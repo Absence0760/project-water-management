@@ -59,6 +59,12 @@ In short:
   known advisories.
 - Svelte escapes output by default. Don't use `{@html}` with user-supplied names
   (farms, crops, projects).
+- **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
+  user-controlled and the files are opened in Excel by other project members,
+  so any text cell starting with `= + - @`, tab or CR gets a leading `'`
+  (`backend/src/export/csv.ts`, OWASP "CSV injection"). Numbers are written as
+  numbers. Export file names are ASCII slugs, so `Content-Disposition` can't be
+  injected.
 
 ## Public repo hygiene
 

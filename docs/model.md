@@ -457,6 +457,10 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 
 ## 7. Glossary
 
+The app's `/help` page carries a fuller, searchable version of this glossary
+plus per-field help (`frontend/src/lib/help/content.ts`). Keep the two in
+step when a definition changes.
+
 | Term | Meaning |
 | --- | --- |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. |

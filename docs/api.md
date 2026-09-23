@@ -179,6 +179,61 @@ matched.
 - Fetch the daily values to overlay with the per-project
   `GET /projects/:id/runs/:runId/series?key=…` for each side.
 
+## Export
+
+File downloads for checking numbers in Excel and for moving a project between
+installations. All are `GET`, **viewer** role, and behave like the other project
+routes (`401` signed out, `404` not a member). Responses carry
+`Content-Disposition: attachment; filename="<project-slug>_<parts>_<YYYY-MM-DD>.<ext>"`
+(ASCII slug, UTC date) and `Cache-Control: no-store`; CORS exposes
+`Content-Disposition` so the SPA can read the name when it downloads with
+`fetch`.
+
+| Path | Query | Body |
+| --- | --- | --- |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, per-farm summary table, catchment figures, calibration, warnings — blocks separated by a blank record |
+| `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
+| `/projects/:id/export.json` | – | The project document (below) |
+
+CSV format: RFC 4180 (CRLF, fields with `,` `"` or line breaks quoted, `"`
+doubled), a **UTF-8 BOM** so Excel reads `m³` correctly, ISO `YYYY-MM-DD`
+dates, full-precision numbers, and **empty cells for missing days**. Column
+headers are `label (unit)`, in the engine's output order. Text cells that start
+with `= + - @` get a leading `'` so a spreadsheet never runs them as formulas.
+`from`/`to` are inclusive ISO dates, clamped to the series; `400` if they are
+not real dates, `from > to`, or the window misses the series entirely.
+
+**Project document** (`export.json`) is the shape `pnpm import:project`
+accepts (`ProjectFile` in `backend/src/projects/document.ts`), so a project
+round-trips export → import:
+
+```jsonc
+{
+  "format": "water-management/project", "version": 1,
+  "exportedAt": "…", "engineVersion": "0.2.0",   // informational; ignored on import
+  "name": "…", "description": "…",
+  "settings": { /* stored settings merged over the defaults */ },
+  "model": { "nodes": [], "crops": [], "cropAreas": [], "transfers": [] },
+  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "1981-01-01", "values": [0.4, null] }]
+}
+```
+
+Runs are not included (re-run after importing, or pass `--run`). The importer
+gives every row a fresh id.
+
+**Size cap — 413.** Production serves the API through Lambda's *buffered*
+response mode, which fails any response over **6 MB**. Every export body is
+built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
+once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
+a full Client Catchment node (16 161 days × 13 series) is ≈ 1.5–2 MB and the
+catchment table (11 series) is similar, so real catchments fit; a 60 000-day
+series is ≈ 1 MB. The durable fix if exports grow (many long series, multi-node
+workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or
+writing the file to S3 and returning a pre-signed URL. Gzip is not a clean win
+here: a gzipped body is binary, so the Lambda adapter base64-encodes it (+33 %),
+and CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress either.
+
 ## Health
 
 `GET /health` → `{ ok: true }`.
