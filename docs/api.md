@@ -30,18 +30,28 @@ validation (`details` = zod issues); `409` = conflict (duplicate name, last owne
 ## Projects
 
 Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
-(members, delete).
+(members, delete, move between teams).
+
+Your effective role is the highest of your direct membership and your team
+membership: on a team's projects, a team **admin** is an `owner` and a team
+**member** is an `editor`. Direct sharing (`/projects/:id/members`) still works
+alongside teams, e.g. to give an outside client `viewer` access.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects` | – | `{ projects: ProjectSummary[] }` | – |
-| POST | `/projects` | `{ name, description? }` | `201 { project }` | – |
+| POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team you're in; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, settings? }` | `{ project }` | editor |
+| PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204` | owner |
-| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (model + series copied; runs not) | viewer |
+| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (model + series copied; runs not; stays in the team only if you're in it) | viewer |
 
-- `ProjectSummary = { id, name, description, role, createdAt, updatedAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt }`
+- `team = { id, name } | null` — `null` for a personal project. `name` is
+  `null` when you reach a team's project through direct sharing but aren't in
+  the team (team names are visible to members only).
+- `PATCH { teamId }` moves the project into a team you belong to (`404 team not
+  found` otherwise) or, with `null`, back to personal. Owner only.
 - `project = ProjectSummary & { settings: ProjectSettings }` — settings are
   returned merged over the defaults, so the client always sees every field.
 
@@ -53,6 +63,32 @@ Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` — user must already have an account | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | – |
+
+These are **direct** members only. People who reach a team project through the
+team are listed by `GET /teams/:id`, not here.
+
+## Teams
+
+A team owns many projects (catchments) together. Team roles: `member` <
+`admin`. Admins rename/delete the team and manage its members; on the team's
+projects admins are owners and members are editors (see Projects above).
+
+| Method | Path | Body | Response | Min team role |
+| --- | --- | --- | --- | --- |
+| GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
+| POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
+| GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first) | member |
+| PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
+| DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` — `404` if no account has that email, `409` if already a member | admin |
+| PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
+| DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | member |
+
+- `Team = { id, name, role, createdAt, memberCount, projectCount }` — `role` is
+  **your** role in the team.
+- `TeamMember = { userId, email, displayName, role }`
+- `409 a team must keep at least one admin` when removing or demoting the last
+  admin (including the last admin leaving). A team you aren't in is `404`.
 
 ## Model data
 
@@ -79,7 +115,14 @@ Daily series, `values[i]` = value on `startDate + i` days, `null` = missing.
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
 | PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (upsert on kind+name) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
+
+`merge` is for daily or batch appends (loggers, CHIRPS, forecasts): the days
+sent are merged into the existing series by date. Incoming values win on
+overlapping days, the series extends in either direction, and any gap days
+between the old and new ranges become `null`. `413` if the merged series would
+exceed 60 000 days.
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`). Max 60 000 values
 (~164 years).

@@ -69,4 +69,87 @@ describe('createApi', () => {
 		expect((f.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p/runs/r/series?key=natural_flow');
 		expect((f.mock.calls[1] as unknown as [string])[0]).toBe('/projects/p/runs/r/series?key=dam+storage&nodeId=n%2F1');
 	});
+
+	it('sends teamId only when creating a team project', async () => {
+		const f = mockFetch(201, { project: { id: 'p' } });
+		const api = createApi('', f);
+		await api.projects.create('A');
+		await api.projects.create('B', 'desc', 't1');
+		await api.projects.create('C', undefined, null);
+		const bodies = f.mock.calls.map((c) => JSON.parse((c as unknown as [string, RequestInit])[1].body as string));
+		expect(bodies[0]).toEqual({ name: 'A' });
+		expect(bodies[1]).toEqual({ name: 'B', description: 'desc', teamId: 't1' });
+		expect(bodies[2]).toEqual({ name: 'C' });
+	});
+
+	it('moves a project between teams via PATCH teamId (null = personal)', async () => {
+		const f = mockFetch(200, { project: { id: 'p' } });
+		await createApi('', f).projects.update('p', { teamId: null });
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/projects/p');
+		expect(init.method).toBe('PATCH');
+		expect(JSON.parse(init.body as string)).toEqual({ teamId: null });
+	});
+
+	it('posts series batches to the merge endpoint', async () => {
+		const f = mockFetch(200, { id: 's' });
+		const body = { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2026-09-01', values: [1, null] };
+		await createApi('', f).series.merge('p', body);
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/projects/p/series/merge');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body as string)).toEqual(body);
+	});
+});
+
+describe('teams client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('lists and creates teams, unwrapping the envelope', async () => {
+		const team = { id: 't', name: 'Hydro', role: 'admin', createdAt: '', memberCount: 1, projectCount: 0 };
+		const list = mockFetch(200, { teams: [team] });
+		expect(await createApi('', list).teams.list()).toEqual([team]);
+		expect(call(list)).toEqual({ url: '/teams', method: 'GET', body: undefined });
+
+		const create = mockFetch(201, { team });
+		expect(await createApi('', create).teams.create('Hydro')).toEqual(team);
+		expect(call(create)).toEqual({ url: '/teams', method: 'POST', body: { name: 'Hydro' } });
+	});
+
+	it('returns team detail with members', async () => {
+		const f = mockFetch(200, { team: { id: 't' }, members: [{ userId: 'u', role: 'admin' }] });
+		const r = await createApi('', f).teams.get('t');
+		expect(r.members).toHaveLength(1);
+		expect(call(f).url).toBe('/teams/t');
+	});
+
+	it('builds member management requests with encoded ids', async () => {
+		const f = mockFetch(200, { member: { userId: 'u/1', role: 'member' }, team: { id: 't' } });
+		const api = createApi('', f);
+		await api.teams.rename('t', 'New');
+		await api.teams.addMember('t', 'a@b.c', 'member');
+		await api.teams.setRole('t', 'u/1', 'admin');
+		expect(call(f, 0)).toEqual({ url: '/teams/t', method: 'PATCH', body: { name: 'New' } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t/members', method: 'POST', body: { email: 'a@b.c', role: 'member' } });
+		expect(call(f, 2)).toEqual({ url: '/teams/t/members/u%2F1', method: 'PATCH', body: { role: 'admin' } });
+	});
+
+	it('deletes teams and members (204)', async () => {
+		const f = mockFetch(204);
+		const api = createApi('', f);
+		await expect(api.teams.removeMember('t', 'u')).resolves.toBeUndefined();
+		await expect(api.teams.remove('t')).resolves.toBeUndefined();
+		expect(call(f, 0)).toMatchObject({ url: '/teams/t/members/u', method: 'DELETE' });
+		expect(call(f, 1)).toMatchObject({ url: '/teams/t', method: 'DELETE' });
+	});
+
+	it('surfaces the last-admin 409 message', async () => {
+		const f = mockFetch(409, { error: 'a team must keep at least one admin' });
+		const err = await createApi('', f).teams.removeMember('t', 'u').catch((e) => e);
+		expect(err.status).toBe(409);
+		expect(err.message).toBe('a team must keep at least one admin');
+	});
 });

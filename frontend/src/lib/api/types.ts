@@ -10,11 +10,22 @@ export interface User {
 	displayName: string;
 }
 
+/**
+ * The team a project belongs to. `name` is null when you reach the project by
+ * direct sharing but aren't in its team (team names are private to members).
+ */
+export interface ProjectTeam {
+	id: string;
+	name: string | null;
+}
+
 export interface ProjectSummary {
 	id: string;
 	name: string;
 	description: string | null;
 	role: Role;
+	/** null = a personal project (owned by its direct members only). */
+	team: ProjectTeam | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -28,6 +39,27 @@ export interface Member {
 	email: string;
 	displayName: string;
 	role: Role;
+}
+
+/** Team roles: admins are owners of every team project, members are editors. */
+export type TeamRole = 'member' | 'admin';
+export const TEAM_ROLES: readonly TeamRole[] = ['member', 'admin'];
+
+export interface Team {
+	id: string;
+	name: string;
+	/** Your role in the team. */
+	role: TeamRole;
+	createdAt: string;
+	memberCount: number;
+	projectCount: number;
+}
+
+export interface TeamMember {
+	userId: string;
+	email: string;
+	displayName: string;
+	role: TeamRole;
 }
 
 export interface RunMeta {

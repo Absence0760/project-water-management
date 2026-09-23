@@ -15,6 +15,9 @@ import type {
 	Run,
 	RunMeta,
 	RunSeriesRef,
+	Team,
+	TeamMember,
+	TeamRole,
 	User
 } from './types';
 
@@ -104,6 +107,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 
 	const enc = encodeURIComponent;
 	const p = (id: string) => `/projects/${enc(id)}`;
+	const t = (id: string) => `/teams/${enc(id)}`;
 
 	return {
 		request,
@@ -119,12 +123,23 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
-			create: (name: string, description?: string) =>
-				request<{ project: Project }>('POST', '/projects', { name, description }).then((r) => r.project),
+			/** `teamId` null/omitted = a personal project. */
+			create: (name: string, description?: string, teamId?: string | null) =>
+				request<{ project: Project }>('POST', '/projects', {
+					name,
+					description,
+					...(teamId ? { teamId } : {})
+				}).then((r) => r.project),
 			get: (id: string) => request<{ project: Project }>('GET', p(id)).then((r) => r.project),
 			update: (
 				id: string,
-				patch: { name?: string; description?: string; settings?: Partial<ProjectSettings> }
+				patch: {
+					name?: string;
+					description?: string;
+					settings?: Partial<ProjectSettings>;
+					/** Move into a team you're in, or null for personal. Owner only. */
+					teamId?: string | null;
+				}
 			) => request<{ project: Project }>('PATCH', p(id), patch).then((r) => r.project),
 			remove: (id: string) => request<void>('DELETE', p(id)),
 			copy: (id: string, name: string) =>
@@ -142,6 +157,23 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
+		teams: {
+			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),
+			create: (name: string) => request<{ team: Team }>('POST', '/teams', { name }).then((r) => r.team),
+			get: (id: string) => request<{ team: Team; members: TeamMember[] }>('GET', t(id)),
+			rename: (id: string, name: string) =>
+				request<{ team: Team }>('PATCH', t(id), { name }).then((r) => r.team),
+			remove: (id: string) => request<void>('DELETE', t(id)),
+			addMember: (id: string, email: string, role: TeamRole) =>
+				request<{ member: TeamMember }>('POST', `${t(id)}/members`, { email, role }).then((r) => r.member),
+			setRole: (id: string, userId: string, role: TeamRole) =>
+				request<{ member: TeamMember }>('PATCH', `${t(id)}/members/${enc(userId)}`, { role }).then(
+					(r) => r.member
+				),
+			/** Remove a member (admin), or yourself to leave the team. */
+			removeMember: (id: string, userId: string) =>
+				request<void>('DELETE', `${t(id)}/members/${enc(userId)}`)
+		},
 		model: {
 			get: (id: string) => request<ProjectModel>('GET', `${p(id)}/model`),
 			save: (id: string, model: ProjectModel) => request<ProjectModel>('PUT', `${p(id)}/model`, model)
@@ -155,6 +187,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				id: string,
 				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[] }
 			) => request<SeriesMeta>('PUT', `${p(id)}/series`, body),
+			/** Merge days into a series by date (incoming wins on overlap); creates it if missing. */
+			merge: (
+				id: string,
+				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[] }
+			) => request<SeriesMeta>('POST', `${p(id)}/series/merge`, body),
 			remove: (id: string, seriesId: string) =>
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},
