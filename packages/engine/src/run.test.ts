@@ -1,0 +1,603 @@
+import { describe, expect, it } from 'vitest';
+import type { Monthly } from './calendar';
+import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
+import { runModel, runModelWith } from './run';
+import { calibrationStats } from './network/stats';
+import { buildTopology } from './network/topology';
+import { excelRound } from './network/round';
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const zeros = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as unknown as Monthly;
+const flat = (v: number) => new Array(12).fill(v) as unknown as Monthly;
+
+function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
+	return {
+		id,
+		name: id,
+		kind: 'farm',
+		downstreamNodeId: null,
+		sortOrder: 0,
+		areaKm2: 1,
+		areaHiKm2: 0,
+		areaLoKm2: 0,
+		flowShareManual: null,
+		pctUpstreamToDam: 0,
+		pctRunoffToDam: 0,
+		damCapacityM3: 0,
+		damInitialPct: 0,
+		damMinPct: 0,
+		divertCapacityM3Day: 0,
+		returnFlowPct: 0,
+		...over
+	};
+}
+
+interface Fixture {
+	nodes: NetworkNode[];
+	crops?: CropDef[];
+	cropAreas?: CropArea[];
+	transfers?: Transfer[];
+	settings?: Partial<ProjectSettings>;
+	natural: number[];
+	startDate?: string;
+	rain?: (number | null)[];
+	observed?: (number | null)[];
+}
+
+function input(f: Fixture): ModelInput {
+	const days = f.natural.length;
+	const startDate = f.startDate ?? '2020-01-01';
+	return {
+		settings: { ewrPragmaticM3PerDay: zeros, ...f.settings },
+		model: { nodes: f.nodes, crops: f.crops ?? [], cropAreas: f.cropAreas ?? [], transfers: f.transfers ?? [] },
+		series: {
+			rain_catchment_mm: { startDate, values: f.rain ?? new Array(days).fill(0) },
+			...(f.observed ? { flow_observed_m3s: { startDate, values: f.observed } } : {})
+		}
+	};
+}
+
+const run = (f: Fixture) => runModelWith(input(f), () => ({ naturalFlowM3Day: f.natural }));
+
+function get(out: { series: RunSeries[] }, nodeId: string | null, key: string): number[] {
+	const s = out.series.find((x) => x.nodeId === nodeId && x.key === key);
+	if (!s) throw new Error(`no series ${nodeId}/${key}`);
+	return s.values;
+}
+
+// ---------------------------------------------------------------------------
+// Synthetic networks — always run
+// ---------------------------------------------------------------------------
+
+describe('runModel — three-node network (A → B → gauge)', () => {
+	// Two farms of equal area share natural flow 50/50. A has a dam that takes
+	// all its own runoff; B has no dam and a 50% runoff-to-dam split (no dam, so
+	// that water just passes the "full" dam as spill).
+	const nodes = [
+		node('A', {
+			downstreamNodeId: 'B',
+			pctRunoffToDam: 1,
+			damCapacityM3: 1000,
+			damInitialPct: 0.5,
+			returnFlowPct: 0.1
+		}),
+		node('B', { downstreamNodeId: 'G', sortOrder: 1, pctRunoffToDam: 0.5, returnFlowPct: 0 }),
+		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
+	];
+	// A: one crop, 1000 m², crop factor 1.
+	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+	const cropAreas: CropArea[] = [{ nodeId: 'A', cropId: 'c', areaM2: 1000 }];
+	const settings: Partial<ProjectSettings> = { apanMm: flat(31 * 100) as Monthly };
+	// October: 31 days → gross = 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day.
+
+	const out = run({
+		nodes,
+		crops,
+		cropAreas,
+		settings,
+		natural: [200, 0, 1601],
+		startDate: '2020-10-01'
+	});
+
+	it('splits natural flow by area share (ROUND to whole m³)', () => {
+		expect(get(out, 'A', 'runoff')).toEqual([100, 0, 801]); // ROUND(800.5) = 801 (half away from zero)
+		expect(get(out, 'B', 'runoff')).toEqual([100, 0, 801]);
+	});
+
+	it('supplies demand from the dam and carries storage day to day', () => {
+		// Day 0: Qprev 500 + M 100 → avail 600, G = 100, P = 500, Q = 500.
+		// Day 1: avail 500 → G 100, Q 400.
+		// Day 2: avail 400 + 801 = 1201 → G 100, P 1101, Q 1000, spill 101.
+		expect(get(out, 'A', 'demand')).toEqual([100, 100, 100]);
+		expect(get(out, 'A', 'supplied')).toEqual([100, 100, 100]);
+		expect(get(out, 'A', 'dam_storage')).toEqual([500, 400, 1000]);
+		expect(get(out, 'A', 'spill')).toEqual([0, 0, 101]);
+		// U = spill + below-dam (0) + return ROUND(100 × 0.1) = 10
+		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 111]);
+	});
+
+	it('routes upstream outflow into the next farm and on to the gauge', () => {
+		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 111]);
+		// B: capacity 0. M = ROUND(I × 0.5) goes to the (zero) dam and spills; N below dam.
+		// U = R + S + T = (K + M) + N + 0 = H + I.
+		expect(get(out, 'B', 'spill')).toEqual([60, 10, 512]); // K + M: 10 + 50, 10 + 0, 111 + ROUND(400.5)=401
+		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 912]);
+		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 912]);
+		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 912]);
+	});
+
+	it('reports per-farm averages', () => {
+		const a = out.summary.farms.find((f) => f.nodeId === 'A')!;
+		expect(a.avgDemandM3Day).toBe(100);
+		expect(a.fractionSupplied).toBe(1);
+		const b = out.summary.farms.find((f) => f.nodeId === 'B')!;
+		expect(b.avgDemandM3Day).toBe(0);
+		expect(b.fractionSupplied).toBe(1);
+		expect(out.summary.farms.map((f) => f.nodeId)).toEqual(['A', 'B']); // gauges have no farm summary
+		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 912) / 3, 10);
+	});
+
+	it('runs over the rainfall period and emits catchment series', () => {
+		expect(out.startDate).toBe('2020-10-01');
+		expect(out.endDate).toBe('2020-10-03');
+		expect(out.days).toBe(3);
+		expect(get(out, null, 'natural_flow')).toEqual([200, 0, 1601]);
+		expect(out.summary.warnings).toEqual(['no observed flow series: calibration statistics not computed']);
+	});
+});
+
+describe('runModel — dam behaviour', () => {
+	it('mirrors the b023 upstream split: pctUpstreamToDam sends inflow *below* the dam (L), capped by the diversion', () => {
+		// Upstream U farm drains 1000 m³/day of runoff into D. D has pctUpstreamToDam = 1,
+		// which in b023 makes L = H (below dam); only the 300 m³/day diversion reaches the dam.
+		const out = run({
+			nodes: [
+				node('U', { downstreamNodeId: 'D' }),
+				node('D', {
+					areaKm2: 0,
+					sortOrder: 1,
+					pctUpstreamToDam: 1,
+					divertCapacityM3Day: 300,
+					damCapacityM3: 10_000
+				})
+			],
+			natural: [1000, 1000]
+		});
+		expect(get(out, 'D', 'inflow_upstream')).toEqual([1000, 1000]);
+		expect(get(out, 'D', 'dam_storage')).toEqual([300, 600]);
+		expect(get(out, 'D', 'outflow')).toEqual([700, 700]);
+	});
+
+	it('with pctUpstreamToDam = 0 all upstream inflow enters the dam (K)', () => {
+		const out = run({
+			nodes: [
+				node('U', { downstreamNodeId: 'D' }),
+				node('D', { areaKm2: 0, sortOrder: 1, damCapacityM3: 1500 })
+			],
+			natural: [1000, 1000]
+		});
+		expect(get(out, 'D', 'dam_storage')).toEqual([1000, 1500]);
+		expect(get(out, 'D', 'spill')).toEqual([0, 500]);
+		expect(get(out, 'D', 'outflow')).toEqual([0, 500]);
+	});
+
+	it('rounds the initial storage like the Element sheet (ROUND(pct × ROUND(capacity)))', () => {
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 1001.4, damInitialPct: 0.5 })],
+			natural: [0]
+		});
+		expect(get(out, 'D', 'dam_storage')).toEqual([501]); // ROUND(0.5 × 1001) = ROUND(500.5)
+	});
+
+	it('records a deficit when the dam runs dry', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 150, damInitialPct: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0, 0],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'supplied')).toEqual([100, 50]);
+		expect(get(out, 'D', 'deficit')).toEqual([0, 50]);
+		const s = out.summary.farms[0]!;
+		expect(s.avgDeficitM3Day).toBe(25);
+		expect(s.fractionSupplied).toBe(0.75);
+	});
+});
+
+describe('runModel — irrigation demand', () => {
+	it('offsets gross demand by effective rain above the threshold and rounds like the workbook', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }];
+		const out = run({
+			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 10_000 }],
+			// A-pan 100 mm × 0.5 = 50 mm; 10 000 m² × 50 mm / 1000 / 31 = 16.129 → ROUND(,1) = 16.1
+			settings: { apanMm: flat(100) as Monthly },
+			startDate: '2021-01-01',
+			natural: [0, 0, 0, 0],
+			// 2 mm is at the threshold → ignored; 3 mm → 10 000 × 0.65/1000 × 3 = 19.5 → floored at 0
+			rain: [0, 2, 1, 3]
+		});
+		expect(get(out, 'F', 'demand')).toEqual([16, 16, 16, 0]);
+	});
+
+	it('falls back to CHIRPS rain when catchment rain is missing', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const base = input({
+			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			startDate: '2020-10-01',
+			natural: [0, 0],
+			rain: [null, 0]
+		});
+		base.series.rain_chirps_mm = { startDate: '2020-10-01', values: [100, 100] };
+		const out = runModelWith(base, () => ({ naturalFlowM3Day: [0, 0] }));
+		// day 0: CHIRPS 100 mm → offset 1000 × 0.65 × 0.1 = 65 → 35; day 1: catchment 0 wins
+		expect(get(out, 'F', 'demand')).toEqual([35, 100]);
+	});
+});
+
+describe('runModel — transfers', () => {
+	const transfer = (over: Partial<Transfer> = {}): Transfer => ({
+		id: 't1',
+		fromNodeId: 'S',
+		toNodeId: 'R',
+		months: [1],
+		maxRateM3s: 0.01, // 864 m³/day
+		dailyCapM3: null,
+		minStoragePct: 0.3,
+		enabled: true,
+		...over
+	});
+	const nodes = () => [
+		node('S', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4 }),
+		node('R', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 1 })
+	];
+
+	it("draws from the source's previous-day storage above the minimum, capped by the rate", () => {
+		// S: start 4000, keep 3000 → day 0 moves min(1000, 864) = 864, day 1 moves 136, then nothing.
+		const out = run({ nodes: nodes(), transfers: [transfer()], natural: [0, 0, 0], startDate: '2021-01-30' });
+		expect(get(out, 'S', 'transfer')).toEqual([-864, -136, 0]);
+		expect(get(out, 'R', 'transfer')).toEqual([864, 136, 0]);
+		expect(get(out, 'S', 'dam_storage')).toEqual([3136, 3000, 3000]);
+		expect(get(out, 'R', 'dam_storage')).toEqual([864, 1000, 1000]);
+	});
+
+	it('only runs in its months', () => {
+		// 2021-01-31 is January, 2021-02-01 is not.
+		const out = run({ nodes: nodes(), transfers: [transfer()], natural: [0, 0], startDate: '2021-01-31' });
+		expect(get(out, 'R', 'transfer')).toEqual([864, 0]);
+	});
+
+	it('honours an explicit daily cap and the enabled flag', () => {
+		const capped = run({
+			nodes: nodes(),
+			transfers: [transfer({ dailyCapM3: 100 })],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(capped, 'R', 'transfer')).toEqual([100]);
+		const off = run({
+			nodes: nodes(),
+			transfers: [transfer({ enabled: false })],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(off, 'R', 'transfer')).toEqual([0]);
+	});
+
+	it('skips transfers involving a gauge, with a warning', () => {
+		const out = run({
+			nodes: [...nodes(), node('G', { kind: 'gauge', areaKm2: 0 })].map((n) =>
+				n.id === 'G' ? n : { ...n, downstreamNodeId: 'G' }
+			),
+			transfers: [transfer({ toNodeId: 'G' })],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(out.summary.warnings.some((w) => w.includes('transfers must be between farms'))).toBe(true);
+	});
+});
+
+describe('runModel — EWR', () => {
+	// X and Y are headwater farms draining into Z, which drains into gauge G.
+	// Equal areas → each farm carries a third of the EWR.
+	const nodes = [
+		node('X', { downstreamNodeId: 'Z' }),
+		node('Y', { downstreamNodeId: 'Z', sortOrder: 1, damCapacityM3: 1e9, pctRunoffToDam: 1 }),
+		node('Z', { downstreamNodeId: 'G', sortOrder: 2 }),
+		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 3 })
+	];
+	// Natural 300 → 100 per farm. X passes its 100 on, Y stores its 100 (no outflow), Z adds 100.
+	const out = run({
+		nodes,
+		natural: [300, 300],
+		settings: { ewrPragmaticM3PerDay: flat(150) as Monthly }
+	});
+
+	it('fragments the EWR and accumulates it downstream', () => {
+		expect(get(out, 'X', 'ewr')).toEqual([50, 50]);
+		expect(get(out, 'Z', 'ewr_cumulative')).toEqual([150, 150]);
+		expect(get(out, 'G', 'ewr_cumulative')).toEqual([150, 150]);
+	});
+
+	it('attributes shortfalls to the farm that causes them', () => {
+		expect(get(out, 'X', 'ewr_shortfall')).toEqual([0, 0]); // 100 out ≥ 50
+		expect(get(out, 'Y', 'ewr_shortfall')).toEqual([-50, -50]); // 0 out < 50
+		expect(get(out, 'Y', 'ewr_shortfall_incremental')).toEqual([-50, -50]);
+		// Z: out 200 ≥ 150 → met; incremental = MIN(0 − (0 + −50), 0) = 0
+		expect(get(out, 'Z', 'ewr_shortfall')).toEqual([0, 0]);
+		expect(get(out, 'Z', 'ewr_shortfall_incremental')).toEqual([0, 0]);
+		const y = out.summary.farms.find((f) => f.nodeId === 'Y')!;
+		expect(y.avgEwrShortfallM3Day).toBe(50);
+		expect(y.daysEwrNotMet).toBe(2);
+	});
+
+	it('counts catchment days where simulated outflow is below the EWR', () => {
+		expect(get(out, null, 'ewr')).toEqual([150, 150]);
+		expect(out.summary.catchment.ewrDaysNotMet).toBe(0);
+		const dry = run({ nodes, natural: [0, 300], settings: { ewrPragmaticM3PerDay: flat(150) as Monthly } });
+		expect(dry.summary.catchment.ewrDaysNotMet).toBe(1);
+		expect(get(dry, null, 'ewr_shortfall')).toEqual([-150, 0]);
+	});
+});
+
+describe('runModel — flow shares', () => {
+	it('warns when manual shares do not sum to 1 and applies them anyway', () => {
+		const out = run({
+			nodes: [node('A', { flowShareManual: 0.5 }), node('B', { flowShareManual: 0.3, sortOrder: 1 })].map((n) =>
+				n.id === 'A' ? { ...n, downstreamNodeId: 'B' } : n
+			),
+			settings: { flowShareMethod: 'manual' },
+			natural: [1000]
+		});
+		expect(get(out, 'A', 'runoff')).toEqual([500]);
+		expect(get(out, 'B', 'runoff')).toEqual([300]);
+		expect(out.summary.warnings.some((w) => w.includes('sum to 80.00%'))).toBe(true);
+	});
+
+	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
+		const out = run({
+			nodes: [
+				node('A', { downstreamNodeId: 'B', areaHiKm2: 3, areaLoKm2: 1 }),
+				node('B', { sortOrder: 1, areaHiKm2: 1, areaLoKm2: 3 })
+			],
+			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.8, lo: 0.2 } },
+			natural: [1000]
+		});
+		// A: 3/4 × 0.8 + 1/4 × 0.2 = 0.65; B: 0.35
+		expect(get(out, 'A', 'runoff')).toEqual([650]);
+		expect(get(out, 'B', 'runoff')).toEqual([350]);
+		expect(out.summary.warnings.some((w) => w.includes('flow shares'))).toBe(false);
+	});
+});
+
+describe('runModel — validation and window', () => {
+	it('rejects a network with a cycle', () => {
+		expect(() =>
+			run({ nodes: [node('A', { downstreamNodeId: 'B' }), node('B', { downstreamNodeId: 'A' })], natural: [0] })
+		).toThrow(/outflow node|cycle/);
+	});
+
+	it('rejects a link to an unknown node', () => {
+		expect(() => run({ nodes: [node('A', { downstreamNodeId: 'nope' })], natural: [0] })).toThrow(/unknown node/);
+	});
+
+	it('needs a rainfall or Pitman series to define the period', () => {
+		const i = input({ nodes: [node('A')], natural: [0] });
+		i.series = {};
+		expect(() => runModelWith(i, () => ({ naturalFlowM3Day: [] }))).toThrow(/no rainfall or Pitman/);
+	});
+
+	it('honours simulationStart/End', () => {
+		const i = input({ nodes: [node('A')], natural: [0, 0, 0, 0], startDate: '2020-01-01' });
+		i.settings.simulationStart = '2020-01-02';
+		i.settings.simulationEnd = '2020-01-03';
+		let seen = 0;
+		const out = runModelWith(i, (ctx) => {
+			seen = ctx.days;
+			return { naturalFlowM3Day: [5, 6] };
+		});
+		expect(seen).toBe(2);
+		expect(out.startDate).toBe('2020-01-02');
+		expect(get(out, null, 'natural_flow')).toEqual([5, 6]);
+	});
+
+	it('orders nodes upstream-first regardless of input order', () => {
+		const t = buildTopology([
+			node('G', { kind: 'gauge' }),
+			node('B', { downstreamNodeId: 'G' }),
+			node('A', { downstreamNodeId: 'B' })
+		]);
+		expect(Array.from(t.order)).toEqual([2, 1, 0]);
+		expect(t.outflow).toBe(0);
+	});
+});
+
+describe('runModel — calibration statistics', () => {
+	it('compares simulated outflow with observed flow on overlapping days', () => {
+		const out = run({
+			nodes: [node('A')],
+			natural: [86_400, 2 * 86_400, 3 * 86_400],
+			observed: [1, null, 4]
+		});
+		const c = out.summary.calibration!;
+		expect(c.days).toBe(2);
+		expect(c.meanObservedM3s).toBe(2.5);
+		expect(c.meanSimulatedM3s).toBe(2);
+		expect(c.rmseM3s).toBeCloseTo(Math.sqrt(0.5), 12);
+		expect(c.pbias).toBeCloseTo(20, 12); // 100 × (0 + 1) / 5
+		expect(c.nse).toBeCloseTo(1 - 1 / 4.5, 12);
+		expect(get(out, null, 'observed_flow')).toEqual([86_400, NaN, 345_600]);
+	});
+
+	it('returns null NSE when observations are constant', () => {
+		expect(calibrationStats([86_400, 86_400], [1, 1]).nse).toBeNull();
+		expect(calibrationStats([1], [null]).days).toBe(0);
+	});
+});
+
+describe('excelRound', () => {
+	it('rounds half away from zero and survives binary representation error', () => {
+		expect(excelRound(2.5)).toBe(3);
+		expect(excelRound(-2.5)).toBe(-3);
+		expect(excelRound(2.675, 2)).toBe(2.68);
+		expect(excelRound(1.005, 2)).toBe(1.01);
+		expect(excelRound(0.49)).toBe(0);
+	});
+});
+
+describe('runModel — end to end with the rain model', () => {
+	it('produces natural flow from rain and runs the network', () => {
+		const days = 60;
+		const rain = Array.from({ length: days }, (_, i) => (i % 10 === 0 ? 30 : 0));
+		const i = input({ nodes: [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge' })], natural: [] });
+		i.series = { rain_catchment_mm: { startDate: '2020-06-01', values: rain } };
+		const out = runModel(i);
+		expect(out.days).toBe(days);
+		const nat = get(out, null, 'natural_flow');
+		expect(nat).toHaveLength(days);
+		expect(nat.every((v) => Number.isFinite(v) && v >= 0)).toBe(true);
+		expect(Math.max(...nat)).toBeGreaterThan(0);
+		// A is the only farm: its runoff is the whole natural flow, passed straight through.
+		expect(get(out, 'G', 'outflow')).toEqual(nat);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Workbook regression — client catchment (client data, local only)
+// ---------------------------------------------------------------------------
+
+interface Expected {
+	startDate: string;
+	days: number;
+	catchment: Record<string, (number | null)[]>;
+	nodes: Record<string, { kind: string } & Record<string, (number | null)[]>>;
+	shortfalls: {
+		periodStart: string;
+		periodEnd: string;
+		farms: { name: string; avgDemand: number; avgSupplied: number; avgEwrShortfall: number }[];
+	} | null;
+}
+interface ImportedProject {
+	settings: ModelInput['settings'];
+	model: ModelInput['model'];
+	series: { kind: string; startDate: string; values: (number | null)[] }[];
+}
+
+// No @types/node in this package: reach node:fs through an untyped dynamic import.
+type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
+const fsSpecifier = 'node:fs';
+const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
+const cwd = (globalThis as { process?: { cwd(): string } }).process?.cwd() ?? '.';
+const dataDir = ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment']
+	.map((p) => `${cwd}/${p}`)
+	.find((p) => fs.existsSync(`${p}/expected.json`));
+
+describe.skipIf(!dataDir)(
+	'workbook regression: client catchment (needs data/client-catchment from scripts/wbt-import/extract_project.py)',
+	() => {
+		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
+		const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
+		const modelInput: ModelInput = {
+			settings: project.settings,
+			model: project.model,
+			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
+		};
+		// Feed the workbook's own natural flow so this isolates the network port from the rain model.
+		const natural = expected.catchment.natural_flow!.map((v) => v ?? 0);
+		const t0 = Date.now();
+		const out = runModelWith(modelInput, () => ({ naturalFlowM3Day: natural }));
+		const elapsedMs = Date.now() - t0;
+		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
+
+		/** Days where engine and workbook differ by more than 1e-6. */
+		function mismatches(actual: number[], want: (number | null)[]): number[] {
+			const bad: number[] = [];
+			for (let t = 0; t < want.length; t++) {
+				const w = want[t] ?? 0;
+				if (!(Math.abs(actual[t]! - w) <= 1e-6)) bad.push(t);
+			}
+			return bad;
+		}
+
+		it('covers the same period as the workbook', () => {
+			expect(out.startDate).toBe(expected.startDate);
+			expect(out.days).toBe(expected.days);
+		});
+
+		it('runs 13 nodes × 16k days well under a second', () => {
+			expect(elapsedMs).toBeLessThan(1000);
+		});
+
+		const keys = [
+			'demand',
+			'supplied',
+			'inflow_upstream',
+			'runoff',
+			'transfer',
+			'dam_storage',
+			'spill',
+			'outflow',
+			'deficit',
+			'ewr',
+			'ewr_cumulative',
+			'ewr_shortfall',
+			'ewr_shortfall_incremental'
+		];
+		for (const [name, want] of Object.entries(expected.nodes)) {
+			it(`matches every daily value on Element sheet "${name}"`, () => {
+				const id = idByName.get(name)!;
+				const report: Record<string, string> = {};
+				for (const key of keys) {
+					if (!(key in want) || (want.kind === 'gauge' && !['outflow', 'ewr_cumulative', 'ewr_shortfall'].includes(key)))
+						continue;
+					const bad = mismatches(get(out, id, key), want[key]!);
+					if (bad.length) {
+						const t = bad[0]!;
+						report[key] = `${bad.length} days differ, first day ${t}: engine ${get(out, id, key)[t]} vs workbook ${want[key]![t]}`;
+					}
+				}
+				expect(report).toEqual({});
+			});
+		}
+
+		it('matches the catchment simulated outflow and EWR', () => {
+			expect(mismatches(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
+			expect(mismatches(get(out, null, 'ewr'), expected.catchment.ewr!)).toEqual([]);
+			expect(mismatches(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!)).toEqual([]);
+		});
+
+		it('end to end (natural flow from the rain model too) reproduces the workbook outflow', () => {
+			const t1 = Date.now();
+			const full = runModel(modelInput);
+			expect(Date.now() - t1).toBeLessThan(1000);
+			expect(mismatches(get(full, null, 'natural_flow'), expected.catchment.natural_flow!)).toEqual([]);
+			expect(mismatches(get(full, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
+			expect(full.summary.calibration?.days).toBeGreaterThan(0);
+		});
+
+		it('matches the [Shortfalls] sheet averages over its reporting period', () => {
+			if (!expected.shortfalls) return;
+			const { periodStart, periodEnd, farms } = expected.shortfalls;
+			const day = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
+			const a = day(periodStart) - day(expected.startDate);
+			const b = day(periodEnd) - day(expected.startDate);
+			const avg = (v: number[]) => v.slice(a, b + 1).reduce((s, x) => s + x, 0) / (b - a + 1);
+			for (const f of farms) {
+				const id = idByName.get(f.name)!;
+				expect(excelRound(avg(get(out, id, 'demand')))).toBe(f.avgDemand);
+				expect(excelRound(avg(get(out, id, 'supplied')))).toBe(f.avgSupplied);
+				expect(excelRound(avg(get(out, id, 'ewr_shortfall_incremental')))).toBe(f.avgEwrShortfall);
+			}
+		});
+	}
+);
