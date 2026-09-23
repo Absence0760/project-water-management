@@ -18,6 +18,7 @@
 		parseNumberList,
 		TABLE_PARAMS
 	} from './calibration';
+	import { dataQualityError } from './dataQuality';
 	import MonthlyBars from './MonthlyBars.svelte';
 
 	let {
@@ -67,7 +68,8 @@
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
-	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError);
+	const dqError = $derived(dataQualityError(s.dataQuality));
+	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError || !!dqError);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -457,6 +459,33 @@
 			a calibration period.
 		</p>
 		{#if dateError}<p class="err" role="alert">{dateError}</p>{/if}
+	</section>
+
+	<!-- Data quality ------------------------------------------------------------------>
+	<section class="panel" aria-labelledby="dq-h">
+		<div class="panel-head">
+			<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
+			<span class="muted small">Gauge vs logger check on the Time series tab and in run warnings</span>
+		</div>
+		<div class="fields">
+			<div class="field">
+				<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
+				<NumberInput id="dq-min" min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
+				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 67 %.</span>
+			</div>
+			<div class="field">
+				<label for="dq-max">Highest gauge/logger ratio <span class="u">(%)</span></label>
+				<NumberInput id="dq-max" min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
+				<span class="hint" id="dq-max-h">… or more than this share. Default 150 %.</span>
+			</div>
+			<div class="field">
+				<label for="dq-days">Minimum shared days <span class="u">(days)</span></label>
+				<NumberInput id="dq-days" min={1} max={366} step={1} disabled={readonly} bind:value={s.dataQuality.agreementMinDays} aria-describedby="dq-days-h" />
+				<span class="hint" id="dq-days-h">Water years with fewer days on which both records have a reading are not judged. Default 90.</span>
+			</div>
+		</div>
+		<p class="hint muted">These thresholds only decide which years are flagged; they never change the model results.</p>
+		{#if dqError}<p class="err" role="alert">{dqError}</p>{/if}
 	</section>
 
 	{#if !readonly}
