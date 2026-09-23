@@ -43,6 +43,14 @@ Settings has its own save button, which sits above that bar.
   since the last run: a rainfall or Pitman series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
 
+## Overview
+
+The setup checklist (`overview/checklist.ts`), eight headline facts, project
+details, team and members. Email addresses (member rows here and on team pages,
+pending invitations, the confirm-email banner) render through
+`common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
+`-`, `_` or `+` rather than mid-word on a phone.
+
 ## Network
 
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the

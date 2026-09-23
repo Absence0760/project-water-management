@@ -6,6 +6,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
+	import EmailText from '$lib/components/common/EmailText.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -37,7 +38,7 @@
 {#if show && session.user}
 	<section class="verify-banner" aria-label="Email confirmation">
 		<p>
-			Please confirm your email address. We sent a link to <strong>{session.user.email}</strong>.
+			Please confirm your email address. We sent a link to <strong><EmailText email={session.user.email} /></strong>.
 		</p>
 		<div class="actions">
 			<button type="button" class="btn btn-sm" onclick={resend} disabled={busy}>
