@@ -79,7 +79,8 @@ reduction.
 Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. The chart opens on the last 3 years and has
+their kind by name) are marked. Clicking a row (or its View button) shows
+that series in the chart below. The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree. "What the model uses" explains every kind. Each series

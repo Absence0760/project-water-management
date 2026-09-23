@@ -14,7 +14,7 @@ async function expectOnTop(page: Page, bubble: Locator) {
 	expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height);
 	const covered = await bubble.evaluate((el) => {
 		const r = el.getBoundingClientRect();
-		const pts = [
+		const pts: [number, number][] = [
 			[r.left + 4, r.top + 4],
 			[r.right - 4, r.top + 4],
 			[r.left + 4, r.bottom - 4],
