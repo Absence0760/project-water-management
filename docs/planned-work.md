@@ -17,9 +17,9 @@ Status: ⬜ not started · 🚧 partly there.
 | Feature | Why | Effort |
 | --- | --- | --- |
 | ⬜ **Curtailment targets per farm** | The b023 Shortfalls sheet's key output is *how much each farm must reduce (or may gain) so irrigation balances and the EWR is met* ("target volume", "reduce/gain" in m³/day and l/s). V1 shows deficits and EWR shortfalls but not the recommended cut. This is the answer the client actually sells. | M |
-| ⬜ **EWR compliance heat map** | Month × year grid of % days EWR not met, like the workbook's EWR pivot. The standard way to see *when* the river fails. | S |
+| 🚧 **EWR compliance heat map** | Month × year grid of % days EWR not met, like the workbook's EWR pivot. The standard way to see *when* the river fails. — Engine grid in `RunSummary.ewrCompliance` (outlet + per farm; semantics in model.md §2.9) and `components/ewr/EwrHeatmap.svelte` are done; not yet mounted in the Runs tab. | S |
 | ⬜ **Run comparison** | Pick two runs (e.g. baseline vs dam raise) → per-farm delta table and overlaid hydrographs. Without it, every what-if needs screenshots side by side. | M |
-| ⬜ **Calibration window + more metrics** | The workbook calibrates on 2010–2018 only; V1 scores the whole record (hence NSE −0.70 on Client Catchment). Let the user pick the window; add KGE, R², log-NSE (low-flow fit), volume error per year. | S |
+| 🚧 **Calibration window + more metrics** | The workbook calibrates on 2010–2018 only; V1 scores the whole record (hence NSE −0.70 on Client Catchment). Let the user pick the window; add KGE, R², log-NSE (low-flow fit), volume error per year. — Engine, importer and settings validation done (Client Catchment on the workbook's window and logger: NSE 0.29, KGE 0.57; model.md §2.10); `components/calibration/CalibrationPanel.svelte` and `CalibrationWindowFields.svelte` built, not yet mounted. | S |
 | ⬜ **Export** | CSV/Excel download of any table or series, and a run's full daily output. Hydrologists will want to check numbers in Excel. | S |
 | 🚧 **Append daily data from the UI** | Merge endpoint exists (`POST /series/merge`); upload "append" mode and "data up to …" staleness indicator are in progress. | S |
 | ⬜ **Help & glossary** | The workbook ships a 200-row Help sheet. Port it as contextual help (ⓘ next to fields) and a glossary page: EWR, MAP, A-pan, crop factor, flow share, NSE… | S |
