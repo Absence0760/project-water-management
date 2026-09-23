@@ -169,6 +169,17 @@ readable by anyone. The rules:
   by calling the Function URL directly.
 - **WAF:** a per-IP rate limit on CloudFront, covering both the site and
   `/api/*`.
+- **Response headers** (CloudFront, both behaviours): CSP (`default-src
+  'self'`, `object-src 'none'`, `frame-ancestors 'none'`, no third-party
+  origins; `default-src 'none'` on `/api/*`), HSTS 2 years, nosniff,
+  `X-Frame-Options: DENY`, Referrer-Policy, Permissions-Policy, COOP.
+- **Email (SES):** the API role may only `ses:SendEmail` as
+  `no-reply@<domain>` through one identity and configuration set, over a VPC
+  endpoint. DKIM + SPF-aligned MAIL FROM + DMARC; TLS required to the
+  receiving server; bounces and complaints suppressed.
+- **Deploy role trust:** the plan fails if the bootstrap role's trust policy
+  is not pinned to this repo's `environment:production` subject
+  (`infra/oidc.tf` postcondition, tested).
 - **Database (Phase 6):** private subnets or the Data API only, no public
   endpoint, encryption at rest, TLS in transit, automated backups + PITR,
   deletion protection.
@@ -184,11 +195,16 @@ readable by anyone. The rules:
 - Adding an existing but unverified account to a project or team (see
   "Password reset, email verification and invites" above).
 - No per-account login lockout yet. (Phase 7)
-- **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
-  allows inline scripts, because SvelteKit's static build emits an inline
-  bootstrap script. Svelte's default escaping and the ban on `{@html}` with
-  user data are the main XSS defence. Move to hash-based CSP when practical.
-  (Phase 7)
+- **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
+  (`infra/security_headers.tf`) is strict on scripts: the header's
+  `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build
+  `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script,
+  and the frontend deploy refuses a build without that meta policy
+  (`infra/scripts/check-csp.mjs`). This needs `kit.csp.mode = 'hash'` in
+  `frontend/svelte.config.js`. Styles keep `'unsafe-inline'`, because Svelte
+  templates and uPlot set inline `style` attributes. CSS injection can't run
+  script; Svelte's escaping and the ban on `{@html}` with user data remain the
+  first XSS defence.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
