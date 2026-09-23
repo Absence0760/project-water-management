@@ -1,4 +1,5 @@
 import { createProject, PASSWORD, register, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 async function signInThroughForm(page: import('@playwright/test').Page, email: string, password: string) {
@@ -87,4 +88,88 @@ test('an off-site ?next= is ignored after signing in', async ({ page, playwright
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');
+});
+
+// --- Email flows. e2e mails go to the backend log (MAIL_TRANSPORT=log), so the
+// link tokens below are planted in the database (support/db.ts). ---
+
+test('"Forgot password?" carries the typed email and the request is acknowledged', async ({ page }) => {
+	const email = uniqueEmail('forgetful');
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(email);
+	await page.getByRole('link', { name: 'Forgot password?' }).click();
+
+	await expect(page).toHaveURL(`/forgot-password?email=${encodeURIComponent(email)}`);
+	await expect(page.getByLabel('Email')).toHaveValue(email);
+	await page.getByRole('button', { name: 'Send reset link' }).click();
+
+	// Same answer whether or not the address has an account.
+	await expect(page.getByRole('heading', { level: 1, name: 'Check your email' })).toBeVisible();
+	await expect(page.getByRole('status')).toContainText(`If there is an account for ${email}`);
+});
+
+test('a reset link sets a new password and signs in with it', async ({ page, playwright }) => {
+	const api = await playwright.request.newContext();
+	const user = await register(api, 'Resetter');
+	await api.dispose();
+	const token = await plantEmailToken(user.email, 'reset');
+
+	await page.goto(`/reset-password?token=${token}`);
+	// The token is dropped from the address bar once read.
+	await expect(page).toHaveURL('/reset-password');
+	await page.getByLabel('New password', { exact: true }).fill('a brand new passphrase');
+	await page.getByLabel('Repeat new password').fill('a brand new passphrase');
+	await page.getByRole('button', { name: 'Set new password' }).click();
+	await expect(page.getByRole('status')).toContainText('Your password has been changed');
+
+	await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+	await signInThroughForm(page, user.email, user.password);
+	await expect(page.getByRole('alert')).toHaveText('wrong email or password');
+	await page.getByLabel('Password').fill('a brand new passphrase');
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+});
+
+test('a signed-in user can still open a reset link, and a spent link says so', async ({ page, owner }) => {
+	const token = await plantEmailToken(owner.email, 'reset');
+	await page.goto(`/reset-password?token=${token}`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Choose a new password' })).toBeVisible();
+	await expect(page).toHaveURL('/reset-password');
+	await expect(page.getByText(`You’re signed in as ${owner.email}`)).toBeVisible();
+
+	await page.goto('/reset-password?token=' + 'x'.repeat(43));
+	await expect(page.getByLabel('New password', { exact: true })).toBeVisible();
+	await page.getByLabel('New password', { exact: true }).fill('another passphrase');
+	await page.getByLabel('Repeat new password').fill('another passphrase');
+	await page.getByRole('button', { name: 'Set new password' }).click();
+	await expect(page.getByRole('alert')).toContainText('This reset link is invalid, already used, or older than 1 hour.');
+	await expect(page.getByRole('link', { name: 'Send a new link' })).toBeVisible();
+});
+
+test('the confirm-email banner goes once the link is used', async ({ page, owner }) => {
+	const banner = page.getByRole('region', { name: 'Email confirmation' });
+	await page.goto('/');
+	await expect(banner).toContainText(`We sent a link to ${owner.email}`);
+
+	const token = await plantEmailToken(owner.email, 'verify');
+	await page.goto(`/verify-email?token=${token}`);
+	await expect(page.getByRole('status')).toContainText(`${owner.email} is confirmed`);
+	await page.getByRole('link', { name: 'Go to your projects' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(banner).toHaveCount(0);
+});
+
+test('a confirmation link works signed out', async ({ page, playwright }) => {
+	const api = await playwright.request.newContext();
+	const user = await register(api, 'Other device');
+	await api.dispose();
+	const token = await plantEmailToken(user.email, 'verify');
+
+	await page.goto(`/verify-email?token=${token}`);
+	await expect(page).toHaveURL('/verify-email');
+	await expect(page.getByRole('status')).toContainText('your email address is confirmed');
+	await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+	await signInThroughForm(page, user.email, user.password);
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Email confirmation' })).toHaveCount(0);
 });

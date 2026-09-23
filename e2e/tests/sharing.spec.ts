@@ -1,4 +1,6 @@
-import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
+import { addMember, createProject, PASSWORD, putModel, sampleModel, uniqueEmail } from '../support/api.ts';
+import { plantInviteToken } from '../support/db.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
@@ -89,4 +91,81 @@ test('an editor can change the shared model but cannot manage members', async ({
 	await e.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
 	await expect(e.getByLabel('Area of Upper farm, km²', { exact: true })).toBeEditable();
 	await expect(e.getByRole('button', { name: '+ Add node' })).toBeVisible();
+});
+
+test('an owner invites an address with no account, sees it pending, and revokes it', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Invite catchment');
+	const email = uniqueEmail('not-yet-registered');
+
+	await page.goto(`/projects/${project.id}`);
+	const members = page.getByRole('region', { name: 'Members' });
+	await members.getByLabel('Add member by email').fill(email);
+	await members.getByLabel('Role', { exact: true }).selectOption('editor');
+	await members.getByRole('button', { name: 'Add' }).click();
+	await expect(members.getByText(`Invitation sent to ${email}.`)).toBeVisible();
+
+	const pending = page.getByRole('region', { name: /Pending invitations/ });
+	const item = pending.getByRole('listitem').filter({ hasText: email });
+	await expect(item).toContainText('editor');
+	await expect(item).toContainText(/invited by Owner \d+ · expires in 7 days/);
+	// Not a member yet.
+	await expect(members.getByRole('rowheader').filter({ hasText: email })).toHaveCount(0);
+
+	// Still pending after a reload (it's the server's list, not local state).
+	await page.reload();
+	await expect(pending.getByRole('listitem').filter({ hasText: email })).toBeVisible();
+
+	// Re-sending inside a minute keeps the link that's already in their inbox.
+	await pending.getByRole('button', { name: `Resend invitation to ${email}` }).click();
+	await expect(page.getByText(`An invitation went to ${email} less than a minute ago`)).toBeVisible();
+
+	page.once('dialog', (d) => void d.accept());
+	await pending.getByRole('button', { name: `Revoke invitation to ${email}` }).click();
+	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
+	await expect(pending).toHaveCount(0);
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Invite catchment' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
+});
+
+test('an invited person signs up through the link and lands in the project', async ({ page, owner, browser }) => {
+	void owner;
+	const project = await createProject(page.request, 'Invited-to catchment');
+	const email = uniqueEmail('invitee');
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/members`, {
+		data: { email, role: 'editor' }
+	});
+	expect(res.status()).toBe(201);
+	expect((await res.json()).invited).toBe(true);
+	const token = await plantInviteToken(email);
+
+	const context = await browser.newContext();
+	const v = await context.newPage();
+	await v.goto(`/register?invite=${token}`);
+	await expect(v.getByText('invited you to the project Invited-to catchment')).toBeVisible();
+	await expect(v.getByLabel('Email')).toHaveValue(email);
+	await expect(v.getByLabel('Email')).not.toBeEditable();
+	await v.getByLabel('Display name').fill('Invited Hydrologist');
+	await v.getByLabel('Password').fill(PASSWORD);
+	await v.getByRole('button', { name: 'Create account and join' }).click();
+
+	// Signed up through the link: already a verified editor, no confirm banner.
+	await expect(v.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	const row = v.getByRole('row').filter({ has: v.getByRole('rowheader', { name: 'Invited-to catchment' }) });
+	await expect(row).toContainText('editor');
+	await expect(v.getByRole('region', { name: 'Email confirmation' })).toHaveCount(0);
+	await context.close();
+
+	// The owner now sees a member, not an invite.
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByRole('region', { name: 'Members' }).getByRole('rowheader', { name: /Invited Hydrologist/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
+});
+
+test('a dead invite link falls back to a normal sign-up', async ({ page }) => {
+	await page.goto('/register?invite=' + 'y'.repeat(43));
+	await expect(page.getByRole('alert')).toContainText('This invitation link is invalid, was revoked, or has expired');
+	await expect(page.getByRole('heading', { level: 1, name: 'Create an account' })).toBeVisible();
+	await expect(page.getByLabel('Email')).toBeEditable();
 });

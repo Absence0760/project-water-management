@@ -45,17 +45,19 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `support/env.ts` | Ports and database URLs (dev-only docker credentials) |
 | `support/global-setup.ts` | Rebuilds `water_e2e` |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
+| `support/db.ts` | Plants reset / verify / invite link tokens straight into `water_e2e` (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path |
 | `tests/golden-path.spec.ts` | One user journey done only through the UI: register, create "Catchment D", build the network, crops and a transfer, save, set A-pan and EWR, upload two years of rain and flow, run the model, read the results, reload, then add two more catchments |
-| `tests/auth.spec.ts` | Register, sign out and in, wrong password, deep link → login → back, open-redirect guard |
+| `tests/auth.spec.ts` | Register, sign out and in, wrong password, deep link → login → back, open-redirect guard; "Forgot password?" → request acknowledged; reset link → new password works (also opened while signed in; spent link); confirm-email banner cleared by the link, and the link working signed out |
 | `tests/projects.spec.ts` | Create several projects, copy one (with its model), delete, roles in the list |
-| `tests/sharing.spec.ts` | Owner shares with a viewer (read-only everywhere, unshared project → not found); editor rights |
+| `tests/sharing.spec.ts` | Owner shares with a viewer (read-only everywhere, unshared project → not found); editor rights; inviting an address with no account (pending list, re-send throttle, revoke); signing up through an invite link lands in the project; a dead invite link falls back to plain sign-up |
 | `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard |
 | `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard; date validation |
 | `tests/series.spec.ts` | Upload rainfall + observed-flow CSVs, preview, chart; malformed CSV |
 | `tests/runs.spec.ts` | Run the model: run listed, farm summary table, charts, persisted |
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run |
+| `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |
 | `tests/a11y.spec.ts` | axe WCAG 2.1 A/AA scan of login, register, project list, dialog, every workspace tab and the save bar, in light and dark themes |
 
 ## Rules for writing specs

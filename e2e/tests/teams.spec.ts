@@ -1,6 +1,7 @@
 // Teams: create one, add a colleague, create a catchment in the team, and see
 // it grouped on both people's project lists; the last admin can't leave.
 import { AxeBuilder } from '@axe-core/playwright';
+import { uniqueEmail } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -61,4 +62,26 @@ test('team pages have no WCAG 2.1 AA violations', async ({ page, owner }) => {
 		const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
 		expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 	}
+});
+
+test('a team admin invites an address with no account and revokes it', async ({ page, owner }) => {
+	void owner;
+	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Invite Hydrology' } });
+	const { team } = (await res.json()) as { team: { id: string } };
+	const email = uniqueEmail('team-invitee');
+
+	await page.goto(`/teams/${team.id}`);
+	await page.getByLabel('Add member by email').fill(email);
+	await page.getByRole('button', { name: 'Add', exact: true }).click();
+	await expect(page.getByText(`Invitation sent to ${email}.`)).toBeVisible();
+	// Member count is unchanged: an invite isn't a member.
+	await expect(page.getByText('1 member ·')).toBeVisible();
+
+	const pending = page.getByRole('region', { name: /Pending invitations/ });
+	await expect(pending.getByRole('listitem').filter({ hasText: email })).toContainText('member');
+
+	page.once('dialog', (d) => void d.accept());
+	await pending.getByRole('button', { name: `Revoke invitation to ${email}` }).click();
+	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
+	await expect(pending).toHaveCount(0);
 });
