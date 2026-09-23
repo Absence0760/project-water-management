@@ -6,7 +6,7 @@
 # asdf shims the binary itself.
 
 # Frontend, backend and engine (pnpm via Corepack).
-nodejs 22
+nodejs 24
 
 # scripts/wbt-import — the Excel extractor (openpyxl).
 python 3.14

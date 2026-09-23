@@ -21,6 +21,22 @@ If you find a rule worth applying to *every* future project, propose it for the 
 - **Deploys go through the `production` GitHub environment.** Every repo that ships to a real environment must have a GitHub environment named **`production`** with the operator set as a **required reviewer**, and every deploy job must be gated on `environment: production`. This is the human-in-the-loop that makes the OIDC deploy role load-bearing: the role's trust policy pins the `environment:production` `:sub` claim, so a workflow can only assume it *after* a human approves the run. A deploy path that skips the environment (or an environment with no required reviewer) is a bug — treat it like a missing auth check. See `.github/workflows/deploy.yml.example` (Gate 3) for the pattern; the environment itself is provisioned from the `templates` repo's estate scripts (`new-project-account.sh` for new in-org projects, `backfill-prod-environment.sh` for existing repos).
 - **Pre-commit hooks** — `.pre-commit-config.yaml` runs gitleaks on staged changes. Install once with `pre-commit install`. Don't bypass with `--no-verify`.
 
+## Project rules (water-management)
+
+Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `security.md`, `model.md`, `plan.md`).
+
+1. **Never bypass RLS.** All project data goes through the backend's `withUser` (a transaction as `water_app` with `app.current_user_id` set). App code never connects as the owner or a superuser. A migration that adds a table adds its RLS policies **and** `GRANT … TO water_app` in the same file.
+2. **Migrations are forward-only once deployed.** `001` may still be edited until the first production deploy. After that, add `NNN_*.sql`. Prefer expand/contract.
+3. When changing a SQL function or policy, start from its **latest** definition. `DROP POLICY` needs the exact name.
+4. Every SQL function pins `search_path`, and every foreign key has a covering index. Catalogue tests guard both, so keep them green.
+5. RLS "cannot see" tests need a **positive control** (a member *can* see it).
+6. Every route is auth-gated or on the public allowlist (guarded by a test). API responses never contain raw DB error text.
+7. Date-sensitive tests run under a skewed `TZ`.
+8. Never `git stash`, not even with a path.
+9. e2e is Playwright under `e2e/`. It runs fully locally against docker Postgres and the dev servers, with no `networkidle` waits and a pinned `timezoneId: 'UTC'`.
+10. Engine results must match the client catchment workbook. The regression tests in `packages/engine` may skip **only** when the gitignored `data/` fixtures are absent.
+11. **The repo is public.** Client data (workbooks, extracted data, real farm names or values) is never committed; fixtures are synthetic. Secrets live only in `infra-secrets/water-management/`.
+
 ## Working alongside other Claude sessions
 
 More than one Claude session may run in **this one checkout at the same time** — sharing a single working tree *and* a single git index, so a careless `git add` + `git commit` sweeps up another session's in-flight work. The `.claude/hooks/git-scope-guard.py` PreToolUse hook enforces the rules below; if a git command is denied, its message names the scoped alternative — follow it, don't work around it.
@@ -103,8 +119,8 @@ These ship with placeholder examples and need per-project adaptation — see `.c
 
 ## Where to look
 
-- `docs/STACK.md` — the canonical "what is this and how do I run it" doc (template-owned)
-- `docs/` — additional architecture/deployment/security docs (template-owned)
+- `docs/STACK.md` — the canonical "what is this and how do I run it" doc
+- `docs/` — additional architecture/deployment/security docs 
 - `.github/workflows/gitleaks.yml` — secret scanning (base-owned)
 - `.github/workflows/audit.yml` — weekly `pnpm audit` + auto-issue (base-owned)
 - `.github/workflows/security.yml` — CodeQL static analysis + container scanning (base-owned)
