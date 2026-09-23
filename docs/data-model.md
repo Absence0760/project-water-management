@@ -70,7 +70,9 @@ first") therefore disappears.
 
 The backend checks these on every `PUT /model`: node names are unique, the
 references stay inside the same document, the graph is a tree, and there is
-exactly one node with no downstream (the outflow gauge).
+exactly one node with no downstream (the outflow gauge). The engine
+(`buildTopology`) enforces the last two again and throws, so a run never picks
+one of several outlets by array order.
 
 ## Time-series storage
 

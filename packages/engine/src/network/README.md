@@ -16,7 +16,7 @@ A full `runModel` for client catchment takes about 160 ms.
 
 | File | b023 source | What it does |
 | --- | --- | --- |
-| `topology.ts` | [Network] | Orders nodes upstream-first from `downstreamNodeId`. Throws on cycles and unknown links. |
+| `topology.ts` | [Network] | Orders nodes upstream-first from `downstreamNodeId`. Throws on cycles, unknown links and more than one outflow node. |
 | `shares.ts` | [Farm spec] "Selected fragmentation" | Each farm's share of natural flow and EWR (area / hiLo / manual). Warns if the shares don't sum to 1 ±0.0002. |
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |

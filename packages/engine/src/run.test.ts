@@ -273,9 +273,11 @@ describe('runModel — transfers', () => {
 		enabled: true,
 		...over
 	});
+	// S and R (and R2 below) drain into the outflow gauge G.
 	const nodes = () => [
-		node('S', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4 }),
-		node('R', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 1 })
+		node('S', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4, downstreamNodeId: 'G' }),
+		node('R', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 1, downstreamNodeId: 'G' }),
+		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 9 })
 	];
 
 	it("draws from the source's previous-day storage above the minimum, capped by the rate", () => {
@@ -315,7 +317,7 @@ describe('runModel — transfers', () => {
 		// the first (document order) takes 864, the second only the remaining 136.
 		// Previously each rule saw yesterday's full storage and 1728 left the dam.
 		const out = run({
-			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2 })],
+			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2, downstreamNodeId: 'G' })],
 			transfers: [transfer(), transfer({ id: 't2', toNodeId: 'R2' })],
 			natural: [0],
 			startDate: '2021-01-01'
@@ -328,9 +330,7 @@ describe('runModel — transfers', () => {
 
 	it('skips transfers involving a gauge, with a warning', () => {
 		const out = run({
-			nodes: [...nodes(), node('G', { kind: 'gauge', areaKm2: 0 })].map((n) =>
-				n.id === 'G' ? n : { ...n, downstreamNodeId: 'G' }
-			),
+			nodes: nodes(),
 			transfers: [transfer({ toNodeId: 'G' })],
 			natural: [0],
 			startDate: '2021-01-01'
@@ -454,6 +454,19 @@ describe('runModel — validation and window', () => {
 		expect(() =>
 			run({ nodes: [node('A', { downstreamNodeId: 'B' }), node('B', { downstreamNodeId: 'A' })], natural: [0] })
 		).toThrow(/outflow node|cycle/);
+	});
+
+	it('rejects a network with more than one outflow node, whatever the array order', () => {
+		// Without the check the outlet was whichever root came first (or the first
+		// gauge), and the other root's water silently left the balance.
+		const nodes = [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 }), node('Lost', { sortOrder: 1 })];
+		for (const order of [nodes, [...nodes].reverse()]) {
+			expect(() => run({ nodes: order, natural: [0] })).toThrow(/2 outflow nodes \((G, Lost|Lost, G)\).*exactly one/);
+			expect(() => buildTopology(order)).toThrow(/outflow nodes/);
+		}
+		// One root is fine; so is an empty network (no outlet at all).
+		expect(buildTopology(nodes.slice(0, 2)).outflow).toBe(1);
+		expect(buildTopology([]).outflow).toBe(-1);
 	});
 
 	it('rejects a link to an unknown node', () => {
