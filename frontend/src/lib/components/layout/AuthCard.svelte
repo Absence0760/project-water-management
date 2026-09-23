@@ -40,7 +40,7 @@
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 1.5rem;
-		color: var(--brand-ink);
+		color: var(--brand-navy);
 	}
 	@media (prefers-color-scheme: dark) {
 		.lockup {

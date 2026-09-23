@@ -57,9 +57,9 @@
 		gap: 0.5rem;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 1.15rem;
+		font-size: 1.1rem;
 		color: var(--text);
-		letter-spacing: -0.005em;
+		letter-spacing: -0.01em;
 	}
 	.brand:hover {
 		text-decoration: none;

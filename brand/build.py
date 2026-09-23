@@ -12,7 +12,7 @@ Outputs (all committed, all regenerated deterministically):
     frontend/static/favicon.ico      16/32/48 px
     frontend/static/apple-touch-icon.png, icon-192.png, icon-512.png, icon-maskable-512.png
     frontend/static/site.webmanifest
-    frontend/static/fonts/fraunces-600.woff2   Latin subset, static 600 weight (OFL)
+    frontend/static/fonts/outfit-600.woff2     Latin subset, static 600 weight (OFL)
 """
 from __future__ import annotations
 
@@ -33,17 +33,17 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "brand" / "src"
 DIST = ROOT / "brand" / "dist"
 STATIC = ROOT / "frontend" / "static"
-FONT_SRC = ROOT / "brand" / "fonts" / "Fraunces-Variable.ttf"
+FONT_SRC = ROOT / "brand" / "fonts" / "Outfit-Variable.ttf"
 
-TEAL = "#0E4A6B"
-INK = "#0E3B55"
-MIST = "#E8F4F2"
-OCHRE = "#C9892B"
-IVORY = "#F7F4EC"
+NAVY = "#102A43"
+CYAN = "#1E9BB8"
+MIST = "#D9E6F2"
+CYAN_BRIGHT = "#36C6E0"
+PAPER = "#F5F7FB"
 NAME = "Water Management"
 
 # Display settings for the wordmark and the web font.
-AXES = {"wght": 600, "opsz": 72, "SOFT": 0, "WONK": 0}
+AXES = {"wght": 600}
 
 
 def static_font() -> TTFont:
@@ -52,7 +52,7 @@ def static_font() -> TTFont:
 
 
 def build_webfont(font: TTFont) -> None:
-    out = STATIC / "fonts" / "fraunces-600.woff2"
+    out = STATIC / "fonts" / "outfit-600.woff2"
     out.parent.mkdir(parents=True, exist_ok=True)
     opts = Options()
     opts.flavor = "woff2"
@@ -132,7 +132,7 @@ def lockup(mark_inner: str, word_d: str, word_w: float, cap: float, ink: str, ma
         mark = mark.replace(a, b)
     mark_size = 120
     gap = 26
-    baseline = 60 + cap / 2 + 6  # optically centre the caps on the drop's body
+    baseline = 60 + cap / 2  # centre the caps on the mark
     w = mark_size + gap + word_w
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.1f} {mark_size}" role="img" aria-label="{NAME}">\n'
@@ -162,28 +162,29 @@ def main() -> None:
 
     font = static_font()
     d, w, cap = wordmark_path(font, NAME, 64)
-    (DIST / "logo.svg").write_text(lockup(inner(mark_src), d, w, cap, INK))
-    # Reversed: mist drop with teal branches, mist wordmark.
+    (DIST / "logo.svg").write_text(lockup(inner(mark_src), d, w, cap, NAVY))
+    # Reversed: mist nodes and lines, bright cyan outlet, mist wordmark.
     (DIST / "logo-reversed.svg").write_text(
-        lockup(inner(mark_src), d, w, cap, MIST, {f'fill="{TEAL}"': 'fill="#F2F7F6"', f'stroke="{MIST}"': f'stroke="{TEAL}"', f'fill="{MIST}"': f'fill="{TEAL}"'})
+        lockup(inner(mark_src), d, w, cap, MIST, {NAVY: MIST, CYAN: CYAN_BRIGHT})
     )
 
     shutil.copy(SRC / "mark-small.svg", STATIC / "favicon.svg")
 
+    reversed_mark = inner(mark_src).replace(NAVY, MIST).replace(CYAN, CYAN_BRIGHT)
     with tempfile.TemporaryDirectory() as tmp:
         t = Path(tmp)
-        # Icons: the mark on an ivory tile with safe padding (maskable-friendly).
+        # Icons: the reversed mark on a navy tile with safe padding (maskable-friendly).
         tile = t / "tile.svg"
         tile.write_text(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">'
-            f'<rect width="120" height="120" fill="{IVORY}"/>'
-            f'<g transform="translate(18 16) scale(0.7)">{inner(mark_src)}</g></svg>'
+            f'<rect width="120" height="120" fill="{NAVY}"/>'
+            f'<g transform="translate(18 14) scale(0.7)">{reversed_mark}</g></svg>'
         )
         maskable = t / "maskable.svg"
         maskable.write_text(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">'
-            f'<rect width="120" height="120" fill="{IVORY}"/>'
-            f'<g transform="translate(27 26) scale(0.55)">{inner(mark_src)}</g></svg>'
+            f'<rect width="120" height="120" fill="{NAVY}"/>'
+            f'<g transform="translate(27 25) scale(0.55)">{reversed_mark}</g></svg>'
         )
         png(tile, STATIC / "apple-touch-icon.png", 180)
         png(tile, STATIC / "icon-192.png", 192)
@@ -206,8 +207,8 @@ def main() -> None:
                     {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
                     {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
                 ],
-                "theme_color": TEAL,
-                "background_color": IVORY,
+                "theme_color": NAVY,
+                "background_color": NAVY,
                 "display": "standalone",
             },
             indent=2,
