@@ -142,20 +142,22 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await page.getByLabel('Area of Upper farm, km²', { exact: true }).fill('99');
 
-	// Await each prompt before moving on: a `page.once` listener registered for
-	// the second prompt could otherwise also receive the first one.
+	// Answer each prompt inside its listener (a click that opens a prompt only
+	// returns once the prompt is handled), and wait for the first answer before
+	// adding the second listener, so it can't also receive the first prompt.
 	const projectsLink = page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' });
-	const first = page.waitForEvent('dialog');
+	let asked = '';
+	page.once('dialog', (d) => {
+		asked = d.message();
+		void d.dismiss();
+	});
 	await projectsLink.click();
-	const stay = await first;
-	expect(stay.message()).toBe('You have unsaved model changes. Leave without saving?');
-	await stay.dismiss();
+	await expect.poll(() => asked).toBe('You have unsaved model changes. Leave without saving?');
 	await expect(page.getByRole('heading', { level: 1, name: 'Unsaved guard' })).toBeVisible();
 	await expect(page.getByLabel('Area of Upper farm, km²', { exact: true })).toHaveValue('99');
 
-	const second = page.waitForEvent('dialog');
+	page.once('dialog', (d) => void d.accept());
 	await projectsLink.click();
-	await (await second).accept();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 });
 
