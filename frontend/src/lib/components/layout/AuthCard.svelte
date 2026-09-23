@@ -56,6 +56,10 @@
 		font-size: 0.875rem;
 		color: var(--text-2);
 	}
+	/* Sits in running text: underline so it isn't told apart by colour alone. */
+	.footer :global(a) {
+		text-decoration: underline;
+	}
 	.card :global(input) {
 		width: 100%;
 	}
