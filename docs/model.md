@@ -463,11 +463,15 @@ sheet within its rounding (½ m³/day).
 
 ## 3. Workbook quirks and suspected bugs
 
-The V1 engine reproduces these **as the workbook does them**, so it can be
-regression-tested against client catchment. Each one needs a decision from the
-hydrologist. When one is fixed, the fix goes behind a project setting (a
-"workbook-compatible" mode against a "corrected" mode). That way old results
-stay reproducible and the engine version records which one was used.
+The engine no longer has to reproduce the workbook (operator decision,
+2026-09). Where a workbook algorithm is physically or numerically unsound, the
+engine **replaces it outright** (no workbook-compatible mode) and the row below
+says so; every run records the engine version, so older results stay
+explainable. Where the question is one of policy or hydrological judgement, the
+row stays **mirrored** until the hydrologist decides. The soundness audit
+([engine-audit.md](./engine-audit.md)) has the evidence and a recommendation for
+each, and the client catchment regression suite lists where and why results differ
+from the workbook.
 
 | # | Where | What we see | Why it matters |
 | --- | --- | --- | --- |

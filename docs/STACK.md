@@ -109,9 +109,11 @@ Prefer reading these over guessing. Update them when behaviour changes.
   with no real farm names or values ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
 - **The engine stays pure.** No `fetch`, no DB, no Node or DOM APIs in
   `packages/engine`, because it has to run in the browser *and* in Lambda.
-  Every engine change must keep the b023 regression tests green
-  ([model.md §6](./model.md#6-porting-strategy-and-regression-testing)). A
-  change in behaviour bumps `ENGINE_VERSION`.
+  Engine correctness is judged by documented hydrology and the invariant tests
+  (`run.invariants.test.ts`), not by agreement with the workbook: an
+  intentional departure is justified in [engine-audit.md](./engine-audit.md)
+  and listed, column by column, in the client catchment regression suite's deviation
+  list, which must stay green. A change in behaviour bumps `ENGINE_VERSION`.
 - Tests that need client-derived fixtures (under `data/`) skip when the
   fixture is absent.
 - **Every project-scoped query runs as `water_app` inside a transaction that

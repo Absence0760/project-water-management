@@ -8,6 +8,12 @@ LAMBDA definitions in the workbook's named ranges, all read with openpyxl.
 **Status: partial.** The session ended early. The sections marked *not
 reviewed* still need a pass. No engine code was changed in this round.
 
+> **Follow-up:** the soundness audit ([engine-audit.md](./engine-audit.md),
+> engine 0.4.0) asks whether the algorithms are *right*, not whether they match
+> the workbook. It decides F5 (the engine no longer rounds at all, audit R1)
+> and F7 (warning W3), and fixes a gauge issue behind F3 (G1). F3 itself stays
+> with the hydrologist (Q17).
+
 ## Findings
 
 | # | Severity | Where | Finding | Evidence | Fix |
