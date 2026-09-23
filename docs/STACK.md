@@ -20,7 +20,7 @@ sides share.
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
   charts, vitest. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
-- **e2e/** (being added): Playwright, fully local. It uses an isolated
+- **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
   so it never collides with `pnpm dev`.
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
@@ -55,9 +55,10 @@ pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB)
 pnpm test:engine | test:frontend | test:backend
 pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
-pnpm test:e2e               # Playwright (being added; also test:e2e:ui, check:e2e)
+pnpm test:e2e               # Playwright, 48 specs incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 
-pnpm seed:demo              # extract + import client catchment and the blank b023 for demo@example.com / demo-password
+pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
+pnpm seed:demo              # seed:examples + the Client Catchment client workbook from Original/ (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
 ```

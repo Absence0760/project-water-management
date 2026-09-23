@@ -60,18 +60,18 @@ a second and third project (empty, or copied) side by side.
 
 ### 1a. Engine: port b023 ([model.md §2](./model.md#2-the-b023-model-what-v1-ports))
 
-- ⬜ Natural flow from rain (§2.4): season state, base flow, recession index,
+- ✅ Natural flow from rain (§2.4): season state, base flow, recession index,
   pulse index, response flow, Pitman fallback. This needs the extra calibration
   settings: recession curve and factors, shift-peak indices, reset ratio, winter
   thresholds, amplitude, max days.
-- ⬜ Net irrigation demand per day (§2.3), with the workbook's rounding.
-- ⬜ Flow shares by the Area, Hi/Lo and Specific methods, plus fragmented flow
+- ✅ Net irrigation demand per day (§2.3), with the workbook's rounding.
+- ✅ Flow shares by the Area, Hi/Lo and Specific methods, plus fragmented flow
   and EWR (§2.5).
-- ⬜ Farm balance in network order, with gauges (§2.7).
-- ⬜ Transfers from structured rules (§2.6).
-- ⬜ EWR check at the outflow gauge, per-farm summaries, and calibration stats
+- ✅ Farm balance in network order, with gauges (§2.7).
+- ✅ Transfers from structured rules (§2.6).
+- ✅ EWR check at the outflow gauge, per-farm summaries, and calibration stats
   (NSE, PBIAS, RMSE) against the observed series.
-- ⬜ A `warnings[]` list: shares not summing to 1, missing series, gaps in rain,
+- ✅ A `warnings[]` list: shares not summing to 1, missing series, gaps in rain,
   days that fell back to Pitman flow.
 
 **Acceptance:** regression tests driven by fixtures extracted from client catchment
@@ -82,11 +82,11 @@ synthetic fixtures cover the same code paths on CI.
 
 ### 1b. Import
 
-- 🚧 `scripts/wbt-import` (Python + openpyxl, read-only) extracts the network,
+- ✅ `scripts/wbt-import` (Python + openpyxl, read-only) extracts the network,
   farm spec, crops, crop areas, transfer parameters, calibration and pragmatic
   EWR from a b023 workbook. It also extracts the daily input series. The output
   is `data/<name>/project.json` (the `ProjectModel` + settings + series shape).
-- 🚧 `pnpm import:project <project.json> --email …` creates a project from
+- ✅ `pnpm import:project <project.json> --email …` creates a project from
   `project.json`, and `pnpm seed:demo` extracts and imports the local
   workbooks for a demo user. Still to come: an import action in the UI.
 - ⬜ The importer reports whatever it could not map: hand-written transfer
@@ -97,13 +97,24 @@ workbook (as in 1a) with **no manual edits**.
 
 ### 1c. Backend API ([api.md](./api.md))
 
-- ⬜ Auth: register, login, logout, me (bcryptjs; jose HS256 in the `wm_session`
+- ✅ **Teams** (`002_teams.sql`): groups own many catchments. Team admin → owner
+  and team member → editor on every team project; direct sharing still works;
+  the effective role is the higher of the two. Teams UI in progress.
+- ✅ **Append / merge daily data**: `POST /projects/:id/series/merge` adds a
+  daily or batch update to a series by date (new days extend, re-sent days
+  overwrite, gaps become missing). UI option on the Data tab in progress.
+- ✅ **Seed data**: `pnpm seed:examples` — three invented catchments (healthy
+  winter-rainfall, water-stressed, larger summer-rainfall network), each with a
+  run, plus a team and two demo users sharing both ways. Safe to commit (no
+  client data); used by e2e.
+
+- ✅ Auth: register, login, logout, me (bcryptjs; jose HS256 in the `wm_session`
   httpOnly cookie).
-- ⬜ Projects: CRUD plus copy. Members: list, add by email, change role, remove.
-- ⬜ Model document: `GET`/`PUT` with tree validation. Series: list, get,
+- ✅ Projects: CRUD plus copy. Members: list, add by email, change role, remove.
+- ✅ Model document: `GET`/`PUT` with tree validation. Series: list, get,
   upsert, delete. Runs: create (synchronous), list, get, fetch one series,
   delete.
-- ⬜ Every project-scoped query runs in a transaction as `water_app` with
+- ✅ Every project-scoped query runs in a transaction as `water_app` with
   `app.current_user_id` set. DB tests prove the RLS rules
   ([data-model.md § Access control](./data-model.md#access-control)). Every
   "cannot see" test has a positive control, meaning the member *can* see it,
@@ -118,23 +129,23 @@ workbook (as in 1a) with **no manual edits**.
 
 ### 1d. Frontend
 
-- ⬜ Sign in / register. A project list with role badges. Create, copy, delete.
-- ⬜ Project workspace: **Network** (a tree view of farms and gauges, with an
+- ✅ Sign in / register. A project list with role badges. Create, copy, delete.
+- 🚧 Project workspace (V1 built; hydrologist-focused polish in progress): **Network** (a tree view of farms and gauges, with an
   editable table of farm parameters), **Crops** (monthly factors, and an
   area-per-farm grid), **Transfers**, **Settings** (A-pan, effective rain, flow
   share method, calibration, pragmatic EWR, date window), **Data** (upload CSV
   series, show coverage and gaps).
-- ⬜ **Run and results:** a run button, a run history, catchment charts (natural
+- 🚧 **Run and results** (V1 built; FDC, log scale, storage % in progress): a run button, a run history, catchment charts (natural
   vs simulated vs observed flow, EWR line, days not met), per-farm charts
   (demand vs supplied, dam storage, spill), a Shortfalls table, and calibration
   stats. Charts use uPlot and handle 16k points without lag.
 - ⬜ A browser-side instant preview: change a parameter and see the effect
   without saving, using the same engine.
-- ⬜ Members page (owner only).
+- ✅ Members panel (owner manages; anyone can leave).
 - ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or
   series quickly.
-- ⬜ **e2e (Playwright)** under `e2e/`, running fully locally against docker
+- ✅ **e2e (Playwright)** under `e2e/`, running fully locally against docker
   Postgres and the dev servers. Pinned `timezoneId: 'UTC'`, and waits on real
   signals (no `networkidle`). The first spec is the demo path: register,
   create project, import, run, chart.
@@ -152,6 +163,24 @@ workbook (as in 1a) with **no manual edits**.
 - [ ] A second user sees nothing until they are invited. As a viewer they can't
       edit.
 - [ ] `pnpm check`, `pnpm test` and `pnpm test:backend:db` pass.
+
+### 1e. Data ingestion (after V1)
+
+Catchments receive new data daily or in batches (logger readings, CHIRPS
+satellite rainfall, forecasts) — the workbook's "New data from" and forecast
+rows exist for this.
+
+- ✅ Merge endpoint (above) — the building block for every feed.
+- ⬜ **API keys per project** (hashed, scoped to `series:write`, revocable) so a
+  logger gateway or script can push without a user session.
+- ⬜ **Scheduled fetchers** (EventBridge → Lambda): CHIRPS daily rainfall for the
+  catchment polygon; the DWS gauge record where one exists.
+- ⬜ **Auto re-run** after new data (debounced), keeping earlier runs for comparison;
+  "new data since last run" banner.
+- ⬜ **Partial recompute** from the first changed day, reusing stored state
+  (the workbook's "New data from" logic) — only needed if full runs get slow
+  (currently ~0.2 s engine time for 44 years).
+- ⬜ Forecast days flagged (workbook marks them "F") and shown distinctly in charts.
 
 ---
 

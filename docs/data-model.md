@@ -123,6 +123,26 @@ Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
 
+### Teams (002_teams.sql)
+
+Users and groups work across many catchments. A **team** (e.g. a consultancy
+or a catchment management agency) has members with a team role, and projects
+may belong to a team (`project.team_id`):
+
+| Team role | Effective role on every team project |
+| --- | --- |
+| `member` | `editor` |
+| `admin` | `owner` (and manages the team: rename, members, delete) |
+
+Direct project membership still works on top — the **effective role is the
+higher of the two** (`app_project_role()`). Every project policy goes through
+`app_has_role()`, which uses the effective role, so team access applies to all
+project-scoped tables at once. The team's creator becomes its first admin and a
+team always keeps at least one admin (same trigger pattern as project owners).
+Deleting a team keeps its projects with their direct members (`ON DELETE SET
+NULL`); the creator of a project is always a direct owner. A project can only be
+created in, or moved into, a team the user belongs to (moving needs owner).
+
 ### Two database roles
 
 | DB role | Used by | Privileges |
@@ -140,7 +160,8 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   start the backend sets `set_config('app.current_user_id', <uuid>, true)`
   (transaction-local, so a pooled connection can't leak it to the next request).
 - `app_current_user_id()` reads that setting. `app_has_role(project, minRole)`
-  is `SECURITY DEFINER` and checks `project_member`.
+  is `SECURITY DEFINER` and compares the effective role from
+  `app_project_role()` (direct `project_member` row or team membership).
 - Policies on `project`, `project_member` and every model-data table (`node`,
   `crop`, `crop_area`, `transfer`, `time_series`, `model_run`, `run_series`):
   SELECT needs `viewer`; INSERT/UPDATE/DELETE on model data need `editor`;
