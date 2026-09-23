@@ -419,6 +419,44 @@ def read_element_sheet(wb: Workbook, name: str, kind: str, days: int, first_date
     return out
 
 
+# [Shortfalls] columns as offsets from zShortfalls_Tbl's first column (E) -> expected.json keys.
+# The first three are the original keys; the rest are the curtailment columns
+# (engine CurtailmentFarm, packages/engine/src/network/curtailment.ts).
+SHORTFALLS_COLS = {
+    "avgDemand": 3,  # H
+    "avgSupplied": 4,  # I
+    "avgEwrShortfall": 13,  # R
+    "deficit": 5,  # J
+    "fractionSupplied": 6,  # K ("-" when demand is 0)
+    "target": 8,  # M
+    "reduceGain": 9,  # N
+    "reduceGainLs": 10,  # O
+    "targetFraction": 11,  # P
+    "totalChange": 14,  # S
+    "totalChangeLs": 15,  # T
+    "volumeLeft": 16,  # U
+    "fractionOfDemandLeft": 17,  # V
+}
+# Columns the totals row (just below the "-- do NOT delete this row" sentinel) fills. K there is Σ I / Σ H.
+SHORTFALLS_TOTALS = (
+    "avgDemand",
+    "avgSupplied",
+    "deficit",
+    "fractionSupplied",
+    "target",
+    "reduceGain",
+    "reduceGainLs",
+    "avgEwrShortfall",
+    "totalChange",
+    "volumeLeft",
+)
+
+
+def num_or_none(v: Any) -> float | None:
+    """A [Shortfalls] cell: a number, or None for "-", an error value or a blank."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
 def read_shortfalls(wb: Workbook) -> dict[str, Any] | None:
     try:
         sheet, c1, r1, _, r2 = wb.ref("zShortfalls_Tbl")
@@ -426,14 +464,19 @@ def read_shortfalls(wb: Workbook) -> dict[str, Any] | None:
     except KeyError:
         return None
     start, end = wb.block(s, pc, pr, pc, pr + 1)
+    width = max(SHORTFALLS_COLS.values())
     farms = []
-    for row in wb.block(sheet, c1, r1 + 1, c1 + 13, r2):
+    for row in wb.block(sheet, c1, r1 + 1, c1 + width, r2):
         if not is_name(row[2]):
             continue
-        farms.append(
-            {"name": clean(row[2]), "avgDemand": num(row[3]), "avgSupplied": num(row[4]), "avgEwrShortfall": num(row[13])}
-        )
-    return {"periodStart": iso(start[0]), "periodEnd": iso(end[0]), "farms": farms}
+        farm: dict[str, Any] = {"name": clean(row[2])}
+        for key, off in SHORTFALLS_COLS.items():
+            farm[key] = num(row[off]) if key in ("avgDemand", "avgSupplied", "avgEwrShortfall") else num_or_none(row[off])
+        farms.append(farm)
+    # zShortfalls_Tbl ends on the sentinel row; the totals row is the next one.
+    tot = wb.block(sheet, c1, r2 + 1, c1 + width, r2 + 1)[0]
+    totals = {k: num_or_none(tot[SHORTFALLS_COLS[k]]) for k in SHORTFALLS_TOTALS}
+    return {"periodStart": iso(start[0]), "periodEnd": iso(end[0]), "farms": farms, "totals": totals}
 
 
 # ---------------------------------------------------------------------------

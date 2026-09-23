@@ -59,6 +59,13 @@ rows and columns don't break it.
   logger, catchment rain, CHIRPS rain and forecast rain. A column with no
   values is skipped. Blank cells become `null`.
 
+- **Expected results** (`expected.json`): every Element sheet's daily
+  columns, the [Flow data] catchment columns, and `shortfalls`: the
+  [Shortfalls] reporting period plus every farm row (H–V: averages, target,
+  reduce/gain, EWR shortfall, total change and volume left) and the totals
+  row. A `"-"` or error cell becomes `null`. The engine's regression test
+  compares `RunSummary.curtailment` with these values.
+
 Ids are `uuid5` of the project name and the element, crop or transfer name, so
 re-importing a workbook gives the same ids.
 
