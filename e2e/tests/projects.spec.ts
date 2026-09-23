@@ -85,9 +85,15 @@ test('the list shows the role the user has on each project', async ({ page, owne
 	await other.dispose();
 
 	await page.goto('/');
-	await expect(row(page, 'My own catchment').getByRole('cell').nth(1)).toHaveText('owner');
-	await expect(row(page, 'Colleague catchment').getByRole('cell').nth(1)).toHaveText('editor');
-	await expect(row(page, 'Colleague reference').getByRole('cell').nth(1)).toHaveText('viewer');
+	const roleCell = (name: string, role: string) => row(page, name).getByRole('cell', { name: role, exact: true });
+	await expect(roleCell('My own catchment', 'owner')).toBeVisible();
+	await expect(roleCell('Colleague catchment', 'editor')).toBeVisible();
+	await expect(roleCell('Colleague reference', 'viewer')).toBeVisible();
+
+	// Own projects are grouped under Personal, the colleague's under Shared with me.
+	const group = (name: string) => page.getByRole('region', { name });
+	await expect(group('Personal').getByRole('rowheader', { name: 'My own catchment' })).toBeVisible();
+	await expect(group('Shared with me').getByRole('row')).toHaveCount(3); // header + 2
 
 	// Only owners get a Delete button; anyone may copy.
 	await expect(row(page, 'My own catchment').getByRole('button', { name: /^Delete/ })).toBeVisible();
