@@ -388,6 +388,36 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Model and hydrology (for the hydrologist)
 
+> **Ask this first — it decides what the model is calibrated to.**
+>
+> **Which measured flow should Client Catchment be calibrated against?** The two
+> observed records agree until 2013/14, then the G1 gauge reads a fraction
+> of the A1 logger for four years (volume per water year, Oct–Sep; ratio on
+> days where both have a reading):
+>
+> | Water year | Gauge G1 | Logger A1 | Gauge as % of logger |
+> | --- | --- | --- | --- |
+> | 2012/13 | 59.3 Mm³ | 60.0 Mm³ (169 days) | 95 % |
+> | 2013/14 | 46.9 Mm³ | 56.6 Mm³ | 83 % |
+> | 2014/15 | 4.5 Mm³ | 33.9 Mm³ | **13 %** |
+> | 2015/16 | 14.6 Mm³ | 44.0 Mm³ | **33 %** |
+> | 2016/17 | 0.9 Mm³ | 11.3 Mm³ | **8 %** |
+> | 2017/18 | 20.4 Mm³ | 1.8 Mm³ (logger ends Mar 2018) | 1 % |
+>
+> The workbook calibrates to the logger. Against it the model scores NSE
+> 0.29 / KGE 0.57; against the gauge NSE −0.34 (worse than the mean) —
+> so the choice changes every farm's supply and EWR result.
+>
+> 1. Is the A1 logger the trusted record?
+> 2. Is anything known about the gauge from 2014 — weir damage, siltation, a
+>    rating-curve change, flow bypassing the structure, gaps filled with zeros?
+> 3. Should the gauge be excluded from 2014 onward, or corrected?
+> 4. Is there a DWS-verified G1 record we should import instead?
+>
+> Numbers from the client catchment WORKING 007 workbook; details in
+> [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg).
+
+
 1. **Which model should the app be built on?** b023 is complete and in use. The
    node-based v004 and the runoff module are unfinished experiments. Is the plan
    right: b023 first, then node-based features, then the runoff module as an
@@ -418,25 +448,20 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 9. **Reference results.** Is the client catchment "WORKING 007" workbook the version to
    match? Are there other catchments (B, C…) with workbooks we can use as test
    cases?
-10. **Which flow record is the truth?** The G1 gauge and the A1 logger
-    disagree badly in 2014–2017 (one water year the gauge has < 10 % of the
-    logger's volume). The workbook calibrates against the logger; is that the
-    intended target, and is the gauge record in those years usable?
-    (model.md §2.10)
-11. **Zero observed flows.** The workbook skips days where observed flow is
+10. **Zero observed flows.** The workbook skips days where observed flow is
     zero when scoring the fit; the app keeps them. Real readings or gaps?
-12. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
+11. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
     fits against them, or also score monthly totals?
-13. **EWR "days not met".** Count days that were actually short (app default)
+12. **EWR "days not met".** Count days that were actually short (app default)
     or the workbook macro's running monthly total? The workbook's EWR pivot is
     also stale on ~23 % of farm-months (macro not re-run). (model.md §2.9)
-14. **Curtailment targets** (model.md §2.11, Q11–Q15): is reduce/gain a
+13. **Curtailment targets** (model.md §2.11, Q11–Q15): is reduce/gain a
     fairness target or a schedule farms can follow (a downstream surplus can't
     reach an upstream farm)? The column "Reduction of demand required (%)" is
     actually the share of demand *left* — which do you report? How does a cut
     apply to a farm with no irrigation? Should l/s truncate (hiding cuts under
     0.1 l/s)?
-15. **Comparing runs.** Is a higher simulated outflow good or neutral, and a
+14. **Comparing runs.** Is a higher simulated outflow good or neutral, and a
     PBIAS closer to 0 better? Do you need per-farm series (e.g. the same
     farm's dam storage) overlaid across runs?
 
