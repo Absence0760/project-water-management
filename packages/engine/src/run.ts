@@ -295,14 +295,20 @@ export function runModelWith(
 		window
 	);
 
+	// Pitman flow is *naturalised* (no farms, dams or abstraction): compare it
+	// with natural flow. Gauge and logger records measure the impacted river, so
+	// they are compared with the simulated outflow (audit C1; the workbook
+	// scored the outflow against whichever record rUseFlow picked).
+	const scoreNatural = observedKind === 'flow_pitman_m3s';
 	const calibration = observedKind
 		? {
-				...calibrationStats(simOutflow, observedM3s, {
+				...calibrationStats(scoreNatural ? natural : simOutflow, observedM3s, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd
 				}),
-				flowKind: observedKind
+				flowKind: observedKind,
+				simulatedKey: scoreNatural ? ('natural_flow' as const) : ('simulated_outflow' as const)
 			}
 		: null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');

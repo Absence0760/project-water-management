@@ -621,6 +621,24 @@ describe('runModel — calibration statistics', () => {
 		expect(missing.summary.warnings.some((w) => /flow_pitman_m3s.*missing/.test(w))).toBe(true);
 	});
 
+	it('scores natural flow, not the impacted outflow, against naturalised Pitman flow (audit C1)', () => {
+		// A's dam keeps every drop, so the outflow is 0 while natural flow equals Pitman.
+		const i = input({
+			nodes: [node('A', { pctRunoffToDam: 1, damCapacityM3: 1e9 })],
+			natural: [86_400, 2 * 86_400, 3 * 86_400]
+		});
+		i.series.flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 2, 3] };
+		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 2 * 86_400, 3 * 86_400] }));
+		const c = out.summary.calibration!;
+		expect(c.flowKind).toBe('flow_pitman_m3s');
+		expect(c.simulatedKey).toBe('natural_flow');
+		expect(c.nse).toBeCloseTo(1, 12);
+		expect(c.pbias).toBeCloseTo(0, 12);
+		// A gauge or logger record is impacted flow: it is scored against the outflow.
+		expect(run({ nodes: [node('A')], natural: [86_400], observed: [1] }).summary.calibration!.simulatedKey).toBe('simulated_outflow');
+	});
+
 	it('returns null NSE when observations are constant', () => {
 		expect(calibrationStats([86_400, 86_400], [1, 1]).nse).toBeNull();
 		expect(calibrationStats([1], [null]).days).toBe(0);

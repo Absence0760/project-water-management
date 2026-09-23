@@ -318,6 +318,15 @@ logger, which only has data from 2013-04-15). The importer copies both into
 window the whole overlap is scored; with no flow kind the engine uses the gauge
 series if present, else the logger.
 
+**What is scored against what.** Gauge and logger records measure the river as
+it is, with farms, dams and abstraction, so they are compared with the
+**simulated outflow**. Pitman flow is *naturalised* (WR90/WR2012 model flow with
+no development), so from engine 0.4.0 it is compared with the **natural flow**
+from the rain model; the workbook compared the outflow with whichever record
+`rUseFlow` picked, which scores the rain model against a record of a different
+quantity ([audit C1](./engine-audit.md)). `CalibrationStats.simulatedKey` says
+which series was scored.
+
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
 have an observation, in m³/s:
 

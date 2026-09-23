@@ -334,6 +334,12 @@ export interface CalibrationStats {
 	annualVolumes?: AnnualVolume[];
 	/** The series simulated outflow was compared with (set by runModel). */
 	flowKind?: CalibrationFlowKind;
+	/**
+	 * The simulated series that was scored (engine ≥ 0.4.0): `natural_flow` when
+	 * flowKind is naturalised Pitman flow, else `simulated_outflow` (gauge and
+	 * logger records measure impacted flow). Older runs always scored the outflow.
+	 */
+	simulatedKey?: 'natural_flow' | 'simulated_outflow';
 }
 
 /** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */
