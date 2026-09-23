@@ -1,0 +1,81 @@
+// URL builders for the backend's download endpoints (docs/api.md § Export),
+// plus the menu entries the workspace mounts <DownloadMenu> with. Pure: the
+// API base URL is a parameter so tests don't need SvelteKit's $env modules
+// (./index.ts binds PUBLIC_API_URL).
+
+export interface DailyWindow {
+	/** Inclusive ISO dates; omitted = the whole run / series. */
+	from?: string;
+	to?: string;
+}
+
+export interface DownloadItem {
+	/** Menu text, e.g. "Daily series — Farm 1 (CSV)". */
+	label: string;
+	url: string;
+	/** Optional second line under the label. */
+	hint?: string;
+}
+
+export function exportUrls(baseUrl: string) {
+	const base = baseUrl.replace(/\/+$/, '');
+	const enc = encodeURIComponent;
+	const p = (id: string) => `${base}/projects/${enc(id)}`;
+	const query = (params: Record<string, string | null | undefined>) => {
+		const q = new URLSearchParams();
+		for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+		const s = q.toString();
+		return s ? `?${s}` : '';
+	};
+	return {
+		/** Every daily series of one node, or of the catchment when `nodeId` is null. */
+		runDaily: (projectId: string, runId: string, nodeId: string | null = null, w: DailyWindow = {}) =>
+			`${p(projectId)}/runs/${enc(runId)}/export/daily.csv${query({ nodeId, from: w.from, to: w.to })}`,
+		runSummary: (projectId: string, runId: string) => `${p(projectId)}/runs/${enc(runId)}/export/summary.csv`,
+		series: (projectId: string, seriesId: string, w: DailyWindow = {}) =>
+			`${p(projectId)}/series/${enc(seriesId)}/export.csv${query({ from: w.from, to: w.to })}`,
+		/** The whole project as the JSON document `pnpm import:project` accepts. */
+		project: (projectId: string) => `${p(projectId)}/export.json`
+	};
+}
+
+export type ExportUrls = ReturnType<typeof exportUrls>;
+
+/**
+ * Menu entries for one run: the summary sheet, the catchment table, then one
+ * daily table per node (in the order given — pass them in network order).
+ */
+export function runDownloadItems(
+	urls: ExportUrls,
+	projectId: string,
+	runId: string,
+	nodes: readonly { id: string; name: string }[] = []
+): DownloadItem[] {
+	return [
+		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-farm table, catchment and calibration' },
+		{ label: 'Daily series — catchment (CSV)', url: urls.runDaily(projectId, runId), hint: 'Natural flow, outflow, EWR, rain…' },
+		...nodes.map((n) => ({ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) }))
+	];
+}
+
+/** File name from a `Content-Disposition` header, or `fallback` when absent. */
+export function filenameFromDisposition(header: string | null | undefined, fallback: string): string {
+	if (!header) return fallback;
+	const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+	if (star) {
+		try {
+			return decodeURIComponent(star[1]!.trim());
+		} catch {
+			/* fall through to the plain parameter */
+		}
+	}
+	const plain = /filename\s*=\s*"([^"]*)"|filename\s*=\s*([^;]+)/i.exec(header);
+	const name = (plain?.[1] ?? plain?.[2] ?? '').trim();
+	return name || fallback;
+}
+
+/** Last path segment of a download URL, used when the server sent no file name. */
+export function fallbackFilename(url: string): string {
+	const path = url.split('?')[0] ?? '';
+	return path.slice(path.lastIndexOf('/') + 1) || 'download';
+}
