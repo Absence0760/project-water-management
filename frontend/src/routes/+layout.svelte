@@ -56,7 +56,7 @@
 		</div>
 	</main>
 {:else if ready}
-	{@render children()}
+	<div id="main" tabindex="-1">{@render children()}</div>
 {:else}
 	<main class="page"><p class="muted" role="status">Loading…</p></main>
 {/if}

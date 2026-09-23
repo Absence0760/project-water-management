@@ -24,6 +24,8 @@
 	--surface-sunken: #eaecea;
 	--border: #d9dcd9;
 	--border-strong: #b9bdb9;
+	/* Form-control outlines: ≥ 3:1 on --surface (WCAG 1.4.11). */
+	--border-input: #858a85;
 	--text: #161816;
 	--text-2: #4d514e;
 	/* ≥ 4.5:1 on --surface-2 and --accent-soft (table heads, selected rows). */
@@ -38,7 +40,8 @@
 	--warning-soft: #fdf3dc;
 	--success: #1f6f3a;
 	--success-soft: #e5f4ea;
-	--focus: #1e9bb8;
+	/* Focus ring: ≥ 3:1 against --bg and --surface (brand cyan is 2.99 on --bg). */
+	--focus: #0b6e8a;
 	--row-hover: #eef4f8;
 	--row-flag: #fdf3dc;
 
@@ -52,6 +55,9 @@
 	--radius-sm: 4px;
 	--shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.04);
 	--gutter: 16px;
+	--header-h: 56px;
+	/* Minimum touch target on small / touch screens. */
+	--tap: 44px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -63,6 +69,7 @@
 		--surface-sunken: #161716;
 		--border: #333633;
 		--border-strong: #4a4e4a;
+		--border-input: #6b706b;
 		--text: #eceeec;
 		--text-2: #c3c6c1;
 		--text-muted: #9a9e99;
@@ -116,8 +123,11 @@ h4 {
 	line-height: 1.25;
 	font-weight: 600;
 }
+/* Outfit (display face) for page titles only; UI text stays system sans. */
 h1 {
-	font-size: 1.35rem;
+	font-family: var(--font-display);
+	font-size: 1.5rem;
+	letter-spacing: -0.01em;
 }
 h2 {
 	font-size: 1.1rem;
@@ -138,13 +148,14 @@ a:hover {
 }
 /* Links inside running text must not rely on colour alone (WCAG 1.4.1). */
 p a:not(.btn),
-.alert a:not(.btn) {
+.alert a:not(.btn),
+.hint a:not(.btn) {
 	text-decoration: underline;
 }
 
 :focus-visible {
 	outline: 2px solid var(--focus);
-	outline-offset: 1px;
+	outline-offset: 2px;
 }
 
 .muted {
@@ -226,6 +237,17 @@ p a:not(.btn),
 	color: var(--danger);
 	background: var(--danger-soft);
 }
+/* Touch screens and phones: 44 px targets (buttons and standalone fields). */
+@media (pointer: coarse), (max-width: 640px) {
+	.btn,
+	.field > input,
+	.field > select {
+		min-height: var(--tap);
+	}
+	.btn-sm {
+		padding: 0.3rem 0.65rem;
+	}
+}
 
 /* ---- Forms ------------------------------------------------------------ */
 input,
@@ -234,10 +256,15 @@ textarea {
 	font: inherit;
 	color: var(--text);
 	background: var(--surface);
-	border: 1px solid var(--border-strong);
+	border: 1px solid var(--border-input);
 	border-radius: var(--radius-sm);
 	padding: 0.35rem 0.5rem;
 	min-width: 0;
+}
+input:hover:not(:disabled):not(:read-only),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled):not(:read-only) {
+	border-color: var(--text-muted);
 }
 input:disabled,
 select:disabled,
@@ -460,4 +487,9 @@ table.data tr.flag {
 }
 .toolbar .spacer {
 	flex: 1;
+}
+
+/* Skip-link target: focusable but no ring around the whole page. */
+#main:focus {
+	outline: none;
 }
