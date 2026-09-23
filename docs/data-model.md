@@ -178,6 +178,28 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `app_user` has no RLS: login has to look a user up by email before anyone is
   signed in. The backend never selects `password_hash` into a response.
 
+### Email tokens and invites (003_email.sql)
+
+| Table / column | Holds |
+| --- | --- |
+| `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (pre-003 accounts were backfilled as verified) |
+| `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
+| `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
+| `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`; unique per (project, email) / (team, email) |
+
+- Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
+  functions: `app_issue_email_token()` (per-address cooldown, replaces older
+  tokens of the purpose) and `app_consume_email_token()` (deletes = single
+  use; `NULL` if unknown/expired). The RLS policies on `email_token` only allow
+  a signed-in user their own rows.
+- `invite` RLS: project owners (via `app_has_role(…, 'owner')`) or team admins
+  (`app_team_role(…) = 'admin'`) read, create, refresh and delete; inserts must
+  have `invited_by` = the current user. `app_invite_for_token()` answers the
+  public "what is this link for?" lookup; `app_accept_invites(user)` converts
+  every live invite for the user's **verified** address into
+  `project_member` / `team_member` rows and deletes those invites. Invites
+  cascade away with their project or team.
+
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role
 boundaries hold, that the last owner can't be removed, and that cross-project

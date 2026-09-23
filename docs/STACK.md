@@ -12,7 +12,9 @@ sides share.
   (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest.
   Imported as source by frontend and backend.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
-  URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`.
+  URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`,
+  and for email `nodemailer` (SMTP → Mailpit locally) / `@aws-sdk/client-sesv2`
+  (SES in production), picked by `MAIL_TRANSPORT`.
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
   (needs Postgres).
@@ -23,6 +25,8 @@ sides share.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
   so it never collides with `pnpm dev`.
+- **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
+  http://localhost:8026, `pnpm dev:mail:up`).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
   bound by RLS. The `water_test` database is for DB tests.
@@ -49,6 +53,7 @@ pnpm dev:db:status | dev:db:logs
 pnpm dev:db:migrate         # apply backend/migrations as `water`
 pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local data)
 pnpm dev:db:psql            # psql as the schema owner
+pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026, dev:mail:open)
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm check                  # typecheck all workspaces

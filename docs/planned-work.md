@@ -23,8 +23,8 @@ Status: ⬜ not started · 🚧 partly there.
 | ⬜ **Export** | CSV/Excel download of any table or series, and a run's full daily output. Hydrologists will want to check numbers in Excel. | S |
 | 🚧 **Append daily data from the UI** | Merge endpoint exists (`POST /series/merge`); upload "append" mode and "data up to …" staleness indicator are in progress. | S |
 | ⬜ **Help & glossary** | The workbook ships a 200-row Help sheet. Port it as contextual help (ⓘ next to fields) and a glossary page: EWR, MAP, A-pan, crop factor, flow share, NSE… | S |
-| ⬜ **Password reset + email verification** | Required before real users. Needs email: SES in prod, Mailpit locally (estate pattern from project-flakey). | M |
-| ⬜ **Invite people who don't have an account yet** | Today a member must register before they can be added. Email invite with a signup link. Depends on email. | S |
+| 🚧 **Password reset + email verification** | Required before real users. Built: API (hashed single-use tokens, session revocation on reset), Mailpit locally, SES transport, `/forgot-password` `/reset-password` `/verify-email` pages and a verify banner. Left: mount the banner + "Forgot password?" link in the redesigned auth UI, and SES Terraform ([deployment.md § Email](./deployment.md#email-amazon-ses--not-provisioned-yet)). | M |
+| 🚧 **Invite people who don't have an account yet** | Built: adding an unknown address emails a sign-up link and stores a pending invite (7 days) that becomes a membership once the address is verified; owners/admins list and revoke invites (API). Left: members-panel UI ("Invitation sent", pending list) and reading `?invite=` on the register page. | S |
 
 ## Next — make it a working tool, not a demo
 

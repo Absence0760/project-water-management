@@ -60,8 +60,9 @@ async function createTransport(kind: string): Promise<Send> {
 		}
 		case 'ses': {
 			const { SESv2Client, SendEmailCommand } = await import('@aws-sdk/client-sesv2');
-			// Region + credentials come from the Lambda environment / IAM role.
-			const client = new SESv2Client({});
+			// Credentials come from the Lambda's IAM role; the region is the
+			// Lambda's own unless SES_REGION overrides it (docs/deployment.md § Email).
+			const client = new SESv2Client(process.env.SES_REGION ? { region: process.env.SES_REGION } : {});
 			const configurationSet = process.env.SES_CONFIGURATION_SET || undefined;
 			return async (mail, from) => {
 				await client.send(
