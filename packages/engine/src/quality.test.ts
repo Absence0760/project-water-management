@@ -26,7 +26,7 @@ describe('observedAgreement', () => {
 		expect(ag.years[0]!.volumeAMm3).toBeCloseTo(364 * 0.0864, 9);
 		expect(ag.years[1]!.ratio).toBeCloseTo(0.1, 12);
 		expect(ag.flaggedYears).toEqual([2021]);
-		expect(agreementWarning(ag)).toMatch(/observed gauge flow recorded 10 % in 2021\/22 of the logger flow volume/);
+		expect(agreementWarning(ag)).toMatch(/observed gauge flow as a share of the logger flow volume .*: 2021\/22: 10 %\./);
 	});
 
 	it('flags too-high ratios and ignores years with too few shared days', () => {
@@ -43,7 +43,7 @@ describe('observedAgreement', () => {
 		const ag = observedAgreement({ flow_observed_m3s: constant('2020-10-01', 100, 1), flow_logger_m3s: constant('2020-10-01', 100, 0) })!;
 		expect(ag.years[0]!.ratio).toBeNull();
 		expect(ag.flaggedYears).toEqual([2020]);
-		expect(agreementWarning(ag)).toMatch(/logger flow recorded nothing/);
+		expect(agreementWarning(ag)).toMatch(/2020\/21: the logger flow recorded nothing/);
 	});
 
 	it('labels water years', () => {

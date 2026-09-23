@@ -117,10 +117,10 @@ export function agreementWarning(ag: ObservedAgreement | null): string | null {
 	if (!ag || ag.flaggedYears.length === 0) return null;
 	const parts = ag.years
 		.filter((y) => y.flagged)
-		.map((y) => (y.ratio === null ? `${waterYearLabel(y.waterYear)} (${OBSERVED_FLOW_LABEL[ag.b]} recorded nothing)` : `${Math.round(y.ratio * 100)} % in ${waterYearLabel(y.waterYear)}`));
+		.map((y) => (y.ratio === null ? `${waterYearLabel(y.waterYear)}: the ${OBSERVED_FLOW_LABEL[ag.b]} recorded nothing` : `${waterYearLabel(y.waterYear)}: ${Math.round(y.ratio * 100)} %`));
 	return (
-		`Observed flow records disagree: ${OBSERVED_FLOW_LABEL[ag.a]} recorded ${parts.join(', ')} of the ${OBSERVED_FLOW_LABEL[ag.b]} volume ` +
-		`on days both have readings (expected ${Math.round(ag.minRatio * 100)}–${Math.round(ag.maxRatio * 100)} %). ` +
+		`Observed flow records disagree — the ${OBSERVED_FLOW_LABEL[ag.a]} as a share of the ${OBSERVED_FLOW_LABEL[ag.b]} volume ` +
+		`(days both have readings; expected ${Math.round(ag.minRatio * 100)}–${Math.round(ag.maxRatio * 100)} %): ${parts.join('; ')}. ` +
 		`Check which record to calibrate against (Settings → calibration flow series).`
 	);
 }
