@@ -46,7 +46,9 @@
 		"test:e2e": "pnpm -C e2e e2e",
 		"test:e2e:ui": "pnpm -C e2e e2e:ui",
 		"test:e2e:install": "pnpm -C e2e install:browsers",
-		"check:e2e": "pnpm -C e2e check"
+		"check:e2e": "pnpm -C e2e check",
+		"//-- infra --": "Terraform in infra/: credential-free fmt -check + validate + plan-only `terraform test` (mocked providers, tests/guardrails.tftest.hcl). Needs terraform (tfenv, infra/.terraform-version). Never plans against or applies to AWS; see infra/README.md.",
+		"check:infra": "bin/check-infra.sh"
 	},
 	"engines": {
 		"node": ">=24"
