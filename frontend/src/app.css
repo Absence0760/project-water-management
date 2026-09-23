@@ -104,9 +104,12 @@
 	box-sizing: border-box;
 }
 
-/* Reserve the scrollbar's space even when a page (or a loading state) is
-   short, so the layout doesn't shift sideways as content height changes. */
+/* Always show the vertical scrollbar, so the layout doesn't shift sideways
+   when a page (or a loading state) is short. scrollbar-gutter alone doesn't
+   reserve the space in Chromium with classic scrollbars here (clientWidth
+   still flipped 1440 ↔ 1425 between short and long tabs); overflow-y does. */
 html {
+	overflow-y: scroll;
 	scrollbar-gutter: stable;
 }
 html,
