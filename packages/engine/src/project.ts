@@ -170,6 +170,8 @@ export interface NetworkNode {
 export interface CropDef {
 	id: string;
 	name: string;
+	/** Display order (0-based); the model doesn't depend on it. */
+	sortOrder?: number;
 	/** Crop factor per water-year month (Oct–Sep), 12 values. */
 	cropFactor: number[];
 }

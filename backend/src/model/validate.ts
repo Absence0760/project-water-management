@@ -33,6 +33,7 @@ export const ModelBody = z.object({
 			z.object({
 				id: uuid,
 				name: z.string().trim().min(1).max(100),
+				sortOrder: z.number().int().optional(),
 				cropFactor: z.array(z.number().finite().min(0)).length(12)
 			})
 		)

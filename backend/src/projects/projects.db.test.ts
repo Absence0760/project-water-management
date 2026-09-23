@@ -189,3 +189,23 @@ describe('series append', () => {
 	});
 });
 
+describe('display order', () => {
+	it('keeps the crop order the client saves (defaults to document order)', async () => {
+		const u = await signUp('Order');
+		const { projectId, model } = await projectWithModel(u);
+		const m = structuredClone(model);
+		m.crops = [
+			{ id: crypto.randomUUID(), name: 'Zucchini', cropFactor: monthly(0.5) },
+			{ id: crypto.randomUUID(), name: 'Apples', cropFactor: monthly(0.5) },
+			...m.crops
+		];
+		m.cropAreas = [];
+		const saved = await u.call('PUT', `/projects/${projectId}/model`, m);
+		expect(saved.body.crops.map((c: { name: string }) => c.name)).toEqual(['Zucchini', 'Apples', 'Citrus']);
+		const reordered = structuredClone(saved.body);
+		reordered.crops = reordered.crops.map((c: { sortOrder: number }, i: number) => ({ ...c, sortOrder: 2 - i }));
+		const again = await u.call('PUT', `/projects/${projectId}/model`, reordered);
+		expect(again.body.crops.map((c: { name: string }) => c.name)).toEqual(['Citrus', 'Apples', 'Zucchini']);
+	});
+});
+

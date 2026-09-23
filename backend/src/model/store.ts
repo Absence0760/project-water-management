@@ -14,7 +14,10 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
 		);
-	const crops = await db.query(`SELECT id, name, crop_factor AS "cropFactor" FROM crop WHERE project_id = $1 ORDER BY name`, [projectId]);
+	const crops = await db.query(
+		`SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor" FROM crop WHERE project_id = $1 ORDER BY sort_order, name`,
+		[projectId]
+	);
 	const cropAreas = await db.query(
 			`SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2" FROM crop_area WHERE project_id = $1`,
 			[projectId]
@@ -81,12 +84,14 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			await db.query('UPDATE node SET downstream_node_id = $2 WHERE id = $1', [n.id, n.downstreamNodeId]);
 		}
 	}
-	for (const c of m.crops) {
+	for (const [i, c] of m.crops.entries()) {
 		await upserted(
-			`INSERT INTO crop (id, project_id, name, crop_factor) VALUES ($1, $2, $3, $4)
-			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, crop_factor = EXCLUDED.crop_factor
+			`INSERT INTO crop (id, project_id, name, sort_order, crop_factor) VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order,
+				crop_factor = EXCLUDED.crop_factor
 			 WHERE crop.project_id = EXCLUDED.project_id`,
-			[c.id, projectId, c.name, c.cropFactor],
+			// Without an explicit order, the document's order is the display order.
+			[c.id, projectId, c.name, c.sortOrder ?? i, c.cropFactor],
 			'crop'
 		);
 	}
