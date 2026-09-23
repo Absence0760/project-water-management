@@ -8,14 +8,15 @@ export interface Topology {
 	order: Int32Array;
 	/** upstream[i] = indices of the nodes draining directly into node i. */
 	upstream: Int32Array[];
-	/** Index of the outflow node (downstreamNodeId null) whose outflow is the simulated catchment outflow. */
+	/** Index of the single outflow node (downstreamNodeId null), whose outflow is the simulated catchment outflow; -1 for an empty network. */
 	outflow: number;
 	warnings: string[];
 }
 
 /**
  * Build the calculation order. Throws on structural errors the model cannot
- * run with (unknown downstream reference, a cycle, no outflow node); returns
+ * run with (unknown downstream reference, a cycle, no outflow node or more
+ * than one); returns
  * warnings for problems it can work around.
  */
 export function buildTopology(nodes: readonly NetworkNode[]): Topology {
@@ -78,16 +79,17 @@ export function buildTopology(nodes: readonly NetworkNode[]): Topology {
 		throw new Error(`network has a cycle through: ${stuck.join(', ')}`);
 	}
 
-	// Pick the outflow node: prefer a gauge when there are several roots.
-	let outflow = roots[0] ?? -1;
+	// The simulated catchment outflow is one node's outflow: with several roots
+	// the others' water would silently leave the balance, and which root counts
+	// would depend on array order. The backend rejects this on save; the engine
+	// does too, so a direct caller can't get a quietly wrong result.
 	if (roots.length > 1) {
-		const gauge = roots.find((r) => nodes[r]!.kind === 'gauge');
-		if (gauge !== undefined) outflow = gauge;
-		warnings.push(
+		throw new Error(
 			`network has ${roots.length} outflow nodes (${roots.map((r) => nodes[r]!.name).join(', ')}); ` +
-				`"${nodes[outflow]!.name}" is used as the catchment outflow and the others' water is not counted`
+				'exactly one node may drain into nothing — point the others downstream'
 		);
 	}
+	const outflow = roots[0] ?? -1;
 
 	return {
 		order: Int32Array.from(order),

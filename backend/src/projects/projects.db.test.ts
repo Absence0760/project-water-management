@@ -109,6 +109,28 @@ describe('projects', () => {
 		}
 	});
 
+	it('stores the gauge-vs-logger thresholds, rejects bad ones, and runs use them', async () => {
+		const u = await signUp('Q');
+		const { projectId } = await projectWithModel(u);
+		const first = await u.call('GET', `/projects/${projectId}`);
+		expect(first.body.project.settings.dataQuality).toEqual({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
+		const ok = await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality: { agreementMinRatio: 0.9, agreementMinDays: 30 } } });
+		expect(ok.status).toBe(200);
+		// A partial patch keeps the other threshold at its default.
+		expect(ok.body.project.settings.dataQuality).toEqual({ agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
+		for (const dataQuality of [{ agreementMinRatio: 0 }, { agreementMinRatio: 1.2 }, { agreementMaxRatio: 0.5 }, { agreementMinDays: 12.5 }, { agreementMinDays: 400 }, { other: 1 }]) {
+			expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality } })).status, JSON.stringify(dataQuality)).toBe(400);
+		}
+		// Gauge at 80 % of the logger: inside the defaults, outside 90 %.
+		const days = 60;
+		await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-10-01', values: new Array(days).fill(0) });
+		await u.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2020-10-01', values: new Array(days).fill(0.8) });
+		await u.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_logger_m3s', unit: 'm3/s', startDate: '2020-10-01', values: new Array(days).fill(1) });
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'thresholds' });
+		expect(run.status).toBe(201);
+		expect(run.body.run.summary.dataQuality.observedAgreement).toMatchObject({ minRatio: 0.9, minDays: 30, flaggedYears: [2020] });
+	});
+
 	it('scores a run over the calibration window and stores the EWR compliance grid', async () => {
 		const u = await signUp('R');
 		const { projectId } = await projectWithModel(u);

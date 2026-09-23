@@ -8,13 +8,21 @@
 //   5. EWR shortfalls, calibration statistics     [EWR shortfalls]       → ./network/stats.ts
 //   6. curtailment targets per farm               [Shortfalls]           → ./network/curtailment.ts
 // See ./network/README.md for the column-by-column mapping.
-import { agreementWarning, observedAgreement } from './quality';
+import {
+	agreementOptions,
+	agreementWarning,
+	areaMismatches,
+	areaMismatchWarning,
+	observedAgreement,
+	resolveDataQuality,
+	seriesChecks
+} from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeNaturalFlow, recessionTableWarnings } from './flow';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
-import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
@@ -182,7 +190,9 @@ export function runModelWith(
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
-		upstream: topo.upstream,
+		// Sum each node's upstream in node-id order, not display order, so the
+		// float result can't depend on how the nodes are listed (review F8).
+		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
 		transfers,
 		month,
 		naturalFlow: natural,
@@ -216,7 +226,7 @@ export function runModelWith(
 	const ewrShort = new Float64Array(days);
 	let ewrDaysNotMet = 0;
 	for (let t = 0; t < days; t++) {
-		const d = simOutflow[t]! - ewr[t]!;
+		const d = shortfall(simOutflow[t]!, ewr[t]!, Math.max(simOutflow[t]!, ewr[t]!));
 		if (d < 0) {
 			ewrDaysNotMet++;
 			ewrShort[t] = d;
@@ -333,10 +343,16 @@ export function runModelWith(
 		);
 	}
 
-	// Input data quality: do the two observed flow records agree?
-	const agreement = observedAgreement(input.series);
+	// Input data quality: do the two observed flow records agree? Are there
+	// impossible or suspicious values? Do the farm areas add up?
+	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
+	const checks = seriesChecks(series);
+	for (const c of checks) warnings.push(c.text);
+	const areas = areaMismatches(nodes, settings.flowShareMethod);
+	const areaNote = areaMismatchWarning(areas);
+	if (areaNote) warnings.push(areaNote);
 
 	const outflowNode = topo.outflow >= 0 ? nodes[topo.outflow]! : null;
 	const compliance = ewrCompliance(
@@ -368,7 +384,7 @@ export function runModelWith(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
-			dataQuality: { observedAgreement: agreement },
+			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
 			warnings
 		}
 	};
@@ -507,6 +523,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
 	s.calibration = { ...d.calibration, ...((raw?.calibration as object | undefined) ?? {}) };
 	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
+	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {

@@ -106,8 +106,12 @@ their kind by name) are marked. Clicking a row (or its View button) shows
 that series in the chart below. The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
-where they disagree. "What the model uses" explains every kind. Each series
-can be downloaded as CSV.
+where they disagree, using the project's thresholds from Settings → *Data
+quality*. A **Data checks** panel lists negative values, outliers and flat
+stretches found in each loaded series (engine `checkSeries`; the same checks a
+run reports as warnings, rules in [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+"What the model uses" explains every kind. Each series can be downloaded as
+CSV.
 
 ## Settings & calibration
 
@@ -123,6 +127,10 @@ The settings are grouped by what they drive:
 - **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
   curtailment reporting window.
 - **Simulation period**.
+- **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
+  in %, minimum shared days; defaults 67 %, 150 %, 90 days). Out-of-range
+  values block Save with a message. They only change which water years are
+  flagged, never the results.
 
 ## Runs & results
 

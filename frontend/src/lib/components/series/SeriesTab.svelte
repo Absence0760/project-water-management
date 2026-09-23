@@ -1,6 +1,17 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { fromEpochDay, observedAgreement, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import {
+		agreementOptions,
+		checkSeries,
+		fromEpochDay,
+		observedAgreement,
+		resolveDataQuality,
+		SERIES_KINDS,
+		toEpochDay,
+		type DataQualitySettings,
+		type SeriesKind,
+		type SeriesMeta
+	} from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -23,6 +34,7 @@
 		readonly,
 		initial = null,
 		runs = null,
+		dataQuality = null,
 		onSeriesChange
 	}: {
 		projectId: string;
@@ -30,6 +42,8 @@
 		/** Already-loaded list (the page's), so the first frame has the final layout. */
 		initial?: SeriesMeta[] | null;
 		runs?: RunMeta[] | null;
+		/** The project's settings.dataQuality (gauge-vs-logger thresholds); null = the engine defaults. */
+		dataQuality?: Partial<DataQualitySettings> | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();
 
@@ -131,8 +145,21 @@
 		const l = first('flow_logger_m3s');
 		const vo = o && values[o.id];
 		const vl = l && values[l.id];
-		return vo && vl ? observedAgreement({ flow_observed_m3s: vo, flow_logger_m3s: vl }) : null;
+		// resolveDataQuality falls back to the defaults for anything missing or invalid, like a run does.
+		return vo && vl
+			? observedAgreement({ flow_observed_m3s: vo, flow_logger_m3s: vl }, agreementOptions(resolveDataQuality(dataQuality)))
+			: null;
 	});
+
+	// Negative values, outliers and flat-lines per series (the checks a run reports as warnings).
+	const checks = $derived(
+		list.flatMap((s) => {
+			const v = values[s.id];
+			if (!v || !(SERIES_KINDS as readonly string[]).includes(s.kind)) return [];
+			return checkSeries(s.kind as SeriesKind, v).map((c) => ({ id: `${s.id}-${c.check}`, series: s, check: c }));
+		})
+	);
+	const CHECK_LABEL = { negative: 'Negative values', outlier: 'Outliers', flatline: 'Flat stretch' } as const;
 
 	async function remove(s: SeriesMeta) {
 		if (!confirm(`Delete the series "${s.name || kindLabel(s.kind)}"? Runs already stored are not affected.`)) return;
@@ -278,6 +305,29 @@
 {#if agreement}
 	<section class="panel" aria-label="Gauge vs logger agreement">
 		<AgreementTable {agreement} headingLevel={2} />
+	</section>
+{/if}
+
+{#if list.length && Object.keys(values).length}
+	<section class="panel" aria-labelledby="chk-h" data-testid="series-checks">
+		<div class="panel-head">
+			<h2 id="chk-h">Data checks</h2>
+			<span class="muted small">Negative values, outliers and flat stretches. Runs list the same checks as warnings.</span>
+		</div>
+		{#if checks.length}
+			<ul class="checks">
+				{#each checks as c (c.id)}
+					<li>
+						<span class="badge badge-warn">{CHECK_LABEL[c.check.check]}</span>
+						<strong>{c.series.name || kindLabel(c.series.kind)}</strong>
+						<span class="muted">({kindLabel(c.series.kind)})</span>:
+						{c.check.text.slice(c.check.text.indexOf(':') + 1).trim()}
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="muted small">No negative values, outliers or flat stretches found in the loaded series.</p>
+		{/if}
 	</section>
 {/if}
 
@@ -432,6 +482,17 @@
 		align-items: center;
 		justify-content: center;
 		color: var(--text-muted);
+	}
+	.checks {
+		margin: 0;
+		padding-left: 1.1rem;
+		display: grid;
+		gap: 0.35rem;
+		font-size: 0.85rem;
+	}
+	.checks .badge {
+		text-transform: none;
+		margin-right: 0.25rem;
 	}
 	.lower {
 		display: grid;

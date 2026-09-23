@@ -5,6 +5,27 @@
 // Unlike the workbook nothing is rounded: every split conserves water exactly
 // (docs/engine-audit.md R1).
 
+/**
+ * Relative size of float noise treated as zero in a shortfall. A difference
+ * of large volumes (outflow − requirement, or a shortfall minus its upstream
+ * shortfalls) that is exact in real arithmetic comes out as ±1e-16 of the
+ * volumes involved; 1e-12 of them is far below anything measurable (0.01 m³
+ * on a 10⁹ m³/day requirement) and far above the noise.
+ */
+export const SHORTFALL_NOISE = 1e-12;
+
+/**
+ * MIN(a − b, 0) with float noise reported as 0: the result is negative only
+ * when it exceeds SHORTFALL_NOISE × `scale` (the largest magnitude that went
+ * into a and b). Without this a residue of −4.8e-7 m³ counted as a day the
+ * EWR was not met, and whether it appeared depended on the order upstream
+ * values were summed in (engine review F8).
+ */
+export function shortfall(a: number, b: number, scale: number): number {
+	const d = a - b;
+	return d < -SHORTFALL_NOISE * scale ? d : 0;
+}
+
 export interface PlanNode {
 	kind: 'farm' | 'gauge';
 	/** Fraction of natural flow / EWR generated on this farm's land. */
@@ -37,6 +58,11 @@ export interface NetworkPlan {
 	days: number;
 	nodes: PlanNode[];
 	order: Int32Array;
+	/**
+	 * upstream[i] = nodes draining directly into node i, in a fixed order
+	 * (runModel uses node-id order) so sums over them don't depend on how the
+	 * nodes are listed.
+	 */
 	upstream: Int32Array[];
 	transfers: PlanTransfer[];
 	/** Calendar month (1–12) of each day. */
@@ -128,11 +154,14 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			let sumU = 0;
 			let sumZ = 0;
 			let sumAA = 0;
+			// Magnitude of the upstream shortfalls, the scale of their float noise.
+			let absAA = 0;
 			for (let u = 0; u < ups.length; u++) {
 				const ur = res[ups[u]!]!;
 				sumU += ur.outflow[t]!;
 				sumZ += ur.ewrCumulative[t]!;
 				sumAA += ur.ewrShortfall[t]!;
+				absAA += Math.abs(ur.ewrShortfall[t]!);
 			}
 
 			if (node.kind === 'gauge') {
@@ -144,7 +173,7 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 				r.inflowUpstream[t] = sumU;
 				r.outflow[t] = sumU;
 				r.ewrCumulative[t] = sumZ;
-				r.ewrShortfall[t] = Math.min(sumU - sumZ, 0);
+				r.ewrShortfall[t] = shortfall(sumU, sumZ, Math.max(sumU, sumZ));
 				continue;
 			}
 
@@ -173,8 +202,11 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			const U = Rr + S + T;
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
-			const AA = Math.min(U - Z, 0);
-			const AB = Math.min(AA - sumAA, 0);
+			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
+			// noise of the volumes involved reported as 0 (review F8).
+			const scale = Math.max(U, Z, absAA);
+			const AA = shortfall(U, Z, scale);
+			const AB = shortfall(AA, sumAA, scale);
 
 			r.demand[t] = F;
 			r.supplied[t] = G;

@@ -24,7 +24,8 @@ reviewed* still need a pass. No engine code was changed in this round.
 | F4 | Low (workbook bug, not in the engine) | client catchment `[Farm spec]` M32, M33, M42 | "Selected fragmentation" is hard-coded to the area share for Farm B, Farm C and Farm D, whatever method is chosen. | `M32 = G32/rFarmSpec_AreaTotal`, while the other rows use `IF(method…)` | Documented as **Q16**. The engine applies the chosen method to every farm, which is the intended behaviour. |
 | F5 | Low | `network/round.ts` vs `flow.ts:75` | There are two `excelRound` implementations. `round.ts` nudges by `y·4e-16`; `flow.ts` uses `toPrecision(15)` string shifting. They agree on every client catchment value, but they can differ on an x.5 boundary after 15 significant digits. | Code inspection | Use one implementation, `flow.ts`'s 15-significant-digit version, which is closer to Excel. Run the regression suite to prove it changes nothing. Not done. |
 | F6 | Low (benign deviation) | `flow.ts:128,166,222` | The engine guards divisions that give `#DIV/0!` in the workbook: `fRfIndex` with a flat curve segment, `fIndxAddedFlow` with amplitude 0, `fBaseFlow` with receded base 0. The workbook would fill every later row with errors. | LAMBDA text of `fRfIndex`, `fIndxAddedFlow`, `fBaseFlow` | Keep the guards. They are documented here. |
-| F7 | Info | `demand.ts` / area share | The share and `RainToM3` use `node.areaKm2` (workbook G, which client catchment types in, not `I+J`). The Hi/Lo method uses `areaHiKm2`/`areaLoKm2`. In the app these can drift apart, with no warning when `areaKm2 ≠ hi + lo`. | client catchment G31 = 29.3, I31 + J31 = 29.395 | Consider a data-quality warning when \|areaKm2 − (hi + lo)\| is larger than 1%. |
+| F8 | Low (numerical) | `network/simulate.ts` AA/AB, gauge and outlet shortfalls | The EWR shortfalls cancel large sums, so they carried float residue (e.g. −4.77e-7 m³ where the answer is 0). Whether the residue appeared depended on the order upstream values were summed in, i.e. on the **node array order**, and any residue counted as a day "not met": `FarmSummary.daysEwrNotMet` and the farm EWR grid changed with display order. More common once the engine stopped rounding (0.4.0). | Found by the order-invariance invariant: `randomInput(70)` vs `scrambleOrder(…, 70)` gave n0 `daysEwrNotMet` 259 vs 246 (rounded engine); seeds 103, 125, 145 … on 0.4.0. | **Fixed (0.4.0).** `runModel` passes each node's upstream list in node-id order, and `shortfall(a, b, scale)` reports a difference within `SHORTFALL_NOISE` = 1e-12 of the volumes involved as 0, for farm AA and AB, gauges and the outlet. The seeds are a regression test in `run.invariants.test.ts`; the test's F8 filter is gone. |
+| F7 | Info | `demand.ts` / area share | The share and `RainToM3` use `node.areaKm2` (workbook G, which client catchment types in, not `I+J`). The Hi/Lo method uses `areaHiKm2`/`areaLoKm2`. In the app these can drift apart, with no warning when `areaKm2 ≠ hi + lo`. | client catchment G31 = 29.3, I31 + J31 = 29.395 | **Done:** `quality.ts` `areaMismatches` warns when the difference is over 1 % (model.md §2.10a). client catchment's 0.3 % passes. |
 
 ## Verified OK (against the cells)
 
@@ -39,9 +40,25 @@ reviewed* still need a pass. No engine code was changed in this round.
 - **Curtailment:** matches `[Shortfalls]` row 11 (H, I, J, K, M, N, O, P, R, S, T, U, V). K_tot uses the rounded averages and has a zero guard (Q14).
 - **Performance:** every daily loop is O(days × nodes + days × transfers). Nothing is O(n²) over days.
 
-## Not reviewed (session ended)
+## Reviewed in the verification round (2026-09)
 
-- `compare.ts` in detail. From a skim: matching is id-then-name and deltas are b − a. `reportStart/End`, `calibration*` and `calibrationFlowKind` settings only show up as generic "Setting X changed" lines.
-- `quality.ts` edge cases (negative flows, `minDays` when a series ends part-way through a year).
-- `ewr.ts` compliance grid beyond a code read: the daily vs running-total logic looked right.
-- Fuzzing with a seeded PRNG (random trees, zero areas, share sums ≠ 1, transfer chains A→B→C, transfers to an upstream farm) and a mass-balance check (column V = 0) over random networks.
+- `compare.ts`: matching and deltas are right. Fixed: the report and
+  calibration windows, the calibration flow series and the data-quality
+  thresholds now have readable lines instead of *Setting "x" changed*; month
+  lists compare as sets (repeats and order were reported as changes); an
+  emptied series no longer shows as a one-day range. Leap days and skewed time
+  zones are tested.
+- `quality.ts`: negative readings are now skipped by the gauge-vs-logger
+  comparison (and reported by `seriesChecks`); inconsistent thresholds throw;
+  a tiny ratio shows as "<1 %". A water year cut short by the end of a series
+  is judged only if it still has `minDays` shared days, which is the intended
+  rule. Empty, all-missing and single-day series are tested.
+- `ewr.ts` grid: covered by the report-totals invariant (cells add up to the
+  run, Σ volume = −Σ daily shortfall, Σ days not met = the summary counts).
+- Fuzzing: done, see [model.md §6 Verification](./model.md#verification). It
+  found F8, now fixed.
+
+## Not reviewed
+
+- `ewr.ts` beyond the totals: the `runningTotal` count method is only used by
+  the workbook regression.

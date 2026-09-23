@@ -8,9 +8,24 @@
 // rating change, bypass, zero-filled gaps) — and calibrating to the wrong one
 // skews every result. Client Catchment: the gauge reads 8–33 % of the logger from
 // 2014/15 (docs/plan.md, first hydrologist question).
-import { toEpochDay } from './calendar';
+//
+// seriesChecks: negative values, outliers and flat-lines (a stuck logger, a
+// filled-in gap) in each input series. areaMismatches: farms whose area is not
+// the sum of their high- and low-MAP areas (engine-review F7).
+//
+// None of these change a model result. They become run warnings and
+// RunSummary.dataQuality, and the Time series tab shows them before a run.
+import { fromEpochDay, toEpochDay } from './calendar';
 import { waterYearOf } from './network/stats';
-import type { DailySeries, SeriesKind } from './project';
+import {
+	defaultProjectSettings,
+	SERIES_KINDS,
+	type DailySeries,
+	type DataQualitySettings,
+	type FlowShareMethod,
+	type NetworkNode,
+	type SeriesKind
+} from './project';
 
 /** Observed-flow kinds compared with each other (Pitman is modelled, not observed). */
 export const OBSERVED_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] as const satisfies readonly SeriesKind[];
@@ -71,6 +86,9 @@ export function observedAgreement(
 	const minRatio = options.minRatio ?? 2 / 3;
 	const maxRatio = options.maxRatio ?? 1.5;
 	const minDays = options.minDays ?? 90;
+	if (!(minRatio > 0 && minRatio <= maxRatio && Number.isFinite(maxRatio) && minDays >= 0)) {
+		throw new RangeError(`agreement thresholds need 0 < minRatio ≤ maxRatio and minDays ≥ 0 (got ${minRatio}, ${maxRatio}, ${minDays})`);
+	}
 
 	const a0 = toEpochDay(sa.startDate);
 	const b0 = toEpochDay(sb.startDate);
@@ -82,7 +100,9 @@ export function observedAgreement(
 	for (let day = from; day < to; day++) {
 		const va = sa.values[day - a0];
 		const vb = sb.values[day - b0];
-		if (va == null || vb == null || !Number.isFinite(va) || !Number.isFinite(vb)) continue;
+		// A shared day needs a valid reading in both: present, finite and not
+		// negative (a negative flow is an error, which seriesChecks reports).
+		if (!isReading(va) || !isReading(vb)) continue;
 		const wy = waterYearOf(day);
 		const y = byYear.get(wy) ?? { days: 0, va: 0, vb: 0 };
 		y.days++;
@@ -109,6 +129,36 @@ export function observedAgreement(
 	return { a, b, minRatio, maxRatio, minDays, years, flaggedYears: years.filter((y) => y.flagged).map((y) => y.waterYear) };
 }
 
+const isReading = (v: number | null | undefined): v is number => v != null && Number.isFinite(v) && v >= 0;
+
+/** observedAgreement options from the project's settings.dataQuality. */
+export function agreementOptions(dq: DataQualitySettings): Required<AgreementOptions> {
+	return { minRatio: dq.agreementMinRatio, maxRatio: dq.agreementMaxRatio, minDays: dq.agreementMinDays };
+}
+
+/**
+ * settings.dataQuality merged over the defaults. An invalid field (not a
+ * finite number, min ratio outside 0 < r ≤ 1, max ratio below 1, days not a
+ * whole number in 1–366) falls back to its default with a warning, so a
+ * hand-edited or old stored value can't break a run.
+ */
+export function resolveDataQuality(raw: unknown, warnings: string[] = []): DataQualitySettings {
+	const d = defaultProjectSettings().dataQuality;
+	const r = (typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+	const pick = (key: keyof DataQualitySettings, ok: (v: number) => boolean, rule: string): number => {
+		const v = r[key];
+		if (v === undefined || v === null) return d[key];
+		if (typeof v === 'number' && Number.isFinite(v) && ok(v)) return v;
+		warnings.push(`data-quality setting ${key} = ${JSON.stringify(v)} is invalid (${rule}); using the default ${+d[key].toFixed(4)}`);
+		return d[key];
+	};
+	return {
+		agreementMinRatio: pick('agreementMinRatio', (v) => v > 0 && v <= 1, 'needs 0 < ratio ≤ 1'),
+		agreementMaxRatio: pick('agreementMaxRatio', (v) => v >= 1, 'needs a ratio ≥ 1'),
+		agreementMinDays: pick('agreementMinDays', (v) => Number.isInteger(v) && v >= 1 && v <= 366, 'needs a whole number of days, 1–366')
+	};
+}
+
 /** "2016/17" for water year 2016. */
 export const waterYearLabel = (wy: number) => `${wy}/${String((wy + 1) % 100).padStart(2, '0')}`;
 
@@ -117,10 +167,212 @@ export function agreementWarning(ag: ObservedAgreement | null): string | null {
 	if (!ag || ag.flaggedYears.length === 0) return null;
 	const parts = ag.years
 		.filter((y) => y.flagged)
-		.map((y) => (y.ratio === null ? `${waterYearLabel(y.waterYear)}: the ${OBSERVED_FLOW_LABEL[ag.b]} recorded nothing` : `${waterYearLabel(y.waterYear)}: ${Math.round(y.ratio * 100)} %`));
+		.map((y) => (y.ratio === null ? `${waterYearLabel(y.waterYear)}: the ${OBSERVED_FLOW_LABEL[ag.b]} recorded nothing` : `${waterYearLabel(y.waterYear)}: ${pctText(y.ratio)}`));
 	return (
 		`Observed flow records disagree — the ${OBSERVED_FLOW_LABEL[ag.a]} as a share of the ${OBSERVED_FLOW_LABEL[ag.b]} volume ` +
 		`(days both have readings; expected ${Math.round(ag.minRatio * 100)}–${Math.round(ag.maxRatio * 100)} %): ${parts.join('; ')}. ` +
 		`Check which record to calibrate against (Settings → calibration flow series).`
+	);
+}
+
+/** A ratio as a whole percentage; a tiny non-zero ratio shows as "<1 %" rather than a misleading "0 %". */
+function pctText(r: number): string {
+	const p = Math.round(r * 100);
+	return p === 0 && r > 0 ? '<1 %' : `${p} %`;
+}
+
+// ---------------------------------------------------------------------------
+// Series checks: negative values, outliers, flat-lines
+// ---------------------------------------------------------------------------
+
+export type SeriesCheckKind = 'negative' | 'outlier' | 'flatline';
+
+export interface SeriesCheck {
+	seriesKind: SeriesKind;
+	check: SeriesCheckKind;
+	/** Days affected (for a flat-line: days inside the flat stretches). */
+	days: number;
+	/** Up to MAX_EXAMPLES cases: the day, its value, and for a flat-line the stretch length. */
+	examples: { date: string; value: number; runDays?: number }[];
+	/** One sentence for the run warnings and the Time series tab. */
+	text: string;
+}
+
+/**
+ * Outlier rule: a value above FACTOR × the 99th percentile of the series'
+ * positive values, once there are at least OUTLIER_MIN_POSITIVE of them. The
+ * factors are deliberately wide: the point is to catch typing and unit errors
+ * (an l/s record loaded as m³/s, a misplaced decimal), not real floods.
+ */
+export const OUTLIER_FACTOR = { rain: 5, flow: 10 } as const;
+export const OUTLIER_MIN_POSITIVE = 100;
+/**
+ * Flat-line rule: at least this many consecutive days with the same non-zero
+ * value. Zero stretches are normal (dry spells, a river that stops flowing).
+ * Pitman flow is modelled (often a monthly value repeated daily), so it is
+ * not checked.
+ */
+export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
+	rain_catchment_mm: 5,
+	rain_chirps_mm: 5,
+	rain_forecast_mm: 5,
+	flow_observed_m3s: 14,
+	flow_logger_m3s: 14
+};
+const MAX_EXAMPLES = 5;
+
+const SERIES_NAME: Record<SeriesKind, string> = {
+	rain_catchment_mm: 'Rainfall (catchment)',
+	rain_chirps_mm: 'Rainfall (CHIRPS)',
+	rain_forecast_mm: 'Rainfall (forecast)',
+	flow_pitman_m3s: 'Pitman flow',
+	flow_observed_m3s: 'Observed flow',
+	flow_logger_m3s: 'Logger flow'
+};
+const unitOf = (k: SeriesKind) => (k.startsWith('rain_') ? 'mm' : 'm³/s');
+const fmt = (v: number) => String(+v.toPrecision(4));
+const valid = (v: number | null | undefined): v is number => v != null && Number.isFinite(v);
+
+/** Linear-interpolated quantile of an ascending array (q in 0–1). */
+function quantileSorted(xs: Float64Array, q: number): number {
+	const pos = (xs.length - 1) * q;
+	const lo = Math.floor(pos);
+	const hi = Math.ceil(pos);
+	return xs[lo]! + (xs[hi]! - xs[lo]!) * (pos - lo);
+}
+
+/** Checks for one daily series. Missing days are skipped, never counted as a value. */
+export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
+	const out: SeriesCheck[] = [];
+	const d0 = toEpochDay(s.startDate);
+	const date = (i: number) => fromEpochDay(d0 + i);
+	const name = SERIES_NAME[kind] ?? kind;
+	const unit = unitOf(kind);
+	const eg = (xs: SeriesCheck['examples']) =>
+		xs.map((x) => `${x.date}: ${fmt(x.value)} ${unit}${x.runDays ? ` for ${x.runDays} days` : ''}`).join('; ');
+	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+	// Negative values: impossible for rain and for flow.
+	const neg: SeriesCheck['examples'] = [];
+	let negDays = 0;
+	s.values.forEach((v, i) => {
+		if (valid(v) && v < 0) {
+			negDays++;
+			if (neg.length < MAX_EXAMPLES) neg.push({ date: date(i), value: v });
+		}
+	});
+	if (negDays) {
+		out.push({
+			seriesKind: kind,
+			check: 'negative',
+			days: negDays,
+			examples: neg,
+			text: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
+		});
+	}
+
+	// Outliers against the series' own distribution.
+	const positive = Float64Array.from(s.values.filter((v): v is number => valid(v) && v > 0)).sort();
+	if (positive.length >= OUTLIER_MIN_POSITIVE) {
+		const factor = kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow;
+		const limit = factor * quantileSorted(positive, 0.99);
+		const hits: SeriesCheck['examples'] = [];
+		s.values.forEach((v, i) => {
+			if (valid(v) && v > limit) hits.push({ date: date(i), value: v });
+		});
+		if (hits.length) {
+			const top = [...hits].sort((a, b) => b.value - a.value || (a.date < b.date ? -1 : 1)).slice(0, MAX_EXAMPLES);
+			out.push({
+				seriesKind: kind,
+				check: 'outlier',
+				days: hits.length,
+				examples: top,
+				text: `${name}: ${plural(hits.length, 'day')} above ${factor}× the 99th percentile, ${fmt(limit)} ${unit} (${eg(top)}). Check for typing or unit errors`
+			});
+		}
+	}
+
+	// Flat-lines: the same non-zero value on many consecutive days.
+	const minRun = FLATLINE_MIN_DAYS[kind];
+	if (minRun) {
+		const runs: SeriesCheck['examples'] = [];
+		let flatDays = 0;
+		let nRuns = 0;
+		for (let i = 0; i < s.values.length; ) {
+			const v = s.values[i];
+			let j = i + 1;
+			if (valid(v) && v !== 0) {
+				while (j < s.values.length && s.values[j] === v) j++;
+				if (j - i >= minRun) {
+					nRuns++;
+					flatDays += j - i;
+					if (runs.length < MAX_EXAMPLES) runs.push({ date: date(i), value: v, runDays: j - i });
+				}
+			}
+			i = j;
+		}
+		if (nRuns) {
+			out.push({
+				seriesKind: kind,
+				check: 'flatline',
+				days: flatDays,
+				examples: runs,
+				text: `${name}: ${plural(nRuns, 'flat stretch', 'flat stretches')} of ${minRun} or more days with the same value (${eg(runs)}). A stuck logger or a filled-in gap?`
+			});
+		}
+	}
+	return out;
+}
+
+/** checkSeries for every series present, in SERIES_KINDS order. */
+export function seriesChecks(series: Partial<Record<SeriesKind, DailySeries>>): SeriesCheck[] {
+	return SERIES_KINDS.flatMap((k) => (series[k] ? checkSeries(k, series[k]!) : []));
+}
+
+// ---------------------------------------------------------------------------
+// Farm area vs high- + low-MAP area (engine-review F7)
+// ---------------------------------------------------------------------------
+
+/** Relative difference above which a farm's areas count as inconsistent. */
+export const AREA_TOLERANCE = 0.01;
+
+export interface AreaMismatch {
+	nodeId: string;
+	name: string;
+	areaKm2: number;
+	/** areaHiKm2 + areaLoKm2. */
+	hiLoKm2: number;
+	/** |area − (hi + lo)| / max(area, hi + lo), 0–1. */
+	difference: number;
+}
+
+/**
+ * Farms whose area (used by the area share and the rain volume) differs from
+ * areaHiKm2 + areaLoKm2 (used by the hi/lo share) by more than 1 %. Farms that
+ * leave hi and lo both at 0 are skipped unless the hi/lo method is chosen:
+ * they simply haven't split their area.
+ */
+export function areaMismatches(nodes: readonly NetworkNode[], method: FlowShareMethod): AreaMismatch[] {
+	const out: AreaMismatch[] = [];
+	for (const n of nodes) {
+		if (n.kind !== 'farm') continue;
+		const hiLo = (n.areaHiKm2 || 0) + (n.areaLoKm2 || 0);
+		const area = n.areaKm2 || 0;
+		if (hiLo === 0 && method !== 'hiLo') continue;
+		const big = Math.max(area, hiLo);
+		if (!(big > 0)) continue;
+		const difference = Math.abs(area - hiLo) / big;
+		if (difference > AREA_TOLERANCE) out.push({ nodeId: n.id, name: n.name, areaKm2: area, hiLoKm2: hiLo, difference });
+	}
+	return out;
+}
+
+/** One run warning for the area mismatches, or null. */
+export function areaMismatchWarning(list: readonly AreaMismatch[]): string | null {
+	if (list.length === 0) return null;
+	const parts = list.map((m) => `${m.name}: ${fmt(m.areaKm2)} km² vs ${fmt(m.hiLoKm2)} km²`);
+	return (
+		`Farm area differs from high-MAP + low-MAP area by more than ${AREA_TOLERANCE * 100} % (${parts.join('; ')}). ` +
+		'The area flow share uses the farm area and the hi/lo share uses the split, so the two methods disagree for these farms.'
 	);
 }

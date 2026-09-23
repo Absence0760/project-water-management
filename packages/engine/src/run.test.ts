@@ -9,6 +9,7 @@ import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
 import { buildTopology } from './network/topology';
+import { shortfall } from './network/simulate';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 
 // ---------------------------------------------------------------------------
@@ -306,9 +307,11 @@ describe('runModel — transfers', () => {
 		enabled: true,
 		...over
 	});
+	// S and R (and R2 below) drain into the outflow gauge G.
 	const nodes = () => [
-		node('S', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4 }),
-		node('R', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 1 })
+		node('S', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4, downstreamNodeId: 'G' }),
+		node('R', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 1, downstreamNodeId: 'G' }),
+		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 9 })
 	];
 
 	it("draws from the source's previous-day storage above the minimum, capped by the rate", () => {
@@ -348,7 +351,7 @@ describe('runModel — transfers', () => {
 		// the first (document order) takes 864, the second only the remaining 136.
 		// Previously each rule saw yesterday's full storage and 1728 left the dam.
 		const out = run({
-			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2 })],
+			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2, downstreamNodeId: 'G' })],
 			transfers: [transfer(), transfer({ id: 't2', toNodeId: 'R2' })],
 			natural: [0],
 			startDate: '2021-01-01'
@@ -361,14 +364,43 @@ describe('runModel — transfers', () => {
 
 	it('skips transfers involving a gauge, with a warning', () => {
 		const out = run({
-			nodes: [...nodes(), node('G', { kind: 'gauge', areaKm2: 0 })].map((n) =>
-				n.id === 'G' ? n : { ...n, downstreamNodeId: 'G' }
-			),
+			nodes: nodes(),
 			transfers: [transfer({ toNodeId: 'G' })],
 			natural: [0],
 			startDate: '2021-01-01'
 		});
 		expect(out.summary.warnings.some((w) => w.includes('transfers must be between farms'))).toBe(true);
+	});
+});
+
+describe('shortfall (review F8)', () => {
+	it('is MIN(a − b, 0), with float noise of the volumes involved reported as 0', () => {
+		expect(shortfall(80, 100, 100)).toBe(-20);
+		expect(shortfall(120, 100, 120)).toBe(0);
+		// 5e9 − (5e9 + one ULP) is noise, not a shortfall: exactly the residue that
+		// counted as a day "not met" depending on node order.
+		const big = 5e9;
+		const residue = big - (big + 1e-6);
+		expect(residue).toBeLessThan(0);
+		expect(shortfall(big, big + 1e-6, big)).toBe(0);
+		// A real shortfall of 0.1 m³ on the same volumes is kept.
+		expect(shortfall(big, big + 0.1, big)).toBeCloseTo(-0.1, 6);
+	});
+
+	it('makes upstream sums independent of node order', () => {
+		// Three branches whose shortfalls cancel in exact arithmetic.
+		const nodes = [
+			node('G', { kind: 'gauge', areaKm2: 0 }),
+			node('A', { downstreamNodeId: 'G', sortOrder: 1 }),
+			node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
+			node('C', { downstreamNodeId: 'G', sortOrder: 3 })
+		];
+		const settings = { ewrPragmaticM3PerDay: flat(0.3) as Monthly };
+		const a = run({ nodes, natural: [0.1 + 0.2], settings });
+		const b = run({ nodes: [nodes[0]!, nodes[3]!, nodes[1]!, nodes[2]!].map((n, i) => ({ ...n, sortOrder: 9 - i })), natural: [0.1 + 0.2], settings });
+		expect(get(b, 'G', 'ewr_shortfall')).toEqual(get(a, 'G', 'ewr_shortfall'));
+		expect(get(a, 'G', 'ewr_shortfall')).toEqual([0]);
+		expect(a.summary.catchment.ewrDaysNotMet).toBe(0);
 	});
 });
 
@@ -513,6 +545,19 @@ describe('runModel — validation and window', () => {
 		).toThrow(/outflow node|cycle/);
 	});
 
+	it('rejects a network with more than one outflow node, whatever the array order', () => {
+		// Without the check the outlet was whichever root came first (or the first
+		// gauge), and the other root's water silently left the balance.
+		const nodes = [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 }), node('Lost', { sortOrder: 1 })];
+		for (const order of [nodes, [...nodes].reverse()]) {
+			expect(() => run({ nodes: order, natural: [0] })).toThrow(/2 outflow nodes \((G, Lost|Lost, G)\).*exactly one/);
+			expect(() => buildTopology(order)).toThrow(/outflow nodes/);
+		}
+		// One root is fine; so is an empty network (no outlet at all).
+		expect(buildTopology(nodes.slice(0, 2)).outflow).toBe(1);
+		expect(buildTopology([]).outflow).toBe(-1);
+	});
+
 	it('rejects a link to an unknown node', () => {
 		expect(() => run({ nodes: [node('A', { downstreamNodeId: 'nope' })], natural: [0] })).toThrow(/unknown node/);
 	});
@@ -645,6 +690,49 @@ describe('runModel — calibration statistics', () => {
 	it('returns null NSE when observations are constant', () => {
 		expect(calibrationStats([86_400, 86_400], [1, 1]).nse).toBeNull();
 		expect(calibrationStats([1], [null]).days).toBe(0);
+	});
+});
+
+describe('runModel — input data quality', () => {
+	it('compares gauge and logger with the project thresholds', () => {
+		const days = 120;
+		const i = input({ nodes: [node('A')], natural: new Array(days).fill(0), observed: new Array(days).fill(0.8) });
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: new Array(days).fill(1) };
+		const dq = (o: ReturnType<typeof run>) => o.summary.dataQuality!.observedAgreement!;
+		const nat = () => ({ naturalFlowM3Day: new Array(days).fill(0) });
+		const byDefault = runModelWith(i, nat);
+		expect(dq(byDefault)).toMatchObject({ minRatio: 2 / 3, maxRatio: 1.5, minDays: 90, flaggedYears: [] });
+		i.settings.dataQuality = { agreementMinRatio: 0.9, agreementMaxRatio: 1.1, agreementMinDays: 60 };
+		const strict = runModelWith(i, nat);
+		expect(dq(strict)).toMatchObject({ minRatio: 0.9, maxRatio: 1.1, minDays: 60, flaggedYears: [2019] });
+		expect(strict.summary.warnings.some((w) => /Observed flow records disagree.*expected 90–110 %/.test(w))).toBe(true);
+		// A bad stored value falls back to the default with a warning instead of failing the run.
+		i.settings.dataQuality = { ...i.settings.dataQuality!, agreementMinRatio: 3 };
+		const bad = runModelWith(i, nat);
+		expect(dq(bad).minRatio).toBe(2 / 3);
+		expect(bad.summary.warnings.some((w) => /agreementMinRatio = 3 is invalid/.test(w))).toBe(true);
+	});
+
+	it('reports negative, outlying and flat input values as warnings and in dataQuality', () => {
+		const rain = Array.from({ length: 400 }, (_, t) => (t % 2 ? 0 : 1 + (t % 13)));
+		rain[3] = -4;
+		rain[100] = 5000;
+		const out = run({ nodes: [node('A')], natural: new Array(400).fill(0), rain });
+		const checks = out.summary.dataQuality!.seriesChecks!;
+		expect(checks.map((c) => [c.seriesKind, c.check])).toEqual([
+			['rain_catchment_mm', 'negative'],
+			['rain_catchment_mm', 'outlier']
+		]);
+		for (const c of checks) expect(out.summary.warnings).toContain(c.text);
+	});
+
+	it('warns when a farm area and its hi + lo areas differ by more than 1 % (F7)', () => {
+		const out = run({
+			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3 }), node('B', { areaKm2: 5, areaHiKm2: 4, areaLoKm2: 1, downstreamNodeId: 'A' })],
+			natural: [0]
+		});
+		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
+		expect(out.summary.warnings.some((w) => /A: 10 km² vs 9 km²/.test(w))).toBe(true);
 	});
 });
 
@@ -1090,8 +1178,11 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 			settings: { flowShareMethod: 'hiLo' },
 			natural: [0]
 		});
-		expect(warns(out, /"A".*area 10 km² .*hi \+ lo 9 km²/)).toHaveLength(1);
-		expect(warns(out, /"B"/)).toHaveLength(0);
+		// One warning for the run (quality.ts areaMismatches), naming A only.
+		expect(warns(out, /high-MAP \+ low-MAP area/)).toHaveLength(1);
+		expect(warns(out, /A: 10 km² vs 9 km²/)).toHaveLength(1);
+		expect(warns(out, /B: /)).toHaveLength(0);
+		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
 	});
 
 	it('W4: warns about a recession table that cannot describe a recession', () => {

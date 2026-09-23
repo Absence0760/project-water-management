@@ -75,8 +75,14 @@ the shared days changed), and runs stored before the hash existed have none,
 so an in-place edit between them isn't visible. If the results changed and
 the list shows nothing, one of those is the likely reason.
 Settings are compared after merging over the defaults, so an old snapshot that
-stored only some fields doesn't show false differences. Settings keys the
-engine doesn't know yet still appear as *Setting "x" changed*.
+stored only some fields doesn't show false differences. Every setting the
+Settings tab edits has a readable line, including the curtailment reporting
+window, the calibration window and flow series, and the gauge-vs-logger
+thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*). Month
+lists (transfer months, summer months) compare as sets, so re-ordering them is
+not a change. A series that became empty says so rather than showing a
+one-day range. Settings keys the engine doesn't know yet still appear as
+*Setting "x" changed*.
 
 ## Where the code lives
 

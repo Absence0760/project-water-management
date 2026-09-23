@@ -109,7 +109,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s |
-  flow_pitman_m3s | null`.
+  flow_pitman_m3s | null`. `dataQuality` (gauge-vs-logger thresholds) takes
+  `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
+  `agreementMinDays` (whole days, 1–366); any subset may be sent.
 
 ### Members
 
@@ -247,6 +249,15 @@ engine's `runModel`, stores the outputs, and returns the summary.
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's
   own start/end; clipped to the run with a warning). Runs stored by older
   engines have no `curtailment` key. Formulas: [model.md §2.11](./model.md#211-curtailment-targets-shortfalls).
+
+- `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
+  `observedAgreement` (gauge vs logger per water year, with the thresholds
+  used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
+  'flatline', days, examples: [{ date, value, runDays? }], text }[]`) and
+  `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
+  whose area is more than 1 % off high + low MAP area). The last two are absent
+  on older runs. Each check also appears in `warnings`. Rules:
+  [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
 
 ## Compare runs
 

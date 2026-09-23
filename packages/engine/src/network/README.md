@@ -22,7 +22,7 @@ workbook cells.
 
 | File | b023 source | What it does |
 | --- | --- | --- |
-| `topology.ts` | [Network] | Orders nodes upstream-first from `downstreamNodeId`. Throws on cycles and unknown links. |
+| `topology.ts` | [Network] | Orders nodes upstream-first from `downstreamNodeId`. Throws on cycles, unknown links and more than one outflow node. |
 | `shares.ts` | [Farm spec] "Selected fragmentation" | Each farm's share of natural flow and EWR (area / hiLo / manual). Warns if the shares don't sum to 1 ±0.0002. |
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
@@ -59,6 +59,12 @@ initial storage on day 0):
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
 | AA | `ewr_shortfall` | MIN(U − Z, 0) |
 | AB | `ewr_shortfall_incremental` | MIN(AA − Σ upstream AA, 0) — the shortfall this farm adds |
+
+Every MIN(…, 0) shortfall here (AA, AB, the gauge's and the outlet's) goes
+through `shortfall(a, b, scale)`: a difference within 1e-12 of the volumes
+involved is float noise and reported as 0, so a residue never counts as a day
+the EWR was not met (engine review F8). Upstream sums run in node-id order, so
+results don't depend on how the nodes are listed.
 
 Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
 (the workbook rounds both to whole m³).

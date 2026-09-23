@@ -211,10 +211,11 @@ method is chosen in `[Farm spec]`:
 | **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split, default 0.81 / 0.19) |
 | **Specific** | A value entered by hand ("external fragmentation") |
 
-The shares should sum to 1 within `0.0002` (fragmentation tolerance). With the
-Hi/Lo method the run also warns about any farm whose area differs from its hi +
-lo areas by more than 1 %: the shares use hi + lo, the rain volume uses the area
-([audit W3](./engine-audit.md), engine review F7). Then:
+The shares should sum to 1 within `0.0002` (fragmentation tolerance). The run
+also warns, once, about any farm whose area differs from its hi + lo areas by
+more than 1 %: the hi/lo shares use hi + lo, the area share and the rain volume
+use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
+§2.10a). Then:
 
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
@@ -389,7 +390,31 @@ Mm³, and the ratio gauge / logger. A year is **flagged** when the ratio falls
 outside 2/3 … 3/2 (one instrument reads less than two-thirds or more than 1.5×
 the other) on at least 90 shared days, or when one records nothing while the
 other records flow. Flagged years produce a run warning and are listed in
-`RunSummary.dataQuality.observedAgreement`.
+`RunSummary.dataQuality.observedAgreement`. A shared day needs a valid reading
+in both records: present, finite and not negative.
+
+The three thresholds are a project setting, `settings.dataQuality`
+(`agreementMinRatio` 2/3, `agreementMaxRatio` 1.5, `agreementMinDays` 90 by
+default; Settings tab → *Data quality*). They change only which years are
+flagged, never a model result. An invalid stored value (min ratio outside
+0 < r ≤ 1, max ratio below 1, days not a whole number in 1–366) falls back to
+its default with a run warning. The Time series tab shows the same table
+before any run, with the project's thresholds.
+
+**Other input checks** (`seriesChecks`, `areaMismatches` in `quality.ts`),
+reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
+`areaMismatches`, and on the Time series tab:
+
+| Check | Rule | Why |
+| --- | --- | --- |
+| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
+| Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
+| Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal; Pitman flow (modelled, often monthly values repeated daily) is not checked | a stuck logger or a filled-in gap |
+| Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
+
+The outlier and flat-line limits are engine constants (`OUTLIER_FACTOR`,
+`FLATLINE_MIN_DAYS`), not settings; whether they suit these catchments is a
+question for the hydrologist.
 
 Two instruments on the same reach should roughly agree; a sustained gap
 usually means something physical at one of them (a damaged or silted weir, a
@@ -577,10 +602,17 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 
 ## 6. Porting strategy and regression testing
 
-1. **Port b023 exactly, rounding included.** The workbook rounds at specific
-   steps: gross mm to 2 dp, farm demand to 1 dp, and net demand, fragmented
-   flows, storage and return flow to 0 dp. The engine must round at the same
-   points with Excel's `ROUND` semantics (half away from zero). `INT` floors.
+1. **Port b023's formulas, not its rounding** (engine 0.4.0,
+   [audit R1](./engine-audit.md)). The workbook rounds almost every column
+   (gross mm to 2 dp, farm demand to 1 dp, net demand, fragments, storage,
+   return flow and the transfer cap to 0 dp, `INT` on rain flow, `ROUND` /
+   `ROUNDDOWN` in `[Shortfalls]`). That rounding creates and destroys water
+   and stops recessions at a floor, so the engine keeps full float64
+   precision everywhere; only presentation (UI, exports) rounds for display.
+   Excel's `ROUND` survives in `network/round.ts` for tests that replay
+   workbook cells. The one deliberate tolerance in the model is in EWR
+   shortfalls: a difference within 1e-12 of the volumes involved is float
+   noise and counts as no shortfall (`SHORTFALL_NOISE`, review F8).
 2. **Fixtures come from the client workbook and are never committed.**
    `scripts/wbt-import` reads the client catchment inputs and the workbook's own
    computed columns into `data/` (for example `data/client-catchment/expected.json`; gitignored). The engine's
@@ -589,14 +621,76 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
    cover the same code paths.
 3. **Stage by stage:** natural flow (§2.4) → demand (§2.3) → fragmentation
    (§2.5) → farm balance and transfers (§2.6–2.7) → EWR and outputs (§2.8).
-   Each stage is compared with the workbook's column for all 16 161 days. The
-   target is **exact equality** on rounded columns and < 1e-9 relative
-   difference elsewhere.
+   Each stage is compared with the workbook's column for all 16 161 days.
+   Where the workbook's rounding or a corrected algorithm makes the engine
+   differ, the difference is listed and explained
+   ([engine-audit.md § Regression suite](./engine-audit.md)); elsewhere the
+   target is < 1e-9 relative difference.
 4. **Performance budget:** a full client catchment run (16k days × 13 elements) takes
    about **18 ms** in Node, which is fast enough to run in the browser as you
    type and in Lambda on request.
 5. **Every run records `engine_version`** and a snapshot of its inputs, so an
    old result can always be explained after the model or the project changes.
+
+### Verification
+
+Matching the workbook shows the port is faithful; it can't show the model is
+*sound*, and it stops being the goal wherever an algorithm is corrected. The
+main safety net is therefore a suite of **physical invariants** that any
+correct water balance must satisfy, whatever the formulas inside. They live in
+`packages/engine/src/testing/invariants.ts` (exported as
+`@water-management/engine/testing`) and each returns the first broken property
+as text:
+
+| Check | What must hold |
+| --- | --- |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
+| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with return flows set to 0, doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
+
+They run on:
+
+- **Random networks** (`run.invariants.test.ts`, generator in `testing/fuzz.ts`):
+  400 seeded cases per `pnpm test` — chains, fans, binary trees, gauges in the
+  middle, empty and huge dams, zero areas, share sums ≠ 1, several transfers
+  per dam, transfers to upstream farms, missing days, leap days, runs that
+  start mid water-year. A failure prints the seed, the broken property and a
+  **shrunk** reproduction (greedily dropping transfers, crops, nodes and days
+  while the same property still fails).
+- **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
+  15 years each, through the full rain model.
+- **client catchment** when `data/client-catchment` is present (skipped otherwise).
+
+The suite also checks itself: `run.invariants.test.ts` feeds each check a
+deliberately broken result (an unbalanced day, a transfer outside its months
+or above its limit, one below the reserve or held back, a grid cell or target
+that doesn't add up) and expects an objection.
+
+**Soak after any engine change** (about 35 ms per case; 20 000 cases take
+roughly 12 minutes):
+
+```bash
+FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
+FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
+```
+
+Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
+Write a new property as a physical statement ("storage never exceeds
+capacity"), not as a snapshot of today's numbers, so it survives algorithm
+fixes. The order-invariance check found **F8** ([engine-review.md](./engine-review.md)):
+float residue in EWR shortfalls counted as days not met, depending on node
+order. It is fixed at the source (upstream sums in node-id order, noise below
+10⁻¹² of the volumes reported as no shortfall), and the seeds that exposed it
+are pinned as a regression test.
+
+Tolerances are float noise only, because the engine no longer rounds: daily
+balances close to 10⁻⁶ m³ (plus 10⁻⁹ relative), single-operation identities
+to 10⁻¹² relative, run-long sums to 10⁻¹⁰ of Σ|x|. Don't widen one to make a
+failure pass; a failure is either a broken invariant (fix the check) or an
+engine bug (fix the engine).
 
 ---
 

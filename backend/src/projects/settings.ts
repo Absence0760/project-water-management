@@ -41,7 +41,17 @@ export const SettingsPatch = z
 		reportEnd: isoDate.nullable(),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
-		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable()
+		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
+		// Gauge-vs-logger thresholds (engine resolveDataQuality). Each bound is
+		// checked on its own (min ≤ 1 ≤ max), so any subset can be patched.
+		dataQuality: z
+			.object({
+				agreementMinRatio: z.number().gt(0).max(1),
+				agreementMaxRatio: z.number().min(1).max(100),
+				agreementMinDays: z.number().int().min(1).max(366)
+			})
+			.partial()
+			.strict()
 	})
 	.partial()
 	.passthrough()

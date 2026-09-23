@@ -367,7 +367,7 @@
 				{:else if tab === 'settings'}
 					<SettingsTab {project} {editor} seriesKinds={series?.map((x) => x.kind) ?? null} readonly={!canEdit} {onProjectChange} />
 				{:else if tab === 'series'}
-					<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} onSeriesChange={(l) => (series = l)} />
+					<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} dataQuality={project.settings.dataQuality} onSeriesChange={(l) => (series = l)} />
 				{:else if tab === 'runs'}
 					<RunsTab
 						{projectId}

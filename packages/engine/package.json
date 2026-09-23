@@ -6,7 +6,8 @@
 	"type": "module",
 	"description": "Pure TypeScript water-balance model. No I/O, no DB, no DOM — runs in the browser and in Lambda.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./testing": "./src/testing/index.ts"
 	},
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",
