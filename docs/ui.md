@@ -46,7 +46,10 @@ Settings has its own save button, which sits above that bar.
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
   and the outflow gauge is a filled triangle. River lines thicken with the
-  upstream area, and transfers are dashed arrows. Editors can drag a node onto
+  upstream area, and transfers are dashed arrows. Each transfer arc takes
+  the smallest bend that keeps it off every node label and symbol and inside
+  the drawing (`transferArc`), left of the nodes first since labels sit to
+  their right. Editors can drag a node onto
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
