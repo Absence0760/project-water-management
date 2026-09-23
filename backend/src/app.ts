@@ -1,8 +1,17 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
+import { csrf } from 'hono/csrf';
+import { requireUser, type AuthEnv } from './auth/middleware.js';
+import { authRoutes } from './auth/routes.js';
+import { ApiError, handleError } from './http/errors.js';
+import { modelRoutes } from './model/routes.js';
+import { projectRoutes } from './projects/routes.js';
+import { runRoutes } from './runs/routes.js';
+import { seriesRoutes } from './series/routes.js';
 
 export function createApp() {
-	const app = new Hono();
+	const app = new Hono<AuthEnv>();
 
 	// CloudFront-stamped shared secret. In prod, CloudFront stamps every
 	// /api/* request with X-CloudFront-Shared-Secret via the origin's
@@ -34,23 +43,33 @@ export function createApp() {
 		'*',
 		cors({
 			origin: (origin) => (allowedOrigins.includes(origin) ? origin : null),
-			allowMethods: ['GET', 'POST', 'OPTIONS'],
+			allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 			allowHeaders: ['Content-Type'],
+			// The session is an httpOnly cookie, so the browser must send credentials.
+			credentials: true,
 			maxAge: 600
 		})
 	);
+	// Session cookies are SameSite=Lax; this additionally rejects cross-origin
+	// form posts (the only cross-site writes a browser can make without CORS).
+	app.use('*', csrf({ origin: allowedOrigins }));
+	// Largest legitimate body is a time-series upload (60k values ≈ 1 MB JSON).
+	app.use('*', bodyLimit({ maxSize: 4 * 1024 * 1024, onError: () => { throw new ApiError(413, 'request too large'); } }));
 
 	app.get('/health', (c) => c.json({ ok: true }));
 
-	// TODO: Mount your routes here.
-	// Example:
-	//   import { myRoute } from './routes/my-route.js';
-	//   app.route('/my-route', myRoute);
+	app.route('/auth', authRoutes);
 
-	app.onError((err, c) => {
-		console.error('Unhandled error', err);
-		return c.json({ error: 'Internal server error' }, 500);
-	});
+	const projects = new Hono<AuthEnv>();
+	projects.use('*', requireUser);
+	projects.route('/', projectRoutes);
+	projects.route('/', modelRoutes);
+	projects.route('/', seriesRoutes);
+	projects.route('/', runRoutes);
+	app.route('/projects', projects);
+
+	app.notFound((c) => c.json({ error: 'not found' }, 404));
+	app.onError(handleError);
 
 	return app;
 }

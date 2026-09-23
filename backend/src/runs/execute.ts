@@ -1,0 +1,50 @@
+import { runModel, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
+import type { Db } from '../db/tx.js';
+import { loadModel } from '../model/store.js';
+import { mergeSettings } from '../projects/settings.js';
+
+/** Gather everything the engine needs for a project. */
+export async function loadModelInput(db: Db, projectId: string): Promise<ModelInput> {
+	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
+	const model = await loadModel(db, projectId);
+	// First series of each kind (ordered by name) — the engine takes one per kind.
+	const { rows: s } = await db.query<{ kind: SeriesKind; start_date: string; values: (number | null)[] }>(
+		`SELECT DISTINCT ON (kind) kind, start_date, "values" FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
+		[projectId]
+	);
+	const series: Partial<Record<SeriesKind, DailySeries>> = {};
+	for (const r of s) series[r.kind] = { startDate: r.start_date, values: r.values };
+	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
+}
+
+/** Run the engine and persist outputs. Returns the new run id. */
+export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
+	const input = await loadModelInput(db, projectId);
+	const output = runModel(input);
+	const snapshot = {
+		settings: input.settings,
+		model: input.model,
+		series: Object.fromEntries(
+			Object.entries(input.series).map(([k, v]) => [k, { startDate: v.startDate, length: v.values.length }])
+		)
+	};
+	const { rows } = await db.query<{ id: string }>(
+		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)
+		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7) RETURNING id`,
+		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary)]
+	);
+	const runId = rows[0]!.id;
+	// Batch the per-series inserts to keep round-trips low (~150 series per run).
+	const BATCH = 25;
+	for (let i = 0; i < output.series.length; i += BATCH) {
+		const chunk = output.series.slice(i, i + BATCH);
+		const params: unknown[] = [runId, projectId];
+		const values = chunk.map((s, j) => {
+			params.push(s.nodeId, s.key, JSON.stringify({ label: s.label, unit: s.unit }), s.values.map((v) => (Number.isFinite(v) ? v : null)));
+			const b = 3 + j * 4;
+			return `($1, $2, $${b}::uuid, $${b + 1}, $${b + 2}::jsonb, $${b + 3}::float8[])`;
+		});
+		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
+	}
+	return { id: runId, output };
+}

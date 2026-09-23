@@ -5,3 +5,9 @@
 
 process.env.ALLOWED_ORIGINS = 'http://localhost:7777';
 process.env.SITE_URL = 'http://localhost:7777';
+process.env.AUTH_JWT_SECRET = 'test-only-jwt-secret-0000000000000000000';
+process.env.COOKIE_SECURE = 'false';
+// DB-backed tests (*.db.test.ts) use the dedicated water_test database; see
+// db-global-setup.ts. DEV-ONLY docker credentials.
+process.env.DATABASE_URL ??= 'postgresql://water_app:water_app@127.0.0.1:5434/water_test';
+process.env.TEST_MIGRATION_DATABASE_URL ??= 'postgresql://water:water@127.0.0.1:5434/water_test';

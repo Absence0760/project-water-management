@@ -1,0 +1,116 @@
+import type { ProjectModel } from '@water-management/engine';
+import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
+
+export async function loadModel(db: Db, projectId: string): Promise<ProjectModel> {
+	const [nodes, crops, cropAreas, transfers] = await Promise.all([
+		db.query(
+			`SELECT id, name, kind, downstream_node_id AS "downstreamNodeId", sort_order AS "sortOrder",
+				area_km2 AS "areaKm2", area_hi_km2 AS "areaHiKm2", area_lo_km2 AS "areaLoKm2",
+				flow_share_manual AS "flowShareManual", pct_upstream_to_dam AS "pctUpstreamToDam",
+				pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
+				dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
+				divert_capacity_m3_day AS "divertCapacityM3Day", return_flow_pct AS "returnFlowPct"
+			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
+			[projectId]
+		),
+		db.query(`SELECT id, name, crop_factor AS "cropFactor" FROM crop WHERE project_id = $1 ORDER BY name`, [projectId]),
+		db.query(
+			`SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2" FROM crop_area WHERE project_id = $1`,
+			[projectId]
+		),
+		db.query(
+			`SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
+				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled
+			 FROM transfer WHERE project_id = $1 ORDER BY id`,
+			[projectId]
+		)
+	]);
+	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows };
+}
+
+/**
+ * Replace the project's model with `m` (already validated). Rows are upserted by
+ * id so references from runs survive; rows missing from `m` are deleted.
+ * Upserts only touch rows of *this* project — an id that exists in another
+ * project is a conflict, never a hijack.
+ */
+export async function saveModel(db: Db, projectId: string, m: ProjectModel): Promise<void> {
+	const nodeIds = m.nodes.map((n) => n.id);
+	const cropIds = m.crops.map((c) => c.id);
+	const transferIds = m.transfers.map((t) => t.id);
+
+	await db.query('DELETE FROM transfer WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, transferIds]);
+	await db.query('DELETE FROM crop_area WHERE project_id = $1', [projectId]);
+	await db.query('DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, cropIds]);
+	// Clear topology first so node renames/reorders can't trip uniqueness or
+	// same-project checks mid-way; it's restored below.
+	await db.query('UPDATE node SET downstream_node_id = NULL WHERE project_id = $1', [projectId]);
+	await db.query('DELETE FROM node WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, nodeIds]);
+	// Temporarily rename survivors so swapping two names in one save works.
+	await db.query(`UPDATE node SET name = '~' || id::text WHERE project_id = $1`, [projectId]);
+	await db.query(`UPDATE crop SET name = '~' || id::text WHERE project_id = $1`, [projectId]);
+
+	const upserted = async (sql: string, params: unknown[], what: string) => {
+		const { rowCount } = await db.query(sql, params);
+		if (rowCount !== 1) throw new ApiError(409, `${what} id already used by another project`);
+	};
+
+	for (const n of m.nodes) {
+		await upserted(
+			`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
+				flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
+				dam_min_pct, divert_capacity_m3_day, return_flow_pct)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
+				area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
+				flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
+				pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
+				dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
+				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, return_flow_pct = EXCLUDED.return_flow_pct
+			 WHERE node.project_id = EXCLUDED.project_id`,
+			[
+				n.id, projectId, n.name, n.kind, n.sortOrder, n.areaKm2, n.areaHiKm2, n.areaLoKm2, n.flowShareManual,
+				n.pctUpstreamToDam, n.pctRunoffToDam, n.damCapacityM3, n.damInitialPct, n.damMinPct,
+				n.divertCapacityM3Day, n.returnFlowPct
+			],
+			'node'
+		);
+	}
+	for (const n of m.nodes) {
+		if (n.downstreamNodeId) {
+			await db.query('UPDATE node SET downstream_node_id = $2 WHERE id = $1', [n.id, n.downstreamNodeId]);
+		}
+	}
+	for (const c of m.crops) {
+		await upserted(
+			`INSERT INTO crop (id, project_id, name, crop_factor) VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, crop_factor = EXCLUDED.crop_factor
+			 WHERE crop.project_id = EXCLUDED.project_id`,
+			[c.id, projectId, c.name, c.cropFactor],
+			'crop'
+		);
+	}
+	const areas = m.cropAreas.filter((a) => a.areaM2 > 0);
+	if (areas.length) {
+		await db.query(
+			`INSERT INTO crop_area (project_id, node_id, crop_id, area_m2)
+			 SELECT $1, * FROM unnest($2::uuid[], $3::uuid[], $4::float8[])`,
+			[projectId, areas.map((a) => a.nodeId), areas.map((a) => a.cropId), areas.map((a) => a.areaM2)]
+		);
+	}
+	for (const t of m.transfers) {
+		await upserted(
+			`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3,
+				min_storage_pct, enabled)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 ON CONFLICT (id) DO UPDATE SET from_node_id = EXCLUDED.from_node_id, to_node_id = EXCLUDED.to_node_id,
+				months = EXCLUDED.months, max_rate_m3s = EXCLUDED.max_rate_m3s, daily_cap_m3 = EXCLUDED.daily_cap_m3,
+				min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled
+			 WHERE transfer.project_id = EXCLUDED.project_id`,
+			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled],
+			'transfer'
+		);
+	}
+	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);
+}

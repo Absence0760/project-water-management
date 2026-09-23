@@ -1,0 +1,219 @@
+import { Hono } from 'hono';
+import { z } from 'zod';
+import type { AuthEnv } from '../auth/middleware.js';
+import { withUser } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
+import { loadModel, saveModel } from '../model/store.js';
+import { requireRole, UUID, type Role } from './access.js';
+import { mergeSettings, SettingsPatch } from './settings.js';
+
+type ProjectRow = {
+	id: string;
+	name: string;
+	description: string;
+	settings: unknown;
+	role: Role;
+	created_at: Date;
+	updated_at: Date;
+};
+
+const summary = (r: ProjectRow) => ({
+	id: r.id,
+	name: r.name,
+	description: r.description,
+	role: r.role,
+	createdAt: r.created_at.toISOString(),
+	updatedAt: r.updated_at.toISOString()
+});
+const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.settings) });
+
+const SELECT_PROJECT = `
+	SELECT p.id, p.name, p.description, p.settings, p.created_at, p.updated_at, m.role
+	FROM project p JOIN project_member m ON m.project_id = p.id AND m.user_id = app_current_user_id()`;
+
+const name = z.string().trim().min(1).max(200);
+const CreateBody = z.object({ name, description: z.string().max(5000).optional() });
+const PatchBody = z.object({
+	name: name.optional(),
+	description: z.string().max(5000).optional(),
+	settings: SettingsPatch.optional()
+});
+const RoleEnum = z.enum(['viewer', 'editor', 'owner']);
+
+async function getProject(db: import('../db/tx.js').Db, id: string) {
+	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
+	if (!rows[0]) throw new ApiError(404, 'not found');
+	return rows[0];
+}
+
+export const projectRoutes = new Hono<AuthEnv>()
+	.get('/', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} ORDER BY p.updated_at DESC`);
+			return c.json({ projects: rows.map(summary) });
+		})
+	)
+	.post('/', async (c) => {
+		const body = CreateBody.parse(await c.req.json());
+		return withUser(c.get('userId'), async (db) => {
+			// Id generated here, not via RETURNING: RLS checks RETURNING rows against
+			// the SELECT policy before the AFTER trigger has made us a member.
+			const id = crypto.randomUUID();
+			await db.query(
+				`INSERT INTO project (id, name, description, created_by) VALUES ($1, $2, $3, app_current_user_id())`,
+				[id, body.name, body.description ?? '']
+			);
+			return c.json({ project: full(await getProject(db, id)) }, 201);
+		});
+	})
+	.get('/:id', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			await requireRole(db, c.req.param('id'), 'viewer');
+			return c.json({ project: full(await getProject(db, c.req.param('id'))) });
+		})
+	)
+	.patch('/:id', async (c) => {
+		const body = PatchBody.parse(await c.req.json());
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const current = await getProject(db, id);
+			const settings = body.settings ? { ...mergeSettings(current.settings), ...body.settings } : undefined;
+			await db.query(
+				`UPDATE project SET
+					name = COALESCE($2, name),
+					description = COALESCE($3, description),
+					settings = COALESCE($4::jsonb, settings),
+					updated_at = now()
+				 WHERE id = $1`,
+				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null]
+			);
+			return c.json({ project: full(await getProject(db, id)) });
+		});
+	})
+	.delete('/:id', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			await requireRole(db, c.req.param('id'), 'owner');
+			await db.query('DELETE FROM project WHERE id = $1', [c.req.param('id')]);
+			return c.body(null, 204);
+		})
+	)
+	.post('/:id/copy', async (c) => {
+		const body = z.object({ name }).parse(await c.req.json());
+		const srcId = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, srcId, 'viewer');
+			const src = await getProject(db, srcId);
+			const newId = crypto.randomUUID();
+			await db.query(
+				`INSERT INTO project (id, name, description, settings, created_by)
+				 VALUES ($1, $2, $3, $4, app_current_user_id())`,
+				[newId, body.name, src.description, JSON.stringify(src.settings ?? {})]
+			);
+			await saveModel(db, newId, remapIds(await loadModel(db, srcId)));
+			await db.query(
+				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
+				 SELECT $2, kind, name, unit, start_date, "values" FROM time_series WHERE project_id = $1`,
+				[srcId, newId]
+			);
+			return c.json({ project: full(await getProject(db, newId)) }, 201);
+		});
+	})
+	// --- members -------------------------------------------------------------
+	.get('/:id/members', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			await requireRole(db, c.req.param('id'), 'viewer');
+			const { rows } = await db.query(
+				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role
+				 FROM project_member m JOIN app_user u ON u.id = m.user_id
+				 WHERE m.project_id = $1 ORDER BY m.role DESC, u.display_name`,
+				[c.req.param('id')]
+			);
+			return c.json({ members: rows });
+		})
+	)
+	.post('/:id/members', async (c) => {
+		const body = z.object({ email: z.string().trim().toLowerCase().email(), role: RoleEnum }).parse(await c.req.json());
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'owner');
+			const { rows: users } = await db.query<{ id: string; email: string; display_name: string }>(
+				'SELECT id, email, display_name FROM app_user WHERE email = $1',
+				[body.email]
+			);
+			const user = users[0];
+			if (!user) throw new ApiError(404, 'no account with that email — ask them to register first');
+			const { rowCount } = await db.query(
+				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+				[id, user.id, body.role]
+			);
+			if (!rowCount) throw new ApiError(409, 'already a member');
+			return c.json({ member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } }, 201);
+		});
+	})
+	.patch('/:id/members/:userId', async (c) => {
+		const body = z.object({ role: RoleEnum }).parse(await c.req.json());
+		const { id, userId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'owner');
+			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
+			if (body.role !== 'owner') await assertNotLastOwner(db, id, userId);
+			const { rows } = await db.query(
+				`UPDATE project_member m SET role = $3 FROM app_user u
+				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
+				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role`,
+				[id, userId, body.role]
+			);
+			if (!rows[0]) throw new ApiError(404, 'not found');
+			return c.json({ member: rows[0] });
+		});
+	})
+	.delete('/:id/members/:userId', async (c) => {
+		const { id, userId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'viewer');
+			const self = userId === c.get('userId');
+			if (!self && role !== 'owner') throw new ApiError(403, 'requires owner role');
+			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
+			await assertNotLastOwner(db, id, userId);
+			const { rowCount } = await db.query('DELETE FROM project_member WHERE project_id = $1 AND user_id = $2', [
+				id,
+				userId
+			]);
+			if (!rowCount) throw new ApiError(404, 'not found');
+			return c.body(null, 204);
+		});
+	});
+
+/**
+ * Friendly 409 before the deferred DB trigger would abort the commit. Checked
+ * *before* the change: afterwards a member who just left can no longer see
+ * the member list through RLS.
+ */
+async function assertNotLastOwner(db: import('../db/tx.js').Db, projectId: string, userId: string) {
+	const { rows } = await db.query<{ owners: number; target_is_owner: boolean }>(
+		`SELECT count(*) FILTER (WHERE role = 'owner')::int AS owners,
+			bool_or(user_id = $2 AND role = 'owner') AS target_is_owner
+		 FROM project_member WHERE project_id = $1`,
+		[projectId, userId]
+	);
+	if (rows[0]?.target_is_owner && rows[0].owners <= 1) {
+		throw new ApiError(409, 'a project must keep at least one owner');
+	}
+}
+
+/** Fresh ids for a copied model, keeping every internal reference intact. */
+function remapIds(model: import('@water-management/engine').ProjectModel) {
+	const map = new Map<string, string>();
+	const id = (old: string) => {
+		let n = map.get(old);
+		if (!n) map.set(old, (n = crypto.randomUUID()));
+		return n;
+	};
+	return {
+		nodes: model.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
+		crops: model.crops.map((c) => ({ ...c, id: id(c.id) })),
+		cropAreas: model.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
+		transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) }))
+	};
+}

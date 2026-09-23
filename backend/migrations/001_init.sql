@@ -169,6 +169,8 @@ CREATE TABLE run_series (
 	-- NULL node = catchment-level series (natural flow, simulated outflow, …).
 	node_id    uuid REFERENCES node(id) ON DELETE CASCADE,
 	key        text NOT NULL,
+	-- { label, unit } for display.
+	meta       jsonb NOT NULL DEFAULT '{}'::jsonb,
 	"values"   double precision[] NOT NULL,
 	UNIQUE NULLS NOT DISTINCT (run_id, node_id, key)
 );
