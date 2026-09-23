@@ -61,6 +61,7 @@ jobs:
             'frontend/' \
             'packages/engine/' \
             'pnpm-lock.yaml' \
+            'infra/scripts/check-csp.mjs' \
             '.github/workflows/deploy-frontend.yml' \
             || true)
 
@@ -106,6 +107,12 @@ jobs:
         working-directory: frontend
         run: pnpm build
 
+      # The CloudFront CSP header allows inline scripts only because SvelteKit's
+      # <meta> CSP narrows them to the hashed bootstrap (infra/security_headers.tf).
+      # Refuse to ship a build where that meta policy is missing or incomplete.
+      - name: Check the build's CSP hashes
+        run: node infra/scripts/check-csp.mjs frontend/build
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
@@ -113,24 +120,25 @@ jobs:
           role-session-name: deploy-frontend-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Sync build output to S3
+      # Only _app/immutable/ is content-hashed, so only it may be cached
+      # forever. Everything else (index.html, favicons, site.webmanifest,
+      # fonts/) keeps its name across releases and gets a short cache.
+      # Immutable assets go up first so a new index.html never points at a
+      # chunk that isn't there yet. Old chunks are deliberately NOT deleted
+      # (the second sync's --exclude also shields them from its --delete): a
+      # tab still running the previous release lazy-loads them on navigation.
+      # They are a few MB per release; prune by hand if that ever matters.
+      - name: Sync content-hashed assets (cache forever)
         run: |
-          aws s3 sync frontend/build/ "s3://${{ vars.FRONTEND_BUCKET }}/" \
-            --delete \
-            --cache-control "public, max-age=31536000, immutable" \
-            --exclude "*.html" \
-            --exclude "*.xml" \
-            --exclude "*.txt"
+          aws s3 sync frontend/build/_app/immutable/ "s3://${{ vars.FRONTEND_BUCKET }}/_app/immutable/" \
+            --cache-control "public, max-age=31536000, immutable"
 
-      - name: Sync HTML with shorter cache
+      - name: Sync everything else (short cache)
         run: |
           aws s3 sync frontend/build/ "s3://${{ vars.FRONTEND_BUCKET }}/" \
             --delete \
             --cache-control "public, max-age=60, must-revalidate" \
-            --exclude "*" \
-            --include "*.html" \
-            --include "*.xml" \
-            --include "*.txt"
+            --exclude "_app/immutable/*"
 
       - name: Invalidate CloudFront cache
         run: |
