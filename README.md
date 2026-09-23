@@ -1,8 +1,8 @@
 # water-management
 
-A web app for **daily catchment water-balance modelling**. It reimplements the
-Water Balance Tool (WBT b023) Excel workbook that SmartMatix built for the
-Freshwater Research Centre. For each catchment it models:
+A web app for **daily catchment water-balance modelling**. It replaces the
+spreadsheet-based Water Balance Tool (WBT b023) the client used before. For
+each catchment it models:
 
 - natural river flow from rainfall
 - irrigation demand per farm (crops × A-pan evaporation)

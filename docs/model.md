@@ -22,8 +22,8 @@ is wrong.
 
 ## 1. Background
 
-**Water Balance Tool (WBT) b023** is an Excel/VBA workbook. SmartMatix wrote it
-for the Freshwater Research Centre (FRC, Scarborough, South Africa). It runs a
+**Water Balance Tool (WBT) b023** is the Excel/VBA workbook the client used
+before this app. It runs a
 **daily** water balance for one river catchment, which is a network of farms
 (each with an optional composite dam) that drain into one outflow gauge. It
 answers three questions:
