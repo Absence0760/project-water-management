@@ -295,9 +295,9 @@ export const HELP: HelpEntry[] = [
 	},
 	{
 		id: 'dam-min',
-		term: 'Minimum dam storage (transfers)',
-		short: 'Storage a transfer may not draw the dam below, as a fraction of capacity. Irrigation is not limited by it.',
-		long: 'Transfers out of this dam only take water above this level. Irrigation can still empty the dam completely — whether farmers keep a reserve is open question Q5 for the hydrologist.',
+		term: 'Minimum dam storage',
+		short: 'A reserve level recorded with the dam, as a fraction of capacity. The model does not use it yet: neither irrigation nor transfers read it.',
+		long: 'Irrigation can empty the dam completely. A transfer keeps its own minimum storage in the source dam (set on the transfer, not here). Whether this dam-level reserve should limit irrigation or transfers is open question Q5 for the hydrologist; until then changing it does not change results.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		aliases: ['min dam volume'],

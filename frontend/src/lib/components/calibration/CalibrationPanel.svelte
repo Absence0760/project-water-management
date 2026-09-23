@@ -11,6 +11,7 @@
 		FLOW_KIND_LABEL,
 		RATING_LABEL,
 		RATING_TONE,
+		SIMULATED_LABEL,
 		describeWindow,
 		isLegacyStats,
 		isPartYear,
@@ -68,6 +69,9 @@
 			</div>
 			{#if calibration.flowKind}
 				<div><dt>Compared with</dt><dd>{FLOW_KIND_LABEL[calibration.flowKind] ?? calibration.flowKind}</dd></div>
+			{/if}
+			{#if calibration.simulatedKey}
+				<div><dt>Scored against</dt><dd>{SIMULATED_LABEL[calibration.simulatedKey]}</dd></div>
 			{/if}
 		</dl>
 

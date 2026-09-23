@@ -26,6 +26,8 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(farms.getByRole('rowheader', { name: 'All farms' })).toBeVisible();
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
+	// A gauge record is scored against the simulated outflow, not natural flow.
+	await expect(calibration.getByRole('definition').filter({ hasText: 'Simulated outflow at the outlet' })).toBeVisible();
 
 	const chart = page.getByRole('img', { name: /^Catchment · .*: line chart/ });
 	await expect(chart.locator('canvas')).toBeVisible();

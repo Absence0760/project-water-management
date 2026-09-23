@@ -112,6 +112,14 @@ export const FLOW_KIND_LABEL: Record<string, string> = {
 	flow_pitman_m3s: 'Pitman (natural) flow'
 };
 
+/** The simulated series a calibration was scored against. Pitman is a natural
+ *  flow, so it is compared with the simulated natural flow; gauges and loggers
+ *  with the simulated outflow (docs/engine-audit.md C1). */
+export const SIMULATED_LABEL: Record<NonNullable<CalibrationStats['simulatedKey']>, string> = {
+	natural_flow: 'Simulated natural flow (before farms and dams)',
+	simulated_outflow: 'Simulated outflow at the outlet'
+};
+
 /** Validation message for a calibration window, or null when it is fine. */
 export function windowError(start: string | null, end: string | null): string | null {
 	const iso = /^\d{4}-\d{2}-\d{2}$/;
