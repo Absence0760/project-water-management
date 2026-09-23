@@ -136,12 +136,11 @@ What we mirror, and what we don't:
    inflow entering above the dam") describes the label, not the effect.
 2. **Month lists are matched as substrings.** `fIsMthIn` / `fSorW2` use
    `FIND(m & ",", list & ",")`, so a list "11,12" also switches on January and
-   February. **Mirrored at import**: `extract_project.py` expands transfer
-   months the same way, prints a note when this changes anything, and stores
-   the expanded list. The engine does a plain membership test. It makes no
-   difference to either sample workbook: client catchment's transfer is
-   "5,6,7,8,9,10", and lists with 11 or 12 there already include 1 and 2.
-   `calibration.py` expands summer months the same way.
+   February. **Not mirrored** (audit M1): the importer keeps the months a list
+   names and prints a note when the workbook would have added others; the
+   engine does a plain membership test. It makes no difference to either
+   sample workbook: client catchment's transfer is "5,6,7,8,9,10", and lists with 11
+   or 12 there already include 1 and 2.
 3. **Blank template's sample transfer reads spill, not storage.** In
    `Blank_WBT_b023_v001.xlsm` [Transfers] P7 is
    `fGetTrfVolCapped(FarmB!R6, …)`: column R (spill) where every other
