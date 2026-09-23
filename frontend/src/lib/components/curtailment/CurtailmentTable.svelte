@@ -1,7 +1,7 @@
 <!--
 	Curtailment targets per farm: the b023 [Shortfalls] report over the run's
 	reporting window (RunSummary.curtailment, engine ≥ 0.3.0). Formulas and
-	workbook quirks: docs/model.md §2.9. Sign convention: negative = reduce,
+	workbook quirks: docs/model.md §2.11. Sign convention: negative = reduce,
 	positive = may gain.
 -->
 <script lang="ts">

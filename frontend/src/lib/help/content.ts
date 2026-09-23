@@ -132,6 +132,28 @@ export const HELP: HelpEntry[] = [
 		related: ['dam-initial', 'calibration'],
 		source: 'b023 Help (Calc. Model date window)'
 	},
+	{
+		id: 'calibration-window',
+		term: 'Calibration window',
+		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
+		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record — the Client Catchment workbook uses Oct 2010 to Sep 2018 against the A1 logger. Choose which observed series to compare against (gauge, logger or Pitman). The fit statistics and the annual volume table only count days inside this window.',
+		category: 'fit',
+		aliases: ['calibration period', 'observed flow record'],
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind'],
+		related: ['calibration', 'nse'],
+		source: 'b023 [Flow Calibration Cfg] date range and flow choice; docs/model.md §2.10'
+	},
+	{
+		id: 'report-window',
+		term: 'Reporting window',
+		short: 'The period the curtailment report (targets and reduce/gain per farm) averages over. Empty = the whole run.',
+		long: 'Pick a critical period — a dry season or a drought year — to see how much each farm would need to reduce for irrigation to balance and the EWR to be met in that period. A window partly outside the run is clipped to it.',
+		category: 'basics',
+		aliases: ['reporting period', 'shortfall period'],
+		fields: ['settings.reportStart', 'settings.reportEnd'],
+		related: ['ewr'],
+		source: 'b023 [Shortfalls] "Set reporting period"; docs/model.md §2.11'
+	},
 
 	// ---- Network ------------------------------------------------------------
 	{
@@ -853,9 +875,45 @@ export const HELP: HelpEntry[] = [
 		units: 'dimensionless, −∞ … 1',
 		category: 'fit',
 		aliases: ['Kling-Gupta'],
-		fields: ['stats.kge'],
+		fields: ['stats.kge', 'stats.kgeR', 'stats.kgeAlpha', 'stats.kgeBeta'],
 		related: ['nse'],
 		source: 'docs/model.md §7'
+	},
+	{
+		id: 'r-squared',
+		term: 'R² (coefficient of determination)',
+		short: 'Share of the day-to-day variation in observed flow that the simulation follows (0–1). Ignores volume errors.',
+		long: 'R² is the square of the correlation between simulated and observed flow. A high R² with a poor NSE usually means the timing is right but the volumes are off — check PBIAS.',
+		units: 'dimensionless, 0 … 1',
+		category: 'fit',
+		aliases: ['R2', 'correlation'],
+		fields: ['stats.r2'],
+		related: ['nse', 'pbias'],
+		source: 'docs/model.md §2.10'
+	},
+	{
+		id: 'log-nse',
+		term: 'log-NSE (low-flow fit)',
+		short: 'NSE computed on the logarithm of flow, so it rewards a good fit in low flows rather than in floods.',
+		long: 'Ordinary NSE is dominated by a few big floods. For irrigation and EWR questions the dry-season low flows matter most; log-NSE weights them evenly. A small constant (1 % of mean observed flow) is added before taking logs so zero flows are allowed.',
+		units: 'dimensionless, −∞ … 1',
+		category: 'fit',
+		aliases: ['logNSE', 'low flow'],
+		fields: ['stats.logNse'],
+		related: ['nse'],
+		source: 'docs/model.md §2.10'
+	},
+	{
+		id: 'volume-error',
+		term: 'Volume error',
+		short: 'How much more (+) or less (−) water the model produces than was observed over the calibration window, in %.',
+		long: 'The same information as PBIAS with the opposite sign: +10 % means the simulation is 10 % too wet. The annual volume table shows it per water year, which reveals whether an error comes from a few years or is systematic.',
+		units: '%',
+		category: 'fit',
+		aliases: ['volume bias', 'water balance error'],
+		fields: ['stats.volumeErrorPct'],
+		related: ['pbias'],
+		source: 'docs/model.md §2.10'
 	}
 ];
 

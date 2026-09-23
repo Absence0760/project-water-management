@@ -22,7 +22,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, returnFlowPct: true
 };
-const CROP: Record<keyof CropDef, true> = { id: true, name: true, cropFactor: true };
+const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
 const TRANSFER: Record<keyof Transfer, true> = {
 	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true
@@ -34,9 +34,11 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, ewrDaysNotMet: true, ewrFractionDaysNotMet: true
 };
-// `kge` is planned (docs/planned-work.md "Calibration window + more metrics").
-const STATS: Record<keyof CalibrationStats | 'kge', true> = {
-	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true, kge: true
+const STATS: Record<keyof CalibrationStats, true> = {
+	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,
+	windowStart: true, windowEnd: true, firstObservedDate: true, lastObservedDate: true, kge: true, kgeR: true,
+	kgeAlpha: true, kgeBeta: true, r2: true, logNse: true, logEpsilonM3s: true, volumeErrorPct: true,
+	annualVolumes: true, flowKind: true
 };
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
@@ -103,7 +105,7 @@ describe('help content', () => {
 	});
 
 	it('covers every user-editable model field', () => {
-		const skip = new Set(['node.id', 'node.sortOrder', 'crop.id', 'cropArea.nodeId', 'cropArea.cropId', 'transfer.id']);
+		const skip = new Set(['node.id', 'node.sortOrder', 'crop.id', 'crop.sortOrder', 'cropArea.nodeId', 'cropArea.cropId', 'transfer.id']);
 		const editable = [
 			...Object.keys(NODE).map((k) => `node.${k}`),
 			...Object.keys(CROP).map((k) => `crop.${k}`),

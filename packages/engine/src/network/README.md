@@ -20,8 +20,9 @@ A full `runModel` for client catchment takes about 160 ms.
 | `shares.ts` | [Farm spec] "Selected fragmentation" | Each farm's share of natural flow and EWR (area / hiLo / manual). Warns if the shares don't sum to 1 ±0.0002. |
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
-| `stats.ts` | – | NSE, PBIAS, RMSE of simulated outflow vs observed flow. |
+| `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes; `moriasiRating`. |
 | `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain and total change (m³/day, l/s) over the reporting window → `RunSummary.curtailment`. |
+| `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm. |
 | `round.ts` | – | Excel `ROUND` and the workbook's rounding precisions. |
 
 ## Daily farm balance
@@ -97,10 +98,17 @@ warning.
   fraction = ΣI / ΣH; target M = ROUND(H × that, 1); reduce/gain N = M − I;
   total change S = N + R; volume left U = M + R; l/s = ROUNDDOWN(÷ 86.4, 1).
   Workbook signs (negative = reduce). Full table and quirks:
-  [docs/model.md §2.9](../../../../docs/model.md#29-curtailment-targets-shortfalls).
-- Calibration: over days with an observation, from `flow_observed_m3s`
-  (falling back to `flow_logger_m3s`). PBIAS = 100 × Σ(obs − sim) / Σ obs, so
-  positive means the model under-estimates.
+  [docs/model.md §2.11](../../../../docs/model.md#211-curtailment-targets-shortfalls).
+- Calibration: over days with an observation inside
+  `settings.calibrationStart`…`calibrationEnd` (null = open), from
+  `settings.calibrationFlowKind`, else `flow_observed_m3s`, else
+  `flow_logger_m3s`. PBIAS = 100 × Σ(obs − sim) / Σ obs, so positive means the
+  model under-estimates. Formulas: [docs/model.md §2.10](../../../../docs/model.md#210-calibration-statistics-flow-calibration-cfg).
+- `ewrCompliance`: per water year × month, days where the outlet's
+  `ewr_shortfall` (and each farm's `ewr_shortfall_incremental`) is below zero,
+  and the summed shortfall volume. The workbook pivot's running-total count is
+  available as `countMethod: 'runningTotal'`
+  ([docs/model.md §2.9](../../../../docs/model.md#29-ewr-compliance-grid-ewr-shortfalls-pivot-data--ewr-analysis)).
 - Series are in the workbook's sign convention: shortfalls are ≤ 0.
   `observed_flow` holds `NaN` on missing days (serialises as `null`).
 

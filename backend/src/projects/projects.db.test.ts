@@ -71,6 +71,42 @@ describe('projects', () => {
 		expect((await u.call('PATCH', `/projects/${id}`, { settings: { reportStart: 'last summer' } })).status).toBe(400);
 	});
 
+	it('stores the calibration window and flow series, and rejects bad values', async () => {
+		const u = await signUp('W');
+		const { body } = await u.call('POST', '/projects', { name: 'W' });
+		const id = body.project.id;
+		expect(body.project.settings).toMatchObject({ calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null });
+		const ok = await u.call('PATCH', `/projects/${id}`, {
+			settings: { calibrationStart: '2010-10-01', calibrationEnd: '2018-09-30', calibrationFlowKind: 'flow_logger_m3s' }
+		});
+		expect(ok.status).toBe(200);
+		expect(ok.body.project.settings).toMatchObject({ calibrationStart: '2010-10-01', calibrationFlowKind: 'flow_logger_m3s' });
+		for (const settings of [{ calibrationStart: '1/10/2010' }, { calibrationEnd: 20180930 }, { calibrationFlowKind: 'rain_catchment_mm' }]) {
+			expect((await u.call('PATCH', `/projects/${id}`, { settings })).status, JSON.stringify(settings)).toBe(400);
+		}
+	});
+
+	it('scores a run over the calibration window and stores the EWR compliance grid', async () => {
+		const u = await signUp('R');
+		const { projectId } = await projectWithModel(u);
+		const days = 400; // 2020-09-01 … 2021-10-05: three water years
+		const rain = Array.from({ length: days }, (_, i) => (i % 7 === 0 ? 20 : 0));
+		const observed = Array.from({ length: days }, (_, i) => 0.5 + (i % 30) / 30);
+		await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-09-01', values: rain });
+		await u.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2020-09-01', values: observed });
+		await u.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibrationStart: '2020-10-01', calibrationEnd: '2021-09-30', ewrPragmaticM3PerDay: monthly(50_000) }
+		});
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'window' });
+		expect(res.status).toBe(201);
+		const { calibration, ewrCompliance } = res.body.run.summary;
+		expect(calibration).toMatchObject({ days: 365, windowStart: '2020-10-01', windowEnd: '2021-09-30', flowKind: 'flow_observed_m3s' });
+		expect(calibration.annualVolumes).toHaveLength(1);
+		expect(ewrCompliance.waterYears).toEqual([2019, 2020, 2021]);
+		expect(ewrCompliance.farms).toHaveLength(1);
+		expect(ewrCompliance.days.flat().reduce((a: number, b: number) => a + b, 0)).toBe(days);
+	});
+
 	it('round-trips the model document and rejects invalid networks', async () => {
 		const u = await signUp('M');
 		const { projectId, model } = await projectWithModel(u);

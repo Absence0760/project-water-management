@@ -1,4 +1,4 @@
-import { defaultProjectSettings, type ProjectSettings } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, type ProjectSettings } from '@water-management/engine';
 import { z } from 'zod';
 
 type Json = Record<string, unknown>;
@@ -38,7 +38,10 @@ export const SettingsPatch = z
 		simulationStart: isoDate.nullable(),
 		simulationEnd: isoDate.nullable(),
 		reportStart: isoDate.nullable(),
-		reportEnd: isoDate.nullable()
+		reportEnd: isoDate.nullable(),
+		calibrationStart: isoDate.nullable(),
+		calibrationEnd: isoDate.nullable(),
+		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable()
 	})
 	.partial()
 	.passthrough()

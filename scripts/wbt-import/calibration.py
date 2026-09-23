@@ -1,5 +1,9 @@
 """Extract the rain -> natural-flow calibration from a b023 WBT workbook.
 
+`extract_calibration_window(wb)` returns the top-level settings
+`calibrationStart` / `calibrationEnd` / `calibrationFlowKind` (the window and
+flow record the workbook calibrates against).
+
 `extract_calibration(wb)` returns a dict shaped like the engine's
 `CalibrationParams` (packages/engine/src/project.ts, camelCase keys), read from
 the [Flow Calibration Cfg] sheet via the workbook's named ranges so it keeps
@@ -13,6 +17,7 @@ mode is fine and recommended for the large client workbooks.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import sys
@@ -109,6 +114,42 @@ def extract_calibration(wb) -> dict[str, Any]:
     }
 
 
+# [Flow data] rUseFlow picks Flow A/B/C = columns F/G/H.
+_USE_FLOW_KINDS = {1: "flow_pitman_m3s", 2: "flow_observed_m3s", 3: "flow_logger_m3s"}
+
+
+def _iso_or_none(v: Any) -> str | None:
+    if isinstance(v, dt.datetime):
+        return v.date().isoformat()
+    if isinstance(v, dt.date):
+        return v.isoformat()
+    return None
+
+
+def extract_calibration_window(wb) -> dict[str, Any]:
+    """Top-level ProjectSettings for calibration scoring.
+
+    calibrationStart/End come from [Flow Calibration Cfg] zCalibration_Date1 /
+    zCalibration_DateN (the window the hydrologist calibrated on);
+    calibrationFlowKind from [Flow data] rUseFlow (1 Pitman, 2 gauge, 3 logger).
+    Anything missing or unreadable becomes null (= the engine's default).
+    """
+    out: dict[str, Any] = {"calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None}
+    for key, name in (("calibrationStart", "zCalibration_Date1"), ("calibrationEnd", "zCalibration_DateN")):
+        try:
+            out[key] = _iso_or_none(_cell(wb, name))
+        except (KeyError, ValueError):
+            pass
+    try:
+        use = _cell(wb, "rUseFlow")
+        out["calibrationFlowKind"] = _USE_FLOW_KINDS.get(int(use)) if isinstance(use, (int, float)) else None
+    except (KeyError, ValueError):
+        pass
+    if out["calibrationStart"] and out["calibrationEnd"] and out["calibrationStart"] > out["calibrationEnd"]:
+        out["calibrationStart"] = out["calibrationEnd"] = None
+    return out
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"usage: {argv[0]} WORKBOOK.xlsm", file=sys.stderr)
@@ -117,7 +158,7 @@ def main(argv: list[str]) -> int:
 
     wb = openpyxl.load_workbook(argv[1], read_only=True, data_only=True, keep_vba=False)
     try:
-        print(json.dumps(extract_calibration(wb), indent=2))
+        print(json.dumps({"calibration": extract_calibration(wb), **extract_calibration_window(wb)}, indent=2))
     finally:
         wb.close()
     return 0

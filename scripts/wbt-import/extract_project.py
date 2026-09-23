@@ -32,9 +32,10 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:  # written alongside this script; falls back to engine defaults if absent
-    from calibration import extract_calibration  # type: ignore
+    from calibration import extract_calibration, extract_calibration_window  # type: ignore
 except ImportError:  # pragma: no cover
     extract_calibration = None
+    extract_calibration_window = None
 
 _REF = re.compile(r"^'?(?P<sheet>.+?)'?!\$?(?P<c1>[A-Z]+)\$?(?P<r1>\d+)(?::\$?(?P<c2>[A-Z]+)\$?(?P<r2>\d+))?$")
 
@@ -479,6 +480,27 @@ def read_shortfalls(wb: Workbook) -> dict[str, Any] | None:
     return {"periodStart": iso(start[0]), "periodEnd": iso(end[0]), "farms": farms, "totals": totals}
 
 
+def read_ewr_pivot(wb: Workbook) -> list[dict[str, Any]] | None:
+    """[EWR shortfalls Pivot Data]: per calendar year x month x farm, the summed
+    incremental EWR shortfall (m3, <= 0) and the count of days "not met".
+
+    The table is written by VBA (sProEp_GenerateEWRpivotData), so it is only as
+    fresh as the last time that macro ran. Its count uses a running monthly
+    total; see packages/engine/src/network/ewr.ts.
+    """
+    try:
+        rows = wb.named("zEWRshortPivotData_DataTbl")
+    except KeyError:
+        return None
+    out = []
+    for r in rows[1:]:
+        year, month, farm, vol, cnt = r[0], r[1], r[2], r[3], r[4]
+        if not isinstance(year, (int, float)) or not is_name(farm):
+            continue
+        out.append({"year": int(year), "month": int(month), "farm": clean(farm), "volM3": num(vol), "daysNotMet": int(num(cnt))})
+    return out
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -593,10 +615,19 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
             "ewrPragmaticM3PerDay": ewr,
             "simulationStart": None,
             "simulationEnd": None,
+            "calibrationStart": None,
+            "calibrationEnd": None,
+            "calibrationFlowKind": None,
         }
+        if extract_calibration_window is not None:
+            settings.update(extract_calibration_window(wb.wb))
 
         flow = read_flow_data(wb)
         dates = flow["dates"]
+        kind = settings["calibrationFlowKind"]
+        if kind and kind not in {s["kind"] for s in flow["series"]}:
+            wb.notes.append(f"[Flow data] rUseFlow picks {kind}, which has no values; calibrationFlowKind left unset")
+            settings["calibrationFlowKind"] = None
         project = {
             "name": name,
             "description": f"Imported from {path.name}",
@@ -625,6 +656,7 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
             "catchment": flow["calc"],
             "nodes": expected_nodes,
             "shortfalls": read_shortfalls(wb),
+            "ewrPivot": read_ewr_pivot(wb),
         }
         return project, expected, wb.notes
     finally:

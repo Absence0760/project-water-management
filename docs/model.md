@@ -257,11 +257,88 @@ compared with the full pragmatic EWR and the observed flow.
 | Workbook sheet | What it shows | App equivalent (V1) |
 | --- | --- | --- |
 | `[EWR shortfalls]` | Per day: unfragmented EWR, EWR volume not met at the gauge, a not-met flag, Σ incremental farm shortfalls, and per-farm incremental shortfall | Run series (`ewr_*` keys) + chart |
-| `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.9); `RunSummary.farms` keeps the whole-run averages |
-| `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | Later phase (reports) |
-| `[Flow Calibr. Graph Full]` | Observed vs simulated flow | Calibration chart + `CalibrationStats` (NSE, PBIAS, RMSE) |
+| `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
+| `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
+| `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
-### 2.9 Curtailment targets (`[Shortfalls]`)
+### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
+
+The workbook's VBA macro `sProEp_GenerateEWRpivotData` walks the
+`[EWR shortfalls]` sheet and writes one row per calendar year × month × farm:
+the month's summed incremental shortfall (AB, m³), a "not met" day count, and
+that count / days in the month (February = `INT(28.25)` = 28). A pivot table
+then shows it as farm × month.
+
+The engine's `ewrCompliance` (`network/ewr.ts`) builds the same grid, laid
+out as **water-year rows × Oct…Sep columns**, for the outlet (simulated
+outflow vs the full pragmatic EWR, i.e. `[Flow data]` AK) and for each farm
+(`ewr_shortfall_incremental`). Each cell holds the days simulated, the days
+not met and the shortfall volume (m³, positive).
+
+**Which days count as "not met".** The macro adds each day's shortfall to a
+running monthly total and counts the day when *the total* is below zero. Once
+a month has one short day, every later day of that month counts, even days
+when the EWR was met. The engine counts a day only when **that day** is short
+(`countMethod: 'daily'`), which is what "% of days EWR not met" means; the
+summary uses this. `countMethod: 'runningTotal'` reproduces the macro, and the
+client catchment regression test checks it against the extracted pivot. Volumes are
+the same either way. The percentage the UI shows is days not met / days
+simulated in that month, so a leap February is out of 29 and a part month at
+either end of the run is out of the days actually simulated.
+
+**The workbook's pivot is stale.** It is written by a macro, not by formulas,
+so it reflects the model as it was when someone last ran the macro. In the
+client catchment workbook about 23% of farm-months hold volumes that no longer match
+the Element sheets or `[EWR shortfalls]` (for example a farm whose daily AB is
+constant through a February shows a monthly sum that is not 28 × that value).
+Where the volumes are current, the running-total counts match exactly.
+
+### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
+
+The hydrologist calibrates on a window, not the whole record:
+`zCalibration_Date1`…`zCalibration_DateN` (client catchment: 2010-10-01 to
+2018-09-30), against the flow record `rUseFlow` picks in `[Flow data]`
+(1 = Pitman, 2 = the G1 gauge, 3 = the A1 logger; client catchment uses the
+logger, which only has data from 2013-04-15). The importer copies both into
+`settings.calibrationStart/End` and `settings.calibrationFlowKind`. With no
+window the whole overlap is scored; with no flow kind the engine uses the gauge
+series if present, else the logger.
+
+`calibrationStats` (`network/stats.ts`) scores the days inside the window that
+have an observation, in m³/s:
+
+| Metric | Formula | Reads as |
+| --- | --- | --- |
+| NSE | 1 − Σ(o − s)² / Σ(o − ō)² | 1 perfect; ≤ 0 no better than the observed mean |
+| PBIAS | 100 × Σ(o − s) / Σo | %; positive = model under-estimates volume |
+| RMSE | √(Σ(o − s)² / n) | m³/s |
+| KGE | 1 − √((r − 1)² + (α − 1)² + (β − 1)²) (Gupta et al. 2009) | 1 perfect; > −0.41 beats the mean flow (Knoben et al. 2019) |
+| r, α, β | Pearson r; α = σs/σo; β = s̄/ō (population σ) | timing, variability and volume ratios |
+| R² | r² | share of variance explained |
+| log-NSE | NSE of ln(Q + ε), ε = ō / 100 (Pushpalatha et al. 2012) | fit of low flows |
+| Volume error | 100 × (Σs − Σo) / Σo | %; positive = model too wet (= −PBIAS) |
+| Annual volumes | Σ per water year of paired days, Mm³, and % difference | the annual water balance |
+
+`moriasiRating` rates NSE and PBIAS after Moriasi et al. (2007): NSE > 0.75
+very good, > 0.65 good, > 0.50 satisfactory; |PBIAS| < 10 very good, < 15
+good, < 25 satisfactory; otherwise unsatisfactory. Those thresholds were set
+for monthly flows; daily fits usually score lower.
+
+The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
+treats blank observations as 0 and then only counts days with observed flow
+> 0. The engine skips blank days and keeps observed zeros.
+
+**client catchment (engine 0.3.0, end to end from rain).** Whole record against the
+G1 gauge (V1's behaviour): NSE −0.70, PBIAS −23%. The workbook's window
+against the G1 gauge: NSE −0.34, PBIAS −116%, KGE −0.28. The workbook's
+window against the logger it actually calibrates to (1 803 days, 2013-04-15 to
+2018-03-22): **NSE 0.29, KGE 0.57 (r 0.69, α 1.11, β 1.28), R² 0.48, log-NSE
+0.49, PBIAS −28%**. β = 1.278 equals the workbook's own "Calibration / Logger"
+volume ratio (`[Flow Calibration Cfg]` K27 = 1.2783). The gauge and the logger
+disagree badly from 2014 to 2017 (in one water year the gauge records less than
+a tenth of the logger's volume): a question for the hydrologist.
+
+### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
 gain) so that irrigation is shared fairly and the EWR is met?* It works on
@@ -488,8 +565,11 @@ step when a definition changes.
 | **Return flow** | The share of irrigation water that runs back to the river. |
 | **Transfer** | Water moved from one farm's dam to another farm (pipeline or canal). |
 | **NSE** | Nash–Sutcliffe Efficiency = 1 − Σ(obs−sim)² / Σ(obs−mean obs)². 1 is perfect; ≤ 0 means no better than the mean. |
-| **PBIAS** | Percent bias = 100 × Σ(sim−obs) / Σobs. Negative means the model under-predicts volume. |
-| **KGE** | Kling–Gupta Efficiency: combines correlation, bias and variability. |
+| **PBIAS** | Percent bias = 100 × Σ(obs−sim) / Σobs (the engine's sign). Positive means the model under-predicts volume. |
+| **KGE** | Kling–Gupta Efficiency (Gupta et al. 2009): 1 − distance from perfect correlation, variability ratio and bias ratio. |
+| **Log-NSE** | NSE on the logarithm of flow, which weights low flows. |
+| **Calibration window** | The period the fit is scored over (the workbook's 2010–2018 for client catchment). |
+| **Water year** label | The app labels a water year by the year its October falls in: 2010 = Oct 2010 – Sep 2011, shown as 2010/11. |
 | **RMSE** | Root-mean-square error. |
 | **Hydrological unit (HU)** | A sub-catchment with its own area, MAP and rain gauge (runoff module). |
 | **Stress class** | Low / Moderate / High / Severe / Critical, from the supply ratio (node-based model). |
