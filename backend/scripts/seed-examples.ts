@@ -4,9 +4,10 @@
 //
 //   pnpm seed:examples                      (root script; needs `pnpm dev:db:up`)
 //
-// Creates two demo users and shows sharing both ways:
-//   demo@example.com    owns Kleinberg + Droëvlei; editor on Sandspruit
-//   analyst@example.com owns Sandspruit; viewer on Kleinberg
+// Creates two demo users and shows both ways of sharing:
+//   team "Demo Catchment Consultants" (demo = admin, analyst = member) owns
+//     Kleinberg + Droëvlei → analyst gets editor on both through the team
+//   analyst@example.com personally owns Sandspruit and shares it with demo as viewer
 // Each project gets one model run so results show immediately.
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
@@ -48,9 +49,15 @@ export async function seedExamples(): Promise<string[]> {
 		ids.push(id);
 		console.log(`seeded ${ex.name} (${who.email})`);
 	}
-	// Make sure both users exist before sharing.
-	await share(ANALYST.email, ids[2]!, DEMO.email, 'editor');
-	await share(DEMO.email, ids[0]!, ANALYST.email, 'viewer');
+	// Both users exist now: set up the team and the direct share.
+	const [demo, analyst] = [await userId(DEMO.email), await userId(ANALYST.email)];
+	const teamId = crypto.randomUUID();
+	await withUser(demo, async (db) => {
+		await db.query('INSERT INTO team (id, name, created_by) VALUES ($1, $2, $3)', [teamId, 'Demo Catchment Consultants', demo]);
+		await db.query(`INSERT INTO team_member (team_id, user_id, role) VALUES ($1, $2, 'member')`, [teamId, analyst]);
+		await db.query('UPDATE project SET team_id = $1 WHERE id = ANY($2::uuid[])', [teamId, [ids[0], ids[1]]]);
+	});
+	await share(ANALYST.email, ids[2]!, DEMO.email, 'viewer');
 	return ids;
 }
 
