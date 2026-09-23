@@ -14,6 +14,7 @@
 		const p = page.url.pathname.slice(base.length) || '/';
 		if (p === '/' || p.startsWith('/projects')) return 'projects';
 		if (p.startsWith('/teams')) return 'teams';
+		if (p.startsWith('/help')) return 'help';
 		return null;
 	});
 
@@ -53,6 +54,7 @@
 		<nav aria-label="Main">
 			<a href="{base}/" aria-current={section === 'projects' ? 'page' : undefined}>Projects</a>
 			<a href="{base}/teams" aria-current={section === 'teams' ? 'page' : undefined}>Teams</a>
+			<a href="{base}/help" aria-current={section === 'help' ? 'page' : undefined}>Help</a>
 		</nav>
 		<div class="spacer"></div>
 		<div class="account">

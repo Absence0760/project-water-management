@@ -2,6 +2,8 @@
 	import { onMount, untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type RunMeta } from '$lib/api';
+	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
+	import { downloads } from '$lib/export';
 	import { fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { cached } from './cache';
@@ -73,6 +75,15 @@
 		};
 	});
 
+	// Anyone who can open the project can take a copy of it (viewers included).
+	const projectDownloads = $derived([
+		{
+			label: 'Download project (JSON)',
+			url: downloads.project(project.id),
+			hint: 'Model, settings and input series (runs not included)'
+		}
+	]);
+
 	async function saveDetails(e: SubmitEvent) {
 		e.preventDefault();
 		saving = true;
@@ -107,7 +118,10 @@
 <div class="grid">
 	<div class="col">
 		<section class="panel" aria-labelledby="details-h">
-			<div class="panel-head"><h2 id="details-h">Project details</h2></div>
+			<div class="panel-head">
+				<h2 id="details-h">Project details</h2>
+				<DownloadMenu items={projectDownloads} />
+			</div>
 			<form onsubmit={saveDetails}>
 				{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 				<div class="field">
