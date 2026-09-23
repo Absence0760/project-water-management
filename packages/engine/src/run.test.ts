@@ -706,8 +706,12 @@ describe.skipIf(!dataDir)(
 	'workbook regression: client catchment (needs data/client-catchment from scripts/wbt-import/extract_project.py)',
 	() => {
 		// vitest still runs a skipped describe's body to collect its tests: don't
-		// read the (absent) fixtures then.
-		if (!dataDir) return;
+		// read the (absent) fixtures then, but register one test so the run
+		// reports the suite as skipped rather than silently empty.
+		if (!dataDir) {
+			it('needs data/client-catchment', () => {});
+			return;
+		}
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
 		const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
 		const modelInput: ModelInput = {
