@@ -95,6 +95,16 @@ describe('day-1 state (audit E1)', () => {
 		expect(c.naturalFlowM3Day[0]).toBeCloseTo(300 * 0.9845, 9);
 	});
 
+	it('a storm on the first day starts its pulse at the pulse index, like on any other day', () => {
+		// The blank reserved-row index (0) made day 1 take the base index instead.
+		const c = computeFlowColumns(cal(), inputs([40, 0], '2021-07-01'));
+		const k = cal();
+		const v = c.rainFlow[0]!;
+		const pulse = Math.max(k.shiftPeakIndexLo + (k.shiftPeakIndexHi - k.shiftPeakIndexLo) * (1 - v / k.amplitudeM3Day), k.shiftPeakIndexLo);
+		expect(c.addedIndex[0]).toBeCloseTo(pulse > c.baseIndex[0]! ? Math.max(1, c.baseIndex[0]! - 0.2) : pulse, 12);
+		expect(c.addedIndex[1]).toBeCloseTo(c.addedIndex[0]! + 1, 12);
+	});
+
 	it('never turns the base flow negative, whatever the first two recession factors', () => {
 		// f2 > 2·f1 made the day-1 factor negative: base flow −30 m³/day, and a
 		// negative base can never reset (rain / negative base is never > 1.5).

@@ -169,8 +169,9 @@ function addedFlowIndex(
 	const ci = Math.max(indx, lo);
 	// Keep the start left of the base index so the event curve crosses the base.
 	const li = ci > baseIndex ? Math.max(1, baseIndex - 0.2) : ci;
-	const afi = addedFlow > 0 ? li : prevIndex + 1;
-	return Math.min(prevIndex === 0 ? baseIndex : afi, cal.recessionDaysMax);
+	// (The workbook also returns the base index when yesterday's index is blank,
+	// which only happened on day 1; the engine seeds day 0's index instead.)
+	return Math.min(addedFlow > 0 ? li : prevIndex + 1, cal.recessionDaysMax);
 }
 
 function rainUsed(threshold: number, catchment: number | null, chirps: number | null, forecast: number | null): number {
@@ -198,8 +199,8 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 	const day0 = toEpochDay(inputs.startDate);
 
 	// The day before the run is a steady base-flow state: base flow and the
-	// resultant flow both equal baseFlowInitial, at that flow's own position on
-	// the recession curve. The workbook's "reserved" row fills in only the base
+	// resultant flow both equal baseFlowInitial, and every index is that flow's
+	// own position on the recession curve. The workbook's "reserved" row fills in only the base
 	// flow and leaves its index blank (0), so day 1 receded at the extrapolated
 	// factor 2·f1 − f2 (300 → 34 m³/day with the default curve, or a negative
 	// base flow that can never reset when f2 > 2·f1) — audit E1.
@@ -208,7 +209,7 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 	let prevRain = 0;
 	let prevBase = cal.baseFlowInitial;
 	let prevBaseIndex = initialIndex;
-	let prevAddedIndex = 0;
+	let prevAddedIndex = initialIndex;
 	let prevResponseAdded = 0;
 	let prevResultant = cal.baseFlowInitial;
 	let prevResultantIndex = initialIndex;
