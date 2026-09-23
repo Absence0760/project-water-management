@@ -153,11 +153,9 @@
 		.meta {
 			display: block;
 		}
-		.projects {
-			table-layout: auto;
-		}
+		/* Keep the fixed layout: the name column takes what the buttons leave. */
 		.c-act {
-			width: 1%;
+			width: 6.25rem;
 		}
 		.actions {
 			vertical-align: top;

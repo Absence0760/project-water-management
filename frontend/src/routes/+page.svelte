@@ -420,6 +420,7 @@
 	}
 	.group-head {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 0.5rem;
 		margin-bottom: 0.5rem;
