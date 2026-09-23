@@ -44,8 +44,9 @@ const roleIn = (page: Page, name: string) =>
 	page
 		.getByRole('row')
 		.filter({ has: page.getByRole('rowheader', { name, exact: true }) })
+		// The "Your role" cell (column positions vary: the Team column only shows in some groups).
 		.getByRole('cell')
-		.nth(1);
+		.filter({ hasText: /^(owner|editor|viewer)$/ });
 
 test('each demo user sees their own and shared example catchments with the right role', async ({ page, browser }) => {
 	await signInAs(page, DEMO);

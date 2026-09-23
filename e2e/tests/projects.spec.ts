@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, putModel, register, sampleModel } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, putSeries, register, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const row = (page: Page, name: string) =>
@@ -43,7 +43,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await expect(page.getByRole('row')).toHaveCount(5);
 
 	// The copy carries A's model but is its own project.
-	await row(page, 'Example Valley — new orchard').getByRole('link', { name: 'Example Valley — new orchard' }).click();
+	await row(page, 'Example Valley — new orchard').getByRole('link', { name: 'Example Valley — new orchard', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Example Valley — new orchard' })).toBeVisible();
 	await expect(page).not.toHaveURL(new RegExp(idA));
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
@@ -100,4 +100,37 @@ test('the list shows the role the user has on each project', async ({ page, owne
 	await expect(row(page, 'Colleague catchment').getByRole('button', { name: /^Delete/ })).toHaveCount(0);
 	await expect(row(page, 'Colleague reference').getByRole('button', { name: /^Delete/ })).toHaveCount(0);
 	await expect(row(page, 'Colleague reference').getByRole('button', { name: 'Copy Colleague reference' })).toBeVisible();
+});
+
+test('the list shows data freshness and the last run, with an Add data shortcut for editors', async ({ page, owner, signIn }) => {
+	void owner;
+	const empty = await createProject(page.request, 'Freshness — empty');
+	const stale = await createProject(page.request, 'Freshness — stale');
+	await putModel(page.request, stale.id, sampleModel());
+	const days = 30;
+	const series = (kind: string, unit: string) => ({ kind, unit, startDate: '2020-10-01', values: Array(days).fill(1) });
+	await putSeries(page.request, stale.id, series('rain_catchment_mm', 'mm'));
+	await putSeries(page.request, stale.id, series('flow_observed_m3s', 'm3/s'));
+	await createRun(page.request, stale.id, 'baseline');
+
+	await page.goto('/');
+	const emptyRow = row(page, 'Freshness — empty');
+	await expect(emptyRow).toContainText('no data yet');
+	await expect(emptyRow).toContainText('not run yet');
+	const staleRow = row(page, 'Freshness — stale');
+	const status = staleRow.getByRole('cell').filter({ hasText: /^data / });
+	await expect(status.getByTitle('Input data runs to 2020-10-30')).toHaveText(/^data \d+ years old$/);
+	await expect(status).toContainText(/last run \d{4}-\d{2}-\d{2}/);
+
+	// "Add data" opens the workspace with the upload dialog requested.
+	const add = emptyRow.getByRole('link', { name: 'Add data to Freshness — empty' });
+	await expect(add).toHaveAttribute('href', `/projects/${empty.id}?add=data`);
+
+	// Viewers can't upload, so they don't get the shortcut.
+	const viewer = await signIn('Freshness viewer');
+	await addMember(page.request, stale.id, viewer.user.email, 'viewer');
+	await viewer.page.goto('/');
+	const vRow = row(viewer.page, 'Freshness — stale');
+	await expect(vRow).toContainText(/data \d+ years old/);
+	await expect(vRow.getByRole('link', { name: /^Add data/ })).toHaveCount(0);
 });

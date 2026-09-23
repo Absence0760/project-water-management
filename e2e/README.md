@@ -50,7 +50,7 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path |
 | `tests/golden-path.spec.ts` | One user journey done only through the UI: register, create "Catchment D", build the network, crops and a transfer, save, set A-pan and EWR, upload two years of rain and flow, run the model, read the results, reload, then add two more catchments |
 | `tests/auth.spec.ts` | Register, sign out and in, wrong password, deep link → login → back, open-redirect guard; "Forgot password?" → request acknowledged; reset link → new password works (also opened while signed in; spent link); confirm-email banner cleared by the link, and the link working signed out |
-| `tests/projects.spec.ts` | Create several projects, copy one (with its model), delete, roles in the list |
+| `tests/projects.spec.ts` | Create several projects, copy one (with its model), delete, roles in the list; data-freshness badge, last run and the editors-only "Add data" link (`?add=data`) |
 | `tests/sharing.spec.ts` | Owner shares with a viewer (read-only everywhere, unshared project → not found); editor rights; inviting an address with no account (pending list, re-send throttle, revoke); signing up through an invite link lands in the project; a dead invite link falls back to plain sign-up |
 | `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard |
 | `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard; date validation |

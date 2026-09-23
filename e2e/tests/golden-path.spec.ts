@@ -101,7 +101,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 
 	// --- time series: two years of daily rain and observed flow ----------------
-	await tab(page, 'Time series').click();
+	await tab(page, 'Data').click();
 	const upload = page.getByRole('region', { name: 'Upload CSV' });
 	await upload.getByLabel('Kind').selectOption({ label: 'Rainfall — catchment' });
 	await upload.getByLabel('CSV file').setInputFiles(fixture('rainfall-2y.csv'));
@@ -155,12 +155,12 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
 
 	for (const name of ['Catchment D', 'Catchment E', 'Catchment F']) {
-		await expect(projectRow(page, name).getByRole('cell').nth(1)).toHaveText('owner');
+		await expect(projectRow(page, name).getByRole('cell', { name: 'owner', exact: true })).toBeVisible();
 	}
 	await expect(page.getByRole('row')).toHaveCount(4);
 
 	// Catchment D still opens with its model and run.
-	await projectRow(page, 'Catchment D').getByRole('link', { name: 'Catchment D' }).click();
+	await projectRow(page, 'Catchment D').getByRole('link', { name: 'Catchment D', exact: true }).click();
 	await expect(page).toHaveURL(projectUrl);
 	await tab(page, 'Runs').click();
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toBeVisible();
