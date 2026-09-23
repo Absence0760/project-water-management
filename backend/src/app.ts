@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -26,8 +27,9 @@ export function createApp() {
 	const sharedSecret = process.env.CLOUDFRONT_SHARED_SECRET ?? '';
 	if (sharedSecret) {
 		app.use('*', async (c, next) => {
-			const provided = c.req.header('x-cloudfront-shared-secret');
-			if (provided !== sharedSecret) {
+			const provided = Buffer.from(c.req.header('x-cloudfront-shared-secret') ?? '');
+			const expected = Buffer.from(sharedSecret);
+			if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
 				return c.json({ error: 'forbidden' }, 403);
 			}
 			await next();

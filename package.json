@@ -7,12 +7,10 @@
 	"scripts": {
 		"//-- setup --": "One-time bootstrap: install deps, start local Postgres (:5434), apply migrations. See docs/run-locally.md.",
 		"setup": "pnpm install && pnpm dev:db:up && pnpm dev:db:migrate",
-
 		"//-- dev --": "dev = frontend (:7777) + backend (:3001) in parallel. Needs dev:db:up first.",
 		"dev": "pnpm --filter @water-management/frontend --filter @water-management/backend --parallel run dev",
 		"dev:run:frontend": "pnpm -C frontend dev",
 		"dev:run:backend": "pnpm -C backend dev",
-
 		"//-- db --": "Local Postgres 17 in docker on :5434 (user/db water, app role water_app). Migrations live in backend/migrations.",
 		"dev:db:up": "docker compose up -d --wait postgres",
 		"dev:db:down": "docker compose down",
@@ -21,19 +19,15 @@
 		"dev:db:migrate": "pnpm -C backend db:migrate",
 		"dev:db:reset": "docker compose down -v && pnpm dev:db:up && pnpm dev:db:migrate",
 		"dev:db:psql": "psql postgresql://water:water@127.0.0.1:5434/water",
-
 		"//-- data --": "Workbook import. seed:demo extracts client catchment + the blank WBT from Original/ (Python venv, see scripts/wbt-import/README.md) and imports them for demo@example.com / demo-password.",
 		"import:project": "pnpm -C backend import:project",
 		"seed:demo": "bin/seed-demo.sh",
-
 		"//-- build --": "Production builds: static frontend (frontend/build) and the Lambda bundle (backend/dist/lambda.mjs).",
 		"build": "pnpm -r run build",
 		"build:frontend": "pnpm -C frontend build",
 		"build:backend": "pnpm -C backend build",
-
 		"//-- check --": "Typecheck every workspace.",
 		"check": "pnpm -r run check",
-
 		"//-- test --": "test = unit tests everywhere (no DB). test:backend:db needs dev:db:up; it migrates and uses the water_test database.",
 		"test": "pnpm -r run test",
 		"test:engine": "pnpm -C packages/engine test",
@@ -43,6 +37,7 @@
 		"test:scripts": "node scripts/check_root_scripts.mjs"
 	},
 	"engines": {
-		"node": ">=22"
-	}
+		"node": ">=24"
+	},
+	"packageManager": "pnpm@10.33.2"
 }

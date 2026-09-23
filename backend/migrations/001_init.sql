@@ -175,6 +175,18 @@ CREATE TABLE run_series (
 	UNIQUE NULLS NOT DISTINCT (run_id, node_id, key)
 );
 
+-- Covering indexes for every foreign key: cascades and the RLS joins would
+-- otherwise scan (guarded by src/db/catalogue.db.test.ts).
+CREATE INDEX project_created_by_idx ON project (created_by);
+CREATE INDEX node_downstream_idx ON node (downstream_node_id);
+CREATE INDEX crop_area_crop_idx ON crop_area (crop_id);
+CREATE INDEX transfer_from_idx ON transfer (from_node_id);
+CREATE INDEX transfer_to_idx ON transfer (to_node_id);
+CREATE INDEX time_series_project_idx ON time_series (project_id);
+CREATE INDEX model_run_created_by_idx ON model_run (created_by);
+CREATE INDEX run_series_project_idx ON run_series (project_id);
+CREATE INDEX run_series_node_idx ON run_series (node_id);
+
 -- ---------------------------------------------------------------------------
 -- Row-level security
 --
@@ -186,7 +198,7 @@ CREATE TABLE run_series (
 
 -- Current user from the per-transaction setting; NULL when unset.
 CREATE FUNCTION app_current_user_id() RETURNS uuid
-	LANGUAGE sql STABLE
+	LANGUAGE sql STABLE SET search_path = public
 	AS $$ SELECT nullif(current_setting('app.current_user_id', true), '')::uuid $$;
 
 -- SECURITY DEFINER so policies on project_member can call it without recursing

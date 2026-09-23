@@ -33,9 +33,9 @@ export function handleError(err: unknown, c: Context) {
 	}
 	const code = (err as { code?: string }).code;
 	if (code === PG_UNIQUE) return c.json({ error: 'already exists' }, 409);
-	if (code === PG_FK || code === PG_CHECK) {
-		return c.json({ error: (err as Error).message }, code === PG_CHECK ? 409 : 400);
-	}
+	// Never echo raw database error text — it leaks schema details.
+	if (code === PG_FK) return c.json({ error: 'references something that does not exist in this project' }, 400);
+	if (code === PG_CHECK) return c.json({ error: 'violates a data rule' }, 409);
 	// RLS WITH CHECK failures surface as insufficient_privilege.
 	if (code === PG_RLS) return c.json({ error: 'forbidden' }, 403);
 	console.error('Unhandled error', err);
