@@ -19,13 +19,28 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Verification (algorithms)
 
-- [ ] Finish and review the three verification tracks started at the end of
-      the session (see the status notes below): invariant/fuzz tests
-      (`packages/engine/src/**/*.invariants.test.ts`), the independent Python
-      implementation (`verify/`), and the engine review (`docs/engine-review.md`).
-- [ ] Run the full Playwright suite on the final `main` (`pnpm dev:db:up && pnpm test:e2e`)
-      — the last complete run predates the final merges, the "Data" tab rename
-      and the shell wiring.
+State at the end of the session (details in [engine-review.md](./engine-review.md)):
+
+- ✅ **Workbook match:** client catchment reproduced exactly (flow columns, 13 element
+  sheets × 16 161 days, Shortfalls) — `pnpm test:engine` with `data/` present.
+- ✅ **Invariant fuzz tests** (`packages/engine/src/run.invariants.test.ts`,
+  400 random networks per run; `FUZZ_CASES=20000` for a soak): water balance,
+  non-negativity, capacity, supply ≤ demand, transfer limits, determinism,
+  order invariance. They found two engine bugs, both **fixed** (commit 45f1520):
+  several transfers from one dam could overdraw it (review F1 / quirk Q18), and
+  rounding of a fractional inflow split could make supply negative.
+- 🚧 **Expert review:** units, calendar, rounding, rain/flow LAMBDAs, farm balance,
+  routing, calibration statistics and curtailment verified against the cells.
+  Still to review: `compare.ts`, `quality.ts` edge cases, `ewr.ts` in depth.
+  Open findings: F3 (per-farm EWR shortfalls don't add up to the outlet's — Q17,
+  hydrologist), F4 (workbook Farm spec shares for three farms — Q16), F5 (two
+  copies of the Excel rounding helper — merge them), F7 (warn when a farm's area
+  ≠ hi + lo area).
+- [ ] **Independent Python implementation** (`verify/`): only the formula spec
+      exists; build the model, runner and `diff.py`, then run the three-way
+      comparison (see status below).
+- [ ] Soak-run the fuzz tests (`FUZZ_CASES=20000 pnpm test:engine`) after any engine change.
+- ✅ **e2e:** full Playwright suite green on the final `main` — 62 passed.
 
 ## UI polish
 
