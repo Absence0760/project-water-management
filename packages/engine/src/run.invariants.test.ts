@@ -36,6 +36,21 @@ describe('engine invariants on random networks', () => {
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
+	it('doubling crop areas can raise the supply fraction only through return flow (seed 4660)', () => {
+		// Why checkDoubledCropAreas zeroes return flows: with them, extra draw on
+		// stored water partly returns to the river and a starved farm downstream
+		// gains more than twice the water. That is physics, not an engine bug.
+		const input = randomInput(4660);
+		const frac = (x: ModelInput) => {
+			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
+			return t[1]! / t[0]!;
+		};
+		const doubled = structuredClone(input);
+		for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
+		expect(frac(doubled)).toBeGreaterThan(frac(input));
+		expect(checkDoubledCropAreas(input)).toBeNull();
+	});
+
 	it('F8 regression: the seeds where display order changed EWR "days not met" are order-invariant', () => {
 		// Found by the order-invariance check: rounded engine (0.3.x) on 70 … 18130,
 		// unrounded (0.4.0) on 103 … 395. Fixed in network/simulate.ts (review F8).
@@ -148,7 +163,7 @@ describe('the invariants reject broken results', () => {
 
 	it('order invariance and the crop-area property hold on the real model', () => {
 		expect(checkOrderInvariance(input, out, 7)).toBeNull();
-		expect(checkDoubledCropAreas(input, out)).toBeNull();
+		expect(checkDoubledCropAreas(input)).toBeNull();
 		// … and object when the "other" run differs.
 		const shifted = structuredClone(out);
 		shifted.summary.catchment.meanNaturalFlowM3Day += 1;
