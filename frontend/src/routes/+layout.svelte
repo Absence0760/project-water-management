@@ -4,6 +4,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
+	import { safeNext } from '$lib/auth/redirect';
 	import { isPublicPath, session } from '$lib/auth/session.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
 
@@ -26,7 +27,8 @@
 	onMount(checkSession);
 
 	// Route guard: signed-out users go to /login (remembering where they were);
-	// signed-in users skip the auth pages.
+	// signed-in users skip the auth pages — to the remembered ?next= page, so
+	// this guard and the login form's own redirect agree on where to land.
 	$effect(() => {
 		if (!session.checked || bootError) return;
 		const path = page.url.pathname;
@@ -35,7 +37,7 @@
 			const next = path + page.url.search;
 			goto(`${base}/login?next=${encodeURIComponent(next)}`, { replaceState: true });
 		} else if (session.user && isPublic) {
-			goto(`${base}/`, { replaceState: true });
+			goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		}
 	});
 

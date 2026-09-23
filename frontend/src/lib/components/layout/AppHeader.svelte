@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
@@ -15,6 +16,10 @@
 		}
 		session.user = null;
 		signingOut = false;
+		// Let the layout's route guard react first (it would send us to
+		// /login?next=<this page>); the explicit navigation below then wins, so
+		// the next person to sign in isn't dropped onto this user's page.
+		await tick();
 		await goto(`${base}/login`);
 	}
 </script>
