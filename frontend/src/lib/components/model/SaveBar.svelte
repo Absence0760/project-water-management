@@ -3,13 +3,30 @@
 	// indicator, validation summary, Save / Discard.
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 
-	let { editor, onsave, readonly }: { editor: ModelEditor; onsave: () => void; readonly: boolean } = $props();
+	let {
+		editor,
+		onsave,
+		readonly,
+		height = $bindable(0)
+	}: {
+		editor: ModelEditor;
+		onsave: () => void;
+		readonly: boolean;
+		/** Rendered height (0 when hidden), so the page can keep content clear of it. */
+		height?: number;
+	} = $props();
+
+	const shown = $derived(!readonly && (editor.dirty || !!editor.saveError));
+	let measured = $state(0);
+	$effect(() => {
+		height = shown ? measured : 0;
+	});
 
 	const blocking = $derived(editor.issues.length);
 </script>
 
-{#if !readonly && (editor.dirty || editor.saveError)}
-	<div class="savebar" role="region" aria-label="Unsaved model changes">
+{#if shown}
+	<div class="savebar" role="region" aria-label="Unsaved model changes" bind:offsetHeight={measured}>
 		<div class="inner">
 			<span class="dot" aria-hidden="true"></span>
 			<span class="status" aria-live="polite">
@@ -20,7 +37,7 @@
 				{:else if blocking}
 					Unsaved changes · <span class="err">{blocking} problem{blocking === 1 ? '' : 's'} to fix before saving</span>
 				{:else}
-					Unsaved changes to the model
+					Unsaved changes to the model <span class="muted where">(network, crops and transfers)</span>
 				{/if}
 			</span>
 			<div class="spacer"></div>
@@ -68,5 +85,16 @@
 	}
 	.spacer {
 		flex: 1;
+	}
+	.where {
+		font-weight: 400;
+	}
+	@media (max-width: 640px) {
+		.btn {
+			min-height: 44px;
+		}
+		.where {
+			display: none;
+		}
 	}
 </style>

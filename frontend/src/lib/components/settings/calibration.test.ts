@@ -24,3 +24,12 @@ describe('parseNumberList', () => {
 		expect(parseNumberList('1, x')).toBeNull();
 	});
 });
+
+describe('known calibration parameters', () => {
+	it('cover every engine default key with help text', async () => {
+		const { defaultProjectSettings } = await import('@water-management/engine');
+		const { KNOWN_CAL_KEYS, FLOW_PARAMS, ADVANCED_PARAMS, TABLE_PARAMS } = await import('./calibration');
+		for (const key of Object.keys(defaultProjectSettings().calibration)) expect(KNOWN_CAL_KEYS.has(key)).toBe(true);
+		for (const p of [...FLOW_PARAMS, ...ADVANCED_PARAMS, ...TABLE_PARAMS]) expect(p.help.length).toBeGreaterThan(20);
+	});
+});

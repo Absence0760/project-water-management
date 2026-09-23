@@ -1,0 +1,75 @@
+import type { FarmSummary } from '@water-management/engine';
+import { describe, expect, it } from 'vitest';
+import type { RunSeriesRef } from '$lib/api/types';
+import { m3DayToMm3a, seriesGroups, sortFarms, storagePct, toDisplayUnit } from './results';
+
+const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
+	nodeId,
+	name,
+	avgDemandM3Day: 100,
+	avgSuppliedM3Day: 100 * fractionSupplied,
+	avgDeficitM3Day,
+	fractionSupplied,
+	avgEwrShortfallM3Day: 0,
+	daysEwrNotMet: 0
+});
+
+describe('sortFarms', () => {
+	const farms = [farm('b', 'Bravo', 0.9, 10), farm('a', 'Alpha', 1, 0), farm('c', 'Charlie', 0.5, 50)];
+	const names = (fs: FarmSummary[]) => fs.map((f) => f.name);
+
+	it('defaults to the network order', () => {
+		const order = new Map([
+			['c', 0],
+			['a', 1],
+			['b', 2]
+		]);
+		expect(names(sortFarms(farms, 'network', 'asc', order))).toEqual(['Charlie', 'Alpha', 'Bravo']);
+	});
+
+	it('keeps the run order for farms the network no longer has', () => {
+		expect(names(sortFarms(farms, 'network', 'asc', new Map([['c', 0]])))).toEqual(['Charlie', 'Bravo', 'Alpha']);
+	});
+
+	it('sorts numerically and by name in either direction', () => {
+		expect(names(sortFarms(farms, 'fractionSupplied', 'asc'))).toEqual(['Charlie', 'Bravo', 'Alpha']);
+		expect(names(sortFarms(farms, 'avgDeficitM3Day', 'desc'))).toEqual(['Charlie', 'Bravo', 'Alpha']);
+		expect(names(sortFarms(farms, 'name', 'asc'))).toEqual(['Alpha', 'Bravo', 'Charlie']);
+	});
+});
+
+describe('seriesGroups', () => {
+	const ref = (nodeId: string | null, key: string): RunSeriesRef => ({ nodeId, key, label: key, unit: 'm³/day' });
+	it('puts the catchment first and nodes in network order', () => {
+		const g = seriesGroups(
+			[ref('n2', 'outflow'), ref(null, 'natural_flow'), ref('n1', 'demand'), ref('n1', 'supplied')],
+			new Map([
+				['n1', 0],
+				['n2', 1]
+			]),
+			new Map([
+				['n1', 'Upper'],
+				['n2', 'Lower']
+			])
+		);
+		expect(g.map((x) => x.label)).toEqual(['Catchment (outflow gauge)', 'Upper', 'Lower']);
+		expect(g[1]!.options.map((o) => o.key)).toEqual(['demand', 'supplied']);
+	});
+});
+
+describe('units', () => {
+	it('converts m³/day flows to m³/s and keeps gaps', () => {
+		expect(toDisplayUnit([86_400, null, Number.NaN], 'm³/day', 'm³/s')).toEqual({ unit: 'm³/s', values: [1, null, null] });
+		expect(toDisplayUnit([5], 'mm', 'm³/s')).toEqual({ unit: 'mm', values: [5] });
+		expect(toDisplayUnit([5], 'm³/day', 'm³/day')).toEqual({ unit: 'm³/day', values: [5] });
+	});
+
+	it('gives Mm³/a from a mean m³/day', () => {
+		expect(m3DayToMm3a(1_000_000 / 365.25)).toBeCloseTo(1, 10);
+	});
+
+	it('expresses dam storage as % of capacity', () => {
+		expect(storagePct([500, null, 1000], 1000)).toEqual([50, null, 100]);
+		expect(storagePct([1], 0.15)).toBeNull();
+	});
+});

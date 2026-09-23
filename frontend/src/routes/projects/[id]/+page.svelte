@@ -3,7 +3,8 @@
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, hasRole, type Project } from '$lib/api';
+	import type { SeriesMeta } from '@water-management/engine';
+	import { api, ApiError, hasRole, type Project, type RunMeta } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import CropsTab from '$lib/components/crops/CropsTab.svelte';
@@ -17,21 +18,30 @@
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 
+	// Workflow order: describe the catchment, feed it data, calibrate, run.
 	const TABS = [
 		{ id: 'overview', label: 'Overview' },
 		{ id: 'network', label: 'Network' },
-		{ id: 'crops', label: 'Crops' },
+		{ id: 'crops', label: 'Crops & demand' },
 		{ id: 'transfers', label: 'Transfers' },
-		{ id: 'settings', label: 'Settings' },
 		{ id: 'series', label: 'Time series' },
-		{ id: 'runs', label: 'Runs' }
+		{ id: 'settings', label: 'Settings & calibration' },
+		{ id: 'runs', label: 'Runs & results' }
 	] as const;
 	type TabId = (typeof TABS)[number]['id'];
 	const MODEL_TABS: TabId[] = ['network', 'crops', 'transfers'];
+	// Friendlier ?tab= spellings that resolve to the canonical keys above.
+	const TAB_ALIASES: Record<string, TabId> = {
+		data: 'series',
+		demand: 'crops',
+		calibration: 'settings',
+		results: 'runs'
+	};
 
 	const projectId = $derived(page.params.id ?? '');
 	const tab = $derived.by<TabId>(() => {
-		const t = page.url.searchParams.get('tab');
+		const raw = page.url.searchParams.get('tab') ?? '';
+		const t = TAB_ALIASES[raw] ?? raw;
 		return TABS.some((x) => x.id === t) ? (t as TabId) : 'overview';
 	});
 
@@ -40,6 +50,10 @@
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
 	const editor = new ModelEditor();
+	// Shared with the Overview checklist, the Time series tab and the Runs tab.
+	let series = $state<SeriesMeta[] | null>(null);
+	let runs = $state<RunMeta[] | null>(null);
+	let saveBarHeight = $state(0);
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
@@ -49,9 +63,19 @@
 		error = null;
 		notFound = false;
 		try {
-			const [p, m] = await Promise.all([api.projects.get(projectId), api.model.get(projectId)]);
+			// Everything a tab's first render needs, behind one loading gate, so no
+			// tab (or the Overview checklist) flashes an empty state. The lists are
+			// best-effort: a failure there shouldn't hide the project.
+			const [p, m, sl, rl] = await Promise.all([
+				api.projects.get(projectId),
+				api.model.get(projectId),
+				api.series.list(projectId).catch(() => null),
+				api.runs.list(projectId).catch(() => null)
+			]);
 			project = p;
 			editor.load(m);
+			series = sl;
+			runs = rl;
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else error = e instanceof Error ? e.message : String(e);
@@ -59,6 +83,13 @@
 			loading = false;
 		}
 	}
+	/** Refresh the shared lists in place (keeps the current values on failure). */
+	async function loadLists() {
+		const [sl, rl] = await Promise.allSettled([api.series.list(projectId), api.runs.list(projectId)]);
+		if (sl.status === 'fulfilled') series = sl.value;
+		if (rl.status === 'fulfilled') runs = rl.value;
+	}
+
 	// Reload when the route param changes (e.g. navigating between projects).
 	$effect(() => {
 		void projectId;
@@ -101,6 +132,13 @@
 		await goto(`${base}/`);
 	}
 
+	// Keep the active tab in view in the scrolling strip (phones).
+	let tabStrip: HTMLElement | undefined = $state();
+	$effect(() => {
+		void tab;
+		tabStrip?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+	});
+
 	function tabKeydown(e: KeyboardEvent, idx: number) {
 		if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
 		e.preventDefault();
@@ -113,7 +151,7 @@
 
 <svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
 
-<main class="page">
+<main class="page" style:--dock-h="{saveBarHeight}px">
 	<LoadState {loading} error={notFound ? null : error} retry={load}>
 		{#if notFound || !project}
 			<div class="alert alert-error" role="alert">
@@ -127,7 +165,7 @@
 				{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
 			</div>
 
-			<nav class="tabs" aria-label="Project sections">
+			<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
 				{#each TABS as t, i (t.id)}
 					<a
 						id="tab-{t.id}"
@@ -145,10 +183,19 @@
 			</nav>
 
 			{#if !canEdit && tab !== 'overview'}
-				<p class="readonly-note muted">You have view-only access to this project.</p>
+				<div class="readonly-note" role="note">
+					<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+						<path d="M1.5 10s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" fill="none" stroke="currentColor" stroke-width="1.6" />
+						<circle cx="10" cy="10" r="2.6" fill="currentColor" />
+					</svg>
+					<span>
+						<strong>View only.</strong> You have view-only access to this project. You can explore every input and
+						result; ask the project owner for editor access to change anything or run the model.
+					</span>
+				</div>
 			{/if}
 
-			<section class="tab-body" aria-labelledby="tab-{tab}">
+			<section class="tab-body" class:readonly={!canEdit} aria-labelledby="tab-{tab}">
 				{#if tab === 'overview'}
 					<OverviewTab
 						{project}
@@ -161,23 +208,31 @@
 					/>
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
-					<NetworkTab {editor} readonly={!canEdit} />
+					<NetworkTab {editor} settings={project.settings} readonly={!canEdit} />
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
-					<CropsTab {editor} readonly={!canEdit} />
+					<CropsTab {editor} settings={project.settings} readonly={!canEdit} />
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
 					<TransfersTab {editor} readonly={!canEdit} />
 				{:else if tab === 'settings'}
-					<SettingsTab {project} readonly={!canEdit} {onProjectChange} />
+					<SettingsTab {project} {editor} readonly={!canEdit} {onProjectChange} />
 				{:else if tab === 'series'}
-					<SeriesTab {projectId} readonly={!canEdit} />
+					<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} onSeriesChange={(l) => (series = l)} />
 				{:else if tab === 'runs'}
-					<RunsTab {projectId} {editor} canRun={canEdit} modelDirty={editor.dirty} />
+					<RunsTab
+						{projectId}
+						{project}
+						{editor}
+						{series}
+						canRun={canEdit}
+						modelDirty={editor.dirty}
+						onRunsChange={(l) => (runs = l)}
+					/>
 				{/if}
 			</section>
 
-			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} />
+			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} />
 		{/if}
 	</LoadState>
 </main>
@@ -189,6 +244,11 @@
 />
 
 <style>
+	.page {
+		/* Room for the fixed model save bar so it never hides the last row or a
+		   tab's own sticky actions (Settings). */
+		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
+	}
 	.head {
 		display: flex;
 		align-items: center;
@@ -198,26 +258,36 @@
 	}
 	.head h1 {
 		margin: 0;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.crumbs {
 		color: var(--text-muted);
 	}
+	/* The strip scrolls sideways on phones. The underline is drawn inside each
+	   tab (inset shadow), so nothing overflows vertically and no stray vertical
+	   scrollbar appears with classic (always-visible) scrollbars. */
 	.tabs {
 		display: flex;
-		gap: 0.25rem;
-		border-bottom: 1px solid var(--border);
+		gap: 0.15rem;
+		box-shadow: inset 0 -1px 0 var(--border);
 		margin-bottom: 1rem;
-		overflow-x: auto;
+		overflow: auto hidden;
 		scrollbar-width: thin;
+		overscroll-behavior-x: contain;
 	}
 	.tabs a {
-		position: relative;
-		padding: 0.5rem 0.85rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		padding: 0 0.85rem;
 		color: var(--text-2);
 		font-weight: 500;
-		border-bottom: 2px solid transparent;
-		margin-bottom: -1px;
 		white-space: nowrap;
+		flex: none;
+	}
+	.tabs a:focus-visible {
+		outline-offset: -2px;
 	}
 	.tabs a:hover {
 		color: var(--text);
@@ -226,7 +296,7 @@
 	}
 	.tabs a[aria-current='page'] {
 		color: var(--accent);
-		border-bottom-color: var(--accent);
+		box-shadow: inset 0 -2px 0 var(--accent);
 	}
 	.issue-dot {
 		display: inline-block;
@@ -235,10 +305,37 @@
 		border-radius: 50%;
 		background: var(--warning);
 		margin-left: 0.3rem;
-		vertical-align: middle;
 	}
 	.readonly-note {
-		margin: -0.25rem 0 0.75rem;
-		font-size: 0.85rem;
+		display: flex;
+		gap: 0.6rem;
+		align-items: flex-start;
+		margin: -0.25rem 0 1rem;
+		padding: 0.55rem 0.8rem;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius);
+		background: var(--surface);
+		color: var(--text-2);
+		font-size: 0.875rem;
+	}
+	.readonly-note svg {
+		flex: none;
+		color: var(--accent);
+		margin-top: 0.05rem;
+	}
+	.readonly-note strong {
+		color: var(--text);
+	}
+	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
+	.readonly :global(input:not([type='checkbox']):read-only),
+	.readonly :global(select:disabled),
+	.readonly :global(textarea:read-only) {
+		background: transparent;
+		border-color: transparent;
+		color: var(--text);
+		appearance: none;
+		opacity: 1;
+		cursor: default;
 	}
 </style>

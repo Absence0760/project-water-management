@@ -1,18 +1,63 @@
 <script lang="ts">
+	// Headline numbers, calibration fit and the per-farm table of one run.
 	import type { RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { describePbias, NSE_HELP, PBIAS_HELP, rateNse, ratePbias, type Rating } from './rating';
+	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, type FarmSortKey } from './results';
 
-	let { summary }: { summary: RunSummary } = $props();
+	let {
+		summary,
+		days,
+		nodeOrder = new Map()
+	}: {
+		summary: RunSummary;
+		/** Days in the run (for "% of days"). */
+		days: number;
+		/** nodeId → network position, for the default farm order. */
+		nodeOrder?: ReadonlyMap<string, number>;
+	} = $props();
 
-	const SUPPLY_TARGET = 0.95;
 	const farms = $derived(summary.farms ?? []);
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
 		supplied: farms.reduce((s, f) => s + f.avgSuppliedM3Day, 0),
-		deficit: farms.reduce((s, f) => s + f.avgDeficitM3Day, 0)
+		deficit: farms.reduce((s, f) => s + f.avgDeficitM3Day, 0),
+		ewr: farms.reduce((s, f) => s + f.avgEwrShortfallM3Day, 0)
 	});
 	const cal = $derived(summary.calibration);
+	const c = $derived(summary.catchment);
+	const nse = $derived(rateNse(cal?.nse));
+	const pbias = $derived(ratePbias(cal?.pbias));
+
+	let sortKey = $state<FarmSortKey>('network');
+	let sortDir = $state<'asc' | 'desc'>('asc');
+	const sorted = $derived(sortFarms(farms, sortKey, sortDir, nodeOrder));
+
+	function sortBy(k: FarmSortKey) {
+		if (sortKey === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sortKey = k;
+			// Worst first for the columns people scan for problems.
+			sortDir = k === 'fractionSupplied' || k === 'name' ? 'asc' : 'desc';
+		}
+	}
+	const ariaSort = (k: FarmSortKey) => (sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined);
+
+	const COLS: { key: FarmSortKey; label: string; unit: string; title: string }[] = [
+		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean net irrigation demand over the run (after effective rainfall).' },
+		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
+		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
+		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; farms under ${SUPPLY_TARGET * 100} % are flagged.` },
+		{ key: 'avgEwrShortfallM3Day', label: 'EWR shortfall', unit: 'm³/day', title: "Mean shortfall against the farm's share of the EWR that this farm adds." },
+		{ key: 'daysEwrNotMet', label: 'EWR not met', unit: 'days', title: 'Days on which this farm added to an EWR shortfall.' }
+	];
+	const RATING_CLASS: Record<Rating, string> = {
+		'very good': 'good',
+		good: 'good',
+		satisfactory: 'ok',
+		unsatisfactory: 'bad'
+	};
 </script>
 
 {#if summary.warnings?.length}
@@ -24,54 +69,106 @@
 
 <h3>Catchment</h3>
 <dl class="stats">
-	<div class="stat"><dt>Mean natural flow</dt><dd>{fmtNum(summary.catchment.meanNaturalFlowM3Day)}<small>m³/day</small></dd></div>
-	<div class="stat"><dt>Mean simulated outflow</dt><dd>{fmtNum(summary.catchment.meanSimulatedOutflowM3Day)}<small>m³/day</small></dd></div>
-	<div class="stat"><dt>Days EWR not met</dt><dd>{fmtNum(summary.catchment.ewrDaysNotMet)}<small>days</small></dd></div>
-	<div class="stat"><dt>Share of days EWR not met</dt><dd>{fmtPct(summary.catchment.ewrFractionDaysNotMet)}</dd></div>
+	<div class="stat">
+		<dt>Mean natural flow</dt>
+		<dd>{fmtNum(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
+		<dd class="sub">{fmtNum(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
+	</div>
+	<div class="stat">
+		<dt>Mean simulated outflow</dt>
+		<dd>{fmtNum(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
+		<dd class="sub">
+			{fmtNum(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
+				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
+		</dd>
+	</div>
+	<div class="stat" class:flagged={c.ewrFractionDaysNotMet > 0.05}>
+		<dt>EWR not met</dt>
+		<dd>{fmtPct(c.ewrFractionDaysNotMet)}<small>of days</small></dd>
+		<dd class="sub">{fmtNum(c.ewrDaysNotMet)} of {fmtNum(days)} days at the outflow gauge</dd>
+	</div>
+	<div class="stat" class:flagged={shortCount > 0}>
+		<dt>Irrigation supplied</dt>
+		<dd>{totals.demand > 0 ? fmtPct(totals.supplied / totals.demand) : '–'}<small>of demand</small></dd>
+		<dd class="sub">
+			{shortCount ? `${shortCount} of ${farms.length} farms below ${fmtPct(SUPPLY_TARGET, 0)}` : `all farms ≥ ${fmtPct(SUPPLY_TARGET, 0)}`}
+		</dd>
+	</div>
 </dl>
 
 <h3>Calibration against observed flow</h3>
 {#if cal && cal.days > 0}
 	<dl class="stats">
-		<div class="stat"><dt>Overlapping days</dt><dd>{fmtNum(cal.days)}</dd></div>
-		<div class="stat"><dt>Nash–Sutcliffe (NSE)</dt><dd>{fmtNum(cal.nse, 3)}</dd></div>
-		<div class="stat"><dt>Percent bias</dt><dd>{cal.pbias == null ? '–' : `${fmtNum(cal.pbias, 1)}%`}</dd></div>
-		<div class="stat"><dt>RMSE</dt><dd>{fmtNum(cal.rmseM3s, 3)}<small>m³/s</small></dd></div>
-		<div class="stat"><dt>Mean observed</dt><dd>{fmtNum(cal.meanObservedM3s, 3)}<small>m³/s</small></dd></div>
-		<div class="stat"><dt>Mean simulated</dt><dd>{fmtNum(cal.meanSimulatedM3s, 3)}<small>m³/s</small></dd></div>
+		<div class="stat">
+			<dt title={NSE_HELP}>Nash–Sutcliffe (NSE)</dt>
+			<dd>{fmtNum(cal.nse, 3)}</dd>
+			{#if nse}<dd class="sub"><span class="rating {RATING_CLASS[nse]}">{nse}</span></dd>{/if}
+		</div>
+		<div class="stat">
+			<dt title={PBIAS_HELP}>Percent bias (PBIAS)</dt>
+			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
+			{#if pbias}<dd class="sub"><span class="rating {RATING_CLASS[pbias]}">{pbias}</span> {describePbias(cal.pbias)}</dd>{/if}
+		</div>
+		<div class="stat">
+			<dt>Mean flow, observed / simulated</dt>
+			<dd>{fmtNum(cal.meanObservedM3s, 3)} / {fmtNum(cal.meanSimulatedM3s, 3)}<small>m³/s</small></dd>
+			<dd class="sub">RMSE {fmtNum(cal.rmseM3s, 3)} m³/s</dd>
+		</div>
+		<div class="stat">
+			<dt>Overlapping days</dt>
+			<dd>{fmtNum(cal.days)}</dd>
+			<dd class="sub">{fmtPct(cal.days / Math.max(days, 1), 0)} of the run has observed flow</dd>
+		</div>
 	</dl>
+	<p class="muted small explain">
+		<strong>NSE</strong>: 1 is a perfect fit; 0 is no better than the mean observed flow. <strong>PBIAS</strong>: positive means the
+		model under-estimates total flow. Ratings follow Moriasi et al. (2007) — NSE &gt; 0.75 very good, &gt; 0.65 good, &gt; 0.5
+		satisfactory; |PBIAS| &lt; 10 % very good, &lt; 15 % good, &lt; 25 % satisfactory. They were set for monthly flow, so daily fits
+		rate lower. Tune the flow calibration under Settings & calibration.
+	</p>
 {:else}
-	<p class="muted">No observed flow overlaps the simulation period, so calibration statistics aren't available.</p>
+	<p class="muted">
+		No observed flow overlaps the simulation period, so calibration statistics aren't available. Upload an observed-flow series for
+		the outflow gauge on the Time series tab.
+	</p>
 {/if}
 
 <h3>Farms</h3>
 {#if farms.length === 0}
 	<p class="muted">This run has no farm results.</p>
 {:else}
-	<p class="muted small">
-		{#if shortCount}
-			<span class="flag-key" aria-hidden="true"></span>
-			{shortCount} of {farms.length} farm{farms.length === 1 ? '' : 's'} received less than {fmtPct(SUPPLY_TARGET, 0)} of demand (highlighted).
-		{:else}
-			All farms received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
+	<div class="farm-head">
+		<p class="muted small">
+			{#if shortCount}
+				<span class="flag-key" aria-hidden="true"></span>
+				{shortCount} of {farms.length} farm{farms.length === 1 ? '' : 's'} received less than {fmtPct(SUPPLY_TARGET, 0)} of demand (highlighted).
+			{:else}
+				All farms received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
+			{/if}
+			Daily averages over the run; click a heading to sort.
+		</p>
+		{#if sortKey !== 'network'}
+			<button type="button" class="btn btn-sm" onclick={() => ((sortKey = 'network'), (sortDir = 'asc'))}>Network order</button>
 		{/if}
-		Values are daily averages over the run.
-	</p>
+	</div>
 	<div class="table-wrap">
-		<table class="data">
+		<table class="data farms">
 			<thead>
 				<tr>
-					<th scope="col">Farm</th>
-					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
-					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
-					<th scope="col" class="num">Deficit<br /><span class="u">m³/day</span></th>
-					<th scope="col" class="num">Supplied<br /><span class="u">% of demand</span></th>
-					<th scope="col" class="num">EWR shortfall<br /><span class="u">m³/day</span></th>
-					<th scope="col" class="num">EWR not met<br /><span class="u">days</span></th>
+					<th scope="col" aria-sort={ariaSort('name')}>
+						<button type="button" class="sort" onclick={() => sortBy('name')}>Farm{#if sortKey === 'name'}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
+					</th>
+					{#each COLS as col (col.key)}
+						<th scope="col" class="num" aria-sort={ariaSort(col.key)} title={col.title}>
+							<button type="button" class="sort" onclick={() => sortBy(col.key)}>
+								{#if sortKey === col.key}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}{col.label}<br /><span class="u">{col.unit}</span>
+							</button>
+						</th>
+					{/each}
 				</tr>
 			</thead>
 			<tbody>
-				{#each farms as f (f.nodeId)}
+				{#each sorted as f (f.nodeId)}
 					{@const short = f.fractionSupplied < SUPPLY_TARGET}
 					<tr class:flag={short}>
 						<th scope="row">
@@ -80,7 +177,7 @@
 						</th>
 						<td class="num">{fmtNum(f.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(f.avgSuppliedM3Day)}</td>
-						<td class="num">{fmtNum(f.avgDeficitM3Day)}</td>
+						<td class="num" class:neg={f.avgDeficitM3Day > 0.5}>{fmtNum(f.avgDeficitM3Day)}</td>
 						<td class="num" class:short>{fmtPct(f.fractionSupplied)}</td>
 						<td class="num">{fmtNum(f.avgEwrShortfallM3Day)}</td>
 						<td class="num">{fmtNum(f.daysEwrNotMet)}</td>
@@ -94,17 +191,24 @@
 					<td class="num">{fmtNum(totals.supplied)}</td>
 					<td class="num">{fmtNum(totals.deficit)}</td>
 					<td class="num">{totals.demand > 0 ? fmtPct(totals.supplied / totals.demand) : '–'}</td>
-					<td class="num"></td>
+					<td class="num">{fmtNum(totals.ewr)}</td>
 					<td class="num"></td>
 				</tr>
 			</tfoot>
 		</table>
 	</div>
+	<p class="muted small after">
+		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
+		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
+	</p>
 {/if}
 
 <style>
 	h3 {
 		margin-top: 1.1rem;
+	}
+	h3:first-of-type {
+		margin-top: 0;
 	}
 	.small {
 		font-size: 0.8rem;
@@ -113,7 +217,81 @@
 		font-weight: 400;
 		color: var(--text-muted);
 	}
-	td.short {
+	.stat dd.sub {
+		font-size: 0.75rem;
+		font-weight: 400;
+		color: var(--text-muted);
+		margin-top: 0.15rem;
+	}
+	.stat.flagged {
+		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+		box-shadow: inset 3px 0 0 var(--warning);
+	}
+	.stat dt[title] {
+		cursor: help;
+		text-decoration: underline dotted;
+		text-underline-offset: 2px;
+	}
+	.rating {
+		display: inline-block;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		font-weight: 600;
+		text-transform: capitalize;
+	}
+	.rating.good {
+		background: var(--success-soft);
+		color: var(--success);
+	}
+	.rating.ok {
+		background: var(--warning-soft);
+		color: var(--warning);
+	}
+	.rating.bad {
+		background: var(--danger-soft);
+		color: var(--danger);
+	}
+	.explain {
+		max-width: 90ch;
+		margin-top: -0.25rem;
+	}
+	.farm-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		flex-wrap: wrap;
+	}
+	.farm-head p {
+		margin: 0 0 0.5rem;
+	}
+	.farms thead th {
+		padding: 0;
+	}
+	.sort {
+		all: unset;
+		box-sizing: border-box;
+		display: block;
+		width: 100%;
+		padding: 0.35rem 0.55rem;
+		cursor: pointer;
+		text-align: inherit;
+		min-height: 36px;
+	}
+	.sort:hover {
+		background: var(--row-hover);
+	}
+	.sort:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: -2px;
+	}
+	.dir {
+		font-size: 0.6rem;
+		margin-right: 0.25rem;
+		color: var(--accent);
+	}
+	td.short,
+	td.neg {
 		color: var(--warning);
 		font-weight: 600;
 	}
@@ -129,5 +307,8 @@
 		border: 1px solid var(--warning);
 		vertical-align: -1px;
 		margin-right: 0.25rem;
+	}
+	.after {
+		margin: 0.5rem 0 0;
 	}
 </style>

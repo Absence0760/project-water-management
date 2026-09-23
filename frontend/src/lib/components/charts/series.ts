@@ -8,6 +8,27 @@ export interface DailyInput {
 
 export interface ChartSeries extends DailyInput {
 	label: string;
+	/** line (default), points (e.g. observations), dashed, or step (monthly targets such as EWR). */
+	style?: 'line' | 'points' | 'dashed' | 'step';
+	/** CSS custom property holding the colour, e.g. '--series-2'. */
+	color?: string;
+	width?: number;
+}
+
+/**
+ * Short axis labels: 30 000 000 → "30M", 250 000 → "250k", 1 500 → "1.5k",
+ * 0.25 → "0.25". Keeps the y axis narrow for big m³/day figures.
+ */
+export function fmtCompact(v: number): string {
+	const a = Math.abs(v);
+	const trim = (x: number, d: number) => String(Number(x.toFixed(d)));
+	if (a >= 1e9) return `${trim(v / 1e9, 1)}G`;
+	if (a >= 1e6) return `${trim(v / 1e6, 1)}M`;
+	if (a >= 1e4) return `${trim(v / 1e3, 0)}k`;
+	if (a >= 1e3) return `${trim(v / 1e3, 1)}k`;
+	if (a >= 1 || a === 0) return trim(v, 1);
+	if (a >= 0.01) return trim(v, 3);
+	return v.toExponential(0);
 }
 
 /**

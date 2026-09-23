@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignDaily } from './series';
+import { alignDaily, fmtCompact } from './series';
 
 describe('alignDaily', () => {
 	it('aligns series with different start dates onto a shared axis', () => {
@@ -19,4 +19,19 @@ describe('alignDaily', () => {
 	it('handles no series', () => {
 		expect(alignDaily([])).toEqual({ x: [], ys: [] });
 	});
+});
+
+describe('fmtCompact', () => {
+	it.each([
+		[30_000_000, '30M'],
+		[2_500_000, '2.5M'],
+		[250_000, '250k'],
+		[1_500, '1.5k'],
+		[120, '120'],
+		[1.25, '1.3'],
+		[0, '0'],
+		[0.25, '0.25'],
+		[0.001, '1e-3'],
+		[-5_000_000, '-5M']
+	])('%s → %s', (v, want) => expect(fmtCompact(v)).toBe(want));
 });
