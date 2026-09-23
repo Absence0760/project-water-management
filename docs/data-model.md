@@ -108,6 +108,11 @@ the run used. Input *series* are not copied into it (they are large): the run
 refers to them as they were. If a series is re-uploaded, old runs can no longer
 be recomputed exactly. A later migration can add a content hash of each input
 series to the snapshot so the UI can flag "inputs changed since this run".
+For each series kind the snapshot keeps only `{ startDate, length }`.
+`GET /compare/runs` is the only endpoint that returns the snapshot. Its "what
+changed" list (engine `diffInputs`, see [run-comparison.md](./run-comparison.md))
+can therefore see a series being extended or trimmed, but not a value edited
+within the same dates. The content hash above would close that gap as well.
 
 ## Access control
 

@@ -143,6 +143,37 @@ engine's `runModel`, stores the outputs, and returns the summary.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
 
+## Compare runs
+
+Compare two runs, from the same project or from two projects you can see (for
+example project D copied from C and then modified). See
+[run-comparison.md](./run-comparison.md) for how farms and model elements are
+matched.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/compare/runs?a=<projectId>:<runId>&b=<projectId>:<runId>` | – | see below | viewer on **both** projects |
+
+```ts
+{
+  a: { project: { id, name }, run: RunMeta & { summary: RunSummary, inputs: RunInputsSnapshot } },
+  b: { … same shape … },
+  comparison: RunComparison,    // compareRuns(a.run, b.run) — every delta is b − a
+  changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs)
+  catchmentSeries: { key, label, unit }[]  // catchment series present in both runs, same unit
+}
+```
+
+- `RunInputsSnapshot`, `RunComparison` and `InputChange` are in
+  `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run
+  (`{ settings, model, series: { [kind]: { startDate, length } } }`). This is the
+  only endpoint that returns it.
+- `404` when either project isn't visible to you, or the run isn't in the named
+  project. It never says which side failed. `400` when `a` or `b` is missing or
+  isn't `<projectId>:<runId>`.
+- Fetch the daily values to overlay with the per-project
+  `GET /projects/:id/runs/:runId/series?key=…` for each side.
+
 ## Health
 
 `GET /health` → `{ ok: true }`.

@@ -87,6 +87,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract
+- `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
 - `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`

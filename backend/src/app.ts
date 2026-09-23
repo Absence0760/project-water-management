@@ -5,6 +5,7 @@ import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { authRoutes } from './auth/routes.js';
+import { compareRoutes } from './compare/routes.js';
 import { ApiError, handleError } from './http/errors.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
@@ -75,6 +76,11 @@ export function createApp() {
 	teams.use('*', requireUser);
 	teams.route('/', teamRoutes);
 	app.route('/teams', teams);
+
+	const compare = new Hono<AuthEnv>();
+	compare.use('*', requireUser);
+	compare.route('/', compareRoutes);
+	app.route('/compare', compare);
 
 	app.notFound((c) => c.json({ error: 'not found' }, 404));
 	app.onError(handleError);

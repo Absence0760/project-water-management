@@ -8,7 +8,7 @@ needs. [plan.md](./plan.md) holds the phased delivery plan; this doc is the
 them (see "Questions for the client" there).
 
 Effort: **S** ≈ a day or two · **M** ≈ a week · **L** ≈ several weeks.
-Status: ⬜ not started · 🚧 partly there.
+Status: ⬜ not started · 🚧 partly there · ✅ done.
 
 ---
 
@@ -18,7 +18,7 @@ Status: ⬜ not started · 🚧 partly there.
 | --- | --- | --- |
 | ⬜ **Curtailment targets per farm** | The b023 Shortfalls sheet's key output is *how much each farm must reduce (or may gain) so irrigation balances and the EWR is met* ("target volume", "reduce/gain" in m³/day and l/s). V1 shows deficits and EWR shortfalls but not the recommended cut. This is the answer the client actually sells. | M |
 | ⬜ **EWR compliance heat map** | Month × year grid of % days EWR not met, like the workbook's EWR pivot. The standard way to see *when* the river fails. | S |
-| ⬜ **Run comparison** | Pick two runs (e.g. baseline vs dam raise) → per-farm delta table and overlaid hydrographs. Without it, every what-if needs screenshots side by side. | M |
+| 🚧 **Run comparison** | Pick two runs (e.g. baseline vs dam raise) → per-farm delta table and overlaid hydrographs. Without it, every what-if needs screenshots side by side. **Built:** `/compare` page (same project or across a copy), "what changed" input diff, headline + per-farm deltas, overlaid catchment series ([run-comparison.md](./run-comparison.md)). Left: a "Compare runs" button on the Runs tab, per-node series overlay. | M |
 | ⬜ **Calibration window + more metrics** | The workbook calibrates on 2010–2018 only; V1 scores the whole record (hence NSE −0.70 on Client Catchment). Let the user pick the window; add KGE, R², log-NSE (low-flow fit), volume error per year. | S |
 | ⬜ **Export** | CSV/Excel download of any table or series, and a run's full daily output. Hydrologists will want to check numbers in Excel. | S |
 | 🚧 **Append daily data from the UI** | Merge endpoint exists (`POST /series/merge`); upload "append" mode and "data up to …" staleness indicator are in progress. | S |
