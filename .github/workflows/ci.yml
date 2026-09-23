@@ -9,9 +9,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# PRs: only the tip is worth building, so a new push cancels the old run.
+# main: every commit keeps its own run (per-SHA group, never cancelled). The
+# operator pushes straight to main, and a release is refused unless `CI gate`
+# passed on the tagged commit (scripts/release/preflight.mjs), so a push
+# must not cancel the previous commit's run (estate standard: threkir ci.yml).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -77,6 +82,15 @@ jobs:
 
       - name: CSP meta policy present
         run: node infra/scripts/check-csp.mjs frontend/build
+
+      # Ceilings and their change log: scripts/guards/check_web_bundle_budget.mjs.
+      - name: Web bundle budget
+        run: pnpm check:bundle
+
+      # The exact packaging deploy-backend.yml runs, so a broken package script
+      # fails here rather than at release time.
+      - name: Package Lambdas (release path)
+        run: infra/scripts/package-lambdas.sh
 
   db-test:
     name: Backend DB tests (Postgres + RLS)
@@ -177,31 +191,100 @@ jobs:
             e2e/test-results/
           retention-days: 7
 
-  # Credential-free Terraform checks: fmt, validate, and the plan-only
-  # `terraform test` suite against mocked providers. No AWS credentials, no
-  # state, no sops key — nothing here can touch the real account. Same
-  # script as `pnpm check:infra` locally.
-  terraform:
-    name: Terraform (fmt, validate, test)
+  # Workflow syntax as GitHub parses it (actionlint), plus this repo's CI
+  # rules as a guard (SHA pins, OIDC-only, environment gating, CI-gate fan-in)
+  # and the unit tests of every scripts/ guard (estate standard: threkir's
+  # workflow-lint job). A workflow GitHub rejects never fails a PR job; it
+  # just silently never runs, which is how a release pipeline dies unnoticed.
+  workflow-lint:
+    name: Workflow lint + guards
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Read pinned Terraform version
-        id: tfver
-        run: echo "version=$(tr -d '[:space:]' < infra/.terraform-version)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: ${{ steps.tfver.outputs.version }}
-          terraform_wrapper: false
+          persist-credentials: false
 
-      - name: fmt, validate, test
-        run: bin/check-infra.sh
+      - name: Install actionlint
+        run: |
+          # The Go module proxy is the flaky part, so the fetch retries; only a
+          # persistent failure is a verdict (and it is not about the workflows).
+          for attempt in 1 2 3; do
+            if go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; then exit 0; fi
+            echo "::warning::actionlint install attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
+          echo "::error::actionlint install failed after 3 attempts (Go module fetch, before any lint ran)."
+          exit 1
+
+      # -shellcheck= / -pyflakes= off, matching the estate: the gate is what
+      # GitHub itself enforces (syntax + expressions), not shell style.
+      - name: actionlint
+        run: |
+          if ! "$(go env GOPATH)/bin/actionlint" -color -shellcheck= -pyflakes=; then
+            echo "::error::A workflow does not parse the way GitHub parses it. The line above names the file and rule. Reproduce: actionlint -shellcheck= -pyflakes="
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Workflow guard (pins, OIDC, environment, CI gate)
+        run: node scripts/guards/check_workflows.mjs
+
+      - name: Guard unit tests (scripts/guards, scripts/release)
+        run: |
+          if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs; then
+            echo "::error::A guard's own tests failed; its verdicts elsewhere in CI cannot be trusted until they pass. Reproduce: pnpm test:guards"
+            exit 1
+          fi
+
+  # Committed env files stay local-only; values are never printed
+  # (estate standard: feohledger env-isolation.yml, threkir env-isolation).
+  env-isolation:
+    name: Env isolation (committed env files)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Committed env files point at the local stack only
+        run: node scripts/guards/check_env_isolation.mjs
+
+  # Credential-free Terraform checks (fmt, validate, plan-only `terraform
+  # test` with mocked providers) + Trivy IaC. Called, so every job in it
+  # fans into the gate. Same checks as `pnpm check:infra` locally.
+  terraform:
+    name: Terraform
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+      security-events: write # Trivy SARIF upload (public repo only)
+    uses: ./.github/workflows/terraform.yml
+
+  # Secret scan, called so a detection fails the gate. UNGATED on purpose: a
+  # pasted credential arrives in a markdown file as easily as in code, and a
+  # docs-only diff skips every code-gated job.
+  gitleaks:
+    name: Secret scan (gitleaks)
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/gitleaks.yml
 
   # Single required status check for branch protection (docs/USING.md
   # "The CI gate"). It fans in on every job above via `needs` + always(),
@@ -214,7 +297,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, test, db-test, e2e, terraform]
+    needs: [changes, workflow-lint, test, db-test, e2e, env-isolation, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:
