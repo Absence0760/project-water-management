@@ -39,7 +39,15 @@ State at the end of the session (details in [engine-review.md](./engine-review.m
 - [ ] **Independent Python implementation** (`verify/`): only the formula spec
       exists; build the model, runner and `diff.py`, then run the three-way
       comparison (see status below).
-- [ ] Soak-run the fuzz tests (`FUZZ_CASES=20000 pnpm test:engine`) after any engine change.
+- [ ] Soak-run the fuzz tests after any engine change:
+      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts` (`FUZZ_SEED` picks the start).
+- [ ] Invariant checks not written yet: per-day transfer limits (rate, daily cap,
+      min storage, months), order invariance (the scramble helper exists in
+      `src/testing/fuzz.ts`), "doubling crop areas never raises the supply
+      fraction", curtailment/EWR-grid totals, running the invariants on the three
+      examples and client catchment, and a Verification subsection in model.md §6.
+- [ ] With several outflow nodes the engine would pick the outlet by array order;
+      the backend forbids that today — make the engine reject it too.
 - ✅ **e2e:** full Playwright suite green on the final `main` — 62 passed.
 
 ## UI polish
