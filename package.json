@@ -19,7 +19,8 @@
 		"dev:db:migrate": "pnpm -C backend db:migrate",
 		"dev:db:reset": "docker compose down -v && pnpm dev:db:up && pnpm dev:db:migrate",
 		"dev:db:psql": "psql postgresql://water:water@127.0.0.1:5434/water",
-		"//-- data --": "Workbook import. seed:demo extracts client catchment + the blank WBT from Original/ (Python venv, see scripts/wbt-import/README.md) and imports them for demo@example.com / demo-password.",
+		"//-- data --": "Demo data. seed:examples = 3 invented catchments + 2 demo users (demo@ / analyst@example.com, password demo-password), works on any clone. seed:demo = seed:examples + the client workbooks in Original/ (needs Python + openpyxl, scripts/wbt-import/README.md).",
+		"seed:examples": "pnpm -C backend seed:examples",
 		"import:project": "pnpm -C backend import:project",
 		"seed:demo": "bin/seed-demo.sh",
 		"//-- build --": "Production builds: static frontend (frontend/build) and the Lambda bundle (backend/dist/lambda.mjs).",
@@ -34,7 +35,12 @@
 		"test:frontend": "pnpm -C frontend test",
 		"test:backend": "pnpm -C backend test",
 		"test:backend:db": "pnpm -C backend test:db",
-		"test:scripts": "node scripts/check_root_scripts.mjs"
+		"test:scripts": "node scripts/check_root_scripts.mjs",
+		"//-- e2e --": "Playwright (Chromium), fully local. Needs dev:db:up; rebuilds the water_e2e database and starts its own backend :3101 + frontend :7801 (dev servers untouched). First time: test:e2e:install. See e2e/README.md.",
+		"test:e2e": "pnpm -C e2e e2e",
+		"test:e2e:ui": "pnpm -C e2e e2e:ui",
+		"test:e2e:install": "pnpm -C e2e install:browsers",
+		"check:e2e": "pnpm -C e2e check"
 	},
 	"engines": {
 		"node": ">=24"

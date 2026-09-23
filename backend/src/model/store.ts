@@ -3,8 +3,8 @@ import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
 export async function loadModel(db: Db, projectId: string): Promise<ProjectModel> {
-	const [nodes, crops, cropAreas, transfers] = await Promise.all([
-		db.query(
+	// Sequential on purpose: one pooled client can't run queries concurrently.
+	const nodes = await db.query(
 			`SELECT id, name, kind, downstream_node_id AS "downstreamNodeId", sort_order AS "sortOrder",
 				area_km2 AS "areaKm2", area_hi_km2 AS "areaHiKm2", area_lo_km2 AS "areaLoKm2",
 				flow_share_manual AS "flowShareManual", pct_upstream_to_dam AS "pctUpstreamToDam",
@@ -13,19 +13,18 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 				divert_capacity_m3_day AS "divertCapacityM3Day", return_flow_pct AS "returnFlowPct"
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
-		),
-		db.query(`SELECT id, name, crop_factor AS "cropFactor" FROM crop WHERE project_id = $1 ORDER BY name`, [projectId]),
-		db.query(
+		);
+	const crops = await db.query(`SELECT id, name, crop_factor AS "cropFactor" FROM crop WHERE project_id = $1 ORDER BY name`, [projectId]);
+	const cropAreas = await db.query(
 			`SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2" FROM crop_area WHERE project_id = $1`,
 			[projectId]
-		),
-		db.query(
+		);
+	const transfers = await db.query(
 			`SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
 				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled
 			 FROM transfer WHERE project_id = $1 ORDER BY id`,
 			[projectId]
-		)
-	]);
+		);
 	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows };
 }
 
