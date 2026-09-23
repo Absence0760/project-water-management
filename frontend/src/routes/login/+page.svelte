@@ -5,7 +5,11 @@
 	import { api } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
+	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+
+	// Dev-only shortcut to the seeded demo account; never in a production build.
+	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
 
 	let email = $state('');
 	let password = $state('');
@@ -29,16 +33,29 @@
 
 <svelte:head><title>Sign in · Water Management</title></svelte:head>
 
-<AuthCard title="Sign in">
+<AuthCard title="Sign in" subtitle="Welcome back. Sign in to your catchment projects.">
+	{#if DEMO}
+		<div class="demo">
+			<span>Demo: <span class="mono">{DEMO.email}</span> / <span class="mono">{DEMO.password}</span></span>
+			<button
+				type="button"
+				class="btn btn-sm"
+				onclick={() => {
+					email = DEMO.email;
+					password = DEMO.password;
+				}}>Use demo account</button
+			>
+		</div>
+	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<form onsubmit={submit}>
 		<div class="field">
 			<label for="email">Email</label>
-			<input id="email" type="email" autocomplete="email" required bind:value={email} />
+			<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 		</div>
 		<div class="field">
 			<label for="password">Password</label>
-			<input id="password" type="password" autocomplete="current-password" required bind:value={password} />
+			<PasswordInput id="password" autocomplete="current-password" required bind:value={password} />
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
 	</form>
@@ -46,3 +63,19 @@
 		No account? <a href="{base}/register{page.url.search}">Create one</a>
 	{/snippet}
 </AuthCard>
+
+<style>
+	.demo {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		padding: 0.55rem 0.7rem;
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		font-size: 0.8rem;
+		color: var(--text-2);
+	}
+</style>

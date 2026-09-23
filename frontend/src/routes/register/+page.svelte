@@ -5,6 +5,7 @@
 	import { api } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
+	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 
 	let displayName = $state('');
@@ -34,7 +35,7 @@
 
 <svelte:head><title>Create account · Water Management</title></svelte:head>
 
-<AuthCard title="Create an account">
+<AuthCard title="Create an account" subtitle="Model your own catchments, or join a team's.">
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<form onsubmit={submit}>
 		<div class="field">
@@ -43,21 +44,21 @@
 		</div>
 		<div class="field">
 			<label for="email">Email</label>
-			<input id="email" type="email" autocomplete="email" required bind:value={email} />
+			<input id="email" type="email" autocomplete="email" inputmode="email" required aria-describedby="email-hint" bind:value={email} />
+			<span class="hint" id="email-hint">Colleagues add you to teams and projects by this address.</span>
 		</div>
 		<div class="field">
 			<label for="password">Password</label>
-			<input
+			<PasswordInput
 				id="password"
-				type="password"
 				autocomplete="new-password"
 				required
-				minlength="8"
-				maxlength="200"
+				minlength={8}
+				maxlength={200}
 				aria-describedby="pw-hint"
 				bind:value={password}
 			/>
-			<span class="hint" id="pw-hint">At least 8 characters.</span>
+			<span class="hint" id="pw-hint">At least 8 characters. A short passphrase works well.</span>
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
 	</form>
