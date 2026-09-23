@@ -14,7 +14,7 @@ browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-manageme
                                    (+ X-CloudFront-Shared-Secret header,
                                     CachingDisabled, all methods, cookies forwarded)
                                         │
-                                        └─► Postgres (RDS t4g.micro or Aurora Serverless v2)
+                                        └─► RDS PostgreSQL 17 (private subnets; migrate Lambda applies migrations)
 ```
 
 - **One origin.** The browser only ever talks to the site's domain. CloudFront
@@ -23,10 +23,11 @@ browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-manageme
   is therefore first-party. The backend rejects requests that lack the
   CloudFront shared-secret header, so calling the Function URL directly does
   nothing.
-- **Database:** added in Phase 6. The options and the recommendation are in
-  [plan.md 6b](./plan.md#6b-terraform-additions-infra). Whatever is chosen, it
-  is private (no public endpoint), encrypted, has automated backups + PITR and
-  deletion protection. The backend connects as `water_app` (RLS-bound);
+- **Database:** RDS PostgreSQL 17 (`db.t4g.micro`) in private subnets. It is
+  encrypted and has automated backups + PITR and deletion protection. The API
+  Lambda runs in the VPC, and a migrate Lambda applies `backend/migrations`
+  ([plan.md 6b](./plan.md#6b-terraform-additions-infra),
+  [infra/README.md](../infra/README.md)). The backend connects as `water_app` (RLS-bound);
   migrations run as the owner role.
 - **Region:** likely `af-south-1` for the DB and Lambda (data residency and
   latency; see plan.md). The CloudFront certificate always lives in
@@ -136,11 +137,12 @@ variables and secrets:
 
 Tracked in [plan.md 6b](./plan.md#6b-terraform-additions-infra):
 
-- a DB module (RDS or Aurora), and the Lambda in a VPC with endpoints, or the
-  RDS Data API
-- Lambda runtime `nodejs22.x` (the template has 20.x), timeout ~30 s, memory
-  1024 MB, and env vars for `DATABASE_URL` / the secret ARN and
-  `AUTH_JWT_SECRET`
+- RDS PostgreSQL 17 in private subnets, the API Lambda in the VPC (VPC
+  endpoints, no NAT), and a separate **migrate Lambda** that the deploy runs
+  before publishing new code. This is being added now; see
+  [infra/README.md](../infra/README.md) for the resources.
+- Lambda runtime `nodejs24.x`, timeout ~30 s, memory ~1024 MB, with the DB
+  connection and `AUTH_JWT_SECRET` taken from sops
 - tightening or removing the Function URL CORS block (the browser never calls it
   directly), and updating the stale comments in `infra/README.md` and `waf.tf`
   that say it does
@@ -186,7 +188,6 @@ goes through the environment approval).
 ## Costs (rough, idle to light use)
 
 CloudFront, S3 and Lambda are cents. WAF is ~$5–6/month. The DB is the main
-cost: RDS t4g.micro ~$12–15/month, or Aurora Serverless v2 at min 0 ACU at
-~storage cost while idle. A VPC Lambda needs interface endpoints (~$7/month
-each per AZ) or a NAT (~$32/month). The Terraform budget alarm is set from
+cost: RDS t4g.micro at ~$12–15/month. The VPC Lambda's interface endpoints
+cost ~$7/month each per AZ, which is still cheaper than a NAT (~$32/month). The Terraform budget alarm is set from
 `budget_monthly_usd`.

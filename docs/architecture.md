@@ -20,7 +20,7 @@ flowchart LR
     S3[(S3<br/>static build)]
     L[Lambda · Hono<br/>Function URL]
     EL[engine<br/>stored runs]
-    DB[(Postgres<br/>RDS / Aurora)]
+    DB[(RDS PostgreSQL 17<br/>private subnets)]
     L --- EL
   end
 
@@ -105,7 +105,7 @@ sequenceDiagram
 | **uPlot** | Draws 16k-point time series quickly, and it's small. |
 | **Static frontend** | Cheap hosting on S3 + CloudFront, and no server-side rendering to secure. |
 | **Python importer first** | openpyxl reads the 87 MB `.xlsm` reliably in read-only mode. An in-browser SheetJS importer comes later ([plan.md](./plan.md)). |
-| **Lambda + managed Postgres** | Almost no cost while idle for a low-traffic expert tool. Trade-offs in [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws). |
+| **Lambda + RDS PostgreSQL 17 (t4g.micro)** | Low, predictable cost for a low-traffic expert tool. Always warm, and the same `pg` code path as local. Trade-offs in [plan.md 6b](./plan.md#6b-terraform-additions-infra). |
 
 ## Repo layout
 

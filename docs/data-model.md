@@ -1,10 +1,11 @@
 # Data model
 
-Postgres 17 (locally in docker on `:5434`; in production Aurora Serverless v2
-or RDS, see [deployment.md](./deployment.md)). The schema lives in plain SQL
+Postgres 17 (locally in docker on `:5434`; in production RDS PostgreSQL 17, see
+[deployment.md](./deployment.md)). The schema lives in plain SQL
 migrations under `backend/migrations/` and is applied by a small runner
-(`pnpm dev:db:migrate`). Migrations only ever move forward: never edit one that
-has shipped, add a new numbered file instead.
+(`pnpm dev:db:migrate`). Once deployed, migrations only move forward: never edit
+one that has shipped, add a new numbered file instead. Until the first
+production deploy, `001_init.sql` may still be edited in place.
 
 The TypeScript shapes that mirror these tables are in
 `packages/engine/src/project.ts`. The backend (storage and validation) and the
@@ -171,5 +172,13 @@ ids are rejected.
   the viewer/editor policies, same-project triggers for any foreign keys to
   `node`/`crop`, and grants to `water_app`. The `/safe-migration` command walks
   through this.
-- Production: migrations run as a step of the backend deploy, before the new
-  Lambda code goes live (see [deployment.md](./deployment.md)).
+- Prefer **expand/contract**: add the new column or table and backfill it, ship
+  code that uses it, and drop the old one in a later migration. The running
+  code and the schema must be compatible during a deploy.
+- When changing a SQL function or policy, start from its **latest**
+  definition (it may have been redefined in a later migration than the one
+  that created it). `DROP POLICY` needs the exact policy name.
+- Every SQL function pins `search_path`, and every foreign key has a covering
+  index. Catalogue tests guard both.
+- Production: a migrate Lambda applies migrations as the owner role before the
+  new API code goes live (see [deployment.md](./deployment.md)).

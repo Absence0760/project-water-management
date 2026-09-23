@@ -28,7 +28,7 @@ sides share.
   ([plan.md](./plan.md)).
 
 pnpm monorepo with three workspaces (`frontend`, `backend`, `packages/*`).
-Node `>=22`, pnpm 10.
+Node 24 (`.tool-versions`), pnpm 10.
 
 ## Commands (run from repo root)
 
@@ -58,7 +58,7 @@ pnpm test:scripts           # guard: root scripts point at real targets
 Local dev needs **no env setup**. `backend/.env.development` and
 `frontend/.env.development` are committed and hold only non-sensitive local
 defaults (localhost URLs, the throwaway docker DB passwords, a dev-only JWT
-secret). Needs Node 22, pnpm 10, and docker (with compose).
+secret). Needs Node 24, pnpm 10, and docker (with compose).
 
 ```bash
 pnpm setup
@@ -101,7 +101,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   sets `app.current_user_id`.** Never connect the running backend as `water`,
   and never add `BYPASSRLS`. A new project table needs RLS policies,
   same-project triggers and grants (use `/safe-migration`).
-- **Migrations only move forward.** Add `NNN_name.sql`; never edit a shipped one.
+- **Migrations move forward once deployed.** Add `NNN_name.sql`. `001` may
+  still be edited until the first production deploy. Prefer expand/contract
+  ([data-model.md § Migrations](./data-model.md#migrations)).
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it
   out.
@@ -114,7 +116,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework other than vitest (Python importer tests aside).
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside.
 - Don't replace pnpm, and don't `npm install -g` anything.
 - Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
   from its CDN tarball when the in-browser importer is built.

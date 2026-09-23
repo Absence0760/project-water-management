@@ -18,10 +18,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   `/api/*`, so the cookie is first-party. Together with `SameSite=Lax`, this
   blocks cross-site POSTs from carrying the session. The API accepts JSON bodies
   only.
-- **Logout** clears the cookie. There is no server-side session list yet, so a
-  stolen token stays valid until it expires. Rotating `AUTH_JWT_SECRET` logs
-  everyone out. Adding a server-side session version or revocation is a
-  Phase 7 item.
+- **Logout** clears the cookie. There is no revocation yet, so a stolen token
+  stays valid until it expires. Rotating `AUTH_JWT_SECRET` logs everyone out.
+  The planned fix is a per-user `sessions_revoked_at` watermark (Phase 7).
 - Login returns the same error for an unknown email and a wrong password.
 
 ## Authorization: per-project roles enforced by Postgres RLS
@@ -124,10 +123,17 @@ readable by anyone. The rules:
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
-- No rate limiting specifically on `/auth/login` and `/auth/register` beyond
-  the WAF's per-IP rule. There is no account lockout. (Phase 7)
+- No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
+  rule. (Phase 7)
 - No password reset or email verification: both need SES. (Phase 7)
-- No server-side session revocation. (Phase 7)
+- No session revocation yet. Planned: a `sessions_revoked_at` watermark on
+  `app_user`, so tokens issued before it are rejected. (Phase 7)
+- No per-account login lockout yet. (Phase 7)
+- **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
+  allows inline scripts, because SvelteKit's static build emits an inline
+  bootstrap script. Svelte's default escaping and the ban on `{@html}` with
+  user data are the main XSS defence. Move to hash-based CSP when practical.
+  (Phase 7)
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).

@@ -20,7 +20,7 @@ users as viewer, editor or owner.
 
 ## Quick start
 
-Needs Node 22, pnpm 10 (Corepack) and Docker.
+Needs Node 24, pnpm 10 (Corepack) and Docker.
 
 ```bash
 pnpm setup      # install deps, start Postgres 17 (docker, :5434), run migrations
@@ -32,8 +32,9 @@ non-sensitive. Register an account at http://localhost:7777 and create a
 project.
 
 **Demo data (client catchment):** the client workbook stays local in `Original/`
-(gitignored). Extract it with the Python importer in `scripts/wbt-import/` into
-`data/` (also gitignored), then load it into a new project. Step by step:
+(gitignored). With a Python venv that has openpyxl installed,
+`PYTHON=.venv/bin/python pnpm seed:demo` extracts it into `data/` (also
+gitignored) and imports it for a local demo user. Step by step:
 [docs/run-locally.md § Import client catchment](./docs/run-locally.md#import-client-catchment-demo-data).
 
 ## How it's built

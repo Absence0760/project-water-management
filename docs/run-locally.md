@@ -5,7 +5,7 @@ on Node, and the site on Vite.
 
 ## Prerequisites
 
-- **Node.js 22** (`.tool-versions`; `node --version`). On this workstation it
+- **Node.js 24** (`.tool-versions`; `node --version`). On this workstation it
   comes from nvm.
 - **pnpm 10** via Corepack (`corepack enable`). Don't `npm install -g` it.
 - **Docker** with the compose plugin (`docker compose version`).
@@ -55,22 +55,32 @@ user starts with no projects.
 ## Import client catchment (demo data)
 
 The client workbooks live in `Original/` (gitignored, never committed). The
-importer reads a b023 workbook **read-only** and writes a `project.json` under
-`data/` (also gitignored):
+quickest route is the demo seed. It extracts client catchment and the blank b023
+sample into `data/` (also gitignored), then imports both as projects for a local
+demo user:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install openpyxl
+PYTHON=.venv/bin/python pnpm seed:demo
+```
+
+Then sign in at http://localhost:7777 as `demo@example.com` / `demo-password`.
+These are local-only values: the user exists only in your docker Postgres.
+
+To do the steps by hand, or to import another workbook for your own account:
+
+```bash
 .venv/bin/python scripts/wbt-import/extract_project.py "Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
+pnpm import:project "$PWD/data/client-catchment/project.json" --email you@example.com --name "Client Catchment"
 ```
 
 This writes `data/client-catchment/project.json` (settings, model, input series) and
 `data/client-catchment/expected.json` (the workbook's own results, used by the
 engine's regression test). The workbook must have been calculated and saved in
 Excel, because the importer reads cached values. Options are documented at the
-top of each script in `scripts/wbt-import/`. Then load
-`project.json` into a new project, either through the app's import action or
-the upload script (see [plan.md Phase 1b](./plan.md#1b-import)). Open the
-project, press **Run**, and compare the Shortfalls table with the workbook's
+top of each script in `scripts/wbt-import/`. `import:project` creates the
+project for an existing user (`--password` also creates the user; local demo
+only). Open the project, press **Run**, and compare the Shortfalls table with the workbook's
 `[Shortfalls]` sheet.
 
 The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's

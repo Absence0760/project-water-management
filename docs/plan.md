@@ -86,8 +86,9 @@ synthetic fixtures cover the same code paths on CI.
   farm spec, crops, crop areas, transfer parameters, calibration and pragmatic
   EWR from a b023 workbook. It also extracts the daily input series. The output
   is `data/<name>/project.json` (the `ProjectModel` + settings + series shape).
-- ⬜ An upload path, either a backend endpoint or a one-shot script, that creates
-  a project from `project.json` in one transaction.
+- 🚧 `pnpm import:project <project.json> --email …` creates a project from
+  `project.json`, and `pnpm seed:demo` extracts and imports the local
+  workbooks for a demo user. Still to come: an import action in the UI.
 - ⬜ The importer reports whatever it could not map: hand-written transfer
   formulas that don't fit the rule shape, or a Specific method with no values.
 
@@ -104,7 +105,15 @@ workbook (as in 1a) with **no manual edits**.
   delete.
 - ⬜ Every project-scoped query runs in a transaction as `water_app` with
   `app.current_user_id` set. DB tests prove the RLS rules
-  ([data-model.md § Access control](./data-model.md#access-control)).
+  ([data-model.md § Access control](./data-model.md#access-control)). Every
+  "cannot see" test has a positive control, meaning the member *can* see it,
+  so an empty result isn't a false pass.
+- ⬜ **Catalogue guards** (tests that read `pg_catalog`): every table with a
+  `project_id` has RLS enabled, all four policies, and grants to `water_app`;
+  every function pins `search_path`; every foreign key has a covering index.
+- ⬜ **Route guard:** a test that walks the Hono router and fails when a route
+  is neither auth-gated nor on the explicit public allowlist (`/health`,
+  `/auth/register`, `/auth/login`). API errors never include raw DB error text.
 
 ### 1d. Frontend
 
@@ -121,6 +130,16 @@ workbook (as in 1a) with **no manual edits**.
 - ⬜ A browser-side instant preview: change a parameter and see the effect
   without saving, using the same engine.
 - ⬜ Members page (owner only).
+- ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
+  response can't overwrite a newer one when the user switches project or
+  series quickly.
+- ⬜ **e2e (Playwright)** under `e2e/`, running fully locally against docker
+  Postgres and the dev servers. Pinned `timezoneId: 'UTC'`, and waits on real
+  signals (no `networkidle`). The first spec is the demo path: register,
+  create project, import, run, chart.
+- ⬜ Housekeeping: pin `packageManager` (pnpm) in the root `package.json`. Run
+  date-sensitive unit tests under a skewed `TZ`, so that code which
+  accidentally depends on local time fails.
 
 **Phase 1 acceptance (the demo):**
 
@@ -240,40 +259,42 @@ Decided: slug **`water-management`**, URL **`https://water-management.jaredhowar
   never touches this repo.
 - ⬜ **Region.** Given POPIA and latency to South Africa, `af-south-1` (Cape
   Town) is the natural choice for the DB and Lambda. It is an opt-in region with
-  somewhat higher prices, and Aurora Serverless v2 and the Data API must be
-  confirmed there. CloudFront's certificate stays in `us-east-1` whatever the
+  somewhat higher prices, and RDS PostgreSQL 17 on t4g must be available
+  there. CloudFront's certificate stays in `us-east-1` whatever the
   region.
 
 ### 6b. Terraform additions (`infra/`)
 
-- ⬜ **Database.** Decide between these, based on usage after Phase 2:
+The infrastructure is Terraform in `infra/` and follows the estate pattern:
+state in the bootstrap's S3 bucket (lockfile), a deploy role looked up from the
+bootstrap, secrets from `infra-secrets` through sops. Resource-level detail
+lives in [infra/README.md](../infra/README.md). The intent:
 
-  | Option | Idle cost | Pros | Cons |
-  | --- | --- | --- | --- |
-  | **Aurora Serverless v2, min 0 ACU** (scale to zero) + **RDS Data API** | ~storage only | No VPC for the Lambda, so no NAT; IAM + Secrets Manager auth | Resuming from 0 takes ~15 s (the first request after idle is slow and needs a longer Lambda timeout or a retry); Data API payload limits (1 MB response) and a different driver than local `pg` |
-  | Aurora Serverless v2 + **VPC Lambda** with `pg` | ~storage only | The same `pg` code as local; no Data API limits | The Lambda sits in a VPC, so it needs VPC endpoints (Secrets Manager, KMS) or a NAT (~$32/month); same resume delay |
-  | **RDS PostgreSQL `db.t4g.micro`** + VPC Lambda | ~$12–15/month | Always warm; plain Postgres; simplest to operate | Paid while idle; single-AZ unless you pay double |
-
-  Recommendation: start with **RDS t4g.micro + VPC Lambda + VPC endpoints**.
-  It is the same code path as local, always warm, and the cost is predictable.
-  Move to Aurora with scale-to-zero only if idle cost matters more than the
-  first-request latency. Whichever is chosen: encryption at rest, automated
-  backups with PITR (7+ days), deletion protection, and the DB not publicly
-  reachable.
-- ⬜ Create the `water_app` role out-of-band, with the password from
-  `infra-secrets` (Terraform `postgresql` provider or a one-off migration step).
-  Migrations run as the owner role.
-- ⬜ Lambda: runtime **`nodejs22.x`** (the template still has 20.x); timeout
-  **30 s** (runs plus DB resume; the template has 10 s); memory 1024 MB
-  (engine plus large JSON); env vars `DATABASE_URL`/secret ARN and
-  `AUTH_JWT_SECRET` from sops; reserved concurrency stays capped.
+- 🚧 **Database: RDS PostgreSQL 17** (`db.t4g.micro`, the same major version as
+  local). Private subnets only, encrypted at rest, TLS, automated backups with
+  PITR (7+ days), deletion protection. Chosen over Aurora Serverless v2 for
+  these reasons: it stays warm with no ~15 s resume on first request, the
+  `pg` code path is the same as local (no Data API driver or payload limits),
+  and the cost is predictable (~$12–15/month). Revisit Aurora with
+  scale-to-zero only if idle cost matters more than first-request latency.
+- 🚧 **VPC Lambda.** The API Lambda runs in the DB's VPC and reaches AWS APIs
+  through VPC endpoints rather than a NAT. It connects as `water_app`
+  (RLS-bound).
+- 🚧 **Migrate Lambda.** A separate function that runs `backend/migrations` as
+  the owner role and also creates or updates `water_app`. The deploy invokes it
+  before publishing new API code.
+- 🚧 **Secrets through sops.** `AUTH_JWT_SECRET` and the DB passwords come from
+  `infra-secrets/water-management/prod.sops.yaml` (the `carlpett/sops` provider)
+  into Lambda configuration. Nothing is in this repo.
+- ⬜ **Lambda runtime `nodejs24.x`** (the repo moves to Node 24). Timeout ~30 s
+  for runs and memory ~1024 MB (engine plus large JSON). Reserved concurrency
+  stays capped.
 - ⬜ CloudFront already proxies same-origin `/api/*` to the Function URL with a
   shared-secret header. Keep that, so the session cookie is first-party and
-  `SameSite=Lax` works. Update `infra/README.md` and `waf.tf` comments, which
-  still say the browser calls the Function URL directly. Tighten the Function
-  URL CORS block, or drop it, since the browser never calls it directly.
-- ⬜ Budget and alarms: DB CPU and storage, and Lambda errors and duration.
-  Budget $25–50/month.
+  `SameSite=Lax` works. Tighten or drop the Function URL CORS block, since the
+  browser never calls the Function URL directly.
+- ⬜ Budget and alarms: DB CPU, free storage and connections, plus Lambda
+  errors and duration. Budget $25–50/month.
 
 ### 6c. CI/CD
 
@@ -296,8 +317,13 @@ rehearsed once.
 - ⬜ **Accounts:** password reset and email verification (SES), and invitations
   by email for people without an account yet (today the invitee must register
   first).
-- ⬜ **Abuse limits:** rate-limit login/register (per IP and per email), plus
-  the WAF rate rule that already exists at the edge.
+- ⬜ **Abuse limits:** **per-account login lockout** (back off after N failed
+  attempts per email, stored in the DB so it holds across Lambda instances),
+  plus a per-IP limit on register. This adds to the WAF rate rule at the edge.
+- ⬜ **Session revocation watermark:** `app_user.sessions_revoked_at`. A JWT
+  whose `iat` is older than the watermark is rejected. "Sign out everywhere",
+  a password change and an admin lock all set it. That gives revocation
+  without a session table.
 - ⬜ **Data protection (POPIA):** a privacy notice, data export and account
   deletion, a retention policy for runs, and a sub-processor list (AWS). Run
   `/audit/gdpr`, `/audit/account-deletion-completeness` and
@@ -307,8 +333,16 @@ rehearsed once.
 - ⬜ Background runs if some run ever exceeds the Lambda timeout (for example
   many scenarios at once). SQS + a worker Lambda, with a status on
   `model_run`.
-- ⬜ Accessibility (WCAG 2.2 AA) and a user guide written for hydrologists and
-  farmers' associations.
+- ⬜ **Accessibility (WCAG 2.2 AA):** axe checks in the Playwright specs for
+  every page, a 320 px-wide reflow check (no horizontal scroll except inside
+  the chart and grid scrollers), and a contrast test over the design tokens
+  (every text/background pair ≥ 4.5:1, UI ≥ 3:1).
+- ⬜ **CSP:** a Content-Security-Policy through a CloudFront response-headers
+  policy. SvelteKit's static build needs `'unsafe-inline'` for its bootstrap
+  script unless hashes are generated. This is accepted as a documented risk
+  ([security.md](./security.md#known-gaps-tracked-in-planmd)); revisit with
+  hash-based CSP.
+- ⬜ A user guide written for hydrologists and farmers' associations.
 - ⬜ `/audit/all`, `/release-readiness` before a 1.0 tag.
 
 ---
@@ -397,7 +431,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 | **Licence / IP** (FRC and SmartMatix) | Could block any use beyond a demo | Ask first (question 15), before investing past Phase 2. |
 | **Client data in the cloud** (POPIA, confidentiality between farms) | Could block hosting, or force a region choice | Local-first V1. Ask question 16. `af-south-1`. Per-project RLS already isolates catchments. |
 | **Scope creep**: three model families, pump scenarios, AI runoff | Nothing gets finished | The phases gate on client sign-off. The node-based and runoff features wait until the b023 port is accepted. |
-| **Aurora resume latency** (~15 s) against the Lambda timeout | The first request after idle fails | Prefer RDS t4g.micro. If Aurora: a 30 s timeout, and the frontend retries on 503. |
+| **VPC Lambda cold starts / DB connection limits** | Slow first request; too many connections from concurrent Lambdas | RDS stays warm. Small `pg` pool per Lambda (1–2). Reserved concurrency is capped. RDS Proxy only if connection counts become a problem. |
 | **Run output volume** (up to ~25 MB/run) | DB growth and cost | Trim keys, cap the number of runs, float4. Runs can be recomputed deterministically. |
 | **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports are ~2 MB for client catchment. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
