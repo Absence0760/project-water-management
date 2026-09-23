@@ -124,7 +124,10 @@
 					font,
 					grid: { stroke: gridColor, width: 1 },
 					ticks: { stroke: gridColor },
-					...(isTime ? {} : { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))) }),
+					// Daily data: never tick more often than once a day (no "12am / 12pm").
+					...(isTime
+						? { space: Math.max(50, Math.ceil(width / Math.max(spanDays, 1))) }
+						: { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))) }),
 					label: isTime ? undefined : xLabel,
 					labelFont: font,
 					labelSize: isTime ? undefined : 20

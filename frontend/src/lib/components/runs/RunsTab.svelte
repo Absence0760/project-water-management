@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
@@ -13,6 +13,7 @@
 	import { downloads, runDownloadItems } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun } from './cache';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
@@ -181,14 +182,8 @@
 		if (!latest) return null;
 		const reasons: string[] = [];
 		if (project.updatedAt > latest.createdAt) reasons.push('the model or settings were saved');
-		if (!project.settings.simulationEnd && series) {
-			const newest = series
-				.filter((s) => s.kind.startsWith('rain_') || s.kind === 'flow_pitman_m3s')
-				.map((s) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1))
-				.sort()
-				.pop();
-			if (newest && newest > latest.endDate) reasons.push(`new data runs to ${newest}`);
-		}
+		const newer = project.settings.simulationEnd ? [] : newDataSinceRun(series ?? [], latest);
+		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(seriesEnd).sort().pop()}`);
 		return reasons.length ? reasons : null;
 	});
 	// What a run still needs (the engine refuses to run without these).

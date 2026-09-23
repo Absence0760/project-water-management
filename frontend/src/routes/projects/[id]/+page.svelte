@@ -13,7 +13,12 @@
 	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
 	import RunsTab from '$lib/components/runs/RunsTab.svelte';
+	import AddDataDialog from '$lib/components/series/AddDataDialog.svelte';
+	import { describeAge } from '$lib/components/series/coverage';
+	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import SeriesTab from '$lib/components/series/SeriesTab.svelte';
+	import type { UploadResult } from '$lib/components/series/upload';
+	import { kindLabel } from '$lib/series/kinds';
 	import SettingsTab from '$lib/components/settings/SettingsTab.svelte';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
@@ -24,7 +29,7 @@
 		{ id: 'network', label: 'Network' },
 		{ id: 'crops', label: 'Crops & demand' },
 		{ id: 'transfers', label: 'Transfers' },
-		{ id: 'series', label: 'Time series' },
+		{ id: 'series', label: 'Data' },
 		{ id: 'settings', label: 'Settings & calibration' },
 		{ id: 'runs', label: 'Runs & results' }
 	] as const;
@@ -33,6 +38,7 @@
 	// Friendlier ?tab= spellings that resolve to the canonical keys above.
 	const TAB_ALIASES: Record<string, TabId> = {
 		data: 'series',
+		timeseries: 'series',
 		demand: 'crops',
 		calibration: 'settings',
 		results: 'runs'
@@ -54,6 +60,72 @@
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);
 	let saveBarHeight = $state(0);
+
+	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
+	const today = new Date().toISOString().slice(0, 10);
+	const fresh = $derived(freshness(series ?? [], today));
+	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
+	let addOpen = $state(false);
+	let droppedFile = $state.raw<File | null>(null);
+	let dragDepth = $state(0);
+	let banner = $state<{ text: string; added: number } | null>(null);
+	let rerunning = $state(false);
+	let rerunError = $state<string | null>(null);
+
+	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+
+	function openAddData(file: File | null = null) {
+		droppedFile = file;
+		addOpen = true;
+	}
+	const hasFiles = (e: DragEvent) => canEdit && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+	function onDragEnter(e: DragEvent) {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		dragDepth++;
+	}
+	function onDragOver(e: DragEvent) {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+	}
+	function onDragLeave(e: DragEvent) {
+		if (!hasFiles(e)) return;
+		dragDepth = Math.max(0, dragDepth - 1);
+	}
+	function onDrop(e: DragEvent) {
+		if (!hasFiles(e)) return;
+		e.preventDefault();
+		dragDepth = 0;
+		const f = e.dataTransfer?.files?.[0];
+		if (f) openAddData(f);
+	}
+
+	async function onUploaded(r: UploadResult) {
+		await loadLists();
+		const what = r.meta.name || kindLabel(r.meta.kind);
+		banner = {
+			text: r.added || r.changed ? `${r.message.replace(/\.$/, '')}.` : `No new days for “${what}”: the file matched what is stored.`,
+			added: r.added + r.changed
+		};
+	}
+
+	async function rerun() {
+		rerunning = true;
+		rerunError = null;
+		try {
+			const r = await api.runs.create(projectId, `Data to ${fresh?.latest ?? today}`);
+			const { summary: _s, ...meta } = r;
+			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id)];
+			banner = null;
+			await goto(`?tab=runs&run=${r.id}`, { noScroll: true });
+		} catch (e) {
+			rerunError = e instanceof Error ? e.message : String(e);
+		} finally {
+			rerunning = false;
+		}
+	}
 
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
@@ -151,7 +223,15 @@
 
 <svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
 
-<main class="page" style:--dock-h="{saveBarHeight}px">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<main
+	class="page"
+	style:--dock-h="{saveBarHeight}px"
+	ondragenter={onDragEnter}
+	ondragover={onDragOver}
+	ondragleave={onDragLeave}
+	ondrop={onDrop}
+>
 	<LoadState {loading} error={notFound ? null : error} retry={load}>
 		{#if notFound || !project}
 			<div class="alert alert-error" role="alert">
@@ -163,7 +243,52 @@
 				<h1>{project.name}</h1>
 				<span class="badge" class:badge-owner={isOwner}>{project.role}</span>
 				{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
+				<div class="head-actions">
+					{#if fresh}
+						<details class="fresh" class:stale={fresh.stale}>
+							<summary>
+								<span class="dot" aria-hidden="true"></span>
+								Data up to <strong>{longDate(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden"> (older than {STALE_DAYS} days)</span>{/if}
+							</summary>
+							<div class="fresh-pop">
+								<table class="data compact">
+									<thead><tr><th scope="col">Series</th><th scope="col" class="num">Up to</th><th scope="col" class="num">Age</th></tr></thead>
+									<tbody>
+										{#each fresh.perSeries as p (p.id)}
+											<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{p.end}</td><td class="num">{describeAge(p.age)}</td></tr>
+										{/each}
+									</tbody>
+								</table>
+								<p class="muted">Flagged when the newest data is more than {STALE_DAYS} days old.</p>
+							</div>
+						</details>
+					{:else if series}
+						<span class="fresh-none muted">No data yet</span>
+					{/if}
+					{#if canEdit}
+						<button type="button" class="btn btn-primary add" onclick={() => openAddData()}>
+							<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2 11v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+							Add data
+						</button>
+					{/if}
+				</div>
 			</div>
+
+			{#if banner}
+				<div class="alert alert-success-ish" role="status">
+					<span>{banner.text}</span>
+					{#if canEdit && banner.added > 0}
+						<button type="button" class="btn btn-primary btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>
+					{/if}
+					<button type="button" class="btn btn-ghost btn-sm" onclick={() => (banner = null)}>Dismiss</button>
+					{#if rerunError}<span class="err">{rerunError}</span>{/if}
+				</div>
+			{:else if behindRun.length && tab !== 'runs' && tab !== 'series'}
+				<div class="alert alert-info behind" role="status">
+					<span>New data since the last run ({behindRun.map((s) => s.name || kindLabel(s.kind)).join(', ')}).</span>
+					{#if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
+				</div>
+			{/if}
 
 			<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
 				{#each TABS as t, i (t.id)}
@@ -233,6 +358,13 @@
 			</section>
 
 			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} />
+			{#if canEdit}
+				<AddDataDialog bind:open={addOpen} {projectId} list={series ?? []} file={droppedFile} onuploaded={onUploaded} />
+				{#if dragDepth > 0}
+					<div class="drop" aria-hidden="true"><div>Drop the CSV to add daily data to {project.name}</div></div>
+				{/if}
+				<p class="visually-hidden" aria-live="polite">{dragDepth > 0 ? 'Drop the file to add data.' : ''}</p>
+			{/if}
 		{/if}
 	</LoadState>
 </main>
@@ -260,6 +392,120 @@
 		margin: 0;
 		min-width: 0;
 		overflow-wrap: anywhere;
+	}
+	.head-actions {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.add {
+		min-height: 36px;
+	}
+	.fresh {
+		position: relative;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.fresh summary {
+		cursor: pointer;
+		list-style: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.3rem 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		min-height: 36px;
+	}
+	.fresh summary::-webkit-details-marker {
+		display: none;
+	}
+	.fresh .dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--success);
+	}
+	.fresh.stale summary {
+		border-color: color-mix(in srgb, var(--warning) 50%, var(--border));
+		background: var(--warning-soft);
+		color: var(--warning);
+	}
+	.fresh.stale .dot {
+		background: var(--warning);
+	}
+	.fresh-pop {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 6px);
+		z-index: 35;
+		width: min(440px, calc(100vw - 2 * var(--gutter)));
+		padding: 0.6rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	.fresh-pop p {
+		margin: 0.4rem 0 0;
+		font-size: 0.78rem;
+	}
+	.fresh-none {
+		font-size: 0.85rem;
+	}
+	.alert-success-ish,
+	.behind {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.alert-success-ish {
+		background: var(--success-soft);
+		border-color: color-mix(in srgb, var(--success) 40%, transparent);
+		color: var(--text);
+	}
+	.alert-success-ish > span:first-child,
+	.behind > span:first-child {
+		flex: 1;
+		min-width: 12rem;
+	}
+	.err {
+		color: var(--danger);
+	}
+	.drop {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		background: color-mix(in srgb, var(--bg) 75%, transparent);
+		pointer-events: none;
+	}
+	.drop div {
+		padding: 2.5rem 3rem;
+		border: 3px dashed var(--accent);
+		border-radius: 12px;
+		background: var(--surface);
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-align: center;
+	}
+	@media (max-width: 640px) {
+		.head-actions {
+			margin-left: 0;
+			width: 100%;
+		}
+		.add,
+		.fresh summary {
+			min-height: 44px;
+		}
 	}
 	.crumbs {
 		color: var(--text-muted);
