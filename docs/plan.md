@@ -108,10 +108,11 @@ workbook (as in 1a) with **no manual edits**.
   ([data-model.md § Access control](./data-model.md#access-control)). Every
   "cannot see" test has a positive control, meaning the member *can* see it,
   so an empty result isn't a false pass.
-- ⬜ **Catalogue guards** (tests that read `pg_catalog`): every table with a
-  `project_id` has RLS enabled, all four policies, and grants to `water_app`;
-  every function pins `search_path`; every foreign key has a covering index.
-- ⬜ **Route guard:** a test that walks the Hono router and fails when a route
+- ✅ **Catalogue guards** (`backend/src/db/catalogue.db.test.ts`): RLS is
+  enabled on every table outside the allowlist, every RLS table has policies,
+  `water_app` has the grants but owns nothing and can't bypass RLS, every
+  function pins `search_path`, and every foreign key has a covering index.
+- ✅ **Route guard** (`backend/src/routes.test.ts`): a test that walks the Hono router and fails when a route
   is neither auth-gated nor on the explicit public allowlist (`/health`,
   `/auth/register`, `/auth/login`). API errors never include raw DB error text.
 
@@ -137,8 +138,8 @@ workbook (as in 1a) with **no manual edits**.
   Postgres and the dev servers. Pinned `timezoneId: 'UTC'`, and waits on real
   signals (no `networkidle`). The first spec is the demo path: register,
   create project, import, run, chart.
-- ⬜ Housekeeping: pin `packageManager` (pnpm) in the root `package.json`. Run
-  date-sensitive unit tests under a skewed `TZ`, so that code which
+- ✅ `packageManager` is pinned (pnpm 10) in the root `package.json`.
+- ⬜ Run date-sensitive unit tests under a skewed `TZ`, so that code which
   accidentally depends on local time fails.
 
 **Phase 1 acceptance (the demo):**
