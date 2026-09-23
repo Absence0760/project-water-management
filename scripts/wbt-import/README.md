@@ -2,7 +2,7 @@
 
 Python scripts that read a b023 Water Balance Tool workbook (`.xlsm`) and write
 JSON the app and the engine's tests use. Client workbooks and everything
-generated from them stay out of git: put workbooks in `Original/` and outputs in
+generated from them stay out of git: put workbooks in `../project-water-management-source/Original/` (outside the repo) and outputs in
 `data/` (both gitignored).
 
 | Script | Output |
@@ -22,8 +22,8 @@ python3 -m venv .venv && .venv/bin/pip install openpyxl
 ## Run
 
 ```sh
-.venv/bin/python scripts/wbt-import/extract_project.py "Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
-.venv/bin/python scripts/wbt-import/extract_project.py Original/Blank_WBT_b023_v001.xlsm data/blank
+.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
+.venv/bin/python scripts/wbt-import/extract_project.py ../project-water-management-source/Original/Blank_WBT_b023_v001.xlsm data/blank
 ```
 
 The 87 MB client catchment workbook takes about 20 s. The script prints a summary and

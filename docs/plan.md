@@ -26,7 +26,7 @@ and [data-model.md](./data-model.md)):
 - **Excel import:** a Python extractor (`scripts/wbt-import`) turns a workbook
   into `project.json`. An in-browser importer (SheetJS) comes later.
 - **The repo is public.** No secret, client workbook or client-derived data is
-  ever committed. `Original/`, `AI/`, `data/` and `*.xlsm`/`*.xlsx` are
+  ever committed. The workbooks live outside the repo (`../project-water-management-source/`); `data/` and `*.xlsm`/`*.xlsx` are
   gitignored, and committed fixtures are synthetic, with no real farm names or
   values. All production secrets are SOPS-encrypted in the private
   `Absence0760/infra-secrets` repo under `water-management/`

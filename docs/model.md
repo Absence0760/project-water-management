@@ -39,7 +39,7 @@ answers three questions:
 **project**. The user can keep several projects side by side (place A, B, C…)
 and create or copy more.
 
-Source workbooks (kept locally in `Original/` and `AI/`, never committed):
+Source workbooks (kept locally outside the repo in `../project-water-management-source/Original/` and `…/AI/`, never committed):
 
 | Workbook | What it is | Status |
 | --- | --- | --- |

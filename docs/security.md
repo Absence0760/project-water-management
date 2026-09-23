@@ -126,7 +126,7 @@ readable by anyone. The rules:
   `infra-secrets/bin/sops-init.sh --project water-management --region <region>`.
   Terraform consumes them with the `carlpett/sops` provider or a
   decrypt-to-tfvars step into a gitignored `terraform.tfvars`.
-- **No client data.** Workbooks (`Original/`, `AI/`, `*.xlsm`, `*.xlsx`) and
+- **No client data.** Workbooks (kept outside the repo in `../project-water-management-source/`; `*.xlsm`, `*.xlsx` are gitignored) and
   everything extracted from them (`data/`) are gitignored. Committed test
   fixtures are **synthetic**: made-up farm names, made-up numbers. Never paste
   real farm names, owners, dam sizes or series into fixtures, test names, code

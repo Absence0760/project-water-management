@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seed a local demo: the invented example catchments (always), plus the client
-# catchment client workbook from Original/ when present (extracted into data/,
+# catchment client workbook when present (extracted into data/,
 # gitignored), imported with one model run.
 #
 #   pnpm seed:demo            # uses $PYTHON or python3 with openpyxl installed
@@ -14,6 +14,9 @@ cd "$(dirname "$0")/.."
 EMAIL="${DEMO_EMAIL:-demo@example.com}"
 PASSWORD="${DEMO_PASSWORD:-demo-password}"
 PY="${PYTHON:-python3}"
+# Client workbooks live OUTSIDE the repo (never committed): by default in a
+# sibling folder, ../project-water-management-source/{Original,AI}/.
+WBT_SOURCE_DIR="${WBT_SOURCE_DIR:-../project-water-management-source}"
 
 extract() { # <workbook> <outdir>
 	if [ -f "$2/project.json" ]; then
@@ -36,7 +39,7 @@ if ! "$PY" -c 'import openpyxl' 2>/dev/null; then
 fi
 
 imported=0
-if extract "Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment; then
+if extract "$WBT_SOURCE_DIR/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment; then
 	pnpm -s import:project "$PWD/data/client-catchment/project.json" --email "$EMAIL" --password "$PASSWORD" --name "Client Catchment" --run
 	imported=$((imported + 1))
 fi

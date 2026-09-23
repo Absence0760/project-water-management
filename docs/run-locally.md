@@ -82,7 +82,7 @@ the e2e stack uses `log`, so neither needs Mailpit.
 
 ## Import client catchment (demo data)
 
-The client workbooks live in `Original/` (gitignored, never committed). The
+The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
 quickest route is the demo seed. It extracts client catchment and the blank b023
 sample into `data/` (also gitignored), then imports both as projects for a local
 demo user (details in `scripts/wbt-import/README.md`):
@@ -98,7 +98,7 @@ These are local-only values: the user exists only in your docker Postgres.
 To do the steps by hand, or to import another workbook for your own account:
 
 ```bash
-.venv/bin/python scripts/wbt-import/extract_project.py "Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
+.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
 pnpm import:project "$PWD/data/client-catchment/project.json" --email you@example.com --name "Client Catchment"
 ```
 

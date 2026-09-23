@@ -63,7 +63,7 @@ pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inve
 pnpm test:e2e               # Playwright, 48 specs incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
-pnpm seed:demo              # seed:examples + the Client Catchment client workbook from Original/ (needs Python + openpyxl)
+pnpm seed:demo              # seed:examples + the Client Catchment client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
 ```

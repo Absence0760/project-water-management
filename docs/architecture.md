@@ -122,6 +122,6 @@ water-management/
 ├── scripts/               check_root_scripts.mjs, wbt-import/ (Python)
 ├── infra/                 Terraform
 ├── docs/                  This documentation
-├── Original/, AI/, data/  Client workbooks and generated data (gitignored)
+├── data/                 Generated client fixtures (gitignored; workbooks live outside the repo in ../project-water-management-source/)
 └── .github/workflows/     CI, deploy (release-gated), security scans
 ```

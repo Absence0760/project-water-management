@@ -31,7 +31,7 @@ No env setup is needed: the local defaults are committed, and they are
 non-sensitive. Register an account at http://localhost:7777 and create a
 project.
 
-**Demo data (client catchment):** the client workbook stays local in `Original/`
+**Demo data (client catchment):** the client workbook stays local in `../project-water-management-source/Original/` (a sibling folder outside the repo; override with `WBT_SOURCE_DIR`)
 (gitignored). With a Python venv that has openpyxl installed,
 `PYTHON=.venv/bin/python pnpm seed:demo` extracts it into `data/` (also
 gitignored) and imports it for a local demo user. Step by step:
@@ -82,7 +82,7 @@ The full list is in [docs/STACK.md](./docs/STACK.md#commands-run-from-repo-root)
 ## Public repo: secrets and client data
 
 This repo is public. Client workbooks and anything extracted from them
-(`Original/`, `AI/`, `data/`, `*.xlsm`, `*.xlsx`) are **never committed**, and
+(kept outside the repo in `../project-water-management-source/`; `data/`, `*.xlsm`, `*.xlsx` are gitignored) are **never committed**, and
 committed test fixtures are synthetic. Production secrets are SOPS-encrypted in
 the private `Absence0760/infra-secrets` repo under `water-management/`, never
 here. See [docs/security.md § Public repo hygiene](./docs/security.md#public-repo-hygiene).

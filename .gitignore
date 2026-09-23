@@ -104,6 +104,8 @@ backend.config
 # Tests use small fixtures extracted from them (see docs/model.md).
 *.xlsm
 *.xlsx
+# The workbooks now live outside the repo (../project-water-management-source/);
+# keep these as a safety net in case they're copied back in.
 Original/
 AI/
 data/
