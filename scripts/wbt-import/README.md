@@ -54,7 +54,12 @@ rows and columns don't break it.
 - **Settings**: A-pan evaporation, effective rainfall %, February days
   (AppSettings), fragmentation method and hi/lo split, pragmatic EWR, and
   calibration (via `calibration.py`; engine defaults with a note if that
-  module is missing).
+  module is missing). `calibrationStart/End` come from [Flow Calibration Cfg]
+  `zCalibration_Date1/DateN`, and `calibrationFlowKind` from [Flow data]
+  `rUseFlow` (left null, with a note, when that series has no values).
+- **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
+  month, farm, summed shortfall, days not met). A macro writes that table, so
+  it can be stale; see `docs/model.md` §2.9.
 - **Series** are [Flow data] columns F–K: Pitman flow, observed flow (G1),
   logger, catchment rain, CHIRPS rain and forecast rain. A column with no
   values is skipped. Blank cells become `null`.
