@@ -270,14 +270,14 @@
 		<div class="field">
 			<label for="np-team">Belongs to</label>
 			<select id="np-team" bind:value={newTeamId} aria-describedby="np-team-hint">
-				<option value="">Personal (only you, plus anyone you share with)</option>
+				<option value="">Personal</option>
 				{#each teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 			</select>
 			<span class="hint" id="np-team-hint">
 				{#if teams.length}
-					In a team, every member can edit and team admins are owners.
+					Personal: only you and people you share it with. In a team, every member can edit and team admins are owners.
 				{:else}
-					<a href="{base}/teams">Create a team</a> to work on catchments together.
+					Only you and people you share it with. <a href="{base}/teams">Create a team</a> to work on catchments together.
 				{/if}
 			</span>
 		</div>
