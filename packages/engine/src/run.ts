@@ -6,10 +6,12 @@
 //   3. daily net irrigation demand                [Irrigation Demand]    → ./demand.ts
 //   4. transfers + farm dams, routed downstream   [Transfers], Elements  → ./network/simulate.ts
 //   5. EWR shortfalls, calibration statistics     [EWR shortfalls]       → ./network/stats.ts
+//   6. curtailment targets per farm               [Shortfalls]           → ./network/curtailment.ts
 // See ./network/README.md for the column-by-column mapping.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeNaturalFlow } from './flow';
+import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { WBT_PRECISION, excelRound } from './network/round';
 import { flowShares } from './network/shares';
 import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -26,7 +28,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.2.0';
+export const ENGINE_VERSION = '0.3.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -272,6 +274,24 @@ export function runModelWith(
 		});
 	});
 
+	const window = resolveReportWindow(settings, start, days, warnings);
+	const curtailment = computeCurtailment(
+		nodes.flatMap((node, i) => {
+			if (node.kind !== 'farm') return [];
+			const r = sim.nodes[i]!;
+			return [
+				{
+					nodeId: node.id,
+					name: node.name,
+					demand: r.demand,
+					supplied: r.supplied,
+					ewrShortfallIncremental: r.ewrShortfallIncremental
+				}
+			];
+		}),
+		window
+	);
+
 	const calibration = observedKind ? calibrationStats(simOutflow, observedM3s) : null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
 	else if (calibration && calibration.days === 0) warnings.push('observed flow has no values inside the simulation period');
@@ -291,12 +311,52 @@ export function runModelWith(
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
 			},
 			calibration,
+			curtailment,
 			warnings
 		}
 	};
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * settings.reportStart/reportEnd as day indices into the run, clipped to it.
+ * null means the run's own start/end. A window that doesn't overlap the run
+ * (or ends before it starts) falls back to the whole run, with a warning.
+ */
+export function resolveReportWindow(
+	settings: Pick<ProjectSettings, 'reportStart' | 'reportEnd'>,
+	runStart: number,
+	days: number,
+	warnings: string[]
+): ReportWindow {
+	const runEnd = runStart + days - 1;
+	const parse = (v: string | null | undefined, name: string): number | null => {
+		if (v == null || v === '') return null;
+		const d = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? toEpochDay(v) : NaN;
+		if (!Number.isFinite(d)) {
+			warnings.push(`${name} "${String(v)}" is not a date (YYYY-MM-DD); using the run's ${name === 'reportStart' ? 'start' : 'end'}`);
+			return null;
+		}
+		return d;
+	};
+	let a = parse(settings.reportStart, 'reportStart') ?? runStart;
+	let b = parse(settings.reportEnd, 'reportEnd') ?? runEnd;
+	if (b < a || b < runStart || a > runEnd) {
+		warnings.push(
+			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} does not overlap the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)}); the curtailment report covers the whole run`
+		);
+		a = runStart;
+		b = runEnd;
+	} else if (a < runStart || b > runEnd) {
+		warnings.push(
+			`reporting window ${fromEpochDay(a)} … ${fromEpochDay(b)} is clipped to the run (${fromEpochDay(runStart)} … ${fromEpochDay(runEnd)})`
+		);
+		a = Math.max(a, runStart);
+		b = Math.min(b, runEnd);
+	}
+	return { from: a - runStart, to: b - runStart, reportStart: fromEpochDay(a), reportEnd: fromEpochDay(b) };
+}
 
 function alignSeries(s: DailySeries | undefined, start: number, days: number): (number | null)[] {
 	const out = new Array<number | null>(days).fill(null);

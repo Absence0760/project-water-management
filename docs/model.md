@@ -257,9 +257,69 @@ compared with the full pragmatic EWR and the observed flow.
 | Workbook sheet | What it shows | App equivalent (V1) |
 | --- | --- | --- |
 | `[EWR shortfalls]` | Per day: unfragmented EWR, EWR volume not met at the gauge, a not-met flag, Σ incremental farm shortfalls, and per-farm incremental shortfall | Run series (`ewr_*` keys) + chart |
-| `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.farms` + table (V1 has the first columns; the "balanced" columns follow once their formulas are confirmed) |
+| `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.9); `RunSummary.farms` keeps the whole-run averages |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | Later phase (reports) |
 | `[Flow Calibr. Graph Full]` | Observed vs simulated flow | Calibration chart + `CalibrationStats` (NSE, PBIAS, RMSE) |
+
+### 2.9 Curtailment targets (`[Shortfalls]`)
+
+The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
+gain) so that irrigation is shared fairly and the EWR is met?* It works on
+averages over a **reporting window** the user types into two cells
+("Set reporting period", named range `zShortfalls_PeriodStart` and the cell
+below it). The engine reads the window from `settings.reportStart` /
+`settings.reportEnd` (ISO dates, inclusive; `null` = the run's own start or
+end; clipped to the run with a warning). It computes the table in
+`packages/engine/src/network/curtailment.ts` and returns it as
+`RunSummary.curtailment`.
+
+**The idea in plain words.** Over the window, add up what every farm asked
+for and what it actually got. The ratio is the catchment's **equitable supply
+fraction**: if the water that was supplied had been shared in proportion to
+demand, every farm would have received that fraction of its demand. That
+share is the farm's **target volume**. A farm that received more than its
+target must **reduce** by the difference; one that received less may
+**gain**. Across all farms these reductions and gains cancel out (up to
+rounding), so this step only *redistributes* water. The farm's average **EWR
+shortfall** (the incremental shortfall it causes, §2.7 AB) is then added on
+top. The result is the **total change** that both balances irrigation and
+meets the EWR, and **target + EWR shortfall** is the volume the farm has left
+to irrigate once both are done.
+
+**Cell formulas.** One row per farm, in `[Network]` order, and gauges are
+left out. *W* is the reporting window, and every average is a plain mean over
+the days in *W*. Column letters are the workbook's. Signs follow the
+workbook: **negative = reduce / shortfall, positive = gain**.
+
+| Col | Engine field (`CurtailmentFarm`) | Workbook label | Formula |
+| --- | --- | --- | --- |
+| H | `demandM3Day` | Average demand (m³/day) | `ROUND(AVERAGE(F over W), 0)`, where F is the Element sheet's net demand |
+| I | `suppliedM3Day` | Average supply (m³/day) | `ROUND(AVERAGE(G over W), 0)`, where G is irrigation supplied |
+| J | `deficitM3Day` | Average deficit (m³/day) | `I − H` (≤ 0) |
+| K | `fractionSupplied` | %Supply | `IF(H = 0, "-", I / H)` (not rounded) |
+| K<sub>tot</sub> | `equitableFraction` | (totals row) | `ΣI / ΣH`, over the **rounded** farm averages |
+| M | `targetM3Day` | Target volume (m³/day) | `ROUND(H × K_tot, 1)` |
+| N | `reduceGainM3Day` | − = Reduce, + = Gain (m³/day) | `M − I` |
+| O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `ROUNDDOWN(N / 86.4, 1)`, truncated toward zero |
+| P | `targetFraction` | %Supply (of target) | `IF(H = 0, "-", ROUND(M / H, 3))`. This is K_tot, rounded, for every farm with demand |
+| R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | `ROUND(AVERAGE(incremental EWR shortfall over W), 0)` (≤ 0). The sheet reads it from `[EWR shortfalls]`, which copies Element sheet AB |
+| S | `totalChangeM3Day` | Total reductions (m³/day) | `N + R` |
+| T | `totalChangeLs` | Total reductions (l/s) | `ROUNDDOWN(S / 86.4, 1)` |
+| U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | `M + R` |
+| V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", ROUND(U / H, 3))` (see quirk Q12) |
+
+The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
+N, O, R, S and U. Its l/s figure is the sum of the *truncated* farm values,
+so it is not `ROUNDDOWN(ΣN / 86.4, 1)`. T has no total. 86.4 converts m³/day
+to l/s (1 m³/day = 1000 l / 86 400 s).
+
+The engine reproduces this number for number. For the saved window, the
+client catchment regression test compares every column and the totals with the
+workbook. That window happens to be fully supplied, so the test also replays
+the cell formulas over the whole run, which has deficits, on the workbook's
+own daily Element-sheet values. The one addition is that differences and
+sums of 1-dp values are rounded to 1 dp, to drop binary noise
+(`120.3 − 120` would otherwise be `0.29999999999999716`).
 
 ---
 
@@ -283,7 +343,11 @@ stay reproducible and the engine version records which one was used.
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |
-| Q11 | Shortfalls | The "target volume / reduce-gain / volume left after balancing" columns come from a formula chain not yet extracted. | Needed before we can show the full Shortfalls report. |
+| Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. | Decides whether "gain" may be shown as water a farm can actually get. A network-aware redistribution (or licences, see planned-work) would change every target. |
+| Q12 | Shortfalls V | The column is labelled **"Reduction of demand required (%)"**, but the formula is `U / H`, the share of demand that is *left*: 1.000 means no reduction, and 0.600 means a 40 % cut. **Mirrored**: `fractionOfDemandLeft` holds `U / H`, and the UI labels it "demand left", not "reduction". | The label invites exactly the wrong reading. We should ask which one the client reports. |
+| Q13 | Shortfalls R/S/U | The EWR shortfall is the farm's **incremental** shortfall (Element AB). With quirk Q4 in play, that is the whole outflow compared with the farm's own fragment. A farm with no irrigation demand can still carry an EWR "reduction" (S < 0, U < 0) that it has no irrigation to cut. | We need to confirm how a cut is meant to be applied to a natural or stand-alone-dam element. |
+| Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. It also uses the **rounded** farm averages (H, I), not the raw ones. | Cosmetic. The rounding effect is at most ½ m³/day per farm. |
+| Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Mirrored.** | Small cuts disappear in l/s. We should confirm this is deliberate (a conservative presentation). |
 
 ---
 

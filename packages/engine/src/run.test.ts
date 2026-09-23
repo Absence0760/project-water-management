@@ -4,7 +4,7 @@ import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSe
 import { runModel, runModelWith } from './run';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
-import { excelRound } from './network/round';
+import { excelRound, excelRoundDown } from './network/round';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -350,6 +350,43 @@ describe('runModel — EWR', () => {
 	});
 });
 
+describe('runModel — curtailment report', () => {
+	// D runs dry on day 1 (demand 100, dam 150): supplied [100, 50].
+	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+	const fixture = (settings: Partial<ProjectSettings> = {}): Fixture => ({
+		nodes: [
+			node('D', { damCapacityM3: 150, damInitialPct: 1, downstreamNodeId: 'W' }),
+			node('W', { sortOrder: 1, damCapacityM3: 1e6, damInitialPct: 1 })
+		],
+		crops,
+		cropAreas: [
+			{ nodeId: 'D', cropId: 'c', areaM2: 1000 },
+			{ nodeId: 'W', cropId: 'c', areaM2: 1000 }
+		],
+		settings: { apanMm: flat(3100) as Monthly, ...settings },
+		natural: [0, 0],
+		startDate: '2020-10-01'
+	});
+
+	it('covers the whole run by default and redistributes supply equitably', () => {
+		const c = run(fixture()).summary.curtailment!;
+		expect([c.reportStart, c.reportEnd, c.days]).toEqual(['2020-10-01', '2020-10-02', 2]);
+		// D: demand 100, supplied ROUND(75) = 75; W: 100 / 100. Σ 175 / 200 = 0.875.
+		expect(c.equitableFraction).toBe(0.875);
+		expect(c.farms.map((f) => [f.name, f.targetM3Day, f.reduceGainM3Day])).toEqual([
+			['D', 87.5, 12.5],
+			['W', 87.5, -12.5]
+		]);
+	});
+
+	it('honours settings.reportStart / reportEnd', () => {
+		const c = run(fixture({ reportStart: '2020-10-01', reportEnd: '2020-10-01' })).summary.curtailment!;
+		expect(c.days).toBe(1);
+		expect(c.equitableFraction).toBe(1); // day 0: both farms fully supplied
+		expect(c.farms.every((f) => f.reduceGainM3Day === 0)).toBe(true);
+	});
+});
+
 describe('runModel — flow shares', () => {
 	it('warns when manual shares do not sum to 1 and applies them anyway', () => {
 		const out = run({
@@ -484,9 +521,25 @@ interface Expected {
 	shortfalls: {
 		periodStart: string;
 		periodEnd: string;
-		farms: { name: string; avgDemand: number; avgSupplied: number; avgEwrShortfall: number }[];
+		farms: ({ name: string; avgDemand: number; avgSupplied: number; avgEwrShortfall: number } & Partial<
+			Record<ShortfallCol, number | null>
+		>)[];
+		/** The totals row; present once extract_project.py reads the curtailment columns. */
+		totals?: Record<string, number | null>;
 	} | null;
 }
+/** [Shortfalls] curtailment columns in expected.json (scripts/wbt-import SHORTFALLS_COLS). */
+type ShortfallCol =
+	| 'deficit'
+	| 'fractionSupplied'
+	| 'target'
+	| 'reduceGain'
+	| 'reduceGainLs'
+	| 'targetFraction'
+	| 'totalChange'
+	| 'totalChangeLs'
+	| 'volumeLeft'
+	| 'fractionOfDemandLeft';
 interface ImportedProject {
 	settings: ModelInput['settings'];
 	model: ModelInput['model'];
@@ -598,6 +651,111 @@ describe.skipIf(!dataDir)(
 				expect(excelRound(avg(get(out, id, 'supplied')))).toBe(f.avgSupplied);
 				expect(excelRound(avg(get(out, id, 'ewr_shortfall_incremental')))).toBe(f.avgEwrShortfall);
 			}
+		});
+
+		it('matches every [Shortfalls] curtailment column over its reporting period', () => {
+			const sf = expected.shortfalls;
+			if (!sf?.totals) return; // expected.json from before the curtailment columns were extracted
+			const inWindow = runModelWith(
+				{ ...modelInput, settings: { ...modelInput.settings, reportStart: sf.periodStart, reportEnd: sf.periodEnd } },
+				() => ({ naturalFlowM3Day: natural })
+			).summary.curtailment!;
+			expect([inWindow.reportStart, inWindow.reportEnd]).toEqual([sf.periodStart, sf.periodEnd]);
+			const byName = new Map(inWindow.farms.map((f) => [f.name, f]));
+			const report: Record<string, string> = {};
+			const cols: [ShortfallCol | 'avgDemand' | 'avgSupplied' | 'avgEwrShortfall', keyof (typeof inWindow.farms)[number]][] = [
+				['avgDemand', 'demandM3Day'],
+				['avgSupplied', 'suppliedM3Day'],
+				['deficit', 'deficitM3Day'],
+				['fractionSupplied', 'fractionSupplied'],
+				['target', 'targetM3Day'],
+				['reduceGain', 'reduceGainM3Day'],
+				['reduceGainLs', 'reduceGainLs'],
+				['targetFraction', 'targetFraction'],
+				['avgEwrShortfall', 'ewrShortfallM3Day'],
+				['totalChange', 'totalChangeM3Day'],
+				['totalChangeLs', 'totalChangeLs'],
+				['volumeLeft', 'volumeLeftM3Day'],
+				['fractionOfDemandLeft', 'fractionOfDemandLeft']
+			];
+			for (const want of sf.farms) {
+				const got = byName.get(want.name);
+				if (!got) {
+					report[want.name] = 'missing from engine report';
+					continue;
+				}
+				for (const [wk, gk] of cols) {
+					const w = want[wk] ?? null;
+					const g = got[gk] as number | null;
+					if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-9) report[`${want.name}.${wk}`] = `engine ${g} vs workbook ${w}`;
+				}
+			}
+			const t = inWindow.totals;
+			const totals: [string, number | null][] = [
+				['avgDemand', t.demandM3Day],
+				['avgSupplied', t.suppliedM3Day],
+				['deficit', t.deficitM3Day],
+				['fractionSupplied', inWindow.equitableFraction],
+				['target', t.targetM3Day],
+				['reduceGain', t.reduceGainM3Day],
+				['reduceGainLs', t.reduceGainLs],
+				['avgEwrShortfall', t.ewrShortfallM3Day],
+				['totalChange', t.totalChangeM3Day],
+				['volumeLeft', t.volumeLeftM3Day]
+			];
+			for (const [k, g] of totals) {
+				const w = sf.totals[k] ?? null;
+				if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-6) report[`totals.${k}`] = `engine ${g} vs workbook ${w}`;
+			}
+			expect(report).toEqual({});
+		});
+
+		it('reproduces the [Shortfalls] cell formulas over the whole run from the workbook\'s own daily columns', () => {
+			// The saved reporting period is fully supplied, so it never exercises a non-trivial
+			// target. Over the whole run client catchment has deficits: replay the sheet's cell
+			// formulas, written out independently here, on the Element sheet values.
+			const c = out.summary.curtailment!;
+			expect([c.reportStart, c.days]).toEqual([expected.startDate, expected.days]);
+			const mean = (v: (number | null)[]) => v.reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
+			const farmNames = Object.entries(expected.nodes)
+				.filter(([, n]) => n.kind === 'farm')
+				.map(([name]) => name);
+			const rows = farmNames.map((name) => {
+				const n = expected.nodes[name]!;
+				return {
+					name,
+					H: excelRound(mean(n.demand!)),
+					I: excelRound(mean(n.supplied!)),
+					R: excelRound(mean(n.ewr_shortfall_incremental!))
+				};
+			});
+			const K = rows.reduce((s, r) => s + r.I, 0) / rows.reduce((s, r) => s + r.H, 0);
+			expect(K).toBeLessThan(1); // the whole run does have deficits
+			expect(c.equitableFraction).toBeCloseTo(K, 12);
+			for (const r of rows) {
+				const M = excelRound(r.H * K, 1);
+				const N = M - r.I;
+				const S = N + r.R;
+				const got = c.farms.find((f) => f.name === r.name)!;
+				expect({
+					M: got.targetM3Day,
+					N: got.reduceGainM3Day,
+					O: got.reduceGainLs,
+					S: got.totalChangeM3Day,
+					T: got.totalChangeLs,
+					U: got.volumeLeftM3Day
+				}).toEqual({
+					M,
+					N: excelRound(N, 1),
+					O: excelRoundDown(N / 86.4, 1),
+					S: excelRound(S, 1),
+					T: excelRoundDown(S / 86.4, 1),
+					U: excelRound(M + r.R, 1)
+				});
+			}
+			// Some farm must give water up and another may gain it.
+			expect(c.farms.some((f) => f.reduceGainM3Day < 0)).toBe(true);
+			expect(c.farms.some((f) => f.reduceGainM3Day > 0)).toBe(true);
 		});
 	}
 );

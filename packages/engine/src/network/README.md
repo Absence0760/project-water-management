@@ -7,7 +7,8 @@ statistics. Natural flow itself comes from `../flow.ts`. Entry point:
 
 `run.test.ts` reproduces every daily value on all 13 Element sheets of the
 client catchment b023 workbook (1981-01-01 to 2025-03-31, 16 161 days) **exactly**, and
-also the catchment simulated outflow and the [Shortfalls] averages. That holds
+also the catchment simulated outflow and every [Shortfalls] column (the
+averages and the curtailment targets). That holds
 both with the workbook's own natural flow fed in and end to end from rainfall.
 A full `runModel` for client catchment takes about 160 ms.
 
@@ -20,6 +21,7 @@ A full `runModel` for client catchment takes about 160 ms.
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
 | `stats.ts` | – | NSE, PBIAS, RMSE of simulated outflow vs observed flow. |
+| `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain and total change (m³/day, l/s) over the reporting window → `RunSummary.curtailment`. |
 | `round.ts` | – | Excel `ROUND` and the workbook's rounding precisions. |
 
 ## Daily farm balance
@@ -88,6 +90,14 @@ warning.
   (demand − supplied); `fractionSupplied` = supplied / demand (1 when there is
   no demand); `avgEwrShortfallM3Day` = −mean(AB), a positive volume (the
   workbook shows it negative); `daysEwrNotMet` = days with AB < 0.
+- `curtailment` ([Shortfalls]): over `settings.reportStart … reportEnd`
+  (`resolveReportWindow` in `../run.ts`: null = run start/end, clipped to the
+  run with a warning, a disjoint or reversed window falls back to the whole
+  run). Per farm: H/I/R = ROUND(mean demand / supplied / AB, 0); equitable
+  fraction = ΣI / ΣH; target M = ROUND(H × that, 1); reduce/gain N = M − I;
+  total change S = N + R; volume left U = M + R; l/s = ROUNDDOWN(÷ 86.4, 1).
+  Workbook signs (negative = reduce). Full table and quirks:
+  [docs/model.md §2.9](../../../../docs/model.md#29-curtailment-targets-shortfalls).
 - Calibration: over days with an observation, from `flow_observed_m3s`
   (falling back to `flow_logger_m3s`). PBIAS = 100 × Σ(obs − sim) / Σ obs, so
   positive means the model under-estimates.
