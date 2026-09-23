@@ -16,7 +16,7 @@ Status: ⬜ not started · 🚧 partly there.
 
 | Feature | Why | Effort |
 | --- | --- | --- |
-| ⬜ **Curtailment targets per farm** | The b023 Shortfalls sheet's key output is *how much each farm must reduce (or may gain) so irrigation balances and the EWR is met* ("target volume", "reduce/gain" in m³/day and l/s). V1 shows deficits and EWR shortfalls but not the recommended cut. This is the answer the client actually sells. | M |
+| 🚧 **Curtailment targets per farm** | The b023 Shortfalls sheet's key output is *how much each farm must reduce (or may gain) so irrigation balances and the EWR is met* ("target volume", "reduce/gain" in m³/day and l/s). V1 shows deficits and EWR shortfalls but not the recommended cut. This is the answer the client actually sells. **Engine done**: `RunSummary.curtailment` over `settings.reportStart…reportEnd`, which matches client catchment's [Shortfalls] exactly (formulas and quirks Q11–Q15 in model.md §2.9). The `CurtailmentTable` component is built. Still to do: mount it in the runs tab and add a reporting-window picker in settings. | M |
 | ⬜ **EWR compliance heat map** | Month × year grid of % days EWR not met, like the workbook's EWR pivot. The standard way to see *when* the river fails. | S |
 | ⬜ **Run comparison** | Pick two runs (e.g. baseline vs dam raise) → per-farm delta table and overlaid hydrographs. Without it, every what-if needs screenshots side by side. | M |
 | ⬜ **Calibration window + more metrics** | The workbook calibrates on 2010–2018 only; V1 scores the whole record (hence NSE −0.70 on Client Catchment). Let the user pick the window; add KGE, R², log-NSE (low-flow fit), volume error per year. | S |

@@ -142,6 +142,11 @@ engine's `runModel`, stores the outputs, and returns the summary.
 
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
+- `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
+  per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
+  l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's
+  own start/end; clipped to the run with a warning). Runs stored by older
+  engines have no `curtailment` key. Formulas: [model.md §2.9](./model.md#29-curtailment-targets-shortfalls).
 
 ## Health
 

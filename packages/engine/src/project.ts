@@ -67,6 +67,13 @@ export interface ProjectSettings {
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
+	/**
+	 * Reporting window (ISO dates, inclusive) for the curtailment report, the
+	 * b023 [Shortfalls] "Set reporting period" cells. null = the run's start /
+	 * end. Clipped to the simulation period.
+	 */
+	reportStart: string | null;
+	reportEnd: string | null;
 }
 
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -120,7 +127,9 @@ export function defaultProjectSettings(): ProjectSettings {
 		},
 		ewrPragmaticM3PerDay: zeros,
 		simulationStart: null,
-		simulationEnd: null
+		simulationEnd: null,
+		reportStart: null,
+		reportEnd: null
 	};
 }
 
@@ -258,6 +267,66 @@ export interface CalibrationStats {
 	meanSimulatedM3s: number | null;
 }
 
+/**
+ * One farm's row of the curtailment report (b023 [Shortfalls], workbook column
+ * in brackets). Averages are over the reporting window and rounded like the
+ * workbook. Signs follow the workbook: negative = reduce / shortfall, positive
+ * = gain. See docs/model.md §2.9.
+ */
+export interface CurtailmentFarm {
+	nodeId: string;
+	name: string;
+	/** [H] ROUND(average net irrigation demand, 0). */
+	demandM3Day: number;
+	/** [I] ROUND(average irrigation supplied, 0). */
+	suppliedM3Day: number;
+	/** [J] supplied − demand (≤ 0: the average deficit). */
+	deficitM3Day: number;
+	/** [K] supplied / demand; null when demand is 0 (the workbook shows "-"). */
+	fractionSupplied: number | null;
+	/** [M] ROUND(demand × catchment equitableFraction, 1): this farm's equitable share of the water actually supplied. */
+	targetM3Day: number;
+	/** [N] target − supplied. Negative = reduce, positive = may gain. */
+	reduceGainM3Day: number;
+	/** [O] ROUNDDOWN(reduceGainM3Day / 86.4, 1), l/s (truncated toward zero). */
+	reduceGainLs: number;
+	/** [P] ROUND(target / demand, 3); null when demand is 0. */
+	targetFraction: number | null;
+	/** [R] ROUND(average incremental EWR shortfall, 0), ≤ 0. */
+	ewrShortfallM3Day: number;
+	/** [S] reduceGain + ewrShortfall. Negative = total cut needed to balance irrigation and meet the EWR. */
+	totalChangeM3Day: number;
+	/** [T] ROUNDDOWN(totalChangeM3Day / 86.4, 1), l/s. */
+	totalChangeLs: number;
+	/** [U] target + ewrShortfall: irrigation volume left once balanced and the EWR is met. */
+	volumeLeftM3Day: number;
+	/** [V] ROUND(volumeLeft / demand, 3): share of demand that is left (the workbook labels it "reduction of demand required"). null when demand is 0. */
+	fractionOfDemandLeft: number | null;
+}
+
+/** b023 [Shortfalls] over a reporting window: per-farm targets and cuts, plus the totals row. */
+export interface CurtailmentSummary {
+	/** Inclusive reporting window actually used (ISO dates). */
+	reportStart: string;
+	reportEnd: string;
+	days: number;
+	/** [K total] Σ supplied / Σ demand over all farms; null when total demand is 0 (the workbook shows #DIV/0!). */
+	equitableFraction: number | null;
+	farms: CurtailmentFarm[];
+	/** The workbook's totals row: plain sums of the farm columns (l/s is the sum of the truncated farm values). */
+	totals: {
+		demandM3Day: number;
+		suppliedM3Day: number;
+		deficitM3Day: number;
+		targetM3Day: number;
+		reduceGainM3Day: number;
+		reduceGainLs: number;
+		ewrShortfallM3Day: number;
+		totalChangeM3Day: number;
+		volumeLeftM3Day: number;
+	};
+}
+
 export interface RunSummary {
 	farms: FarmSummary[];
 	catchment: {
@@ -267,6 +336,11 @@ export interface RunSummary {
 		ewrFractionDaysNotMet: number;
 	};
 	calibration: CalibrationStats | null;
+	/**
+	 * Curtailment targets per farm over settings.reportStart…reportEnd. Absent
+	 * on runs stored before engine 0.3.0.
+	 */
+	curtailment?: CurtailmentSummary;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }

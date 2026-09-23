@@ -19,6 +19,20 @@ export function excelRound(x: number, digits = 0): number {
 }
 
 /**
+ * Excel `ROUNDDOWN(x, digits)`: truncate toward zero, with the same tolerance
+ * for binary representation error as excelRound (so 8.64 / 86.4 → 0.1, not
+ * 0.0). Never returns -0.
+ */
+export function excelRoundDown(x: number, digits = 0): number {
+	const f = POW10[digits] ?? 10 ** digits;
+	const y = Math.abs(x) * f;
+	const r = Math.floor(y + y * 4e-16);
+	if (r === 0) return 0;
+	const out = r / f;
+	return x < 0 ? -out : out;
+}
+
+/**
  * Rounding precision the b023 workbook uses at each step. They are workbook
  * cells (e.g. `rFR_Round`, `zFarmDemand_Round`) but identical in every b023
  * workbook we have seen, so they are constants rather than project settings.
