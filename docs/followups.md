@@ -11,7 +11,8 @@ Tick items off (or move them into an issue) as they are done.
       some of its farms; scrub them before making the GitHub repo public (it
       was pushed private).
 - [ ] **Hydrologist review** of the first question in plan.md (gauge G1 vs
-      logger A1 from 2014/15) — it decides what Client Catchment is calibrated to.
+      logger A1 from 2014/15) — it decides what Client Catchment is calibrated to Tracked in
+      [#2](https://github.com/Absence0760/project-water-management/issues/2).
 - [ ] **Hydrologist read-through of the help text** (`frontend/src/lib/help/content.ts`),
       especially entries built on open quirks (Q1 upstream-to-dam label, Q4
       per-farm EWR share, Q5 minimum dam level).
