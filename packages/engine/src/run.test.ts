@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { runModel, runModelWith } from './run';
+import { resolveReportWindow, runModel, runModelWith } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
-import { waterYearIndex } from './calendar';
+import { toEpochDay, waterYearIndex } from './calendar';
 import { buildTopology } from './network/topology';
-import { excelRound, excelRoundDown } from './network/round';
+import { computeCurtailment, type ReportWindow } from './network/curtailment';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -648,16 +648,6 @@ describe('runModel — calibration statistics', () => {
 	});
 });
 
-describe('excelRound', () => {
-	it('rounds half away from zero and survives binary representation error', () => {
-		expect(excelRound(2.5)).toBe(3);
-		expect(excelRound(-2.5)).toBe(-3);
-		expect(excelRound(2.675, 2)).toBe(2.68);
-		expect(excelRound(1.005, 2)).toBe(1.01);
-		expect(excelRound(0.49)).toBe(0);
-	});
-});
-
 describe('runModel — end to end with the rain model', () => {
 	it('produces natural flow from rain and runs the network', () => {
 		const days = 60;
@@ -746,15 +736,84 @@ describe.skipIf(!dataDir)(
 		const out = runModelWith(modelInput, () => ({ naturalFlowM3Day: natural }));
 		const elapsedMs = Date.now() - t0;
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
+		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
+		const topo = buildTopology(project.model.nodes);
+		const index = new Map(project.model.nodes.map((n, i) => [n.id, i]));
+		const farmCount = (i: number): number =>
+			(project.model.nodes[i]!.kind === 'farm' ? 1 : 0) + Array.from(topo.upstream[i]!).reduce((s, u) => s + farmCount(u), 0);
+		const croppedM2 = (id: string) => project.model.cropAreas.filter((c) => c.nodeId === id).reduce((s, c) => s + c.areaM2, 0);
+		/** Confluence gauges: the workbook's gauge summed its branches' AA (audit G1). */
+		const confluenceGauge = (i: number) => project.model.nodes[i]!.kind === 'gauge' && topo.upstream[i]!.length > 1;
 
-		/** Days where engine and workbook differ by more than 1e-6. */
-		function mismatches(actual: number[], want: (number | null)[]): number[] {
-			const bad: number[] = [];
-			for (let t = 0; t < want.length; t++) {
-				const w = want[t] ?? 0;
-				if (!(Math.abs(actual[t]! - w) <= 1e-6)) bad.push(t);
+		// -------------------------------------------------------------------------
+		// DEVIATION LIST — where engine ≥ 0.4.0 differs from the workbook on purpose
+		// (docs/engine-audit.md). Up to 0.3.1 every column below matched exactly.
+		//
+		//   exact  the algorithm is unchanged and nothing is rounded: equal to 1e-6.
+		//   daily  differs only by the workbook's ROUND steps (R1): every day,
+		//          |engine − workbook| ≤ the sum of the half-units those steps drop.
+		//   mean   a state that carries from day to day (storage and all that is
+		//          routed through it) or depends on one: the workbook's rounding
+		//          (R1) shifts the state and the shift propagates, so compare the
+		//          whole-run mean: |Δmean| ≤ 1 % of mean|workbook| + 1 m³/day.
+		//   skip   not comparable, with the reason.
+		// -------------------------------------------------------------------------
+		type Rule = { kind: 'exact' } | { kind: 'daily'; bound: number } | { kind: 'mean' } | { kind: 'skip'; why: string };
+		const MEAN_REL = 0.01;
+		const MEAN_ABS = 1;
+		function nodeRule(name: string, key: string): Rule {
+			const n = nodeByName.get(name)!;
+			const i = index.get(n.id)!;
+			switch (key) {
+				case 'demand':
+					// R1: net ROUND(,0) 0.5 + farm ROUND(,1) 0.05 + crop mm ROUND(,2) 0.005 mm on the cropped area.
+					return { kind: 'daily', bound: 0.55 + (croppedM2(n.id) * 0.005) / 1000 / 28 + 1e-6 };
+				case 'runoff':
+				case 'ewr':
+					return { kind: 'daily', bound: 0.5 + 1e-6 }; // R1: ROUND(value × share, 0)
+				case 'ewr_cumulative':
+					return { kind: 'daily', bound: 0.5 * farmCount(i) + 1e-6 }; // R1: one ROUNDed fragment per farm at or above
+				case 'ewr_shortfall':
+					// G1: a confluence gauge's shortfall is MIN(U − Z, 0), not Σ branch AA; checked separately below.
+					return confluenceGauge(i) ? { kind: 'skip', why: 'G1' } : { kind: 'mean' };
+				case 'ewr_shortfall_incremental':
+					// G1: AB = MIN(AA − Σ upstream AA, 0) reads the AA of a confluence gauge directly upstream.
+					return Array.from(topo.upstream[i]!).some(confluenceGauge) ? { kind: 'skip', why: 'G1' } : { kind: 'mean' };
+				default:
+					// supplied, deficit, inflow_upstream, transfer, dam_storage, spill, outflow: R1 via the state.
+					return { kind: 'mean' };
 			}
-			return bad;
+		}
+
+		function compare(actual: ArrayLike<number>, want: (number | null)[], rule: Rule): string | null {
+			if (rule.kind === 'skip') return null;
+			const n = want.length;
+			if (rule.kind === 'mean') {
+				let a = 0;
+				let w = 0;
+				let wAbs = 0;
+				for (let t = 0; t < n; t++) {
+					a += actual[t]!;
+					w += want[t] ?? 0;
+					wAbs += Math.abs(want[t] ?? 0);
+				}
+				const d = Math.abs(a - w) / n;
+				const bound = (MEAN_REL * wAbs) / n + MEAN_ABS;
+				return d <= bound ? null : `mean differs by ${d.toFixed(3)} m³/day (bound ${bound.toFixed(3)}): engine ${(a / n).toFixed(3)} vs workbook ${(w / n).toFixed(3)}`;
+			}
+			const bound = rule.kind === 'exact' ? 1e-6 : rule.bound;
+			let bad = 0;
+			let first = -1;
+			let worst = 0;
+			for (let t = 0; t < n; t++) {
+				const d = Math.abs(actual[t]! - (want[t] ?? 0));
+				worst = Math.max(worst, d);
+				if (!(d <= bound)) {
+					bad++;
+					if (first < 0) first = t;
+				}
+			}
+			return bad === 0 ? null : `${bad} days beyond ±${bound}, worst ${worst}, first day ${first}: engine ${actual[first]} vs workbook ${want[first]}`;
 		}
 
 		it('covers the same period as the workbook', () => {
@@ -782,34 +841,61 @@ describe.skipIf(!dataDir)(
 			'ewr_shortfall_incremental'
 		];
 		for (const [name, want] of Object.entries(expected.nodes)) {
-			it(`matches every daily value on Element sheet "${name}"`, () => {
+			it(`matches Element sheet "${name}" within the deviation list`, () => {
 				const id = idByName.get(name)!;
 				const report: Record<string, string> = {};
 				for (const key of keys) {
 					if (!(key in want) || (want.kind === 'gauge' && !['outflow', 'ewr_cumulative', 'ewr_shortfall'].includes(key)))
 						continue;
-					const bad = mismatches(get(out, id, key), want[key]!);
-					if (bad.length) {
-						const t = bad[0]!;
-						report[key] = `${bad.length} days differ, first day ${t}: engine ${get(out, id, key)[t]} vs workbook ${want[key]![t]}`;
-					}
+					const bad = compare(get(out, id, key), want[key]!, nodeRule(name, key));
+					if (bad) report[key] = bad;
 				}
 				expect(report).toEqual({});
 			});
 		}
 
-		it('matches the catchment simulated outflow and EWR', () => {
-			expect(mismatches(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
-			expect(mismatches(get(out, null, 'ewr'), expected.catchment.ewr!)).toEqual([]);
-			expect(mismatches(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!)).toEqual([]);
+		it('G1: every gauge reports its own shortfall MIN(flow − cumulative EWR, 0)', () => {
+			for (const n of project.model.nodes.filter((x) => x.kind === 'gauge')) {
+				const U = get(out, n.id, 'outflow');
+				const Z = get(out, n.id, 'ewr_cumulative');
+				expect(get(out, n.id, 'ewr_shortfall')).toEqual(U.map((u, t) => Math.min(u - Z[t]!, 0)));
+			}
 		});
 
-		it('end to end (natural flow from the rain model too) reproduces the workbook outflow', () => {
+		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
+			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, { kind: 'mean' })).toBeNull(); // R1
+			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
+			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, { kind: 'mean' })).toBeNull(); // R1
+		});
+
+		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
 			const t1 = Date.now();
 			const full = runModel(modelInput);
 			expect(Date.now() - t1).toBeLessThan(1000);
-			expect(mismatches(get(full, null, 'natural_flow'), expected.catchment.natural_flow!)).toEqual([]);
-			expect(mismatches(get(full, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
+			// E1 (day-1 base flow) and R1 (no rounding floor in the recessions): compare
+			// water-year volumes, allowing 2 % plus the workbook's rounding floor
+			// 0.5 / (1 − f_max) m³/day, which the engine no longer adds on dry days.
+			const cal = { ...defaultCal(), ...(project.settings.calibration as object | undefined) } as ReturnType<typeof defaultCal>;
+			const floor = 0.5 / (1 - Math.max(...cal.recessionFactors)) + 1;
+			const got = get(full, null, 'natural_flow');
+			const want = expected.catchment.natural_flow!;
+			const d0 = Math.round(Date.parse(`${expected.startDate}T00:00:00Z`) / 86_400_000);
+			const years = new Map<number, { e: number; w: number; days: number }>();
+			for (let t = 0; t < want.length; t++) {
+				const d = new Date((d0 + t) * 86_400_000);
+				const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+				const y = years.get(wy) ?? { e: 0, w: 0, days: 0 };
+				y.e += got[t]!;
+				y.w += want[t] ?? 0;
+				y.days++;
+				years.set(wy, y);
+			}
+			const bad = [...years].filter(([, y]) => Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor);
+			expect(bad.map(([wy, y]) => `${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³`)).toEqual([]);
+			const sim = get(full, null, 'simulated_outflow');
+			const simW = expected.catchment.simulated_outflow!;
+			const mean = (v: ArrayLike<number | null>) => Array.from(v).reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
+			expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
 		});
 
@@ -820,12 +906,15 @@ describe.skipIf(!dataDir)(
 		// sheet *and* the [EWR shortfalls] sheet, but the pivot has a different
 		// sum). So: every farm-month whose volume is current must match exactly,
 		// counts included under the running-total rule, and most must be current.
+		// The grid is fed the workbook's own daily AB, so this tests ewr.ts alone
+		// (the engine's AB differs from the workbook's by R1).
 		it('reproduces the [EWR shortfalls Pivot Data] counts (running-total rule) wherever the pivot is current', () => {
 			if (!expected.ewrPivot?.length) return;
+			const wbAB = (name: string) => expected.nodes[name]!.ewr_shortfall_incremental!.map((v) => v ?? 0);
 			const farms = project.model.nodes
 				.filter((n) => n.kind === 'farm')
-				.map((n) => ({ nodeId: n.id, name: n.name, shortfallM3Day: get(out, n.id, 'ewr_shortfall_incremental') }));
-			const outlet = { nodeId: null, name: 'outlet', shortfallM3Day: get(out, null, 'ewr_shortfall') };
+				.map((n) => ({ nodeId: n.id, name: n.name, shortfallM3Day: wbAB(n.name) }));
+			const outlet = { nodeId: null, name: 'outlet', shortfallM3Day: expected.catchment.ewr_not_met!.map((v) => v ?? 0) };
 			const g = ewrCompliance(out.startDate, out.days, outlet, farms, 'runningTotal');
 			const byName = new Map(g.farms.map((f) => [f.name, f]));
 			const bad: string[] = [];
@@ -874,45 +963,36 @@ describe.skipIf(!dataDir)(
 			expect((100 * (sim - obs)) / obs).toBeCloseTo(c.volumeErrorPct!, 8);
 		});
 
-		it('matches the [Shortfalls] sheet averages over its reporting period', () => {
-			if (!expected.shortfalls) return;
-			const { periodStart, periodEnd, farms } = expected.shortfalls;
-			const day = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
-			const a = day(periodStart) - day(expected.startDate);
-			const b = day(periodEnd) - day(expected.startDate);
-			const avg = (v: number[]) => v.slice(a, b + 1).reduce((s, x) => s + x, 0) / (b - a + 1);
-			for (const f of farms) {
-				const id = idByName.get(f.name)!;
-				expect(excelRound(avg(get(out, id, 'demand')))).toBe(f.avgDemand);
-				expect(excelRound(avg(get(out, id, 'supplied')))).toBe(f.avgSupplied);
-				expect(excelRound(avg(get(out, id, 'ewr_shortfall_incremental')))).toBe(f.avgEwrShortfall);
-			}
-		});
+		// [Shortfalls]: computeCurtailment is fed the workbook's own daily F, G and AB,
+		// so these test curtailment.ts alone, not the network's R1 differences.
+		const wbCurtailment = (window: ReportWindow) =>
+			computeCurtailment(
+				Object.entries(expected.nodes)
+					.filter(([, n]) => n.kind === 'farm')
+					.map(([name, n]) => ({
+						nodeId: idByName.get(name)!,
+						name,
+						demand: n.demand!.map((v) => v ?? 0),
+						supplied: n.supplied!.map((v) => v ?? 0),
+						ewrShortfallIncremental: n.ewr_shortfall_incremental!.map((v) => v ?? 0)
+					})),
+				window
+			);
 
-		it('matches every [Shortfalls] curtailment column over its reporting period', () => {
+		it("matches the [Shortfalls] sheet's averages over its reporting period, within the sheet's ROUND", () => {
 			const sf = expected.shortfalls;
-			if (!sf?.totals) return; // expected.json from before the curtailment columns were extracted
-			const inWindow = runModelWith(
-				{ ...modelInput, settings: { ...modelInput.settings, reportStart: sf.periodStart, reportEnd: sf.periodEnd } },
-				() => ({ naturalFlowM3Day: natural })
-			).summary.curtailment!;
-			expect([inWindow.reportStart, inWindow.reportEnd]).toEqual([sf.periodStart, sf.periodEnd]);
-			const byName = new Map(inWindow.farms.map((f) => [f.name, f]));
+			if (!sf) return;
+			const w = resolveReportWindow({ reportStart: sf.periodStart, reportEnd: sf.periodEnd }, toEpochDay(expected.startDate), expected.days, []);
+			const c = wbCurtailment(w);
+			expect([c.reportStart, c.reportEnd]).toEqual([sf.periodStart, sf.periodEnd]);
+			const byName = new Map(c.farms.map((f) => [f.name, f]));
 			const report: Record<string, string> = {};
-			const cols: [ShortfallCol | 'avgDemand' | 'avgSupplied' | 'avgEwrShortfall', keyof (typeof inWindow.farms)[number]][] = [
-				['avgDemand', 'demandM3Day'],
-				['avgSupplied', 'suppliedM3Day'],
-				['deficit', 'deficitM3Day'],
-				['fractionSupplied', 'fractionSupplied'],
-				['target', 'targetM3Day'],
-				['reduceGain', 'reduceGainM3Day'],
-				['reduceGainLs', 'reduceGainLs'],
-				['targetFraction', 'targetFraction'],
-				['avgEwrShortfall', 'ewrShortfallM3Day'],
-				['totalChange', 'totalChangeM3Day'],
-				['totalChangeLs', 'totalChangeLs'],
-				['volumeLeft', 'volumeLeftM3Day'],
-				['fractionOfDemandLeft', 'fractionOfDemandLeft']
+			// H, I, R are ROUND(average, 0) on the sheet (R1): ±0.5; J = I − H: ±1.
+			const cols: [string, number, (f: (typeof c.farms)[number]) => number, (w: NonNullable<Expected['shortfalls']>['farms'][number]) => number | null | undefined][] = [
+				['avgDemand', 0.5, (f) => f.demandM3Day, (w) => w.avgDemand],
+				['avgSupplied', 0.5, (f) => f.suppliedM3Day, (w) => w.avgSupplied],
+				['avgEwrShortfall', 0.5, (f) => f.ewrShortfallM3Day, (w) => w.avgEwrShortfall],
+				['deficit', 1, (f) => f.deficitM3Day, (w) => w.deficit]
 			];
 			for (const want of sf.farms) {
 				const got = byName.get(want.name);
@@ -920,78 +1000,55 @@ describe.skipIf(!dataDir)(
 					report[want.name] = 'missing from engine report';
 					continue;
 				}
-				for (const [wk, gk] of cols) {
-					const w = want[wk] ?? null;
-					const g = got[gk] as number | null;
-					if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-9) report[`${want.name}.${wk}`] = `engine ${g} vs workbook ${w}`;
+				for (const [k, bound, g, wv] of cols) {
+					const v = wv(want);
+					if (v == null) continue;
+					if (!(Math.abs(g(got) - v) <= bound + 1e-9)) report[`${want.name}.${k}`] = `engine ${g(got)} vs sheet ${v}`;
 				}
 			}
-			const t = inWindow.totals;
-			const totals: [string, number | null][] = [
-				['avgDemand', t.demandM3Day],
-				['avgSupplied', t.suppliedM3Day],
-				['deficit', t.deficitM3Day],
-				['fractionSupplied', inWindow.equitableFraction],
-				['target', t.targetM3Day],
-				['reduceGain', t.reduceGainM3Day],
-				['reduceGainLs', t.reduceGainLs],
-				['avgEwrShortfall', t.ewrShortfallM3Day],
-				['totalChange', t.totalChangeM3Day],
-				['volumeLeft', t.volumeLeftM3Day]
-			];
-			for (const [k, g] of totals) {
-				const w = sf.totals[k] ?? null;
-				if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-6) report[`totals.${k}`] = `engine ${g} vs workbook ${w}`;
+			// K total: Σ I / Σ H; the sheet divides the rounded averages (Q14): |ΔK| ≤ n·0.5·(1 + K) / (ΣH − n·0.5).
+			const Kw = sf.totals?.fractionSupplied;
+			if (Kw != null && c.equitableFraction !== null) {
+				const n = c.farms.length;
+				const bound = (n * 0.5 * (1 + Kw)) / (c.totals.demandM3Day - n * 0.5);
+				if (!(Math.abs(c.equitableFraction - Kw) <= bound)) report.equitableFraction = `engine ${c.equitableFraction} vs sheet ${Kw}`;
 			}
+			// The derived columns (M, N, O, P, S, T, U, V) are functions of these; the
+			// whole-run replay below checks their formulas. The sheet's values differ
+			// further only by its own ROUND / ROUNDDOWN (R1, Q14, Q15).
 			expect(report).toEqual({});
 		});
 
-		it('reproduces the [Shortfalls] cell formulas over the whole run from the workbook\'s own daily columns', () => {
+		it('reproduces the [Shortfalls] formulas, unrounded, over the whole run from the workbook\'s own daily columns', () => {
 			// The saved reporting period is fully supplied, so it never exercises a non-trivial
 			// target. Over the whole run client catchment has deficits: replay the sheet's cell
-			// formulas, written out independently here, on the Element sheet values.
-			const c = out.summary.curtailment!;
-			expect([c.reportStart, c.days]).toEqual([expected.startDate, expected.days]);
+			// formulas, written out independently here without the sheet's rounding (R1).
+			const c = wbCurtailment({ from: 0, to: expected.days - 1, reportStart: expected.startDate, reportEnd: out.endDate });
 			const mean = (v: (number | null)[]) => v.reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
-			const farmNames = Object.entries(expected.nodes)
+			const rows = Object.entries(expected.nodes)
 				.filter(([, n]) => n.kind === 'farm')
-				.map(([name]) => name);
-			const rows = farmNames.map((name) => {
-				const n = expected.nodes[name]!;
-				return {
-					name,
-					H: excelRound(mean(n.demand!)),
-					I: excelRound(mean(n.supplied!)),
-					R: excelRound(mean(n.ewr_shortfall_incremental!))
-				};
-			});
+				.map(([name, n]) => ({ name, H: mean(n.demand!), I: mean(n.supplied!), R: mean(n.ewr_shortfall_incremental!) }));
 			const K = rows.reduce((s, r) => s + r.I, 0) / rows.reduce((s, r) => s + r.H, 0);
 			expect(K).toBeLessThan(1); // the whole run does have deficits
 			expect(c.equitableFraction).toBeCloseTo(K, 12);
 			for (const r of rows) {
-				const M = excelRound(r.H * K, 1);
+				const M = r.H * K;
 				const N = M - r.I;
 				const S = N + r.R;
 				const got = c.farms.find((f) => f.name === r.name)!;
-				expect({
-					M: got.targetM3Day,
-					N: got.reduceGainM3Day,
-					O: got.reduceGainLs,
-					S: got.totalChangeM3Day,
-					T: got.totalChangeLs,
-					U: got.volumeLeftM3Day
-				}).toEqual({
-					M,
-					N: excelRound(N, 1),
-					O: excelRoundDown(N / 86.4, 1),
-					S: excelRound(S, 1),
-					T: excelRoundDown(S / 86.4, 1),
-					U: excelRound(M + r.R, 1)
-				});
+				const close = (g: number, w: number) => expect(g).toBeCloseTo(w, 6);
+				close(got.targetM3Day, M);
+				close(got.reduceGainM3Day, N);
+				close(got.reduceGainLs, N / 86.4);
+				close(got.totalChangeM3Day, S);
+				close(got.totalChangeLs, S / 86.4);
+				close(got.volumeLeftM3Day, M + r.R);
 			}
 			// Some farm must give water up and another may gain it.
 			expect(c.farms.some((f) => f.reduceGainM3Day < 0)).toBe(true);
 			expect(c.farms.some((f) => f.reduceGainM3Day > 0)).toBe(true);
+			// The engine's own report (on its own daily columns) covers the whole run by default.
+			expect([out.summary.curtailment!.reportStart, out.summary.curtailment!.days]).toEqual([expected.startDate, expected.days]);
 		});
 	}
 );

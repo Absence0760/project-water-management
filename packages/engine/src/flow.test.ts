@@ -36,6 +36,8 @@ describe('excelRound (test helper for replaying workbook cells)', () => {
 		expect(excelRound(2.675, 2)).toBe(2.68);
 		expect(excelRound(79.12345, 4)).toBe(79.1235);
 		expect(excelRound(1e-20, 4)).toBe(0);
+		expect(excelRound(0.49)).toBe(0);
+		expect(Object.is(excelRound(-0.4), 0)).toBe(true);
 	});
 });
 
@@ -229,22 +231,24 @@ if (!fixture) {
 	console.warn(`[flow.test] ${FIXTURE_REL} not found — skipping the workbook regression (client data is not in CI).`);
 }
 
-const COMPARED: (keyof FlowColumns)[] = [
-	'isSummer',
-	'rainUsedMm',
-	'baseFlow',
-	'baseIndex',
-	'responseStart',
-	'rainFlow',
-	'addedIndex',
-	'responseAdded',
-	'resultantFlow',
-	'resultantIndex',
-	'naturalFlowM3Day'
-];
+// DEVIATION LIST — engine ≥ 0.4.0 differs from the workbook on purpose
+// (docs/engine-audit.md). Up to 0.3.1 every column matched day by day.
+//
+//   isSummer, rainUsedMm        exact: unchanged, and no rounding. (isSummer
+//                               relies on the summer-month list naming every
+//                               summer month: M1 no longer expands "11" to
+//                               January; client catchment's list needs no expansion.)
+//   rainFlow (V)                0 ≤ engine − workbook < 1 m³/day: R1 drops INT.
+//   baseFlow … resultantIndex   not compared day by day: E1 (day-1 state) and
+//                               R1 (no ROUND, no 4-dp indices) change the state,
+//                               and a base-flow reset near the 1.5 ratio can flip.
+//   naturalFlowM3Day (AB)       per water year, |Δ volume| ≤ 2 % + days × (the
+//                               workbook's rounding floor 0.5 / (1 − f_max) + 1):
+//                               the floor is what R1 stops adding on dry days.
+const EXACT: (keyof FlowColumns)[] = ['isSummer', 'rainUsedMm'];
 
 describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {
-	it('matches every [Flow data] column day by day', () => {
+	it('matches the [Flow data] columns within the deviation list', () => {
 		const f = fixture!;
 		const got = computeFlowColumns(f.calibration, { startDate: f.startDate, days: f.days, ...f.inputs });
 		// Guard against a vacuous pass: the series must contain real rain events
@@ -253,18 +257,36 @@ describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {
 		expect(new Set(f.expected.isSummer)).toEqual(new Set([0, 1]));
 
 		const mismatches: string[] = [];
-		for (const key of COMPARED) {
-			const exp = f.expected[key];
-			let count = 0;
-			let first = -1;
-			for (let i = 0; i < f.days; i++) {
-				if (got[key][i] !== exp[i]) {
-					count++;
-					if (first < 0) first = i;
-				}
-			}
-			if (count > 0) {
-				mismatches.push(`${key}: ${count}/${f.days} days differ, first [${first}] got ${got[key][first]} want ${exp[first]}`);
+		const note = (key: string, bad: number[], why: string) => {
+			if (bad.length) mismatches.push(`${key}: ${bad.length}/${f.days} days ${why}, first [${bad[0]}] got ${got[key as keyof FlowColumns][bad[0]!]} want ${f.expected[key as keyof FlowColumns][bad[0]!]}`);
+		};
+		for (const key of EXACT) {
+			note(key, [...Array(f.days).keys()].filter((i) => got[key][i] !== f.expected[key][i]), 'differ');
+		}
+		// R1: INT dropped. Same season flag → same factor, so the difference is the dropped fraction.
+		note(
+			'rainFlow',
+			[...Array(f.days).keys()].filter((i) => {
+				const d = got.rainFlow[i]! - f.expected.rainFlow[i]!;
+				return got.isSummer[i] === f.expected.isSummer[i] && !(d >= -1e-9 && d < 1);
+			}),
+			'outside [0, 1)'
+		);
+		const floor = 0.5 / (1 - Math.max(...f.calibration.recessionFactors)) + 1;
+		const d0 = Math.round(Date.parse(`${f.startDate}T00:00:00Z`) / 86_400_000);
+		const years = new Map<number, { e: number; w: number; days: number }>();
+		for (let i = 0; i < f.days; i++) {
+			const d = new Date((d0 + i) * 86_400_000);
+			const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+			const y = years.get(wy) ?? { e: 0, w: 0, days: 0 };
+			y.e += got.naturalFlowM3Day[i]!;
+			y.w += f.expected.naturalFlowM3Day[i]!;
+			y.days++;
+			years.set(wy, y);
+		}
+		for (const [wy, y] of years) {
+			if (Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor) {
+				mismatches.push(`naturalFlowM3Day water year ${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³`);
 			}
 		}
 		expect(mismatches).toEqual([]);
