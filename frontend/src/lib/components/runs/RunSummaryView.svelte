@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Headline numbers, calibration fit and the per-farm table of one run.
 	import type { RunSummary } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP, rateNse, ratePbias, type Rating } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, type FarmSortKey } from './results';
@@ -70,7 +71,7 @@
 <h3>Catchment</h3>
 <dl class="stats">
 	<div class="stat">
-		<dt>Mean natural flow</dt>
+		<dt>Mean natural flow <HelpTip key="catchment.meanNaturalFlowM3Day" /></dt>
 		<dd>{fmtNum(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
 		<dd class="sub">{fmtNum(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
 	</div>
@@ -83,55 +84,36 @@
 		</dd>
 	</div>
 	<div class="stat" class:flagged={c.ewrFractionDaysNotMet > 0.05}>
-		<dt>EWR not met</dt>
+		<dt>EWR not met <HelpTip key="catchment.ewrFractionDaysNotMet" /></dt>
 		<dd>{fmtPct(c.ewrFractionDaysNotMet)}<small>of days</small></dd>
 		<dd class="sub">{fmtNum(c.ewrDaysNotMet)} of {fmtNum(days)} days at the outflow gauge</dd>
 	</div>
 	<div class="stat" class:flagged={shortCount > 0}>
-		<dt>Irrigation supplied</dt>
+		<dt>Irrigation supplied <HelpTip key="summary.fractionSupplied" /></dt>
 		<dd>{totals.demand > 0 ? fmtPct(totals.supplied / totals.demand) : '–'}<small>of demand</small></dd>
 		<dd class="sub">
 			{shortCount ? `${shortCount} of ${farms.length} farms below ${fmtPct(SUPPLY_TARGET, 0)}` : `all farms ≥ ${fmtPct(SUPPLY_TARGET, 0)}`}
 		</dd>
 	</div>
-</dl>
-
-<h3>Calibration against observed flow</h3>
-{#if cal && cal.days > 0}
-	<dl class="stats">
+	{#if cal && cal.days > 0}
 		<div class="stat">
-			<dt title={NSE_HELP}>Nash–Sutcliffe (NSE)</dt>
-			<dd>{fmtNum(cal.nse, 3)}</dd>
-			{#if nse}<dd class="sub"><span class="rating {RATING_CLASS[nse]}">{nse}</span></dd>{/if}
+			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
+			<dd>{fmtNum(cal.nse, 2)}</dd>
+			{#if nse}<dd class="sub"><span class="rating {RATING_CLASS[nse]}">{nse}</span> · {fmtNum(cal.days)} days observed</dd>{/if}
 		</div>
 		<div class="stat">
-			<dt title={PBIAS_HELP}>Percent bias (PBIAS)</dt>
+			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
 			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
 			{#if pbias}<dd class="sub"><span class="rating {RATING_CLASS[pbias]}">{pbias}</span> {describePbias(cal.pbias)}</dd>{/if}
 		</div>
+	{:else}
 		<div class="stat">
-			<dt>Mean flow, observed / simulated</dt>
-			<dd>{fmtNum(cal.meanObservedM3s, 3)} / {fmtNum(cal.meanSimulatedM3s, 3)}<small>m³/s</small></dd>
-			<dd class="sub">RMSE {fmtNum(cal.rmseM3s, 3)} m³/s</dd>
+			<dt>Calibration</dt>
+			<dd class="none">–</dd>
+			<dd class="sub">no observed flow in the run</dd>
 		</div>
-		<div class="stat">
-			<dt>Overlapping days</dt>
-			<dd>{fmtNum(cal.days)}</dd>
-			<dd class="sub">{fmtPct(cal.days / Math.max(days, 1), 0)} of the run has observed flow</dd>
-		</div>
-	</dl>
-	<p class="muted small explain">
-		<strong>NSE</strong>: 1 is a perfect fit; 0 is no better than the mean observed flow. <strong>PBIAS</strong>: positive means the
-		model under-estimates total flow. Ratings follow Moriasi et al. (2007) — NSE &gt; 0.75 very good, &gt; 0.65 good, &gt; 0.5
-		satisfactory; |PBIAS| &lt; 10 % very good, &lt; 15 % good, &lt; 25 % satisfactory. They were set for monthly flow, so daily fits
-		rate lower. Tune the flow calibration under Settings & calibration.
-	</p>
-{:else}
-	<p class="muted">
-		No observed flow overlaps the simulation period, so calibration statistics aren't available. Upload an observed-flow series for
-		the outflow gauge on the Time series tab.
-	</p>
-{/if}
+	{/if}
+</dl>
 
 <h3>Farms</h3>
 {#if farms.length === 0}
@@ -227,10 +209,13 @@
 		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
 		box-shadow: inset 3px 0 0 var(--warning);
 	}
-	.stat dt[title] {
-		cursor: help;
-		text-decoration: underline dotted;
-		text-underline-offset: 2px;
+	.stat dt {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.stat dd.none {
+		color: var(--text-muted);
 	}
 	.rating {
 		display: inline-block;
@@ -250,10 +235,6 @@
 	.rating.bad {
 		background: var(--danger-soft);
 		color: var(--danger);
-	}
-	.explain {
-		max-width: 90ch;
-		margin-top: -0.25rem;
 	}
 	.farm-head {
 		display: flex;

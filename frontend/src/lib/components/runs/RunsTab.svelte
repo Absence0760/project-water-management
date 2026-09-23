@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
+	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
+	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
+	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
+	import { downloads, runDownloadItems } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { detailCache, forgetRun } from './cache';
@@ -185,6 +192,10 @@
 		return reasons.length ? reasons : null;
 	});
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
+	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
+	const downloadItems = $derived(
+		detail ? runDownloadItems(downloads, projectId, detail.run.id, editor.model.nodes.map((n) => ({ id: n.id, name: n.name }))) : []
+	);
 </script>
 
 {#if canRun}
@@ -218,7 +229,14 @@
 
 <div class="layout">
 	<section class="panel list" aria-labelledby="runs-h">
-		<div class="panel-head"><h2 id="runs-h">Runs</h2>{#if runs.length}<span class="muted small">{runs.length} stored · newest first</span>{/if}</div>
+		<div class="panel-head">
+			<h2 id="runs-h">Runs</h2>
+			{#if runs.length >= 2}
+				<a class="small" href="{base}/compare?project={encodeURIComponent(projectId)}">Compare runs</a>
+			{:else if runs.length}
+				<span class="muted small">{runs.length} stored</span>
+			{/if}
+		</div>
 		{#if loading}
 			<ul class="runs skeleton" aria-hidden="true">
 				{#each [0, 1] as i (i)}<li><span class="sk sk-line"></span><span class="sk sk-short"></span></li>{/each}
@@ -257,25 +275,55 @@
 		{:else if detail}
 			<section class="panel" aria-labelledby="res-h" aria-busy={detailLoading}>
 				<div class="panel-head">
-					<h2 id="res-h">{detail.run.label || 'Untitled run'}</h2>
-					<span class="muted small">
-						{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}
-						{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
-					</span>
+					<div>
+						<h2 id="res-h">{detail.run.label || 'Untitled run'}</h2>
+						<span class="muted small">
+							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}
+							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
+						</span>
+					</div>
+					<DownloadMenu items={downloadItems} />
 				</div>
 				<section aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
 			</section>
+			<section class="panel">
+				<CurtailmentTable summary={detail.run.summary} {farmNames} />
+			</section>
+			{@const summary = detail.run.summary}
 			<RunCharts
 				{projectId}
 				runId={detail.run.id}
 				refs={detail.series}
-				farms={detail.run.summary.farms ?? []}
+				farms={summary.farms ?? []}
 				{nodeNames}
 				{nodeOrder}
 				{damCapacity}
-			/>
+			>
+				{#snippet afterHydrograph()}
+					<div class="panel">
+						<CalibrationPanel
+							calibration={summary.calibration}
+							requestedStart={project.settings.calibrationStart}
+							requestedEnd={project.settings.calibrationEnd}
+						/>
+						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
+							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
+						{/if}
+					</div>
+				{/snippet}
+				{#snippet afterFlowViews()}
+					<div class="panel">
+						{#if summary.ewrCompliance}
+							<EwrHeatmap compliance={summary.ewrCompliance} />
+						{:else}
+							<h3>EWR compliance by month</h3>
+							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
+						{/if}
+					</div>
+				{/snippet}
+			</RunCharts>
 		{:else if loading || detailLoading || (runs.length > 0 && selectedId)}
 			<div class="panel skeleton-detail" aria-hidden="true">
 				<span class="sk sk-title"></span>
@@ -452,6 +500,11 @@
 	.placeholder {
 		text-align: center;
 		padding: 3rem 1rem;
+	}
+	.agree {
+		margin-top: 1rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
 	}
 	.linkish {
 		all: unset;

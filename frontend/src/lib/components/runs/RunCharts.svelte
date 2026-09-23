@@ -2,6 +2,7 @@
 	// The standard result views of one run: hydrograph, flow-duration curve,
 	// EWR vs outflow, a farm's dam storage and supply, and an explorer for any
 	// stored series. Each series is fetched once, on demand (see cache.ts).
+	import type { Snippet } from 'svelte';
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import { flowDurationCurves, percentileFlows } from '$lib/components/charts/fdc';
@@ -19,7 +20,9 @@
 		farms,
 		nodeNames,
 		nodeOrder,
-		damCapacity
+		damCapacity,
+		afterHydrograph,
+		afterFlowViews
 	}: {
 		projectId: string;
 		runId: string;
@@ -29,6 +32,10 @@
 		nodeOrder: ReadonlyMap<string, number>;
 		/** nodeId → dam capacity (m³) from the current model. */
 		damCapacity: ReadonlyMap<string, number>;
+		/** Full-width panels slotted after the hydrograph (e.g. calibration). */
+		afterHydrograph?: Snippet;
+		/** …and after the flow-duration / EWR pair (e.g. EWR compliance). */
+		afterFlowViews?: Snippet;
 	} = $props();
 
 	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
@@ -38,7 +45,8 @@
 	let flowUnit = $state<'m³/s' | 'm³/day'>('m³/s');
 	let hydroLog = $state(false);
 	let fdcLog = $state(true);
-	let ewrLog = $state(false);
+	// Log by default: the EWR is a low-flow question and floods dwarf it on a linear axis.
+	let ewrLog = $state(true);
 
 	// --- catchment series -----------------------------------------------------
 	type Loaded = { natural?: DailySeries; simulated?: DailySeries; observed?: DailySeries; ewr?: DailySeries };
@@ -76,7 +84,7 @@
 		const out: ChartSeries[] = [];
 		const c = catchment;
 		if (c.observed) out.push({ label: 'Observed', startDate: c.observed.startDate, values: conv(c.observed), style: 'points', color: '--chart-obs' });
-		if (c.natural) out.push({ label: 'Natural', startDate: c.natural.startDate, values: conv(c.natural), color: '--series-1', width: 1.25 });
+		if (c.natural) out.push({ label: 'Natural', startDate: c.natural.startDate, values: conv(c.natural), color: '--series-1', width: 2.25 });
 		if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
 		return out;
 	});
@@ -184,6 +192,8 @@
 		{/if}
 	</section>
 
+	{#if afterHydrograph}<div class="wide slot">{@render afterHydrograph()}</div>{/if}
+
 	<section class="panel" aria-labelledby="fdc-h">
 		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
 		{#if catchLoading && !fdc.series.length}
@@ -246,6 +256,8 @@
 		{/if}
 	</section>
 
+	{#if afterFlowViews}<div class="wide slot">{@render afterFlowViews()}</div>{/if}
+
 	{#if farmOptions.length}
 		<section class="panel wide" aria-labelledby="farm-h">
 			<div class="panel-head">
@@ -307,6 +319,9 @@
 	}
 	.wide {
 		grid-column: 1 / -1;
+	}
+	.slot {
+		min-width: 0;
 	}
 	@media (max-width: 1100px) {
 		.charts {

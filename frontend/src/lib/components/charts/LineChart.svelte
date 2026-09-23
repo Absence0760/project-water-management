@@ -67,6 +67,7 @@
 		return a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4;
 	}
 
+	const isDecade = (v: number) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
 	const utc = (ts: number) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
 	const isoDay = (v: number) => new Date(v * 1000).toISOString().slice(0, 10);
 
@@ -137,6 +138,8 @@
 					gap: 4,
 					grid: { stroke: gridColor, width: 1 },
 					ticks: { stroke: gridColor, size: 4 },
+					// On a log scale keep only the decades, so the grid stays readable.
+					filter: log ? (_u, splits) => splits.map((v) => (isDecade(v) ? v : null)) : undefined,
 					values: (_u, vals) => vals.map((v) => (v == null ? '' : fmtCompact(v))),
 					label: unit || undefined,
 					labelFont: font,
@@ -219,7 +222,7 @@
 	{/if}
 	<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
 	<p class="hint">
-		{#if caption}{caption} {/if}Drag across the chart to zoom; double-click to reset.
+		{#if caption}{caption}{' '}{/if}Drag across the chart to zoom; double-click to reset.
 	</p>
 </figure>
 
