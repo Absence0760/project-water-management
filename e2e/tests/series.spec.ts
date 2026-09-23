@@ -127,3 +127,18 @@ test('clicking anywhere on a series row shows it in the chart; its buttons keep 
 	await flowRow.getByRole('button', { name: /^Delete/ }).click();
 	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('a US month/day CSV is read as month/day, and the summary says how dates were read', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series date order');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('CSV file').setInputFiles({
+		name: 'us.csv',
+		mimeType: 'text/csv',
+		buffer: Buffer.from('date,value\n03/04/2021,1\n03/13/2021,2\n')
+	});
+	const summary = form.getByRole('definition');
+	await expect(form.getByText('month/day/year')).toBeVisible();
+	await expect(summary.first()).toHaveText('2021-03-04 → 2021-03-13');
+});

@@ -17,7 +17,7 @@ describe('parseDate', () => {
 describe('parseSeriesCsv', () => {
 	it('parses a file with a header row', () => {
 		const r = parseSeriesCsv('date,value\n2020-01-01,1.5\n2020-01-02,2\n');
-		expect(r).toEqual({ startDate: '2020-01-01', endDate: '2020-01-02', values: [1.5, 2], rowCount: 2, missingCount: 0 });
+		expect(r).toEqual({ startDate: '2020-01-01', endDate: '2020-01-02', values: [1.5, 2], rowCount: 2, missingCount: 0, dateOrder: 'iso', dateOrderAssumed: false });
 	});
 
 	it('parses a file without a header, CRLF and BOM', () => {
@@ -53,3 +53,38 @@ describe('parseSeriesCsv', () => {
 		expect(() => parseSeriesCsv('1900-01-01,1\n2100-01-01,1')).toThrow(/limit/);
 	});
 });
+
+describe('parseSeriesCsv date order', () => {
+	it('reads a US month/day file as month/day, not silently as day/month', () => {
+		const r = parseSeriesCsv('date,value\n03/04/2020,1\n03/13/2020,2\n');
+		expect(r.dateOrder).toBe('mdy');
+		expect(r.dateOrderAssumed).toBe(false);
+		expect(r.startDate).toBe('2020-03-04');
+		expect(r.endDate).toBe('2020-03-13');
+	});
+
+	it('reads a South African day/month file as day/month', () => {
+		const r = parseSeriesCsv('03/04/2020,1\n13/04/2020,2\n');
+		expect([r.dateOrder, r.dateOrderAssumed, r.startDate, r.endDate]).toEqual(['dmy', false, '2020-04-03', '2020-04-13']);
+	});
+
+	it('assumes day/month, and says so, when no day above 12 settles it', () => {
+		const r = parseSeriesCsv('01/02/2020,1\n02/02/2020,2\n');
+		expect([r.dateOrder, r.dateOrderAssumed, r.startDate]).toEqual(['dmy', true, '2020-02-01']);
+	});
+
+	it('rejects a file that mixes both orders', () => {
+		expect(() => parseSeriesCsv('13/01/2020,1\n01/14/2020,2\n')).toThrow(/mix day\/month and month\/day/);
+	});
+
+	it('year-first dates are unaffected', () => {
+		const r = parseSeriesCsv('2020-01-05,1\n2020/01/06,2\n');
+		expect([r.dateOrder, r.dateOrderAssumed]).toEqual(['iso', false]);
+	});
+
+	it('an impossible first date is an error, not a skipped header', () => {
+		expect(() => parseSeriesCsv('31/02/2020,1\n01/03/2020,2\n')).toThrow(/Line 1: "31\/02\/2020" is not a date/);
+		expect(parseSeriesCsv('Date;Rain\n01/03/2020;2\n').rowCount).toBe(1);
+	});
+});
+

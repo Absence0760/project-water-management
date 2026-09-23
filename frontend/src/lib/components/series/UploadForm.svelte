@@ -191,7 +191,7 @@
 2025-04-02,12.4
 2025-04-03,</pre>
 		<ul>
-			<li>Dates: YYYY-MM-DD, YYYY/MM/DD or DD/MM/YYYY.</li>
+			<li>Dates: YYYY-MM-DD (safest), YYYY/MM/DD, DD/MM/YYYY or MM/DD/YYYY. The order is worked out from the whole file; if no day is above 12, day/month is assumed and the summary says so.</li>
 			<li>Separators: comma, semicolon or tab.</li>
 			<li>Blank, NA or - = no reading (stored as a gap).</li>
 			<li>Units: rainfall in mm per day; flow as the daily mean in m³/s.</li>
@@ -241,6 +241,15 @@
 			<div><dt>Days</dt><dd>{fmtNum(parsed.values.length)}</dd></div>
 			<div><dt>With values</dt><dd>{fmtNum(parsed.rowCount)}</dd></div>
 			<div><dt>Gaps</dt><dd>{fmtNum(parsed.missingCount)}</dd></div>
+			{#if parsed.dateOrder !== 'iso'}
+				<div>
+					<dt>Dates read as</dt>
+					<dd class:warn-text={parsed.dateOrderAssumed}>
+						{parsed.dateOrder === 'dmy' ? 'day/month/year' : 'month/day/year'}{#if parsed.dateOrderAssumed}
+							(assumed: no day above 12; use YYYY-MM-DD to be sure){/if}
+					</dd>
+				</div>
+			{/if}
 			{#if preview}
 				<div><dt>New days</dt><dd class="ok">{fmtNum(preview.added)}</dd></div>
 				<div><dt>Changed</dt><dd class:warn-text={preview.changed > 0}>{fmtNum(preview.changed)}</dd></div>

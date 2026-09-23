@@ -2,7 +2,6 @@
 // which stored series an uploaded file most likely updates.
 import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { parseDate } from '$lib/series/csv';
 
 /** Days after which data counts as stale. Could become a project setting. */
 export const STALE_DAYS = 7;
@@ -61,8 +60,9 @@ export function headerLine(text: string): string {
 	for (const raw of text.replace(/^﻿/, '').split(/\r?\n/)) {
 		const line = raw.trim();
 		if (!line || line.startsWith('#')) continue;
-		const first = line.split(/[,;\t]/)[0] ?? '';
-		return parseDate(first) ? '' : line;
+		const first = (line.split(/[,;\t]/)[0] ?? '').trim().replace(/^"|"$/g, '');
+		// Same rule as the CSV parser: a header's first cell is text, not a date.
+		return /^\d/.test(first) ? '' : line;
 	}
 	return '';
 }

@@ -39,6 +39,29 @@ describe('parseNum', () => {
 		expect(parseNum('')).toBeNull();
 		expect(parseNum('abc')).toBeNull();
 	});
+
+	it('reads a single non-grouping comma as a decimal comma, never as a lost separator', () => {
+		expect(parseNum('1,5')).toBe(1.5);
+		expect(parseNum('2,75')).toBe(2.75);
+		expect(parseNum('-0,25')).toBe(-0.25);
+		expect(parseNum(',5')).toBe(0.5);
+		expect(parseNum('12 000,5')).toBe(12000.5);
+		expect(parseNum('1234,5678')).toBe(1234.5678);
+	});
+
+	it('keeps valid comma groupings as thousands separators, as the app displays them', () => {
+		expect(parseNum('1,500')).toBe(1500);
+		expect(parseNum('300,000')).toBe(300000);
+		expect(parseNum('1,234,567.8')).toBe(1234567.8);
+		expect(parseNum('-1,000')).toBe(-1000);
+	});
+
+	it('rejects ambiguous comma use instead of guessing', () => {
+		expect(parseNum('1,2,3')).toBeNull();
+		expect(parseNum('1,5.2')).toBeNull();
+		expect(parseNum('12,34,567')).toBeNull();
+		expect(parseNum('1,')).toBeNull();
+	});
 });
 
 describe('localIsoDate', () => {

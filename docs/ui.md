@@ -103,7 +103,11 @@ Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. The chart opens on the last 3 years and has
+that series in the chart below. Uploads read year-last dates (DD/MM/YYYY or
+MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
+mixing both is rejected; one with no part above 12 assumes day/month and the
+summary says so). In number fields, a comma is a thousands separator only in a
+valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree, using the project's thresholds from Settings → *Data

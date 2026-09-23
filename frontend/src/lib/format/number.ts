@@ -51,10 +51,25 @@ export function localIsoDate(now: Date = new Date()): string {
 	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** Parse user input that may contain thousands separators or spaces. Empty → null. */
+const GROUPED = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/;
+const DECIMAL_COMMA = /^-?\d*,\d+$/;
+
+/**
+ * Parse typed or pasted numbers. Spaces are thousands separators (12 000).
+ * A comma is a thousands separator only in a valid grouping (1,500 and
+ * 1,234,567.8, as the app displays numbers); otherwise a single comma is a
+ * decimal comma, as typed in South Africa and much of the world (1,5 → 1.5).
+ * Anything else ambiguous (1,2,3; 1,5.2) is rejected rather than guessed.
+ * Empty → null.
+ */
 export function parseNum(input: string): number | null {
-	const s = input.replace(/[\s,]/g, '');
+	let s = input.replace(/\s/g, '');
 	if (s === '') return null;
+	if (s.includes(',')) {
+		if (GROUPED.test(s)) s = s.replace(/,/g, '');
+		else if (DECIMAL_COMMA.test(s)) s = s.replace(',', '.');
+		else return null;
+	}
 	const n = Number(s);
 	return Number.isFinite(n) ? n : null;
 }
