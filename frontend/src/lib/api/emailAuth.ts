@@ -1,0 +1,85 @@
+// Client for the email-driven account flows and pending invites (docs/api.md
+// § Auth, § Members, § Teams). Kept beside client.ts rather than inside it so
+// it can land without touching the shared client; it goes through the same
+// `request`, so errors are the usual ApiError.
+import type { Api } from './client';
+import type { Member, Role, TeamMember, TeamRole } from './types';
+
+/** A pending invitation for an address that has no account yet. */
+export interface Invite {
+	id: string;
+	email: string;
+	role: string;
+	/** Display name of whoever (re-)sent it. */
+	invitedBy: string;
+	createdAt: string;
+	expiresAt: string;
+	expired: boolean;
+}
+
+/** What an invite link is for (POST /auth/invite-info). */
+export interface InviteInfo {
+	email: string;
+	projectName: string | null;
+	teamName: string | null;
+	invitedBy: string;
+}
+
+/** POST …/members answers with a member (existing account) or an invite (no account yet). */
+export type AddMemberResult<M> = { member: M; invited?: undefined } | { invited: true; invite: Invite; member?: undefined };
+
+const enc = encodeURIComponent;
+
+export function emailAuthApi(api: Pick<Api, 'request'>) {
+	const { request } = api;
+	return {
+		/** Always resolves (202) for a well-formed address — the server never says whether it has an account. */
+		forgotPassword: (email: string) => request<{ ok: true }>('POST', '/auth/forgot-password', { email }),
+		/** 204 on success; signs out every session (log in again afterwards). */
+		resetPassword: (token: string, password: string) =>
+			request<void>('POST', '/auth/reset-password', { token, password }),
+		verifyEmail: (token: string) => request<{ verified: true }>('POST', '/auth/verify-email', { token }),
+		/** 202, or ApiError 429 (sent a moment ago) / 409 (already verified). */
+		resendVerification: () => request<{ sent: true }>('POST', '/auth/resend-verification'),
+		inviteInfo: (token: string) =>
+			request<{ invite: InviteInfo }>('POST', '/auth/invite-info', { token }).then((r) => r.invite),
+
+		projectInvites: {
+			/** Same endpoint as members.add, typed with the invite branch. */
+			add: (projectId: string, email: string, role: Role) =>
+				request<AddMemberResult<Member>>('POST', `/projects/${enc(projectId)}/members`, { email, role }),
+			list: (projectId: string) =>
+				request<{ invites: Invite[] }>('GET', `/projects/${enc(projectId)}/invites`).then((r) => r.invites),
+			revoke: (projectId: string, inviteId: string) =>
+				request<void>('DELETE', `/projects/${enc(projectId)}/invites/${enc(inviteId)}`)
+		},
+		teamInvites: {
+			add: (teamId: string, email: string, role: TeamRole) =>
+				request<AddMemberResult<TeamMember>>('POST', `/teams/${enc(teamId)}/members`, { email, role }),
+			list: (teamId: string) =>
+				request<{ invites: Invite[] }>('GET', `/teams/${enc(teamId)}/invites`).then((r) => r.invites),
+			revoke: (teamId: string, inviteId: string) =>
+				request<void>('DELETE', `/teams/${enc(teamId)}/invites/${enc(inviteId)}`)
+		}
+	};
+}
+
+export type EmailAuthApi = ReturnType<typeof emailAuthApi>;
+
+/**
+ * The one-time token from an emailed link (`?token=…`, or `?invite=…` on the
+ * sign-up page). Returns null for anything that can't be one of ours, so a
+ * mangled link shows a clear message instead of a server round trip.
+ */
+export function linkToken(url: URL, param: 'token' | 'invite' = 'token'): string | null {
+	const t = url.searchParams.get(param)?.trim() ?? '';
+	return /^[A-Za-z0-9_-]{43}$/.test(t) ? t : null;
+}
+
+/** Password rule shared with the server (8–200 characters). */
+export function passwordProblem(password: string, confirm: string): string | null {
+	if (password.length < 8) return 'Use at least 8 characters.';
+	if (password.length > 200) return 'Use at most 200 characters.';
+	if (password !== confirm) return 'The two passwords don’t match.';
+	return null;
+}
