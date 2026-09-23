@@ -1,0 +1,20 @@
+# Key list for infra-secrets/water-management/prod.sops.yaml (PRIVATE estate
+# repo — never create the real file in this public repo). Flat keys, every
+# value a quoted string. Read by infra/secrets.tf via data "sops_file".
+#
+# Create / edit (authenticated to the water-management account):
+#   cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml
+#
+# The RDS master (schema-owner) password is NOT here: RDS manages and rotates
+# it in Secrets Manager (infra/rds.tf). The CloudFront shared secret is
+# Terraform-generated (random_password) and is not here either.
+
+# Signs the wm_session JWT (HS256). >= 32 chars. `openssl rand -hex 32`
+auth_jwt_secret: "REPLACE_ME"
+
+# Password for the RLS-bound runtime role water_app. 24+ ALPHANUMERIC chars
+# only (it is embedded in DATABASE_URL). `openssl rand -hex 24`
+# The migrate Lambda sets it on the role on every invocation. Rotating is:
+# edit here -> terraform apply -> immediately invoke the migrate Lambda
+# (infra/README.md § Rotating secrets); the API fails DB logins in between.
+db_app_password: "REPLACE_ME"

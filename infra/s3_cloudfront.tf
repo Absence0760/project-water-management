@@ -1,9 +1,10 @@
 # ----------------------------------------------------------------------------
-# S3 bucket hosting the prerendered SvelteKit site
+# S3 bucket hosting the static SvelteKit SPA build
 # ----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${local.project}-frontend"
+  # Bucket names are global; the account ID suffix avoids collisions.
+  bucket = "${local.project}-frontend-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -50,6 +51,25 @@ data "aws_iam_policy_document" "frontend_bucket_policy" {
       values   = [aws_cloudfront_distribution.frontend.arn]
     }
   }
+
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.frontend.arn,
+      "${aws_s3_bucket.frontend.arn}/*",
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "frontend" {
@@ -58,15 +78,17 @@ resource "aws_s3_bucket_policy" "frontend" {
 }
 
 # ----------------------------------------------------------------------------
-# ACM certificate (must live in us-east-1 for CloudFront)
+# ACM certificate (must live in us-east-1 for CloudFront), DNS-validated in
+# the delegated child zone. The zone's NS delegation from jaredhoward.com
+# (bootstrap stage 3) must be live before the first apply, or validation
+# hangs until it times out.
 # ----------------------------------------------------------------------------
 
 resource "aws_acm_certificate" "frontend" {
   provider = aws.us_east_1
 
-  domain_name               = var.domain_name
-  subject_alternative_names = ["www.${var.domain_name}"]
-  validation_method         = "DNS"
+  domain_name       = var.domain_name
+  validation_method = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -98,18 +120,66 @@ resource "aws_acm_certificate_validation" "frontend" {
 }
 
 # ----------------------------------------------------------------------------
+# CloudFront Functions (viewer-request)
+#
+# spa_rewrite  — default behaviour. The frontend is a pure SPA (adapter-static
+#   fallback index.html, ssr = false): deep links like /projects/<id> have no
+#   object in S3. Any path whose last segment has no file extension is served
+#   /index.html with a 200, and the client router takes over. Done here rather
+#   than with a distribution-wide custom_error_response because those also
+#   rewrite the API's own 403/404 JSON responses into index.html.
+#
+# api_strip_prefix — /api/* behaviour. The browser calls same-origin
+#   /api/auth/login; the Hono app routes /auth/login (dev hits it directly on
+#   :3001 with no prefix). Stripping here keeps the app prefix-agnostic.
+#
+# Cost: $0.10 per million invocations.
+# ----------------------------------------------------------------------------
+
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${local.project}-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Serve /index.html for extension-less SPA routes"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      var last = uri.substring(uri.lastIndexOf('/') + 1);
+      if (last.indexOf('.') === -1) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
+resource "aws_cloudfront_function" "api_strip_prefix" {
+  name    = "${local.project}-api-strip-prefix"
+  runtime = "cloudfront-js-2.0"
+  comment = "Strip the /api prefix before forwarding to the Lambda Function URL"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      request.uri = request.uri.substring(4) || '/';
+      return request;
+    }
+  EOT
+}
+
+# ----------------------------------------------------------------------------
 # CloudFront Origin Access Control + distribution
 #
-# Two origins:
-#   - s3-frontend (S3 bucket via OAC, signed sigv4)            -> default
-#   - lambda-api (Function URL via custom_origin, shared secret) -> /api/*
+# One origin for the browser: water-management.jaredhoward.com.
+#   - default  → S3 bucket via OAC (signed sigv4)
+#   - /api/*   → Lambda Function URL (custom origin + shared secret header)
 #
-# CloudFront stamps every /api/* request with X-CloudFront-Shared-Secret
-# (random_password.cloudfront_shared_secret, also injected into the Lambda
-# env). The handler rejects any request without the header. Direct hits
-# to the Function URL — which is publicly reachable by AWS design — are
-# rejected at the handler layer, so the WAF + per-IP rate limit on this
-# distribution actually covers the API surface, not just the frontend.
+# The browser never calls the Function URL. CloudFront stamps every /api/*
+# request with X-CloudFront-Shared-Secret (random_password below, also in
+# the Lambda env) and the app rejects requests without it. Direct hits to the
+# Function URL — publicly reachable by AWS design — therefore get 403, so the
+# WAF + per-IP rate limit on this distribution covers the API too.
 # ----------------------------------------------------------------------------
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
@@ -120,9 +190,10 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-# Shared secret — Terraform generates once, feeds both origin custom_header
-# (below) AND Lambda env (lambda.tf). Rotates on `terraform apply -replace`
-# of this resource.
+# Shared secret — generated once, fed to both the origin custom_header (below)
+# and the Lambda env (lambda.tf). Rotate with
+# `terraform apply -replace=random_password.cloudfront_shared_secret`
+# (a few seconds of 403s while CloudFront and Lambda converge).
 resource "random_password" "cloudfront_shared_secret" {
   length  = 48
   special = false
@@ -131,12 +202,13 @@ resource "random_password" "cloudfront_shared_secret" {
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "${local.project} frontend"
+  http_version        = "http2and3"
+  comment             = "${local.project} frontend + API"
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
   web_acl_id          = aws_wafv2_web_acl.frontend.arn
 
-  aliases = [var.domain_name, "www.${var.domain_name}"]
+  aliases = [var.domain_name]
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
@@ -155,6 +227,9 @@ resource "aws_cloudfront_distribution" "frontend" {
       https_port             = 443
       origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
+      # Above the Lambda's 30 s timeout so a slow model run surfaces as the
+      # Lambda's own error rather than a CloudFront 504.
+      origin_read_timeout = 35
     }
     custom_header {
       name  = "X-CloudFront-Shared-Secret"
@@ -169,31 +244,35 @@ resource "aws_cloudfront_distribution" "frontend" {
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
 
-    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    response_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03" # Managed-SecurityHeadersPolicy
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   # /api/* -> Lambda Function URL. CachingDisabled is critical here —
   # CachingOptimized would serve other users' API responses, which is at
   # best a privacy leak and at worst session bleeding. AllViewerExceptHostHeader
-  # forwards everything (auth headers, body, query, cookies) except Host —
-  # Host has to be the Lambda Function URL hostname for AWS to route it,
-  # not the user-facing domain.
+  # forwards everything (cookies, body, query, Origin) except Host — Host has
+  # to be the Function URL hostname for AWS to route it.
   ordered_cache_behavior {
-    path_pattern             = "/api/*"
-    target_origin_id         = "lambda-api"
-    viewer_protocol_policy   = "https-only"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods           = ["GET", "HEAD"]
-    compress                 = true
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
-    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
-  }
+    path_pattern               = "/api/*"
+    target_origin_id           = "lambda-api"
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
+    response_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03" # Managed-SecurityHeadersPolicy
 
-  custom_error_response {
-    error_code            = 404
-    response_code         = 404
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.api_strip_prefix.arn
+    }
   }
 
   viewer_certificate {
@@ -210,10 +289,10 @@ resource "aws_cloudfront_distribution" "frontend" {
 }
 
 # ----------------------------------------------------------------------------
-# Route 53 alias records
+# Route 53 alias records in the child zone
 # ----------------------------------------------------------------------------
 
-resource "aws_route53_record" "apex" {
+resource "aws_route53_record" "site_a" {
   zone_id = var.route53_zone_id
   name    = var.domain_name
   type    = "A"
@@ -225,10 +304,10 @@ resource "aws_route53_record" "apex" {
   }
 }
 
-resource "aws_route53_record" "www" {
+resource "aws_route53_record" "site_aaaa" {
   zone_id = var.route53_zone_id
-  name    = "www.${var.domain_name}"
-  type    = "A"
+  name    = var.domain_name
+  type    = "AAAA"
 
   alias {
     name                   = aws_cloudfront_distribution.frontend.domain_name

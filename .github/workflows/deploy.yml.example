@@ -94,7 +94,10 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      # CUSTOMISE: build steps per stack (python build, go compile, jar, etc.)
+      # CUSTOMISE: build steps per stack. For this repo:
+      #   pnpm/action-setup + actions/setup-node (node-version: 24), then
+      #   `pnpm install --frozen-lockfile` and `infra/scripts/package-lambdas.sh`
+      #   (→ backend/dist/lambda.zip + backend/dist/migrate.zip).
 
       - uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
@@ -102,15 +105,20 @@ jobs:
           role-session-name: deploy-backend-${{ env.RELEASE_TAG }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      # CUSTOMISE: AWS update step per stack.
-      # Example for Lambda:
-      #   - name: Update Lambda code
-      #     run: |
-      #       aws lambda update-function-code \
-      #         --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
-      #         --zip-file fileb://backend/lambda.zip --publish
-      #       aws lambda wait function-updated \
-      #         --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}"
+      # CUSTOMISE: AWS update step per stack. This repo's real sequence lives
+      # in deploy-backend.yml: update + invoke the migrate Lambda FIRST (fail
+      # the job on FunctionError), then update the API Lambda:
+      #   - run: |
+      #       aws lambda update-function-code --function-name "$MIGRATE_FUNCTION_NAME" \
+      #         --zip-file fileb://backend/dist/migrate.zip
+      #       aws lambda wait function-updated --function-name "$MIGRATE_FUNCTION_NAME"
+      #       aws lambda invoke --function-name "$MIGRATE_FUNCTION_NAME" \
+      #         --cli-binary-format raw-in-base64-out --payload '{}' \
+      #         --cli-read-timeout 320 out.json > meta.json
+      #       if jq -e 'has("FunctionError")' meta.json; then exit 1; fi
+      #       aws lambda update-function-code --function-name "$LAMBDA_FUNCTION_NAME" \
+      #         --zip-file fileb://backend/dist/lambda.zip
+      #       aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
 
   # Frontend deploys after the backend so the static site never points at
   # a stale API contract during the rollout window.

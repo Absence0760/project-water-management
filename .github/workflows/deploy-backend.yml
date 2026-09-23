@@ -58,6 +58,9 @@ jobs:
 
           CHANGED=$(git diff --name-only "$PREV_TAG..$CURRENT_TAG" -- \
             'backend/' \
+            'packages/engine/' \
+            'infra/scripts/package-lambdas.sh' \
+            'infra/certs/' \
             'pnpm-lock.yaml' \
             '.github/workflows/deploy-backend.yml' \
             || true)
@@ -75,6 +78,7 @@ jobs:
     needs: check
     if: needs.check.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
 
     steps:
@@ -89,7 +93,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -99,26 +103,60 @@ jobs:
         working-directory: backend
         run: pnpm check
 
-      - name: Build Lambda bundle
-        working-directory: backend
-        run: pnpm build
-
-      - name: Package Lambda zip
-        working-directory: backend
-        run: |
-          cd dist
-          zip -9 lambda.zip lambda.mjs
-          ls -lh lambda.zip
+      # Builds backend/dist/lambda.zip (API) and backend/dist/migrate.zip
+      # (migrations + owner-role runner). Layouts documented in the script.
+      - name: Build and package Lambdas
+        run: infra/scripts/package-lambdas.sh
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: deploy-backend-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Update Lambda function code
+      # Migrations run BEFORE the new API code ships, so they must stay
+      # backwards-compatible with the code still serving for that window
+      # (expand/contract — CLAUDE.md rule 2).
+      - name: Update migrate Lambda code
+        env:
+          MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
         run: |
+          set -euo pipefail
           aws lambda update-function-code \
-            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --function-name "$MIGRATE_FUNCTION_NAME" \
+            --zip-file "fileb://backend/dist/migrate.zip" \
+            --query 'CodeSha256' --output text
+          aws lambda wait function-updated --function-name "$MIGRATE_FUNCTION_NAME"
+
+      - name: Run migrations
+        env:
+          MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
+        run: |
+          set -euo pipefail
+          # Synchronous invoke; the function's own timeout is 300 s.
+          aws lambda invoke \
+            --function-name "$MIGRATE_FUNCTION_NAME" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            --cli-read-timeout 320 \
+            --log-type Tail \
+            migrate-result.json > migrate-meta.json
+          # Tail of the function's log (migration names only — no credentials).
+          jq -r '.LogResult // empty' migrate-meta.json | base64 -d || true
+          echo "Result: $(cat migrate-result.json)"
+          if jq -e 'has("FunctionError")' migrate-meta.json > /dev/null; then
+            echo "::error::Migrate Lambda failed — API code NOT updated."
+            exit 1
+          fi
+
+      - name: Update API Lambda code
+        env:
+          LAMBDA_FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
             --zip-file "fileb://backend/dist/lambda.zip" \
-            --publish
+            --query 'CodeSha256' --output text
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"

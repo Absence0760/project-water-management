@@ -1,5 +1,9 @@
+# Pushed to GitHub by ~/github/templates/scripts/export-tf-vars.sh: each output
+# name is uppercased verbatim (lambda_function_name → LAMBDA_FUNCTION_NAME);
+# sensitive outputs become secrets, the rest variables.
+
 output "aws_region" {
-  description = "AWS region — surfaced as a GitHub variable so the deploy workflow can read it."
+  description = "Primary AWS region — the deploy workflows' AWS_REGION."
   value       = var.aws_region
 }
 
@@ -19,28 +23,28 @@ output "cloudfront_domain_name" {
 }
 
 output "lambda_function_name" {
-  description = "Lambda function name. CI uses this to update the function code."
+  description = "API Lambda function name. deploy-backend.yml updates its code."
   value       = aws_lambda_function.backend.function_name
 }
 
-output "public_api_url" {
-  description = "Same-origin API base. Frontend hits /api/* on the CloudFront distribution; CloudFront proxies to the Lambda Function URL with the shared secret. Set as a build-time gh var so frontend code can read it via import.meta.env.PUBLIC_API_URL."
-  value       = "https://${var.domain_name}/api"
-}
-
-output "lambda_function_url" {
-  description = "Direct HTTPS URL of the backend Lambda Function URL. Provided for debugging; do NOT use from the frontend (the shared-secret check rejects un-stamped requests). Marked sensitive to discourage accidental gh-variable exposure."
-  value       = aws_lambda_function_url.backend.function_url
-  sensitive   = true
+output "migrate_function_name" {
+  description = "Migrate Lambda function name. deploy-backend.yml updates and invokes it before the API."
+  value       = aws_lambda_function.migrate.function_name
 }
 
 output "public_site_url" {
   description = "Public URL of the site."
-  value       = "https://${var.domain_name}"
+  value       = local.site_origin
+}
+
+output "lambda_function_url" {
+  description = "Direct HTTPS URL of the API Function URL. For debugging only — it returns 403 without the CloudFront shared secret."
+  value       = aws_lambda_function_url.backend.function_url
+  sensitive   = true
 }
 
 # Sensitive — embeds the AWS account ID. export-tf-vars.sh pushes sensitive
-# outputs to GitHub *secrets*, read by deploy.yml as
+# outputs to GitHub *secrets*, read by the workflows as
 # ${{ secrets.AWS_DEPLOY_ROLE_ARN }}.
 output "aws_deploy_role_arn" {
   description = "ARN of the bootstrap-created deploy role that GitHub Actions assumes via OIDC."

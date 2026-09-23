@@ -2,7 +2,7 @@
 # GitHub OIDC deploy role — bootstrap-aware
 #
 # The OIDC provider AND the deploy role are owned by the cross-project
-# bootstrap (~/repos/templates/scripts/new-project-account.sh). This file
+# bootstrap (~/github/templates/scripts/new-project-account.sh). This file
 # just LOOKS UP the role and attaches this project's per-resource deploy
 # policy to it.
 #
@@ -60,7 +60,20 @@ data "aws_iam_policy_document" "github_deploy" {
       "lambda:GetFunction",
       "lambda:GetFunctionConfiguration",
     ]
-    resources = [aws_lambda_function.backend.arn]
+    resources = [
+      aws_lambda_function.backend.arn,
+      aws_lambda_function.migrate.arn,
+    ]
+  }
+
+  # The backend deploy runs the migrate Lambda before shipping new API code.
+  # Note the implication: whoever can deploy can run migrate code with the DB
+  # owner's credentials. That is the same trust boundary as deploying the API
+  # itself and is gated by the `production` environment's required reviewer.
+  statement {
+    sid       = "MigrateInvoke"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.migrate.arn]
   }
 }
 
