@@ -412,6 +412,30 @@ describe('runModel — EWR', () => {
 	});
 });
 
+describe('runModel — EWR at a confluence gauge (audit G1)', () => {
+	it("a gauge's shortfall is its own flow against its own requirement, not the sum of its branches' shortfalls", () => {
+		// A stores all its runoff (outflow 0, 100 short of its 100 EWR share); B passes
+		// its 200 (100 spare). At gauge G the flow 200 meets the EWR 200 — no shortfall.
+		// The workbook's GaugeTemplate sums the branches' AA: −100.
+		const out = run({
+			nodes: [
+				node('A', { downstreamNodeId: 'G', pctRunoffToDam: 1, damCapacityM3: 1e9 }),
+				node('B', { downstreamNodeId: 'G', sortOrder: 1 }),
+				node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
+			],
+			natural: [400],
+			settings: { ewrPragmaticM3PerDay: flat(200) as Monthly }
+		});
+		expect(get(out, 'A', 'ewr_shortfall')).toEqual([-100]);
+		expect(get(out, 'B', 'ewr_shortfall')).toEqual([0]);
+		expect(get(out, 'G', 'outflow')).toEqual([200]);
+		expect(get(out, 'G', 'ewr_cumulative')).toEqual([200]);
+		expect(get(out, 'G', 'ewr_shortfall')).toEqual([0]);
+		// Consistent with the catchment series at the outlet.
+		expect(get(out, null, 'ewr_shortfall')).toEqual([0]);
+	});
+});
+
 describe('runModel — curtailment report', () => {
 	// D runs dry on day 1 (demand 100, dam 150): supplied [100, 50].
 	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];

@@ -64,7 +64,9 @@ Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
 (the workbook rounds both to whole m³).
 
 A **gauge** passes its upstream through: `outflow` = Σ upstream U,
-`ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = Σ upstream AA. The outflow
+`ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = MIN(outflow − ewr_cumulative, 0).
+(The workbook's gauge sums the upstream AA, which overstates the shortfall at a
+confluence where one branch has water to spare: audit G1.) The outflow
 node's `outflow` is the catchment `simulated_outflow`.
 
 ## Irrigation demand

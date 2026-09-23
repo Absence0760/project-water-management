@@ -136,11 +136,15 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			}
 
 			if (node.kind === 'gauge') {
-				// GaugeTemplate: G = Σ upstream U, H = Σ upstream Z, I = Σ upstream AA.
+				// GaugeTemplate: G = Σ upstream U, H = Σ upstream Z. The shortfall is
+				// the gauge's own flow against its own requirement, like a farm's AA.
+				// The workbook sums the branches' AA (I = Σ upstream AA), which
+				// reports a shortfall at a confluence whose flow meets the EWR when
+				// one branch is short and another has water to spare (audit G1).
 				r.inflowUpstream[t] = sumU;
 				r.outflow[t] = sumU;
 				r.ewrCumulative[t] = sumZ;
-				r.ewrShortfall[t] = sumAA;
+				r.ewrShortfall[t] = Math.min(sumU - sumZ, 0);
 				continue;
 			}
 
