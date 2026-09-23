@@ -83,6 +83,11 @@ project for an existing user (`--password` also creates the user; local demo
 only). Open the project, press **Run**, and compare the Shortfalls table with the workbook's
 `[Shortfalls]` sheet.
 
+A project downloaded from the app (**Download → Project (JSON)**, i.e.
+`GET /projects/:id/export.json`) has the same shape, so
+`pnpm import:project <downloaded>.json --email …` copies it into another
+installation ([api.md § Export](./api.md#export)).
+
 The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's
 read-only mode, so memory stays bounded.
 

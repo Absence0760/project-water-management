@@ -15,27 +15,8 @@ import { withoutUser, withUser } from '../src/db/tx.js';
 import { saveModel } from '../src/model/store.js';
 import { executeRun } from '../src/runs/execute.js';
 import { ModelBody, modelProblems } from '../src/model/validate.js';
-import { SettingsPatch } from '../src/projects/settings.js';
-import { MAX_SERIES_VALUES } from '../src/series/routes.js';
-
-
-const ProjectFile = z.object({
-	name: z.string().min(1).max(200),
-	description: z.string().max(5000).default(''),
-	settings: SettingsPatch.default({}),
-	model: ModelBody,
-	series: z
-		.array(
-			z.object({
-				kind: z.string(),
-				name: z.string().default(''),
-				unit: z.string(),
-				startDate: z.string(),
-				values: z.array(z.number().nullable()).max(MAX_SERIES_VALUES)
-			})
-		)
-		.default([])
-});
+// Shared with GET /projects/:id/export.json, so an export re-imports as-is.
+import { ProjectFile } from '../src/projects/document.js';
 
 export async function importProject(file: string, email: string, opts: ImportOptions = {}) {
 	return importProjectData(JSON.parse(await readFile(file, 'utf8')), email, opts);

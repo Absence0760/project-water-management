@@ -5,6 +5,7 @@ import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { authRoutes } from './auth/routes.js';
+import { exportRoutes } from './export/routes.js';
 import { ApiError, handleError } from './http/errors.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
@@ -48,6 +49,8 @@ export function createApp() {
 			origin: (origin) => (allowedOrigins.includes(origin) ? origin : null),
 			allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 			allowHeaders: ['Content-Type'],
+			// Lets the SPA read the export file name when it downloads via fetch().
+			exposeHeaders: ['Content-Disposition'],
 			// The session is an httpOnly cookie, so the browser must send credentials.
 			credentials: true,
 			maxAge: 600
@@ -69,6 +72,7 @@ export function createApp() {
 	projects.route('/', modelRoutes);
 	projects.route('/', seriesRoutes);
 	projects.route('/', runRoutes);
+	projects.route('/', exportRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();
