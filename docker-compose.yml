@@ -1,0 +1,30 @@
+# Local dev services. Start with `pnpm dev:db:up`.
+#
+# Postgres is published on 5434 — this workstation already runs Supabase's
+# container Postgres on 5432 and native Postgres on 5433.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: water-management-db
+    ports:
+      - "5434:5432"
+    environment:
+      # DEV-ONLY throwaway credentials — grant access to nothing outside this
+      # local container. Never reuse them anywhere real.
+      POSTGRES_USER: water
+      POSTGRES_PASSWORD: water
+      POSTGRES_DB: water
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once on first boot of an empty volume: creates the RLS-bound
+      # application role. Schema itself comes from backend/migrations via
+      # `pnpm dev:db:migrate`, not from here.
+      - ./dev/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U water -d water"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

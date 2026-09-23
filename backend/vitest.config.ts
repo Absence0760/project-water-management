@@ -1,13 +1,32 @@
 import { defineConfig } from 'vitest/config';
 
+// Two projects:
+//   unit — pure logic, no database (`pnpm test`).
+//   db   — against real Postgres (`pnpm test:backend:db`, needs `pnpm dev:db:up`).
+//          globalSetup migrates the water_test database first.
 export default defineConfig({
 	test: {
-		environment: 'node',
-		// Env vars set once for every test file. Individual tests can override
-		// via vi.stubEnv() if they need to exercise a missing-env code path.
-		setupFiles: ['./src/__tests__/setup.ts'],
-		// Don't pick up the dist/ folder from previous builds.
-		exclude: ['node_modules/**', 'dist/**'],
-		include: ['src/**/*.test.ts']
+		projects: [
+			{
+				test: {
+					name: 'unit',
+					environment: 'node',
+					setupFiles: ['./src/__tests__/setup.ts'],
+					include: ['src/**/*.test.ts'],
+					exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.test.ts']
+				}
+			},
+			{
+				test: {
+					name: 'db',
+					environment: 'node',
+					setupFiles: ['./src/__tests__/setup.ts'],
+					globalSetup: ['./src/__tests__/db-global-setup.ts'],
+					include: ['src/**/*.db.test.ts'],
+					// Tests share one database; run files serially.
+					fileParallelism: false
+				}
+			}
+		]
 	}
 });

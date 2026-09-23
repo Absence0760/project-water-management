@@ -1,0 +1,37 @@
+import type pg from 'pg';
+import { getPool } from './pool.js';
+
+export type Db = pg.PoolClient;
+
+/**
+ * Run `fn` in a transaction scoped to `userId`. Sets `app.current_user_id`
+ * with is_local=true, so it is cleared at COMMIT/ROLLBACK and can never leak
+ * to the next request that borrows this pooled connection. Every RLS policy
+ * keys on this setting — all project-scoped queries must go through here.
+ */
+export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): Promise<T> {
+	return inTransaction(async (db) => {
+		await db.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+		return fn(db);
+	});
+}
+
+/** Transaction with no user context — only for app_user lookups during auth. */
+export async function withoutUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+	return inTransaction(fn);
+}
+
+async function inTransaction<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+	const client = await getPool().connect();
+	try {
+		await client.query('BEGIN');
+		const result = await fn(client);
+		await client.query('COMMIT');
+		return result;
+	} catch (err) {
+		await client.query('ROLLBACK').catch(() => {});
+		throw err;
+	} finally {
+		client.release();
+	}
+}

@@ -1,20 +1,27 @@
 {
 	"$schema": "https://json.schemastore.org/package.json",
-	"name": "@my-project/backend",
+	"name": "@water-management/backend",
 	"version": "0.0.1",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"dev": "tsx watch src/server.ts",
-		"build": "esbuild src/lambda.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/lambda.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+		"build": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/lambda.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
 		"check": "tsc -p tsconfig.json --noEmit",
-		"test": "vitest run",
+		"test": "vitest run --project unit",
 		"test:watch": "vitest",
-		"start": "node dist/server.js"
+		"start": "node dist/server.js",
+		"test:db": "vitest run --project db",
+		"db:migrate": "tsx scripts/migrate.ts"
 	},
 	"dependencies": {
 		"dotenv": "^17.4.1",
-		"hono": "4.12.12"
+		"hono": "4.12.12",
+		"@water-management/engine": "workspace:*",
+		"bcryptjs": "3.0.3",
+		"jose": "6.2.12",
+		"pg": "8.23.0",
+		"zod": "4.6.5"
 	},
 	"devDependencies": {
 		"@hono/node-server": "1.19.13",
@@ -23,6 +30,7 @@
 		"esbuild": "0.28.0",
 		"tsx": "4.21.0",
 		"typescript": "6.0.2",
-		"vitest": "^2.1.9"
+		"vitest": "^2.1.9",
+		"@types/pg": "8.23.1"
 	}
 }

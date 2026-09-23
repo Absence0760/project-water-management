@@ -33,7 +33,7 @@ variable "bootstrap_slug" {
     surfaces as a plan-time "role not found" error.
   EOT
   type        = string
-  default     = "my-project"
+  default     = "water-management"
 }
 
 variable "site_url" {
