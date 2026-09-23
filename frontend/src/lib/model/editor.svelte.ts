@@ -50,7 +50,9 @@ export function newTransfer(fromNodeId: string, toNodeId: string): Transfer {
 
 export class ModelEditor {
 	model = $state<ProjectModel>(emptyModel());
-	#saved = $state('');
+	// Starts equal to the empty model: an editor that never loaded (the project
+	// failed to load or 404'd) has no unsaved changes to guard on navigation.
+	#saved = $state(JSON.stringify(this.model));
 	saving = $state(false);
 	saveError = $state<string | null>(null);
 

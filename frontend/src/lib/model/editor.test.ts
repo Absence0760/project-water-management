@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ModelEditor } from './editor.svelte';
 
 describe('ModelEditor', () => {
+	it('is not dirty before anything is loaded', () => {
+		// A project page that 404s never calls load(); leaving it must not
+		// trigger the "unsaved changes" prompt.
+		expect(new ModelEditor().dirty).toBe(false);
+	});
+
 	it('tracks dirty state against the loaded snapshot and reverts', () => {
 		const ed = new ModelEditor();
 		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
