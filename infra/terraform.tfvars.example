@@ -50,9 +50,9 @@ dmarc_report_email = "you+dmarc@example.com"
 # ses_tls_policy        = "REQUIRE"
 # ses_endpoint_az_count = 1
 
-# CloudFront price class. PriceClass_200 is the cheapest that has South
-# African edges; PriceClass_100 serves SA users from Europe.
-# cloudfront_price_class = "PriceClass_200"
+# CloudFront price class. Only PriceClass_All has South African edges;
+# PriceClass_100/200 serve SA users from Europe or Asia.
+# cloudfront_price_class = "PriceClass_All"
 
 # WAF: requests per IP per 5-minute window across the site (auth endpoints
 # have a fixed, tighter 100). AWS min 100.

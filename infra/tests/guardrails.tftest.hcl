@@ -368,8 +368,8 @@ run "edge_security" {
     error_message = "HTTP must redirect (site) or be refused (API)."
   }
   assert {
-    condition     = aws_cloudfront_distribution.frontend.price_class == "PriceClass_200"
-    error_message = "Default price class must include the South African edges (PriceClass_200)."
+    condition     = aws_cloudfront_distribution.frontend.price_class == "PriceClass_All"
+    error_message = "Default price class must include the South African edges (only PriceClass_All does)."
   }
 
   # Header policies attached to the right behaviours.

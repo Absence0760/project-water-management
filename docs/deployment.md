@@ -80,8 +80,9 @@ What was checked (September 2026):
   simply require it (plan question 15).
 - **Latency.** Users are in South Africa. Cape Town is roughly 20–50 ms from
   most of the country versus ~150–200 ms to Ireland. Static files come from
-  CloudFront edges either way (Terraform now uses **PriceClass_200**, the
-  cheapest class with South African edge locations; PriceClass_100 has none),
+  CloudFront edges either way (Terraform uses **PriceClass_All**, the only
+  class with South African edge locations per AWS's pay-as-you-go price-class
+  table),
   but every API call and model run goes to the region.
 
 | | af-south-1 (recommended) | eu-west-1 (Ireland) | us-east-1 |
@@ -291,7 +292,7 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   with `DATABASE_URL` and `AUTH_JWT_SECRET` from sops (`carlpett/sops`,
   `secrets.tf`).
 - No CORS block on the Function URL (the browser never calls it).
-- SES (above), CloudFront security headers and CSP, PriceClass_200.
+- SES (above), CloudFront security headers and CSP, PriceClass_All.
 - Budget and alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / free storage / connections / freeable memory, SES
   bounce and complaint rates, CloudFront 5xx; all to the SNS topics that email

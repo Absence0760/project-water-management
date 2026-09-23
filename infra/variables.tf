@@ -234,9 +234,9 @@ variable "ses_endpoint_az_count" {
 # --- CloudFront --------------------------------------------------------------
 
 variable "cloudfront_price_class" {
-  description = "CloudFront price class. PriceClass_200 is the cheapest class that includes the South African edge locations; PriceClass_100 (North America, Europe, Israel) would serve South African users from Europe."
+  description = "CloudFront price class. PriceClass_All is the only class with South African (and Kenyan, Nigerian, Egyptian, Middle East) edge locations: AWS's pay-as-you-go price-class table excludes them from 100 and 200, which would serve South African users from Europe or Asia."
   type        = string
-  default     = "PriceClass_200"
+  default     = "PriceClass_All"
   validation {
     condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
     error_message = "Must be PriceClass_100, PriceClass_200 or PriceClass_All."

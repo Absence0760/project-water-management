@@ -205,7 +205,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   http_version        = "http2and3"
   comment             = "${local.project} frontend + API"
   default_root_object = "index.html"
-  price_class         = var.cloudfront_price_class # PriceClass_200 = includes the South African edges
+  price_class         = var.cloudfront_price_class # PriceClass_All: the only class with South African edges
   web_acl_id          = aws_wafv2_web_acl.frontend.arn
 
   aliases = [var.domain_name]

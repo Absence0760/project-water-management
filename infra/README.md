@@ -191,8 +191,8 @@ notify a topic in its own region.
   and uPlot set inline `style` attributes, which nothing narrower allows (an
   accepted risk; CSS can't run script). No third-party origin is allowed
   anywhere.
-- **PriceClass_200**, not 100: PriceClass_100 has no South African edge
-  locations, so SA users would be served from Europe. At this traffic the
+- **PriceClass_All**: AWS's price-class table ([CloudFront pay-as-you-go pricing](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/)) puts South Africa, Kenya, Nigeria, Egypt and the Middle East only in PriceClass_All, so
+  100 or 200 would serve SA users from Europe or Asia. At this traffic the
   difference in price is cents.
 - **WAF has no AWS managed rule groups.** The common rule set blocks bodies
   over 8 KB, and series uploads are ~1 MB.
@@ -217,7 +217,7 @@ Idle to light use, on-demand, us-east-1:
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | CloudWatch: 12 alarms, logs, RDS log export | ~1.70 |
-| CloudFront (PriceClass_200), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
+| CloudFront (PriceClass_All), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $40** |
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
