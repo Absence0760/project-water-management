@@ -1,5 +1,6 @@
-import { addMember, createProject, PASSWORD, putModel, sampleModel, uniqueEmail } from '../support/api.ts';
-import { plantInviteToken } from '../support/db.ts';
+import type { Page } from '@playwright/test';
+import { addMember, createProject, PASSWORD, putModel, register, sampleModel, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken, plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -129,6 +130,31 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
 });
 
+test('adding an account that never confirmed its email invites it until the address is confirmed', async ({ page, owner, playwright }) => {
+	void owner;
+	const project = await createProject(page.request, 'Unconfirmed catchment');
+	const api = await playwright.request.newContext();
+	const unconfirmed = await register(api, 'Unconfirmed colleague', { verified: false });
+
+	await page.goto(`/projects/${project.id}`);
+	const members = page.getByRole('region', { name: 'Members' });
+	await members.getByLabel('Add member by email').fill(unconfirmed.email);
+	await members.getByLabel('Role', { exact: true }).selectOption('editor');
+	await members.getByRole('button', { name: 'Add' }).click();
+	await expect(members.getByText(`Invitation sent to ${unconfirmed.email}.`)).toBeVisible();
+	await expect(members.getByRole('rowheader').filter({ hasText: unconfirmed.email })).toHaveCount(0);
+	const pending = page.getByRole('region', { name: /Pending invitations/ });
+	await expect(pending.getByRole('listitem').filter({ hasText: unconfirmed.email })).toContainText('editor');
+
+	// Confirming the address (the emailed link) turns the invite into a membership.
+	const token = await plantEmailToken(unconfirmed.email, 'verify');
+	expect((await api.post(`${API_URL}/auth/verify-email`, { data: { token } })).status()).toBe(200);
+	await api.dispose();
+	await page.reload();
+	await expect(members.getByRole('rowheader').filter({ hasText: 'Unconfirmed colleague' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
+});
+
 test('an invited person signs up through the link and lands in the project', async ({ page, owner, browser }) => {
 	void owner;
 	const project = await createProject(page.request, 'Invited-to catchment');
@@ -168,4 +194,77 @@ test('a dead invite link falls back to a normal sign-up', async ({ page }) => {
 	await expect(page.getByRole('alert')).toContainText('This invitation link is invalid, was revoked, or has expired');
 	await expect(page.getByRole('heading', { level: 1, name: 'Create an account' })).toBeVisible();
 	await expect(page.getByLabel('Email')).toBeEditable();
+});
+
+/** Invites `email` (no account yet) to a new project of `page`'s user; returns the link token. */
+async function inviteToProject(page: Page, projectName: string, email: string): Promise<string> {
+	const project = await createProject(page.request, projectName);
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/members`, { data: { email, role: 'viewer' } });
+	expect(res.status()).toBe(201);
+	return plantInviteToken(email);
+}
+
+test('someone signed in as another account opens an invitation: told whose it is, can sign out and accept', async ({ page, owner, signIn }) => {
+	void owner;
+	const email = uniqueEmail('forwarded');
+	const token = await inviteToProject(page, 'Forwarded catchment', email);
+
+	const other = await signIn('Colleague on a shared laptop');
+	await other.page.goto(`/register?invite=${token}`);
+	// Not sent home: the page explains the mismatch.
+	await expect(other.page.getByRole('heading', { level: 1, name: 'You’re already signed in' })).toBeVisible();
+	await expect(other.page).toHaveURL(/\/register\?invite=/);
+	await expect(other.page.getByText(`Signed in as ${other.user.email}.`)).toBeVisible();
+	await expect(other.page.getByRole('alert')).toHaveText(
+		`This invitation to the project Forwarded catchment is for ${email}, not the account you’re signed in with.`
+	);
+	await expect(other.page.getByRole('link', { name: 'Stay signed in and go to your projects' })).toHaveAttribute('href', '/');
+
+	await other.page.getByRole('button', { name: `Sign out and accept as ${email}` }).click();
+	await expect(other.page.getByRole('heading', { level: 1, name: 'Accept your invitation' })).toBeVisible();
+	await expect(other.page.getByLabel('Email')).toHaveValue(email);
+	await other.page.getByLabel('Display name').fill('Forwarded Invitee');
+	await other.page.getByLabel('Password').fill(PASSWORD);
+	await other.page.getByRole('button', { name: 'Create account and join' }).click();
+	await expect(other.page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(other.page.getByRole('rowheader', { name: 'Forwarded catchment' })).toBeVisible();
+});
+
+test('the invitee, signed up without the link, is told to confirm their email to join', async ({ page, owner, browser }) => {
+	void owner;
+	const email = uniqueEmail('early-signup');
+	const token = await inviteToProject(page, 'Confirm-first catchment', email);
+
+	// Signs up directly (not through the link), so the invite waits for a confirmed address.
+	const context = await browser.newContext();
+	const v = await context.newPage();
+	const res = await v.request.post(`${API_URL}/auth/register`, { data: { email, password: PASSWORD, displayName: 'Early Bird' } });
+	expect(res.status()).toBe(201);
+
+	await v.goto(`/register?invite=${token}`);
+	await expect(v.getByRole('heading', { level: 1, name: 'You’re already signed in' })).toBeVisible();
+	await expect(v.getByRole('status').filter({ hasText: 'invited this address' })).toContainText(
+		'invited this address to the project Confirm-first catchment.'
+	);
+	await expect(v.getByText(`You’ll join as soon as you confirm your email address: use the link we sent to ${email}.`)).toBeVisible();
+	// Sign-up mailed a link seconds ago, so the server holds a resend back (429) and says why.
+	await v.getByRole('button', { name: 'Resend confirmation email' }).click();
+	await expect(v.getByRole('status').filter({ hasText: 'sent a moment ago' })).toBeVisible();
+	await context.close();
+});
+
+test('a signed-in user opening a dead invitation link is told so, not sent home', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/register?invite=' + 'z'.repeat(43));
+	await expect(page.getByRole('heading', { level: 1, name: 'You’re already signed in' })).toBeVisible();
+	await expect(page.getByRole('alert')).toContainText('This invitation link is invalid, was revoked, or has expired');
+	await page.getByRole('link', { name: 'Go to your projects' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+});
+
+test('a signed-in user opening plain /register is still sent on to the app', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/register');
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(page).toHaveURL(/\/$/);
 });

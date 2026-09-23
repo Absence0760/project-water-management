@@ -46,6 +46,8 @@ export function flowShares(
 				(sumLo > 0 ? (n.areaLoKm2 / sumLo) * hiLoSplit.lo : 0);
 		}
 		if (sumHi === 0 || sumLo === 0) warnings.push('hi/lo flow shares: total high or low MAP area is 0');
+		// A farm area that differs from hi + lo (engine review F7, audit W3) is
+		// reported once per run by quality.ts areaMismatches, for every method.
 	} else {
 		let sum = 0;
 		for (const { n } of farms) sum += n.areaKm2;

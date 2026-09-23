@@ -40,6 +40,7 @@ No env files to write. `backend/.env.development` and
 | `MAIL_TRANSPORT` | `smtp` | `smtp` → Mailpit locally; `log` prints emails to the console; `ses` in production |
 | `SMTP_HOST` / `SMTP_PORT` | `127.0.0.1` / `1026` | Mailpit's SMTP port |
 | `MAIL_FROM` | `Water Management <no-reply@localhost>` | Sender |
+| `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
 
 To override something on your machine, create a gitignored

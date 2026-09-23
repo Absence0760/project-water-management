@@ -18,7 +18,7 @@
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { downloads } from '$lib/export';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
@@ -57,10 +57,19 @@
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
 	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
 	let values = $state.raw<Record<string, Daily>>({});
-	const today = new Date().toISOString().slice(0, 10);
+	// The viewer's calendar date, as on the project list (projects/freshness.ts).
+	const today = localIsoDate();
 
 	let selectedId = $state<string | null>(null);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+
+	// Clicking anywhere on a row shows that series in the chart; clicks on the
+	// row's own controls (View, CSV menu, Delete) keep their meaning. The View
+	// button stays the keyboard / screen-reader way to do the same.
+	function rowClick(e: MouseEvent, id: string) {
+		if ((e.target as Element).closest('button, a, input, select, summary, [role="menu"]')) return;
+		selectedId = id;
+	}
 	let flowLog = $state(false);
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -222,7 +231,9 @@
 						{@const end = endDate(s)}
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
 						{@const role = KIND_ROLES[s.kind]}
-						<tr class:selected={s.id === selectedId}>
+						<!-- Pointer shortcut only; the View button is the accessible control. -->
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+						<tr class="pick" class:selected={s.id === selectedId} onclick={(e) => rowClick(e, s.id)}>
 							<th scope="row">
 								<span class="kind">{kindLabel(s.kind)}</span>
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
@@ -421,7 +432,14 @@
 		border-radius: 2px;
 		background: var(--surface-2);
 	}
-	tr.selected {
+	tr.pick {
+		cursor: pointer;
+	}
+	tr.pick:hover {
+		background: var(--surface-2);
+	}
+	tr.selected,
+	tr.selected:hover {
 		background: var(--accent-soft);
 	}
 	.act {

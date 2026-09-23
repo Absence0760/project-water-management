@@ -62,3 +62,35 @@ test('the results dashboard renders long records without locking the page', asyn
 		expect(Date.now() - t0).toBeLessThan(2_000);
 	}
 });
+
+test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Results menu');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const menu = page.getByRole('navigation', { name: 'Result sections' });
+	await expect(menu.getByRole('link')).toHaveText([
+		'Summary',
+		'Curtailment',
+		'Hydrograph',
+		'Calibration',
+		'Flow duration',
+		'EWR vs outflow',
+		'EWR by month',
+		'Farm detail',
+		'Explore outputs'
+	]);
+
+	await menu.getByRole('link', { name: 'Farm detail' }).click();
+	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
+	const farm = page.getByRole('region', { name: 'Farm detail' });
+	await expect(farm).toBeInViewport();
+	// The section's top edge clears the sticky app header.
+	const header = await page.getByRole('banner').boundingBox();
+	const top = await farm.boundingBox();
+	expect(top!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+
+	await menu.getByRole('link', { name: 'Explore outputs' }).click();
+	await expect(page.getByRole('region', { name: 'Explore any output' })).toBeInViewport();
+	await expect(page).toHaveURL(/#res-explore$/);
+});

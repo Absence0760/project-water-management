@@ -12,6 +12,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                     └─ /api/*  → CF Function strips /api → Lambda Function URL      Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
+                                                          SES API (VPC endpoint) ◄────┤ SendEmail as no-reply@
                                                                                       │ water_app, TLS verify-full
                                    deploy-backend.yml ──invoke──► migrate Lambda ─────┤
                                                                    │ owner creds       ▼
@@ -35,13 +36,21 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   `custom_error_response`, because that would also turn the API's own 403/404
   JSON into `index.html`.
 - **Private-only VPC.** Two private subnets with no internet gateway, no NAT
-  and no public subnet. Nothing needs the internet. The API makes no outbound
-  calls, and Lambda log delivery doesn't go through the function's ENI. The
-  only AWS API the VPC needs is Secrets Manager, and only the migrate Lambda
-  uses it, through one interface endpoint whose policy allows reading the RDS
-  master secret and nothing else. If a future feature needs egress, add the
+  and no public subnet. Nothing needs the internet, and Lambda log delivery
+  doesn't go through the function's ENI. The VPC reaches exactly two AWS APIs,
+  each through its own interface endpoint and security group: **SES** (the API
+  Lambda's only outbound call, `SendEmail`; `ses.tf`) and **Secrets Manager**
+  (the migrate Lambda only; its endpoint policy allows reading the RDS master
+  secret and nothing else). If a future feature needs egress, add the
   matching VPC endpoint for an AWS service. Reach for a NAT (~$33/month) only
   for genuinely external hosts.
+- **Email (SES).** Domain identity for the site hostname with Easy DKIM
+  (2048-bit), custom MAIL FROM `mail.<domain>` (MX + SPF), DMARC at `p=none`,
+  and a configuration set that requires TLS to the receiving server, puts
+  bounces and complaints on the suppression list, and publishes per-event
+  counts to CloudWatch. The API role may call `ses:SendEmail` on that identity
+  and configuration set only, and only with `From = no-reply@<domain>`.
+  Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
 - **Two Lambdas.** `water-management-backend` is the API. It connects as the
   RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
   concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
@@ -64,15 +73,18 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `network.tf` | VPC, 2 private subnets, security groups, Secrets Manager endpoint |
 | `rds.tf` | Subnet group, pg17 parameter group, log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
+| `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
+| `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/CloudFront alarms |
-| `oidc.tf` | Looks up the bootstrap deploy role and attaches the per-resource deploy policy |
+| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms |
+| `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
-| `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`) |
+| `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
+| `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in both zips |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (13 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -142,13 +154,18 @@ reviewer.
 
 ### Region
 
-`aws_region` has no default. **af-south-1 (Cape Town)** is the natural choice
-for a South African client (POPIA data residency, ~20 ms rather than ~230 ms
-RTT), but it is an opt-in region and costs more (see [Cost](#cost)).
-**us-east-1** is the cheapest. The ACM certificate, WAF, the CloudFront alarm
-and its SNS topic are always in us-east-1, and so is the tfstate bucket. The
-two SNS topics exist because a CloudWatch alarm can only notify a topic in its
-own region.
+`aws_region` has no default, on purpose: the operator chooses. The
+recommendation (**af-south-1**, with SES in the same region) and its
+reasoning, with sources, are in
+[docs/deployment.md § Region](../docs/deployment.md#region-recommendation).
+In short: SES, its DKIM/MAIL FROM feedback endpoints and the SES API VPC
+endpoint all exist in af-south-1, so nothing forces a second region; it is an
+opt-in region and costs more (see [Cost](#cost)). SES and its DNS follow
+`aws_region` automatically, including af-south-1's regional DKIM domain
+(`dkim.af-south-1.amazonses.com`, tested). The ACM certificate, WAF, the
+CloudFront alarm and its SNS topic are always in us-east-1, and so is the
+tfstate bucket. The two SNS topics exist because a CloudWatch alarm can only
+notify a topic in its own region.
 
 ### Smaller calls
 
@@ -156,9 +173,27 @@ own region.
   not native bcrypt).
 - **No www alias.** `www.water-management.jaredhoward.com` isn't worth a SAN,
   records and a redirect.
-- **Managed SecurityHeadersPolicy** on both behaviours: HSTS, nosniff,
-  frame-options, referrer-policy. There is no CSP yet, because SvelteKit's
-  inline bootstrap script would need a hash.
+- **Own response-headers policies** (`security_headers.tf`) instead of the
+  managed SecurityHeadersPolicy: HSTS 2 years with subdomains (no preload —
+  only a registrable domain can be preloaded), nosniff, `X-Frame-Options:
+  DENY`, `X-XSS-Protection: 0`, Referrer-Policy, Permissions-Policy and COOP,
+  all with `override`. The API behaviour gets `default-src 'none'`.
+- **CSP in two layers.** SvelteKit's static build has one inline bootstrap
+  script whose hash changes every build, so it can't be pinned in Terraform.
+  The CloudFront header carries everything build-independent (`default-src
+  'self'`, `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors
+  'none'`, `connect-src 'self'`) plus `script-src 'self' 'unsafe-inline'`;
+  SvelteKit's `<meta>` CSP (`kit.csp.mode = 'hash'`) adds `script-src 'self'
+  'sha256-…'`. Browsers enforce both, so only the hashed bootstrap and
+  same-origin files run. `scripts/check-csp.mjs` fails the frontend deploy if
+  the meta policy is missing, so the header's `'unsafe-inline'` can never be
+  the effective policy. `style-src` keeps `'unsafe-inline'`: Svelte templates
+  and uPlot set inline `style` attributes, which nothing narrower allows (an
+  accepted risk; CSS can't run script). No third-party origin is allowed
+  anywhere.
+- **PriceClass_200**, not 100: PriceClass_100 has no South African edge
+  locations, so SA users would be served from Europe. At this traffic the
+  difference in price is cents.
 - **WAF has no AWS managed rule groups.** The common rule set blocks bodies
   over 8 KB, and series uploads are ~1 MB.
 - **Frontend bucket name** carries the account ID (S3 names are global).
@@ -175,20 +210,25 @@ Idle to light use, on-demand, us-east-1:
 | RDS gp3 20 GiB | 2.30 |
 | RDS backups (free up to the provisioned size) | 0 |
 | Secrets Manager interface endpoint, 1 AZ | 7.30 |
+| SES API interface endpoint, 1 AZ | 7.30 |
+| SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (RDS master secret) | 0.40 |
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 10 alarms, logs, RDS log export | ~1.50 |
-| CloudFront, CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $32** |
+| CloudWatch: 12 alarms, logs, RDS log export | ~1.70 |
+| CloudFront (PriceClass_200), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
+| **Total** | **≈ $40** |
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $38–42/month**. Check the AWS pricing calculator before
-you commit to it. Main levers: `secretsmanager_endpoint_az_count = 1`
-(the default), and dropping WAF, which is not recommended because it is the
-spend and brute-force guard for the API. `budget_monthly_usd` defaults to
-**50**.
+which comes to **≈ $48–52/month**. Check the AWS pricing calculator before
+you commit to it. At that level the default `budget_monthly_usd = 50` sits
+right on the baseline and the forecast alert would fire every month, so
+**raise it to ~70 for af-south-1**. Main levers: the two endpoint AZ counts
+(`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`, both 1 by
+default), and dropping WAF, which is not recommended because it is the spend
+and brute-force guard for the API. A NAT instead of the two endpoints would
+cost more (~$33 + data).
 
 ## Operator steps
 
@@ -213,6 +253,10 @@ Claude does not run any of these, and none of them print a secret. Replace
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
    `budget_monthly_usd = 0`.
+4a. **SES endpoint service check** (read-only, before the first plan): confirm
+   the SES API endpoint service exists in the region (it launched Dec 2025):
+   `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
+   An empty result means the apply would fail on `aws_vpc_endpoint.ses`.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
    with `openssl rand -hex 32` (JWT) and `openssl rand -hex 24` (db password)
@@ -235,18 +279,40 @@ Claude does not run any of these, and none of them print a secret. Replace
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
    topic.
+8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
+   records are created by the apply; the identity turns `SUCCESS` once DNS
+   propagates (minutes to an hour):
+   `aws sesv2 get-email-identity --email-identity water-management.jaredhoward.com --region <region> --profile water-management --query '{dkim:DkimAttributes.Status,mailFrom:MailFromAttributes.MailFromDomainStatus,verified:VerifiedForSendingStatus}'`.
+   A new account is in the **SES sandbox** (200 emails/day, 1/s, and only to
+   *verified* addresses), which Terraform can't change. Request production
+   access — it is a human review by AWS, usually within a day:
+   `aws sesv2 put-account-details --production-access-enabled --mail-type TRANSACTIONAL --website-url https://water-management.jaredhoward.com --use-case-description "Transactional account email only (email verification, password reset, project invitations) for a low-volume B2B water-modelling tool; no marketing. Bounces and complaints go to the SES suppression list and CloudWatch alarms." --contact-language EN --region <region> --profile water-management`.
+   Until it is granted, verify your own address to test
+   (`aws sesv2 create-email-identity --email-identity you@example.com --region <region> --profile water-management`),
+   and check with `aws sesv2 get-account --region <region> --profile water-management --query ProductionAccessEnabled`.
+8b. **DMARC.** After 2–4 weeks of clean aggregate reports at
+   `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
    `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`** and `PUBLIC_SITE_URL`
    as variables, and `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` as
-   secrets.
+   secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
+   to deploy while any of them is empty.
+9a. **Approval gate.** Confirm the `production` environment exists with you
+   as a required reviewer:
+   `gh api repos/Absence0760/project-water-management/environments/production --jq '.protection_rules'`.
+   If not: `cd ~/github/templates && ./scripts/backfill-prod-environment.sh --apply`.
+   Required reviewers need a **public** repo (or GitHub Pro/Team for a
+   private one); the release preflight refuses to deploy without them.
 10. **First deploy:** backend first (it runs `001_init` and creates
-    `water_app`), then frontend:
-    - `gh workflow run deploy-backend.yml`
-    - `gh workflow run deploy-frontend.yml`
+    `water_app`), then frontend, each by publishing a release
+    ([docs/deployment.md § Releasing](../docs/deployment.md#releasing)):
+    - `gh release create backend@0.1.0 --target main --title "Backend 0.1.0" --generate-notes`
+    - once that deploy has finished: `gh release create web@0.1.0 --target main --title "Web 0.1.0" --generate-notes`
 
-    Approve each in the `production` environment, then check with
-    `curl -s https://water-management.jaredhoward.com/api/health`.
+    Approve each in the `production` environment. The backend deploy ends
+    with a `/api/health` check through CloudFront; check the site by hand
+    too: `curl -s https://water-management.jaredhoward.com/api/health`.
 
 ### Rotating secrets
 
@@ -274,16 +340,32 @@ Claude does not run any of these, and none of them print a secret. Replace
 
 ## Validating locally
 
-No AWS credentials are needed. Terraform 1.15's `validate` checks the S3
-backend's required `bucket`, so point it at a local backend through a
-gitignored override file first:
-`cd ~/github/project-water-management/infra && printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf`
+No AWS credentials are needed:
 
-Then:
-`cd ~/github/project-water-management/infra && terraform fmt -check -recursive && terraform init -backend=false && terraform validate && terraform test`
+`cd ~/github/project-water-management && pnpm check:infra`
 
-Delete `backend_override.tf` before any real `terraform init -backend-config=backend.config`.
-Otherwise the override silently wins and state goes to a local file.
+That is `bin/check-infra.sh`: `terraform fmt -check -recursive`,
+`init -backend=false`, `validate`, and `terraform test`. CI runs the same
+script (`ci.yml` job `terraform`, which calls `terraform.yml`; part of the
+`CI gate`), plus a Trivy IaC scan. CI never plans against the real account;
+[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why. Terraform 1.15's
+`validate` checks the S3 backend's required `bucket`, so the script writes a
+gitignored `backend_override.tf` (local backend) for the run and deletes it
+afterwards. If you create one by hand, delete it before any real
+`terraform init -backend-config=backend.config`, or the override silently
+wins and state goes to a local file.
+
+The test suite (`tests/guardrails.tftest.hcl`) plans against mocked providers
+and pins: Lambda runtime/memory/timeout/concurrency and env; RDS durability
+and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
+(public-access block, OAC-only policy, ACLs off); TLS minimums; both
+security-headers policies and the CSP directives; SES identity, DKIM (global
+and regional DKIM domains), MAIL FROM, DMARC, TLS-required configuration set,
+the least-privilege `ses:SendEmail` policy and the VPC endpoint; every alarm
+wired to SNS; the budget; the deploy policy having no wildcards; and the
+deploy role's trust postcondition, with negative runs for a branch subject, a
+`StringLike` wildcard and another repo (and a positive run for GitHub's
+immutable-claims subject).
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 

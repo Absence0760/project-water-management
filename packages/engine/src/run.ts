@@ -19,11 +19,10 @@ import {
 } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
-import { computeNaturalFlow } from './flow';
+import { computeNaturalFlow, recessionTableWarnings } from './flow';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
-import { WBT_PRECISION, excelRound } from './network/round';
 import { flowShares } from './network/shares';
-import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
@@ -40,7 +39,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.3.1';
+export const ENGINE_VERSION = '0.4.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -48,6 +47,8 @@ const SEC_PER_DAY = 86_400;
 export interface NaturalFlowInput {
 	naturalFlowM3Day: ArrayLike<number>;
 	series?: { key: string; label: string; unit: string; values: number[] }[];
+	/** Problems found while producing the natural flow (added to the run's warnings). */
+	warnings?: string[];
 }
 
 /** Explicit catchment area, else the sum of the farm areas (the workbook's rFarmSpec_AreaTotal). */
@@ -64,16 +65,25 @@ function withCatchmentArea<T extends { catchmentAreaKm2: number | null }>(cal: T
 
 /** Run the full model: natural flow from rain (./flow.ts), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
-	return runModelWith(input, (ctx) =>
-		computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
+	return runModelWith(input, (ctx) => {
+		const nf = computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
 			startDate: ctx.startDate,
 			days: ctx.days,
 			rainCatchmentMm: ctx.aligned('rain_catchment_mm'),
 			rainChirpsMm: ctx.aligned('rain_chirps_mm'),
 			rainForecastMm: ctx.aligned('rain_forecast_mm'),
 			flowPitmanM3s: ctx.aligned('flow_pitman_m3s')
-		})
-	);
+		});
+		const warnings = recessionTableWarnings(ctx.settings.calibration);
+		// [Flow data] AB falls back to Pitman whenever the rain model gives 0, so
+		// one series can mix two sources (quirk Q7, audit W5).
+		if (nf.pitmanDays > 0) {
+			warnings.push(
+				`${nf.pitmanDays} days of natural flow are Pitman flow: the rain model gave 0 on those days, so the series mixes two sources`
+			);
+		}
+		return { ...nf, warnings };
+	});
 }
 
 export interface RunContext {
@@ -133,6 +143,8 @@ export function runModelWith(
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
+	warnings.push(...(nf.warnings ?? []));
+	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings);
 
 	// --- network ----------------------------------------------------------------
 	const nodes = model.nodes;
@@ -163,14 +175,13 @@ export function runModelWith(
 		}
 		const activeMonth = new Uint8Array(13);
 		for (const m of tr.months) if (m >= 1 && m <= 12) activeMonth[m] = 1;
-		// b023: "Transfer capacity max" = ROUND(max rate m³/s × 86400); an explicit daily cap can only lower it.
-		let maxDaily = excelRound(tr.maxRateM3s * SEC_PER_DAY, 0);
+		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it); an explicit daily cap can only lower it.
+		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
 		transfers.push({
 			from,
 			to,
 			activeMonth,
-			// fGetDamCapacity reads the unrounded capacity from [Farm spec].
 			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
 			maxDailyM3: Math.max(0, maxDaily)
 		});
@@ -179,13 +190,16 @@ export function runModelWith(
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
-		upstream: topo.upstream,
+		// Sum each node's upstream in node-id order, not display order, so the
+		// float result can't depend on how the nodes are listed (review F8).
+		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
 		transfers,
 		month,
 		naturalFlow: natural,
 		ewr,
 		nodes: nodes.map((n, i) => {
-			const cap = excelRound(n.damCapacityM3, 0);
+			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
+			const cap = n.damCapacityM3;
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -193,7 +207,7 @@ export function runModelWith(
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
-				initialStorageM3: excelRound(n.damInitialPct * cap, 0),
+				initialStorageM3: n.damInitialPct * cap,
 				returnFlowPct: n.returnFlowPct,
 				demand: demand[i]!
 			};
@@ -212,7 +226,7 @@ export function runModelWith(
 	const ewrShort = new Float64Array(days);
 	let ewrDaysNotMet = 0;
 	for (let t = 0; t < days; t++) {
-		const d = simOutflow[t]! - ewr[t]!;
+		const d = shortfall(simOutflow[t]!, ewr[t]!, Math.max(simOutflow[t]!, ewr[t]!));
 		if (d < 0) {
 			ewrDaysNotMet++;
 			ewrShort[t] = d;
@@ -227,8 +241,8 @@ export function runModelWith(
 			'observed_flow',
 			OBSERVED_LABEL[observedKind],
 			'm³/day',
-			// b023 [Flow data] P: ROUND(m³/s × 86400); missing days are NaN so charts show gaps.
-			observedM3s.map((v) => (v === null ? NaN : excelRound(v * SEC_PER_DAY, 0)))
+			// m³/s × 86400 (the workbook rounds [Flow data] P); missing days are NaN so charts show gaps.
+			observedM3s.map((v) => (v === null ? NaN : v * SEC_PER_DAY))
 		);
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
@@ -304,14 +318,20 @@ export function runModelWith(
 		window
 	);
 
+	// Pitman flow is *naturalised* (no farms, dams or abstraction): compare it
+	// with natural flow. Gauge and logger records measure the impacted river, so
+	// they are compared with the simulated outflow (audit C1; the workbook
+	// scored the outflow against whichever record rUseFlow picked).
+	const scoreNatural = observedKind === 'flow_pitman_m3s';
 	const calibration = observedKind
 		? {
-				...calibrationStats(simOutflow, observedM3s, {
+				...calibrationStats(scoreNatural ? natural : simOutflow, observedM3s, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd
 				}),
-				flowKind: observedKind
+				flowKind: observedKind,
+				simulatedKey: scoreNatural ? ('natural_flow' as const) : ('simulated_outflow' as const)
 			}
 		: null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
@@ -357,6 +377,7 @@ export function runModelWith(
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
+				runoffCoefficient,
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
 			},
@@ -370,6 +391,48 @@ export function runModelWith(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Natural-flow volume / rain volume over the run (null without rain). A value
+ * above 1 means the catchment gives back more water than fell on it, which no
+ * catchment can do over a whole record: warn (audit H1, W1). Also counts the
+ * days without any rainfall value, which the model silently treats as dry (W2).
+ */
+function catchmentRunoffCoefficient(
+	input: ModelInput,
+	settings: ProjectSettings,
+	natural: Float64Array,
+	aligned: (k: SeriesKind) => (number | null)[],
+	warnings: string[]
+): number | null {
+	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+	if (!kinds.some((k) => input.series?.[k])) return null;
+	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
+	let rainMm = 0;
+	let missing = 0;
+	for (let t = 0; t < natural.length; t++) {
+		const v = c[t] ?? ch[t] ?? f[t] ?? null;
+		if (v === null) missing++;
+		else if (v > 0) rainMm += v;
+	}
+	if (missing > 0) {
+		warnings.push(
+			`${missing} of ${natural.length} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm)`
+		);
+	}
+	const area = resolveCatchmentAreaKm2(settings.calibration, input);
+	if (!(rainMm > 0) || !(area > 0)) return null;
+	let flow = 0;
+	for (let t = 0; t < natural.length; t++) flow += natural[t]!;
+	const coefficient = flow / (rainMm * area * 1000); // 1 mm on 1 km² = 1000 m³
+	if (coefficient > 1) {
+		warnings.push(
+			`the rain model makes more runoff than rainfall: natural flow is ${coefficient.toFixed(2)}× the rain volume over the run. ` +
+				'Check the calibration (a, b, the season factors, the recession curve) and the catchment area'
+		);
+	}
+	return coefficient;
+}
 
 /**
  * settings.reportStart/reportEnd as day indices into the run, clipped to it.
@@ -538,18 +601,9 @@ function buildDemand(
 		}
 		if (cropped === 0) return d;
 		anyArea = true;
-		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays, {
-			cropMm: WBT_PRECISION.cropGrossMm,
-			farmM3Day: WBT_PRECISION.farmDemandM3Day
-		});
+		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
 		for (let t = 0; t < days; t++) {
-			d[t] = netDailyDemandM3(
-				gross[wy[t]!]!,
-				cropped,
-				rain[t]!,
-				settings.effectiveRainFraction,
-				WBT_PRECISION.netDemandM3Day
-			);
+			d[t] = netDailyDemandM3(gross[wy[t]!]!, cropped, rain[t]!, settings.effectiveRainFraction);
 		}
 		return d;
 	});

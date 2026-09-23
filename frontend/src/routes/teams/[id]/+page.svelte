@@ -20,6 +20,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fmtDate } from '$lib/format/number';
+	import EmailText from '$lib/components/common/EmailText.svelte';
 
 	const teamId = $derived(page.params.id ?? '');
 	const me = $derived(session.user?.id ?? '');
@@ -108,7 +109,7 @@
 			const r = await api.teams.addMember(teamId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				addToMembers(r.member);
 				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());
@@ -226,9 +227,9 @@
 									<tr>
 										<th scope="row">
 											{m.displayName}{#if m.userId === me}&nbsp;<span class="muted">(you)</span>{/if}
-											<span class="sub-email">{m.email}</span>
+											<span class="sub-email"><EmailText email={m.email} /></span>
 										</th>
-										<td class="email">{m.email}</td>
+										<td class="email"><EmailText email={m.email} /></td>
 										<td>
 											{#if isAdmin}
 												<select
@@ -447,7 +448,6 @@
 		font-weight: 400;
 		font-size: 0.8rem;
 		color: var(--text-muted);
-		overflow-wrap: anywhere;
 	}
 	.roles {
 		margin: 1rem 0 0.5rem;

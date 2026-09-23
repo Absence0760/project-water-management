@@ -37,6 +37,62 @@
 		void page.url.hash;
 		jumpToHash();
 	});
+
+	// Table of contents: on wide screens it stays beside the text as you
+	// scroll, marks the topic and term you're reading (aria-current), and lists
+	// that topic's terms. The current section is the last one whose top has
+	// passed just below the sticky app header; at the very bottom, the last.
+	let tocEl: HTMLElement | undefined = $state();
+	let current = $state({ topic: '', entry: '' });
+	function spy() {
+		const header = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 56;
+		const line = header + 24;
+		const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+		let topic = '';
+		let entry = '';
+		for (const g of groups) {
+			const h = document.getElementById(`topic-${g.category}`);
+			if (!h) continue;
+			if (atEnd || h.getBoundingClientRect().top <= line) {
+				topic = g.category;
+				entry = '';
+				for (const e of g.entries) {
+					const el = document.getElementById(e.id);
+					if (el && (el.getBoundingClientRect().top <= line || atEnd)) entry = e.id;
+				}
+			}
+		}
+		if (!topic && groups.length) topic = groups[0]!.category;
+		if (topic !== current.topic || entry !== current.entry) current = { topic, entry };
+	}
+	$effect(() => {
+		if (searching) return;
+		let frame = 0;
+		const onScroll = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(spy);
+		};
+		tick().then(spy);
+		window.addEventListener('scroll', onScroll, { passive: true });
+		window.addEventListener('resize', onScroll);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('resize', onScroll);
+		};
+	});
+	// Keep the current link in view inside the sidebar (it scrolls on its own
+	// when the list is taller than the screen), without moving the page.
+	$effect(() => {
+		void current;
+		const link =
+			tocEl?.querySelector<HTMLElement>('.terms [aria-current="location"]') ??
+			tocEl?.querySelector<HTMLElement>('[aria-current="location"]');
+		if (!tocEl || !link || tocEl.scrollHeight <= tocEl.clientHeight) return;
+		const t = link.offsetTop - tocEl.offsetTop;
+		if (t < tocEl.scrollTop) tocEl.scrollTop = t - 8;
+		else if (t + link.offsetHeight > tocEl.scrollTop + tocEl.clientHeight) tocEl.scrollTop = t + link.offsetHeight - tocEl.clientHeight + 8;
+	});
 </script>
 
 <svelte:head><title>Help and glossary · Water Management</title></svelte:head>
@@ -96,27 +152,41 @@
 			{/each}
 		</section>
 	{:else}
-		<nav class="toc" aria-label="Topics">
-			<ul>
+		<div class="layout">
+			<nav class="toc" aria-label="Topics" bind:this={tocEl}>
+				<ul class="topics">
+					{#each groups as g (g.category)}
+						{@const here = current.topic === g.category}
+						<li>
+							<a href="#topic-{g.category}" aria-current={here ? 'location' : undefined}>{CATEGORY_TITLES[g.category]}</a>
+							{#if here}
+								<ul class="terms">
+									{#each g.entries as e (e.id)}
+										<li><a href="#{e.id}" aria-current={current.entry === e.id ? 'location' : undefined}>{e.term}</a></li>
+									{/each}
+								</ul>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</nav>
+			<div class="content">
 				{#each groups as g (g.category)}
-					<li><a href="#topic-{g.category}">{CATEGORY_TITLES[g.category]}</a></li>
+					<section aria-labelledby="topic-{g.category}">
+						<h2 id="topic-{g.category}">{CATEGORY_TITLES[g.category]}</h2>
+						{#each g.entries as e (e.id)}
+							{@render entryCard(e)}
+						{/each}
+					</section>
 				{/each}
-			</ul>
-		</nav>
-		{#each groups as g (g.category)}
-			<section aria-labelledby="topic-{g.category}">
-				<h2 id="topic-{g.category}">{CATEGORY_TITLES[g.category]}</h2>
-				{#each g.entries as e (e.id)}
-					{@render entryCard(e)}
-				{/each}
-			</section>
-		{/each}
+			</div>
+		</div>
 	{/if}
 </main>
 
 <style>
 	.help {
-		max-width: 60rem;
+		max-width: 76rem;
 	}
 	.head {
 		margin-bottom: 1rem;
@@ -136,13 +206,82 @@
 		margin: 0;
 		min-height: 1.2em;
 	}
+	/* Phones and narrow windows: the topics wrap above the text. */
 	.toc ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.toc .topics {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.25rem 1rem;
-		margin: 0 0 1.25rem;
-		padding: 0;
-		list-style: none;
+		margin-bottom: 1.25rem;
+	}
+	.toc .terms {
+		display: none;
+	}
+	.toc a[aria-current='location'] {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.content > section:first-child > h2 {
+		margin-top: 0;
+	}
+	/* Wide screens: a sidebar that stays on screen, below the app header. */
+	@media (min-width: 64rem) {
+		.layout {
+			display: grid;
+			grid-template-columns: 15rem minmax(0, 1fr);
+			gap: 2rem;
+			align-items: start;
+		}
+		.toc {
+			position: sticky;
+			top: calc(var(--header-h) + 1rem);
+			max-height: calc(100vh - var(--header-h) - 2rem);
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			padding-right: 0.25rem;
+		}
+		.toc .topics {
+			display: grid;
+			gap: 0.15rem;
+			margin-bottom: 0;
+		}
+		.toc a {
+			display: block;
+			padding: 0.3rem 0.6rem;
+			border-left: 2px solid transparent;
+			border-radius: 0 var(--radius) var(--radius) 0;
+			color: var(--text-muted);
+			text-decoration: none;
+		}
+		.toc a:hover {
+			color: var(--text);
+			background: var(--surface-2);
+		}
+		.toc a[aria-current='location'] {
+			border-left-color: var(--accent);
+			background: var(--accent-soft);
+		}
+		.toc .terms {
+			display: grid;
+			gap: 0.05rem;
+			margin: 0.15rem 0 0.4rem 0.75rem;
+			font-size: 0.85rem;
+		}
+		/* 24 px targets (WCAG 2.2 SC 2.5.8). */
+		.terms a {
+			display: flex;
+			align-items: center;
+			min-height: 24px;
+			padding: 0.15rem 0.6rem;
+		}
+		.terms a[aria-current='location'] {
+			background: transparent;
+			font-weight: 600;
+		}
 	}
 	section > h2 {
 		margin: 1.5rem 0 0.75rem;

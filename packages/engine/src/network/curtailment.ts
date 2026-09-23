@@ -7,9 +7,9 @@
 // farm's average incremental EWR shortfall gives the total change needed so
 // irrigation is balanced *and* the EWR is met. Column letters are the
 // client catchment/blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
-// formulas and the quirks this mirrors.
+// formulas and the quirks this mirrors. Unlike the sheet nothing is rounded
+// or truncated (docs/engine-audit.md R1, Q14, Q15): the UI rounds for display.
 import type { CurtailmentFarm, CurtailmentSummary } from '../project';
-import { excelRound, excelRoundDown } from './round';
 
 /** m³/day → l/s: 1 m³/day = 1000 l / 86 400 s. The workbook divides by 86.4. */
 export const M3_PER_DAY_PER_LS = 86.4;
@@ -36,12 +36,6 @@ export interface ReportWindow {
 
 /** -0 → 0, so results serialise and compare cleanly. */
 const nz = (x: number) => (x === 0 ? 0 : x);
-/**
- * Sums and differences of 1-dp values are exact to 1 dp in decimal; round off
- * the binary noise (120.3 − 120 = 0.29999999999999716) so they print and
- * compare as the workbook shows them.
- */
-const dp1 = (x: number) => nz(excelRound(x, 1));
 
 function windowMean(a: ArrayLike<number>, from: number, to: number): number {
 	let s = 0;
@@ -57,24 +51,26 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 	const { from, to } = window;
 	if (!(to >= from)) throw new Error(`report window is empty (${window.reportStart} … ${window.reportEnd})`);
 
-	// H, I, R: ROUND(AVERAGE(window), 0).
+	// H, I, R: AVERAGE over the window (the sheet then ROUNDs to 0 dp).
 	const base = farms.map((f) => ({
 		f,
-		H: nz(excelRound(windowMean(f.demand, from, to), 0)),
-		I: nz(excelRound(windowMean(f.supplied, from, to), 0)),
-		R: nz(excelRound(windowMean(f.ewrShortfallIncremental, from, to), 0))
+		H: nz(windowMean(f.demand, from, to)),
+		I: nz(windowMean(f.supplied, from, to)),
+		R: nz(windowMean(f.ewrShortfallIncremental, from, to))
 	}));
 	const sumH = base.reduce((s, b) => s + b.H, 0);
 	const sumI = base.reduce((s, b) => s + b.I, 0);
-	// K total = I total / H total — from the *rounded* farm averages, unguarded in the workbook (#DIV/0! at 0).
+	// K total = Σ supplied / Σ demand (the sheet divides its rounded averages, unguarded: #DIV/0! at 0).
 	const equitable = sumH === 0 ? null : sumI / sumH;
 
 	const rows: CurtailmentFarm[] = base.map(({ f, H, I, R }) => {
 		// With no demand anywhere, every H is 0 and so is every target.
-		const M = equitable === null ? 0 : nz(excelRound(H * equitable, 1));
-		const N = dp1(M - I);
-		const S = dp1(N + R);
-		const U = dp1(M + R);
+		const M = equitable === null ? 0 : nz(H * equitable);
+		// Target and supply agree whenever the farm already has its equitable
+		// share; don't report float cancellation noise (≈1e-16 m³/day) as a cut or gain.
+		const N = nz(Math.abs(M - I) <= 1e-12 * Math.max(Math.abs(M), Math.abs(I)) ? 0 : M - I);
+		const S = nz(N + R);
+		const U = nz(M + R);
 		return {
 			nodeId: f.nodeId,
 			name: f.name,
@@ -84,17 +80,17 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			fractionSupplied: H === 0 ? null : I / H,
 			targetM3Day: M,
 			reduceGainM3Day: N,
-			reduceGainLs: excelRoundDown(N / M3_PER_DAY_PER_LS, 1),
-			targetFraction: H === 0 ? null : excelRound(M / H, 3),
+			reduceGainLs: nz(N / M3_PER_DAY_PER_LS),
+			targetFraction: H === 0 ? null : M / H,
 			ewrShortfallM3Day: R,
 			totalChangeM3Day: S,
-			totalChangeLs: excelRoundDown(S / M3_PER_DAY_PER_LS, 1),
+			totalChangeLs: nz(S / M3_PER_DAY_PER_LS),
 			volumeLeftM3Day: U,
-			fractionOfDemandLeft: H === 0 ? null : excelRound(U / H, 3)
+			fractionOfDemandLeft: H === 0 ? null : U / H
 		};
 	});
 
-	const sum = (k: keyof CurtailmentFarm) => dp1(rows.reduce((s, r) => s + (r[k] as number), 0));
+	const sum = (k: keyof CurtailmentFarm) => nz(rows.reduce((s, r) => s + (r[k] as number), 0));
 	return {
 		reportStart: window.reportStart,
 		reportEnd: window.reportEnd,

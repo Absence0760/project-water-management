@@ -95,6 +95,7 @@
 							max={isPct(f) ? 100 : undefined}
 							scale={isPct(f) ? 100 : 1}
 							nullable={f.nullable}
+							grouped={!isPct(f)}
 							placeholder={f.nullable ? 'not set' : undefined}
 							disabled={readonly}
 							aria-describedby="{id(f.key)}-h"

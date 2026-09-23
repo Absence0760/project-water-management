@@ -13,6 +13,11 @@ const config = {
 		paths: {
 			base: process.env.BASE_PATH || '',
 		},
+		// Emit a <meta> CSP pinning scripts to 'self' plus the hash of the one
+		// inline bootstrap script. It narrows CloudFront's header policy
+		// (infra/security_headers.tf); the deploy refuses a build without it
+		// (infra/scripts/check-csp.mjs).
+		csp: { mode: 'hash', directives: { 'script-src': ['self'] } },
 	},
 };
 

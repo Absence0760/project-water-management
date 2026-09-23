@@ -65,10 +65,15 @@ name**:
 
 Each run stores a snapshot of its inputs in `model_run.inputs`: the settings
 (merged over the defaults), the whole model document, and each driving series'
-**start date and length**. Series values are not stored. So "What changed"
-reports a series that was added, removed, extended or trimmed, but not an edit
-to values inside the same dates (for example a corrected logger reading). If
-the results changed and the list shows nothing, that is the likely reason.
+**start date, length and a SHA-256 hash of its values** (`valuesSha256`).
+Series values themselves are not stored. So "What changed" reports a series
+that was added, removed, extended or trimmed, and — from the hash — values
+edited **inside the same dates** (for example a corrected logger reading:
+*Observed flow values changed (same dates, … to …)*). Two limits: when the
+dates changed too, only the date change is listed (one hash can't say whether
+the shared days changed), and runs stored before the hash existed have none,
+so an in-place edit between them isn't visible. If the results changed and
+the list shows nothing, one of those is the likely reason.
 Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting

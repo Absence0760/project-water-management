@@ -14,8 +14,9 @@ storage.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
+| POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
@@ -32,8 +33,13 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 | --- | --- | --- |
 | Confirm your email | `/verify-email?token=…` | 48 h |
 | Reset your password | `/reset-password?token=…` | 1 h |
-| Invitation | `/register?invite=…` | 7 days |
+| Invitation | `/register?invite=…` (no account yet) or `/verify-email?token=…` (unverified account) | 7 days (invite) / 48 h (verify link) |
 
+- **`login` lockout:** the 5th attempt in a row without the right password
+  locks that address for 1 minute, doubling with each further attempt up to 15
+  minutes; a correct password or a password reset clears it. Addresses without
+  an account lock the same way, so a `429` says nothing about whether the
+  account exists ([security.md § Authentication](./security.md#authentication)).
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
 - **`forgot-password`** answers the same `202` whether or not the address has
@@ -45,11 +51,20 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
   Sign in again afterwards.
 - **`verify-email`** marks the address verified and turns every pending invite
-  for it into a membership.
+  for it into a membership. It needs no session: the token is the credential,
+  so a link opened on another device works signed out.
 - **`register` with `inviteToken`** (from `/register?invite=…`): if the token is
   a live invite for *the same address*, the account starts verified and joins
   the invited projects/teams immediately, with no verification email.
   Otherwise the token is ignored and sign-up proceeds normally.
+- **Opening `/register?invite=…` while signed in** (frontend only; the other
+  sign-in pages send a signed-in user on to the app): the page looks the invite
+  up and explains it. An invite for another address offers *Sign out and
+  accept as …* (the sign-up form then takes over with the address locked) or
+  staying signed in. An invite for the signed-in address says the user joins
+  once the address is confirmed (with a resend button), or should already have
+  access if it is. A dead link says so. There is no "accept while signed in"
+  endpoint: invites are claimed by `verify-email` or by `register`.
 
 ## Errors
 
@@ -57,7 +72,8 @@ Non-2xx responses are `{ error: string, details?: unknown }`. `401` = not signed
 in; `404` = not found **or** not a member (RLS hides the project — the API never
 reveals that a project exists); `403` = member without the needed role; `400` =
 validation (`details` = zod issues); `409` = conflict (duplicate name, last owner);
-`429` = an email was sent to this address moments ago.
+`429` = an email was sent to this address moments ago, or sign-in is locked
+for this address (with `Retry-After`).
 
 ## Projects
 
@@ -102,7 +118,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for an existing account; `201 { invited: true, invite }` when no account has the address (see Invites) | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | – |
 
@@ -111,14 +127,25 @@ team are listed by `GET /teams/:id`, not here.
 
 ### Invites
 
-Adding an address that has no account creates a **pending invite** and emails
-it a sign-up link (`/register?invite=…`, valid 7 days). The invite becomes a
-membership with the invited role once that address is **verified** — by
-signing up through the link, or by signing up normally and clicking the
-verification email. An unverified sign-up alone does not claim invites.
+Adding an address that has no **verified** account creates a **pending
+invite**; the response is the same whether or not an account exists. The
+email depends on the case:
+
+- **No account:** a sign-up link (`/register?invite=…`, valid 7 days).
+- **An account that never verified the address** (it can't sign up again): a
+  confirm-your-email link for that account (`/verify-email?token=…`, 48 h),
+  with a note to use "Forgot password" instead if they never created the
+  account (someone else registered their address). No email if a
+  verification link went out in the last minute — that link accepts the
+  invite too.
+
+The invite becomes a membership with the invited role once that address is
+**verified** — by signing up through the link, by the verification email, or
+by a password reset. An unverified account alone never claims invites, so
+pre-registering a colleague's address doesn't get you added in their place.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
-Adding an address after it has registered makes it a member directly and
+Adding an address whose account *is* verified makes it a member directly and
 clears its invite.
 
 | Method | Path | Body | Response | Min role |
@@ -142,7 +169,7 @@ projects admins are owners and members are editors (see Projects above).
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first) | member |
 | PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }`, or `201 { invited: true, invite }` when no account has that email (see Projects § Invites); `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | member |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
@@ -198,12 +225,14 @@ engine's `runModel`, stores the outputs, and returns the summary.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/runs` | `{ label? }` | `201 { run }` | editor |
+| POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run, series: { nodeId, key, label, unit }[] }` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
+- A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
+  run deletes the oldest beyond that, with their outputs.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
 - `RunSummary.calibration` (`CalibrationStats`) is scored over
@@ -253,7 +282,8 @@ matched.
 
 - `RunInputsSnapshot`, `RunComparison` and `InputChange` are in
   `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run
-  (`{ settings, model, series: { [kind]: { startDate, length } } }`). This is the
+  (`{ settings, model, series: { [kind]: { startDate, length, valuesSha256? } } }`;
+  `valuesSha256` = SHA-256 hex of the values' JSON, absent on older runs). This is the
   only endpoint that returns it.
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
@@ -274,7 +304,7 @@ routes (`401` signed out, `404` not a member). Responses carry
 | Path | Query | Body |
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, per-farm summary table, catchment figures, calibration, warnings — blocks separated by a blank record |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, per-farm summary table, catchment figures, calibration, warnings — blocks separated by a blank record. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

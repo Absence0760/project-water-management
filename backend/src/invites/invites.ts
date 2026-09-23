@@ -1,14 +1,17 @@
-// Invitations for addresses that have no account yet (migrations/004_email.sql).
+// Invitations for addresses without a *verified* account (migrations/004_email.sql).
 //
 // POST /projects/:id/members and POST /teams/:id/members fall through to
-// `inviteByEmail` when no account has the address: a pending invite is stored
-// (token hash only) and an email with a sign-up link goes out. The invite turns
-// into a membership once that address is verified — by the verify-email link,
-// a password-reset link, or signing up through the invite link itself
-// (app_accept_invites). Owners (projects) / admins (teams) list and revoke
-// pending invites; RLS enforces the same.
+// `inviteByEmail` unless a verified account has the address: a pending invite
+// is stored (token hash only) and an email goes out — a sign-up link when no
+// account exists, a confirm-your-email link when an unverified account does
+// (someone may have registered a colleague's address to be added in their
+// place). The invite turns into a membership once that address is verified —
+// by the verify-email link, a password-reset link, or signing up through the
+// invite link itself (app_accept_invites). Owners (projects) / admins (teams)
+// list and revoke pending invites; RLS enforces the same.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
+import { issueEmailToken } from '../auth/email-routes.js';
 import { newToken, RESEND_COOLDOWN, TOKEN_TTL } from '../auth/tokens.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
@@ -58,13 +61,20 @@ export type PendingMail = Parameters<typeof trySendMail>[0] | null;
  * the caller's transaction (which has already checked owner/admin). Re-inviting
  * the same address updates the role and, outside the re-send cooldown, issues
  * a fresh link (the old one stops working) and returns the email to send.
+ *
+ * `unverifiedUserId`: the address already has an account that hasn't been
+ * verified. It can't sign up again, so the email carries a verify-email link
+ * for that account instead of a sign-up link; verifying accepts the invite.
+ * No email when a verification link went out within its own cooldown (the
+ * link already in their inbox accepts the invite too).
  */
 export async function inviteByEmail(
 	db: Db,
 	kind: InviteKind,
 	targetId: string,
 	email: string,
-	role: string
+	role: string,
+	unverifiedUserId?: string
 ): Promise<{ invite: ReturnType<typeof toInvite>; mail: PendingMail }> {
 	const { target, role: roleCol } = COLS[kind];
 	const { rows: existing } = await db.query<{ id: string; recent: boolean }>(
@@ -101,12 +111,20 @@ export async function inviteByEmail(
 	const { rows } = await db.query<InviteRow>(`${selectInvites(kind)} WHERE i.id = $1`, [id]);
 	const row = rows[0]!;
 	if (!send) return { invite: toInvite(row), mail: null };
+	let link = siteLink('/register', token, 'invite');
+	if (unverifiedUserId) {
+		const verifyToken = await issueEmailToken(db, unverifiedUserId, 'verify');
+		if (!verifyToken) return { invite: toInvite(row), mail: null };
+		link = siteLink('/verify-email', verifyToken);
+	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
-	const mail = inviteMail(email, siteLink('/register', token, 'invite'), row.invited_by_name, {
-		kind,
-		name: named[0]?.name ?? '',
-		role
-	});
+	const mail = inviteMail(
+		email,
+		link,
+		row.invited_by_name,
+		{ kind, name: named[0]?.name ?? '', role },
+		unverifiedUserId ? 'confirm' : 'sign-up'
+	);
 	return { invite: toInvite(row), mail };
 }
 

@@ -7,6 +7,7 @@
 	import { upsertInvite } from '$lib/components/auth-extras/invites';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cached } from './cache';
+	import EmailText from '$lib/components/common/EmailText.svelte';
 
 	let {
 		projectId,
@@ -67,7 +68,7 @@
 			const r = await api.members.add(projectId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				const m = r.member;
 				members = [...members.filter((x) => x.userId !== m.userId), m];
@@ -154,9 +155,9 @@
 						<tr>
 							<th scope="row">
 								{m.displayName}{#if m.userId === currentUserId}&nbsp;<span class="muted">(you)</span>{/if}
-								<span class="sub-email">{m.email}</span>
+								<span class="sub-email"><EmailText email={m.email} /></span>
 							</th>
-							<td class="email">{m.email}</td>
+							<td class="email"><EmailText email={m.email} /></td>
 							<td>
 								{#if isOwner}
 									<select
@@ -281,7 +282,6 @@
 		font-weight: 400;
 		font-size: 0.8rem;
 		color: var(--text-muted);
-		overflow-wrap: anywhere;
 	}
 	@media (max-width: 560px) {
 		.email {

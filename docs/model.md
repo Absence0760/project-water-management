@@ -22,8 +22,8 @@ is wrong.
 
 ## 1. Background
 
-**Water Balance Tool (WBT) b023** is an Excel/VBA workbook. SmartMatix wrote it
-for the Freshwater Research Centre (FRC, Scarborough, South Africa). It runs a
+**Water Balance Tool (WBT) b023** is the Excel/VBA workbook the client used
+before this app. It runs a
 **daily** water balance for one river catchment, which is a network of farms
 (each with an optional composite dam) that drain into one outflow gauge. It
 answers three questions:
@@ -74,6 +74,18 @@ Units: flows and volumes are **m³/day** internally. The workbook converts m³/s
 with `86 400 s/day` (`rAppSet_ConvertSecToDay`). Months are laid out in
 **water-year order** (Oct … Sep) wherever the workbook shows a monthly table.
 
+**Rounding.** The workbook rounds at nearly every step (`ROUND(…, 0)` on
+fragmented flows, dam splits, return flow, storage and capacity; `INT` on the
+rain-added flow; 4 dp on recession indices; 2 dp / 1 dp / 0 dp in the demand
+chain; 0, 1 and 3 dp and `ROUNDDOWN` in `[Shortfalls]`). **The engine (≥ 0.4.0)
+rounds nothing**: rounding a model state is not neutral. It stopped every
+recession at a floor of about `0.5 / (1 − f)` m³/day (32 m³/day for the
+default tail factor), created or lost water whenever a flow was split (four
+equal farms and 2 m³/day of natural flow gave 4 m³/day of runoff), and turned a
+0.4 m³ dam into no dam ([audit R1](./engine-audit.md)). The formulas below show
+the workbook's rounding for reference, marked *(workbook only)*; the UI and the
+exports round for display.
+
 ### 2.2 Configuration (the "Cfg" sheets)
 
 | Sheet | Holds | App equivalent |
@@ -97,18 +109,18 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
 1. **Gross crop requirement (mm/month)** for crop *c* in water-year month *m*:
 
-   `grossMm[c][m] = ROUND(apanMm[m] × cropFactor[c][m], 2)`
+   `grossMm[c][m] = apanMm[m] × cropFactor[c][m]` (workbook: `ROUND(…, 2)`)
 
 2. **Gross farm demand (m³/day)** for farm *f*:
 
-   `grossFarm[f][m] = ROUND( Σc area[f][c] × grossMm[c][m] / 1000 / daysInMonth[m], 1 )`
+   `grossFarm[f][m] = Σc area[f][c] × grossMm[c][m] / 1000 / daysInMonth[m]` (workbook: `ROUND(…, 1)`)
 
    Here `daysInMonth` is 31, 30, 31, 31, **28.25**, 31, 30, 31, 30, 31, 31, 30 for
    Oct…Sep. February is configurable. 28.25 gives a 365.25-day year.
 
 3. **Net daily demand (m³/day)** on day *t*:
 
-   `netDemand[f][t] = ROUND( MAX(0, grossFarm[f][month(t)] − croppedArea[f] × effRain / 1000 × rainUsed[t]), 0 )`
+   `netDemand[f][t] = MAX(0, grossFarm[f][month(t)] − croppedArea[f] × effRain / 1000 × rainUsed[t])` (workbook: `ROUND(…, 0)`)
 
    - `croppedArea[f]` = Σ crop areas of the farm (m²).
    - `effRain` = effective-rainfall fraction (0.65).
@@ -143,21 +155,39 @@ Per day *t*, with the workbook column letters:
 | --- | --- | --- |
 | R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold |
 | N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
-| V | **Rain-added flow** | `INT(a · R^b · RainToM3 · seasonFactor)` if R > 0, else 0 |
-| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index (or `BaseFlowInitial` on day 1). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. Rounded to 0 dp. |
-| T | **Base recession index** | Where S sits on the recession curve, interpolated linearly and clamped to `[1, DaysMax]`, 4 dp |
+| V | **Rain-added flow** | `a · R^b · RainToM3 · seasonFactor` if R > 0, else 0 (workbook: `INT(…)`) |
+| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. (Workbook: rounded to 0 dp.) |
+| T | **Base recession index** | Where S sits on the recession curve, interpolated linearly and clamped to `[1, DaysMax]` (workbook: 4 dp) |
 | U | **Response flow (start)** | Yesterday's resultant response receded by yesterday's resultant index |
-| W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1 (or the base index if yesterday's was 0). Capped at `DaysMax`, 4 dp. |
+| W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1. Capped at `DaysMax` (workbook: 4 dp). The workbook used the base index when yesterday's was blank, which only happens on day 1, so a first-day storm lost its pulse index; the engine seeds the day before the run (E1). |
 | X | **Response + added** | If V > 0: `U + V`. Else if yesterday's X = 0: `U`. Else yesterday's X receded by yesterday's W. |
 | Y / Z | **Resultant response / index** | `max(X, S)` and the index of whichever one won |
 | AB | **Natural flow (m³/day)** | `Y` if > 0, else the Pitman natural flow (m³/day) if > 0, else 0 |
 
-`recede(flow, index) = ROUND(flow × lerp(factor[floor(index)], factor[floor(index)+1], frac(index)), 0)`
+`recede(flow, index) = flow × lerp(factor[floor(index)], factor[floor(index)+1], frac(index))` (workbook: `ROUND(…, 0)`)
+
+The interpolated factor is clamped at 0, so an index below 1 (a pulse starting at
+`ShiftPeakIndexLo` < 1) can shrink a flow to nothing but never make it negative
+([audit E2](./engine-audit.md)).
+
+**Checks on every run** (warnings, engine ≥ 0.4.0; [audit W1–W5](./engine-audit.md)):
+
+- **Runoff coefficient** = natural-flow volume / rain volume on the catchment
+  over the run (`summary.catchment.runoffCoefficient`). Above 1 the catchment
+  gives back more water than fell on it, which is impossible over a whole
+  record, so the run warns. The structure makes this easy to reach: a storm
+  resets the base flow to the storm's peak, which then recedes along the slow
+  part of the curve (audit H1, a question for the hydrologist).
+- **Days with no rainfall value** from any source are counted: the model treats
+  them as dry (0 mm), for runoff and for demand.
+- **Days of Pitman fallback** (quirk Q7) are counted.
+- **Recession table**: a factor outside 0–1, a curve that rises, or tables of
+  different length.
 
 The same sheet also:
 
 - Picks the **observed** flow series used for calibration: Pitman (1), gauge
-  (2) or logger (3) via `rUseFlow`. It converts it to m³/day, rounded.
+  (2) or logger (3) via `rUseFlow`. It converts it to m³/day (the workbook rounds).
 - Carries the **pragmatic EWR** for the day's month (AF), the **simulated
   outflow** at the outflow gauge (AG), an "EWR not met" flag (AJ = 1 when
   AG < AF) and the shortfall volume (AK = AG − AF when not met).
@@ -181,10 +211,14 @@ method is chosen in `[Farm spec]`:
 | **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split, default 0.81 / 0.19) |
 | **Specific** | A value entered by hand ("external fragmentation") |
 
-The shares should sum to 1 within `0.0002` (fragmentation tolerance). Then:
+The shares should sum to 1 within `0.0002` (fragmentation tolerance). The run
+also warns, once, about any farm whose area differs from its hi + lo areas by
+more than 1 %: the hi/lo shares use hi + lo, the area share and the rain volume
+use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
+§2.10a). Then:
 
-- Farm runoff: `runoff[f][t] = ROUND(naturalFlow[t] × frag[f], 0)`
-- Farm EWR: `ewr[f][t] = ROUND(pragmaticEwr[month(t)] × frag[f], 0)`
+- Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
+- Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
 ### 2.6 Transfers (`[Transfers]`)
 
@@ -212,7 +246,8 @@ shape has to be raised with them (see §3).
 
 Farms are processed in network order. Upstream elements come first, so a farm
 sees its upstream elements' **same-day** outflow. Per farm *f*, day *t* (the
-sheet's column letters are in brackets). Rounding is to whole m³ where shown.
+sheet's column letters are in brackets). The workbook rounds L, M, T and the
+storage to whole m³; the engine doesn't (R1).
 
 | Step | Quantity | Formula |
 | --- | --- | --- |
@@ -220,9 +255,9 @@ sheet's column letters are in brackets). Rounding is to whole m³ where shown.
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
 | I | Farm runoff | fragmented natural flow (§2.5) |
 | J | Transfer in (+) / out (−) | from §2.6 |
-| L | Upstream inflow "below dam" | `ROUND(H × pctUpstream, 0)` (see quirk Q1) |
+| L | Upstream inflow "below dam" | `H × pctUpstream` (see quirk Q1) |
 | K | Upstream inflow "above dam" | `H − L` |
-| M | Farm runoff into dam | `ROUND(I × pctRunoffToDam, 0)` |
+| M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
 | G | **Irrigation supplied** | `MIN(store[t−1] + M + O + K + J, F)` |
@@ -230,19 +265,22 @@ sheet's column letters are in brackets). Rounding is to whole m³ where shown.
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
 | S | Below-dam flow not diverted | `L + N − O` |
-| T | Irrigation return flow | `ROUND(G × returnPct, 0)` |
+| T | Irrigation return flow | `G × returnPct` |
 | U | **Farm outflow** | `R + S + T` |
-| V | Balance check | `ROUND(abs((H+I+J) − G·(1−returnPct) − (store[t] − store[t−1]) − U), 0)` must be 0 |
+| V | Balance check | `abs((H+I+J) − G·(1−returnPct) − (store[t] − store[t−1]) − U)` must be 0 (the invariant tests check it on random networks) |
 | W | **Irrigation deficit** | `F − G` |
 | Y | Fragmented EWR | §2.5 |
 | Z | Cumulative EWR | `Y + Σ Z` of the elements directly upstream (see quirk Q4) |
 | AA | EWR shortfall (−) | `MIN(U − Z, 0)` |
 | AB | Incremental EWR shortfall (−) | `MIN(AA − Σ AA of the elements directly upstream, 0)` |
 
-Initial storage = `ROUND(initialPct × ROUND(damCapacity, 0), 0)`.
+Initial storage = `initialPct × damCapacity` (workbook: `ROUND(initialPct × ROUND(damCapacity, 0), 0)`).
 
-A **gauge** element records its upstream element's outflow (`= simulated flow`),
-its "cumulative" EWR and its shortfall. The **outflow gauge's** flow is the
+A **gauge** element records the sum of its upstream elements' outflow (`= simulated flow`),
+the sum of their cumulative EWR (Z), and its shortfall `MIN(flow − Z, 0)`. The workbook's
+gauge sums the upstream elements' AA instead, which reports a shortfall at a
+confluence whose flow meets the EWR when one branch is short and another has
+water to spare; the engine (≥ 0.4.0) doesn't ([audit G1](./engine-audit.md)). The **outflow gauge's** flow is the
 catchment's simulated outflow that goes back into `[Flow data]` AG. That is
 compared with the full pragmatic EWR and the observed flow.
 
@@ -297,6 +335,15 @@ logger, which only has data from 2013-04-15). The importer copies both into
 `settings.calibrationStart/End` and `settings.calibrationFlowKind`. With no
 window the whole overlap is scored; with no flow kind the engine uses the gauge
 series if present, else the logger.
+
+**What is scored against what.** Gauge and logger records measure the river as
+it is, with farms, dams and abstraction, so they are compared with the
+**simulated outflow**. Pitman flow is *naturalised* (WR90/WR2012 model flow with
+no development), so from engine 0.4.0 it is compared with the **natural flow**
+from the rain model; the workbook compared the outflow with whichever record
+`rUseFlow` picked, which scores the rain model against a record of a different
+quantity ([audit C1](./engine-audit.md)). `CalibrationStats.simulatedKey` says
+which series was scored.
 
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
 have an observation, in m³/s:
@@ -405,47 +452,51 @@ to irrigate once both are done.
 **Cell formulas.** One row per farm, in `[Network]` order, and gauges are
 left out. *W* is the reporting window, and every average is a plain mean over
 the days in *W*. Column letters are the workbook's. Signs follow the
-workbook: **negative = reduce / shortfall, positive = gain**.
+workbook: **negative = reduce / shortfall, positive = gain**. The sheet rounds
+and truncates as shown in brackets; the engine (≥ 0.4.0) computes every column
+unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)).
 
 | Col | Engine field (`CurtailmentFarm`) | Workbook label | Formula |
 | --- | --- | --- | --- |
-| H | `demandM3Day` | Average demand (m³/day) | `ROUND(AVERAGE(F over W), 0)`, where F is the Element sheet's net demand |
-| I | `suppliedM3Day` | Average supply (m³/day) | `ROUND(AVERAGE(G over W), 0)`, where G is irrigation supplied |
+| H | `demandM3Day` | Average demand (m³/day) | `AVERAGE(F over W)` [sheet: `ROUND(…, 0)`], where F is the Element sheet's net demand |
+| I | `suppliedM3Day` | Average supply (m³/day) | `AVERAGE(G over W)` [sheet: `ROUND(…, 0)`], where G is irrigation supplied |
 | J | `deficitM3Day` | Average deficit (m³/day) | `I − H` (≤ 0) |
 | K | `fractionSupplied` | %Supply | `IF(H = 0, "-", I / H)` (not rounded) |
-| K<sub>tot</sub> | `equitableFraction` | (totals row) | `ΣI / ΣH`, over the **rounded** farm averages |
-| M | `targetM3Day` | Target volume (m³/day) | `ROUND(H × K_tot, 1)` |
+| K<sub>tot</sub> | `equitableFraction` | (totals row) | `ΣI / ΣH` [sheet: over the rounded averages] |
+| M | `targetM3Day` | Target volume (m³/day) | `H × K_tot` [sheet: `ROUND(…, 1)`] |
 | N | `reduceGainM3Day` | − = Reduce, + = Gain (m³/day) | `M − I` |
-| O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `ROUNDDOWN(N / 86.4, 1)`, truncated toward zero |
-| P | `targetFraction` | %Supply (of target) | `IF(H = 0, "-", ROUND(M / H, 3))`. This is K_tot, rounded, for every farm with demand |
-| R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | `ROUND(AVERAGE(incremental EWR shortfall over W), 0)` (≤ 0). The sheet reads it from `[EWR shortfalls]`, which copies Element sheet AB |
+| O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `N / 86.4` [sheet: `ROUNDDOWN(…, 1)`, truncated toward zero] |
+| P | `targetFraction` | %Supply (of target) | `IF(H = 0, "-", M / H)` [sheet: `ROUND(…, 3)`]. This is K_tot for every farm with demand |
+| R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | `AVERAGE(incremental EWR shortfall over W)` [sheet: `ROUND(…, 0)`] (≤ 0). The sheet reads it from `[EWR shortfalls]`, which copies Element sheet AB |
 | S | `totalChangeM3Day` | Total reductions (m³/day) | `N + R` |
-| T | `totalChangeLs` | Total reductions (l/s) | `ROUNDDOWN(S / 86.4, 1)` |
+| T | `totalChangeLs` | Total reductions (l/s) | `S / 86.4` [sheet: `ROUNDDOWN(…, 1)`] |
 | U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | `M + R` |
-| V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", ROUND(U / H, 3))` (see quirk Q12) |
+| V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", U / H)` [sheet: `ROUND(…, 3)`] (see quirk Q12) |
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
-N, O, R, S and U. Its l/s figure is the sum of the *truncated* farm values,
-so it is not `ROUNDDOWN(ΣN / 86.4, 1)`. T has no total. 86.4 converts m³/day
-to l/s (1 m³/day = 1000 l / 86 400 s).
+N, O, R, S and U. (The sheet's l/s total is the sum of the *truncated* farm
+values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
+86 400 s). With nothing rounded, the reductions and gains (N) sum to 0 up to
+floating-point noise.
 
-The engine reproduces this number for number. For the saved window, the
-client catchment regression test compares every column and the totals with the
-workbook. That window happens to be fully supplied, so the test also replays
-the cell formulas over the whole run, which has deficits, on the workbook's
-own daily Element-sheet values. The one addition is that differences and
-sums of 1-dp values are rounded to 1 dp, to drop binary noise
-(`120.3 − 120` would otherwise be `0.29999999999999716`).
+The client catchment regression test feeds the workbook's own daily Element-sheet
+values into `computeCurtailment` and checks every column against the cell
+formulas written out unrounded, and the saved window's averages against the
+sheet within its rounding (½ m³/day).
 
 ---
 
 ## 3. Workbook quirks and suspected bugs
 
-The V1 engine reproduces these **as the workbook does them**, so it can be
-regression-tested against client catchment. Each one needs a decision from the
-hydrologist. When one is fixed, the fix goes behind a project setting (a
-"workbook-compatible" mode against a "corrected" mode). That way old results
-stay reproducible and the engine version records which one was used.
+The engine no longer has to reproduce the workbook (operator decision,
+2026-09). Where a workbook algorithm is physically or numerically unsound, the
+engine **replaces it outright** (no workbook-compatible mode) and the row below
+says so; every run records the engine version, so older results stay
+explainable. Where the question is one of policy or hydrological judgement, the
+row stays **mirrored** until the hydrologist decides. The soundness audit
+([engine-audit.md](./engine-audit.md)) has the evidence and a recommendation for
+each, and the client catchment regression suite lists where and why results differ
+from the workbook.
 
 | # | Where | What we see | Why it matters |
 | --- | --- | --- | --- |
@@ -455,17 +506,17 @@ stay reproducible and the engine version records which one was used.
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
-| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. Days with no rain data silently use a different source. | Mixed sources in one series. The UI should flag these days. |
+| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. From engine 0.4.0 the run warns with the number of fallback days and of days without rain data (audit W2, W5). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |
 | Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. | Decides whether "gain" may be shown as water a farm can actually get. A network-aware redistribution (or licences, see planned-work) would change every target. |
 | Q12 | Shortfalls V | The column is labelled **"Reduction of demand required (%)"**, but the formula is `U / H`, the share of demand that is *left*: 1.000 means no reduction, and 0.600 means a 40 % cut. **Mirrored**: `fractionOfDemandLeft` holds `U / H`, and the UI labels it "demand left", not "reduction". | The label invites exactly the wrong reading. We should ask which one the client reports. |
 | Q13 | Shortfalls R/S/U | The EWR shortfall is the farm's **incremental** shortfall (Element AB). With quirk Q4 in play, that is the whole outflow compared with the farm's own fragment. A farm with no irrigation demand can still carry an EWR "reduction" (S < 0, U < 0) that it has no irrigation to cut. | We need to confirm how a cut is meant to be applied to a natural or stand-alone-dam element. |
-| Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. It also uses the **rounded** farm averages (H, I), not the raw ones. | Cosmetic. The rounding effect is at most ½ m³/day per farm. |
-| Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Mirrored.** | Small cuts disappear in l/s. We should confirm this is deliberate (a conservative presentation). |
+| Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
+| Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
-| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements sums their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`. **Mirrored.** | Decides whether the EWR has to be met reach by reach (current maths) or only at the outlet or other gauges. It changes every farm's curtailment. |
+| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) is still **mirrored**. | Decides whether the EWR has to be met reach by reach (current maths) or only at the outlet or other gauges. It changes every farm's curtailment. |
 | Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. client catchment has only one transfer, so no result is affected. **Mirrored for now.** The engine should split the available volume in rule order, which makes no difference when the draws fit. That is an engine change for a later round (see docs/engine-review.md F1). | Negative storage and negative "supplied" are physically impossible. We need the hydrologist to choose a priority rule (rule order, or pro rata). |
 
 ---
@@ -551,10 +602,17 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 
 ## 6. Porting strategy and regression testing
 
-1. **Port b023 exactly, rounding included.** The workbook rounds at specific
-   steps: gross mm to 2 dp, farm demand to 1 dp, and net demand, fragmented
-   flows, storage and return flow to 0 dp. The engine must round at the same
-   points with Excel's `ROUND` semantics (half away from zero). `INT` floors.
+1. **Port b023's formulas, not its rounding** (engine 0.4.0,
+   [audit R1](./engine-audit.md)). The workbook rounds almost every column
+   (gross mm to 2 dp, farm demand to 1 dp, net demand, fragments, storage,
+   return flow and the transfer cap to 0 dp, `INT` on rain flow, `ROUND` /
+   `ROUNDDOWN` in `[Shortfalls]`). That rounding creates and destroys water
+   and stops recessions at a floor, so the engine keeps full float64
+   precision everywhere; only presentation (UI, exports) rounds for display.
+   Excel's `ROUND` survives in `network/round.ts` for tests that replay
+   workbook cells. The one deliberate tolerance in the model is in EWR
+   shortfalls: a difference within 1e-12 of the volumes involved is float
+   noise and counts as no shortfall (`SHORTFALL_NOISE`, review F8).
 2. **Fixtures come from the client workbook and are never committed.**
    `scripts/wbt-import` reads the client catchment inputs and the workbook's own
    computed columns into `data/` (for example `data/client-catchment/expected.json`; gitignored). The engine's
@@ -563,9 +621,11 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
    cover the same code paths.
 3. **Stage by stage:** natural flow (§2.4) → demand (§2.3) → fragmentation
    (§2.5) → farm balance and transfers (§2.6–2.7) → EWR and outputs (§2.8).
-   Each stage is compared with the workbook's column for all 16 161 days. The
-   target is **exact equality** on rounded columns and < 1e-9 relative
-   difference elsewhere.
+   Each stage is compared with the workbook's column for all 16 161 days.
+   Where the workbook's rounding or a corrected algorithm makes the engine
+   differ, the difference is listed and explained
+   ([engine-audit.md § Regression suite](./engine-audit.md)); elsewhere the
+   target is < 1e-9 relative difference.
 4. **Performance budget:** a full client catchment run (16k days × 13 elements) takes
    about **18 ms** in Node, which is fast enough to run in the browser as you
    type and in Lambda on request.
@@ -585,10 +645,10 @@ as text:
 | Check | What must hold |
 | --- | --- |
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
-| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(ROUND(rate × 86 400), daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
-| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the rounded window means; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied within rounding) and never exceed demand; N = M − I, S = N + R, U = M + R. |
-| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results (to 10⁻⁹ of the catchment's largest volume; counts exactly). Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
-| `checkDoubledCropAreas` | More irrigated land can't leave the catchment better supplied: doubling every crop area never raises Σ supplied / Σ demand (allowing for demand being rounded to whole m³). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
+| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
+| `checkDoubledCropAreas` | More irrigated land can't leave the catchment better supplied: doubling every crop area never raises Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
 They run on:
@@ -620,10 +680,17 @@ FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run
 Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
 Write a new property as a physical statement ("storage never exceeds
 capacity"), not as a snapshot of today's numbers, so it survives algorithm
-fixes. Known open finding: **F8** in [engine-review.md](./engine-review.md)
-(order-dependent rounding residue in the incremental EWR shortfall); until it
-is fixed the random-network test lists, rather than fails, order-invariance
-differences in exactly those fields.
+fixes. The order-invariance check found **F8** ([engine-review.md](./engine-review.md)):
+float residue in EWR shortfalls counted as days not met, depending on node
+order. It is fixed at the source (upstream sums in node-id order, noise below
+10⁻¹² of the volumes reported as no shortfall), and the seeds that exposed it
+are pinned as a regression test.
+
+Tolerances are float noise only, because the engine no longer rounds: daily
+balances close to 10⁻⁶ m³ (plus 10⁻⁹ relative), single-operation identities
+to 10⁻¹² relative, run-long sums to 10⁻¹⁰ of Σ|x|. Don't widen one to make a
+failure pass; a failure is either a broken invariant (fix the check) or an
+engine bug (fix the engine).
 
 ---
 

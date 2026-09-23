@@ -8,6 +8,12 @@ LAMBDA definitions in the workbook's named ranges, all read with openpyxl.
 **Status: partial.** The session ended early. The sections marked *not
 reviewed* still need a pass. No engine code was changed in this round.
 
+> **Follow-up:** the soundness audit ([engine-audit.md](./engine-audit.md),
+> engine 0.4.0) asks whether the algorithms are *right*, not whether they match
+> the workbook. It decides F5 (the engine no longer rounds at all, audit R1)
+> and F7 (warning W3), and fixes a gauge issue behind F3 (G1). F3 itself stays
+> with the hydrologist (Q17).
+
 ## Findings
 
 | # | Severity | Where | Finding | Evidence | Fix |
@@ -18,7 +24,7 @@ reviewed* still need a pass. No engine code was changed in this round.
 | F4 | Low (workbook bug, not in the engine) | client catchment `[Farm spec]` M32, M33, M42 | "Selected fragmentation" is hard-coded to the area share for Farm B, Farm C and Farm D, whatever method is chosen. | `M32 = G32/rFarmSpec_AreaTotal`, while the other rows use `IF(method…)` | Documented as **Q16**. The engine applies the chosen method to every farm, which is the intended behaviour. |
 | F5 | Low | `network/round.ts` vs `flow.ts:75` | There are two `excelRound` implementations. `round.ts` nudges by `y·4e-16`; `flow.ts` uses `toPrecision(15)` string shifting. They agree on every client catchment value, but they can differ on an x.5 boundary after 15 significant digits. | Code inspection | Use one implementation, `flow.ts`'s 15-significant-digit version, which is closer to Excel. Run the regression suite to prove it changes nothing. Not done. |
 | F6 | Low (benign deviation) | `flow.ts:128,166,222` | The engine guards divisions that give `#DIV/0!` in the workbook: `fRfIndex` with a flat curve segment, `fIndxAddedFlow` with amplitude 0, `fBaseFlow` with receded base 0. The workbook would fill every later row with errors. | LAMBDA text of `fRfIndex`, `fIndxAddedFlow`, `fBaseFlow` | Keep the guards. They are documented here. |
-| F8 | Low (numerical; open) | `network/simulate.ts` AB = `MIN(AA − sumAA, 0)` | The incremental EWR shortfall cancels two large sums, so it carries rounding residue (e.g. −4.77e-7 m³ where it should be 0). Whether the residue appears depends on the order the upstream AA values are summed in, i.e. on the **node array order**, and the residue counts as a day "not met": `FarmSummary.daysEwrNotMet` and the farm EWR grid change with display order. | Found by the order-invariance invariant (`run.invariants.test.ts`): `randomInput(70)` vs `scrambleOrder(…, 70)` gives n0 `daysEwrNotMet` 259 vs 246; same class on seeds 599, 1648, 2685 (of 1–3000). Shrunk repro: one day, an outlet farm with six upstream farms, fractional divert capacities, EWR ≈ 5·10⁹ m³/day. | In `simulate.ts`, treat a residue below the rounding noise of its operands as 0 (Excel does the same for near-zero differences), e.g. `if (AB > -1e-9 * (Math.abs(AA) + Math.abs(sumAA))) AB = 0`, and sum upstream nodes in a canonical order. Then delete the `F8` filter in `run.invariants.test.ts`; its `it.fails` repro starts failing as the reminder. |
+| F8 | Low (numerical) | `network/simulate.ts` AA/AB, gauge and outlet shortfalls | The EWR shortfalls cancel large sums, so they carried float residue (e.g. −4.77e-7 m³ where the answer is 0). Whether the residue appeared depended on the order upstream values were summed in, i.e. on the **node array order**, and any residue counted as a day "not met": `FarmSummary.daysEwrNotMet` and the farm EWR grid changed with display order. More common once the engine stopped rounding (0.4.0). | Found by the order-invariance invariant: `randomInput(70)` vs `scrambleOrder(…, 70)` gave n0 `daysEwrNotMet` 259 vs 246 (rounded engine); seeds 103, 125, 145 … on 0.4.0. | **Fixed (0.4.0).** `runModel` passes each node's upstream list in node-id order, and `shortfall(a, b, scale)` reports a difference within `SHORTFALL_NOISE` = 1e-12 of the volumes involved as 0, for farm AA and AB, gauges and the outlet. The seeds are a regression test in `run.invariants.test.ts`; the test's F8 filter is gone. |
 | F7 | Info | `demand.ts` / area share | The share and `RainToM3` use `node.areaKm2` (workbook G, which client catchment types in, not `I+J`). The Hi/Lo method uses `areaHiKm2`/`areaLoKm2`. In the app these can drift apart, with no warning when `areaKm2 ≠ hi + lo`. | client catchment G31 = 29.3, I31 + J31 = 29.395 | **Done:** `quality.ts` `areaMismatches` warns when the difference is over 1 % (model.md §2.10a). client catchment's 0.3 % passes. |
 
 ## Verified OK (against the cells)
@@ -50,7 +56,7 @@ reviewed* still need a pass. No engine code was changed in this round.
 - `ewr.ts` grid: covered by the report-totals invariant (cells add up to the
   run, Σ volume = −Σ daily shortfall, Σ days not met = the summary counts).
 - Fuzzing: done, see [model.md §6 Verification](./model.md#verification). It
-  found F8.
+  found F8, now fixed.
 
 ## Not reviewed
 

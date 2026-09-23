@@ -205,7 +205,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   http_version        = "http2and3"
   comment             = "${local.project} frontend + API"
   default_root_object = "index.html"
-  price_class         = "PriceClass_100"
+  price_class         = var.cloudfront_price_class # PriceClass_200 = includes the South African edges
   web_acl_id          = aws_wafv2_web_acl.frontend.arn
 
   aliases = [var.domain_name]
@@ -245,7 +245,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
 
     cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
-    response_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03" # Managed-SecurityHeadersPolicy
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.site.id
 
     function_association {
       event_type   = "viewer-request"
@@ -267,7 +267,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress                   = true
     cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
     origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
-    response_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03" # Managed-SecurityHeadersPolicy
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
 
     function_association {
       event_type   = "viewer-request"

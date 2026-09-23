@@ -19,32 +19,13 @@ const TIMEOUT = Math.max(120_000, CASES * 200);
 /** The rule a failure message names, without node ids and day numbers, so shrinking keeps the same failure. */
 const ruleOf = (msg: string) => msg.split(':')[0]!.replace(/n\d+ day \d+|day \d+|\(seed \d+[^)]*\)/g, '').trim();
 
-/**
- * KNOWN ENGINE BUG F8 (docs/engine-review.md; owner: the network/simulate.ts
- * work, to fix before the next engine release). The incremental EWR shortfall
- * AB = MIN(AA − Σ upstream AA, 0) cancels large sums, so it carries rounding
- * residue (−4.8e-7 m³ instead of 0) whose presence depends on the order the
- * upstream nodes are summed in, i.e. on the node array order. The residue
- * counts as a day "not met" (FarmSummary.daysEwrNotMet 259 vs 246 on seed 70)
- * and shows in the farm EWR grid. Order-invariance failures on exactly these
- * fields are listed, not failed, until then; the `it.fails` test below pins
- * the repro and starts failing once the bug is fixed, which is the cue to
- * delete this filter.
- */
-const F8 = /^order invariance .*(daysEwrNotMet|avgEwrShortfallM3Day|ewrCompliance\.farms|ewr_shortfall_incremental)/;
-
 describe('engine invariants on random networks', () => {
 	it(`${CASES} random cases from seed ${SEED0}`, () => {
 		const failures: string[] = [];
-		const f8: number[] = [];
 		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
 			const input = randomInput(seed);
 			const bad = checkAll(input, seed);
 			if (!bad) continue;
-			if (F8.test(bad)) {
-				f8.push(seed);
-				continue;
-			}
 			const rule = ruleOf(bad);
 			const small = shrink(input, (x) => {
 				const b = checkAll(x, seed);
@@ -52,13 +33,16 @@ describe('engine invariants on random networks', () => {
 			});
 			failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
 		}
-		if (f8.length) console.warn(`known engine bug F8 (EWR incremental shortfall residue) on seeds ${f8.join(', ')}`);
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
-	it.fails('F8: node array order changes the farm EWR "days not met" (fix in network/simulate.ts, then delete the F8 filter)', () => {
-		const input = randomInput(70);
-		expect(checkOrderInvariance(input, runModel(input), 70)).toBeNull();
+	it('F8 regression: the seeds where display order changed EWR "days not met" are order-invariant', () => {
+		// Found by the order-invariance check: rounded engine (0.3.x) on 70 … 18130,
+		// unrounded (0.4.0) on 103 … 395. Fixed in network/simulate.ts (review F8).
+		for (const seed of [70, 599, 1648, 2685, 6655, 8046, 18130, 103, 125, 145, 148, 207, 232, 321, 342, 389, 395]) {
+			const input = randomInput(seed);
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
 	});
 });
 

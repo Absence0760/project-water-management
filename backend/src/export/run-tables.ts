@@ -60,11 +60,20 @@ export interface SummaryMeta {
 	createdAt: string;
 }
 
+/**
+ * Engine fractions (0–1) are written as percentages, the way the UI and the
+ * workbook's Shortfalls sheet show them. Trimmed to 12 significant digits so
+ * binary noise (0.07 × 100 = 7.000000000000001) doesn't reach the sheet.
+ */
+const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).toPrecision(12)) : v);
+/** Fields converted with `pct` (the engine's own key names). */
+const PERCENT_KEYS = new Set(['fractionSupplied', 'ewrFractionDaysNotMet']);
+
 const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgDemandM3Day', 'Average demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
 	['avgDeficitM3Day', 'Average deficit (m³/day)'],
-	['fractionSupplied', 'Fraction of demand supplied (0–1)'],
+	['fractionSupplied', 'Demand supplied (%)'],
 	['avgEwrShortfallM3Day', 'Average EWR shortfall (m³/day)'],
 	['daysEwrNotMet', 'Days EWR not met']
 ];
@@ -73,7 +82,7 @@ const CATCHMENT_ROWS: Record<string, string> = {
 	meanNaturalFlowM3Day: 'Mean natural flow (m³/day)',
 	meanSimulatedOutflowM3Day: 'Mean simulated outflow (m³/day)',
 	ewrDaysNotMet: 'Days EWR not met at the outflow gauge',
-	ewrFractionDaysNotMet: 'Fraction of days EWR not met (0–1)'
+	ewrFractionDaysNotMet: 'Days EWR not met at the outflow gauge (%)'
 };
 
 const CALIBRATION_ROWS: Record<string, string> = {
@@ -93,7 +102,9 @@ const scalar = (v: unknown): Cell | undefined =>
 /** Known keys with friendly labels first, then any extra scalar fields under their raw key. */
 function labelledRows(obj: Record<string, unknown>, labels: Record<string, string>): [string, Cell][] {
 	const out: [string, Cell][] = [];
-	for (const [k, label] of Object.entries(labels)) if (k in obj) out.push([label, scalar(obj[k]) ?? null]);
+	for (const [k, label] of Object.entries(labels)) {
+		if (k in obj) out.push([label, scalar(PERCENT_KEYS.has(k) ? pct(obj[k]) : obj[k]) ?? null]);
+	}
 	for (const [k, v] of Object.entries(obj)) {
 		const s = scalar(v);
 		if (!(k in labels) && s !== undefined) out.push([k, s]);
@@ -125,7 +136,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	for (const f of farms) {
 		yield csvRow([
 			String(f.name ?? ''),
-			...FARM_COLUMNS.map(([k]) => scalar(f[k]) ?? null),
+			...FARM_COLUMNS.map(([k]) => scalar(PERCENT_KEYS.has(k) ? pct(f[k]) : f[k]) ?? null),
 			...extra.map((k) => scalar(f[k]) ?? null)
 		]);
 	}

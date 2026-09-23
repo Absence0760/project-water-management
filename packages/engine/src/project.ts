@@ -351,6 +351,12 @@ export interface CalibrationStats {
 	annualVolumes?: AnnualVolume[];
 	/** The series simulated outflow was compared with (set by runModel). */
 	flowKind?: CalibrationFlowKind;
+	/**
+	 * The simulated series that was scored (engine ≥ 0.4.0): `natural_flow` when
+	 * flowKind is naturalised Pitman flow, else `simulated_outflow` (gauge and
+	 * logger records measure impacted flow). Older runs always scored the outflow.
+	 */
+	simulatedKey?: 'natural_flow' | 'simulated_outflow';
 }
 
 /** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */
@@ -382,38 +388,39 @@ export interface EwrCompliance {
 
 /**
  * One farm's row of the curtailment report (b023 [Shortfalls], workbook column
- * in brackets). Averages are over the reporting window and rounded like the
- * workbook. Signs follow the workbook: negative = reduce / shortfall, positive
- * = gain. See docs/model.md §2.11.
+ * in brackets). Averages are over the reporting window. Nothing is rounded
+ * (the sheet rounds and truncates; docs/engine-audit.md R1) — round for display.
+ * Signs follow the workbook: negative = reduce / shortfall, positive = gain.
+ * See docs/model.md §2.11.
  */
 export interface CurtailmentFarm {
 	nodeId: string;
 	name: string;
-	/** [H] ROUND(average net irrigation demand, 0). */
+	/** [H] Average net irrigation demand. */
 	demandM3Day: number;
-	/** [I] ROUND(average irrigation supplied, 0). */
+	/** [I] Average irrigation supplied. */
 	suppliedM3Day: number;
 	/** [J] supplied − demand (≤ 0: the average deficit). */
 	deficitM3Day: number;
 	/** [K] supplied / demand; null when demand is 0 (the workbook shows "-"). */
 	fractionSupplied: number | null;
-	/** [M] ROUND(demand × catchment equitableFraction, 1): this farm's equitable share of the water actually supplied. */
+	/** [M] demand × catchment equitableFraction: this farm's equitable share of the water actually supplied. */
 	targetM3Day: number;
 	/** [N] target − supplied. Negative = reduce, positive = may gain. */
 	reduceGainM3Day: number;
-	/** [O] ROUNDDOWN(reduceGainM3Day / 86.4, 1), l/s (truncated toward zero). */
+	/** [O] reduceGainM3Day / 86.4, l/s. */
 	reduceGainLs: number;
-	/** [P] ROUND(target / demand, 3); null when demand is 0. */
+	/** [P] target / demand; null when demand is 0. */
 	targetFraction: number | null;
-	/** [R] ROUND(average incremental EWR shortfall, 0), ≤ 0. */
+	/** [R] Average incremental EWR shortfall, ≤ 0. */
 	ewrShortfallM3Day: number;
 	/** [S] reduceGain + ewrShortfall. Negative = total cut needed to balance irrigation and meet the EWR. */
 	totalChangeM3Day: number;
-	/** [T] ROUNDDOWN(totalChangeM3Day / 86.4, 1), l/s. */
+	/** [T] totalChangeM3Day / 86.4, l/s. */
 	totalChangeLs: number;
 	/** [U] target + ewrShortfall: irrigation volume left once balanced and the EWR is met. */
 	volumeLeftM3Day: number;
-	/** [V] ROUND(volumeLeft / demand, 3): share of demand that is left (the workbook labels it "reduction of demand required"). null when demand is 0. */
+	/** [V] volumeLeft / demand: share of demand that is left (the workbook labels it "reduction of demand required"). null when demand is 0. */
 	fractionOfDemandLeft: number | null;
 }
 
@@ -426,7 +433,7 @@ export interface CurtailmentSummary {
 	/** [K total] Σ supplied / Σ demand over all farms; null when total demand is 0 (the workbook shows #DIV/0!). */
 	equitableFraction: number | null;
 	farms: CurtailmentFarm[];
-	/** The workbook's totals row: plain sums of the farm columns (l/s is the sum of the truncated farm values). */
+	/** The workbook's totals row: plain sums of the farm columns. */
 	totals: {
 		demandM3Day: number;
 		suppliedM3Day: number;
@@ -445,6 +452,11 @@ export interface RunSummary {
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
+		/**
+		 * Natural-flow volume / rain volume on the catchment over the run (engine
+		 * ≥ 0.4.0); null without rain. Above 1 is physically impossible and warns.
+		 */
+		runoffCoefficient?: number | null;
 		ewrDaysNotMet: number;
 		ewrFractionDaysNotMet: number;
 	};

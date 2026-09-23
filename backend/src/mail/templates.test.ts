@@ -29,6 +29,12 @@ describe('email templates', () => {
 			inviteMail('ann@example.com', url, 'Ben', { kind: 'project', name: 'Kloof', role: 'viewer' }),
 			/Ben invited you to Water Management/,
 			/7 days/
+		],
+		[
+			'invite (existing unverified account)',
+			inviteMail('ann@example.com', url, 'Ben', { kind: 'project', name: 'Kloof', role: 'viewer' }, 'confirm'),
+			/Ben invited you to Water Management/,
+			/48 hours/
 		]
 	])('%s: subject, link and expiry in both the HTML and the text alternative', (_name, mail, subject, expiry) => {
 		expect(mail.to).toBe('ann@example.com');
@@ -57,6 +63,14 @@ describe('email templates', () => {
 		expect(mail.html).toContain('Eve &lt;script&gt;');
 		expect(mail.html).toContain('&quot;&gt;&lt;img src=x onerror=alert(1)&gt;');
 		expect(mail.text).toContain('the team “"><img src=x onerror=alert(1)>” as an admin');
+	});
+
+	it('asks an existing unverified account to confirm, and says how to take a squatted address back', () => {
+		const mail = inviteMail('x@example.com', url, 'A', { kind: 'team', name: 'T', role: 'member' }, 'confirm');
+		expect(mail.text).toContain('There is already a Water Management account for x@example.com');
+		expect(mail.text).toContain(`Confirm email and accept: ${url}`);
+		expect(mail.text).toMatch(/Forgot password/);
+		expect(mail.text).not.toMatch(/Create account/);
 	});
 
 	it('uses the right article for the role', () => {

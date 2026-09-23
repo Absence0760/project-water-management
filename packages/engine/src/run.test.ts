@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { runModel, runModelWith } from './run';
+import { resolveReportWindow, runModel, runModelWith } from './run';
+import { defaultProjectSettings } from './project';
+
+const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
-import { waterYearIndex } from './calendar';
+import { toEpochDay, waterYearIndex } from './calendar';
 import { buildTopology } from './network/topology';
-import { excelRound, excelRoundDown } from './network/round';
+import { shortfall } from './network/simulate';
+import { computeCurtailment, type ReportWindow } from './network/curtailment';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -104,31 +108,31 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		startDate: '2020-10-01'
 	});
 
-	it('splits natural flow by area share (ROUND to whole m³)', () => {
-		expect(get(out, 'A', 'runoff')).toEqual([100, 0, 801]); // ROUND(800.5) = 801 (half away from zero)
-		expect(get(out, 'B', 'runoff')).toEqual([100, 0, 801]);
+	it('splits natural flow by area share, unrounded (audit R1)', () => {
+		expect(get(out, 'A', 'runoff')).toEqual([100, 0, 800.5]); // the workbook: ROUND(800.5) = 801
+		expect(get(out, 'B', 'runoff')).toEqual([100, 0, 800.5]);
 	});
 
 	it('supplies demand from the dam and carries storage day to day', () => {
 		// Day 0: Qprev 500 + M 100 → avail 600, G = 100, P = 500, Q = 500.
 		// Day 1: avail 500 → G 100, Q 400.
-		// Day 2: avail 400 + 801 = 1201 → G 100, P 1101, Q 1000, spill 101.
+		// Day 2: avail 400 + 800.5 = 1200.5 → G 100, P 1100.5, Q 1000, spill 100.5.
 		expect(get(out, 'A', 'demand')).toEqual([100, 100, 100]);
 		expect(get(out, 'A', 'supplied')).toEqual([100, 100, 100]);
 		expect(get(out, 'A', 'dam_storage')).toEqual([500, 400, 1000]);
-		expect(get(out, 'A', 'spill')).toEqual([0, 0, 101]);
-		// U = spill + below-dam (0) + return ROUND(100 × 0.1) = 10
-		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 111]);
+		expect(get(out, 'A', 'spill')).toEqual([0, 0, 100.5]);
+		// U = spill + below-dam (0) + return 100 × 0.1 = 10
+		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 110.5]);
 	});
 
 	it('routes upstream outflow into the next farm and on to the gauge', () => {
-		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 111]);
-		// B: capacity 0. M = ROUND(I × 0.5) goes to the (zero) dam and spills; N below dam.
+		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 110.5]);
+		// B: capacity 0. M = I × 0.5 goes to the (zero) dam and spills; N below dam.
 		// U = R + S + T = (K + M) + N + 0 = H + I.
-		expect(get(out, 'B', 'spill')).toEqual([60, 10, 512]); // K + M: 10 + 50, 10 + 0, 111 + ROUND(400.5)=401
-		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 912]);
-		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 912]);
-		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 912]);
+		expect(get(out, 'B', 'spill')).toEqual([60, 10, 510.75]); // K + M: 10 + 50, 10 + 0, 110.5 + 400.25
+		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 911]);
+		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 911]);
+		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 911]);
 	});
 
 	it('adds an EWR compliance grid for the outlet and each farm', () => {
@@ -136,7 +140,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		const g = withEwr.summary.ewrCompliance!;
 		expect(g.waterYears).toEqual([2020]);
 		expect(g.days[0]![0]).toBe(3);
-		// Outflow [110, 10, 912] vs EWR 100: only day 1 is short, by 90.
+		// Outflow [110, 10, 911] vs EWR 100: only day 1 is short, by 90.
 		expect(g.outlet.name).toBe('G');
 		expect(g.outlet.daysNotMet[0]![0]).toBe(1);
 		expect(g.outlet.shortfallM3[0]![0]).toBe(90);
@@ -153,7 +157,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(b.avgDemandM3Day).toBe(0);
 		expect(b.fractionSupplied).toBe(1);
 		expect(out.summary.farms.map((f) => f.nodeId)).toEqual(['A', 'B']); // gauges have no farm summary
-		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 912) / 3, 10);
+		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 911) / 3, 10);
 	});
 
 	it('runs over the rainfall period and emits catchment series', () => {
@@ -162,6 +166,36 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(out.days).toBe(3);
 		expect(get(out, null, 'natural_flow')).toEqual([200, 0, 1601]);
 		expect(out.summary.warnings).toEqual(['no observed flow series: calibration statistics not computed']);
+	});
+});
+
+describe('runModel — no rounding in the balance (audit R1)', () => {
+	it('fragmentation conserves natural flow: Σ farm runoff = natural flow', () => {
+		// Four equal farms: ROUND(0.25) = 0 lost 1 m³/day; ROUND(0.5) = 1 created 2 m³/day from 2.
+		const nodes = ['A', 'B', 'C', 'D'].map((id, i) => node(id, { sortOrder: i, downstreamNodeId: i < 3 ? 'ABCD'[i + 1]! : null }));
+		const natural = [1, 2, 5, 1234.5];
+		const out = run({ nodes, natural });
+		for (let t = 0; t < natural.length; t++) {
+			const sum = nodes.reduce((s, n) => s + get(out, n.id, 'runoff')[t]!, 0);
+			expect(sum).toBeCloseTo(natural[t]!, 9);
+		}
+		expect(get(out, null, 'simulated_outflow')).toEqual(natural.map((v) => expect.closeTo(v, 9)));
+	});
+
+	it('keeps a sub-m³ dam and the exact return flow', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, returnFlowPct: 0.25 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1 }],
+			settings: { apanMm: flat(31) as Monthly }, // 1 m² × 31 mm / 1000 / 31 = 0.001 m³/day
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'demand')[0]).toBeCloseTo(0.001, 12);
+		expect(get(out, 'D', 'supplied')[0]).toBeCloseTo(0.001, 12);
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(0.399, 12);
+		expect(get(out, 'D', 'outflow')[0]).toBeCloseTo(0.00025, 12);
 	});
 });
 
@@ -200,12 +234,12 @@ describe('runModel — dam behaviour', () => {
 		expect(get(out, 'D', 'outflow')).toEqual([0, 500]);
 	});
 
-	it('rounds the initial storage like the Element sheet (ROUND(pct × ROUND(capacity)))', () => {
+	it('initial storage is pct × capacity, unrounded (the Element sheet: ROUND(pct × ROUND(capacity)))', () => {
 		const out = run({
 			nodes: [node('D', { damCapacityM3: 1001.4, damInitialPct: 0.5 })],
 			natural: [0]
 		});
-		expect(get(out, 'D', 'dam_storage')).toEqual([501]); // ROUND(0.5 × 1001) = ROUND(500.5)
+		expect(get(out, 'D', 'dam_storage')).toEqual([500.7]); // the workbook: ROUND(0.5 × 1001) = 501
 	});
 
 	it('records a deficit when the dam runs dry', () => {
@@ -227,20 +261,20 @@ describe('runModel — dam behaviour', () => {
 });
 
 describe('runModel — irrigation demand', () => {
-	it('offsets gross demand by effective rain above the threshold and rounds like the workbook', () => {
+	it('offsets gross demand by effective rain above the threshold', () => {
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }];
 		const out = run({
 			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
 			crops,
 			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 10_000 }],
-			// A-pan 100 mm × 0.5 = 50 mm; 10 000 m² × 50 mm / 1000 / 31 = 16.129 → ROUND(,1) = 16.1
+			// A-pan 100 mm × 0.5 = 50 mm; 10 000 m² × 50 mm / 1000 / 31 = 16.129 m³/day
 			settings: { apanMm: flat(100) as Monthly },
 			startDate: '2021-01-01',
 			natural: [0, 0, 0, 0],
 			// 2 mm is at the threshold → ignored; 3 mm → 10 000 × 0.65/1000 × 3 = 19.5 → floored at 0
 			rain: [0, 2, 1, 3]
 		});
-		expect(get(out, 'F', 'demand')).toEqual([16, 16, 16, 0]);
+		expect(get(out, 'F', 'demand')).toEqual([500 / 31, 500 / 31, 500 / 31, 0]);
 	});
 
 	it('falls back to CHIRPS rain when catchment rain is missing', () => {
@@ -339,6 +373,37 @@ describe('runModel — transfers', () => {
 	});
 });
 
+describe('shortfall (review F8)', () => {
+	it('is MIN(a − b, 0), with float noise of the volumes involved reported as 0', () => {
+		expect(shortfall(80, 100, 100)).toBe(-20);
+		expect(shortfall(120, 100, 120)).toBe(0);
+		// 5e9 − (5e9 + one ULP) is noise, not a shortfall: exactly the residue that
+		// counted as a day "not met" depending on node order.
+		const big = 5e9;
+		const residue = big - (big + 1e-6);
+		expect(residue).toBeLessThan(0);
+		expect(shortfall(big, big + 1e-6, big)).toBe(0);
+		// A real shortfall of 0.1 m³ on the same volumes is kept.
+		expect(shortfall(big, big + 0.1, big)).toBeCloseTo(-0.1, 6);
+	});
+
+	it('makes upstream sums independent of node order', () => {
+		// Three branches whose shortfalls cancel in exact arithmetic.
+		const nodes = [
+			node('G', { kind: 'gauge', areaKm2: 0 }),
+			node('A', { downstreamNodeId: 'G', sortOrder: 1 }),
+			node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
+			node('C', { downstreamNodeId: 'G', sortOrder: 3 })
+		];
+		const settings = { ewrPragmaticM3PerDay: flat(0.3) as Monthly };
+		const a = run({ nodes, natural: [0.1 + 0.2], settings });
+		const b = run({ nodes: [nodes[0]!, nodes[3]!, nodes[1]!, nodes[2]!].map((n, i) => ({ ...n, sortOrder: 9 - i })), natural: [0.1 + 0.2], settings });
+		expect(get(b, 'G', 'ewr_shortfall')).toEqual(get(a, 'G', 'ewr_shortfall'));
+		expect(get(a, 'G', 'ewr_shortfall')).toEqual([0]);
+		expect(a.summary.catchment.ewrDaysNotMet).toBe(0);
+	});
+});
+
 describe('runModel — EWR', () => {
 	// X and Y are headwater farms draining into Z, which drains into gauge G.
 	// Equal areas → each farm carries a third of the EWR.
@@ -379,6 +444,30 @@ describe('runModel — EWR', () => {
 		const dry = run({ nodes, natural: [0, 300], settings: { ewrPragmaticM3PerDay: flat(150) as Monthly } });
 		expect(dry.summary.catchment.ewrDaysNotMet).toBe(1);
 		expect(get(dry, null, 'ewr_shortfall')).toEqual([-150, 0]);
+	});
+});
+
+describe('runModel — EWR at a confluence gauge (audit G1)', () => {
+	it("a gauge's shortfall is its own flow against its own requirement, not the sum of its branches' shortfalls", () => {
+		// A stores all its runoff (outflow 0, 100 short of its 100 EWR share); B passes
+		// its 200 (100 spare). At gauge G the flow 200 meets the EWR 200 — no shortfall.
+		// The workbook's GaugeTemplate sums the branches' AA: −100.
+		const out = run({
+			nodes: [
+				node('A', { downstreamNodeId: 'G', pctRunoffToDam: 1, damCapacityM3: 1e9 }),
+				node('B', { downstreamNodeId: 'G', sortOrder: 1 }),
+				node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
+			],
+			natural: [400],
+			settings: { ewrPragmaticM3PerDay: flat(200) as Monthly }
+		});
+		expect(get(out, 'A', 'ewr_shortfall')).toEqual([-100]);
+		expect(get(out, 'B', 'ewr_shortfall')).toEqual([0]);
+		expect(get(out, 'G', 'outflow')).toEqual([200]);
+		expect(get(out, 'G', 'ewr_cumulative')).toEqual([200]);
+		expect(get(out, 'G', 'ewr_shortfall')).toEqual([0]);
+		// Consistent with the catchment series at the outlet.
+		expect(get(out, null, 'ewr_shortfall')).toEqual([0]);
 	});
 });
 
@@ -436,15 +525,15 @@ describe('runModel — flow shares', () => {
 	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
 		const out = run({
 			nodes: [
-				node('A', { downstreamNodeId: 'B', areaHiKm2: 3, areaLoKm2: 1 }),
-				node('B', { sortOrder: 1, areaHiKm2: 1, areaLoKm2: 3 })
+				node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
+				node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
 			],
 			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.8, lo: 0.2 } },
 			natural: [1000]
 		});
 		// A: 3/4 × 0.8 + 1/4 × 0.2 = 0.65; B: 0.35
-		expect(get(out, 'A', 'runoff')).toEqual([650]);
-		expect(get(out, 'B', 'runoff')).toEqual([350]);
+		expect(get(out, 'A', 'runoff')[0]).toBeCloseTo(650, 9);
+		expect(get(out, 'B', 'runoff')[0]).toBeCloseTo(350, 9);
 		expect(out.summary.warnings.some((w) => w.includes('flow shares'))).toBe(false);
 	});
 });
@@ -580,6 +669,24 @@ describe('runModel — calibration statistics', () => {
 		expect(missing.summary.warnings.some((w) => /flow_pitman_m3s.*missing/.test(w))).toBe(true);
 	});
 
+	it('scores natural flow, not the impacted outflow, against naturalised Pitman flow (audit C1)', () => {
+		// A's dam keeps every drop, so the outflow is 0 while natural flow equals Pitman.
+		const i = input({
+			nodes: [node('A', { pctRunoffToDam: 1, damCapacityM3: 1e9 })],
+			natural: [86_400, 2 * 86_400, 3 * 86_400]
+		});
+		i.series.flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 2, 3] };
+		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 2 * 86_400, 3 * 86_400] }));
+		const c = out.summary.calibration!;
+		expect(c.flowKind).toBe('flow_pitman_m3s');
+		expect(c.simulatedKey).toBe('natural_flow');
+		expect(c.nse).toBeCloseTo(1, 12);
+		expect(c.pbias).toBeCloseTo(0, 12);
+		// A gauge or logger record is impacted flow: it is scored against the outflow.
+		expect(run({ nodes: [node('A')], natural: [86_400], observed: [1] }).summary.calibration!.simulatedKey).toBe('simulated_outflow');
+	});
+
 	it('returns null NSE when observations are constant', () => {
 		expect(calibrationStats([86_400, 86_400], [1, 1]).nse).toBeNull();
 		expect(calibrationStats([1], [null]).days).toBe(0);
@@ -626,16 +733,6 @@ describe('runModel — input data quality', () => {
 		});
 		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
 		expect(out.summary.warnings.some((w) => /A: 10 km² vs 9 km²/.test(w))).toBe(true);
-	});
-});
-
-describe('excelRound', () => {
-	it('rounds half away from zero and survives binary representation error', () => {
-		expect(excelRound(2.5)).toBe(3);
-		expect(excelRound(-2.5)).toBe(-3);
-		expect(excelRound(2.675, 2)).toBe(2.68);
-		expect(excelRound(1.005, 2)).toBe(1.01);
-		expect(excelRound(0.49)).toBe(0);
 	});
 });
 
@@ -707,8 +804,13 @@ const dataDir = ['data/client-catchment', '../data/client-catchment', '../../dat
 describe.skipIf(!dataDir)(
 	'workbook regression: client catchment (needs data/client-catchment from scripts/wbt-import/extract_project.py)',
 	() => {
-		// skipIf still runs this body to collect the tests: read nothing when the data is absent.
-		if (!dataDir) return;
+		// vitest still runs a skipped describe's body to collect its tests: don't
+		// read the (absent) fixtures then, but register one test so the run
+		// reports the suite as skipped rather than silently empty.
+		if (!dataDir) {
+			it('needs data/client-catchment', () => {});
+			return;
+		}
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
 		const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
 		const modelInput: ModelInput = {
@@ -722,15 +824,84 @@ describe.skipIf(!dataDir)(
 		const out = runModelWith(modelInput, () => ({ naturalFlowM3Day: natural }));
 		const elapsedMs = Date.now() - t0;
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
+		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
+		const topo = buildTopology(project.model.nodes);
+		const index = new Map(project.model.nodes.map((n, i) => [n.id, i]));
+		const farmCount = (i: number): number =>
+			(project.model.nodes[i]!.kind === 'farm' ? 1 : 0) + Array.from(topo.upstream[i]!).reduce((s, u) => s + farmCount(u), 0);
+		const croppedM2 = (id: string) => project.model.cropAreas.filter((c) => c.nodeId === id).reduce((s, c) => s + c.areaM2, 0);
+		/** Confluence gauges: the workbook's gauge summed its branches' AA (audit G1). */
+		const confluenceGauge = (i: number) => project.model.nodes[i]!.kind === 'gauge' && topo.upstream[i]!.length > 1;
 
-		/** Days where engine and workbook differ by more than 1e-6. */
-		function mismatches(actual: number[], want: (number | null)[]): number[] {
-			const bad: number[] = [];
-			for (let t = 0; t < want.length; t++) {
-				const w = want[t] ?? 0;
-				if (!(Math.abs(actual[t]! - w) <= 1e-6)) bad.push(t);
+		// -------------------------------------------------------------------------
+		// DEVIATION LIST — where engine ≥ 0.4.0 differs from the workbook on purpose
+		// (docs/engine-audit.md). Up to 0.3.1 every column below matched exactly.
+		//
+		//   exact  the algorithm is unchanged and nothing is rounded: equal to 1e-6.
+		//   daily  differs only by the workbook's ROUND steps (R1): every day,
+		//          |engine − workbook| ≤ the sum of the half-units those steps drop.
+		//   mean   a state that carries from day to day (storage and all that is
+		//          routed through it) or depends on one: the workbook's rounding
+		//          (R1) shifts the state and the shift propagates, so compare the
+		//          whole-run mean: |Δmean| ≤ 1 % of mean|workbook| + 1 m³/day.
+		//   skip   not comparable, with the reason.
+		// -------------------------------------------------------------------------
+		type Rule = { kind: 'exact' } | { kind: 'daily'; bound: number } | { kind: 'mean' } | { kind: 'skip'; why: string };
+		const MEAN_REL = 0.01;
+		const MEAN_ABS = 1;
+		function nodeRule(name: string, key: string): Rule {
+			const n = nodeByName.get(name)!;
+			const i = index.get(n.id)!;
+			switch (key) {
+				case 'demand':
+					// R1: net ROUND(,0) 0.5 + farm ROUND(,1) 0.05 + crop mm ROUND(,2) 0.005 mm on the cropped area.
+					return { kind: 'daily', bound: 0.55 + (croppedM2(n.id) * 0.005) / 1000 / 28 + 1e-6 };
+				case 'runoff':
+				case 'ewr':
+					return { kind: 'daily', bound: 0.5 + 1e-6 }; // R1: ROUND(value × share, 0)
+				case 'ewr_cumulative':
+					return { kind: 'daily', bound: 0.5 * farmCount(i) + 1e-6 }; // R1: one ROUNDed fragment per farm at or above
+				case 'ewr_shortfall':
+					// G1: a confluence gauge's shortfall is MIN(U − Z, 0), not Σ branch AA; checked separately below.
+					return confluenceGauge(i) ? { kind: 'skip', why: 'G1' } : { kind: 'mean' };
+				case 'ewr_shortfall_incremental':
+					// G1: AB = MIN(AA − Σ upstream AA, 0) reads the AA of a confluence gauge directly upstream.
+					return Array.from(topo.upstream[i]!).some(confluenceGauge) ? { kind: 'skip', why: 'G1' } : { kind: 'mean' };
+				default:
+					// supplied, deficit, inflow_upstream, transfer, dam_storage, spill, outflow: R1 via the state.
+					return { kind: 'mean' };
 			}
-			return bad;
+		}
+
+		function compare(actual: ArrayLike<number>, want: (number | null)[], rule: Rule): string | null {
+			if (rule.kind === 'skip') return null;
+			const n = want.length;
+			if (rule.kind === 'mean') {
+				let a = 0;
+				let w = 0;
+				let wAbs = 0;
+				for (let t = 0; t < n; t++) {
+					a += actual[t]!;
+					w += want[t] ?? 0;
+					wAbs += Math.abs(want[t] ?? 0);
+				}
+				const d = Math.abs(a - w) / n;
+				const bound = (MEAN_REL * wAbs) / n + MEAN_ABS;
+				return d <= bound ? null : `mean differs by ${d.toFixed(3)} m³/day (bound ${bound.toFixed(3)}): engine ${(a / n).toFixed(3)} vs workbook ${(w / n).toFixed(3)}`;
+			}
+			const bound = rule.kind === 'exact' ? 1e-6 : rule.bound;
+			let bad = 0;
+			let first = -1;
+			let worst = 0;
+			for (let t = 0; t < n; t++) {
+				const d = Math.abs(actual[t]! - (want[t] ?? 0));
+				worst = Math.max(worst, d);
+				if (!(d <= bound)) {
+					bad++;
+					if (first < 0) first = t;
+				}
+			}
+			return bad === 0 ? null : `${bad} days beyond ±${bound}, worst ${worst}, first day ${first}: engine ${actual[first]} vs workbook ${want[first]}`;
 		}
 
 		it('covers the same period as the workbook', () => {
@@ -758,34 +929,61 @@ describe.skipIf(!dataDir)(
 			'ewr_shortfall_incremental'
 		];
 		for (const [name, want] of Object.entries(expected.nodes)) {
-			it(`matches every daily value on Element sheet "${name}"`, () => {
+			it(`matches Element sheet "${name}" within the deviation list`, () => {
 				const id = idByName.get(name)!;
 				const report: Record<string, string> = {};
 				for (const key of keys) {
 					if (!(key in want) || (want.kind === 'gauge' && !['outflow', 'ewr_cumulative', 'ewr_shortfall'].includes(key)))
 						continue;
-					const bad = mismatches(get(out, id, key), want[key]!);
-					if (bad.length) {
-						const t = bad[0]!;
-						report[key] = `${bad.length} days differ, first day ${t}: engine ${get(out, id, key)[t]} vs workbook ${want[key]![t]}`;
-					}
+					const bad = compare(get(out, id, key), want[key]!, nodeRule(name, key));
+					if (bad) report[key] = bad;
 				}
 				expect(report).toEqual({});
 			});
 		}
 
-		it('matches the catchment simulated outflow and EWR', () => {
-			expect(mismatches(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
-			expect(mismatches(get(out, null, 'ewr'), expected.catchment.ewr!)).toEqual([]);
-			expect(mismatches(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!)).toEqual([]);
+		it('G1: every gauge reports its own shortfall MIN(flow − cumulative EWR, 0)', () => {
+			for (const n of project.model.nodes.filter((x) => x.kind === 'gauge')) {
+				const U = get(out, n.id, 'outflow');
+				const Z = get(out, n.id, 'ewr_cumulative');
+				expect(get(out, n.id, 'ewr_shortfall')).toEqual(U.map((u, t) => Math.min(u - Z[t]!, 0)));
+			}
 		});
 
-		it('end to end (natural flow from the rain model too) reproduces the workbook outflow', () => {
+		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
+			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, { kind: 'mean' })).toBeNull(); // R1
+			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
+			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, { kind: 'mean' })).toBeNull(); // R1
+		});
+
+		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
 			const t1 = Date.now();
 			const full = runModel(modelInput);
 			expect(Date.now() - t1).toBeLessThan(1000);
-			expect(mismatches(get(full, null, 'natural_flow'), expected.catchment.natural_flow!)).toEqual([]);
-			expect(mismatches(get(full, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
+			// E1 (day-1 base flow) and R1 (no rounding floor in the recessions): compare
+			// water-year volumes, allowing 2 % plus the workbook's rounding floor
+			// 0.5 / (1 − f_max) m³/day, which the engine no longer adds on dry days.
+			const cal = { ...defaultCal(), ...(project.settings.calibration as object | undefined) } as ReturnType<typeof defaultCal>;
+			const floor = 0.5 / (1 - Math.max(...cal.recessionFactors)) + 1;
+			const got = get(full, null, 'natural_flow');
+			const want = expected.catchment.natural_flow!;
+			const d0 = Math.round(Date.parse(`${expected.startDate}T00:00:00Z`) / 86_400_000);
+			const years = new Map<number, { e: number; w: number; days: number }>();
+			for (let t = 0; t < want.length; t++) {
+				const d = new Date((d0 + t) * 86_400_000);
+				const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+				const y = years.get(wy) ?? { e: 0, w: 0, days: 0 };
+				y.e += got[t]!;
+				y.w += want[t] ?? 0;
+				y.days++;
+				years.set(wy, y);
+			}
+			const bad = [...years].filter(([, y]) => Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor);
+			expect(bad.map(([wy, y]) => `${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³`)).toEqual([]);
+			const sim = get(full, null, 'simulated_outflow');
+			const simW = expected.catchment.simulated_outflow!;
+			const mean = (v: ArrayLike<number | null>) => Array.from(v).reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
+			expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
 		});
 
@@ -796,12 +994,15 @@ describe.skipIf(!dataDir)(
 		// sheet *and* the [EWR shortfalls] sheet, but the pivot has a different
 		// sum). So: every farm-month whose volume is current must match exactly,
 		// counts included under the running-total rule, and most must be current.
+		// The grid is fed the workbook's own daily AB, so this tests ewr.ts alone
+		// (the engine's AB differs from the workbook's by R1).
 		it('reproduces the [EWR shortfalls Pivot Data] counts (running-total rule) wherever the pivot is current', () => {
 			if (!expected.ewrPivot?.length) return;
+			const wbAB = (name: string) => expected.nodes[name]!.ewr_shortfall_incremental!.map((v) => v ?? 0);
 			const farms = project.model.nodes
 				.filter((n) => n.kind === 'farm')
-				.map((n) => ({ nodeId: n.id, name: n.name, shortfallM3Day: get(out, n.id, 'ewr_shortfall_incremental') }));
-			const outlet = { nodeId: null, name: 'outlet', shortfallM3Day: get(out, null, 'ewr_shortfall') };
+				.map((n) => ({ nodeId: n.id, name: n.name, shortfallM3Day: wbAB(n.name) }));
+			const outlet = { nodeId: null, name: 'outlet', shortfallM3Day: expected.catchment.ewr_not_met!.map((v) => v ?? 0) };
 			const g = ewrCompliance(out.startDate, out.days, outlet, farms, 'runningTotal');
 			const byName = new Map(g.farms.map((f) => [f.name, f]));
 			const bad: string[] = [];
@@ -850,45 +1051,36 @@ describe.skipIf(!dataDir)(
 			expect((100 * (sim - obs)) / obs).toBeCloseTo(c.volumeErrorPct!, 8);
 		});
 
-		it('matches the [Shortfalls] sheet averages over its reporting period', () => {
-			if (!expected.shortfalls) return;
-			const { periodStart, periodEnd, farms } = expected.shortfalls;
-			const day = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000);
-			const a = day(periodStart) - day(expected.startDate);
-			const b = day(periodEnd) - day(expected.startDate);
-			const avg = (v: number[]) => v.slice(a, b + 1).reduce((s, x) => s + x, 0) / (b - a + 1);
-			for (const f of farms) {
-				const id = idByName.get(f.name)!;
-				expect(excelRound(avg(get(out, id, 'demand')))).toBe(f.avgDemand);
-				expect(excelRound(avg(get(out, id, 'supplied')))).toBe(f.avgSupplied);
-				expect(excelRound(avg(get(out, id, 'ewr_shortfall_incremental')))).toBe(f.avgEwrShortfall);
-			}
-		});
+		// [Shortfalls]: computeCurtailment is fed the workbook's own daily F, G and AB,
+		// so these test curtailment.ts alone, not the network's R1 differences.
+		const wbCurtailment = (window: ReportWindow) =>
+			computeCurtailment(
+				Object.entries(expected.nodes)
+					.filter(([, n]) => n.kind === 'farm')
+					.map(([name, n]) => ({
+						nodeId: idByName.get(name)!,
+						name,
+						demand: n.demand!.map((v) => v ?? 0),
+						supplied: n.supplied!.map((v) => v ?? 0),
+						ewrShortfallIncremental: n.ewr_shortfall_incremental!.map((v) => v ?? 0)
+					})),
+				window
+			);
 
-		it('matches every [Shortfalls] curtailment column over its reporting period', () => {
+		it("matches the [Shortfalls] sheet's averages over its reporting period, within the sheet's ROUND", () => {
 			const sf = expected.shortfalls;
-			if (!sf?.totals) return; // expected.json from before the curtailment columns were extracted
-			const inWindow = runModelWith(
-				{ ...modelInput, settings: { ...modelInput.settings, reportStart: sf.periodStart, reportEnd: sf.periodEnd } },
-				() => ({ naturalFlowM3Day: natural })
-			).summary.curtailment!;
-			expect([inWindow.reportStart, inWindow.reportEnd]).toEqual([sf.periodStart, sf.periodEnd]);
-			const byName = new Map(inWindow.farms.map((f) => [f.name, f]));
+			if (!sf) return;
+			const w = resolveReportWindow({ reportStart: sf.periodStart, reportEnd: sf.periodEnd }, toEpochDay(expected.startDate), expected.days, []);
+			const c = wbCurtailment(w);
+			expect([c.reportStart, c.reportEnd]).toEqual([sf.periodStart, sf.periodEnd]);
+			const byName = new Map(c.farms.map((f) => [f.name, f]));
 			const report: Record<string, string> = {};
-			const cols: [ShortfallCol | 'avgDemand' | 'avgSupplied' | 'avgEwrShortfall', keyof (typeof inWindow.farms)[number]][] = [
-				['avgDemand', 'demandM3Day'],
-				['avgSupplied', 'suppliedM3Day'],
-				['deficit', 'deficitM3Day'],
-				['fractionSupplied', 'fractionSupplied'],
-				['target', 'targetM3Day'],
-				['reduceGain', 'reduceGainM3Day'],
-				['reduceGainLs', 'reduceGainLs'],
-				['targetFraction', 'targetFraction'],
-				['avgEwrShortfall', 'ewrShortfallM3Day'],
-				['totalChange', 'totalChangeM3Day'],
-				['totalChangeLs', 'totalChangeLs'],
-				['volumeLeft', 'volumeLeftM3Day'],
-				['fractionOfDemandLeft', 'fractionOfDemandLeft']
+			// H, I, R are ROUND(average, 0) on the sheet (R1): ±0.5; J = I − H: ±1.
+			const cols: [string, number, (f: (typeof c.farms)[number]) => number, (w: NonNullable<Expected['shortfalls']>['farms'][number]) => number | null | undefined][] = [
+				['avgDemand', 0.5, (f) => f.demandM3Day, (w) => w.avgDemand],
+				['avgSupplied', 0.5, (f) => f.suppliedM3Day, (w) => w.avgSupplied],
+				['avgEwrShortfall', 0.5, (f) => f.ewrShortfallM3Day, (w) => w.avgEwrShortfall],
+				['deficit', 1, (f) => f.deficitM3Day, (w) => w.deficit]
 			];
 			for (const want of sf.farms) {
 				const got = byName.get(want.name);
@@ -896,81 +1088,123 @@ describe.skipIf(!dataDir)(
 					report[want.name] = 'missing from engine report';
 					continue;
 				}
-				for (const [wk, gk] of cols) {
-					const w = want[wk] ?? null;
-					const g = got[gk] as number | null;
-					if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-9) report[`${want.name}.${wk}`] = `engine ${g} vs workbook ${w}`;
+				for (const [k, bound, g, wv] of cols) {
+					const v = wv(want);
+					if (v == null) continue;
+					if (!(Math.abs(g(got) - v) <= bound + 1e-9)) report[`${want.name}.${k}`] = `engine ${g(got)} vs sheet ${v}`;
 				}
 			}
-			const t = inWindow.totals;
-			const totals: [string, number | null][] = [
-				['avgDemand', t.demandM3Day],
-				['avgSupplied', t.suppliedM3Day],
-				['deficit', t.deficitM3Day],
-				['fractionSupplied', inWindow.equitableFraction],
-				['target', t.targetM3Day],
-				['reduceGain', t.reduceGainM3Day],
-				['reduceGainLs', t.reduceGainLs],
-				['avgEwrShortfall', t.ewrShortfallM3Day],
-				['totalChange', t.totalChangeM3Day],
-				['volumeLeft', t.volumeLeftM3Day]
-			];
-			for (const [k, g] of totals) {
-				const w = sf.totals[k] ?? null;
-				if (w === null ? g !== null : g === null || Math.abs(g - w) > 1e-6) report[`totals.${k}`] = `engine ${g} vs workbook ${w}`;
+			// K total: Σ I / Σ H; the sheet divides the rounded averages (Q14): |ΔK| ≤ n·0.5·(1 + K) / (ΣH − n·0.5).
+			const Kw = sf.totals?.fractionSupplied;
+			if (Kw != null && c.equitableFraction !== null) {
+				const n = c.farms.length;
+				const bound = (n * 0.5 * (1 + Kw)) / (c.totals.demandM3Day - n * 0.5);
+				if (!(Math.abs(c.equitableFraction - Kw) <= bound)) report.equitableFraction = `engine ${c.equitableFraction} vs sheet ${Kw}`;
 			}
+			// The derived columns (M, N, O, P, S, T, U, V) are functions of these; the
+			// whole-run replay below checks their formulas. The sheet's values differ
+			// further only by its own ROUND / ROUNDDOWN (R1, Q14, Q15).
 			expect(report).toEqual({});
 		});
 
-		it('reproduces the [Shortfalls] cell formulas over the whole run from the workbook\'s own daily columns', () => {
+		it('reproduces the [Shortfalls] formulas, unrounded, over the whole run from the workbook\'s own daily columns', () => {
 			// The saved reporting period is fully supplied, so it never exercises a non-trivial
 			// target. Over the whole run client catchment has deficits: replay the sheet's cell
-			// formulas, written out independently here, on the Element sheet values.
-			const c = out.summary.curtailment!;
-			expect([c.reportStart, c.days]).toEqual([expected.startDate, expected.days]);
+			// formulas, written out independently here without the sheet's rounding (R1).
+			const c = wbCurtailment({ from: 0, to: expected.days - 1, reportStart: expected.startDate, reportEnd: out.endDate });
 			const mean = (v: (number | null)[]) => v.reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
-			const farmNames = Object.entries(expected.nodes)
+			const rows = Object.entries(expected.nodes)
 				.filter(([, n]) => n.kind === 'farm')
-				.map(([name]) => name);
-			const rows = farmNames.map((name) => {
-				const n = expected.nodes[name]!;
-				return {
-					name,
-					H: excelRound(mean(n.demand!)),
-					I: excelRound(mean(n.supplied!)),
-					R: excelRound(mean(n.ewr_shortfall_incremental!))
-				};
-			});
+				.map(([name, n]) => ({ name, H: mean(n.demand!), I: mean(n.supplied!), R: mean(n.ewr_shortfall_incremental!) }));
 			const K = rows.reduce((s, r) => s + r.I, 0) / rows.reduce((s, r) => s + r.H, 0);
 			expect(K).toBeLessThan(1); // the whole run does have deficits
 			expect(c.equitableFraction).toBeCloseTo(K, 12);
 			for (const r of rows) {
-				const M = excelRound(r.H * K, 1);
+				const M = r.H * K;
 				const N = M - r.I;
 				const S = N + r.R;
 				const got = c.farms.find((f) => f.name === r.name)!;
-				expect({
-					M: got.targetM3Day,
-					N: got.reduceGainM3Day,
-					O: got.reduceGainLs,
-					S: got.totalChangeM3Day,
-					T: got.totalChangeLs,
-					U: got.volumeLeftM3Day
-				}).toEqual({
-					M,
-					N: excelRound(N, 1),
-					O: excelRoundDown(N / 86.4, 1),
-					S: excelRound(S, 1),
-					T: excelRoundDown(S / 86.4, 1),
-					U: excelRound(M + r.R, 1)
-				});
+				const close = (g: number, w: number) => expect(g).toBeCloseTo(w, 6);
+				close(got.targetM3Day, M);
+				close(got.reduceGainM3Day, N);
+				close(got.reduceGainLs, N / 86.4);
+				close(got.totalChangeM3Day, S);
+				close(got.totalChangeLs, S / 86.4);
+				close(got.volumeLeftM3Day, M + r.R);
 			}
 			// Some farm must give water up and another may gain it.
 			expect(c.farms.some((f) => f.reduceGainM3Day < 0)).toBe(true);
 			expect(c.farms.some((f) => f.reduceGainM3Day > 0)).toBe(true);
+			// The engine's own report (on its own daily columns) covers the whole run by default.
+			expect([out.summary.curtailment!.reportStart, out.summary.curtailment!.days]).toEqual([expected.startDate, expected.days]);
 		});
 	}
 );
+
+describe('runModel — soundness warnings (audit W1–W5)', () => {
+	const rainInput = (rain: (number | null)[], startDate = '2021-07-01', over: Partial<ProjectSettings> = {}): ModelInput => ({
+		settings: { ewrPragmaticM3PerDay: zeros, ...over },
+		model: { nodes: [node('A', { areaKm2: 100, downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 })], crops: [], cropAreas: [], transfers: [] },
+		series: { rain_catchment_mm: { startDate, values: rain } }
+	});
+	const warns = (out: { summary: { warnings: string[] } }, re: RegExp) => out.summary.warnings.filter((w) => re.test(w));
+
+	it('W1: warns when the rain model makes more runoff than the rain that fell, and reports the runoff coefficient', () => {
+		// One 10 mm winter storm on a dry 100 km² catchment: the base flow resets to the
+		// storm peak and recedes along the slow part of the default curve, giving ~7× the rain volume.
+		const rain = new Array(400).fill(0);
+		rain[1] = 10;
+		const out = runModel(rainInput(rain, '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
+		const c = out.summary.catchment.runoffCoefficient!;
+		const natural = get(out, null, 'natural_flow').reduce((a, b) => a + b, 0);
+		expect(c).toBeCloseTo(natural / (10 * 100 * 1000), 9);
+		expect(c).toBeGreaterThan(1);
+		expect(warns(out, /more runoff than rainfall/)).toHaveLength(1);
+		// A plausible catchment: no warning.
+		const calm = runModel(rainInput(new Array(30).fill(5), '2021-01-01'));
+		expect(calm.summary.catchment.runoffCoefficient!).toBeLessThan(1);
+		expect(warns(calm, /more runoff than rainfall/)).toHaveLength(0);
+	});
+
+	it('W2: counts days with no rainfall value from any source (treated as dry)', () => {
+		const out = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01'));
+		expect(warns(out, /3 of 6 days have no rainfall value/)).toHaveLength(1);
+		expect(warns(runModel(rainInput([0, 1, 2], '2021-01-01')), /no rainfall value/)).toHaveLength(0);
+	});
+
+	it('W3: hi/lo shares warn when a farm area differs from its hi + lo areas (rain volume uses the area)', () => {
+		const out = run({
+			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3, downstreamNodeId: 'B' }), node('B', { sortOrder: 1, areaKm2: 5, areaHiKm2: 2, areaLoKm2: 3 })],
+			settings: { flowShareMethod: 'hiLo' },
+			natural: [0]
+		});
+		// One warning for the run (quality.ts areaMismatches), naming A only.
+		expect(warns(out, /high-MAP \+ low-MAP area/)).toHaveLength(1);
+		expect(warns(out, /A: 10 km² vs 9 km²/)).toHaveLength(1);
+		expect(warns(out, /B: /)).toHaveLength(0);
+		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
+	});
+
+	it('W4: warns about a recession table that cannot describe a recession', () => {
+		const cal = defaultCal();
+		const factors = [...cal.recessionFactors];
+		factors[3] = 1.2;
+		const curve = [...cal.recessionCurveM3Day];
+		curve[10] = curve[9]! + 1;
+		const out = runModel(rainInput([0, 0], '2021-01-01', { calibration: { ...cal, recessionFactors: factors, recessionCurveM3Day: curve } }));
+		expect(warns(out, /recession factor 4 is 1.2/)).toHaveLength(1);
+		expect(warns(out, /recession curve rises/)).toHaveLength(1);
+		expect(warns(runModel(rainInput([0, 0], '2021-01-01')), /recession/)).toHaveLength(0);
+	});
+
+	it('W5: warns on days natural flow came from Pitman flow instead of the rain model', () => {
+		const i = rainInput([0, 0, 20], '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } });
+		i.series.flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
+		const out = runModel(i);
+		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([43_200, 43_200]);
+		expect(warns(out, /2 days of natural flow are Pitman flow/)).toHaveLength(1);
+	});
+});
 
 describe('catchment area', () => {
 	it('defaults to the sum of farm areas and honours an explicit override', async () => {

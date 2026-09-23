@@ -32,13 +32,14 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
-	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, ewrDaysNotMet: true, ewrFractionDaysNotMet: true
+	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
+	ewrFractionDaysNotMet: true
 };
 const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,
 	windowStart: true, windowEnd: true, firstObservedDate: true, lastObservedDate: true, kge: true, kgeR: true,
 	kgeAlpha: true, kgeBeta: true, r2: true, logNse: true, logEpsilonM3s: true, volumeErrorPct: true,
-	annualVolumes: true, flowKind: true
+	annualVolumes: true, flowKind: true, simulatedKey: true
 };
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [

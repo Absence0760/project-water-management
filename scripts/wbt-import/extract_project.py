@@ -32,10 +32,11 @@ from openpyxl.utils.cell import column_index_from_string, get_column_letter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:  # written alongside this script; falls back to engine defaults if absent
-    from calibration import extract_calibration, extract_calibration_window  # type: ignore
+    from calibration import extract_calibration, extract_calibration_window, summer_months_note  # type: ignore
 except ImportError:  # pragma: no cover
     extract_calibration = None
     extract_calibration_window = None
+    summer_months_note = None
 
 _REF = re.compile(r"^'?(?P<sheet>.+?)'?!\$?(?P<c1>[A-Z]+)\$?(?P<r1>\d+)(?::\$?(?P<c2>[A-Z]+)\$?(?P<r2>\d+))?$")
 
@@ -51,13 +52,6 @@ DEFAULT_CALIBRATION = {
 }
 
 # b023 rounding precisions the engine hard-codes (packages/engine/src/network/round.ts).
-ENGINE_PRECISION = {
-    "rCropDemand_CalcPrecision": 2,
-    "zFarmDemand_Round": 1,
-    "rID_Round": 0,
-    "rFR_Round": 0,
-}
-
 MONTHS_WY = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"]
 
 # [Flow data] hydrology columns F..K, in order.
@@ -153,25 +147,25 @@ def iso(d: Any) -> str:
 
 
 def month_list(v: Any) -> list[int]:
-    """Months a b023 month-list cell ("1,2,11,12") switches on.
+    """The months a b023 month-list cell ("1,2,11,12") names.
 
-    The workbook tests ISNUMBER(FIND(m & ",", list & ",")) - a substring search,
-    so "11,12" also matches months 1 and 2. Reproduce that (as calibration.py
-    does for summer months) so the engine's plain membership test behaves like
-    the workbook; the importer prints a note when it makes a difference.
+    The workbook matches months with a substring FIND, so "11" also switches on
+    January and "12" February. The importer keeps the listed months only and
+    notes any month the workbook would have added (docs/engine-audit.md M1).
     """
     if v is None:
         return []
     text = str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)
-    text = text.replace(" ", "")
-    return [m for m in range(1, 13) if f"{m}," in text + ","]
+    return sorted({int(x) for x in re.findall(r"\d+", text) if 1 <= int(x) <= 12})
 
 
-def literal_months(v: Any) -> list[int]:
+def substring_extra_months(v: Any) -> list[int]:
+    """Months the workbook's substring FIND matches although the list doesn't name them."""
     if v is None:
         return []
     text = str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)
-    return sorted({int(x) for x in re.findall(r"\d+", text) if 1 <= int(x) <= 12})
+    text = text.replace(" ", "")
+    return sorted({m for m in range(1, 13) if f"{m}," in text + ","} - set(month_list(v)))
 
 
 def table_rows(wb: Workbook, name_range: str) -> tuple[str, list[int], list[str]]:
@@ -313,10 +307,11 @@ def read_transfers(wb: Workbook) -> list[dict[str, Any]]:
             continue
         months_raw = cfg.get("months")
         months = month_list(months_raw)
-        if months != literal_months(months_raw):
+        extra = substring_extra_months(months_raw)
+        if extra:
             wb.notes.append(
-                f"transfer {clean(v)} -> {to}: month list {months_raw!r} also matches months "
-                f"{sorted(set(months) - set(literal_months(months_raw)))} in the workbook (substring FIND); kept"
+                f"transfer {clean(v)} -> {to}: the workbook's substring match also runs it in months {extra}, "
+                f"which {months_raw!r} doesn't list; the app uses the listed months only (audit M1)"
             )
         out.append(
             {
@@ -335,16 +330,6 @@ def month_days(wb: Workbook) -> float:
     labels = [clean(r[0]) for r in wb.named("rAppSet_MonthLbls")]
     days = [num(r[0]) for r in wb.named("zAppSet_MonthDays")]
     return days[labels.index("Feb")] if "Feb" in labels else 28.25
-
-
-def check_precisions(wb: Workbook) -> None:
-    for name, want in ENGINE_PRECISION.items():
-        try:
-            got = num(wb.cell(name), want)
-        except KeyError:
-            continue
-        if got != want:
-            wb.notes.append(f"{name} = {got:g} but the engine rounds to {want}; results will differ slightly")
 
 
 # ---------------------------------------------------------------------------
@@ -523,7 +508,6 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
         crops, apan, erf = read_crops(wb)
         areas, gross_sheet = read_crop_areas(wb)
         transfers = read_transfers(wb)
-        check_precisions(wb)
 
         by_name = {e["name"]: e for e in elements}
         downstream: dict[str, str | None] = {e["name"]: None for e in elements}
@@ -600,6 +584,9 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
 
         if extract_calibration is not None:
             calibration = extract_calibration(wb.wb)
+            note = summer_months_note(wb.wb) if summer_months_note is not None else None
+            if note:
+                wb.notes.append(note)
         else:
             calibration = dict(DEFAULT_CALIBRATION)
             wb.notes.append("calibration.py not found: settings.calibration uses engine defaults")

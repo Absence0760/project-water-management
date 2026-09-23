@@ -25,13 +25,20 @@ import {
 
 /**
  * What a run stores about its inputs (model_run.inputs): the merged settings,
- * the whole model document, and the start/length of each driving series (the
- * values themselves are not kept).
+ * the whole model document, and the start/length of each driving series plus
+ * a content hash of its values (the values themselves are not kept).
  */
 export interface RunInputsSnapshot {
 	settings: Partial<ProjectSettings> & Record<string, unknown>;
 	model: ProjectModel;
-	series: Partial<Record<string, { startDate: string; length: number }>>;
+	series: Partial<Record<string, RunSeriesSnapshot>>;
+}
+
+export interface RunSeriesSnapshot {
+	startDate: string;
+	length: number;
+	/** Hash of the values (backend: SHA-256 hex of their JSON). Absent on runs stored before it existed. */
+	valuesSha256?: string;
 }
 
 /** The parts of a run compareRuns needs. */
@@ -585,7 +592,7 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 	const a = sa ?? {};
 	const b = sb ?? {};
 	const out: InputChange[] = [];
-	const range = (s: { startDate: string; length: number }) => {
+	const range = (s: RunSeriesSnapshot) => {
 		const start = toEpochDay(s.startDate);
 		return { start: s.startDate, end: fromEpochDay(start + Math.max(0, s.length - 1)), empty: !(s.length > 0) };
 	};
@@ -617,6 +624,12 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 			else if (rb.end < ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now ends ${rb.end} (was ${ra.end})` });
 			if (rb.start < ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended back to ${rb.start} (was ${ra.start})` });
 			else if (rb.start > ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now starts ${rb.start} (was ${ra.start})` });
+			// Same dates, different content: values corrected in place. (With
+			// different dates the hash can't tell whether shared days changed.)
+			const sameRange = ra.start === rb.start && ra.end === rb.end;
+			if (sameRange && x.valuesSha256 && y.valuesSha256 && x.valuesSha256 !== y.valuesSha256) {
+				out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} values changed (same dates, ${ra.start} to ${ra.end})` });
+			}
 		}
 	}
 	return out;
@@ -625,8 +638,9 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 /**
  * Human-readable list of what differs between the inputs of run A and run B:
  * settings, network nodes, crops and crop areas, transfers, and the date range
- * of each driving series. Values inside a series aren't snapshotted, so an
- * edit that keeps a series' dates isn't visible here.
+ * of each driving series. Values edited within the same dates show up through
+ * the series' content hash (when both runs stored one); when the dates also
+ * changed, only the date change is reported.
  */
 export function diffInputs(a: RunInputsSnapshot | null | undefined, b: RunInputsSnapshot | null | undefined): InputChange[] {
 	return [

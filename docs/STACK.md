@@ -66,7 +66,18 @@ pnpm seed:examples          # 3 invented example catchments + team + 2 demo user
 pnpm seed:demo              # seed:examples + the Client Catchment client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
+pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
+
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in) + actionlint if installed
+pnpm check:env              # committed env files point only at the local stack
+pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
+pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
+pnpm test:guards            # node:test suites for scripts/guards and scripts/release
 ```
+
+Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main
+--generate-notes` deploys that component after a preflight and the
+`production` approval ([deployment.md § Releasing](./deployment.md#releasing)).
 
 ## First-time setup
 
@@ -109,9 +120,11 @@ Prefer reading these over guessing. Update them when behaviour changes.
   with no real farm names or values ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
 - **The engine stays pure.** No `fetch`, no DB, no Node or DOM APIs in
   `packages/engine`, because it has to run in the browser *and* in Lambda.
-  Every engine change must keep the b023 regression tests green
-  ([model.md §6](./model.md#6-porting-strategy-and-regression-testing)). A
-  change in behaviour bumps `ENGINE_VERSION`.
+  Engine correctness is judged by documented hydrology and the invariant tests
+  (`run.invariants.test.ts`), not by agreement with the workbook: an
+  intentional departure is justified in [engine-audit.md](./engine-audit.md)
+  and listed, column by column, in the client catchment regression suite's deviation
+  list, which must stay green. A change in behaviour bumps `ENGINE_VERSION`.
 - Tests that need client-derived fixtures (under `data/`) skip when the
   fixture is absent.
 - **Every project-scoped query runs as `water_app` inside a transaction that
@@ -134,7 +147,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside.
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside, and the
+  dependency-free CI/release guards under `scripts/` use Node's built-in `node:test` (the estate pattern), since the
+  root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.
 - Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
   from its CDN tarball when the in-browser importer is built.

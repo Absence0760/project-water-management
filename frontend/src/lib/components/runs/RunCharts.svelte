@@ -171,7 +171,7 @@
 {/snippet}
 
 <div class="charts">
-	<section class="panel wide" aria-labelledby="hydro-h">
+	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
 		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
 		{#if catchError}
 			<div class="alert alert-error" role="alert">{catchError}</div>
@@ -194,7 +194,7 @@
 
 	{#if afterHydrograph}<div class="wide slot">{@render afterHydrograph()}</div>{/if}
 
-	<section class="panel" aria-labelledby="fdc-h">
+	<section class="panel" id="res-fdc" aria-labelledby="fdc-h">
 		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
 		{#if catchLoading && !fdc.series.length}
 			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
@@ -237,7 +237,7 @@
 		{/if}
 	</section>
 
-	<section class="panel" aria-labelledby="ewr-h">
+	<section class="panel" id="res-ewr" aria-labelledby="ewr-h">
 		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
 		{#if catchLoading && !ewrSeries.length}
 			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
@@ -259,7 +259,7 @@
 	{#if afterFlowViews}<div class="wide slot">{@render afterFlowViews()}</div>{/if}
 
 	{#if farmOptions.length}
-		<section class="panel wide" aria-labelledby="farm-h">
+		<section class="panel wide" id="res-farm" aria-labelledby="farm-h">
 			<div class="panel-head">
 				<h3 id="farm-h">Farm detail</h3>
 				<div class="field inline">
@@ -302,7 +302,7 @@
 		</section>
 	{/if}
 
-	<section class="panel wide" aria-labelledby="exp-h">
+	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
 		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
 		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} />
 	</section>

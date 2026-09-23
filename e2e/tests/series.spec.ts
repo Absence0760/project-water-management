@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
-import { createProject } from '../support/api.ts';
+import { createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -101,4 +101,29 @@ test('a later file appends to an existing series without erasing stored days', a
 	const stored = await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json();
 	const s = await (await page.request.get(`${API_URL}/projects/${project.id}/series/${stored.series[0].id}`)).json();
 	expect(s.values).toEqual([1, 2, 30, 4, 5]);
+});
+
+test('clicking anywhere on a series row shows it in the chart; its buttons keep their own meaning', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series row click');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
+	const rainRow = table.getByRole('row').filter({ hasText: 'Rainfall — catchment' });
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+
+	await flowRow.getByRole('cell').first().click();
+	await expect(page.getByRole('img', { name: /^Flow — observed gauge.*: line chart/ }).locator('canvas')).toBeVisible();
+	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+
+	await rainRow.getByRole('rowheader').click();
+	await expect(page.getByRole('img', { name: /^Rainfall — catchment: line chart/ }).locator('canvas')).toBeVisible();
+	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'false');
+
+	// A row's own control doesn't also select the row.
+	page.once('dialog', (d) => void d.dismiss());
+	await flowRow.getByRole('button', { name: /^Delete/ }).click();
+	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
 });

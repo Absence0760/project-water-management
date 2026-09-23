@@ -121,7 +121,7 @@ variable "waf_rate_limit_per_ip" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$30 (infra/README.md § Cost), so 50 leaves headroom without hiding a runaway. Set to 0 to skip budget creation (NOT recommended for prod)."
+  description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$40 in us-east-1 and ~$50 in af-south-1 (infra/README.md § Cost): 50 fits us-east-1; raise it to ~70 for af-south-1 or the forecast alert fires every month. Set to 0 to skip budget creation (NOT recommended for prod)."
   type        = number
   default     = 50
 }
@@ -173,4 +173,72 @@ variable "migrate_reserved_concurrency" {
   description = "Reserved concurrency for the migrate Lambda. 1 serialises migrators (on top of the advisory lock in migrate.ts). Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
   type        = number
   default     = 1
+}
+
+# --- Email (SES, ses.tf) -----------------------------------------------------
+
+variable "mail_from_local_part" {
+  description = "Local part of the sender address. Mail goes out as <this>@var.domain_name, and the Lambda's IAM policy only allows that exact From address."
+  type        = string
+  default     = "no-reply"
+}
+
+variable "mail_from_display_name" {
+  description = "Display name in the From header (MAIL_FROM)."
+  type        = string
+  default     = "Water Management"
+}
+
+variable "mail_from_subdomain" {
+  description = "Custom MAIL FROM subdomain (<this>.var.domain_name). Carries the MX + SPF records so SPF aligns for DMARC."
+  type        = string
+  default     = "mail"
+}
+
+variable "dmarc_policy" {
+  description = "DMARC p= policy for var.domain_name. Start at none, read the aggregate reports, then tighten to quarantine (docs/deployment.md § Email)."
+  type        = string
+  default     = "none"
+  validation {
+    condition     = contains(["none", "quarantine", "reject"], var.dmarc_policy)
+    error_message = "dmarc_policy must be none, quarantine or reject."
+  }
+}
+
+variable "dmarc_report_email" {
+  description = "Mailbox for DMARC aggregate reports (rua=). Empty omits rua, which leaves the policy with no feedback — set it before tightening dmarc_policy."
+  type        = string
+  default     = ""
+}
+
+variable "ses_tls_policy" {
+  description = "SES delivery TLS policy. REQUIRE (default) refuses to deliver to a receiving server without STARTTLS, because every email carries a live token; OPTIONAL delivers in the clear if it must."
+  type        = string
+  default     = "REQUIRE"
+  validation {
+    condition     = contains(["REQUIRE", "OPTIONAL"], var.ses_tls_policy)
+    error_message = "ses_tls_policy must be REQUIRE or OPTIONAL."
+  }
+}
+
+variable "ses_endpoint_az_count" {
+  description = "How many AZs get an ENI for the SES API interface endpoint. 1 halves the cost; if that AZ is down, sends fail but the API keeps answering (a mail failure never fails a request)."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.ses_endpoint_az_count >= 1 && var.ses_endpoint_az_count <= 2
+    error_message = "Must be 1 or 2."
+  }
+}
+
+# --- CloudFront --------------------------------------------------------------
+
+variable "cloudfront_price_class" {
+  description = "CloudFront price class. PriceClass_200 is the cheapest class that includes the South African edge locations; PriceClass_100 (North America, Europe, Israel) would serve South African users from Europe."
+  type        = string
+  default     = "PriceClass_200"
+  validation {
+    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
+    error_message = "Must be PriceClass_100, PriceClass_200 or PriceClass_All."
+  }
 }

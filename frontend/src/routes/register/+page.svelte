@@ -22,6 +22,44 @@
 		inviteToken ? 'loading' : hasInviteParam ? 'dead' : 'none'
 	);
 
+	// Signed in already (the route guard keeps an invitation link open): say
+	// whose invitation this is and what to do, rather than sending them home.
+	// `registered` hides this view in the moment between signing up here and
+	// moving on.
+	let registered = $state(false);
+	const signedInAs = $derived(registered ? null : session.user);
+	const forMe = $derived(!!invite && !!signedInAs && invite.email.toLowerCase() === signedInAs.email.toLowerCase());
+	let signingOut = $state(false);
+	let resendMsg = $state<string | null>(null);
+	let resending = $state(false);
+
+	async function signOutToAccept() {
+		signingOut = true;
+		try {
+			await api.auth.logout();
+		} catch {
+			// Drop the local session either way; the sign-up form takes over.
+		}
+		session.user = null;
+		signingOut = false;
+	}
+
+	async function resendConfirmation() {
+		resending = true;
+		resendMsg = null;
+		try {
+			await emailAuth.resendVerification();
+			resendMsg = 'Sent. Check your inbox (and spam folder) for the confirmation link.';
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409 && session.user) {
+				session.user = { ...session.user, emailVerified: true };
+				resendMsg = 'Your address is already confirmed.';
+			} else resendMsg = err instanceof Error ? err.message : String(err);
+		} finally {
+			resending = false;
+		}
+	}
+
 	let displayName = $state('');
 	let email = $state('');
 	let password = $state('');
@@ -60,12 +98,14 @@
 		}
 		busy = true;
 		try {
-			session.user = await api.auth.register(
+			const user = await api.auth.register(
 				email.trim(),
 				password,
 				displayName.trim(),
 				inviteState === 'ok' ? inviteToken : null
 			);
+			registered = true;
+			session.user = user;
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -80,6 +120,60 @@
 	{#if hasInviteParam}<meta name="referrer" content="no-referrer" />{/if}
 </svelte:head>
 
+{#if signedInAs}
+	<AuthCard title="You’re already signed in">
+		<p>Signed in as <strong class="addr">{signedInAs.email}</strong>.</p>
+		{#if inviteState === 'loading'}
+			<p class="muted" role="status">Checking the invitation…</p>
+		{:else if inviteState === 'ok' && invite && forMe}
+			<div class="invite" role="status">
+				<p><strong>{invite.invitedBy}</strong> invited this address to <strong>{target}</strong>.</p>
+				{#if signedInAs.emailVerified}
+					<p class="muted">
+						Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask
+						{invite.invitedBy} to add you again.
+					</p>
+				{:else}
+					<p class="muted">
+						You’ll join as soon as you confirm your email address: use the link we sent to {signedInAs.email}.
+					</p>
+				{/if}
+			</div>
+			{#if !signedInAs.emailVerified}
+				<button type="button" class="btn act" onclick={resendConfirmation} disabled={resending}>
+					{resending ? 'Sending…' : 'Resend confirmation email'}
+				</button>
+				<p class="status" role="status" aria-live="polite">{resendMsg ?? ''}</p>
+			{/if}
+			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+		{:else if inviteState === 'ok' && invite}
+			<div class="alert alert-warning" role="alert">
+				This invitation to <strong>{target}</strong> is for <strong class="addr">{invite.email}</strong>, not the
+				account you’re signed in with.
+			</div>
+			<p class="muted">
+				To accept it, sign out and create an account for {invite.email}. To use this account instead, ask
+				{invite.invitedBy} to invite {signedInAs.email}.
+			</p>
+			<button type="button" class="btn btn-primary act" onclick={signOutToAccept} disabled={signingOut}>
+				{signingOut ? 'Signing out…' : `Sign out and accept as ${invite.email}`}
+			</button>
+			<a class="btn act" href="{base}/">Stay signed in and go to your projects</a>
+		{:else if inviteState === 'error'}
+			<div class="alert alert-warning" role="alert">We couldn’t check this invitation right now. Try the link again later.</div>
+			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+		{:else}
+			<div class="alert alert-warning" role="alert">
+				This invitation link is invalid, was revoked, or has expired (they last 7 days). Ask whoever invited you to send a
+				new one.
+			</div>
+			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+		{/if}
+		{#snippet footer()}
+			Not you? <button type="button" class="linkish" onclick={signOutToAccept} disabled={signingOut}>Sign out</button>
+		{/snippet}
+	</AuthCard>
+{:else}
 <AuthCard
 	title={inviteState === 'ok' ? 'Accept your invitation' : 'Create an account'}
 	subtitle={inviteState === 'ok' ? undefined : 'Model your own catchments, or join a team’s.'}
@@ -149,8 +243,43 @@
 		Already registered? <a href={loginHref}>Sign in</a>
 	{/snippet}
 </AuthCard>
+{/if}
 
 <style>
+	.addr {
+		overflow-wrap: anywhere;
+	}
+	/* Full-width actions, stacked, like the sign-up button. */
+	.act {
+		display: flex;
+		width: 100%;
+		justify-content: center;
+		min-height: 44px;
+		margin-top: 0.75rem;
+	}
+	.status {
+		margin: 0.5rem 0 0;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.status:empty {
+		margin: 0;
+	}
+	.linkish {
+		all: unset;
+		color: var(--accent);
+		text-decoration: underline;
+		font-weight: 500;
+		cursor: pointer;
+	}
+	.linkish:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
+	.invite + .act,
+	.alert + .muted {
+		margin-top: 0.75rem;
+	}
 	.invite {
 		padding: 0.75rem 0.9rem;
 		border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));

@@ -2,7 +2,29 @@
 // / GaugeTemplate, formula row 17) plus [Transfers], [Fragmented flow] and
 // [Fragmented EWR]. Column letters in comments are the FarmTemplate columns;
 // see ./README.md for the full mapping and the workbook quirks we mirror.
-import { excelRound, WBT_PRECISION } from './round';
+// Unlike the workbook nothing is rounded: every split conserves water exactly
+// (docs/engine-audit.md R1).
+
+/**
+ * Relative size of float noise treated as zero in a shortfall. A difference
+ * of large volumes (outflow − requirement, or a shortfall minus its upstream
+ * shortfalls) that is exact in real arithmetic comes out as ±1e-16 of the
+ * volumes involved; 1e-12 of them is far below anything measurable (0.01 m³
+ * on a 10⁹ m³/day requirement) and far above the noise.
+ */
+export const SHORTFALL_NOISE = 1e-12;
+
+/**
+ * MIN(a − b, 0) with float noise reported as 0: the result is negative only
+ * when it exceeds SHORTFALL_NOISE × `scale` (the largest magnitude that went
+ * into a and b). Without this a residue of −4.8e-7 m³ counted as a day the
+ * EWR was not met, and whether it appeared depended on the order upstream
+ * values were summed in (engine review F8).
+ */
+export function shortfall(a: number, b: number, scale: number): number {
+	const d = a - b;
+	return d < -SHORTFALL_NOISE * scale ? d : 0;
+}
 
 export interface PlanNode {
 	kind: 'farm' | 'gauge';
@@ -12,7 +34,7 @@ export interface PlanNode {
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
 	divertCapacityM3Day: number;
-	/** Dam capacity, already rounded to whole m³ like the Element sheet's P14. */
+	/** Dam capacity (m³). */
 	damCapacityM3: number;
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
@@ -36,6 +58,11 @@ export interface NetworkPlan {
 	days: number;
 	nodes: PlanNode[];
 	order: Int32Array;
+	/**
+	 * upstream[i] = nodes draining directly into node i, in a fixed order
+	 * (runModel uses node-id order) so sums over them don't depend on how the
+	 * nodes are listed.
+	 */
 	upstream: Int32Array[];
 	transfers: PlanTransfer[];
 	/** Calendar month (1–12) of each day. */
@@ -69,8 +96,6 @@ export interface NetworkResult {
 	transfers: Float64Array[];
 }
 
-const R0 = (x: number) => excelRound(x, 0);
-
 function allocNode(days: number): NodeResult {
 	const f = () => new Float64Array(days);
 	return {
@@ -97,7 +122,6 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 	const jToday = new Float64Array(nodes.length);
 	// Volume already committed today by earlier transfers from each source dam.
 	const drawnToday = new Float64Array(nodes.length);
-	const fragDigits = WBT_PRECISION.fragmentedM3Day;
 
 	for (let t = 0; t < days; t++) {
 		// [Transfers] "Draw from dam": uses the source dam's storage at the end of
@@ -130,34 +154,40 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			let sumU = 0;
 			let sumZ = 0;
 			let sumAA = 0;
+			// Magnitude of the upstream shortfalls, the scale of their float noise.
+			let absAA = 0;
 			for (let u = 0; u < ups.length; u++) {
 				const ur = res[ups[u]!]!;
 				sumU += ur.outflow[t]!;
 				sumZ += ur.ewrCumulative[t]!;
 				sumAA += ur.ewrShortfall[t]!;
+				absAA += Math.abs(ur.ewrShortfall[t]!);
 			}
 
 			if (node.kind === 'gauge') {
-				// GaugeTemplate: G = Σ upstream U, H = Σ upstream Z, I = Σ upstream AA.
+				// GaugeTemplate: G = Σ upstream U, H = Σ upstream Z. The shortfall is
+				// the gauge's own flow against its own requirement, like a farm's AA.
+				// The workbook sums the branches' AA (I = Σ upstream AA), which
+				// reports a shortfall at a confluence whose flow meets the EWR when
+				// one branch is short and another has water to spare (audit G1).
 				r.inflowUpstream[t] = sumU;
 				r.outflow[t] = sumU;
 				r.ewrCumulative[t] = sumZ;
-				r.ewrShortfall[t] = sumAA;
+				r.ewrShortfall[t] = shortfall(sumU, sumZ, Math.max(sumU, sumZ));
 				continue;
 			}
 
 			const F = node.demand[t]!;
 			const H = sumU;
-			const I = excelRound(nat * node.share, fragDigits);
+			const I = nat * node.share;
 			const J = jToday[i]!;
-			// The workbook's ROUND(H·p, 0) can round *above* a fractional H (a
-			// fractional divert capacity upstream makes U, and so H, fractional),
-			// giving a negative bypass K and negative supply. Cap each rounded split
-			// at the volume it splits — identical whenever H and I are whole m³,
-			// as in client catchment (docs/engine-review.md; found by the invariant tests).
-			const L = Math.min(R0(H * node.pctUpstreamToDam), H);
+			// A split never exceeds the volume it splits (a fraction above 1 would
+			// otherwise make the bypass K negative). The workbook's ROUND(H·p, 0)
+			// could round above a fractional H; without rounding only an invalid
+			// fraction can.
+			const L = Math.min(H * node.pctUpstreamToDam, H);
 			const K = H - L;
-			const M = Math.min(R0(I * node.pctRunoffToDam), I);
+			const M = Math.min(I * node.pctRunoffToDam, I);
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
@@ -168,12 +198,15 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
-			const T = R0(G * node.returnFlowPct);
+			const T = G * node.returnFlowPct;
 			const U = Rr + S + T;
-			const Y = excelRound(ewrT * node.share, fragDigits);
+			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
-			const AA = Math.min(U - Z, 0);
-			const AB = Math.min(AA - sumAA, 0);
+			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
+			// noise of the volumes involved reported as 0 (review F8).
+			const scale = Math.max(U, Z, absAA);
+			const AA = shortfall(U, Z, scale);
+			const AB = shortfall(AA, sumAA, scale);
 
 			r.demand[t] = F;
 			r.supplied[t] = G;

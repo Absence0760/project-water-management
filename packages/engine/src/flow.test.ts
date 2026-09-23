@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	computeFlowColumns,
 	computeNaturalFlow,
-	excelRound,
 	rainToFlow,
 	recede,
 	recessionIndex,
@@ -11,6 +10,7 @@ import {
 	type NaturalFlowInputs
 } from './flow';
 import { defaultProjectSettings, type CalibrationParams } from './project';
+import { excelRound } from './network/round';
 
 const cal = (over: Partial<CalibrationParams> = {}): CalibrationParams => ({
 	...defaultProjectSettings().calibration,
@@ -28,7 +28,7 @@ const inputs = (rain: (number | null)[], startDate = '2021-01-01'): NaturalFlowI
 	flowPitmanM3s: rain.map(() => null)
 });
 
-describe('excelRound', () => {
+describe('excelRound (test helper for replaying workbook cells)', () => {
 	it('rounds half away from zero on the decimal value', () => {
 		expect(excelRound(2.5)).toBe(3);
 		expect(excelRound(-2.5)).toBe(-3);
@@ -36,6 +36,8 @@ describe('excelRound', () => {
 		expect(excelRound(2.675, 2)).toBe(2.68);
 		expect(excelRound(79.12345, 4)).toBe(79.1235);
 		expect(excelRound(1e-20, 4)).toBe(0);
+		expect(excelRound(0.49)).toBe(0);
+		expect(Object.is(excelRound(-0.4), 0)).toBe(true);
 	});
 });
 
@@ -43,13 +45,13 @@ describe('recession helpers', () => {
 	const c = cal();
 	it('recede interpolates between table factors', () => {
 		// index 1.5 → halfway between 0.255 and 0.396
-		expect(recede(c, 1000, 1.5)).toBe(excelRound(1000 * 0.3255));
-		expect(recede(c, 32, 79)).toBe(32); // 32 × 0.9845 = 31.504 → 32: the tail floor
+		expect(recede(c, 1000, 1.5)).toBeCloseTo(1000 * 0.3255, 9);
+		expect(recede(c, 32, 79)).toBeCloseTo(31.504, 9); // the workbook's ROUND kept it at 32 for ever
 	});
 
-	it('recede with a blank (0) index extrapolates below the first factor, as the workbook does', () => {
-		// P = -1 → 0.255 − (0.396 − 0.255) = 0.114
-		expect(recede(c, 300, 0)).toBe(34);
+	it('recede below index 1 extrapolates below the first factor (pulse indices start at shiftPeakIndexLo = 0.9)', () => {
+		// P = -0.1 → 0.255 − 0.1 × (0.396 − 0.255) = 0.2409
+		expect(recede(c, 1000, 0.9)).toBeCloseTo(240.9, 0);
 	});
 
 	it('recessionIndex reads the fractional position off the curve', () => {
@@ -60,9 +62,9 @@ describe('recession helpers', () => {
 		expect(recessionIndex(c, mid)).toBe(3.5);
 	});
 
-	it('rainToFlow = INT(a · rain^b · area·1000 · season factor)', () => {
-		expect(rainToFlow(c, 10, false)).toBe(Math.floor(0.09 * 10 ** 1.2 * 205100 * 1));
-		expect(rainToFlow(c, 10, true)).toBe(Math.floor(0.09 * 10 ** 1.2 * 205100 * 0.1));
+	it('rainToFlow = a · rain^b · area·1000 · season factor (the workbook takes INT)', () => {
+		expect(rainToFlow(c, 10, false)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 1, 9);
+		expect(rainToFlow(c, 10, true)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 0.1, 9);
 		expect(rainToFlow(c, 0, false)).toBe(0);
 	});
 });
@@ -83,10 +85,72 @@ describe('seasonFlag', () => {
 	});
 });
 
+describe('day-1 state (audit E1)', () => {
+	it('recedes the initial base flow at its own recession index, not at a blank index 0', () => {
+		// The workbook's reserved row leaves the base index blank (0), so day 1
+		// recedes at the extrapolated factor 2·f1 − f2 (0.114): 300 → 34, an 89 %
+		// drop on the first day of every run. A steady base flow recedes at the
+		// factor for its own position on the curve (index 79 → 0.9845).
+		const c = computeFlowColumns(cal(), inputs([0, 0, 0]));
+		expect(c.baseFlow[0]).toBeCloseTo(300 * 0.9845, 9);
+		expect(c.baseIndex[0]).toBe(79);
+		expect(c.naturalFlowM3Day[0]).toBeCloseTo(300 * 0.9845, 9);
+	});
+
+	it('a storm on the first day starts its pulse at the pulse index, like on any other day', () => {
+		// The blank reserved-row index (0) made day 1 take the base index instead.
+		const c = computeFlowColumns(cal(), inputs([40, 0], '2021-07-01'));
+		const k = cal();
+		const v = c.rainFlow[0]!;
+		const pulse = Math.max(k.shiftPeakIndexLo + (k.shiftPeakIndexHi - k.shiftPeakIndexLo) * (1 - v / k.amplitudeM3Day), k.shiftPeakIndexLo);
+		expect(c.addedIndex[0]).toBeCloseTo(pulse > c.baseIndex[0]! ? Math.max(1, c.baseIndex[0]! - 0.2) : pulse, 12);
+		expect(c.addedIndex[1]).toBeCloseTo(c.addedIndex[0]! + 1, 12);
+	});
+
+	it('never turns the base flow negative, whatever the first two recession factors', () => {
+		// f2 > 2·f1 made the day-1 factor negative: base flow −30 m³/day, and a
+		// negative base can never reset (rain / negative base is never > 1.5).
+		const factors = [...cal().recessionFactors];
+		factors[0] = 0.1;
+		factors[1] = 0.3;
+		const c = computeFlowColumns(cal({ recessionFactors: factors }), inputs([0, 0, 50, 0, 0], '2021-07-01'));
+		expect(c.baseFlow.every((v) => v >= 0)).toBe(true);
+		expect(c.baseFlow[2]).toBe(c.rainFlow[2]); // the storm resets it
+	});
+});
+
+describe('no rounding in the model state (audit R1)', () => {
+	it('keeps receding through a long dry spell instead of sticking at a rounding floor', () => {
+		// With ROUND(flow × f, 0) a flow stops receding once flow × (1 − f) < 0.5:
+		// 32 m³/day for the default tail factor 0.9845, however long the drought.
+		const c = computeFlowColumns(cal(), inputs(new Array(400).fill(0), '2021-07-01'));
+		expect(c.baseFlow[399]).toBeCloseTo(300 * 0.9845 ** 400, 6);
+		expect(c.baseFlow[399]).toBeLessThan(1);
+	});
+
+	it('rain-added flow is a·R^b·area·factor, not floored to whole m³', () => {
+		expect(rainToFlow(cal(), 3, true)).toBeCloseTo(0.09 * 3 ** 1.2 * 205_100 * 0.1, 9);
+	});
+});
+
+describe('recede (audit E2)', () => {
+	it('clamps an extrapolated factor at 0: flow never recedes below zero', () => {
+		// A pulse index below 1 (shiftPeakIndexLo < 1) extrapolates below the
+		// first factor; with index 0 and f2 > 2·f1 that is negative.
+		const factors = [...cal().recessionFactors];
+		factors[0] = 0.1;
+		factors[1] = 0.3;
+		expect(recede(cal({ recessionFactors: factors }), 1000, 0)).toBe(0);
+		// Inside the table nothing changes.
+		expect(recede(cal(), 1000, 1.5)).toBeCloseTo(1000 * 0.3255, 9);
+	});
+});
+
 describe('computeNaturalFlow', () => {
 	it('recedes the initial base flow with no rain', () => {
 		const out = computeNaturalFlow(cal(), inputs([0, 0, 0, 0]));
-		expect(out.naturalFlowM3Day).toEqual([34, 33, 32, 32]);
+		const f = 0.9845; // factor at index 79, where 300 m³/day sits on the default curve
+		out.naturalFlowM3Day.forEach((v, i) => expect(v).toBeCloseTo(300 * f ** (i + 1), 9));
 		expect(out.series.map((s) => s.key)).toEqual([
 			'rain_used',
 			'is_summer',
@@ -167,22 +231,24 @@ if (!fixture) {
 	console.warn(`[flow.test] ${FIXTURE_REL} not found — skipping the workbook regression (client data is not in CI).`);
 }
 
-const COMPARED: (keyof FlowColumns)[] = [
-	'isSummer',
-	'rainUsedMm',
-	'baseFlow',
-	'baseIndex',
-	'responseStart',
-	'rainFlow',
-	'addedIndex',
-	'responseAdded',
-	'resultantFlow',
-	'resultantIndex',
-	'naturalFlowM3Day'
-];
+// DEVIATION LIST — engine ≥ 0.4.0 differs from the workbook on purpose
+// (docs/engine-audit.md). Up to 0.3.1 every column matched day by day.
+//
+//   isSummer, rainUsedMm        exact: unchanged, and no rounding. (isSummer
+//                               relies on the summer-month list naming every
+//                               summer month: M1 no longer expands "11" to
+//                               January; client catchment's list needs no expansion.)
+//   rainFlow (V)                0 ≤ engine − workbook < 1 m³/day: R1 drops INT.
+//   baseFlow … resultantIndex   not compared day by day: E1 (day-1 state) and
+//                               R1 (no ROUND, no 4-dp indices) change the state,
+//                               and a base-flow reset near the 1.5 ratio can flip.
+//   naturalFlowM3Day (AB)       per water year, |Δ volume| ≤ 2 % + days × (the
+//                               workbook's rounding floor 0.5 / (1 − f_max) + 1):
+//                               the floor is what R1 stops adding on dry days.
+const EXACT: (keyof FlowColumns)[] = ['isSummer', 'rainUsedMm'];
 
 describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {
-	it('matches every [Flow data] column day by day', () => {
+	it('matches the [Flow data] columns within the deviation list', () => {
 		const f = fixture!;
 		const got = computeFlowColumns(f.calibration, { startDate: f.startDate, days: f.days, ...f.inputs });
 		// Guard against a vacuous pass: the series must contain real rain events
@@ -191,18 +257,36 @@ describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {
 		expect(new Set(f.expected.isSummer)).toEqual(new Set([0, 1]));
 
 		const mismatches: string[] = [];
-		for (const key of COMPARED) {
-			const exp = f.expected[key];
-			let count = 0;
-			let first = -1;
-			for (let i = 0; i < f.days; i++) {
-				if (got[key][i] !== exp[i]) {
-					count++;
-					if (first < 0) first = i;
-				}
-			}
-			if (count > 0) {
-				mismatches.push(`${key}: ${count}/${f.days} days differ, first [${first}] got ${got[key][first]} want ${exp[first]}`);
+		const note = (key: string, bad: number[], why: string) => {
+			if (bad.length) mismatches.push(`${key}: ${bad.length}/${f.days} days ${why}, first [${bad[0]}] got ${got[key as keyof FlowColumns][bad[0]!]} want ${f.expected[key as keyof FlowColumns][bad[0]!]}`);
+		};
+		for (const key of EXACT) {
+			note(key, [...Array(f.days).keys()].filter((i) => got[key][i] !== f.expected[key][i]), 'differ');
+		}
+		// R1: INT dropped. Same season flag → same factor, so the difference is the dropped fraction.
+		note(
+			'rainFlow',
+			[...Array(f.days).keys()].filter((i) => {
+				const d = got.rainFlow[i]! - f.expected.rainFlow[i]!;
+				return got.isSummer[i] === f.expected.isSummer[i] && !(d >= -1e-9 && d < 1);
+			}),
+			'outside [0, 1)'
+		);
+		const floor = 0.5 / (1 - Math.max(...f.calibration.recessionFactors)) + 1;
+		const d0 = Math.round(Date.parse(`${f.startDate}T00:00:00Z`) / 86_400_000);
+		const years = new Map<number, { e: number; w: number; days: number }>();
+		for (let i = 0; i < f.days; i++) {
+			const d = new Date((d0 + i) * 86_400_000);
+			const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+			const y = years.get(wy) ?? { e: 0, w: 0, days: 0 };
+			y.e += got.naturalFlowM3Day[i]!;
+			y.w += f.expected.naturalFlowM3Day[i]!;
+			y.days++;
+			years.set(wy, y);
+		}
+		for (const [wy, y] of years) {
+			if (Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor) {
+				mismatches.push(`naturalFlowM3Day water year ${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³`);
 			}
 		}
 		expect(mismatches).toEqual([]);

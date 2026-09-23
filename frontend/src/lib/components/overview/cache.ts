@@ -1,13 +1,11 @@
-// Last-seen lists per project for the Overview tab, so switching back to the
-// tab renders the final layout on the first frame (then refreshes quietly)
-// instead of a loading state that jumps once data arrives. Module scope = one
+// Last-seen member and team lists per project for the Overview tab's panels,
+// so switching back to the tab renders the final layout on the first frame
+// (then refreshes quietly) instead of a loading state that jumps once data
+// arrives. (Series and runs come from the project page.) Module scope = one
 // browser session; nothing is persisted.
-import type { SeriesMeta } from '@water-management/engine';
-import type { Member, RunMeta, Team } from '$lib/api/types';
+import type { Member, Team } from '$lib/api/types';
 
 export interface OverviewData {
-	series?: SeriesMeta[];
-	runs?: RunMeta[];
 	members?: Member[];
 	teams?: Team[];
 }

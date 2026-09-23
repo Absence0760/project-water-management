@@ -21,6 +21,7 @@
 		list,
 		file = null,
 		idPrefix = 'up',
+		pending = $bindable(false),
 		onuploaded
 	}: {
 		projectId: string;
@@ -28,6 +29,8 @@
 		/** A file handed in from outside (drag and drop); read as soon as it changes. */
 		file?: File | null;
 		idPrefix?: string;
+		/** Out: a file is read but not uploaded yet, or an upload is running. */
+		pending?: boolean;
 		onuploaded?: (r: UploadResult) => void | Promise<void>;
 	} = $props();
 
@@ -47,6 +50,10 @@
 	// A kind picked by hand is never overridden by the file-name guess.
 	let kindTouched = $state(false);
 	let targetValues = $state.raw<Daily | null>(null);
+
+	$effect(() => {
+		pending = parsed !== null || uploading;
+	});
 
 	const id = (s: string) => `${idPrefix}-${s}`;
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));

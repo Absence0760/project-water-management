@@ -1,10 +1,7 @@
 // Contextual help and glossary (the /help page and <HelpTip>).
 //
-// Written for hydrologists, in our own words. The concepts follow the WBT b023
-// workbook's Help, Models and configuration sheets and docs/model.md; the
-// workbook's text is SmartMatix's and is deliberately not copied. `source`
-// names where the idea comes from so a reader can check it against the
-// workbook.
+// Written for hydrologists, in our own words, following docs/model.md.
+// `source` names where each idea comes from so a reader can check it.
 //
 // `fields` are the keys a form uses to place a HelpTip next to a field:
 //   node.<NetworkNode field>        settings.<ProjectSettings field>
@@ -514,7 +511,7 @@ export const HELP: HelpEntry[] = [
 		id: 'farm-runoff',
 		term: 'Farm runoff',
 		short: 'The farm’s share of catchment natural flow on the day, in m³/day.',
-		long: 'Natural flow × the farm’s flow share, rounded to whole cubic metres.',
+		long: 'Natural flow × the farm’s flow share.',
 		units: 'm³/day',
 		category: 'flow',
 		fields: ['run.runoff'],

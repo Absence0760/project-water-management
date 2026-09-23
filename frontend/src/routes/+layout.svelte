@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
+	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
 	import VerifyEmailBanner from '$lib/components/auth-extras/VerifyEmailBanner.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
@@ -26,12 +27,15 @@
 	}
 
 	onMount(checkSession);
+	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
+	onMount(() => watchScrollRegions(document.body));
 
 	// Route guard (routeAccess): signed-out users go to /login (remembering
 	// where they were); signed-in users skip the sign-in pages — to the
 	// remembered ?next= page, so this guard and the login form's own redirect
-	// agree on where to land. Emailed-link pages (reset/verify) work either way.
-	const access = $derived(routeAccess(page.url.pathname, base, !!session.user));
+	// agree on where to land. Emailed-link pages (reset/verify, and an invitation
+	// on /register) work either way.
+	const access = $derived(routeAccess(page.url.pathname, base, !!session.user, page.url.searchParams));
 	$effect(() => {
 		if (!session.checked || bootError) return;
 		if (access === 'login') {

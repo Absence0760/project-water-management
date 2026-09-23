@@ -172,13 +172,17 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
-			const { rows: users } = await db.query<{ id: string; email: string; display_name: string }>(
-				'SELECT id, email, display_name FROM app_user WHERE email = $1',
+			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
+				'SELECT id, email, display_name, email_verified_at IS NOT NULL AS verified FROM app_user WHERE email = $1',
 				[body.email]
 			);
 			const user = users[0];
-			// No account yet: invite them by email (they join once they sign up).
-			if (!user) return { invited: await inviteByEmail(db, 'project', id, body.email, body.role) };
+			// No account yet, or one that never proved it owns the address: invite
+			// by email (they join once the address is verified), so pre-registering
+			// a colleague's address can't get you added in their place.
+			if (!user?.verified) {
+				return { invited: await inviteByEmail(db, 'project', id, body.email, body.role, user?.id) };
+			}
 			const { rowCount } = await db.query(
 				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
 				[id, user.id, body.role]

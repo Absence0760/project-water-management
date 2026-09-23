@@ -1,7 +1,7 @@
 # Architecture
 
-A web app for daily catchment water-balance modelling. It ports the SmartMatix
-/ FRC **Water Balance Tool b023** Excel workbook ([model.md](./model.md)). Each
+A web app for daily catchment water-balance modelling. It replaces the client's
+**Water Balance Tool b023** Excel workbook ([model.md](./model.md)). Each
 **project** is one catchment. Users keep as many projects as they need and
 share each one with per-project roles.
 

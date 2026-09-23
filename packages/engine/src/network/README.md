@@ -5,12 +5,18 @@ demand, transfers, farm dams, routing, EWR shortfalls and calibration
 statistics. Natural flow itself comes from `../flow.ts`. Entry point:
 `runModel` in `../run.ts`.
 
-`run.test.ts` reproduces every daily value on all 13 Element sheets of the
-client catchment b023 workbook (1981-01-01 to 2025-03-31, 16 161 days) **exactly**, and
-also the catchment simulated outflow and every [Shortfalls] column (the
-averages and the curtailment targets). That holds
-both with the workbook's own natural flow fed in and end to end from rainfall.
-A full `runModel` for client catchment takes about 160 ms.
+Up to engine 0.3.1 `run.test.ts` reproduced every daily value on all 13
+Element sheets of the client catchment b023 workbook (1981-01-01 to 2025-03-31,
+16 161 days) exactly. From 0.4.0 the engine deliberately differs where the
+workbook's algorithm is unsound ([docs/engine-audit.md](../../../../docs/engine-audit.md)):
+the regression test keeps an explicit, commented deviation list per column,
+each entry naming the audit finding. A full `runModel` for client catchment takes
+about 160 ms.
+
+**No rounding.** The workbook rounds fragmented flows, dam splits, return flow,
+capacity, storage and demand to fixed precisions; the engine keeps full
+precision everywhere (audit R1). `round.ts` only serves tests that replay
+workbook cells.
 
 ## Files
 
@@ -23,7 +29,7 @@ A full `runModel` for client catchment takes about 160 ms.
 | `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes; `moriasiRating`. |
 | `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain and total change (m³/day, l/s) over the reporting window → `RunSummary.curtailment`. |
 | `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm. |
-| `round.ts` | – | Excel `ROUND` and the workbook's rounding precisions. |
+| `round.ts` | – | Excel `ROUND` / `ROUNDDOWN`, for tests that replay workbook cells only. |
 
 ## Daily farm balance
 
@@ -34,11 +40,11 @@ initial storage on day 0):
 | --- | --- | --- |
 | F | `demand` | net irrigation demand (below) |
 | H | `inflow_upstream` | Σ upstream nodes' U |
-| I | `runoff` | ROUND(natural flow × farm share) |
+| I | `runoff` | natural flow × farm share |
 | J | `transfer` | Σ transfers in − Σ transfers out |
-| L | – | ROUND(H × `pctUpstreamToDam`) — upstream inflow *below* the dam (see quirk 1) |
+| L | – | H × `pctUpstreamToDam` — upstream inflow *below* the dam (see quirk 1) |
 | K | – | H − L — upstream inflow into the dam |
-| M | – | ROUND(I × `pctRunoffToDam`) — own runoff into the dam |
+| M | – | I × `pctRunoffToDam` — own runoff into the dam |
 | N | – | I − M — own runoff below the dam |
 | O | – | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
 | G | `supplied` | MIN(Qprev + M + O + K + J, F) |
@@ -46,27 +52,36 @@ initial storage on day 0):
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |
 | S | – | L + N − O — passes below the dam |
-| T | – | ROUND(G × `returnFlowPct`) — irrigation return flow |
+| T | – | G × `returnFlowPct` — irrigation return flow |
 | U | `outflow` | R + S + T |
 | W | `deficit` | F − G |
-| Y | `ewr` | ROUND(EWR × farm share) |
+| Y | `ewr` | EWR × farm share |
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
 | AA | `ewr_shortfall` | MIN(U − Z, 0) |
 | AB | `ewr_shortfall_incremental` | MIN(AA − Σ upstream AA, 0) — the shortfall this farm adds |
 
-Capacity is `ROUND(damCapacityM3)`; initial storage is
-`ROUND(damInitialPct × capacity)`.
+Every MIN(…, 0) shortfall here (AA, AB, the gauge's and the outlet's) goes
+through `shortfall(a, b, scale)`: a difference within 1e-12 of the volumes
+involved is float noise and reported as 0, so a residue never counts as a day
+the EWR was not met (engine review F8). Upstream sums run in node-id order, so
+results don't depend on how the nodes are listed.
+
+Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
+(the workbook rounds both to whole m³).
 
 A **gauge** passes its upstream through: `outflow` = Σ upstream U,
-`ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = Σ upstream AA. The outflow
+`ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = MIN(outflow − ewr_cumulative, 0).
+(The workbook's gauge sums the upstream AA, which overstates the shortfall at a
+confluence where one branch has water to spare: audit G1.) The outflow
 node's `outflow` is the catchment `simulated_outflow`.
 
 ## Irrigation demand
 
-- Gross crop mm per water-year month = ROUND(A-pan × crop factor, 2).
-- Farm gross m³/day = ROUND(Σ(crop area × gross mm) / 1000 / days in month, 1),
+- Gross crop mm per water-year month = A-pan × crop factor.
+- Farm gross m³/day = Σ(crop area × gross mm) / 1000 / days in month,
   with February = `settings.februaryDays` (28.25).
-- Daily net = ROUND(MAX(0, gross − cropped area × effectiveRainFraction/1000 × rain), 0).
+- Daily net = MAX(0, gross − cropped area × effectiveRainFraction/1000 × rain).
+  (The workbook rounds these to 2 dp, 0.1 m³/day and whole m³.)
   Rain is [Flow data] R "Use rain": catchment rain if present, else CHIRPS,
   else forecast, zeroed at or below `calibration.rainThresholdMm`.
 
@@ -75,11 +90,10 @@ node's `outflow` is the catchment `simulated_outflow`.
 Settled at the start of each day, before any farm. In an active month, the
 volume is `fGetTrfVolCapped`:
 
-    MIN(MAX(source storage yesterday − capacity × minStoragePct, 0), ROUND(maxRateM3s × 86400))
+    MIN(MAX(source storage yesterday − capacity × minStoragePct, 0), maxRateM3s × 86400)
 
 further capped by `dailyCapM3` when set. It is added to the destination's J
-and subtracted from the source's. Capacity here is the *unrounded* Farm spec
-value, as in the workbook. Transfers involving a gauge are skipped with a
+and subtracted from the source's. Transfers involving a gauge are skipped with a
 warning.
 
 ## EWR and summary
@@ -94,9 +108,10 @@ warning.
 - `curtailment` ([Shortfalls]): over `settings.reportStart … reportEnd`
   (`resolveReportWindow` in `../run.ts`: null = run start/end, clipped to the
   run with a warning, a disjoint or reversed window falls back to the whole
-  run). Per farm: H/I/R = ROUND(mean demand / supplied / AB, 0); equitable
-  fraction = ΣI / ΣH; target M = ROUND(H × that, 1); reduce/gain N = M − I;
-  total change S = N + R; volume left U = M + R; l/s = ROUNDDOWN(÷ 86.4, 1).
+  run). Per farm: H/I/R = mean demand / supplied / AB; equitable
+  fraction = ΣI / ΣH; target M = H × that; reduce/gain N = M − I;
+  total change S = N + R; volume left U = M + R; l/s = ÷ 86.4 (all unrounded;
+  the sheet rounds and truncates).
   Workbook signs (negative = reduce). Full table and quirks:
   [docs/model.md §2.11](../../../../docs/model.md#211-curtailment-targets-shortfalls).
 - Calibration: over days with an observation inside
@@ -127,12 +142,11 @@ What we mirror, and what we don't:
    inflow entering above the dam") describes the label, not the effect.
 2. **Month lists are matched as substrings.** `fIsMthIn` / `fSorW2` use
    `FIND(m & ",", list & ",")`, so a list "11,12" also switches on January and
-   February. **Mirrored at import**: `extract_project.py` expands transfer
-   months the same way, prints a note when this changes anything, and stores
-   the expanded list. The engine does a plain membership test. It makes no
-   difference to either sample workbook: client catchment's transfer is
-   "5,6,7,8,9,10", and lists with 11 or 12 there already include 1 and 2.
-   `calibration.py` expands summer months the same way.
+   February. **Not mirrored** (audit M1): the importer keeps the months a list
+   names and prints a note when the workbook would have added others; the
+   engine does a plain membership test. It makes no difference to either
+   sample workbook: client catchment's transfer is "5,6,7,8,9,10", and lists with 11
+   or 12 there already include 1 and 2.
 3. **Blank template's sample transfer reads spill, not storage.** In
    `Blank_WBT_b023_v001.xlsm` [Transfers] P7 is
    `fGetTrfVolCapped(FarmB!R6, …)`: column R (spill) where every other
@@ -143,6 +157,8 @@ What we mirror, and what we don't:
    (`J = O − P` …). The engine assumes the standard "add to destination,
    subtract from source". An import of a workbook with custom InOut formulas
    would not be reproduced. client catchment's are standard.
-5. **Gross demand in [Farm demand] rounds to 0.1 m³/day and crop mm to 0.01**
-   before the daily ROUND. The engine keeps these steps (`WBT_PRECISION`), so
-   demand matches the workbook exactly rather than being slightly more precise.
+5. **The workbook rounds almost every column** (demand to 0.01 mm / 0.1 m³/day
+   / 1 m³, fragments, splits, return flow, storage, capacity, the rain flow
+   `INT`, recession indices to 4 dp). **Not mirrored** from engine 0.4.0
+   (audit R1): rounding a state variable stopped recessions at a floor,
+   created or lost water in splits and zeroed small dams.

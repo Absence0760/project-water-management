@@ -6,7 +6,6 @@
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { excelRound } from '../network/round';
 import type { CurtailmentFarm, EwrComplianceGrid, ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
 import { cloneInput, scrambleOrder } from './fuzz';
@@ -51,11 +50,12 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		if (n.kind === 'gauge') continue;
 		const g = (k: string) => get.get(`${n.id}|${k}`)!;
 		const [F, G, W, H, I, J, Q, R, AA, Z] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff', 'transfer', 'dam_storage', 'spill', 'ewr_shortfall', 'ewr_cumulative'].map(g) as number[][];
-		const cap = excelRound(n.damCapacityM3, 0);
-		let qPrev = excelRound(n.damInitialPct * cap, 0);
+		// The engine keeps full precision (docs/engine-audit.md R1): no rounding here either.
+		const cap = n.damCapacityM3;
+		let qPrev = n.damInitialPct * cap;
 		totIn += qPrev;
 		for (let t = 0; t < out.days; t++) {
-			const T = excelRound(G![t]! * n.returnFlowPct, 0);
+			const T = G![t]! * n.returnFlowPct;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev;
 			const rhs = U[t]! + G![t]! - T + Q![t]!;
 			const where = `${n.id} day ${t}`;
@@ -65,7 +65,13 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			if (G![t]! > F![t]! + 1e-9) return `${where}: supplied ${G![t]} > demand ${F![t]}`;
 			if (G![t]! < -1e-9) return `${where}: supplied ${G![t]} < 0`;
 			if (Math.abs(W![t]! - (F![t]! - G![t]!)) > 1e-9) return `${where}: deficit ≠ demand − supplied`;
-			if (AA![t]! > 0 || Math.abs(AA![t]! - Math.min(U[t]! - Z![t]!, 0)) > tol(U[t]!)) return `${where}: EWR shortfall ${AA![t]}`;
+			// The engine reports float noise below 1e-12 of the volumes as no shortfall (review F8).
+			const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z![t]!));
+			if (AA![t]! > 0 || Math.abs(AA![t]! - Math.min(U[t]! - Z![t]!, 0)) > tol(U[t]!) + noise) return `${where}: EWR shortfall ${AA![t]}`;
+			const upAA = ups.reduce((sum, u) => sum + get.get(`${u.id}|ewr_shortfall`)![t]!, 0);
+			const AB = get.get(`${n.id}|ewr_shortfall_incremental`)![t]!;
+			const abNoise = noise + 1e-12 * ups.reduce((sum, u) => sum + Math.abs(get.get(`${u.id}|ewr_shortfall`)![t]!), 0);
+			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
 			totIn += I![t]!;
 			totOut += G![t]! - T;
 			qPrev = Q![t]!;
@@ -81,7 +87,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		if (Math.abs(Jsum) > 1e-6) return `day ${t}: transfers do not net to 0 (${Jsum})`;
 		const e = get.get('null|ewr')![t]!;
 		const sh = get.get('null|ewr_shortfall')![t]!;
-		if (sh !== Math.min(sim[t]! - e, 0) && !(sh === 0 && sim[t]! - e >= 0)) return `day ${t}: catchment EWR shortfall ${sh}`;
+		if (sh > 0 || Math.abs(sh - Math.min(sim[t]! - e, 0)) > 1e-12 * Math.max(Math.abs(sim[t]!), Math.abs(e))) return `day ${t}: catchment EWR shortfall ${sh}`;
 	}
 	if (Math.abs(totIn - totOut) > 1e-6 * Math.max(1, totIn)) return `catchment mass balance: in ${totIn} ≠ out ${totOut}`;
 	return null;
@@ -100,7 +106,7 @@ interface Rule {
  * Q18), checked on each farm's net transfer J:
  * - months: a farm no active rule touches today has J = 0;
  * - rate and daily cap: J ≤ Σ limits of today's rules into the farm, and
- *   −J ≤ Σ limits of today's rules out of it (limit = MIN(ROUND(rate × 86 400),
+ *   −J ≤ Σ limits of today's rules out of it (limit = MIN(rate × 86 400,
  *   daily cap));
  * - minimum storage: −J ≤ yesterday's storage − the lowest reserve among
  *   today's outgoing rules (never below 0);
@@ -116,7 +122,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const a = byId.get(tr.fromNodeId);
 		const b = byId.get(tr.toNodeId);
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm') continue;
-		let maxDaily = excelRound(tr.maxRateM3s * SEC_PER_DAY, 0);
+		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
 		rules.push({ from: a.id, to: b.id, months: new Set(tr.months), maxDaily: Math.max(0, maxDaily), reserve: a.damCapacityM3 * tr.minStoragePct });
 	}
@@ -125,7 +131,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const storage = (id: string, t: number) => {
 		if (t > 0) return get.get(`${id}|dam_storage`)![t - 1]!;
 		const n = byId.get(id)!;
-		return excelRound(n.damInitialPct * excelRound(n.damCapacityM3, 0), 0);
+		return n.damInitialPct * n.damCapacityM3;
 	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
@@ -173,11 +179,13 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
  *   the month, volumes are ≥ 0, and each site's Σ volume and Σ days not met
  *   equal −Σ daily shortfall and the count of short days (outlet: the
  *   catchment summary; farm: its FarmSummary);
- * - curtailment: H, I, R are the rounded window means of demand, supplied and
- *   incremental EWR shortfall; totals are the column sums; the equitable
- *   fraction is ΣI / ΣH; targets redistribute the supplied water (Σ M = Σ I
- *   within the 0.05 m³/day rounding per farm), never exceed demand, and
- *   N = M − I, S = N + R, U = M + R.
+ * - curtailment: H, I, R are the window means of demand, supplied and
+ *   incremental EWR shortfall (unrounded, R1); I ≤ H and R ≤ 0; totals are
+ *   the column sums; the equitable fraction is ΣI / ΣH; targets redistribute
+ *   the supplied water (Σ M = Σ I) and never exceed demand; N = M − I,
+ *   S = N + R, U = M + R and the l/s columns are m³/day ÷ 86.4.
+ * Tolerances are float noise only: 1e-12 of the operands' magnitude for single
+ * operations, 1e-10 of Σ|x| for sums over a run.
  */
 export function checkReportTotals(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
@@ -186,7 +194,9 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		for (let t = from; t <= to; t++) s += a[t]!;
 		return s;
 	};
-	const close = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps + 1e-9 * Math.max(Math.abs(a), Math.abs(b));
+	const sumAbs = (a: number[]) => a.reduce((s, v) => s + Math.abs(v), 0);
+	/** |a − b| within `rel` of `scale` (default: the larger magnitude). */
+	const close = (a: number, b: number, rel = 1e-12, scale = Math.max(Math.abs(a), Math.abs(b))) => Math.abs(a - b) <= rel * scale;
 	const c = out.summary.ewrCompliance!;
 	const cellDays = c.days.flat();
 	if (sum(cellDays) !== out.days) return `EWR grid: cells hold ${sum(cellDays)} days, the run has ${out.days}`;
@@ -207,7 +217,7 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 			}
 		}
 		const vol = sum(g.shortfallM3.flat());
-		if (!close(vol, -sum(daily), 1e-6 * out.days)) return `EWR grid ${label}: Σ volume ${vol} ≠ −Σ daily shortfall ${-sum(daily)}`;
+		if (!close(vol, -sum(daily), 1e-10, sumAbs(daily))) return `EWR grid ${label}: Σ volume ${vol} ≠ −Σ daily shortfall ${-sum(daily)}`;
 		const short = daily.filter((v) => v < 0).length;
 		if (sum(g.daysNotMet.flat()) !== short || short !== daysNotMet) return `EWR grid ${label}: ${sum(g.daysNotMet.flat())} days not met, daily series ${short}, summary ${daysNotMet}`;
 		return null;
@@ -235,29 +245,38 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 	const to = toEpochDay(k.reportEnd) - d0;
 	if (from < 0 || to >= out.days || to < from || k.days !== to - from + 1) return `curtailment window ${k.reportStart} … ${k.reportEnd} outside the run`;
 	const n = to - from + 1;
-	const r0 = (x: number) => excelRound(x, 0) || 0;
 	let sumH = 0;
 	let sumI = 0;
 	let sumM = 0;
 	for (const row of k.farms) {
 		const w = `curtailment ${row.nodeId}`;
-		const H = r0(sum(get.get(`${row.nodeId}|demand`)!, from, to) / n);
-		const I = r0(sum(get.get(`${row.nodeId}|supplied`)!, from, to) / n);
-		const R = r0(sum(get.get(`${row.nodeId}|ewr_shortfall_incremental`)!, from, to) / n);
-		if (row.demandM3Day !== H || row.suppliedM3Day !== I || row.ewrShortfallM3Day !== R) return `${w}: H/I/R ${row.demandM3Day}/${row.suppliedM3Day}/${row.ewrShortfallM3Day} ≠ window means ${H}/${I}/${R}`;
-		if (R > 0 || I > H) return `${w}: shortfall ${R} > 0 or supplied ${I} > demand ${H}`;
-		if (row.targetM3Day > H + 1e-9 || row.targetM3Day < 0) return `${w}: target ${row.targetM3Day} outside [0, demand ${H}]`;
-		const id = (x: CurtailmentFarm, a: number, b: number, what: string) => (close(a, b, 0.051) ? null : `${w}: ${what} (${a} vs ${b}) in ${JSON.stringify(x)}`);
-		const e = id(row, row.reduceGainM3Day, row.targetM3Day - I, 'N ≠ M − I') ?? id(row, row.totalChangeM3Day, row.reduceGainM3Day + R, 'S ≠ N + R') ?? id(row, row.volumeLeftM3Day, row.targetM3Day + R, 'U ≠ M + R');
+		const mean = (key: string) => sum(get.get(`${row.nodeId}|${key}`)!, from, to) / n;
+		const [mH, mI, mR] = [mean('demand'), mean('supplied'), mean('ewr_shortfall_incremental')] as [number, number, number];
+		if (!close(row.demandM3Day, mH) || !close(row.suppliedM3Day, mI) || !close(row.ewrShortfallM3Day, mR))
+			return `${w}: H/I/R ${row.demandM3Day}/${row.suppliedM3Day}/${row.ewrShortfallM3Day} ≠ window means ${mH}/${mI}/${mR}`;
+		// Daily supplied ≤ demand and shortfall ≤ 0, so their means are too (float sums are monotone).
+		if (row.ewrShortfallM3Day > 0 || row.suppliedM3Day > row.demandM3Day) return `${w}: shortfall ${row.ewrShortfallM3Day} > 0 or supplied ${row.suppliedM3Day} > demand ${row.demandM3Day}`;
+		if (row.targetM3Day > row.demandM3Day || row.targetM3Day < 0) return `${w}: target ${row.targetM3Day} outside [0, demand ${row.demandM3Day}]`;
+		const M = row.targetM3Day;
+		const id = (x: CurtailmentFarm, a: number, b: number, what: string, ...ops: number[]) =>
+			close(a, b, 1e-12, Math.max(Math.abs(a), Math.abs(b), ...ops.map(Math.abs))) ? null : `${w}: ${what} (${a} vs ${b}) in ${JSON.stringify(x)}`;
+		const e =
+			id(row, row.reduceGainM3Day, M - row.suppliedM3Day, 'N ≠ M − I', M, row.suppliedM3Day) ??
+			id(row, row.totalChangeM3Day, row.reduceGainM3Day + row.ewrShortfallM3Day, 'S ≠ N + R', row.reduceGainM3Day, row.ewrShortfallM3Day) ??
+			id(row, row.volumeLeftM3Day, M + row.ewrShortfallM3Day, 'U ≠ M + R', M, row.ewrShortfallM3Day) ??
+			id(row, row.reduceGainLs, row.reduceGainM3Day / 86.4, 'l/s ≠ m³/day ÷ 86.4') ??
+			id(row, row.totalChangeLs, row.totalChangeM3Day / 86.4, 'total l/s ≠ m³/day ÷ 86.4');
 		if (e) return e;
+		const H = row.demandM3Day;
+		const I = row.suppliedM3Day;
 		if ((row.fractionSupplied === null) !== (H === 0)) return `${w}: fraction supplied null iff demand 0`;
 		sumH += H;
 		sumI += I;
 		sumM += row.targetM3Day;
 	}
-	if (k.totals.demandM3Day !== sumH || k.totals.suppliedM3Day !== sumI) return `curtailment totals ${k.totals.demandM3Day}/${k.totals.suppliedM3Day} ≠ Σ farms ${sumH}/${sumI}`;
-	if (sumH === 0 ? k.equitableFraction !== null : !close(k.equitableFraction!, sumI / sumH, 1e-12)) return `curtailment equitable fraction ${k.equitableFraction} ≠ ${sumI}/${sumH}`;
-	if (sumH > 0 && !close(sumM, sumI, 0.05 * k.farms.length + 1e-6)) return `curtailment targets Σ ${sumM} do not redistribute the supplied ${sumI}`;
+	if (!close(k.totals.demandM3Day, sumH) || !close(k.totals.suppliedM3Day, sumI)) return `curtailment totals ${k.totals.demandM3Day}/${k.totals.suppliedM3Day} ≠ Σ farms ${sumH}/${sumI}`;
+	if (sumH === 0 ? k.equitableFraction !== null : !close(k.equitableFraction!, sumI / sumH)) return `curtailment equitable fraction ${k.equitableFraction} ≠ ${sumI}/${sumH}`;
+	if (sumH > 0 && !close(sumM, sumI, 1e-12 * Math.max(1, k.farms.length))) return `curtailment targets Σ ${sumM} do not redistribute the supplied ${sumI}`;
 	return null;
 }
 
@@ -272,23 +291,24 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 }
 
 /**
- * Numbers equal to 1e-9 of their scale; objects/arrays compared recursively;
- * NaN equals NaN. The scale of a number inside a numeric array is the array's
- * largest magnitude: summing upstream flows in another order changes the last
- * bits, and a difference of 1e-7 m³ in a series of 10⁹ m³ values is rounding,
- * not a different result. Whole-number results (day counts) must match exactly.
+ * Deep equality for two runs of the same model. NaN equals NaN; whole numbers
+ * (day counts, water years) must match exactly. Other numbers may differ by
+ * float noise, 1e-9 of their scale: summing upstream flows or crop areas in
+ * another order changes the last bits, and 1e-7 m³ in a catchment moving
+ * 10⁹ m³/day is noise, not a different result. The scale of a volume (a field
+ * named …M3…, …Mm3…, …Ls, or a numeric array) is `volume`, the largest volume
+ * in either run; a ratio or fraction is compared to 1e-9 of itself.
  */
-function sameValue(a: unknown, b: unknown, path: string, scale = 1): string | null {
+function sameValue(a: unknown, b: unknown, path: string, scale = 1, volume = 1): string | null {
 	if (typeof a === 'number' && typeof b === 'number') {
 		if (Number.isNaN(a) && Number.isNaN(b)) return null;
+		if (Number.isInteger(a) && Number.isInteger(b)) return a === b ? null : `${path}: ${a} vs ${b}`;
 		return Math.abs(a - b) <= 1e-9 * Math.max(scale, Math.abs(a), Math.abs(b)) ? null : `${path}: ${a} vs ${b}`;
 	}
 	if (Array.isArray(a) && Array.isArray(b)) {
 		if (a.length !== b.length) return `${path}: length ${a.length} vs ${b.length}`;
-		let s = scale;
-		for (const v of [...a, ...b]) if (typeof v === 'number' && Number.isFinite(v)) s = Math.max(s, Math.abs(v));
 		for (let i = 0; i < a.length; i++) {
-			const d = sameValue(a[i], b[i], `${path}[${i}]`, s);
+			const d = sameValue(a[i], b[i], `${path}[${i}]`, scale, volume);
 			if (d) return d;
 		}
 		return null;
@@ -296,7 +316,8 @@ function sameValue(a: unknown, b: unknown, path: string, scale = 1): string | nu
 	if (a && b && typeof a === 'object' && typeof b === 'object') {
 		const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
 		for (const k of keys) {
-			const d = sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`);
+			const isVolume = /M3|Mm3|Ls$/.test(k);
+			const d = sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`, isVolume ? volume : scale, volume);
 			if (d) return d;
 		}
 		return null;
@@ -352,17 +373,16 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 	const cb = canonical(y);
 	let d: string | null = null;
 	for (const k of new Set([...Object.keys(ca.series), ...Object.keys(cb.series)])) {
-		d ??= sameValue(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`, scale);
+		d ??= sameValue(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`, scale, scale);
 	}
-	d ??= sameValue({ ...ca, series: null }, { ...cb, series: null }, 'output');
+	d ??= sameValue({ ...ca, series: null }, { ...cb, series: null }, 'output', 1, scale);
 	return d ? `order invariance (seed ${seed}${shared ? ', transfer order kept' : ''}): ${d}` : null;
 }
 
 /**
  * More irrigated land can't make the catchment better supplied: doubling every
- * crop area never raises Σ supplied / Σ demand over the run. The slack allows
- * for the workbook's rounding of daily demand to whole m³ (±1 m³ per farm-day
- * after doubling).
+ * crop area never raises Σ supplied / Σ demand over the run. Demand is not
+ * rounded (R1), so it doubles exactly and the only slack is float noise.
  */
 export function checkDoubledCropAreas(input: ModelInput, out: ModelOutput): string | null {
 	const x = cloneInput(input);
@@ -377,8 +397,7 @@ export function checkDoubledCropAreas(input: ModelInput, out: ModelOutput): stri
 	const [d1, s1] = tot(out);
 	const [d2, s2] = tot(y);
 	if (!(d1! > 0) || !(d2! > 0)) return null;
-	const cropped = new Set(x.model.cropAreas.filter((a) => a.areaM2 > 0).map((a) => a.nodeId)).size;
-	const slack = (2 * cropped) / d2! + 1e-9; // average m³/day per farm of rounding over total average demand
+	const slack = 1e-12;
 	const f1 = s1! / d1!;
 	const f2 = s2! / d2!;
 	return f2 > f1 + slack ? `doubling crop areas raised the supply fraction ${f1} → ${f2} (slack ${slack})` : null;

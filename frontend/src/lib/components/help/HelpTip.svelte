@@ -5,6 +5,12 @@
 	// keyboard and on touch: click/Enter/Space toggles, Escape closes and keeps
 	// focus on the button, clicking or tabbing away closes. The text lives in a
 	// polite live region so screen readers announce it when it opens.
+	//
+	// The bubble is a manual popover, so it renders in the browser's top layer:
+	// no scroll container (tables scroll sideways) can clip it and no sticky
+	// header can paint over it. It is placed with fixed coordinates from the
+	// button's rect, below it or above when there's no room, and follows it on
+	// scroll and resize.
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { helpFor } from '$lib/help/content';
@@ -13,7 +19,7 @@
 
 	const entry = $derived(helpFor(key));
 	let open = $state(false);
-	let shift = $state(0);
+	let pos = $state({ top: 0, left: 0 });
 	let root: HTMLSpanElement | undefined = $state();
 	let button: HTMLButtonElement | undefined = $state();
 	let bubble: HTMLSpanElement | undefined = $state();
@@ -46,20 +52,37 @@
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
 
-	// Keep the bubble on screen (phones): nudge it back inside an 8 px margin.
+	// Show it in the top layer and keep it next to the button, on screen.
+	function place() {
+		if (!button || !bubble) return;
+		const b = button.getBoundingClientRect();
+		const w = bubble.offsetWidth;
+		const h = bubble.offsetHeight;
+		const margin = 8;
+		const gap = 6;
+		const vw = document.documentElement.clientWidth;
+		const vh = document.documentElement.clientHeight;
+		const left = Math.min(Math.max(b.left + b.width / 2 - w / 2, margin), Math.max(vw - margin - w, margin));
+		const below = b.bottom + gap;
+		const top = below + h > vh - margin && b.top - gap - h >= margin ? b.top - gap - h : below;
+		pos = { top, left };
+	}
+
 	$effect(() => {
-		if (!open) {
-			shift = 0;
-			return;
-		}
+		if (!open) return;
+		let alive = true;
 		tick().then(() => {
-			if (!bubble) return;
-			const r = bubble.getBoundingClientRect();
-			const margin = 8;
-			const vw = document.documentElement.clientWidth;
-			if (r.right > vw - margin) shift = vw - margin - r.right;
-			else if (r.left < margin) shift = margin - r.left;
+			if (!alive || !bubble) return;
+			bubble.showPopover();
+			place();
 		});
+		window.addEventListener('scroll', place, true);
+		window.addEventListener('resize', place);
+		return () => {
+			alive = false;
+			window.removeEventListener('scroll', place, true);
+			window.removeEventListener('resize', place);
+		};
 	});
 </script>
 
@@ -84,7 +107,7 @@
 		</button>
 		<span id={bubbleId} class="live" role="status" aria-live="polite">
 			{#if open}
-				<span class="bubble" bind:this={bubble} style:--shift="{shift}px">
+				<span class="bubble" popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
 					{#if entry.units}<span class="units">Units: {entry.units}</span>{/if}
@@ -121,11 +144,9 @@
 		background: var(--accent-soft);
 	}
 	.bubble {
-		position: absolute;
-		top: calc(100% + 6px);
-		left: 50%;
-		transform: translateX(calc(-50% + var(--shift, 0px)));
-		z-index: 40;
+		position: fixed;
+		inset: auto;
+		margin: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
@@ -143,6 +164,10 @@
 		text-align: left;
 		white-space: normal;
 		text-transform: none;
+	}
+	/* Author styles beat the UA's popover hiding rule, so restate it. */
+	.bubble:not(:popover-open) {
+		display: none;
 	}
 	.term {
 		font-weight: 600;
