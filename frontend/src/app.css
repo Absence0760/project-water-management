@@ -220,7 +220,7 @@ textarea {
 input:disabled,
 select:disabled,
 textarea:disabled,
-input:read-only {
+input:not([type='checkbox']):read-only {
 	background: var(--surface-2);
 	color: var(--text-2);
 }

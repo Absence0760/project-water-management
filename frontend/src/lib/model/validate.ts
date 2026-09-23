@@ -8,6 +8,8 @@ export interface ModelIssue {
 	message: string;
 }
 
+const inRange = (v: number, lo: number, hi: number) => !Number.isNaN(v) && v >= lo && v <= hi;
+
 export function validateModel(model: ProjectModel): ModelIssue[] {
 	const issues: ModelIssue[] = [];
 	const { nodes, crops, cropAreas, transfers } = model;
@@ -37,6 +39,19 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			issues.push({ area: 'network', message: `"${nodeName(n.id)}" drains into itself.` });
 		} else if (n.downstreamNodeId !== null && !nodeIds.has(n.downstreamNodeId)) {
 			issues.push({ area: 'network', message: `"${nodeName(n.id)}" drains into a node that no longer exists.` });
+		}
+	}
+
+	// Ranges (the API rejects these with a 400)
+	const FRACTIONS = ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'returnFlowPct'] as const;
+	const NON_NEG = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'damCapacityM3', 'divertCapacityM3Day'] as const;
+	for (const n of nodes) {
+		const label = `"${nodeName(n.id)}"`;
+		if (n.name.trim().length > 100) issues.push({ area: 'network', message: `${label}: names are limited to 100 characters.` });
+		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
+		if (badFrac) issues.push({ area: 'network', message: `${label}: percentages must be between 0% and 100%.` });
+		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
+			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });
 		}
 	}
 
@@ -86,18 +101,18 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const key = c.name.trim().toLowerCase();
 		if (!key) issues.push({ area: 'crops', message: 'Every crop needs a name.' });
 		else cropNames.set(key, (cropNames.get(key) ?? 0) + 1);
-		if (c.cropFactor.length !== 12 || c.cropFactor.some((f) => !Number.isFinite(f))) {
-			issues.push({ area: 'crops', message: `Crop "${c.name}" needs 12 numeric monthly factors.` });
+		if (c.cropFactor.length !== 12 || c.cropFactor.some((f) => !inRange(f, 0, Infinity))) {
+			issues.push({ area: 'crops', message: `Crop "${c.name}" needs 12 non-negative monthly factors.` });
 		}
 	}
 	for (const [key, count] of cropNames) {
 		if (count > 1) issues.push({ area: 'crops', message: `Crop name "${key}" is used ${count} times.` });
 	}
-	for (const a of cropAreas) {
-		if (!nodeIds.has(a.nodeId) || !cropIds.has(a.cropId)) {
-			issues.push({ area: 'crops', message: 'A crop area refers to a deleted farm or crop.' });
-			break;
-		}
+	if (cropAreas.some((a) => !nodeIds.has(a.nodeId) || !cropIds.has(a.cropId))) {
+		issues.push({ area: 'crops', message: 'A crop area refers to a deleted farm or crop.' });
+	}
+	if (cropAreas.some((a) => !inRange(a.areaM2, 0, Infinity))) {
+		issues.push({ area: 'crops', message: "Crop areas can't be negative." });
 	}
 
 	// Transfers
@@ -110,6 +125,12 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		}
 		if (t.months.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) {
 			issues.push({ area: 'transfers', message: `${label}: months must be 1–12.` });
+		}
+		if (!inRange(t.minStoragePct, 0, 1)) {
+			issues.push({ area: 'transfers', message: `${label}: minimum storage must be between 0% and 100%.` });
+		}
+		if (!inRange(t.maxRateM3s, 0, Infinity) || (t.dailyCapM3 !== null && !inRange(t.dailyCapM3, 0, Infinity))) {
+			issues.push({ area: 'transfers', message: `${label}: rates and caps can't be negative.` });
 		}
 	});
 

@@ -81,4 +81,14 @@ describe('validateModel', () => {
 		});
 		expect(validateModel(m).map((i) => i.area)).toEqual(['crops', 'crops', 'transfers', 'transfers']);
 	});
+
+	it('flags out-of-range fractions and negative quantities', () => {
+		const a = node('a', 'A', null);
+		a.damMinPct = 1.5;
+		a.damCapacityM3 = -1;
+		expect(messages(model([a]))).toEqual([
+			'"A": percentages must be between 0% and 100%.',
+			'"A": areas and capacities can\'t be negative.'
+		]);
+	});
 });
