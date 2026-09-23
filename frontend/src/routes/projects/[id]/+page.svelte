@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -59,7 +59,11 @@
 			loading = false;
 		}
 	}
-	onMount(load);
+	// Reload when the route param changes (e.g. navigating between projects).
+	$effect(() => {
+		void projectId;
+		untrack(load);
+	});
 
 	async function saveModel() {
 		if (editor.issues.length || editor.saving) return;
