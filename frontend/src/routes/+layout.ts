@@ -1,7 +1,6 @@
-// adapter-static needs every route to be prerenderable. Prerendering the
-// whole tree turns the frontend into static files served by S3/CloudFront
-// (see infra/s3_cloudfront.tf); the backend API is reached at runtime from
-// the browser. If you later add client-only routes that can't be
-// prerendered, switch to SPA mode instead: drop this and pass
-// `fallback: 'index.html'` to adapter-static in svelte.config.js.
-export const prerender = true;
+// SPA mode. The app is a signed-in tool whose routes (/projects/[id]) depend on
+// runtime data, so nothing is prerendered or server-rendered: adapter-static
+// emits a single index.html fallback (svelte.config.js) and the client router
+// renders every page. Data is fetched from the backend API in the browser.
+export const ssr = false;
+export const prerender = false;
