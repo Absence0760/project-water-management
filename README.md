@@ -86,9 +86,3 @@ This repo is public. Client workbooks and anything extracted from them
 committed test fixtures are synthetic. Production secrets are SOPS-encrypted in
 the private `Absence0760/infra-secrets` repo under `water-management/`, never
 here. See [docs/security.md § Public repo hygiene](./docs/security.md#public-repo-hygiene).
-
-## Credits
-
-The WBT b023 model architecture is © Freshwater Research Centre. The original
-workbook's code and formulas are © SmartMatix. Whether this reimplementation is
-permitted is an open question with the client (see [docs/plan.md](./docs/plan.md#questions-for-the-client)).

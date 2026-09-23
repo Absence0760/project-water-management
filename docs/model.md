@@ -48,12 +48,6 @@ Source workbooks (kept locally outside the repo in `../project-water-management-
 | `AI/WBT_NodeBased_v004_DEV.xlsm` | An experimental 16-node daily ledger with pump scenarios and stress classes | Unfinished; later phase |
 | `AI/WBT_Runoff_Module_DEV_003.xlsm` | An experimental bucket rainfall-runoff model with 12 hydrological units | Unfinished; later, as an alternative flow generator |
 
-> **Licence note.** The workbook's copyright statement says the *model
-> architecture* is © FRC and the *code and formulas* are © SmartMatix. It allows
-> the licensee to modify and use the workbook within the licensed organisation.
-> Before this app is used beyond a demo, we need the client to confirm that a
-> web reimplementation is covered. See [plan.md § Questions](./plan.md#questions-for-the-client).
-
 ---
 
 ## 2. The b023 model (what V1 ports)

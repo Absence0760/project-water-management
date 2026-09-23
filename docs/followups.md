@@ -7,10 +7,9 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Before sharing more widely
 
-- [ ] **Licence / IP.** The workbook states FRC owns the model design and
-      SmartMatix owns the formulas; the engine is a port of both. Settle this
-      with the client **before making the GitHub repo public** (it was pushed
-      private). Docs also still name the Client Catchment catchment and some farms.
+- [ ] **Client names in docs.** Docs still name the Client Catchment catchment and
+      some of its farms; scrub them before making the GitHub repo public (it
+      was pushed private).
 - [ ] **Hydrologist review** of the first question in plan.md (gauge G1 vs
       logger A1 from 2014/15) — it decides what Client Catchment is calibrated to.
 - [ ] **Hydrologist read-through of the help text** (`frontend/src/lib/help/content.ts`),

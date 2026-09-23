@@ -486,20 +486,14 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Data, legal, hosting
 
-15. **Licence and IP.** The workbook says the model architecture is © FRC and
-    the code and formulas are © SmartMatix, and it allows modification "within
-    the licensed organisation". Is a web reimplementation allowed? **This repo
-    is public**, so the ported formulas become publicly readable. Is that
-    acceptable, or must the engine live in a private repo? Who owns the app and
-    its code? Do SmartMatix and FRC need to agree?
-16. **Cloud storage and POPIA.** May client data (farm names, dam sizes, crop
+15. **Cloud storage and POPIA.** May client data (farm names, dam sizes, crop
     areas, and possibly owners' names) be stored in AWS? Must it stay in South
     Africa (`af-south-1`)? Is any of it confidential between farms, for example
     one farm's abstraction hidden from its neighbours?
-17. **Domain (for information).** The app will live at
+16. **Domain (for information).** The app will live at
     `water-management.jaredhoward.com`. Tell the client this, and flag it early
     if they need a branded domain.
-18. **Budget and support.** What is the expected monthly hosting budget, and
+17. **Budget and support.** What is the expected monthly hosting budget, and
     who pays? Who supports the users?
 
 ---
@@ -510,13 +504,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 | --- | --- | --- |
 | **Hidden workbook behaviour** (VBA steps, rounding, freeze-to-values, hand-edited cells) means we can't match number for number | V1 can't be trusted | Regression tests on every column, stage by stage. Extract the workbook's *computed* columns and compare against those, not against our reading of the formulas. Document every mismatch in model.md §3. |
 | **Workbook bugs**: fix them or copy them? | Results differ from what the client is used to | Workbook-compatible mode by default. Corrected modes are opt-in per project and recorded in the engine version. |
-| **Licence / IP** (FRC and SmartMatix) | Could block any use beyond a demo | Ask first (question 15), before investing past Phase 2. |
-| **Client data in the cloud** (POPIA, confidentiality between farms) | Could block hosting, or force a region choice | Local-first V1. Ask question 16. `af-south-1`. Per-project RLS already isolates catchments. |
+| **Client data in the cloud** (POPIA, confidentiality between farms) | Could block hosting, or force a region choice | Local-first V1. Ask question 15. `af-south-1`. Per-project RLS already isolates catchments. |
 | **Scope creep**: three model families, pump scenarios, AI runoff | Nothing gets finished | The phases gate on client sign-off. The node-based and runoff features wait until the b023 port is accepted. |
 | **VPC Lambda cold starts / DB connection limits** | Slow first request; too many connections from concurrent Lambdas | RDS stays warm. Small `pg` pool per Lambda (1–2). Reserved concurrency is capped. RDS Proxy only if connection counts become a problem. |
 | **Run output volume** (up to ~25 MB/run) | DB growth and cost | Trim keys, cap the number of runs, float4. Runs can be recomputed deterministically. |
 | **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports are ~2 MB for client catchment. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
-| **Public repo exposes the ported model** (FRC/SmartMatix IP) | Licence breach | Question 15 before the engine port is pushed publicly. The fallback is making the repo, or just `packages/engine`, private. |
 | **Single developer / bus factor** | Stalls | Docs (this folder), tests as the spec, conventional commits. |
 | **Stale SheetJS on npm** | Security advisories | Use the official CDN tarball when the in-browser importer lands. The Python importer covers V1. |
