@@ -8,7 +8,15 @@
 //   5. EWR shortfalls, calibration statistics     [EWR shortfalls]       → ./network/stats.ts
 //   6. curtailment targets per farm               [Shortfalls]           → ./network/curtailment.ts
 // See ./network/README.md for the column-by-column mapping.
-import { agreementWarning, observedAgreement } from './quality';
+import {
+	agreementOptions,
+	agreementWarning,
+	areaMismatches,
+	areaMismatchWarning,
+	observedAgreement,
+	resolveDataQuality,
+	seriesChecks
+} from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeNaturalFlow } from './flow';
@@ -315,10 +323,16 @@ export function runModelWith(
 		);
 	}
 
-	// Input data quality: do the two observed flow records agree?
-	const agreement = observedAgreement(input.series);
+	// Input data quality: do the two observed flow records agree? Are there
+	// impossible or suspicious values? Do the farm areas add up?
+	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
+	const checks = seriesChecks(series);
+	for (const c of checks) warnings.push(c.text);
+	const areas = areaMismatches(nodes, settings.flowShareMethod);
+	const areaNote = areaMismatchWarning(areas);
+	if (areaNote) warnings.push(areaNote);
 
 	const outflowNode = topo.outflow >= 0 ? nodes[topo.outflow]! : null;
 	const compliance = ewrCompliance(
@@ -349,7 +363,7 @@ export function runModelWith(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
-			dataQuality: { observedAgreement: agreement },
+			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
 			warnings
 		}
 	};
@@ -446,6 +460,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
 	s.calibration = { ...d.calibration, ...((raw?.calibration as object | undefined) ?? {}) };
 	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
+	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {

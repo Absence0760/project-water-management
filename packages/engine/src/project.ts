@@ -2,7 +2,7 @@
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
 import type { Monthly } from './calendar';
-import type { ObservedAgreement } from './quality';
+import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -87,6 +87,22 @@ export interface ProjectSettings {
 	 * null = observed gauge flow if present, else the logger.
 	 */
 	calibrationFlowKind: CalibrationFlowKind | null;
+	/** Thresholds of the input data-quality checks (./quality.ts). They never change model results. */
+	dataQuality: DataQualitySettings;
+}
+
+/**
+ * Gauge-vs-logger agreement thresholds (observedAgreement): a water year is
+ * flagged when gauge / logger volume on shared days falls outside
+ * agreementMinRatio … agreementMaxRatio, on at least agreementMinDays shared days.
+ */
+export interface DataQualitySettings {
+	/** 0 < min ≤ 1. Default 2/3. */
+	agreementMinRatio: number;
+	/** ≥ 1. Default 1.5. */
+	agreementMaxRatio: number;
+	/** Whole days, 1–366. Default 90. */
+	agreementMinDays: number;
 }
 
 /** Series that calibration statistics can compare simulated outflow with. */
@@ -149,7 +165,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		reportEnd: null,
 		calibrationStart: null,
 		calibrationEnd: null,
-		calibrationFlowKind: null
+		calibrationFlowKind: null,
+		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 }
 	};
 }
 
@@ -441,9 +458,16 @@ export interface RunSummary {
 	ewrCompliance?: EwrCompliance;
 	/**
 	 * Input data-quality checks (engine ≥ 0.3.1). observedAgreement is null when
-	 * the project doesn't have both observed flow records.
+	 * the project doesn't have both observed flow records. seriesChecks and
+	 * areaMismatches were added later and are absent on older runs.
 	 */
-	dataQuality?: { observedAgreement: ObservedAgreement | null };
+	dataQuality?: {
+		observedAgreement: ObservedAgreement | null;
+		/** Negative values, outliers and flat-lines in the input series. */
+		seriesChecks?: SeriesCheck[];
+		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
+		areaMismatches?: AreaMismatch[];
+	};
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }

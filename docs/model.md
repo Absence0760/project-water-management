@@ -343,7 +343,31 @@ Mm³, and the ratio gauge / logger. A year is **flagged** when the ratio falls
 outside 2/3 … 3/2 (one instrument reads less than two-thirds or more than 1.5×
 the other) on at least 90 shared days, or when one records nothing while the
 other records flow. Flagged years produce a run warning and are listed in
-`RunSummary.dataQuality.observedAgreement`.
+`RunSummary.dataQuality.observedAgreement`. A shared day needs a valid reading
+in both records: present, finite and not negative.
+
+The three thresholds are a project setting, `settings.dataQuality`
+(`agreementMinRatio` 2/3, `agreementMaxRatio` 1.5, `agreementMinDays` 90 by
+default; Settings tab → *Data quality*). They change only which years are
+flagged, never a model result. An invalid stored value (min ratio outside
+0 < r ≤ 1, max ratio below 1, days not a whole number in 1–366) falls back to
+its default with a run warning. The Time series tab shows the same table
+before any run, with the project's thresholds.
+
+**Other input checks** (`seriesChecks`, `areaMismatches` in `quality.ts`),
+reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
+`areaMismatches`, and on the Time series tab:
+
+| Check | Rule | Why |
+| --- | --- | --- |
+| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
+| Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
+| Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal; Pitman flow (modelled, often monthly values repeated daily) is not checked | a stuck logger or a filled-in gap |
+| Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
+
+The outlier and flat-line limits are engine constants (`OUTLIER_FACTOR`,
+`FLATLINE_MIN_DAYS`), not settings; whether they suit these catchments is a
+question for the hydrologist.
 
 Two instruments on the same reach should roughly agree; a sustained gap
 usually means something physical at one of them (a damaged or silted weir, a

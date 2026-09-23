@@ -586,6 +586,49 @@ describe('runModel — calibration statistics', () => {
 	});
 });
 
+describe('runModel — input data quality', () => {
+	it('compares gauge and logger with the project thresholds', () => {
+		const days = 120;
+		const i = input({ nodes: [node('A')], natural: new Array(days).fill(0), observed: new Array(days).fill(0.8) });
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: new Array(days).fill(1) };
+		const dq = (o: ReturnType<typeof run>) => o.summary.dataQuality!.observedAgreement!;
+		const nat = () => ({ naturalFlowM3Day: new Array(days).fill(0) });
+		const byDefault = runModelWith(i, nat);
+		expect(dq(byDefault)).toMatchObject({ minRatio: 2 / 3, maxRatio: 1.5, minDays: 90, flaggedYears: [] });
+		i.settings.dataQuality = { agreementMinRatio: 0.9, agreementMaxRatio: 1.1, agreementMinDays: 60 };
+		const strict = runModelWith(i, nat);
+		expect(dq(strict)).toMatchObject({ minRatio: 0.9, maxRatio: 1.1, minDays: 60, flaggedYears: [2019] });
+		expect(strict.summary.warnings.some((w) => /Observed flow records disagree.*expected 90–110 %/.test(w))).toBe(true);
+		// A bad stored value falls back to the default with a warning instead of failing the run.
+		i.settings.dataQuality = { ...i.settings.dataQuality!, agreementMinRatio: 3 };
+		const bad = runModelWith(i, nat);
+		expect(dq(bad).minRatio).toBe(2 / 3);
+		expect(bad.summary.warnings.some((w) => /agreementMinRatio = 3 is invalid/.test(w))).toBe(true);
+	});
+
+	it('reports negative, outlying and flat input values as warnings and in dataQuality', () => {
+		const rain = Array.from({ length: 400 }, (_, t) => (t % 2 ? 0 : 1 + (t % 13)));
+		rain[3] = -4;
+		rain[100] = 5000;
+		const out = run({ nodes: [node('A')], natural: new Array(400).fill(0), rain });
+		const checks = out.summary.dataQuality!.seriesChecks!;
+		expect(checks.map((c) => [c.seriesKind, c.check])).toEqual([
+			['rain_catchment_mm', 'negative'],
+			['rain_catchment_mm', 'outlier']
+		]);
+		for (const c of checks) expect(out.summary.warnings).toContain(c.text);
+	});
+
+	it('warns when a farm area and its hi + lo areas differ by more than 1 % (F7)', () => {
+		const out = run({
+			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3 }), node('B', { areaKm2: 5, areaHiKm2: 4, areaLoKm2: 1, downstreamNodeId: 'A' })],
+			natural: [0]
+		});
+		expect(out.summary.dataQuality!.areaMismatches!.map((m) => m.nodeId)).toEqual(['A']);
+		expect(out.summary.warnings.some((w) => /A: 10 km² vs 9 km²/.test(w))).toBe(true);
+	});
+});
+
 describe('excelRound', () => {
 	it('rounds half away from zero and survives binary representation error', () => {
 		expect(excelRound(2.5)).toBe(3);
