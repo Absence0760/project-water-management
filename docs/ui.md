@@ -144,3 +144,21 @@ The settings are grouped by what they drive:
 Viewers see a "View only" note. Inputs render as plain values instead of
 greyed-out fields. There are no move handles, drag targets, Add data button
 or Run button.
+
+## Accessibility
+
+- `e2e/tests/a11y.spec.ts` runs axe (`@axe-core/playwright`, tags WCAG 2.0,
+  2.1 and 2.2 A/AA) on every page, every workspace tab, the dialogs, the
+  save bar, the one-node form, the view-only workspace, run comparison, teams,
+  help, the dead-link states of the emailed-link pages and an invitation
+  opened while signed in, in light and dark, and every tab again at phone
+  width. No rule is disabled: a violation is fixed in the app.
+- **Sideways-scrolling boxes** (every `.table-wrap`, and anything marked
+  `data-scroll-region`, such as the schematic) become a focusable, named
+  group while their content overflows, so Tab reaches them and the arrow keys
+  scroll them (WCAG 2.1.1). One watcher does this app-wide
+  (`lib/a11y/scrollRegions.ts`, started by the root layout); a box names
+  itself with `data-scroll-label`, or takes its table caption or section name.
+- Row move buttons are 24 × 24 px (WCAG 2.2 target size, 2.5.8).
+- `html { scroll-padding-top }` keeps focused controls and in-page link targets
+  clear of the sticky header (WCAG 2.4.11).

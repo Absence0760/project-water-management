@@ -60,7 +60,7 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `tests/auth-layout.spec.ts` | The split sign-in / register layout beside a classic 15 px scrollbar (`html { overflow-y: scroll }`), desktop and phone, light and dark: no sideways overflow, full-height brand panel, gutter in the form's colour; saves a screenshot of each |
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run |
 | `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |
-| `tests/a11y.spec.ts` | axe WCAG 2.1 A/AA scan of login, register, project list, dialog, every workspace tab and the save bar, in light and dark themes |
+| `tests/a11y.spec.ts` | axe WCAG 2.2 A/AA scan of every page (sign-in pages, emailed-link dead states, project list, teams, a team, help, compare), every workspace tab, dialogs, save bar, one-node form, view-only workspace and a signed-in invitation, in light and dark; every tab again at phone width; sideways-scrolling boxes take focus and scroll by keyboard |
 
 ## Rules for writing specs
 

@@ -140,7 +140,7 @@
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
-	<div class="scroller">
+	<div class="scroller" data-scroll-region data-scroll-label="Schematic drawing">
 		<svg
 			bind:this={svgEl}
 			viewBox="0 0 {width} {height}"
