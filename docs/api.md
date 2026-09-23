@@ -54,6 +54,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   found` otherwise) or, with `null`, back to personal. Owner only.
 - `project = ProjectSummary & { settings: ProjectSettings }` — settings are
   returned merged over the defaults, so the client always sees every field.
+  `PATCH` validates the known fields: e.g. `simulationStart/End` and
+  `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
+  `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s |
+  flow_pitman_m3s | null`.
 
 ### Members
 
@@ -142,6 +146,14 @@ engine's `runModel`, stores the outputs, and returns the summary.
 
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
+- `RunSummary.calibration` (`CalibrationStats`) is scored over
+  `settings.calibrationStart`…`calibrationEnd` against
+  `settings.calibrationFlowKind`, and carries NSE, PBIAS, RMSE, KGE (r, α, β),
+  R², log-NSE, volume error and the per-water-year `annualVolumes` table.
+  `RunSummary.ewrCompliance` is the water-year × month EWR grid for the outlet
+  and each farm (~40 KB for 44 years × 12 farms). Both are defined in
+  `packages/engine/src/project.ts`; runs saved before engine 0.3.0 lack the
+  newer fields, so clients treat them as optional.
 
 ## Health
 
