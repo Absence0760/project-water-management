@@ -7,9 +7,11 @@
 // rain and then recedes from a shifted (steeper) point on the same curve. The
 // natural flow is the larger of the two, falling back to Pitman when zero.
 //
-// Excel's rounding (INT / ROUND half away from zero) is reproduced exactly so a
-// run matches the workbook day for day; see flow.test.ts for the regression
-// against a real workbook.
+// The workbook rounds every column (INT on the rain flow, ROUND to whole m³ and
+// to 4 dp on the indices). The engine does not (docs/engine-audit.md R1):
+// rounding a receding state stops it at an arbitrary floor, e.g. 32 m³/day
+// for a tail factor of 0.9845. flow.test.ts compares with a real workbook and
+// lists where and why the results differ.
 import { monthOfEpochDay, toEpochDay } from './calendar';
 import type { CalibrationParams } from './project';
 
@@ -36,6 +38,8 @@ export interface FlowSeries {
 export interface NaturalFlowResult {
 	naturalFlowM3Day: number[];
 	series: FlowSeries[];
+	/** Days where the rain model gave 0 and natural flow fell back to Pitman flow. */
+	pitmanDays: number;
 }
 
 /** Every intermediate column of [Flow data], one array per column, one entry per day. */
@@ -68,31 +72,6 @@ export interface FlowColumns {
 
 const SECONDS_PER_DAY = 86_400;
 
-/**
- * Excel ROUND: half away from zero, applied to the value as Excel sees it
- * (15 significant digits), so 2.675 → 2.68 rather than JS's 2.67.
- */
-export function excelRound(x: number, digits = 0): number {
-	if (!Number.isFinite(x)) return x;
-	const sign = x < 0 ? -1 : 1;
-	const abs = Number(Math.abs(x).toPrecision(15));
-	const text = String(abs);
-	if (text.includes('e')) {
-		// Tiny or huge magnitudes: shifting by string would be malformed; the
-		// decimal-representation issue ROUND guards against doesn't arise there.
-		const f = 10 ** digits;
-		return (sign * Math.round(abs * f)) / f;
-	}
-	// Shift the decimal point textually so 1.005 → 100.5 exactly, not 100.4999….
-	const scaled = Math.round(Number(`${text}e${digits}`));
-	return sign * Number(`${scaled}e${-digits}`);
-}
-
-/** Excel INT: round down to the nearest integer. */
-function excelInt(x: number): number {
-	return Math.floor(x);
-}
-
 /** 1-based INDEX into a range; cells past the end read as blank (0). */
 function at(range: readonly number[], i: number): number {
 	return range[i - 1] ?? 0;
@@ -103,12 +82,13 @@ export function recede(cal: CalibrationParams, flow: number, index: number): num
 	const r = cal.recessionFactors;
 	const lo = Math.min(Math.max(Math.floor(index), 1), r.length);
 	const hi = Math.min(lo + 1, r.length);
-	// Below index 1 (e.g. a blank previous index = 0) P goes negative and the
-	// workbook extrapolates below the first factor; kept for fidelity.
+	// Below index 1 (a pulse starting at shiftPeakIndexLo < 1) P goes negative
+	// and the factor is extrapolated below the first one. Clamp it at 0: a
+	// recession can shrink a flow to nothing but never below (audit E2).
 	const p = index - lo;
 	const fLo = at(r, lo);
 	const fHi = at(r, hi);
-	return excelRound(flow * (fLo + p * (fHi - fLo)), 0);
+	return flow * Math.max(0, fLo + p * (fHi - fLo));
 }
 
 /** fRfIndex — fractional recession index for a flow, read off the smoothed curve. */
@@ -126,7 +106,29 @@ export function recessionIndex(cal: CalibrationParams, flow: number): number {
 	const hi = Math.min(lo + 1, rows);
 	const span = at(c, hi) - at(c, lo);
 	const p = span === 0 ? 0 : (flow - at(c, lo)) / span;
-	return Math.max(1, excelRound(Math.min(lo + p, cal.recessionDaysMax), 4));
+	return Math.max(1, Math.min(lo + p, cal.recessionDaysMax));
+}
+
+/**
+ * Problems with the recession table that make the model meaningless: a daily
+ * factor outside [0, 1] (a recession that grows or turns negative), a curve
+ * that rises (MATCH(…, -1) needs it descending), or tables of different length.
+ */
+export function recessionTableWarnings(cal: CalibrationParams): string[] {
+	const out: string[] = [];
+	const f = cal.recessionFactors;
+	const c = cal.recessionCurveM3Day;
+	f.forEach((v, i) => {
+		if (!(v >= 0 && v <= 1)) out.push(`recession factor ${i + 1} is ${v}; daily recession factors must be between 0 and 1`);
+	});
+	for (let i = 1; i < c.length; i++) {
+		if (c[i]! > c[i - 1]!) {
+			out.push(`recession curve rises at row ${i + 1} (${c[i - 1]} → ${c[i]} m³/day); it must fall row by row for the index lookup`);
+			break;
+		}
+	}
+	if (c.length !== f.length) out.push(`recession curve has ${c.length} rows but there are ${f.length} recession factors`);
+	return out;
 }
 
 /** fRainToFlow — peak flow (m³/day) produced by a day's rain. */
@@ -135,7 +137,7 @@ export function rainToFlow(cal: CalibrationParams, rainMm: number, summer: boole
 	const factor = summer ? cal.summerFactor : cal.winterFactor;
 	// runModel resolves a null area to the summed farm areas before calling in.
 	const rainToM3 = ((cal.catchmentAreaKm2 ?? 0) * 10 ** 6) / 1000; // rFlowData_RainToM3
-	return excelInt(cal.a * rainMm ** cal.b * rainToM3 * factor);
+	return cal.a * rainMm ** cal.b * rainToM3 * factor;
 }
 
 /** fSorW2 — 1 in summer, 0 in winter; winter persists until a summer month. */
@@ -167,8 +169,9 @@ function addedFlowIndex(
 	const ci = Math.max(indx, lo);
 	// Keep the start left of the base index so the event curve crosses the base.
 	const li = ci > baseIndex ? Math.max(1, baseIndex - 0.2) : ci;
-	const afi = addedFlow > 0 ? li : prevIndex + 1;
-	return excelRound(Math.min(prevIndex === 0 ? baseIndex : afi, cal.recessionDaysMax), 4);
+	// (The workbook also returns the base index when yesterday's index is blank,
+	// which only happened on day 1; the engine seeds day 0's index instead.)
+	return Math.min(addedFlow > 0 ? li : prevIndex + 1, cal.recessionDaysMax);
 }
 
 function rainUsed(threshold: number, catchment: number | null, chirps: number | null, forecast: number | null): number {
@@ -195,16 +198,21 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 	};
 	const day0 = toEpochDay(inputs.startDate);
 
-	// The "reserved" row above the first day: only the base flow is filled in;
-	// every other cell is blank, which Excel reads as 0.
+	// The day before the run is a steady base-flow state: base flow and the
+	// resultant flow both equal baseFlowInitial, and every index is that flow's
+	// own position on the recession curve. The workbook's "reserved" row fills in only the base
+	// flow and leaves its index blank (0), so day 1 receded at the extrapolated
+	// factor 2·f1 − f2 (300 → 34 m³/day with the default curve, or a negative
+	// base flow that can never reset when f2 > 2·f1) — audit E1.
+	const initialIndex = recessionIndex(cal, cal.baseFlowInitial);
 	let prevSummer = 0;
 	let prevRain = 0;
 	let prevBase = cal.baseFlowInitial;
-	let prevBaseIndex = 0;
-	let prevAddedIndex = 0;
+	let prevBaseIndex = initialIndex;
+	let prevAddedIndex = initialIndex;
 	let prevResponseAdded = 0;
-	let prevResultant = 0;
-	let prevResultantIndex = 0;
+	let prevResultant = cal.baseFlowInitial;
+	let prevResultantIndex = initialIndex;
 
 	for (let i = 0; i < n; i++) {
 		const month = monthOfEpochDay(day0 + i);
@@ -220,7 +228,7 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		// fBaseFlow: recede yesterday's base; big rain relative to it resets it.
 		const receded = recede(cal, prevBase, prevBaseIndex);
 		const reset = receded === 0 ? rainFlow > 0 : rainFlow / receded > cal.baseResetRatio;
-		const base = excelRound(reset ? rainFlow : receded, 0);
+		const base = reset ? rainFlow : receded;
 		const baseIndex = recessionIndex(cal, base);
 
 		const responseStart = recede(cal, prevResultant, prevResultantIndex);
@@ -237,7 +245,7 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		const resultant = responseWins ? responseAdded : base;
 		const resultantIndex = responseWins ? addedIndex : baseIndex;
 
-		const pitman = excelRound((inputs.flowPitmanM3s[i] ?? 0) * SECONDS_PER_DAY, 0);
+		const pitman = (inputs.flowPitmanM3s[i] ?? 0) * SECONDS_PER_DAY;
 		const natural = resultant > 0 ? resultant : pitman > 0 ? pitman : 0;
 
 		cols.isSummer[i] = summer;
@@ -268,8 +276,11 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 /** Catchment natural flow (m³/day) from rain, plus the useful intermediates. */
 export function computeNaturalFlow(cal: CalibrationParams, inputs: NaturalFlowInputs): NaturalFlowResult {
 	const c = computeFlowColumns(cal, inputs);
+	let pitmanDays = 0;
+	for (let i = 0; i < c.naturalFlowM3Day.length; i++) if (!(c.resultantFlow[i]! > 0) && c.pitmanM3Day[i]! > 0) pitmanDays++;
 	return {
 		naturalFlowM3Day: c.naturalFlowM3Day,
+		pitmanDays,
 		series: [
 			{ key: 'rain_used', label: 'Rain used', unit: 'mm', values: c.rainUsedMm },
 			{ key: 'is_summer', label: 'Summer (1) / winter (0)', unit: 'flag', values: c.isSummer },

@@ -24,11 +24,13 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 	const out = computeCurtailment(farms, win(0, 3));
 	const [a, b, c] = out.farms;
 
-	it('averages demand, supply and incremental EWR shortfall over the window, ROUND to 0 dp [H, I, R]', () => {
+	const close = (got: number | null | undefined, want: number) => expect(got).toBeCloseTo(want, 9);
+
+	it('averages demand, supply and incremental EWR shortfall over the window, unrounded [H, I, R]', () => {
 		expect([a!.demandM3Day, a!.suppliedM3Day, a!.ewrShortfallM3Day]).toEqual([100, 100, -5]);
 		expect([b!.demandM3Day, b!.suppliedM3Day, b!.ewrShortfallM3Day]).toEqual([200, 100, 0]);
-		// ROUND(-0.75) = -1 (half away from zero)
-		expect([c!.demandM3Day, c!.suppliedM3Day, c!.ewrShortfallM3Day]).toEqual([0, 0, -1]);
+		// The sheet shows ROUND(-0.75) = -1; the engine keeps the mean (audit R1).
+		expect([c!.demandM3Day, c!.suppliedM3Day, c!.ewrShortfallM3Day]).toEqual([0, 0, -0.75]);
 		expect(out.days).toBe(4);
 	});
 
@@ -39,50 +41,47 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		expect(c!.fractionSupplied).toBeNull();
 	});
 
-	it('targets the catchment-wide supply fraction for every farm, ROUND to 1 dp [K total, M, P]', () => {
-		expect(out.equitableFraction).toBeCloseTo(2 / 3, 15);
-		expect(a!.targetM3Day).toBe(66.7);
-		expect(b!.targetM3Day).toBe(133.3);
+	it('targets the catchment-wide supply fraction for every farm [K total, M, P]', () => {
+		close(out.equitableFraction, 2 / 3);
+		close(a!.targetM3Day, 200 / 3);
+		close(b!.targetM3Day, 400 / 3);
 		expect(c!.targetM3Day).toBe(0);
-		expect(a!.targetFraction).toBe(0.667);
-		expect(b!.targetFraction).toBe(0.667); // ROUND(0.6665, 3)
+		close(a!.targetFraction, 2 / 3);
+		close(b!.targetFraction, 2 / 3);
 		expect(c!.targetFraction).toBeNull();
 	});
 
-	it('reduce (−) / gain (+) is target − supplied, and l/s truncates toward zero [N, O]', () => {
-		expect(a!.reduceGainM3Day).toBe(-33.3);
-		expect(b!.reduceGainM3Day).toBe(33.3);
-		expect(a!.reduceGainLs).toBe(-0.3); // -33.3 / 86.4 = -0.385 → ROUNDDOWN → -0.3
-		expect(b!.reduceGainLs).toBe(0.3);
+	it('reduce (−) / gain (+) is target − supplied, and l/s is ÷ 86.4, not truncated [N, O] (audit Q15)', () => {
+		close(a!.reduceGainM3Day, -100 / 3);
+		close(b!.reduceGainM3Day, 100 / 3);
+		close(a!.reduceGainLs, -100 / 3 / 86.4); // -0.386 (the sheet truncates to -0.3)
+		close(b!.reduceGainLs, 100 / 3 / 86.4);
 		expect(Object.is(c!.reduceGainLs, 0)).toBe(true); // never -0
 	});
 
 	it('adds the EWR shortfall for the total change and the volume left [S, T, U, V]', () => {
-		expect(a!.totalChangeM3Day).toBe(-38.3);
-		expect(a!.totalChangeLs).toBe(-0.4);
-		expect(a!.volumeLeftM3Day).toBe(61.7);
-		expect(a!.fractionOfDemandLeft).toBe(0.617);
-		expect(b!.totalChangeM3Day).toBe(33.3);
-		expect(b!.volumeLeftM3Day).toBe(133.3);
+		close(a!.totalChangeM3Day, -100 / 3 - 5);
+		close(a!.totalChangeLs, (-100 / 3 - 5) / 86.4);
+		close(a!.volumeLeftM3Day, 200 / 3 - 5);
+		close(a!.fractionOfDemandLeft, (200 / 3 - 5) / 100);
+		close(b!.totalChangeM3Day, 100 / 3);
+		close(b!.volumeLeftM3Day, 400 / 3);
 		// C: no demand, but the EWR shortfall it adds still counts against it.
-		expect(c!.totalChangeM3Day).toBe(-1);
-		expect(c!.totalChangeLs).toBe(0); // ROUNDDOWN(-0.0116, 1)
-		expect(c!.volumeLeftM3Day).toBe(-1);
+		close(c!.totalChangeM3Day, -0.75);
+		close(c!.totalChangeLs, -0.75 / 86.4); // a small cut stays visible (the sheet shows 0)
+		close(c!.volumeLeftM3Day, -0.75);
 		expect(c!.fractionOfDemandLeft).toBeNull();
 	});
 
-	it('totals are plain sums of the farm columns; redistribution nets to ~0', () => {
-		expect(out.totals).toEqual({
-			demandM3Day: 300,
-			suppliedM3Day: 200,
-			deficitM3Day: -100,
-			targetM3Day: 200,
-			reduceGainM3Day: 0,
-			reduceGainLs: 0,
-			ewrShortfallM3Day: -6,
-			totalChangeM3Day: -6,
-			volumeLeftM3Day: 194
-		});
+	it('totals are plain sums of the farm columns; redistribution nets to 0', () => {
+		const t = out.totals;
+		expect([t.demandM3Day, t.suppliedM3Day, t.deficitM3Day]).toEqual([300, 200, -100]);
+		close(t.targetM3Day, 200);
+		close(t.reduceGainM3Day, 0);
+		close(t.reduceGainLs, 0);
+		close(t.ewrShortfallM3Day, -5.75);
+		close(t.totalChangeM3Day, -5.75);
+		close(t.volumeLeftM3Day, 194.25);
 	});
 
 	it('uses only the days inside the window', () => {
@@ -106,8 +105,15 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		expect(ok.equitableFraction).toBe(1);
 		expect(ok.farms.map((f) => [f.targetM3Day, f.reduceGainM3Day, f.totalChangeM3Day, f.totalChangeLs, f.fractionOfDemandLeft])).toEqual([
 			[800, 0, 0, 0, 1],
-			[2500, 0, -12, -0.1, 0.995] // ROUND(2488 / 2500, 3)
+			[2500, 0, -12, -12 / 86.4, 2488 / 2500]
 		]);
+	});
+
+	it('a lone farm gets exactly its own supply as target: no floating-point "gain" of 1e-16', () => {
+		// H × (I / H) − I is −1.1e-16 for these values; the UI would call that a gain.
+		const lone = computeCurtailment([farm('L', [8 / 7], [5 / 7], [0])], win(0, 0));
+		expect(lone.farms[0]!.reduceGainM3Day).toBe(0);
+		expect(lone.farms[0]!.totalChangeM3Day).toBe(0);
 	});
 
 	it('rejects an empty window', () => {
@@ -115,7 +121,7 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 	});
 });
 
-describe('excelRoundDown', () => {
+describe('excelRoundDown (test helper for replaying workbook cells)', () => {
 	it('truncates toward zero and tolerates binary representation error', () => {
 		expect(excelRoundDown(0.38541, 1)).toBe(0.3);
 		expect(excelRoundDown(-0.38541, 1)).toBe(-0.3);

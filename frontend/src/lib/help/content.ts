@@ -500,7 +500,7 @@ export const HELP: HelpEntry[] = [
 		id: 'farm-runoff',
 		term: 'Farm runoff',
 		short: 'The farm’s share of catchment natural flow on the day, in m³/day.',
-		long: 'Natural flow × the farm’s flow share, rounded to whole cubic metres.',
+		long: 'Natural flow × the farm’s flow share.',
 		units: 'm³/day',
 		category: 'flow',
 		fields: ['run.runoff'],

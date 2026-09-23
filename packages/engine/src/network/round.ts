@@ -1,49 +1,42 @@
-// Excel-compatible rounding. The b023 workbook rounds at fixed points in the
-// chain (fragmented flow, demand, dam splits, return flow); reproducing those
-// exactly is what lets the engine match the workbook to the cubic metre.
-
-const POW10 = [1, 10, 100, 1000, 10_000, 100_000, 1_000_000];
+// Excel-compatible rounding, kept only so tests can replay b023 workbook cells.
+//
+// The engine itself never rounds (docs/engine-audit.md R1): the workbook's
+// ROUND/INT steps stopped recessions at arbitrary floors, created or lost
+// water when a flow was split, and zeroed small dams. Presentation (UI,
+// exports) rounds for display. Don't call these from model code.
 
 /**
- * Excel `ROUND(x, digits)`: half away from zero, and tolerant of binary
- * representation error (Excel rounds 2.675 to 2.68 because it works to 15
- * significant digits; plain `Math.round(267.49999999999997)` would give 267).
+ * Excel `ROUND(x, digits)`: half away from zero, applied to the value as Excel
+ * sees it (15 significant digits), so 2.675 → 2.68 and 1.005 → 1.01 rather
+ * than JS's 2.67 and 1.
  */
 export function excelRound(x: number, digits = 0): number {
-	const f = POW10[digits] ?? 10 ** digits;
-	const y = Math.abs(x) * f;
-	// Nudge by a few ulps so values that are .5 in decimal but .4999… in binary round up.
-	const r = Math.floor(y + 0.5 + y * 4e-16);
-	const out = r / f;
-	return x < 0 ? -out : out;
+	if (!Number.isFinite(x)) return x;
+	const sign = x < 0 ? -1 : 1;
+	const abs = Number(Math.abs(x).toPrecision(15));
+	const text = String(abs);
+	if (text.includes('e')) {
+		// Tiny or huge magnitudes: shifting by string would be malformed; the
+		// decimal-representation issue ROUND guards against doesn't arise there.
+		const f = 10 ** digits;
+		return (sign * Math.round(abs * f)) / f;
+	}
+	// Shift the decimal point textually so 1.005 → 100.5 exactly, not 100.4999….
+	const scaled = Math.round(Number(`${text}e${digits}`));
+	const out = sign * Number(`${scaled}e${-digits}`);
+	return out === 0 ? 0 : out;
 }
 
 /**
- * Excel `ROUNDDOWN(x, digits)`: truncate toward zero, with the same tolerance
- * for binary representation error as excelRound (so 8.64 / 86.4 → 0.1, not
- * 0.0). Never returns -0.
+ * Excel `ROUNDDOWN(x, digits)`: truncate toward zero, on the 15-significant-
+ * digit value like excelRound (so 8.64 / 86.4 → 0.1, not 0.0). Never returns -0.
  */
 export function excelRoundDown(x: number, digits = 0): number {
-	const f = POW10[digits] ?? 10 ** digits;
-	const y = Math.abs(x) * f;
-	const r = Math.floor(y + y * 4e-16);
+	if (!Number.isFinite(x)) return x;
+	const sign = x < 0 ? -1 : 1;
+	const abs = Number(Math.abs(x).toPrecision(15));
+	const f = 10 ** digits;
+	const r = Math.floor(Number((abs * f).toPrecision(15)));
 	if (r === 0) return 0;
-	const out = r / f;
-	return x < 0 ? -out : out;
+	return (sign * r) / f;
 }
-
-/**
- * Rounding precision the b023 workbook uses at each step. They are workbook
- * cells (e.g. `rFR_Round`, `zFarmDemand_Round`) but identical in every b023
- * workbook we have seen, so they are constants rather than project settings.
- */
-export const WBT_PRECISION = {
-	/** [Crop demand] gross crop requirement, mm (`rCropDemand_CalcPrecision`). */
-	cropGrossMm: 2,
-	/** [Farm demand] gross farm demand, m³/day (`zFarmDemand_Round`). */
-	farmDemandM3Day: 1,
-	/** [Irrigation Demand] daily net demand, m³/day (`rID_Round`). */
-	netDemandM3Day: 0,
-	/** [Fragmented flow] / [Fragmented EWR] per-farm share, m³/day (`rFR_Round`). */
-	fragmentedM3Day: 0
-} as const;

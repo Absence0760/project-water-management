@@ -34,7 +34,7 @@ Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `
 7. Date-sensitive tests run under a skewed `TZ`.
 8. Never `git stash`, not even with a path.
 9. e2e is Playwright under `e2e/`. It runs fully locally against docker Postgres and the dev servers, with no `networkidle` waits and a pinned `timezoneId: 'UTC'`.
-10. Engine results must match the client catchment workbook. The regression tests in `packages/engine` may skip **only** when the gitignored `data/` fixtures are absent.
+10. Engine correctness is judged by documented hydrology and invariant tests, not by agreement with the b023 workbook. Where the engine departs from the workbook, `docs/engine-audit.md` says why and the client catchment regression suite in `packages/engine` lists the affected columns with the finding ID; any other difference is a bug. Those regression tests may skip **only** when the gitignored `data/` fixtures are absent.
 11. **The repo is public.** Client data (workbooks, extracted data, real farm names or values) is never committed; fixtures are synthetic. Secrets live only in `infra-secrets/water-management/`.
 
 ## Working alongside other Claude sessions

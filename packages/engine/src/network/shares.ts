@@ -46,6 +46,17 @@ export function flowShares(
 				(sumLo > 0 ? (n.areaLoKm2 / sumLo) * hiLoSplit.lo : 0);
 		}
 		if (sumHi === 0 || sumLo === 0) warnings.push('hi/lo flow shares: total high or low MAP area is 0');
+		// The rain → flow volume uses areaKm2 while these shares use hi + lo, so
+		// the two should describe the same land (engine review F7, audit W3).
+		for (const { n } of farms) {
+			const hl = n.areaHiKm2 + n.areaLoKm2;
+			if (hl > 0 && Math.abs(n.areaKm2 - hl) > 0.01 * Math.max(n.areaKm2, hl)) {
+				warnings.push(
+					`farm "${n.name}": area ${n.areaKm2} km² differs from its hi + lo ${hl} km² by more than 1%; ` +
+						'hi/lo flow shares use hi + lo, the rain volume uses the area'
+				);
+			}
+		}
 	} else {
 		let sum = 0;
 		for (const { n } of farms) sum += n.areaKm2;
