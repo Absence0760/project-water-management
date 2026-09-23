@@ -418,6 +418,27 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 9. **Reference results.** Is the client catchment "WORKING 007" workbook the version to
    match? Are there other catchments (B, C…) with workbooks we can use as test
    cases?
+10. **Which flow record is the truth?** The G1 gauge and the A1 logger
+    disagree badly in 2014–2017 (one water year the gauge has < 10 % of the
+    logger's volume). The workbook calibrates against the logger; is that the
+    intended target, and is the gauge record in those years usable?
+    (model.md §2.10)
+11. **Zero observed flows.** The workbook skips days where observed flow is
+    zero when scoring the fit; the app keeps them. Real readings or gaps?
+12. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
+    fits against them, or also score monthly totals?
+13. **EWR "days not met".** Count days that were actually short (app default)
+    or the workbook macro's running monthly total? The workbook's EWR pivot is
+    also stale on ~23 % of farm-months (macro not re-run). (model.md §2.9)
+14. **Curtailment targets** (model.md §2.11, Q11–Q15): is reduce/gain a
+    fairness target or a schedule farms can follow (a downstream surplus can't
+    reach an upstream farm)? The column "Reduction of demand required (%)" is
+    actually the share of demand *left* — which do you report? How does a cut
+    apply to a farm with no irrigation? Should l/s truncate (hiding cuts under
+    0.1 l/s)?
+15. **Comparing runs.** Is a higher simulated outflow good or neutral, and a
+    PBIAS closer to 0 better? Do you need per-farm series (e.g. the same
+    farm's dam storage) overlaid across runs?
 
 ### Product
 
