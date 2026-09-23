@@ -67,7 +67,17 @@ pnpm seed:demo              # seed:examples + the Client Catchment client workbo
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
+
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in) + actionlint if installed
+pnpm check:env              # committed env files point only at the local stack
+pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
+pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
+pnpm test:guards            # node:test suites for scripts/guards and scripts/release
 ```
+
+Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main
+--generate-notes` deploys that component after a preflight and the
+`production` approval ([deployment.md § Releasing](./deployment.md#releasing)).
 
 ## First-time setup
 
@@ -135,7 +145,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
 
 ## What not to do
 
-- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside.
+- Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside, and the
+  dependency-free CI/release guards under `scripts/` use Node's built-in `node:test` (the estate pattern), since the
+  root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.
 - Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
   from its CDN tarball when the in-browser importer is built.

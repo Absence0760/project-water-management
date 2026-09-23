@@ -80,7 +80,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
-| `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`) |
+| `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in both zips |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
@@ -296,14 +296,23 @@ Claude does not run any of these, and none of them print a secret. Replace
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
    `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`** and `PUBLIC_SITE_URL`
    as variables, and `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` as
-   secrets.
+   secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
+   to deploy while any of them is empty.
+9a. **Approval gate.** Confirm the `production` environment exists with you
+   as a required reviewer:
+   `gh api repos/Absence0760/project-water-management/environments/production --jq '.protection_rules'`.
+   If not: `cd ~/github/templates && ./scripts/backfill-prod-environment.sh --apply`.
+   Required reviewers need a **public** repo (or GitHub Pro/Team for a
+   private one); the release preflight refuses to deploy without them.
 10. **First deploy:** backend first (it runs `001_init` and creates
-    `water_app`), then frontend:
-    - `gh workflow run deploy-backend.yml`
-    - `gh workflow run deploy-frontend.yml`
+    `water_app`), then frontend, each by publishing a release
+    ([docs/deployment.md § Releasing](../docs/deployment.md#releasing)):
+    - `gh release create backend@0.1.0 --target main --title "Backend 0.1.0" --generate-notes`
+    - once that deploy has finished: `gh release create web@0.1.0 --target main --title "Web 0.1.0" --generate-notes`
 
-    Approve each in the `production` environment, then check with
-    `curl -s https://water-management.jaredhoward.com/api/health`.
+    Approve each in the `production` environment. The backend deploy ends
+    with a `/api/health` check through CloudFront; check the site by hand
+    too: `curl -s https://water-management.jaredhoward.com/api/health`.
 
 ### Rotating secrets
 
@@ -337,7 +346,9 @@ No AWS credentials are needed:
 
 That is `bin/check-infra.sh`: `terraform fmt -check -recursive`,
 `init -backend=false`, `validate`, and `terraform test`. CI runs the same
-script (`ci.yml`, job `terraform`, part of the `CI gate`). Terraform 1.15's
+script (`ci.yml` job `terraform`, which calls `terraform.yml`; part of the
+`CI gate`), plus a Trivy IaC scan. CI never plans against the real account;
+[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why. Terraform 1.15's
 `validate` checks the S3 backend's required `bucket`, so the script writes a
 gitignored `backend_override.tf` (local backend) for the run and deletes it
 afterwards. If you create one by hand, delete it before any real
