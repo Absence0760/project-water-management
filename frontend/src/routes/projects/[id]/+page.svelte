@@ -64,6 +64,26 @@
 	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
 	const today = new Date().toISOString().slice(0, 10);
 	const fresh = $derived(freshness(series ?? [], today));
+
+	// The "Data up to" dropdown closes on Escape (focus back on its summary)
+	// and on a click outside it, like the other popups.
+	let freshEl: HTMLDetailsElement | undefined = $state();
+	let freshOpen = $state(false);
+	function freshKeydown(e: KeyboardEvent) {
+		// Read the element: the toggle event that updates freshOpen is async.
+		if (e.key !== 'Escape' || !freshEl?.open) return;
+		e.preventDefault();
+		freshEl.open = false;
+		freshEl.querySelector('summary')?.focus();
+	}
+	$effect(() => {
+		if (!freshOpen) return;
+		const onDoc = (e: PointerEvent) => {
+			if (freshEl && !freshEl.contains(e.target as Node)) freshOpen = false;
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
 	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
 	let addOpen = $state(false);
 	let droppedFile = $state.raw<File | null>(null);
@@ -245,7 +265,7 @@
 				{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
 				<div class="head-actions">
 					{#if fresh}
-						<details class="fresh" class:stale={fresh.stale}>
+						<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
 							<summary>
 								<span class="dot" aria-hidden="true"></span>
 								Data up to <strong>{longDate(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden"> (older than {STALE_DAYS} days)</span>{/if}

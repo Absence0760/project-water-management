@@ -1,6 +1,8 @@
 <script lang="ts">
 	// "Add data" from anywhere in the project: the upload form in a modal
 	// <dialog> (focus trapped, Escape closes, focus returns to the opener).
+	// While a file is read but not uploaded yet (or uploading), Escape and ✕
+	// ask before discarding it.
 	import type { SeriesMeta } from '@water-management/engine';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
@@ -21,6 +23,20 @@
 
 	let el: HTMLDialogElement | undefined = $state();
 	let opener: Element | null = null;
+	let pending = $state(false);
+
+	const DISCARD = 'Discard the file you haven\'t uploaded yet?';
+
+	function requestClose() {
+		if (!pending || confirm(DISCARD)) open = false;
+	}
+
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || e.defaultPrevented) return;
+		// Handle Escape ourselves so the native cancel can't skip the check.
+		e.preventDefault();
+		requestClose();
+	}
 
 	$effect(() => {
 		if (!el) return;
@@ -36,10 +52,10 @@
 	}
 </script>
 
-<dialog bind:this={el} aria-labelledby="add-data-h" onclose={onClose}>
+<dialog bind:this={el} aria-labelledby="add-data-h" onclose={onClose} onkeydown={onKeydown}>
 	<div class="head">
 		<h2 id="add-data-h">Add data</h2>
-		<button type="button" class="btn btn-ghost close" aria-label="Close" onclick={() => (open = false)}>✕</button>
+		<button type="button" class="btn btn-ghost close" aria-label="Close" onclick={requestClose}>✕</button>
 	</div>
 	<p class="muted lead">
 		Upload a CSV of daily rainfall or flow. New days are appended to the matching series; days already stored are corrected
@@ -51,6 +67,7 @@
 			{list}
 			{file}
 			idPrefix="dlg"
+			bind:pending
 			onuploaded={async (r) => {
 				await onuploaded?.(r);
 				open = false;

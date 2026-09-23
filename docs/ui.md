@@ -18,6 +18,14 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.
 Settings has its own save button, which sits above that bar.
 
+**Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
+"Data up to" dropdown, the download menu and the dialogs. Help tips and the
+"Data up to" dropdown also close on a click outside. The one exception guards
+unsaved input: while **Add data** holds a file that is read but not uploaded
+(or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
+render in the browser's top layer (a manual popover placed against the
+button), so a scrolling table or a sticky header can't clip or cover them.
+
 ## Header: data freshness and "Add data"
 
 - **Data up to 31 Mar 2025 · 12 days ago**: the latest end date across the
