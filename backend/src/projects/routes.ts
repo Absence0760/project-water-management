@@ -19,6 +19,9 @@ type ProjectRow = {
 	role: Role;
 	created_at: Date;
 	updated_at: Date;
+	/** Last day covered by any of the project's time series ('YYYY-MM-DD'), or null. */
+	data_until: string | null;
+	last_run_at: Date | null;
 };
 
 const summary = (r: ProjectRow) => ({
@@ -28,7 +31,9 @@ const summary = (r: ProjectRow) => ({
 	role: r.role,
 	team: r.team_id ? { id: r.team_id, name: r.team_name } : null,
 	createdAt: r.created_at.toISOString(),
-	updatedAt: r.updated_at.toISOString()
+	updatedAt: r.updated_at.toISOString(),
+	dataUntil: r.data_until,
+	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null
 });
 const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.settings) });
 
@@ -37,7 +42,12 @@ const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.sett
 // visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
 	SELECT p.id, p.name, p.description, p.settings, p.created_at, p.updated_at, p.team_id,
-		t.name AS team_name, app_project_role(p.id) AS role
+		t.name AS team_name, app_project_role(p.id) AS role,
+		-- Data freshness and last run for the project list, in the same query
+		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
+		(SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
+			WHERE ts.project_id = p.id AND cardinality(ts."values") > 0) AS data_until,
+		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at
 	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 
 const name = z.string().trim().min(1).max(200);

@@ -44,6 +44,29 @@ describe('projects', () => {
 		}
 	});
 
+	it('lists each project with its data end date and last run (null until there are any)', async () => {
+		const u = await signUp('Fresh');
+		const { projectId } = await projectWithModel(u);
+		const find = async () =>
+			(await u.call('GET', '/projects')).body.projects.find((p: { id: string }) => p.id === projectId);
+		expect(await find()).toMatchObject({ dataUntil: null, lastRunAt: null });
+
+		const put = (kind: string, unit: string, startDate: string, n: number) =>
+			u.call('PUT', `/projects/${projectId}/series`, { kind, unit, startDate, values: Array(n).fill(1) });
+		await put('rain_catchment_mm', 'mm', '2020-09-01', 30); // → 2020-09-30
+		expect((await find()).dataUntil).toBe('2020-09-30');
+		await put('flow_observed_m3s', 'm3/s', '2020-09-15', 31); // → 2020-10-15, the later of the two
+		expect((await find()).dataUntil).toBe('2020-10-15');
+
+		const before = Date.now();
+		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'one' })).status).toBe(201);
+		const { lastRunAt, dataUntil } = await find();
+		expect(dataUntil).toBe('2020-10-15');
+		expect(Date.parse(lastRunAt)).toBeGreaterThanOrEqual(before - 5_000);
+		// The single-project endpoint carries the same fields.
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project).toMatchObject({ dataUntil: '2020-10-15', lastRunAt });
+	});
+
 	it('merges settings patches over defaults and keeps unknown engine keys', async () => {
 		const u = await signUp('S');
 		const { body } = await u.call('POST', '/projects', { name: 'S' });

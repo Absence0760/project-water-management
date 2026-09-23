@@ -78,7 +78,11 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | DELETE | `/projects/:id` | – | `204` | owner |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (model + series copied; runs not; stays in the team only if you're in it) | viewer |
 
-- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
+- `dataUntil` — the last day covered by any of the project's time series
+  (`YYYY-MM-DD`: the latest `startDate + length − 1`), or `null` with no data.
+  `lastRunAt` — ISO timestamp of the newest run, or `null`. Both come from the
+  same query as the list (no per-project calls), for the list's freshness badge.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
