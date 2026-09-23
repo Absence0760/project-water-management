@@ -3,6 +3,8 @@ import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { runModel, runModelWith } from './run';
 import { calibrationStats } from './network/stats';
+import { ewrCompliance } from './network/ewr';
+import { waterYearIndex } from './calendar';
 import { buildTopology } from './network/topology';
 import { excelRound } from './network/round';
 
@@ -127,6 +129,20 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 912]);
 		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 912]);
 		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 912]);
+	});
+
+	it('adds an EWR compliance grid for the outlet and each farm', () => {
+		const withEwr = run({ nodes, crops, cropAreas, settings: { ...settings, ewrPragmaticM3PerDay: flat(100) }, natural: [200, 0, 1601], startDate: '2020-10-01' });
+		const g = withEwr.summary.ewrCompliance!;
+		expect(g.waterYears).toEqual([2020]);
+		expect(g.days[0]![0]).toBe(3);
+		// Outflow [110, 10, 912] vs EWR 100: only day 1 is short, by 90.
+		expect(g.outlet.name).toBe('G');
+		expect(g.outlet.daysNotMet[0]![0]).toBe(1);
+		expect(g.outlet.shortfallM3[0]![0]).toBe(90);
+		expect(g.farms.map((f) => f.nodeId)).toEqual(['A', 'B']);
+		const ewrDays = get(withEwr, null, 'ewr_shortfall').filter((v) => v < 0).length;
+		expect(ewrDays).toBe(withEwr.summary.catchment.ewrDaysNotMet);
 	});
 
 	it('reports per-farm averages', () => {
@@ -439,6 +455,65 @@ describe('runModel — calibration statistics', () => {
 		expect(get(out, null, 'observed_flow')).toEqual([86_400, NaN, 345_600]);
 	});
 
+	it('scores only the calibration window and reports it', () => {
+		const out = run({
+			nodes: [node('A')],
+			natural: [86_400, 2 * 86_400, 3 * 86_400],
+			observed: [1, null, 4],
+			settings: { calibrationStart: '2020-01-02', calibrationEnd: null }
+		});
+		const c = out.summary.calibration!;
+		expect(c.days).toBe(1);
+		expect(c.windowStart).toBe('2020-01-02');
+		expect(c.windowEnd).toBe('2020-01-03');
+		expect(c.flowKind).toBe('flow_observed_m3s');
+		expect(c.annualVolumes).toHaveLength(1);
+	});
+
+	it('warns when the calibration window holds no observations', () => {
+		const out = run({
+			nodes: [node('A')],
+			natural: [0, 0],
+			observed: [1, 1],
+			settings: { calibrationStart: '2030-01-01', calibrationEnd: '2030-12-31' }
+		});
+		expect(out.summary.calibration!.days).toBe(0);
+		expect(out.summary.warnings).toContain('observed flow has no values inside the calibration window');
+	});
+
+	it('ignores an invalid or reversed calibration window with a warning', () => {
+		const bad = run({ nodes: [node('A')], natural: [0], observed: [1], settings: { calibrationStart: '01/02/2020' } });
+		expect(bad.summary.warnings.some((w) => /calibrationStart .* not an ISO date/.test(w))).toBe(true);
+		expect(bad.summary.calibration!.days).toBe(1);
+		const rev = run({
+			nodes: [node('A')],
+			natural: [0],
+			observed: [1],
+			settings: { calibrationStart: '2020-02-01', calibrationEnd: '2020-01-01' }
+		});
+		expect(rev.summary.warnings.some((w) => /ends before it starts/.test(w))).toBe(true);
+		expect(rev.summary.calibration!.days).toBe(1);
+	});
+
+	it('calibrates against the configured flow record (workbook rUseFlow)', () => {
+		const i = input({ nodes: [node('A')], natural: [86_400, 86_400], observed: [5, 5] });
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: [1, null] };
+		const auto = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
+		expect(auto.summary.calibration!.flowKind).toBe('flow_observed_m3s');
+		expect(auto.summary.calibration!.days).toBe(2);
+
+		i.settings.calibrationFlowKind = 'flow_logger_m3s';
+		const logger = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
+		expect(logger.summary.calibration!.flowKind).toBe('flow_logger_m3s');
+		expect(logger.summary.calibration!.days).toBe(1);
+		expect(logger.series.find((s) => s.key === 'observed_flow')!.label).toBe('Observed flow (logger)');
+
+		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
+		const missing = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
+		expect(missing.summary.calibration!.flowKind).toBe('flow_observed_m3s');
+		expect(missing.summary.warnings.some((w) => /flow_pitman_m3s.*missing/.test(w))).toBe(true);
+	});
+
 	it('returns null NSE when observations are constant', () => {
 		expect(calibrationStats([86_400, 86_400], [1, 1]).nse).toBeNull();
 		expect(calibrationStats([1], [null]).days).toBe(0);
@@ -485,7 +560,8 @@ interface Expected {
 		periodStart: string;
 		periodEnd: string;
 		farms: { name: string; avgDemand: number; avgSupplied: number; avgEwrShortfall: number }[];
-	} | null;
+	} | null;	/** [EWR shortfalls Pivot Data], written by the workbook's VBA (absent in older extracts). */
+	ewrPivot?: { year: number; month: number; farm: string; volM3: number; daysNotMet: number }[] | null;
 }
 interface ImportedProject {
 	settings: ModelInput['settings'];
@@ -583,6 +659,67 @@ describe.skipIf(!dataDir)(
 			expect(mismatches(get(full, null, 'natural_flow'), expected.catchment.natural_flow!)).toEqual([]);
 			expect(mismatches(get(full, null, 'simulated_outflow'), expected.catchment.simulated_outflow!)).toEqual([]);
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
+		});
+
+		// The pivot table is written by a VBA macro, not by formulas, so it is only
+		// as fresh as the last time someone ran it. In the client catchment workbook
+		// about a quarter of the farm-months hold volumes from an earlier model
+		// state (e.g. one farm's Feb 1981 is 28 × its daily AB value in the Element
+		// sheet *and* the [EWR shortfalls] sheet, but the pivot has a different
+		// sum). So: every farm-month whose volume is current must match exactly,
+		// counts included under the running-total rule, and most must be current.
+		it('reproduces the [EWR shortfalls Pivot Data] counts (running-total rule) wherever the pivot is current', () => {
+			if (!expected.ewrPivot?.length) return;
+			const farms = project.model.nodes
+				.filter((n) => n.kind === 'farm')
+				.map((n) => ({ nodeId: n.id, name: n.name, shortfallM3Day: get(out, n.id, 'ewr_shortfall_incremental') }));
+			const outlet = { nodeId: null, name: 'outlet', shortfallM3Day: get(out, null, 'ewr_shortfall') };
+			const g = ewrCompliance(out.startDate, out.days, outlet, farms, 'runningTotal');
+			const byName = new Map(g.farms.map((f) => [f.name, f]));
+			const bad: string[] = [];
+			let current = 0;
+			for (const p of expected.ewrPivot) {
+				const f = byName.get(p.farm);
+				if (!f) {
+					bad.push(`no farm ${p.farm}`);
+					continue;
+				}
+				const row = (p.month >= 10 ? p.year : p.year - 1) - g.waterYears[0]!;
+				const col = waterYearIndex(p.month);
+				if (f.shortfallM3[row]![col] !== -p.volM3) continue; // stale pivot row
+				current++;
+				if (f.daysNotMet[row]![col] !== p.daysNotMet) {
+					bad.push(`${p.farm} ${p.year}-${p.month}: engine ${f.daysNotMet[row]![col]} days vs pivot ${p.daysNotMet}`);
+				}
+			}
+			expect(current / expected.ewrPivot.length).toBeGreaterThan(0.5);
+			expect(bad.slice(0, 5)).toEqual([]);
+			// The run summary uses the per-day count, which can only be lower.
+			const daily = ewrCompliance(out.startDate, out.days, outlet, farms);
+			const total = (x: typeof g) => x.farms.reduce((a, f) => a + f.daysNotMet.flat().reduce((b, v) => b + v, 0), 0);
+			expect(total(daily)).toBeLessThanOrEqual(total(g));
+			expect(out.summary.ewrCompliance!.outlet.daysNotMet.flat().reduce((a, b) => a + b, 0)).toBe(
+				out.summary.catchment.ewrDaysNotMet
+			);
+		});
+
+		it('scores the calibration window from the workbook settings (plausible NSE)', () => {
+			const full = runModel(modelInput);
+			const c = full.summary.calibration!;
+			const s = project.settings as { calibrationStart?: string | null; calibrationFlowKind?: string | null };
+			if (s.calibrationStart) expect(c.windowStart! >= s.calibrationStart).toBe(true);
+			if (s.calibrationFlowKind) expect(c.flowKind).toBe(s.calibrationFlowKind);
+			expect(c.days).toBeGreaterThan(365);
+			for (const v of [c.nse, c.kge, c.logNse, c.r2]) {
+				expect(Number.isFinite(v)).toBe(true);
+				expect(v!).toBeGreaterThan(-1);
+				expect(v!).toBeLessThan(1);
+			}
+			expect(c.annualVolumes!.length).toBeGreaterThan(0);
+			// Annual volumes add up to the whole-window volume error.
+			const obs = c.annualVolumes!.reduce((a, y) => a + y.observedMm3, 0);
+			const sim = c.annualVolumes!.reduce((a, y) => a + y.simulatedMm3, 0);
+			expect((100 * (sim - obs)) / obs).toBeCloseTo(c.volumeErrorPct!, 8);
 		});
 
 		it('matches the [Shortfalls] sheet averages over its reporting period', () => {

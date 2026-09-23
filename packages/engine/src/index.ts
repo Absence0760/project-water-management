@@ -7,4 +7,5 @@ export * from './project';
 export * from './run';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
-export { calibrationStats } from './network/stats';
+export { calibrationStats, moriasiRating, waterYearOf, type CalibrationWindow, type MoriasiRating } from './network/stats';
+export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';

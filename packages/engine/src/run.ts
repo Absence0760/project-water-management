@@ -13,10 +13,13 @@ import { computeNaturalFlow } from './flow';
 import { WBT_PRECISION, excelRound } from './network/round';
 import { flowShares } from './network/shares';
 import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { ewrCompliance } from './network/ewr';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
 import {
+	CALIBRATION_FLOW_KINDS,
 	defaultProjectSettings,
+	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
 	type ModelInput,
@@ -26,7 +29,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.2.0';
+export const ENGINE_VERSION = '0.3.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -193,8 +196,8 @@ export function runModelWith(
 		out.push({ nodeId, key, label, unit, values: Array.from(values) });
 
 	const simOutflow = topo.outflow >= 0 ? sim.nodes[topo.outflow]!.outflow : new Float64Array(days);
-	const observedM3s = series.flow_observed_m3s ? aligned('flow_observed_m3s') : aligned('flow_logger_m3s');
-	const observedKind = series.flow_observed_m3s ? 'observed' : series.flow_logger_m3s ? 'logger' : null;
+	const observedKind = pickObservedKind(settings.calibrationFlowKind, series, warnings);
+	const observedM3s = observedKind ? aligned(observedKind) : [];
 	const ewrShort = new Float64Array(days);
 	let ewrDaysNotMet = 0;
 	for (let t = 0; t < days; t++) {
@@ -211,7 +214,7 @@ export function runModelWith(
 		push(
 			null,
 			'observed_flow',
-			observedKind === 'observed' ? 'Observed flow' : 'Observed flow (logger)',
+			OBSERVED_LABEL[observedKind],
 			'm³/day',
 			// b023 [Flow data] P: ROUND(m³/s × 86400); missing days are NaN so charts show gaps.
 			observedM3s.map((v) => (v === null ? NaN : excelRound(v * SEC_PER_DAY, 0)))
@@ -272,9 +275,36 @@ export function runModelWith(
 		});
 	});
 
-	const calibration = observedKind ? calibrationStats(simOutflow, observedM3s) : null;
+	const calibration = observedKind
+		? {
+				...calibrationStats(simOutflow, observedM3s, {
+					startDate,
+					windowStart: settings.calibrationStart,
+					windowEnd: settings.calibrationEnd
+				}),
+				flowKind: observedKind
+			}
+		: null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
-	else if (calibration && calibration.days === 0) warnings.push('observed flow has no values inside the simulation period');
+	else if (calibration && calibration.days === 0) {
+		warnings.push(
+			settings.calibrationStart || settings.calibrationEnd
+				? 'observed flow has no values inside the calibration window'
+				: 'observed flow has no values inside the simulation period'
+		);
+	}
+
+	const outflowNode = topo.outflow >= 0 ? nodes[topo.outflow]! : null;
+	const compliance = ewrCompliance(
+		startDate,
+		days,
+		{ nodeId: null, name: outflowNode?.name ?? 'Outlet', shortfallM3Day: ewrShort },
+		nodes.flatMap((node, i) =>
+			node.kind === 'farm'
+				? [{ nodeId: node.id, name: node.name, shortfallM3Day: sim.nodes[i]!.ewrShortfallIncremental }]
+				: []
+		)
+	);
 
 	return {
 		engineVersion: ENGINE_VERSION,
@@ -291,12 +321,36 @@ export function runModelWith(
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
 			},
 			calibration,
+			ewrCompliance: compliance,
 			warnings
 		}
 	};
 }
 
 // ---------------------------------------------------------------------------
+
+const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
+	flow_observed_m3s: 'Observed flow',
+	flow_logger_m3s: 'Observed flow (logger)',
+	flow_pitman_m3s: 'Pitman flow'
+};
+
+/**
+ * The flow record calibration compares against ([Flow data] rUseFlow): the
+ * configured kind when that series exists, else observed gauge flow, else the
+ * logger.
+ */
+function pickObservedKind(
+	wanted: CalibrationFlowKind | null,
+	series: ModelInput['series'],
+	warnings: string[]
+): CalibrationFlowKind | null {
+	if (wanted) {
+		if (series[wanted]) return wanted;
+		warnings.push(`calibration flow series "${wanted}" is missing; using the default observed series`);
+	}
+	return series.flow_observed_m3s ? 'flow_observed_m3s' : series.flow_logger_m3s ? 'flow_logger_m3s' : null;
+}
 
 function alignSeries(s: DailySeries | undefined, start: number, days: number): (number | null)[] {
 	const out = new Array<number | null>(days).fill(null);
@@ -327,6 +381,25 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
+	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {
+		warnings.push(`unknown calibration flow series "${String(s.calibrationFlowKind)}"; using the default`);
+		s.calibrationFlowKind = null;
+	}
+	s.calibrationFlowKind ??= null;
+	for (const key of ['calibrationStart', 'calibrationEnd'] as const) {
+		const v = s[key];
+		if (v == null || v === '') {
+			s[key] = null;
+		} else if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+			warnings.push(`${key} "${String(v)}" is not an ISO date (YYYY-MM-DD); ignored`);
+			s[key] = null;
+		}
+	}
+	if (s.calibrationStart && s.calibrationEnd && s.calibrationStart > s.calibrationEnd) {
+		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
+		s.calibrationStart = null;
+		s.calibrationEnd = null;
+	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);
 		s.flowShareMethod = 'area';

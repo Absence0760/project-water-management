@@ -67,7 +67,23 @@ export interface ProjectSettings {
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
+	/**
+	 * Optional calibration window (ISO dates, inclusive): calibration statistics
+	 * only score days inside it. null = the whole overlap of simulated and
+	 * observed flow. The workbook's [Flow Calibration Cfg] zCalibration_Date1/DateN.
+	 */
+	calibrationStart: string | null;
+	calibrationEnd: string | null;
+	/**
+	 * Flow record to calibrate against ([Flow data] rUseFlow: Flow A/B/C).
+	 * null = observed gauge flow if present, else the logger.
+	 */
+	calibrationFlowKind: CalibrationFlowKind | null;
 }
+
+/** Series that calibration statistics can compare simulated outflow with. */
+export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const;
+export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
@@ -120,7 +136,10 @@ export function defaultProjectSettings(): ProjectSettings {
 		},
 		ewrPragmaticM3PerDay: zeros,
 		simulationStart: null,
-		simulationEnd: null
+		simulationEnd: null,
+		calibrationStart: null,
+		calibrationEnd: null,
+		calibrationFlowKind: null
 	};
 }
 
@@ -248,14 +267,85 @@ export interface FarmSummary {
 	daysEwrNotMet: number;
 }
 
+/** Observed vs simulated volume in one water year (paired days only). */
+export interface AnnualVolume {
+	/** Water year, labelled by the calendar year it starts in (1981 = Oct 1981 – Sep 1982). */
+	waterYear: number;
+	/** Days with an observation (the days the volumes cover). */
+	days: number;
+	/** Days of this water year inside the calibration window; < 365 marks a part year. */
+	daysInWindow: number;
+	observedMm3: number;
+	simulatedMm3: number;
+	/** 100 × (simulated − observed) / observed; null when nothing was observed. */
+	diffPct: number | null;
+}
+
+/**
+ * Fit of simulated outflow to observed flow (network/stats.ts). Fields after
+ * `meanSimulatedM3s` were added in engine 0.3.0 and are absent on runs saved
+ * by older engines.
+ */
 export interface CalibrationStats {
-	/** Days where both observed and simulated outflow exist. */
+	/** Days inside the window where both observed and simulated outflow exist. */
 	days: number;
 	nse: number | null;
 	pbias: number | null;
 	rmseM3s: number | null;
 	meanObservedM3s: number | null;
 	meanSimulatedM3s: number | null;
+	/** The window that was scored, clamped to the run (ISO, inclusive). */
+	windowStart?: string | null;
+	windowEnd?: string | null;
+	/** First and last day inside the window with an observation. */
+	firstObservedDate?: string | null;
+	lastObservedDate?: string | null;
+	/** Kling–Gupta efficiency (Gupta et al. 2009) and its components. */
+	kge?: number | null;
+	/** Pearson correlation of observed and simulated flow. */
+	kgeR?: number | null;
+	/** Variability ratio σ_sim / σ_obs. */
+	kgeAlpha?: number | null;
+	/** Bias ratio mean_sim / mean_obs. */
+	kgeBeta?: number | null;
+	/** Coefficient of determination, r². */
+	r2?: number | null;
+	/** NSE on ln(Q + ε): sensitive to low flows. */
+	logNse?: number | null;
+	/** ε used by logNse (m³/s): 1% of the mean observed flow. */
+	logEpsilonM3s?: number | null;
+	/** 100 × (Σsim − Σobs) / Σobs; positive = model too wet (= −PBIAS). */
+	volumeErrorPct?: number | null;
+	/** Annual water balance: observed vs simulated volume per water year. */
+	annualVolumes?: AnnualVolume[];	/** The series simulated outflow was compared with (set by runModel). */
+	flowKind?: CalibrationFlowKind;
+}
+
+/** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */
+export interface EwrComplianceGrid {
+	/** null = the catchment outlet (simulated outflow vs the full pragmatic EWR). */
+	nodeId: string | null;
+	name: string;
+	/** Days the EWR was not met, [water-year row][month 0 = Oct … 11 = Sep]. */
+	daysNotMet: number[][];
+	/** Volume short of the EWR (m³, positive), same shape. */
+	shortfallM3: number[][];
+}
+
+/**
+ * EWR compliance per water year × month (network/ewr.ts), the app's version of
+ * the workbook's [EWR shortfalls Pivot Data] / [EWR analysis] pivot. A day
+ * counts as "not met" when that day's shortfall is below zero (the workbook's
+ * pivot counts differently; see docs/model.md §2.8).
+ */
+export interface EwrCompliance {
+	/** Row labels: water years, by the calendar year they start in (Oct). */
+	waterYears: number[];
+	/** Days simulated in each cell (0 outside the run), same shape as the grids. */
+	days: number[][];
+	outlet: EwrComplianceGrid;
+	/** Per farm, from the shortfall the farm itself adds (ewr_shortfall_incremental). */
+	farms: EwrComplianceGrid[];
 }
 
 export interface RunSummary {
@@ -267,6 +357,8 @@ export interface RunSummary {
 		ewrFractionDaysNotMet: number;
 	};
 	calibration: CalibrationStats | null;
+	/** EWR compliance grid; absent on runs saved by engines before 0.3.0. */
+	ewrCompliance?: EwrCompliance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }
