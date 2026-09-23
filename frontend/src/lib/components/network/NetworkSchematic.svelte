@@ -10,7 +10,7 @@
 	import { drainageTree } from '$lib/model/tree';
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
-	import { schematicLayout } from './schematic';
+	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, type SchematicNode } from './schematic';
 
 	let {
 		nodes,
@@ -118,23 +118,19 @@
 		return `M${a.x},${a.y + 10} V${midY} H${b.x} V${b.y - 13}`;
 	}
 
+	const metaText = (ln: SchematicNode) =>
+		`${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}`;
+
+	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
+	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(name(ln.node)), metaText(ln))));
+	const symbols = $derived(layout.nodes.map((ln) => ({ id: ln.node.id, box: symbolBox(pos.get(ln.node.id)!) })));
+
 	function transferPath(t: Transfer): string {
 		const a = pos.get(t.fromNodeId);
 		const b = pos.get(t.toNodeId);
 		if (!a || !b || t.fromNodeId === t.toNodeId) return '';
-		// Bow the arc sideways so it doesn't sit on the river lines.
-		const mx = (a.x + b.x) / 2;
-		const my = (a.y + b.y) / 2;
-		const dx = b.x - a.x;
-		const dy = b.y - a.y;
-		const len = Math.hypot(dx, dy) || 1;
-		const bow = Math.min(60, 22 + len * 0.18);
-		const cx = mx + (-dy / len) * bow;
-		const cy = my + (dx / len) * bow;
-		// Stop short of the target symbol.
-		const ex = b.x - ((b.x - cx) / Math.hypot(b.x - cx, b.y - cy)) * 14;
-		const ey = b.y - ((b.y - cy) / Math.hypot(b.x - cx, b.y - cy)) * 14;
-		return `M${a.x},${a.y} Q${cx},${cy} ${ex},${ey}`;
+		const others = symbols.filter((s) => s.id !== t.fromNodeId && s.id !== t.toNodeId).map((s) => s.box);
+		return arcPath(transferArc(a, b, [...labels, ...others], { x0: 0, y0: 0, x1: width, y1: height }));
 	}
 
 </script>
@@ -144,7 +140,7 @@
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
-	<div class="scroller">
+	<div class="scroller" data-scroll-region data-scroll-label="Schematic drawing">
 		<svg
 			bind:this={svgEl}
 			viewBox="0 0 {width} {height}"
@@ -214,9 +210,7 @@
 						<circle class="farm" r="8" />
 					{/if}
 					<text class="label" x="17" y="-2">{short(name(n))}</text>
-					<text class="meta" x="17" y="12">
-						{isOutlet(n) ? 'outflow · ' : ''}{fmtNum(ln.cumulativeAreaKm2, 1)} km²{dam ? ` · ${fmtVolume(n.damCapacityM3)}` : ''}
-					</text>
+					<text class="meta" x="17" y="12">{metaText(ln)}</text>
 				</g>
 			{/each}
 		</svg>

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { createProject, putModel, sampleModel } from '../support/api.ts';
+import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -157,4 +157,33 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	await projectsLink.click();
 	await (await second).accept();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+});
+
+test('large values show thousands separators in the one-node form and the view-only table', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Separators');
+	await putModel(page.request, project.id, sampleModel()); // Upper farm: 150 000 m³ dam
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.getByRole('button', { name: 'One node' }).click();
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+
+	const capacity = page.getByLabel('Capacity (m³)');
+	await expect(capacity).toHaveValue('150,000');
+	// Editing starts from the plain number; typed separators are accepted.
+	await capacity.focus();
+	await expect(capacity).toHaveValue('150000');
+	await capacity.fill('300 000');
+	await capacity.blur();
+	await expect(capacity).toHaveValue('300,000');
+	// The editable table keeps plain numbers.
+	await page.getByRole('button', { name: 'Table' }).click();
+	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300000');
+	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await expect(saveBar(page)).toBeHidden();
+
+	const viewer = await signIn('Separators viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}?tab=network`);
+	await expect(viewer.page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300,000');
+	await expect(viewer.page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('90,000');
 });

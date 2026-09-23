@@ -2,7 +2,11 @@
 	// Numeric input bound to a number (or null when `nullable`). `scale`
 	// displays a stored fraction as a percentage (scale = 100) while keeping
 	// the stored value unchanged. Invalid text is shown but not committed.
+	// `grouped` shows thousands separators (300,000) whenever the field isn't
+	// being edited; it is then a text input, since type="number" can't show them.
 	import type { HTMLInputAttributes } from 'svelte/elements';
+	import { parseNum } from '$lib/format/number';
+	import { groupedText } from './numberText';
 
 	let {
 		value = $bindable(),
@@ -14,6 +18,7 @@
 		max,
 		step = 'any',
 		disabled = false,
+		grouped = false,
 		placeholder,
 		onchange,
 		...rest
@@ -23,6 +28,8 @@
 		scale?: number;
 		/** Read-only (kept focusable, unlike a disabled input). */
 		disabled?: boolean;
+		/** Show thousands separators while not editing (a text input). */
+		grouped?: boolean;
 		/** Accessible label (use when there's no visible <label for>). */
 		label?: string;
 		id?: string;
@@ -34,7 +41,9 @@
 	} & Omit<HTMLInputAttributes, 'value' | 'onchange' | 'min' | 'max' | 'step'> = $props();
 
 	const round = (n: number) => Math.round(n * 1e9) / 1e9;
-	const display = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '' : String(round(v * scale)));
+	const raw = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '' : String(round(v * scale)));
+	// Grouped fields show "300,000" at rest; read-only ones never switch to raw.
+	const display = (v: number | null | undefined) => (grouped ? groupedText(v, scale) : raw(v));
 
 	let text = $state(display(value));
 	let focused = $state(false);
@@ -49,8 +58,8 @@
 		}
 	});
 
-	function commit(raw: string) {
-		const s = raw.trim();
+	function commit(input: string) {
+		const s = input.trim();
 		if (s === '') {
 			if (nullable) {
 				value = null;
@@ -59,7 +68,7 @@
 			} else invalid = true;
 			return;
 		}
-		const n = Number(s);
+		const n = grouped ? (parseNum(s) ?? NaN) : Number(s);
 		if (!Number.isFinite(n) || (min !== undefined && n < min) || (max !== undefined && n > max)) {
 			invalid = true;
 			return;
@@ -73,11 +82,11 @@
 <input
 	{...rest}
 	{id}
-	type="number"
+	type={grouped ? 'text' : 'number'}
 	inputmode="decimal"
-	{min}
-	{max}
-	{step}
+	min={grouped ? undefined : min}
+	max={grouped ? undefined : max}
+	step={grouped ? undefined : step}
 	{placeholder}
 	readonly={disabled}
 	aria-label={label}
@@ -90,7 +99,11 @@
 		if (el.validity.badInput) invalid = true;
 		else commit(el.value);
 	}}
-	onfocus={() => (focused = true)}
+	onfocus={() => {
+		focused = true;
+		// Editing starts from the plain number, so the caret never lands in a separator.
+		if (grouped && !disabled && !invalid) text = raw(value);
+	}}
 	onblur={() => {
 		focused = false;
 		if (!invalid) text = display(value);

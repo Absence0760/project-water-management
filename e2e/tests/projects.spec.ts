@@ -134,3 +134,29 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await expect(vRow).toContainText(/data \d+ years old/);
 	await expect(vRow.getByRole('link', { name: /^Add data/ })).toHaveCount(0);
 });
+
+test.describe('data age under a skewed time zone', () => {
+	// Overrides the suite's pinned UTC on purpose (project rule 7): at 12:30 UTC
+	// on 6 Feb it is already 02:30 on 7 Feb in UTC+14, so a UTC "today" would
+	// be a day behind the viewer's calendar.
+	test.use({ timezoneId: 'Pacific/Kiritimati' });
+
+	test('the project list and the workspace header count the same local days', async ({ page, owner }) => {
+		void owner;
+		const p = await createProject(page.request, 'Skewed clock');
+		// 120 days from 2021-10-01: the data runs to 2022-01-28.
+		await putSeries(page.request, p.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: Array(120).fill(1) });
+		await page.clock.setFixedTime(new Date('2022-02-06T12:30:00Z'));
+
+		await page.goto('/');
+		// The row carries the badge twice (wide and narrow layouts); one is shown.
+		const badge = row(page, 'Skewed clock').getByTitle('Input data runs to 2022-01-28').filter({ visible: true });
+		await expect(badge).toHaveText('data 10 days old');
+
+		await page.goto(`/projects/${p.id}`);
+		// Stale (> 7 days), so a hidden "(older than 7 days)" follows.
+		await expect(page.locator('summary').filter({ hasText: 'Data up to' })).toHaveText(
+			'Data up to 28 Jan 2022 · 10 days ago (older than 7 days)'
+		);
+	});
+});

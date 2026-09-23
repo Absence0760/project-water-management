@@ -238,6 +238,7 @@
 										max={isPct(f) ? 100 : undefined}
 										scale={isPct(f) ? 100 : 1}
 										nullable={f.nullable}
+										grouped={readonly && !isPct(f)}
 										placeholder={f.nullable ? '–' : undefined}
 										disabled={readonly}
 										bind:value={node[f.key]}

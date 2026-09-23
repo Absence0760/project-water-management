@@ -7,6 +7,7 @@
 	import type { Invite } from '$lib/api/types';
 	import { fmtDate } from '$lib/format/number';
 	import { expiryText, resendWasMailed, upsertInvite } from './invites';
+	import EmailText from '$lib/components/common/EmailText.svelte';
 
 	let {
 		invites = $bindable([]),
@@ -94,7 +95,7 @@
 			{#each invites as inv (inv.id)}
 				<li class:expired={inv.expired}>
 					<div class="who">
-						<span class="email">{inv.email}</span>
+						<span class="email"><EmailText email={inv.email} /></span>
 						<span class="meta">
 							<span class="badge">{inv.role}</span>
 							invited by {inv.invitedBy} ·
@@ -171,7 +172,6 @@
 	}
 	.email {
 		font-weight: 500;
-		overflow-wrap: anywhere;
 	}
 	.meta {
 		font-size: 0.8rem;

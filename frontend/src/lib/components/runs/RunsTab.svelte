@@ -17,6 +17,7 @@
 	import { detailCache, forgetRun } from './cache';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
+	import { resultSections } from './sections';
 
 	let {
 		projectId,
@@ -291,11 +292,18 @@
 					</div>
 					<DownloadMenu items={downloadItems} />
 				</div>
-				<section aria-label="Run summary">
+				<nav class="sections" aria-label="Result sections">
+					<ul>
+						{#each resultSections(detail.run.summary) as sec (sec.id)}
+							<li><a href="#{sec.id}">{sec.label}</a></li>
+						{/each}
+					</ul>
+				</nav>
+				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
 			</section>
-			<section class="panel">
+			<section class="panel" id="res-curtailment">
 				<CurtailmentTable summary={detail.run.summary} {farmNames} />
 			</section>
 			{@const summary = detail.run.summary}
@@ -309,7 +317,7 @@
 				{damCapacity}
 			>
 				{#snippet afterHydrograph()}
-					<div class="panel">
+					<div class="panel" id="res-calibration">
 						<CalibrationPanel
 							calibration={summary.calibration}
 							requestedStart={project.settings.calibrationStart}
@@ -321,7 +329,7 @@
 					</div>
 				{/snippet}
 				{#snippet afterFlowViews()}
-					<div class="panel">
+					<div class="panel" id="res-ewr-grid">
 						{#if summary.ewrCompliance}
 							<EwrHeatmap compliance={summary.ewrCompliance} />
 						{:else}
@@ -507,6 +515,35 @@
 	.placeholder {
 		text-align: center;
 		padding: 3rem 1rem;
+	}
+	/* In-page menu: the results run to about ten panels. */
+	.sections ul {
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin: 0 0 0.9rem;
+		padding: 0;
+	}
+	.sections a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 28px;
+		padding: 0 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		font-size: 0.8rem;
+		color: var(--text-2);
+		text-decoration: none;
+	}
+	.sections a:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	@media (max-width: 640px) {
+		.sections a {
+			min-height: 36px;
+		}
 	}
 	.agree {
 		margin-top: 1rem;

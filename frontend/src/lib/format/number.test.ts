@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { fmtDate, fmtNum, fmtPct, parseNum } from './number';
+import { afterEach, describe, expect, it } from 'vitest';
+import { fmtDate, fmtNum, fmtPct, localIsoDate, parseNum } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -38,5 +38,22 @@ describe('parseNum', () => {
 		expect(parseNum(' 12 000 ')).toBe(12000);
 		expect(parseNum('')).toBeNull();
 		expect(parseNum('abc')).toBeNull();
+	});
+});
+
+describe('localIsoDate', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('is the local calendar date, not the UTC one', () => {
+		process.env.TZ = 'Pacific/Kiritimati'; // UTC+14: early morning locally, still yesterday in UTC
+		const early = new Date(2026, 8, 23, 1);
+		expect(early.toISOString().slice(0, 10)).toBe('2026-09-22');
+		expect(localIsoDate(early)).toBe('2026-09-23');
+		process.env.TZ = 'Pacific/Pago_Pago'; // UTC−11: late evening locally, already tomorrow in UTC
+		const late = new Date(2026, 8, 23, 23);
+		expect(late.toISOString().slice(0, 10)).toBe('2026-09-24');
+		expect(localIsoDate(late)).toBe('2026-09-23');
 	});
 });

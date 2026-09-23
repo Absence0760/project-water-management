@@ -57,6 +57,14 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   a live invite for *the same address*, the account starts verified and joins
   the invited projects/teams immediately, with no verification email.
   Otherwise the token is ignored and sign-up proceeds normally.
+- **Opening `/register?invite=…` while signed in** (frontend only; the other
+  sign-in pages send a signed-in user on to the app): the page looks the invite
+  up and explains it. An invite for another address offers *Sign out and
+  accept as …* (the sign-up form then takes over with the address locked) or
+  staying signed in. An invite for the signed-in address says the user joins
+  once the address is confirmed (with a resend button), or should already have
+  access if it is. A dead link says so. There is no "accept while signed in"
+  endpoint: invites are claimed by `verify-email` or by `register`.
 
 ## Errors
 

@@ -32,8 +32,16 @@ export function isGuestPath(pathname: string, base = ''): boolean {
 /**
  * What the root layout's guard does with a route: render it, send a
  * signed-out visitor to /login, or move a signed-in user off a sign-in page.
+ * An emailed invitation (/register?invite=…) stays open to a signed-in user:
+ * the page explains whose invitation it is instead of silently sending them on.
  */
-export function routeAccess(pathname: string, base: string, signedIn: boolean): 'show' | 'login' | 'leave' {
+export function routeAccess(
+	pathname: string,
+	base: string,
+	signedIn: boolean,
+	search?: URLSearchParams
+): 'show' | 'login' | 'leave' {
 	if (!signedIn) return isPublicPath(pathname, base) ? 'show' : 'login';
+	if (strip(pathname, base) === '/register' && search?.has('invite')) return 'show';
 	return isGuestPath(pathname, base) ? 'leave' : 'show';
 }
