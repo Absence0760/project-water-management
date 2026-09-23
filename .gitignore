@@ -106,3 +106,4 @@ backend.config
 *.xlsx
 Original/
 AI/
+data/
