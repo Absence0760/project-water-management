@@ -1,109 +1,192 @@
 # Deployment
 
-## Overview
+> **Status:** not deployed yet. V1 runs locally ([run-locally.md](./run-locally.md)).
+> This page describes the target setup and the steps to get there. What still
+> has to be *built* (DB Terraform, migrate step, CI triggers) is tracked in
+> [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws).
 
-The project deploys to AWS via GitHub Actions with OIDC federation (no
-long-lived AWS keys). Two independent deploy workflows fire when a GitHub
-release is published, each with a skip-if-unchanged check.
+## Target setup
+
+```
+browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-management.jaredhoward.com
+                     ├─ /*      → S3 (private, OAC)       static SvelteKit build
+                     └─ /api/*  → Lambda Function URL      Hono backend
+                                   (+ X-CloudFront-Shared-Secret header,
+                                    CachingDisabled, all methods, cookies forwarded)
+                                        │
+                                        └─► Postgres (RDS t4g.micro or Aurora Serverless v2)
+```
+
+- **One origin.** The browser only ever talks to the site's domain. CloudFront
+  forwards `/api/*` to the **Lambda Function URL** (there is no API Gateway),
+  and the frontend's production `PUBLIC_API_URL` is `/api`. The session cookie
+  is therefore first-party. The backend rejects requests that lack the
+  CloudFront shared-secret header, so calling the Function URL directly does
+  nothing.
+- **Database:** added in Phase 6. The options and the recommendation are in
+  [plan.md 6b](./plan.md#6b-terraform-additions-infra). Whatever is chosen, it
+  is private (no public endpoint), encrypted, has automated backups + PITR and
+  deletion protection. The backend connects as `water_app` (RLS-bound);
+  migrations run as the owner role.
+- **Region:** likely `af-south-1` for the DB and Lambda (data residency and
+  latency; see plan.md). The CloudFront certificate always lives in
+  `us-east-1`.
 
 ## Prerequisites
 
-- AWS account with the target region enabled
-- Domain registered + Route 53 hosted zone existing
-- Terraform >= 1.6
-- GitHub CLI (`gh`) authenticated
-- `sops` + `jq` installed
+- The AWS org and SSO set up as for the other estate projects (`aws sso login`).
+- Terraform (via tfenv), `gh` authenticated, `sops`, `jq`.
+- The templates repo at `~/github/templates` and the private
+  `~/github/infra-secrets`.
 
-## Secrets management
+## 1. Provision the account (one-time)
 
-Production secrets do **not** live in this repo. They live in the private estate
-repo `infra-secrets` (sibling of this repo under `~/github/`), in
-`infra-secrets/<project-slug>/`, SOPS-encrypted under this project's own KMS key
-`alias/<project-slug>-sops`. Decryption requires `kms:Decrypt` on that key via AWS
-IAM (access is IAM, not repo membership). See `../infra-secrets/README.md` for the
-full model.
-
-- `infra-secrets/<project-slug>/prod.sops.yaml` — encrypted production secrets,
-  consumed by this project's Terraform via the `carlpett/sops` provider
-  (`data "sops_file"`).
-
-### First-time setup
-
-Authenticated to the project's AWS account, bootstrap the slot once:
+Create `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
+from `example.tfvars` (`create_subdomain = true`), then from the templates repo:
 
 ```bash
-cd ../infra-secrets
-./bin/sops-init.sh --project <project-slug> --region <region>   # creates alias/<project-slug>-sops, wires the ARN into .sops.yaml
-sops <project-slug>/prod.sops.yaml    # seed from the .example, fill real values, save ENCRYPTED
+cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan
+cd ~/github/templates && ./scripts/new-project-account.sh water-management
 ```
 
-### Daily workflow
+This creates, inside the org:
 
-- Edit a secret: `sops ../infra-secrets/<project-slug>/prod.sops.yaml`
-- Add a collaborator: grant them `kms:Decrypt` on `alias/<project-slug>-sops` (IAM)
-- Local dev usually needs no secrets (committed `backend/.env.development` covers it). If you need a real value locally, read it out of the encrypted file (`sops -d ../infra-secrets/<project-slug>/prod.sops.yaml`) and put it in a gitignored `backend/.env.development.local`
+- the sub-account (`water-management-prod`, or the tfvars `account_name`)
+- the tfstate bucket `water-management-tfstate-<account-id>`, locked with S3
+  conditional writes (`use_lockfile = true`; **no DynamoDB lock table**)
+- the KMS key `alias/water-management-sops`
+- the GitHub OIDC provider and the deploy role `water-management-deploy`. The trust
+  policy is pinned to `repo:<owner>/<repo>:environment:production`, so only a
+  job in the `production` environment (which needs the operator's approval) can
+  assume it.
+- the GitHub `production` environment with a required reviewer, and branch
+  protection on `main`
+- **DNS:** the delegated child zone **`water-management.jaredhoward.com`**
+  (bootstrap tfvars `create_subdomain = true`). Its delegation stage runs as the
+  `dns-parent` profile and writes the NS records into the `jaredhoward.com`
+  parent zone, which lives in the `jaredhoward` account. This is the same
+  pattern as `disag.jaredhoward.com`. The ACM certificate, the CloudFront alias
+  and the A/AAAA records inside the child zone belong to *this* repo's
+  Terraform.
 
-## One-command bootstrap
+Estate runbook: `~/github/project-mgmt/docs/runbooks.md`.
+
+## 2. Secrets (one-time, then as needed)
+
+**This repo is public.** Production secrets live **only** in the private
+`Absence0760/infra-secrets` repo, at `water-management/prod.sops.yaml`,
+encrypted under `alias/water-management-sops`. They are never in this repo,
+encrypted or not. Terraform reads them either with the `carlpett/sops`
+provider (`data "sops_file"`, decrypted in memory) or through a
+decrypt-to-tfvars step into a gitignored `terraform.tfvars`. The operator runs
+the `sops` commands by hand.
 
 ```bash
-./bin/setup.sh
+cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region <region>
+cd ~/github/infra-secrets && sops water-management/prod.sops.yaml
 ```
 
-This handles:
-1. Terraform state bucket + DynamoDB lock table creation
-2. `terraform init` + `terraform apply`
-3. GitHub Actions environment variables population
+Keys this app needs:
 
-## Release-gated deploys
+| Key | Used for |
+| --- | --- |
+| `auth_jwt_secret` | Lambda env `AUTH_JWT_SECRET`: signs session cookies (≥ 32 random bytes) |
+| `db_app_password` | The `water_app` role's password (RLS-bound runtime role) |
+| `db_owner_password` | Owner/migration role, unless RDS-managed master credentials in Secrets Manager are used |
 
-Deploys fire on GitHub releases, not on every push. Each workflow has a
-skip-if-unchanged check job that compares against the previous release tag.
+The CloudFront shared secret is generated by Terraform
+(`random_password.cloudfront_shared_secret`) and needs no manual step.
 
-To deploy:
+Access to decrypt is IAM (`kms:Decrypt` on the key), not repo membership.
+
+## 3. Terraform
 
 ```bash
-gh release create v0.1.0 --generate-notes --target main
+cd infra && cp backend.config.example backend.config && cp terraform.tfvars.example terraform.tfvars
 ```
 
-This fires both deploy workflows. Each checks whether its workspace
-files changed and skips if not.
-
-## Manual deploys
-
-Each workflow also supports `workflow_dispatch` for manual re-runs:
+Fill in `backend.config` (the tfstate bucket) and `terraform.tfvars`:
+`domain_name = "water-management.jaredhoward.com"`, `route53_zone_id` (the child zone the
+bootstrap printed), `bootstrap_slug = "water-management"`, the region, and the budget
+email. Both files are gitignored.
 
 ```bash
-gh workflow run deploy-frontend.yml
-gh workflow run deploy-backend.yml
+cd infra && terraform init -backend-config=backend.config && terraform plan
 ```
 
-## GitHub Actions environment variables
+Only `terraform apply` after the plan has been reviewed and the operator has
+said go. Then push the outputs to the GitHub `production` environment
+variables and secrets:
 
-Set by `bin/setup.sh` in the `production` environment:
+```bash
+~/github/templates/scripts/export-tf-vars.sh infra/
+```
 
-| Variable | Source |
-|---|---|
-| `AWS_REGION` | `terraform.tfvars` |
-| `AWS_ROLE_TO_ASSUME` | `terraform output github_actions_role_arn` |
-| `FRONTEND_BUCKET` | `terraform output frontend_bucket_name` |
-| `CLOUDFRONT_DISTRIBUTION_ID` | `terraform output cloudfront_distribution_id` |
-| `LAMBDA_FUNCTION_NAME` | `terraform output lambda_function_name` |
-| `PUBLIC_API_URL` | `terraform output lambda_function_url` |
-| `PUBLIC_SITE_URL` | `https://<domain>` |
+| GitHub variable | From |
+| --- | --- |
+| `AWS_REGION` | `aws_region` output |
+| `FRONTEND_BUCKET` | `frontend_bucket` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | `cloudfront_distribution_id` |
+| `LAMBDA_FUNCTION_NAME` | `lambda_function_name` |
+| `PUBLIC_API_URL` | `public_api_url` (`/api`) |
+| `PUBLIC_SITE_URL` | `public_site_url` |
+| secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
 
-## GitHub Actions secrets
+### Changes needed before the first real deploy
 
-| Secret | Purpose |
-|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code automation |
+Tracked in [plan.md 6b](./plan.md#6b-terraform-additions-infra):
 
-## Claude Code automation
+- a DB module (RDS or Aurora), and the Lambda in a VPC with endpoints, or the
+  RDS Data API
+- Lambda runtime `nodejs22.x` (the template has 20.x), timeout ~30 s, memory
+  1024 MB, and env vars for `DATABASE_URL` / the secret ARN and
+  `AUTH_JWT_SECRET`
+- tightening or removing the Function URL CORS block (the browser never calls it
+  directly), and updating the stale comments in `infra/README.md` and `waf.tf`
+  that say it does
+- the `carlpett/sops` provider reading `../infra-secrets/water-management/prod.sops.yaml`
+  (not wired into `infra/` yet)
+- DB alarms (CPU, free storage, connections) alongside the existing Lambda and
+  CloudFront alarms
 
-The `claude.yml` workflow responds to `@claude` mentions. The authorized
-user is configured via the `CLAUDE_AUTHORIZED_USER` repository variable
-(Settings > Variables > Actions).
+## 4. CI/CD
+
+- `ci.yml` runs on every pull request and on pushes to `main`: typecheck,
+  unit tests, build, and `test:backend:db` against a Postgres 17 service
+  container. Docs-only diffs skip the heavy jobs, but the `CI gate` check
+  still reports. After the account exists, re-run `new-project-account.sh` so
+  that `CI gate` becomes a required check on `main`.
+- `deploy-frontend.yml` / `deploy-backend.yml` are **release-gated** (the
+  trigger is commented out until the first deploy) and run in
+  `environment: production`, so each deploy waits for the reviewer. They
+  authenticate with OIDC. There are no static AWS keys anywhere.
+- **Migrations** run in the backend deploy *before* the new Lambda code is
+  published (a migrate job or a one-off invocation, still to be built).
+  Migrations must stay backwards-compatible with the running code for that
+  short window: add first, remove in a later release.
+
+Releasing:
+
+```bash
+gh release create v0.2.0 --generate-notes --target main
+```
+
+Each workflow skips when its workspace has not changed since the previous
+release. For a manual re-run: `gh workflow run deploy-backend.yml` (this still
+goes through the environment approval).
 
 ## Rollback
 
-Re-run the previous deploy workflow from the GitHub Actions UI, or trigger
-a manual deploy of the last known-good release tag.
+- **Code:** re-run the deploy workflow for the last good release tag.
+- **Database:** migrations are forward-only. Roll back by shipping a new
+  migration. For data loss, restore to a point in time from the automated
+  backups into a new instance and repoint the Lambda. Rehearse this once before
+  go-live.
+
+## Costs (rough, idle to light use)
+
+CloudFront, S3 and Lambda are cents. WAF is ~$5–6/month. The DB is the main
+cost: RDS t4g.micro ~$12–15/month, or Aurora Serverless v2 at min 0 ACU at
+~storage cost while idle. A VPC Lambda needs interface endpoints (~$7/month
+each per AZ) or a NAT (~$32/month). The Terraform budget alarm is set from
+`budget_monthly_usd`.

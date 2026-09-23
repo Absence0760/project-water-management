@@ -1,93 +1,125 @@
 # Architecture
 
-## Overview
+A web app for daily catchment water-balance modelling. It ports the SmartMatix
+/ FRC **Water Balance Tool b023** Excel workbook ([model.md](./model.md)). Each
+**project** is one catchment. Users keep as many projects as they need and
+share each one with per-project roles.
 
-This is a pnpm monorepo with two app packages plus Terraform for infrastructure
-and GitHub Actions for CI/CD:
+## System
 
-- `frontend/` — SvelteKit (Svelte 5), built with `@sveltejs/adapter-static`. Ships as
-  pre-rendered HTML + assets to S3 + CloudFront.
-- `backend/` — Hono app, written once and deployed two ways: as a local Node HTTP
-  server for development and as an AWS Lambda handler for production. Bundled
-  with esbuild.
-- `infra/` — Terraform module that provisions all AWS resources (S3, CloudFront,
-  Lambda, IAM, Route 53, ACM, GitHub OIDC). Not a workspace package.
-- `.github/workflows/` — two deploy workflows (frontend, backend) that
-  authenticate to AWS via OIDC and deploy on release.
+```mermaid
+flowchart LR
+  subgraph Browser
+    UI[SvelteKit static app<br/>forms · uPlot charts]
+    EB[engine<br/>instant what-if runs]
+    UI --- EB
+  end
 
-The two app packages are decoupled. The frontend knows the backend only by its
-URL (`PUBLIC_API_URL`).
+  subgraph AWS["AWS (later — Phase 6)"]
+    CF[CloudFront + WAF<br/>water-management.jaredhoward.com]
+    S3[(S3<br/>static build)]
+    L[Lambda · Hono<br/>Function URL]
+    EL[engine<br/>stored runs]
+    DB[(Postgres<br/>RDS / Aurora)]
+    L --- EL
+  end
+
+  UI -- "GET /*" --> CF --> S3
+  UI -- "/api/* (cookie)" --> CF -- "+ shared-secret header" --> L
+  L -- "SQL as water_app<br/>RLS per request" --> DB
+```
+
+Locally the same pieces run as `vite dev` on `:7777`, a Node server
+(`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`. The
+browser calls the backend directly on `:3001` (CORS with credentials). In
+production, CloudFront serves the site and **proxies `/api/*` from the same
+origin**, so the session cookie is first-party.
+
+## Workspaces
+
+| Path | Package | What it is |
+| --- | --- | --- |
+| `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
+| `backend` | `@water-management/backend` | Hono API: auth, projects, members, the model document, series, runs. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. |
+| `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
+| `frontend` | `@water-management/frontend` | SvelteKit 5 with `adapter-static`, served as static files. All dynamic data comes from the API. |
+| `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
+| `infra` | none | Terraform: S3, CloudFront, WAF, Lambda + Function URL, ACM, Route 53, budget and alarms. The DB comes in Phase 6. |
+
+## Why one engine in two places
+
+The same `runModel` runs:
+
+- **in the browser**, for instant feedback while editing (a full client catchment run,
+  16k days × 13 elements, takes about 18 ms). Nothing is saved.
+- **in the backend**, for `POST /projects/:id/runs`. The backend loads the
+  project as `water_app`, runs the engine, and stores the input snapshot,
+  summary and output series. Stored runs are what users share and compare.
+
+Because the engine is pure and deterministic, there is only one implementation
+to regression-test against the workbook, and the browser and the stored result
+can never drift apart. Every run records `ENGINE_VERSION`.
+
+## Request lifecycle (backend)
+
+1. CloudFront adds `X-CloudFront-Shared-Secret`, and the backend rejects
+   requests without it (the check is off locally when the secret is empty).
+2. Session middleware verifies the `wm_session` JWT (HS256, jose) and sets
+   `userId`.
+3. Project routes open **one transaction** on a pooled `pg` connection as
+   `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
+   query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
+4. zod validates the input. The model document is saved in one transaction
+   (rows missing from a `PUT` are deleted). Tree validation runs before the
+   write.
+5. Errors map to `{ error, details? }` with 400/401/403/404/409
+   ([api.md](./api.md)).
+
+## Data flow of a model run
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant A as API (Lambda)
+  participant P as Postgres
+  B->>A: POST /projects/:id/runs
+  A->>P: BEGIN; set app.current_user_id
+  A->>P: SELECT project, nodes, crops, areas, transfers, series (RLS)
+  A->>A: runModel(input) ~20 ms
+  A->>P: INSERT model_run (inputs snapshot, summary)
+  A->>P: INSERT run_series × N (double precision[])
+  A->>P: COMMIT
+  A-->>B: 201 { run }
+  B->>A: GET /runs/:runId/series?key=…&nodeId=…
+  A-->>B: { startDate, values }  (one series per chart)
+```
+
+## Key choices
+
+| Choice | Why |
+| --- | --- |
+| **Postgres, with RLS** rather than app-only checks | Per-project sharing is the core of multi-tenancy. RLS makes a forgotten `WHERE` clause fail closed. The runtime role can't bypass it. |
+| **`double precision[]` per series** | 16k values is one row, not 16k rows. The engine and the charts always want whole series ([data-model.md](./data-model.md#time-series-storage)). |
+| **JWT in an httpOnly cookie** | No token in JS-readable storage. Same-origin behind CloudFront, so `SameSite=Lax` works. |
+| **Plain SQL migrations** | The schema is mostly RLS policies and triggers, which an ORM would hide. |
+| **uPlot** | Draws 16k-point time series quickly, and it's small. |
+| **Static frontend** | Cheap hosting on S3 + CloudFront, and no server-side rendering to secure. |
+| **Python importer first** | openpyxl reads the 87 MB `.xlsm` reliably in read-only mode. An in-browser SheetJS importer comes later ([plan.md](./plan.md)). |
+| **Lambda + managed Postgres** | Almost no cost while idle for a low-traffic expert tool. Trade-offs in [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws). |
 
 ## Repo layout
 
 ```
 water-management/
-├── package.json              Workspace root scripts (dev/build/check)
-├── pnpm-workspace.yaml       Lists frontend, backend as packages
-├── docs/                     Architecture, deployment, run-locally, security
-├── frontend/
-│   ├── package.json
-│   ├── svelte.config.js
-│   ├── vite.config.ts
-│   ├── .env.development      PUBLIC_API_URL, PUBLIC_SITE_URL (committed defaults)
-│   └── src/
-│       ├── app.css           Base styles
-│       ├── app.html
-│       └── routes/
-├── backend/
-│   ├── package.json          Build script runs esbuild → dist/lambda.mjs
-│   ├── tsconfig.json
-│   ├── .env.development      Backend env vars (committed local defaults)
-│   └── src/
-│       ├── app.ts            Hono app factory + CORS + route mounting
-│       ├── server.ts         Local dev entry (runs on :3001)
-│       ├── lambda.ts         AWS Lambda entry (wraps app with hono/aws-lambda)
-│       └── routes/           Your API routes go here
-├── infra/
-│   ├── main.tf               Providers, state backend
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── s3_cloudfront.tf      Bucket + OAC + cert + CloudFront + Route 53
-│   ├── lambda.tf             Function + exec role + log group + Function URL
-│   ├── github_oidc.tf        GitHub OIDC provider + CI role + scoped policy
-│   └── terraform.tfvars.example
-└── .github/
-    └── workflows/
-        ├── ci.yml                CI: typecheck + test on PR/push
-        ├── deploy-frontend.yml   Build + sync to S3 + CloudFront invalidation
-        ├── deploy-backend.yml    esbuild bundle + zip + update Lambda
-        └── claude.yml            Claude Code issue/PR automation
+├── package.json           Root scripts (setup / dev / db / build / check / test)
+├── docker-compose.yml     Postgres 17 on :5434
+├── dev/postgres/          First-boot SQL: water_app role, water_test DB
+├── packages/engine/       Model + shared types (vitest)
+├── backend/               Hono API, migrations/, scripts/migrate.ts (vitest: unit + db)
+├── frontend/              SvelteKit static app (vitest)
+├── scripts/               check_root_scripts.mjs, wbt-import/ (Python)
+├── infra/                 Terraform
+├── docs/                  This documentation
+├── Original/, AI/, data/  Client workbooks and generated data (gitignored)
+└── .github/workflows/     CI, deploy (release-gated), security scans
 ```
-
-## Frontend
-
-SvelteKit with `adapter-static`. Every route can prerender to static HTML.
-The build emits `.html` files per route, uploaded to S3. CloudFront sits in
-front for caching and TLS termination. No server-side rendering at runtime.
-
-## Backend
-
-Hono, a small TypeScript HTTP framework. One app definition (`src/app.ts`)
-shared by two entry points:
-
-- `src/server.ts` — local dev via `@hono/node-server` on port 3001.
-  `tsx watch` reloads on change.
-- `src/lambda.ts` — AWS Lambda entry via `hono/aws-lambda`.
-
-Handler code, routing, and middleware are identical across both — the only
-difference is how requests reach the app.
-
-**Important:** `server.ts` imports `dotenv/config`; `lambda.ts` does not.
-This ensures esbuild tree-shakes `dotenv` out of the Lambda bundle. Do not
-add `dotenv` imports to any module reachable from `lambda.ts`.
-
-## Deployment targets
-
-- **Frontend**: S3 bucket (private) + CloudFront with OAC. ACM cert in
-  `us-east-1`. Route 53 A-alias records for apex and `www`.
-- **Backend**: AWS Lambda with Function URL (no API Gateway). Single
-  `dist/lambda.mjs` ESM bundle via esbuild.
-
-Both deploy workflows authenticate via **GitHub OIDC federation** — no
-long-lived AWS access keys. The IAM role's trust policy is scoped to the
-`main` branch only.

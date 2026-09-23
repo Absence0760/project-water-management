@@ -1,86 +1,92 @@
 # water-management
 
-Full-stack web template: static SvelteKit frontend + Hono serverless backend, deployed to AWS via Terraform and GitHub Actions with OIDC federation.
+A web app for **daily catchment water-balance modelling**. It reimplements the
+Water Balance Tool (WBT b023) Excel workbook that SmartMatix built for the
+Freshwater Research Centre. For each catchment it models:
 
-## Stack
+- natural river flow from rainfall
+- irrigation demand per farm (crops × A-pan evaporation)
+- farm dams, spills, diversions and transfers between farms
+- whether the **Environmental Water Requirement (EWR)** is met at each farm and
+  at the outflow gauge
 
-- **Frontend**: SvelteKit (Svelte 5) with `adapter-static`, hosted on S3 + CloudFront
-- **Backend**: Hono on AWS Lambda (via Function URL)
-- **Infrastructure**: Terraform (`infra/`) — S3, CloudFront, Lambda, IAM, Route 53, ACM, GitHub OIDC
-- **CI/CD**: GitHub Actions with OIDC federation (no long-lived AWS keys)
-- **Secrets**: SOPS + AWS KMS, stored in the private `infra-secrets` repo (one subdir per project) — never committed to this repo
+Each catchment is a **project**. You can keep several side by side (place A, B,
+C…), create more, copy one to try a what-if, and share each project with other
+users as viewer, editor or owner.
 
-## Repo layout
-
-```
-water-management/
-├── frontend/       SvelteKit site (vitest)
-├── backend/        Hono API (local Node server + AWS Lambda entry)
-├── infra/          Terraform — all AWS resources
-├── scripts/        dev / build / check tooling
-├── .github/
-│   └── workflows/  CI + deploy pipelines + Claude Code automation
-└── docs/           Architecture, deployment, run-locally, security
-```
+**Status:** building V1, a local demo for the client. The roadmap is in
+[docs/plan.md](./docs/plan.md). The target production URL is
+`https://water-management.jaredhoward.com` (not deployed yet).
 
 ## Quick start
 
-```bash
-pnpm install
-pnpm dev                    # frontend (:7777) + backend (:3001)
-```
-
-Local dev needs no env setup — both workspaces ship a committed `.env.development`
-with non-sensitive local defaults. Production secrets live in the private
-`infra-secrets` repo (not here) and are only needed for deploying; see
-[Production deploy](#production-deploy) below.
-
-See [`docs/run-locally.md`](./docs/run-locally.md) for the full setup walkthrough.
-
-## Production deploy
+Needs Node 22, pnpm 10 (Corepack) and Docker.
 
 ```bash
-# Provision the AWS sub-account (one-time, run from ~/repos/templates):
-./scripts/new-project-account.sh <slug>
-
-# In this repo, then:
-cp infra/backend.config.example infra/backend.config && $EDITOR infra/backend.config
-cp infra/terraform.tfvars.example infra/terraform.tfvars && $EDITOR infra/terraform.tfvars
-cd infra && terraform init -backend-config=backend.config && terraform apply
-~/repos/templates/scripts/export-tf-vars.sh infra/   # push outputs to gh vars + secrets
+pnpm setup      # install deps, start Postgres 17 (docker, :5434), run migrations
+pnpm dev        # frontend http://localhost:7777 + API http://localhost:3001
 ```
 
-See [`docs/deployment.md`](./docs/deployment.md) and [`infra/README.md`](./infra/README.md) for the full walkthrough.
+No env setup is needed: the local defaults are committed, and they are
+non-sensitive. Register an account at http://localhost:7777 and create a
+project.
 
-## Documentation
+**Demo data (client catchment):** the client workbook stays local in `Original/`
+(gitignored). Extract it with the Python importer in `scripts/wbt-import/` into
+`data/` (also gitignored), then load it into a new project. Step by step:
+[docs/run-locally.md § Import client catchment](./docs/run-locally.md#import-client-catchment-demo-data).
 
-- [`docs/architecture.md`](./docs/architecture.md) — how the pieces fit together
-- [`docs/run-locally.md`](./docs/run-locally.md) — local dev setup
-- [`docs/deployment.md`](./docs/deployment.md) — AWS deploy walkthrough
-- [`docs/security.md`](./docs/security.md) — risk register, mitigations
-- [`infra/README.md`](./infra/README.md) — Terraform module specifics
+## How it's built
+
+- **packages/engine**: the model, in pure TypeScript. The same code runs in the
+  browser (instant what-ifs) and on the server (stored runs). It is
+  regression-tested against the client catchment workbook.
+- **backend**: Hono API (Node locally, AWS Lambda in production) on
+  **Postgres**. Per-project access is enforced with row-level security.
+- **frontend**: SvelteKit static site with uPlot charts.
+- **infra**: Terraform for S3 + CloudFront + Lambda (+ Postgres when deployed).
+
+Details: [docs/architecture.md](./docs/architecture.md) ·
+[docs/STACK.md](./docs/STACK.md).
 
 ## Commands
 
 ```bash
-pnpm dev                    # frontend + backend in parallel
-pnpm build                  # build all packages
-pnpm check                  # typecheck all packages
-pnpm test                   # test all packages
-
-pnpm frontend <script>      # shortcut: pnpm --filter @water-management/frontend
-pnpm backend <script>       # shortcut: pnpm --filter @water-management/backend
+pnpm dev                    # frontend + backend
+pnpm dev:db:up | dev:db:down | dev:db:migrate | dev:db:reset | dev:db:psql
+pnpm check                  # typecheck all workspaces
+pnpm test                   # unit tests (no DB)
+pnpm test:backend:db        # API + RLS tests (needs dev:db:up)
+pnpm build                  # static site + Lambda bundle
 ```
 
-## Customizing this template
+The full list is in [docs/STACK.md](./docs/STACK.md#commands-run-from-repo-root).
 
-1. Find-and-replace `water-management` with your project name across all files
-2. Bootstrap the project's secrets slot in the private `infra-secrets` repo:
-   `cd ../infra-secrets && ./bin/sops-init.sh --project <your-slug> --region <region>`
-   (secrets live there, not in this repo — see `docs/deployment.md`)
-3. Set `bootstrap_slug` in `infra/terraform.tfvars` to match the slug
-   `new-project-account.sh` was run with
-4. Fill in `infra/terraform.tfvars` with your values (apex domain,
-   route53 zone ID, optional budget email)
-5. Add your API routes in `backend/src/routes/`
-6. Build your frontend in `frontend/src/routes/`
+## Documentation
+
+| Doc | What's in it |
+| --- | --- |
+| [docs/plan.md](./docs/plan.md) | Roadmap from V1 to a deployed product, acceptance criteria, **questions for the client**, risks |
+| [docs/model.md](./docs/model.md) | The water-balance model step by step, the AI modules, workbook quirks to confirm, glossary |
+| [docs/data-model.md](./docs/data-model.md) | Tables, mapping to the workbook's sheets, roles and RLS, time-series storage |
+| [docs/api.md](./docs/api.md) | HTTP API contract |
+| [docs/architecture.md](./docs/architecture.md) | System diagram, workspaces, request and run lifecycle |
+| [docs/STACK.md](./docs/STACK.md) | Stack, commands, conventions |
+| [docs/run-locally.md](./docs/run-locally.md) | Local setup, importing a workbook, troubleshooting |
+| [docs/deployment.md](./docs/deployment.md) | AWS deployment (account, secrets, Terraform, CI/CD) |
+| [docs/security.md](./docs/security.md) | Auth, RLS, secrets, known gaps, incident playbook |
+| [infra/README.md](./infra/README.md) | Terraform specifics |
+
+## Public repo: secrets and client data
+
+This repo is public. Client workbooks and anything extracted from them
+(`Original/`, `AI/`, `data/`, `*.xlsm`, `*.xlsx`) are **never committed**, and
+committed test fixtures are synthetic. Production secrets are SOPS-encrypted in
+the private `Absence0760/infra-secrets` repo under `water-management/`, never
+here. See [docs/security.md § Public repo hygiene](./docs/security.md#public-repo-hygiene).
+
+## Credits
+
+The WBT b023 model architecture is © Freshwater Research Centre. The original
+workbook's code and formulas are © SmartMatix. Whether this reimplementation is
+permitted is an open question with the client (see [docs/plan.md](./docs/plan.md#questions-for-the-client)).

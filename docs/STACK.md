@@ -1,82 +1,121 @@
-# Stack — web-minimal
+# Stack: water-management
 
-Full-stack web template. Static frontend + serverless backend, deployed to AWS via GitHub Actions with OIDC. Production secrets live SOPS + AWS-KMS-encrypted in the private `infra-secrets` repo (one subdir per project), never in this repo.
+A multi-project web app for daily catchment water-balance modelling. It is a
+port of the WBT b023 Excel tool (see [model.md](./model.md)). There is a static
+SvelteKit frontend, a Hono API (a Node server locally, Lambda in production),
+Postgres with row-level security, and one TypeScript model engine that both
+sides share.
 
 ## Stack
 
-- **frontend/** — SvelteKit 5 static site (adapter-static), Vite, TypeScript, vitest. Dev port `7777`.
-- **backend/** — Hono on AWS Lambda (Function URL). TypeScript, esbuild, tsx for local dev, vitest. Dev port `3001` (`PORT` env override).
-- **infra/** — Terraform: S3 + CloudFront + Lambda + Route 53 + ACM + GitHub OIDC. No package.json.
+- **packages/engine**: `@water-management/engine`. Pure TypeScript model
+  (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest.
+  Imported as source by frontend and backend.
+- **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
+  URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`.
+  Plain SQL migrations live in `backend/migrations/`, run by
+  `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
+  (needs Postgres).
+- **frontend/**: SvelteKit 5 static site (`adapter-static`), Vite, TypeScript,
+  uPlot charts, vitest. Dev port `7777`.
+- **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
+  schema and runs migrations. The backend connects as `water_app`, which is
+  bound by RLS. The `water_test` database is for DB tests.
+- **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
+  `data/…/project.json` and regression fixtures. Output is gitignored.
+- **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda +
+  Route 53 + ACM + budget/alarms. The database is added in Phase 6
+  ([plan.md](./plan.md)).
 
-pnpm monorepo, two workspaces: `@water-management/{frontend,backend}`. Node `>=22`.
+pnpm monorepo with three workspaces (`frontend`, `backend`, `packages/*`).
+Node `>=22`, pnpm 10.
 
 ## Commands (run from repo root)
 
 ```bash
-pnpm install                 # bootstrap
-pnpm dev                     # frontend (7777) + backend (3001) in parallel
-pnpm build                   # build all workspaces
-pnpm check                   # typecheck all
-pnpm test                    # vitest run across workspaces
-pnpm frontend <script>       # run a script in one workspace
-pnpm backend <script>
+pnpm setup                  # install, start Postgres, apply migrations (one-time)
+pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up)
+pnpm dev:run:frontend       # one side only
+pnpm dev:run:backend
+
+pnpm dev:db:up              # Postgres 17 in docker on :5434
+pnpm dev:db:down
+pnpm dev:db:status | dev:db:logs
+pnpm dev:db:migrate         # apply backend/migrations as `water`
+pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local data)
+pnpm dev:db:psql            # psql as the schema owner
+
+pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
+pnpm check                  # typecheck all workspaces
+pnpm test                   # unit tests everywhere (no DB)
+pnpm test:engine | test:frontend | test:backend
+pnpm test:backend:db        # RLS/API tests against water_test (needs dev:db:up)
+pnpm test:scripts           # guard: root scripts point at real targets
 ```
 
-Tests live in `frontend/` and `backend/` (vitest).
+## First-time setup
 
-## First-time setup (after cloning this template)
+Local dev needs **no env setup**. `backend/.env.development` and
+`frontend/.env.development` are committed and hold only non-sensitive local
+defaults (localhost URLs, the throwaway docker DB passwords, a dev-only JWT
+secret). Needs Node 22, pnpm 10, and docker (with compose).
 
-Local dev needs **no env setup** — both workspaces ship a committed
-`.env.development` with non-sensitive local defaults, loaded automatically:
+```bash
+pnpm setup
+pnpm dev
+```
 
-1. Find-and-replace `water-management` with your project name across all files (package.json, infra/, scripts/, README.md). See `README.md § Customise the template` for the exact list.
-2. `pnpm install`
-3. `pnpm dev`
+The walkthrough, including how to import client catchment, is in
+[run-locally.md](./run-locally.md). Personal overrides go in a gitignored
+`<workspace>/.env.development.local`. Never edit the committed file for those.
 
-Personal overrides or real secrets you want locally go in a gitignored
-`<workspace>/.env.development.local` (loaded first, so it wins) — never edit the
-committed `.env.development`.
-
-### Deploy bootstrap (AWS — only when you're ready to ship)
-
-4. **Cross-project bootstrap** (provisions the AWS sub-account itself + tfstate bucket + KMS + OIDC deploy role + GitHub `production` env + branch protection). Run from `~/repos/templates`:
-   ```bash
-   ./scripts/new-project-account.sh <your-slug>
-   ```
-5. **Bootstrap this project's secrets slot** — production secrets live in the private `infra-secrets` repo (sibling of this repo under `~/github/`), one subdir per project, **not** in this repo. Authenticated to the project's AWS account:
-   ```bash
-   cd ../infra-secrets && ./bin/sops-init.sh --project <your-slug> --region <region>
-   ```
-6. Fill in the **real** production secrets and commit them encrypted, in `infra-secrets`:
-   ```bash
-   sops <your-slug>/prod.sops.yaml   # seed from <your-slug>/prod.sops.yaml.example
-   ```
-   Local dev does not need these — a gitignored `backend/.env.development.local` covers it. See `../infra-secrets/README.md` for the full model.
-
-Production deploy (after first-time setup): see `infra/README.md § First-time setup`.
+Deploying (only when the client is ready for it) is covered in
+[deployment.md](./deployment.md).
 
 ## Where to look
 
-- `docs/architecture.md` — system diagram and service boundaries
-- `docs/run-locally.md` — detailed local dev setup
-- `docs/deployment.md` — CI/CD, OIDC, release flow, SOPS secrets workflow
-- `docs/security.md` — risk register, mitigations, incident playbook
-- `infra/README.md` — Terraform module specifics
-- `.github/workflows/` — `ci.yml` (PR + push typecheck/test), two deploy workflows (frontend, backend), `claude.yml` Claude Code automation, `audit.yml` (weekly `pnpm audit`), `dependabot-lockfile.yml` (syncs root `pnpm-lock.yaml` on Dependabot PRs). Dependabot config in `.github/dependabot.yml`.
+- `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
+- `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
+- `docs/api.md`: HTTP contract
+- `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
+- `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
+- `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`
+- `infra/README.md`: Terraform specifics
 
-Prefer reading these over guessing. Update them when behavior changes.
+Prefer reading these over guessing. Update them when behaviour changes.
 
 ## Conventions and gotchas
 
-- **Static frontend** — no SSR. Anything dynamic goes through the backend API.
-- **Two backend entry points** — `backend/src/app.ts` builds the Hono app via `createApp()`. `backend/src/server.ts` is the local dev entry (imports `dotenv/config`). `backend/src/lambda.ts` is the AWS Lambda entry and deliberately does **not** import `server.ts`, so esbuild tree-shakes `dotenv` out of the deployment bundle. Do not add `dotenv` imports to any module reachable from `lambda.ts`.
-- **Terraform** — don't run `terraform apply` without explicit user confirmation. `plan` is fine.
-- **Infra changes** — coordinate Terraform edits with workflow changes in `.github/workflows/`.
-- **Svelte 5 runes** — use `$state`, `$derived`, `$effect`, `$props` — not the legacy options API.
+- **This repo is public.** Never commit secrets (they live in the private
+  `Absence0760/infra-secrets` repo under `water-management/`), client
+  workbooks, or anything derived from them. Committed fixtures are synthetic,
+  with no real farm names or values ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
+- **The engine stays pure.** No `fetch`, no DB, no Node or DOM APIs in
+  `packages/engine`, because it has to run in the browser *and* in Lambda.
+  Every engine change must keep the b023 regression tests green
+  ([model.md §6](./model.md#6-porting-strategy-and-regression-testing)). A
+  change in behaviour bumps `ENGINE_VERSION`.
+- Tests that need client-derived fixtures (under `data/`) skip when the
+  fixture is absent.
+- **Every project-scoped query runs as `water_app` inside a transaction that
+  sets `app.current_user_id`.** Never connect the running backend as `water`,
+  and never add `BYPASSRLS`. A new project table needs RLS policies,
+  same-project triggers and grants (use `/safe-migration`).
+- **Migrations only move forward.** Add `NNN_name.sql`; never edit a shipped one.
+- **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
+  must not reach any module that imports dotenv, so that esbuild tree-shakes it
+  out.
+- **Static frontend only.** No SSR adapters. `PUBLIC_API_URL` is
+  `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
+- **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
+- **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
+  (native) are taken.
+- **Terraform:** `plan` is fine; never `apply` without the operator's go-ahead.
 
 ## What not to do
 
-- Don't add a test framework other than vitest.
-- Don't replace pnpm with npm/yarn — workspace filters assume pnpm.
-- Don't add SSR adapters to the frontend; it must stay static for the S3 + CloudFront deploy.
-- Don't call secret-bearing services directly from the frontend — go through the backend.
+- Don't add a test framework other than vitest (Python importer tests aside).
+- Don't replace pnpm, and don't `npm install -g` anything.
+- Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
+  from its CDN tarball when the in-browser importer is built.
+- Don't call the DB or secret-bearing services from the frontend.

@@ -1,76 +1,143 @@
 # Running locally
 
+Everything runs on a laptop with no cloud account: Postgres in docker, the API
+on Node, and the site on Vite.
+
 ## Prerequisites
 
-- **Node.js 20 or later** — check with `node --version`
-- **pnpm 9 or later** — install with `npm install -g pnpm`
+- **Node.js 22** (`.tool-versions`; `node --version`). On this workstation it
+  comes from nvm.
+- **pnpm 10** via Corepack (`corepack enable`). Don't `npm install -g` it.
+- **Docker** with the compose plugin (`docker compose version`).
+- *(Only for importing workbooks)* **Python 3.14** with `openpyxl` in a virtual
+  environment.
+- `psql` (optional) for `pnpm dev:db:psql`.
 
 ## One-time setup
 
 ```bash
-pnpm install
+pnpm setup
 ```
 
-No env setup needed — both workspaces ship a committed `.env.development` with
-working local defaults (`backend/.env.development`, `frontend/.env.development`),
-loaded automatically by `pnpm dev`. They hold only non-sensitive values
-(localhost URLs, ports). To override a value locally, or to add a real secret,
-create a gitignored `.env.development.local` next to it (loaded first, so it
-wins) — don't edit the committed file.
+This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
+**127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`.
+On first boot of the empty volume, `dev/postgres/00-roles.sql` creates the
+`water_app` login role and the `water_test` database. The migrations then
+create the schema.
 
-## Running the site
+No env files to write. `backend/.env.development` and
+`frontend/.env.development` are committed and hold only throwaway local values:
+
+| Variable | Local value | Meaning |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgresql://water_app:water_app@127.0.0.1:5434/water` | The runtime connection, bound by RLS |
+| `MIGRATION_DATABASE_URL` | `postgresql://water:water@127.0.0.1:5434/water` | Schema owner, used for migrations |
+| `AUTH_JWT_SECRET` | a dev-only string (≥ 32 chars) | Signs session cookies. Production uses a real secret. |
+| `ALLOWED_ORIGINS` | `http://localhost:7777` | CORS allow-list (with credentials) |
+| `CLOUDFRONT_SHARED_SECRET` | empty | Empty turns the CloudFront header check off locally |
+| `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
+
+To override something on your machine, create a gitignored
+`.env.development.local` next to the committed file. It wins.
+
+## Run the app
 
 ```bash
 pnpm dev
 ```
 
-This starts the frontend and backend in parallel:
+- **Frontend:** http://localhost:7777
+- **Backend:** http://localhost:3001 (`GET /health` → `{ "ok": true }`)
 
-- **Frontend** — http://localhost:7777 (Vite dev server with HMR)
-- **Backend** — http://localhost:3001 (`tsx watch` auto-reloading)
+Register an account on the site. The first user needs no invitation, and each
+user starts with no projects.
 
-## Running packages individually
+## Import client catchment (demo data)
 
-```bash
-pnpm frontend dev         # frontend only
-pnpm backend dev          # backend only
-```
-
-## Type-checking
+The client workbooks live in `Original/` (gitignored, never committed). The
+importer reads a b023 workbook **read-only** and writes a `project.json` under
+`data/` (also gitignored):
 
 ```bash
-pnpm check                # all workspaces
-pnpm frontend check       # svelte-check on frontend
-pnpm backend check        # tsc --noEmit on backend
+python3 -m venv .venv && .venv/bin/pip install openpyxl
+.venv/bin/python scripts/wbt-import/extract_project.py "Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
 ```
+
+This writes `data/client-catchment/project.json` (settings, model, input series) and
+`data/client-catchment/expected.json` (the workbook's own results, used by the
+engine's regression test). The workbook must have been calculated and saved in
+Excel, because the importer reads cached values. Options are documented at the
+top of each script in `scripts/wbt-import/`. Then load
+`project.json` into a new project, either through the app's import action or
+the upload script (see [plan.md Phase 1b](./plan.md#1b-import)). Open the
+project, press **Run**, and compare the Shortfalls table with the workbook's
+`[Shortfalls]` sheet.
+
+The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's
+read-only mode, so memory stays bounded.
+
+## Multiple projects
+
+Each catchment is its own project. Create "Place A", "Place B" and "Place C"
+from the project list. **Copy** duplicates a project's model and input series
+(not its runs), which is the quickest way to start a what-if variant.
+
+## Running pieces individually
+
+```bash
+pnpm dev:run:frontend       # frontend only
+pnpm dev:run:backend        # backend only
+pnpm dev:db:status          # is Postgres up?
+pnpm dev:db:logs            # follow Postgres logs
+pnpm dev:db:psql            # psql as the owner role
+pnpm dev:db:down            # stop Postgres (data is kept in the docker volume)
+pnpm dev:db:reset           # DELETE all local data, recreate and migrate
+```
+
+## Checks and tests
+
+```bash
+pnpm check                  # typecheck all workspaces
+pnpm test                   # unit tests (engine, frontend, backend) with no DB
+pnpm test:backend:db        # API + RLS tests against the water_test database
+pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
+```
+
+The client catchment regression data comes from the import step above
+(`expected.json`) and from the extractors in `scripts/wbt-import/`, all written
+under `data/`. Without them, the
+workbook-comparison tests skip with a message, and the committed synthetic
+fixtures still run.
 
 ## Building
 
 ```bash
-pnpm build                # all workspaces
-pnpm frontend build       # static site for S3
-pnpm backend build        # esbuild bundle for Lambda
-```
-
-## Running tests
-
-```bash
-pnpm test                 # all workspaces
-pnpm backend test         # backend only
-pnpm frontend test        # frontend only
+pnpm build                  # frontend/build (static) + backend/dist/lambda.mjs
 ```
 
 ## Common issues
 
-**`PUBLIC_API_URL` is not defined at build time**
-: It's set in the committed `frontend/.env.development`. If you overrode it in `frontend/.env.development.local`, make sure that file still defines it.
+**`pnpm dev:db:up` fails: port 5434 in use**
+: Another container or Postgres is on 5434. Stop it, or change the published
+  port in `docker-compose.yml` together with both URLs in a local
+  `backend/.env.development.local`.
 
-**CORS errors in the browser**
-: `ALLOWED_ORIGINS` (in `backend/.env.development`, or your `.env.development.local` override) must include `http://localhost:7777`.
+**`password authentication failed for user "water_app"`**
+: The docker volume was created before `dev/postgres/00-roles.sql` existed (the
+  init scripts only run on an empty volume). Run `pnpm dev:db:reset`.
 
-**Port already in use**
-: Frontend is hardcoded to 7777. Backend respects `PORT` env var (default 3001).
+**Everything returns 404 for a project that exists**
+: Working as intended. Under RLS, a project you are not a member of is
+  invisible. Sign in as a member, or have an owner add you.
 
-## Next step: deploying
+**Session lost on every request / CORS errors**
+: `ALLOWED_ORIGINS` must include `http://localhost:7777` exactly, and the
+  frontend must call the API with `credentials: 'include'`.
 
-See [`deployment.md`](./deployment.md) for the AWS deployment walkthrough.
+**Port 7777 or 3001 already in use**
+: The frontend port is fixed at 7777. The backend respects `PORT`.
+
+## Next step
+
+When the client wants to use it online, see [deployment.md](./deployment.md)
+and [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws).
