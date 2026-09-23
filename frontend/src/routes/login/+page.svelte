@@ -27,7 +27,7 @@
 	}
 </script>
 
-<svelte:head><title>Sign in · Water Balance</title></svelte:head>
+<svelte:head><title>Sign in · Water Management</title></svelte:head>
 
 <AuthCard title="Sign in">
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}

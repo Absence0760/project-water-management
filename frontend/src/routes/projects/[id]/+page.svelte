@@ -111,7 +111,7 @@
 	}
 </script>
 
-<svelte:head><title>{project ? `${project.name} · ` : ''}Water Balance</title></svelte:head>
+<svelte:head><title>{project ? `${project.name} · ` : ''}Water Management</title></svelte:head>
 
 <main class="page">
 	<LoadState {loading} error={notFound ? null : error} retry={load}>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Water Management">
+  <!-- Confluence: tributaries draining through farm junctions to one outlet,
+       inside a water drop. Editable source — run brand/build.py after edits. -->
+  <path d="M60 8C60 8 22 50 22 76a38 38 0 0 0 76 0C98 50 60 8 60 8Z" fill="#0E4A6B"/>
+  <g fill="none" stroke="#E8F4F2" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M60 104V74L44 56 38 40"/>
+    <path d="M44 56 54 40"/>
+    <path d="M60 74 76 54 74 36"/>
+    <path d="M76 54 86 46"/>
+  </g>
+  <circle cx="60" cy="74" r="3.2" fill="#E8F4F2"/>
+  <circle cx="44" cy="56" r="3.2" fill="#E8F4F2"/>
+  <circle cx="76" cy="54" r="3.2" fill="#E8F4F2"/>
+  <circle cx="60" cy="104" r="5" fill="#C9892B"/>
+</svg>

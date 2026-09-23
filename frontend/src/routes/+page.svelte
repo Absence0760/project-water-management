@@ -94,7 +94,7 @@
 	}
 </script>
 
-<svelte:head><title>Projects · Water Balance</title></svelte:head>
+<svelte:head><title>Projects · Water Management</title></svelte:head>
 
 <main class="page">
 	<div class="toolbar">

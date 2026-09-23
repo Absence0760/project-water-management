@@ -1,11 +1,25 @@
-/* Design tokens + base styles. Calm, data-dense scientific-tool look. */
+/* Design tokens + base styles. Calm, data-dense scientific-tool look.
+   Brand (brand/README.md): Confluence mark, Fraunces display, deep teal + ochre. */
+@font-face {
+	font-family: 'Fraunces';
+	src: url('/fonts/fraunces-600.woff2') format('woff2');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+
 :root {
 	color-scheme: light;
 	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 	--font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+	--font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
 
-	--bg: #f4f5f4;
-	--surface: #fcfcfb;
+	--brand-teal: #0e4a6b;
+	--brand-ink: #0e3b55;
+	--brand-ochre: #c9892b;
+
+	--bg: #f5f4ef;
+	--surface: #fdfcf9;
 	--surface-2: #f0f1ef;
 	--surface-sunken: #eaecea;
 	--border: #d9dcd9;
@@ -13,9 +27,9 @@
 	--text: #161816;
 	--text-2: #4d514e;
 	--text-muted: #6c706c;
-	--accent: #1c5cab;
-	--accent-hover: #184f95;
-	--accent-soft: #e3eefb;
+	--accent: #0e4a6b;
+	--accent-hover: #0a3a55;
+	--accent-soft: #e2eef1;
 	--accent-contrast: #ffffff;
 	--danger: #b42318;
 	--danger-soft: #fdecea;
@@ -23,8 +37,8 @@
 	--warning-soft: #fdf3dc;
 	--success: #1f6f3a;
 	--success-soft: #e5f4ea;
-	--focus: #2a78d6;
-	--row-hover: #f0f4f9;
+	--focus: #1f7aa3;
+	--row-hover: #eef4f5;
 	--row-flag: #fdf3dc;
 
 	--series-1: #2a78d6;
@@ -51,18 +65,18 @@
 		--text: #eceeec;
 		--text-2: #c3c6c1;
 		--text-muted: #9a9e99;
-		--accent: #6da7ec;
-		--accent-hover: #86b6ef;
-		--accent-soft: #1c2b3f;
-		--accent-contrast: #0b1522;
+		--accent: #7cc0da;
+		--accent-hover: #99cfe3;
+		--accent-soft: #14303b;
+		--accent-contrast: #07212e;
 		--danger: #f07a70;
 		--danger-soft: #3a1c19;
 		--warning: #e0b050;
 		--warning-soft: #342a14;
 		--success: #6cc58a;
 		--success-soft: #17301f;
-		--focus: #6da7ec;
-		--row-hover: #202833;
+		--focus: #7cc0da;
+		--row-hover: #1b2a30;
 		--row-flag: #342a14;
 
 		--series-1: #3987e5;

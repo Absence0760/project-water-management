@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Water Management">
+  <!-- Favicon variant (≤ 48 px): fewer, heavier branches so they survive
+       downscaling. Editable source — run brand/build.py after edits. -->
+  <path d="M60 4C60 4 16 52 16 78a44 44 0 0 0 88 0C104 52 60 4 60 4Z" fill="#0E4A6B"/>
+  <g fill="none" stroke="#E8F4F2" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M60 104V76L40 52"/>
+    <path d="M60 76 82 50"/>
+  </g>
+  <circle cx="60" cy="106" r="9" fill="#C9892B"/>
+</svg>

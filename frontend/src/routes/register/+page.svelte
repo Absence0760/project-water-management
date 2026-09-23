@@ -32,7 +32,7 @@
 	}
 </script>
 
-<svelte:head><title>Create account · Water Balance</title></svelte:head>
+<svelte:head><title>Create account · Water Management</title></svelte:head>
 
 <AuthCard title="Create an account">
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}

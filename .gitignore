@@ -107,3 +107,4 @@ backend.config
 Original/
 AI/
 data/
+.venv-brand/
