@@ -129,7 +129,7 @@
 	<NetworkSchematic
 		{nodes}
 		transfers={editor.model.transfers}
-		selectedId={selected?.id ?? null}
+		{selectedId}
 		onselect={select}
 		editable={!readonly}
 		onreparent={reparent}
@@ -159,7 +159,7 @@
 	{:else if view === 'table'}
 		<p class="muted small intro">
 			Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; farms total {fmtPct(shares.sum, 2)}{/if}.
-			Hover a column heading, or see the field guide below, for what each value means.
+			The ⓘ buttons and the field guide below explain each value.
 		</p>
 		<div class="table-wrap">
 			<table class="data compact net">

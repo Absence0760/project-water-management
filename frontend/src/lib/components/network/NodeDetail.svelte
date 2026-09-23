@@ -173,6 +173,10 @@
 		font-size: 0.85rem;
 		color: var(--text-2);
 	}
+	/* Read-only values sit under their label rather than at the far right. */
+	.detail :global(input:read-only) {
+		text-align: left;
+	}
 	.computed {
 		padding: 0.35rem 0;
 		font-variant-numeric: tabular-nums;

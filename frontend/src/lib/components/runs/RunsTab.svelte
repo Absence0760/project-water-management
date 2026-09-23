@@ -191,6 +191,13 @@
 		}
 		return reasons.length ? reasons : null;
 	});
+	// What a run still needs (the engine refuses to run without these).
+	const missing = $derived.by(() => {
+		const out: string[] = [];
+		if (!editor.model.nodes.length) out.push('a network');
+		if (series && !series.some((x) => x.kind.startsWith('rain_') || x.kind === 'flow_pitman_m3s')) out.push('a rainfall (or Pitman flow) series');
+		return out;
+	});
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 	const downloadItems = $derived(
@@ -204,13 +211,18 @@
 			<label for="run-label">Run label <span class="muted">(optional)</span></label>
 			<input id="run-label" maxlength="200" placeholder="e.g. Baseline, 2026 dam raise" bind:value={label} disabled={running} />
 		</div>
-		<button type="submit" class="btn btn-primary" disabled={running}>
+		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0}>
 			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
 			{running ? 'Running model…' : 'Run model'}
 		</button>
 		<p class="note" role="status" aria-live="polite">
 			{#if running}
 				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
+			{:else if missing.length}
+				<span class="warn">
+					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
+					<a href="?tab=series">rainfall data</a> first.
+				</span>
 			{:else if modelDirty}
 				<span class="warn">The model has unsaved changes — runs use the last saved version.</span>
 			{:else if stale}
