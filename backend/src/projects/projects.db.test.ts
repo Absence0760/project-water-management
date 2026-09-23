@@ -144,11 +144,13 @@ describe('members and roles', () => {
 		expect((await owner.call('PATCH', `/projects/${projectId}/members/${owner.id}`, { role: 'editor' })).status).toBe(409);
 	});
 
-	it('404s when adding an email with no account', async () => {
+	it('invites (rather than 404s) an email with no account — see invites.db.test.ts', async () => {
 		const owner = await signUp('Inv');
 		const { projectId } = await projectWithModel(owner);
 		const res = await owner.call('POST', `/projects/${projectId}/members`, { email: 'ghost@example.com', role: 'viewer' });
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(201);
+		expect(res.body).toMatchObject({ invited: true, invite: { email: 'ghost@example.com', role: 'viewer' } });
+		expect((await owner.call('GET', `/projects/${projectId}/members`)).body.members).toHaveLength(1);
 	});
 
 	it('deletes a project with everything in it', async () => {

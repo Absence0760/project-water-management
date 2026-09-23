@@ -12,7 +12,7 @@ describe('auth', () => {
 		const u = await signUp('Ann');
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
-		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann' });
+		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false });
 		expect(JSON.stringify(me.body)).not.toContain('password');
 	});
 

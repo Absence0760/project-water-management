@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { dropInvite, inviteByEmail } from '../invites/invites.js';
+import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
@@ -147,23 +149,31 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/members', async (c) => {
-		const body = z.object({ email: z.string().trim().toLowerCase().email(), role: RoleEnum }).parse(await c.req.json());
+		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await c.req.json());
 		const id = c.req.param('id');
-		return withUser(c.get('userId'), async (db) => {
+		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string }>(
 				'SELECT id, email, display_name FROM app_user WHERE email = $1',
 				[body.email]
 			);
 			const user = users[0];
-			if (!user) throw new ApiError(404, 'no account with that email — ask them to register first');
+			// No account yet: invite them by email (they join once they sign up).
+			if (!user) return { invited: await inviteByEmail(db, 'project', id, body.email, body.role) };
 			const { rowCount } = await db.query(
 				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
 				[id, user.id, body.role]
 			);
 			if (!rowCount) throw new ApiError(409, 'already a member');
-			return c.json({ member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } }, 201);
+			await dropInvite(db, 'project', id, user.email);
+			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } };
 		});
+		// Mail goes out after the transaction commits, and never fails the request.
+		if (result.invited) {
+			if (result.invited.mail) await trySendMail(result.invited.mail);
+			return c.json({ invited: true, invite: result.invited.invite }, 201);
+		}
+		return c.json({ member: result.member }, 201);
 	})
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z.object({ role: RoleEnum }).parse(await c.req.json());

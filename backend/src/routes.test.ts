@@ -3,8 +3,22 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from './app.js';
 
-/** Public by design — each is exercised below without credentials. */
-const PUBLIC = new Set(['GET /health', 'POST /auth/register', 'POST /auth/login', 'POST /auth/logout']);
+/**
+ * Public by design. The email flows are public because the emailed token is
+ * the credential (the link may be opened signed out, on another device).
+ * Each is exercised without credentials below and, end to end, in
+ * auth/*.db.test.ts and invites/invites.db.test.ts.
+ */
+const PUBLIC = new Set([
+	'GET /health',
+	'POST /auth/register',
+	'POST /auth/login',
+	'POST /auth/logout',
+	'POST /auth/forgot-password',
+	'POST /auth/reset-password',
+	'POST /auth/verify-email',
+	'POST /auth/invite-info'
+]);
 
 const app = createApp();
 const routes = [
@@ -29,6 +43,31 @@ describe('route auth inventory', () => {
 			body: method === 'GET' || method === 'HEAD' ? undefined : '{}'
 		});
 		expect(res.status).toBe(401);
+	});
+
+	// Without a database: an invalid body is rejected by validation (400), which
+	// proves the route answers anonymous callers instead of demanding a session.
+	it.each([
+		'POST /auth/register',
+		'POST /auth/login',
+		'POST /auth/forgot-password',
+		'POST /auth/reset-password',
+		'POST /auth/verify-email',
+		'POST /auth/invite-info'
+	])('%s answers anonymous requests (400 on an empty body, not 401)', async (route) => {
+		const path = route.split(' ')[1]!;
+		const res = await app.request(path, {
+			method: 'POST',
+			headers: { origin: 'http://localhost:7777', 'content-type': 'application/json' },
+			body: '{}'
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it('logout and health answer anonymous requests', async () => {
+		expect((await app.request('/health')).status).toBe(200);
+		const res = await app.request('/auth/logout', { method: 'POST', headers: { origin: 'http://localhost:7777' } });
+		expect(res.status).toBe(204);
 	});
 
 	it('every allowlisted public route exists', () => {

@@ -4,8 +4,10 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
+import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
 import { ApiError, handleError } from './http/errors.js';
+import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { runRoutes } from './runs/routes.js';
@@ -62,6 +64,7 @@ export function createApp() {
 	app.get('/health', (c) => c.json({ ok: true }));
 
 	app.route('/auth', authRoutes);
+	app.route('/auth', emailAuthRoutes);
 
 	const projects = new Hono<AuthEnv>();
 	projects.use('*', requireUser);
@@ -69,11 +72,13 @@ export function createApp() {
 	projects.route('/', modelRoutes);
 	projects.route('/', seriesRoutes);
 	projects.route('/', runRoutes);
+	projects.route('/', projectInviteRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();
 	teams.use('*', requireUser);
 	teams.route('/', teamRoutes);
+	teams.route('/', teamInviteRoutes);
 	app.route('/teams', teams);
 
 	app.notFound((c) => c.json({ error: 'not found' }, 404));
