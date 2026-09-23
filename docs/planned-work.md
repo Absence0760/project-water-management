@@ -93,6 +93,8 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 
 ## Suggested order
 
+> **Superseded by [roadmap/](./roadmap/README.md)**, which groups these features into four steps by who they serve, with build plans. The order below is kept for history.
+
 1. Curtailment targets, EWR heat map, calibration window, export, help — the
    demo lands better with each (≈ 2 weeks).
 2. Email (reset, verify, invites) and the change log — needed before real

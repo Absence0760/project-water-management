@@ -106,6 +106,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
+- `docs/roadmap/`: the four-step growth plan (hydrologist tool → shared catchment → licensing → platform), one build plan per step
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
 - `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`
 - `infra/README.md`: Terraform specifics
