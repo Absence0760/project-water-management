@@ -166,6 +166,27 @@ describe('session watermark', () => {
 		expect((await u.call('GET', '/auth/me')).status).toBe(200);
 	});
 
+	it('sign out everywhere revokes every session of the account, and only that account', async () => {
+		const u = await signUp('Everywhere');
+		const other = await signUp('Bystander');
+		// A second device.
+		const second = await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' });
+		const secondCookie = second.headers.get('set-cookie')!.split(';')[0]!;
+		expect((await anon('GET', '/auth/me', undefined, secondCookie)).status).toBe(200);
+
+		const res = await anon('POST', '/auth/logout-everywhere', undefined, secondCookie);
+		expect(res.status).toBe(204);
+		expect(res.headers.get('set-cookie')).toMatch(/wm_session=;/);
+		expect((await anon('GET', '/auth/me', undefined, secondCookie)).status).toBe(401);
+		expect((await u.call('GET', '/auth/me')).status).toBe(401);
+		expect((await u.call('GET', '/projects')).status).toBe(401);
+		// Positive control: other accounts are untouched, and signing in again works at once.
+		expect((await other.call('GET', '/auth/me')).status).toBe(200);
+		const again = await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' });
+		expect(again.status).toBe(200);
+		expect((await anon('GET', '/auth/me', undefined, again.headers.get('set-cookie')!.split(';')[0]!)).status).toBe(200);
+	});
+
 	it('rejects a validly signed session for an account that no longer exists', async () => {
 		const u = await signUp('Gone');
 		await asOwner('DELETE FROM app_user WHERE id = $1', [u.id]);

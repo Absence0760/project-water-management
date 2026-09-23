@@ -108,6 +108,16 @@ export const authRoutes = new Hono<AuthEnv>()
 		clearSession(c);
 		return c.body(null, 204);
 	})
+	// Sign out every device, this one included: move the session watermark to
+	// now, so every session issued before it is rejected (session.ts).
+	.post('/logout-everywhere', requireUser, async (c) => {
+		// This server's clock, the one that stamps session iat_ms (see reset-password).
+		await withoutUser((db) =>
+			db.query('UPDATE app_user SET sessions_revoked_at = $2 WHERE id = $1', [c.get('userId'), new Date()])
+		);
+		clearSession(c);
+		return c.body(null, 204);
+	})
 	.get('/me', requireUser, async (c) => {
 		const row = await withoutUser(async (db) => {
 			const { rows } = await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [

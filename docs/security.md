@@ -21,9 +21,11 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Revocation:** every request re-reads `app_user.sessions_revoked_at`;
   a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
   as is a session for an account that no longer exists. A password reset sets
-  the watermark, so it signs out every device, including a thief's. Logout
-  clears the cookie only (that one token stays valid until expiry if it was
-  copied). Rotating `AUTH_JWT_SECRET` logs everyone out.
+  the watermark, so it signs out every device, including a thief's, and so
+  does `POST /auth/logout-everywhere` ("sign out everywhere", for a lost
+  laptop or a suspected copied cookie). Plain logout clears the cookie only
+  (that one token stays valid until expiry if it was copied). Rotating
+  `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
 - **Sign-in lockout** (`login_throttle`, `backend/src/auth/routes.ts`
   `LOGIN_THROTTLE`): the 5th sign-in attempt in a row without the right
@@ -200,8 +202,9 @@ readable by anyone. The rules:
 
 - No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
   rule. (Phase 7)
-- No self-service "sign out everywhere" or password change while signed in;
-  the `sessions_revoked_at` watermark is only set by a password reset. (Phase 7)
+- No password change while signed in (use "Forgot password"), and no
+  "Sign out everywhere" button in the UI yet — the endpoint exists
+  (`POST /auth/logout-everywhere`). (Phase 7)
 - **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
   allows inline scripts, because SvelteKit's static build emits an inline
   bootstrap script. Svelte's default escaping and the ban on `{@html}` with
