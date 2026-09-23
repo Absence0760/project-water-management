@@ -132,6 +132,8 @@ The settings are grouped by what they drive:
   a jumped-to section, or a focused control, clear of the sticky header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall (or Pitman) series. While a run is going it shows progress.
+  The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
+  oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Summary** (the "Run summary" region): headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met, irrigation
   supplied, and NSE and PBIAS with Moriasi (2007) ratings

@@ -96,3 +96,19 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(page.getByRole('region', { name: 'Explore any output' })).toBeInViewport();
 	await expect(page).toHaveURL(/#res-explore$/);
 });
+
+test('a run past the cap drops the oldest run from the list straight away', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs cap');
+	// RUNS_KEPT_PER_PROJECT is 20 (backend/.env.development).
+	for (let i = 1; i <= 20; i++) await createRun(page.request, project.id, `Old ${String(i).padStart(2, '0')}`);
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	await expect(list.getByRole('button', { name: /^Old 01/ })).toBeVisible();
+
+	await page.getByLabel(/^Run label/).fill('Newest');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
+	await expect(list.getByRole('button', { name: /^Old 01/ })).toHaveCount(0);
+	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
+});

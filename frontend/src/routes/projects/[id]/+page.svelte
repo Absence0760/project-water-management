@@ -137,9 +137,9 @@
 		rerunning = true;
 		rerunError = null;
 		try {
-			const r = await api.runs.create(projectId, `Data to ${fresh?.latest ?? today}`);
+			const { run: r, removedRunIds } = await api.runs.create(projectId, `Data to ${fresh?.latest ?? today}`);
 			const { summary: _s, ...meta } = r;
-			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id)];
+			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
 			banner = null;
 			await goto(`?tab=runs&run=${r.id}`, { noScroll: true });
 		} catch (e) {

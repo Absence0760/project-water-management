@@ -143,10 +143,11 @@
 		const t0 = Date.now();
 		timer = setInterval(() => (elapsed = Math.floor((Date.now() - t0) / 1000)), 250);
 		try {
-			const r = await api.runs.create(projectId, label.trim() || undefined);
+			const { run: r, removedRunIds } = await api.runs.create(projectId, label.trim() || undefined);
 			label = '';
 			const { summary: _summary, ...meta } = r;
-			runs = [meta, ...runs.filter((x) => x.id !== r.id)];
+			// Drop the oldest runs the server trimmed to stay within its cap.
+			runs = [meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
 			onRunsChange?.(runs);
 			select(r.id);
 		} catch (err) {

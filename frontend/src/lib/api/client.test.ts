@@ -23,6 +23,14 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ email: 'a@b.c', password: 'pw' });
 	});
 
+	it('returns the new run with the ids of runs the server trimmed (none from an older server)', async () => {
+		const run = { id: 'r21', label: 'x' };
+		const trimmed = createApi('', mockFetch(201, { run, removedRunIds: ['r1'] }));
+		await expect(trimmed.runs.create('p1')).resolves.toEqual({ run, removedRunIds: ['r1'] });
+		const older = createApi('', mockFetch(201, { run }));
+		await expect(older.runs.create('p1')).resolves.toEqual({ run, removedRunIds: [] });
+	});
+
 	it('returns undefined for 204', async () => {
 		const api = createApi('', mockFetch(204));
 		await expect(api.projects.remove('p1')).resolves.toBeUndefined();

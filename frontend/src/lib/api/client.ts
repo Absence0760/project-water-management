@@ -204,8 +204,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},
 		runs: {
+			/** Runs a model; `removedRunIds` are the oldest runs the server trimmed to stay within its cap. */
 			create: (id: string, label?: string) =>
-				request<{ run: Run }>('POST', `${p(id)}/runs`, label ? { label } : {}).then((r) => r.run),
+				request<{ run: Run; removedRunIds?: string[] }>('POST', `${p(id)}/runs`, label ? { label } : {}).then((r) => ({
+					run: r.run,
+					removedRunIds: r.removedRunIds ?? []
+				})),
 			list: (id: string) => request<{ runs: RunMeta[] }>('GET', `${p(id)}/runs`).then((r) => r.runs),
 			get: (id: string, runId: string) =>
 				request<{ run: Run; series: RunSeriesRef[] }>('GET', `${p(id)}/runs/${enc(runId)}`),
