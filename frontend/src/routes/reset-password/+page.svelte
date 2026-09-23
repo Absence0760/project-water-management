@@ -6,6 +6,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { emailAuthApi, linkToken, passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
+	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 
 	const emailAuth = emailAuthApi(api);
@@ -48,7 +49,7 @@
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title="Choose a new password">
+<AuthCard title="Choose a new password" subtitle="Pick a password you don’t use anywhere else.">
 	{#if done}
 		<div class="alert alert-info" role="status">
 			Your password has been changed and you’ve been signed out everywhere. Sign in with your new password.
@@ -60,17 +61,22 @@
 		</div>
 		<a class="btn btn-primary" href="{base}/forgot-password">Send a new link</a>
 	{:else}
+		{#if session.user}
+			<p class="signed-in">
+				You’re signed in as <strong>{session.user.email}</strong>. Setting a new password signs this browser out
+				too.
+			</p>
+		{/if}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
 				<label for="password">New password</label>
-				<input
+				<PasswordInput
 					id="password"
-					type="password"
 					autocomplete="new-password"
 					required
-					minlength="8"
-					maxlength="200"
+					minlength={8}
+					maxlength={200}
 					aria-describedby="password-hint"
 					bind:value={password}
 				/>
@@ -78,12 +84,28 @@
 			</div>
 			<div class="field">
 				<label for="confirm">Repeat new password</label>
-				<input id="confirm" type="password" autocomplete="new-password" required bind:value={confirm} />
+				<PasswordInput id="confirm" autocomplete="new-password" required maxlength={200} bind:value={confirm} />
 			</div>
 			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Set new password'}</button>
 		</form>
 	{/if}
 	{#snippet footer()}
-		<a href="{base}/login">Back to sign in</a>
+		{#if session.user}
+			<a href="{base}/">Back to your projects</a>
+		{:else}
+			<a href="{base}/login">Back to sign in</a>
+		{/if}
 	{/snippet}
 </AuthCard>
+
+<style>
+	.signed-in {
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		font-size: 0.85rem;
+		color: var(--text-2);
+		overflow-wrap: anywhere;
+	}
+</style>

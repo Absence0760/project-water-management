@@ -21,7 +21,7 @@
 				<BrandMark size={40} />
 				<span>Water Management</span>
 			</div>
-			<h1>{title}</h1>
+			<h1 class:solo={!subtitle}>{title}</h1>
 			{#if subtitle}<p class="muted intro">{subtitle}</p>{/if}
 			{@render children()}
 			<div class="footer">{@render footer()}</div>
@@ -142,6 +142,10 @@
 	}
 	.intro {
 		margin-bottom: 1.5rem;
+	}
+	/* No subtitle: keep the same gap before the first message or field. */
+	h1.solo {
+		margin-bottom: 1.25rem;
 	}
 	.form-box :global(form) {
 		margin-top: 1.25rem;

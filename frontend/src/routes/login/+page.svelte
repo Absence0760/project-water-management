@@ -16,6 +16,11 @@
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
+	// Carries what was typed, so the reset form starts filled in.
+	const forgotHref = $derived(
+		`${base}/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`
+	);
+
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
@@ -56,6 +61,7 @@
 		<div class="field">
 			<label for="password">Password</label>
 			<PasswordInput id="password" autocomplete="current-password" required bind:value={password} />
+			<a class="forgot" href={forgotHref}>Forgot password?</a>
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
 	</form>
@@ -65,6 +71,13 @@
 </AuthCard>
 
 <style>
+	.forgot {
+		align-self: flex-end;
+		font-size: 0.85rem;
+		text-decoration: underline;
+		/* Comfortable tap target without growing the visible text. */
+		padding: 0.35rem 0;
+	}
 	.demo {
 		display: flex;
 		align-items: center;

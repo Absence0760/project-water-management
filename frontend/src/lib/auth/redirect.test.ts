@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeNext } from './redirect';
-import { isPublicPath } from './session.svelte';
+import { isPublicPath, routeAccess } from './session.svelte';
 
 describe('safeNext', () => {
 	it('allows app-relative paths only', () => {
@@ -17,5 +17,27 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/app/register', '/app')).toBe(true);
 		expect(isPublicPath('/projects/1')).toBe(false);
 		expect(isPublicPath('/loginx')).toBe(false);
+	});
+});
+
+describe('routeAccess', () => {
+	it('sends signed-out visitors to login except on public pages', () => {
+		expect(routeAccess('/projects/1', '', false)).toBe('login');
+		expect(routeAccess('/', '', false)).toBe('login');
+		for (const p of ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']) {
+			expect(routeAccess(p, '', false)).toBe('show');
+		}
+	});
+
+	it('moves signed-in users off the sign-in pages only', () => {
+		expect(routeAccess('/login', '', true)).toBe('leave');
+		expect(routeAccess('/app/register', '/app', true)).toBe('leave');
+		expect(routeAccess('/forgot-password', '', true)).toBe('leave');
+		expect(routeAccess('/projects/1', '', true)).toBe('show');
+	});
+
+	it('keeps emailed reset and confirmation links usable while signed in', () => {
+		expect(routeAccess('/reset-password', '', true)).toBe('show');
+		expect(routeAccess('/app/verify-email', '/app', true)).toBe('show');
 	});
 });

@@ -30,7 +30,10 @@
 
 <svelte:head><title>Reset your password · Water Management</title></svelte:head>
 
-<AuthCard title="Reset your password">
+<AuthCard
+	title={sentTo ? 'Check your email' : 'Reset your password'}
+	subtitle={sentTo ? undefined : 'Enter the email address you signed up with and we’ll send you a link to choose a new password.'}
+>
 	{#if sentTo}
 		<!-- Same message whether or not the address has an account (no enumeration). -->
 		<div class="alert alert-info" role="status">
@@ -39,12 +42,11 @@
 		</div>
 		<button type="button" class="btn" onclick={() => (sentTo = null)}>Use a different address</button>
 	{:else}
-		<p>Enter the email address you signed up with and we’ll send you a link to choose a new password.</p>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
 				<label for="email">Email</label>
-				<input id="email" type="email" autocomplete="email" required bind:value={email} />
+				<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 			</div>
 			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
 		</form>

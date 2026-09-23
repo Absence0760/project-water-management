@@ -5,7 +5,8 @@
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
-	import { isPublicPath, session } from '$lib/auth/session.svelte';
+	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
+	import VerifyEmailBanner from '$lib/components/auth-extras/VerifyEmailBanner.svelte';
 	import AppHeader from '$lib/components/layout/AppHeader.svelte';
 
 	import '../app.css';
@@ -26,27 +27,31 @@
 
 	onMount(checkSession);
 
-	// Route guard: signed-out users go to /login (remembering where they were);
-	// signed-in users skip the auth pages — to the remembered ?next= page, so
-	// this guard and the login form's own redirect agree on where to land.
+	// Route guard (routeAccess): signed-out users go to /login (remembering
+	// where they were); signed-in users skip the sign-in pages — to the
+	// remembered ?next= page, so this guard and the login form's own redirect
+	// agree on where to land. Emailed-link pages (reset/verify) work either way.
+	const access = $derived(routeAccess(page.url.pathname, base, !!session.user));
 	$effect(() => {
 		if (!session.checked || bootError) return;
-		const path = page.url.pathname;
-		const isPublic = isPublicPath(path, base);
-		if (!session.user && !isPublic) {
-			const next = path + page.url.search;
+		if (access === 'login') {
+			const next = page.url.pathname + page.url.search;
 			goto(`${base}/login?next=${encodeURIComponent(next)}`, { replaceState: true });
-		} else if (session.user && isPublic) {
+		} else if (access === 'leave') {
 			goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		}
 	});
 
-	const ready = $derived(
-		session.checked && !bootError && (!!session.user === !isPublicPath(page.url.pathname, base))
-	);
+	const ready = $derived(session.checked && !bootError && access === 'show');
+	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
+	// even when a signed-in user opens a reset or confirmation link.
+	const authScreen = $derived(isPublicPath(page.url.pathname, base));
 </script>
 
-<AppHeader />
+{#if !authScreen}
+	<AppHeader />
+	<VerifyEmailBanner />
+{/if}
 
 {#if bootError}
 	<main class="page">

@@ -76,10 +76,10 @@ describe('linkToken', () => {
 });
 
 describe('signed-out access', () => {
-	it('forgot/reset are reachable signed out; verify-email is not (sign in, then back via ?next=)', () => {
+	it('forgot/reset/verify links work signed out', () => {
 		expect(isPublicPath('/forgot-password')).toBe(true);
 		expect(isPublicPath('/reset-password')).toBe(true);
-		expect(isPublicPath('/verify-email')).toBe(false);
+		expect(isPublicPath('/verify-email')).toBe(true);
 	});
 });
 

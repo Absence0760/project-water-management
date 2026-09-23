@@ -1,7 +1,6 @@
 <script lang="ts">
-	// Reached from the confirmation email. Signed-in only (the root layout sends
-	// a signed-out visitor to /login?next=… and back here afterwards), so the
-	// banner and /auth/me reflect the result straight away.
+	// Reached from the confirmation email. Works signed in or out (the token is
+	// the proof); signed in, the banner and session update straight away.
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -9,6 +8,7 @@
 	import { api } from '$lib/api';
 	import { emailAuthApi, linkToken } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
+	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 
 	const emailAuth = emailAuthApi(api);
 	const token = linkToken(page.url);
@@ -54,31 +54,47 @@
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<main class="page verify">
-	<h1>Confirm your email</h1>
+<AuthCard title="Confirm your email">
 	{#if status === 'working'}
 		<p role="status">Confirming your email address…</p>
 	{:else if status === 'done'}
 		<div class="alert alert-info" role="status">
-			Thanks — <strong>{session.user?.email}</strong> is confirmed. Any projects or teams you were invited to are now in your list.
+			{#if session.user}
+				Thanks — <strong>{session.user.email}</strong> is confirmed. Any projects or teams you were invited to are now
+				in your list.
+			{:else}
+				Thanks — your email address is confirmed. Sign in to see any projects or teams you were invited to.
+			{/if}
 		</div>
-		<a class="btn btn-primary" href="{base}/">Go to your projects</a>
+		{#if session.user}
+			<a class="btn btn-primary" href="{base}/">Go to your projects</a>
+		{:else}
+			<a class="btn btn-primary" href="{base}/login">Sign in</a>
+		{/if}
 	{:else}
 		<div class="alert alert-error" role="alert">
 			This confirmation link is invalid, already used, or older than 48 hours.
 		</div>
-		<button type="button" class="btn btn-primary" onclick={resend} disabled={resending}>
-			{resending ? 'Sending…' : 'Send a new link'}
-		</button>
-		<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
+		{#if session.user}
+			<button type="button" class="btn btn-primary" onclick={resend} disabled={resending}>
+				{resending ? 'Sending…' : 'Send a new link'}
+			</button>
+			<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
+		{:else}
+			<p>Sign in and use <strong>Resend email</strong> in the banner at the top of the page to get a new link.</p>
+			<a class="btn btn-primary" href="{base}/login">Sign in</a>
+		{/if}
 	{/if}
-</main>
+	{#snippet footer()}
+		{#if session.user}
+			<a href="{base}/">Back to your projects</a>
+		{:else}
+			No account yet? <a href="{base}/register">Create one</a>
+		{/if}
+	{/snippet}
+</AuthCard>
 
 <style>
-	.verify {
-		max-width: 560px;
-		padding-top: 2rem;
-	}
 	.resend {
 		margin-top: 0.75rem;
 	}
