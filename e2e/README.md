@@ -55,6 +55,7 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard; date validation |
 | `tests/series.spec.ts` | Upload rainfall + observed-flow CSVs, preview, chart; malformed CSV |
 | `tests/runs.spec.ts` | Run the model: run listed, farm summary table, charts, persisted |
+| `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run |
 | `tests/a11y.spec.ts` | axe WCAG 2.1 A/AA scan of login, register, project list, dialog, every workspace tab and the save bar, in light and dark themes |
 
 ## Rules for writing specs
