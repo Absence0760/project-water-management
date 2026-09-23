@@ -156,10 +156,16 @@ readable by anyone. The rules:
   comments, commit messages or docs examples.
 - **Local defaults only.** The committed `.env.development` files hold throwaway
   docker credentials and a dev-only JWT secret. That is safe because they grant
-  nothing outside a local container.
+  nothing outside a local container. `pnpm check:env` (CI job
+  `env-isolation`) enforces it: only `*.env.development`, `*.env.example` and
+  `frontend/.env.production` may be tracked, no sops file may be, every host a
+  dev default names must be local, and the dev-only placeholders must stay
+  placeholders.
 - **gitleaks** runs as a pre-commit hook (`pre-commit install`, never
-  `--no-verify`) and in CI. Before pushing a branch, check the diff for client
-  names as well as for keys.
+  `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
+  weekly over the whole history (`gitleaks-sweep.yml`, which opens a
+  `secret-scan` issue when it fails). Before pushing a branch, check the diff
+  for client names as well as for keys.
 - If something slips in: **don't push**. Rewrite the history locally, then tell
   the operator (see the incident playbook below).
 

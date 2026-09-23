@@ -4,8 +4,11 @@
 > This page describes the target setup and the steps to get there. The
 > Terraform (VPC, RDS, both Lambdas, SES, CloudFront + WAF + security headers,
 > alarms) is written and tested plan-only; nothing is applied. What is left is
-> operator work (account, region, secrets, apply, SES sandbox exit, release
-> triggers), tracked in [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws).
+> operator work (account, region, secrets, apply, SES sandbox exit, the
+> `production` environment's reviewer), tracked in
+> [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws). The release pipelines
+> are live: a release refuses to deploy, with a pointer to the missing step,
+> until that work is done ([§ Releasing](#releasing)).
 
 ## Target setup
 
@@ -296,23 +299,57 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
-billing access for the budget, the SES sandbox exit, and turning on the
-deploy workflows' release triggers.
+billing access for the budget, the SES sandbox exit, and the `production`
+environment's required reviewer (the release preflight refuses to deploy
+without it; see [§ Releasing](#releasing)).
 
 ## 4. CI/CD
 
-- `ci.yml` runs on every pull request and on pushes to `main`: typecheck,
-  unit tests, build, `test:backend:db` against a Postgres 17 service
-  container, Playwright e2e, and **Terraform** (`bin/check-infra.sh`:
-  `fmt -check`, `validate`, and the plan-only `terraform test` suite; no AWS
-  credentials). Docs-only diffs skip the heavy jobs, but the `CI gate` check
-  still reports. After the account exists, re-run `new-project-account.sh` so
-  that `CI gate` becomes a required check on `main`. Locally:
-  `pnpm check:infra`.
-- `deploy-frontend.yml` / `deploy-backend.yml` are **release-gated** (the
-  trigger is commented out until the first deploy) and run in
-  `environment: production`, so each deploy waits for the reviewer. They
-  authenticate with OIDC. There are no static AWS keys anywhere.
+The pipelines follow the estate standard set by `threkir` and `feohledger`.
+Every workflow pins its actions to a commit SHA, grants least-privilege
+`permissions:` per job, and reaches AWS only through GitHub OIDC; there are
+no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
+(`scripts/guards/check_workflows.mjs`, plus actionlint when it is installed).
+
+### What runs on every push to `main` and every pull request
+
+The operator currently pushes straight to `main`, so the push run is the
+complete check. PRs (Dependabot's, or anyone's) get the same run.
+
+| Workflow / job | What it checks |
+| --- | --- |
+| `ci.yml` `test` | `pnpm test:scripts`, `pnpm check`, `pnpm test`, `pnpm build`, the CSP meta policy, the **bundle budget** (`pnpm check:bundle`) and `infra/scripts/package-lambdas.sh` (the packaging the backend release runs) |
+| `ci.yml` `db-test` | `pnpm test:backend:db` against a Postgres 17 service container |
+| `ci.yml` `e2e` | `pnpm test:e2e` (Playwright, Chromium) |
+| `ci.yml` `workflow-lint` | actionlint v1.7.12, the workflow guard, and the unit tests of every guard (`pnpm test:guards`) |
+| `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |
+| `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy IaC scan |
+| `ci.yml` `gitleaks` → `gitleaks.yml` | secret scan; runs on docs-only diffs too |
+| `ci.yml` `ci-gate` | **the one required check**: fails if any job above failed |
+| `compliance-drift.yml` | advisory: personal-data columns, outside hosts or telemetry SDKs added without the matching `docs/data-model.md` / `docs/security.md` change (`pnpm check:compliance`) |
+| `security.yml` | CodeQL (JS/TS + Actions) |
+| `scorecard.yml`, `pr-mergeable.yml`, `pr-title-lint.yml`, `labeler.yml` | OpenSSF Scorecard; "CI never ran on this conflicted PR"; PR title; labels |
+
+Docs-only diffs skip the heavy jobs, but `CI gate` still reports. On `main`
+every commit keeps its own CI run and a later push does not cancel it,
+because a release needs `CI gate` green on the exact commit it ships. After
+the account exists, re-run `new-project-account.sh` so that `CI gate`
+becomes a required check on `main`.
+
+Scheduled: `audit.yml` (weekly `pnpm audit`, opens an issue),
+`gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
+issue when it fails), and weekly runs of `security.yml` and `scorecard.yml`.
+
+There is **no credentialed `terraform plan` in CI**. The only role CI can
+assume is the deploy role, which trusts `environment:production` only and
+holds deploy permissions only (`infra/oidc.tf`). A real plan would need a
+reviewer approval on every infra push, the sops key and the private
+infra-secrets repo. The mocked plan (`terraform test`) runs on every change;
+the real plan stays an operator step
+([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 8).
+
+### What each deploy does
+
 - **Frontend deploy** checks the build before uploading
   (`infra/scripts/check-csp.mjs`): every inline script must be hashed in
   SvelteKit's `<meta>` CSP, or the deploy stops. This needs
@@ -324,25 +361,76 @@ deploy workflows' release triggers.
   published: the workflow updates and synchronously invokes the migrate
   Lambda, and stops if it fails. Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
-  release.
+  release. After the API update, the job calls `/api/health` through
+  CloudFront and fails unless it answers `{"ok":true}`.
 
-Releasing:
+### Releasing
 
-```bash
-gh release create v0.2.0 --generate-notes --target main
-```
+Each deployable has its own release line, named `<component>@<semver>`
+(the threkir convention):
 
-Each workflow skips when its workspace has not changed since the previous
-release. For a manual re-run: `gh workflow run deploy-backend.yml` (this still
-goes through the environment approval).
+| Tag | Workflow | Deploys |
+| --- | --- | --- |
+| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API Lambda, then the health check |
+| `web@X.Y.Z` | `deploy-frontend.yml` | the static build to S3, then a CloudFront invalidation |
+
+**Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
+nothing. Step by step:
+
+1. Push the work to `main` and wait for `CI gate` to go green on that commit
+   (`gh run watch`, or the Actions tab). `/release-readiness` runs the
+   go/no-go checklist.
+2. Pick the version: minor for features, patch for fixes (before 1.0 a
+   breaking change bumps minor). It must be newer than the last release of
+   the same component.
+3. If the frontend needs new API behaviour, release the backend first and
+   let that deploy finish. Migrations must work with the API version still
+   serving (expand/contract, CLAUDE.md rule 2).
+4. Publish the release. The notes are generated from the commits since the
+   previous release; edit them in the web UI if they need a summary.
+
+   ```bash
+   gh release create backend@0.2.0 --target main --title "Backend 0.2.0" --generate-notes
+   gh release create web@0.2.0 --target main --title "Web 0.2.0" --generate-notes
+   ```
+
+5. The **preflight** job (`scripts/release/preflight.mjs`, no environment and
+   no AWS access) refuses the release unless all of these hold. It lists
+   every failure at once:
+   - the tag is `<component>@X.Y.Z` and newer than every published release
+     of that component;
+   - the release is published, not a draft. Prereleases (`-rc.1`, or the
+     prerelease box) are skipped and never reach production;
+   - the tagged commit is on `main` and its `CI gate` passed (it waits up to
+     30 minutes while CI is still running);
+   - the `production` environment exists **and has a required reviewer**. A
+     job that names a missing environment creates it unprotected, so the
+     preflight fails instead;
+   - every AWS variable and secret the deploy reads is set. Until the account
+     is bootstrapped and `export-tf-vars.sh` has run, **every release stops
+     here** with a pointer to the runbook, before anything is built.
+6. **build** installs dependencies and builds the artifact. It has no
+   environment and no AWS credentials, so third-party npm code never runs
+   next to them.
+7. **deploy** waits in `environment: production` until the operator opens
+   the run and clicks **Review deployments → Approve and deploy**. Only then
+   can the job get an OIDC token with the `environment:production` subject
+   the deploy role trusts.
+8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`
+   and `-migrate.zip`, or `web-X.Y.Z-build.zip`).
 
 ## Rollback
 
-- **Code:** re-run the deploy workflow for the last good release tag.
-- **Database:** migrations are forward-only. Roll back by shipping a new
-  migration. For data loss, restore to a point in time from the automated
-  backups into a new instance and repoint the Lambda. Rehearse this once before
-  go-live.
+- **Code:** deploy the last good tag by hand. It goes through the same
+  preflight (without the "newer than" rule) and the same approval:
+  `gh workflow run deploy-backend.yml -f tag=backend@0.1.0`, or
+  `gh workflow run deploy-frontend.yml -f tag=web@0.1.0`. The artifacts that
+  shipped are also attached to each Release.
+- **Database:** migrations are forward-only, so a backend rollback runs old
+  API code against the current schema. That is safe only because migrations
+  are expand/contract. To undo a migration, ship a new one. For data loss,
+  restore to a point in time from the automated backups into a new instance
+  and repoint the Lambda. Rehearse this once before go-live.
 
 ## Costs (rough, idle to light use)
 
