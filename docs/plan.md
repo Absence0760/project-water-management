@@ -348,9 +348,11 @@ rehearsed once.
 
 ## Phase 7: Production hardening
 
-- ⬜ **Accounts:** password reset and email verification (SES), and invitations
-  by email for people without an account yet (today the invitee must register
-  first).
+- ✅ **Accounts:** password reset and email verification (SES), and invitations
+  by email for people without an account yet — "Forgot password?" on sign-in,
+  a confirm-email banner, sign-up through an invite link (address locked, joins
+  on sign-up), and pending invites with re-send / revoke on the project Members
+  panel and the team page.
 - ⬜ **Abuse limits:** **per-account login lockout** (back off after N failed
   attempts per email, stored in the DB so it holds across Lambda instances),
   plus a per-IP limit on register. This adds to the WAF rate rule at the edge.

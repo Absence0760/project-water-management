@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
-	import { api, ROLES, type Member, type ProjectTeam, type Role } from '$lib/api';
+	import { api, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
+	import { emailAuthApi } from '$lib/api/emailAuth';
+	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
+	import { upsertInvite } from '$lib/components/auth-extras/invites';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cached } from './cache';
 
@@ -35,6 +38,10 @@
 	let email = $state('');
 	let role = $state<Role>('viewer');
 	let adding = $state(false);
+	let added = $state<string | null>(null);
+
+	const invitesApi = emailAuthApi(api).projectInvites;
+	let invites = $state<Invite[]>([]);
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -55,9 +62,18 @@
 		e.preventDefault();
 		adding = true;
 		error = null;
+		added = null;
 		try {
-			const m = await api.members.add(projectId, email.trim(), role);
-			members = [...members.filter((x) => x.userId !== m.userId), m];
+			const r = await api.members.add(projectId, email.trim(), role);
+			if (r.invited) {
+				invites = upsertInvite(invites, r.invite);
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+			} else {
+				const m = r.member;
+				members = [...members.filter((x) => x.userId !== m.userId), m];
+				invites = invites.filter((x) => x.email.toLowerCase() !== m.email.toLowerCase());
+				added = `${m.displayName} added as ${m.role}.`;
+			}
 			email = '';
 		} catch (err) {
 			error = msg(err);
@@ -191,7 +207,24 @@
 				<button class="btn btn-primary" type="submit" disabled={adding || !email.trim()}>{adding ? 'Adding…' : 'Add'}</button>
 			</div>
 		</form>
-		<p class="muted small">The person must already have an account. Viewers can read; editors can change the model and run it; owners also manage members.</p>
+		<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
+		<p class="muted small add-hint">
+			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
+			run it; owners also manage members.
+		</p>
+		<PendingInvites
+			bind:invites
+			idPrefix="project"
+			load={() => invitesApi.list(projectId)}
+			resend={async (inv) => {
+				const r = await invitesApi.add(projectId, inv.email, inv.role as Role);
+				if (r.invited) return r.invite;
+				// Signed up meanwhile: a member now, not an invite.
+				members = [...members.filter((x) => x.userId !== r.member.userId), r.member];
+				return null;
+			}}
+			revoke={(inv) => invitesApi.revoke(projectId, inv.id)}
+		/>
 	{/if}
 </section>
 
@@ -225,6 +258,17 @@
 		width: 60%;
 		border-radius: 3px;
 		background: var(--surface-sunken);
+	}
+	.added {
+		margin: 0.5rem 0 0;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.added:empty {
+		margin: 0;
+	}
+	.add-hint {
+		margin: 0.5rem 0 0;
 	}
 	.team-note {
 		margin: -0.25rem 0 0.75rem;

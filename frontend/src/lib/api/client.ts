@@ -8,6 +8,7 @@ import type {
 	SeriesMeta
 } from '@water-management/engine';
 import type {
+	AddMemberResult,
 	Member,
 	Project,
 	ProjectSummary,
@@ -116,10 +117,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			login: (email: string, password: string) =>
 				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
-			register: (email: string, password: string, displayName: string) =>
-				request<{ user: User }>('POST', '/auth/register', { email, password, displayName }).then(
-					(r) => r.user
-				),
+			/** `inviteToken` from a `/register?invite=…` link: a live invite for the same address starts the account verified and joined. */
+			register: (email: string, password: string, displayName: string, inviteToken?: string | null) =>
+				request<{ user: User }>('POST', '/auth/register', {
+					email,
+					password,
+					displayName,
+					...(inviteToken ? { inviteToken } : {})
+				}).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout')
 		},
 		projects: {
@@ -149,8 +154,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		members: {
 			list: (id: string) =>
 				request<{ members: Member[] }>('GET', `${p(id)}/members`).then((r) => r.members),
+			/** An address with no account gets a pending invite instead (`{ invited: true, invite }`). */
 			add: (id: string, email: string, role: Role) =>
-				request<{ member: Member }>('POST', `${p(id)}/members`, { email, role }).then((r) => r.member),
+				request<AddMemberResult<Member>>('POST', `${p(id)}/members`, { email, role }),
 			setRole: (id: string, userId: string, role: Role) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member
@@ -165,8 +171,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			rename: (id: string, name: string) =>
 				request<{ team: Team }>('PATCH', t(id), { name }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
+			/** An address with no account gets a pending invite instead (`{ invited: true, invite }`). */
 			addMember: (id: string, email: string, role: TeamRole) =>
-				request<{ member: TeamMember }>('POST', `${t(id)}/members`, { email, role }).then((r) => r.member),
+				request<AddMemberResult<TeamMember>>('POST', `${t(id)}/members`, { email, role }),
 			setRole: (id: string, userId: string, role: TeamRole) =>
 				request<{ member: TeamMember }>('PATCH', `${t(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member

@@ -70,6 +70,31 @@ export interface TeamMember {
 	role: TeamRole;
 }
 
+/** A pending invitation for an address that has no account yet (docs/api.md § Invites). */
+export interface Invite {
+	id: string;
+	email: string;
+	role: string;
+	/** Display name of whoever (re-)sent it. */
+	invitedBy: string;
+	createdAt: string;
+	expiresAt: string;
+	expired: boolean;
+}
+
+/** What an invite link is for (POST /auth/invite-info). */
+export interface InviteInfo {
+	email: string;
+	projectName: string | null;
+	teamName: string | null;
+	invitedBy: string;
+}
+
+/** POST …/members answers with a member (existing account) or an invite (no account yet). */
+export type AddMemberResult<M> =
+	| { member: M; invited?: undefined; invite?: undefined }
+	| { invited: true; invite: Invite; member?: undefined };
+
 export interface RunMeta {
 	id: string;
 	label: string | null;

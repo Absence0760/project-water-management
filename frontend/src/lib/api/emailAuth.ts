@@ -3,30 +3,9 @@
 // it can land without touching the shared client; it goes through the same
 // `request`, so errors are the usual ApiError.
 import type { Api } from './client';
-import type { Member, Role, TeamMember, TeamRole } from './types';
+import type { AddMemberResult, Invite, InviteInfo, Member, Role, TeamMember, TeamRole } from './types';
 
-/** A pending invitation for an address that has no account yet. */
-export interface Invite {
-	id: string;
-	email: string;
-	role: string;
-	/** Display name of whoever (re-)sent it. */
-	invitedBy: string;
-	createdAt: string;
-	expiresAt: string;
-	expired: boolean;
-}
-
-/** What an invite link is for (POST /auth/invite-info). */
-export interface InviteInfo {
-	email: string;
-	projectName: string | null;
-	teamName: string | null;
-	invitedBy: string;
-}
-
-/** POST …/members answers with a member (existing account) or an invite (no account yet). */
-export type AddMemberResult<M> = { member: M; invited?: undefined } | { invited: true; invite: Invite; member?: undefined };
+export type { AddMemberResult, Invite, InviteInfo } from './types';
 
 const enc = encodeURIComponent;
 

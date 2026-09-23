@@ -3,8 +3,20 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, ApiError, TEAM_ROLES, type ProjectSummary, type Team, type TeamMember, type TeamRole } from '$lib/api';
+	import {
+		api,
+		ApiError,
+		TEAM_ROLES,
+		type Invite,
+		type ProjectSummary,
+		type Team,
+		type TeamMember,
+		type TeamRole
+	} from '$lib/api';
+	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
+	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
+	import { upsertInvite } from '$lib/components/auth-extras/invites';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -29,6 +41,16 @@
 	let role = $state<TeamRole>('member');
 	let adding = $state(false);
 	let addError = $state<string | null>(null);
+	let added = $state<string | null>(null);
+
+	const invitesApi = emailAuthApi(api).teamInvites;
+	let invites = $state<Invite[]>([]);
+
+	function addToMembers(m: TeamMember) {
+		const known = members.some((x) => x.userId === m.userId);
+		members = [...members.filter((x) => x.userId !== m.userId), m];
+		if (team && !known) team.memberCount += 1;
+	}
 
 	let deleteOpen = $state(false);
 	let deleting = $state(false);
@@ -81,10 +103,17 @@
 		e.preventDefault();
 		adding = true;
 		addError = null;
+		added = null;
 		try {
-			const m = await api.teams.addMember(teamId, email.trim(), role);
-			members = [...members, m];
-			if (team) team.memberCount += 1;
+			const r = await api.teams.addMember(teamId, email.trim(), role);
+			if (r.invited) {
+				invites = upsertInvite(invites, r.invite);
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+			} else {
+				addToMembers(r.member);
+				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());
+				added = `${r.member.displayName} added as ${r.member.role}.`;
+			}
 			email = '';
 			role = 'member';
 		} catch (err) {
@@ -256,12 +285,27 @@
 								</div>
 							</div>
 						</form>
+						<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
+						{#key teamId}
+							<PendingInvites
+								bind:invites
+								idPrefix="team"
+								load={() => invitesApi.list(teamId)}
+								resend={async (inv) => {
+									const r = await invitesApi.add(teamId, inv.email, inv.role as TeamRole);
+									if (r.invited) return r.invite;
+									addToMembers(r.member);
+									return null;
+								}}
+								revoke={(inv) => invitesApi.revoke(teamId, inv.id)}
+							/>
+						{/key}
 					{/if}
 					<dl class="roles">
 						<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
 						<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
 					</dl>
-					<p class="muted small">People need an account first: ask them to register with the same email.</p>
+					<p class="muted small">Anyone without an account gets an email invitation to sign up.</p>
 				</section>
 
 				<div class="side">
@@ -373,6 +417,14 @@
 	}
 	.add {
 		margin-top: 1rem;
+	}
+	.added {
+		margin: 0.5rem 0 0;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.added:empty {
+		margin: 0;
 	}
 	.add .field {
 		margin-bottom: 0;

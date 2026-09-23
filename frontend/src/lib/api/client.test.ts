@@ -137,6 +137,27 @@ describe('teams client', () => {
 		expect(call(f, 2)).toEqual({ url: '/teams/t/members/u%2F1', method: 'PATCH', body: { role: 'admin' } });
 	});
 
+	it('members.add / teams.addMember return the member or the pending invite, never undefined', async () => {
+		const member = { userId: 'u', email: 'a@b.c', displayName: 'A', role: 'viewer' };
+		const m = await createApi('', mockFetch(201, { member })).members.add('p', 'a@b.c', 'viewer');
+		expect(m).toEqual({ member });
+
+		const invite = { id: 'i', email: 'new@b.c', role: 'member', invitedBy: 'Ann', createdAt: '', expiresAt: '', expired: false };
+		const r = await createApi('', mockFetch(201, { invited: true, invite })).teams.addMember('t', 'new@b.c', 'member');
+		expect(r.invited).toBe(true);
+		expect(r.invite).toEqual(invite);
+		expect(r.member).toBeUndefined();
+	});
+
+	it('register sends inviteToken only when there is one', async () => {
+		const f = mockFetch(201, { user: { id: 'u' } });
+		const api = createApi('', f);
+		await api.auth.register('a@b.c', 'longenough', 'A');
+		await api.auth.register('a@b.c', 'longenough', 'A', 'tok');
+		expect(call(f, 0).body).toEqual({ email: 'a@b.c', password: 'longenough', displayName: 'A' });
+		expect(call(f, 1).body).toEqual({ email: 'a@b.c', password: 'longenough', displayName: 'A', inviteToken: 'tok' });
+	});
+
 	it('deletes teams and members (204)', async () => {
 		const f = mockFetch(204);
 		const api = createApi('', f);
