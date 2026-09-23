@@ -2,6 +2,7 @@
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
 import type { CropDef, NetworkNode, ProjectModel, Transfer } from '@water-management/engine';
+import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -60,9 +61,10 @@ export class ModelEditor {
 	issues = $derived<ModelIssue[]>(validateModel(this.model));
 
 	load(m: ProjectModel) {
+		// Array order = display order (sortOrder) from here on; reordering keeps them in step.
 		const normalised: ProjectModel = {
-			nodes: m.nodes ?? [],
-			crops: m.crops ?? [],
+			nodes: bySortOrder(m.nodes ?? []),
+			crops: bySortOrder(m.crops ?? []),
 			cropAreas: m.cropAreas ?? [],
 			transfers: m.transfers ?? []
 		};
@@ -108,6 +110,7 @@ export class ModelEditor {
 	addCrop() {
 		const c = newCrop();
 		c.name = `Crop ${this.model.crops.length + 1}`;
+		c.sortOrder = this.model.crops.reduce((m, x, i) => Math.max(m, (x.sortOrder ?? i) + 1), 0);
 		this.model.crops.push(c);
 		return c;
 	}

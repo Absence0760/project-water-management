@@ -48,4 +48,28 @@ describe('ModelEditor', () => {
 		ed.setCropArea(g.id, c.id, 0);
 		expect(ed.model.cropAreas).toHaveLength(0);
 	});
+
+	it('loads nodes and crops in their saved display order', () => {
+		const ed = new ModelEditor();
+		const node = (id: string, sortOrder: number) => ({ ...ed.addNode(), id, name: id, sortOrder });
+		const nodes = [node('b', 2), node('a', 0), node('c', 1)];
+		ed.load({
+			nodes,
+			crops: [
+				{ id: 'y', name: 'y', cropFactor: [], sortOrder: 1 },
+				{ id: 'x', name: 'x', cropFactor: [], sortOrder: 0 }
+			],
+			cropAreas: [],
+			transfers: []
+		});
+		expect(ed.model.nodes.map((n) => n.id)).toEqual(['a', 'c', 'b']);
+		expect(ed.model.crops.map((c) => c.id)).toEqual(['x', 'y']);
+		expect(ed.dirty).toBe(false);
+	});
+
+	it('gives a new crop the next display position', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [{ id: 'x', name: 'x', cropFactor: [], sortOrder: 4 }], cropAreas: [], transfers: [] });
+		expect(ed.addCrop().sortOrder).toBe(5);
+	});
 });
