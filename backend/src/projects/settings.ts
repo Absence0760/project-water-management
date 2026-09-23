@@ -36,7 +36,9 @@ export const SettingsPatch = z
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
 		simulationStart: isoDate.nullable(),
-		simulationEnd: isoDate.nullable()
+		simulationEnd: isoDate.nullable(),
+		reportStart: isoDate.nullable(),
+		reportEnd: isoDate.nullable()
 	})
 	.partial()
 	.passthrough()

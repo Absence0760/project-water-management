@@ -59,6 +59,18 @@ describe('projects', () => {
 		expect((await u.call('PATCH', `/projects/${id}`, { settings: { apanMm: [1, 2] } })).status).toBe(400);
 	});
 
+	it('stores the curtailment reporting window (null by default) and rejects non-dates', async () => {
+		const u = await signUp('R');
+		const { body } = await u.call('POST', '/projects', { name: 'R' });
+		const id = body.project.id;
+		expect(body.project.settings.reportStart).toBeNull();
+		expect(body.project.settings.reportEnd).toBeNull();
+		const res = await u.call('PATCH', `/projects/${id}`, { settings: { reportStart: '2015-12-31', reportEnd: '2016-03-01' } });
+		expect(res.status).toBe(200);
+		expect([res.body.project.settings.reportStart, res.body.project.settings.reportEnd]).toEqual(['2015-12-31', '2016-03-01']);
+		expect((await u.call('PATCH', `/projects/${id}`, { settings: { reportStart: 'last summer' } })).status).toBe(400);
+	});
+
 	it('round-trips the model document and rejects invalid networks', async () => {
 		const u = await signUp('M');
 		const { projectId, model } = await projectWithModel(u);
