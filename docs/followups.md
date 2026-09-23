@@ -1,119 +1,134 @@
-# Follow-ups — open work at the end of the V1 build session (2026-09-23)
+# Follow-ups: open work (updated 2026-09-23, after the audit and hardening round)
 
 Everything below is known, unfinished work. Longer-term features live in
-[planned-work.md](./planned-work.md); client/hydrologist questions in
+[planned-work.md](./planned-work.md); client and hydrologist questions are in
 [plan.md § Questions for the client](./plan.md#questions-for-the-client).
 Tick items off (or move them into an issue) as they are done.
 
-## Before sharing more widely
+## Blocking releases (operator)
 
-- [ ] **Client names in docs.** Docs still name the Client Catchment catchment and
-      some of its farms; scrub them before making the GitHub repo public (it
-      was pushed private).
-- [ ] **Hydrologist review** of the first question in plan.md (gauge G1 vs
-      logger A1 from 2014/15) — it decides what Client Catchment is calibrated to. Tracked in
+- [ ] **GitHub plan.** The repo is private on a free plan, so:
+      - required reviewers and branch protection aren't available, which means
+        the release preflight refuses every release;
+      - CodeQL and Scorecard fail on every push.
+
+      Make the repo public (after the scrub below) or upgrade the plan. Then
+      make `CI gate` a required check.
+- [ ] **Client names in docs.** The docs, and issue #2, still name the client
+      catchment catchment and some of its farms. Scrub them before making the repo
+      public.
+- [ ] **`production` environment:** run
+      `templates/scripts/backfill-prod-environment.sh --apply`, with the
+      operator as required reviewer.
+- [ ] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
+      `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
+      for everything, SES included ([deployment.md § Region
+      recommendation](./deployment.md)). If that's the choice, raise
+      `budget_monthly_usd` to about 70 and set `dmarc_report_email`.
+
+## Hydrologist
+
+- [ ] **Calibration record:** gauge G1 vs logger A1 from 2014/15, tracked in
       [#2](https://github.com/Absence0760/project-water-management/issues/2).
-- [ ] **Hydrologist read-through of the help text** (`frontend/src/lib/help/content.ts`),
-      especially entries built on open quirks (Q1 upstream-to-dam label, Q4
-      per-farm EWR share, Q5 minimum dam level).
+      The runoff-ratio check needs the client catchment workbook back in
+      `../project-water-management-source/Original/`.
+- [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):
+      - H1: a storm resets base flow, so one storm returns about 4.9× its rain.
+      - N1: there's no irrigation efficiency.
+      - N2: dam evaporation and seepage are ignored.
+      - N3: rain only offsets demand on the day it falls.
+      - N4, Q3, Q18: transfer rules.
+      - Q17: how the EWR shortfall is attributed to farms.
+      - Q1, Q5, Q11, Q13: field meanings and curtailment policy.
+- [ ] **Return flow and curtailment:** with return flow on, a farm upstream of
+      a starved neighbour can "help" it by drawing more, because part of the
+      extra draw returns to the river. Keep this in mind when reading
+      curtailment results (it relates to N1).
+- [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
+      10× for flow; flat-lines are 5 days for rain and 14 for flow. Are these
+      right for these catchments? They're fixed in code.
+- [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
+      especially the entries built on open quirks.
+- [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny
+      demand (Q12/Q13). Decide how to show it once answered.
 
-## Verification (algorithms)
+## Verification
 
-State at the end of the session (details in [engine-review.md](./engine-review.md)):
+- ✅ **Engine audit** (engine 0.4.0, [engine-audit.md](./engine-audit.md)):
+  - E1/E2: base flow on day 1, and negative recession.
+  - R1: the model no longer rounds.
+  - G1: gauge EWR shortfall.
+  - C1: Pitman calibrates against natural flow.
+  - M1: importer month lists.
+  - W1–W5: new warnings.
+  - F8: order-dependent float noise in EWR shortfalls.
+- ✅ **Invariant suite** (`packages/engine/src/testing/invariants.ts`) runs on
+  random networks, the three example catchments and client catchment (when `data/`
+  is present). Soaked over seeds 1–20000. Described in model.md §6
+  Verification.
+- ✅ The engine rejects networks with more than one outflow node.
+- [ ] **client catchment regression on real data:** the suite has a commented
+      deviation list but has never run against the real workbook. Re-extract
+      it and run `pnpm test:engine`; a failure prints the actual difference
+      next to its bound.
+- [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
+      formulas, which the engine no longer follows. Decide whether to delete it
+      or rebuild it against the audited model. Operator call.
+- [ ] Soak the fuzz tests after any engine change:
+      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
 
-- ✅ **Workbook match:** client catchment reproduced exactly (flow columns, 13 element
-  sheets × 16 161 days, Shortfalls) — `pnpm test:engine` with `data/` present.
-- ✅ **Invariant fuzz tests** (`packages/engine/src/run.invariants.test.ts`,
-  400 random networks per run; `FUZZ_CASES=20000` for a soak): water balance,
-  non-negativity, capacity, supply ≤ demand, transfer limits, determinism,
-  order invariance. They found two engine bugs, both **fixed** (commit 45f1520):
-  several transfers from one dam could overdraw it (review F1 / quirk Q18), and
-  rounding of a fractional inflow split could make supply negative.
-- 🚧 **Expert review:** units, calendar, rounding, rain/flow LAMBDAs, farm balance,
-  routing, calibration statistics and curtailment verified against the cells.
-  Still to review: `compare.ts`, `quality.ts` edge cases, `ewr.ts` in depth.
-  Open findings: F3 (per-farm EWR shortfalls don't add up to the outlet's — Q17,
-  hydrologist), F4 (workbook Farm spec shares for three farms — Q16), F5 (two
-  copies of the Excel rounding helper — merge them), F7 (warn when a farm's area
-  ≠ hi + lo area).
-- [ ] **Independent Python implementation** (`verify/`): only the formula spec
-      exists; build the model, runner and `diff.py`, then run the three-way
-      comparison (see status below).
-- [ ] Soak-run the fuzz tests after any engine change:
-      `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts` (`FUZZ_SEED` picks the start).
-- [ ] Invariant checks not written yet: per-day transfer limits (rate, daily cap,
-      min storage, months), order invariance (the scramble helper exists in
-      `src/testing/fuzz.ts`), "doubling crop areas never raises the supply
-      fraction", curtailment/EWR-grid totals, running the invariants on the three
-      examples and client catchment, and a Verification subsection in model.md §6.
-- [ ] With several outflow nodes the engine would pick the outlet by array order;
-      the backend forbids that today — make the engine reject it too.
-- ✅ **e2e:** full Playwright suite green on the final `main` — 62 passed.
+## UI
 
-## UI polish
-
-- [ ] Thousands separators in the one-node form and the view-only network table (300000 → 300 000).
-- [ ] Schematic: transfer arcs can cross node labels.
-- [ ] Runs & results page is long — add in-page anchors / a section menu.
-- [ ] Curtailment "Demand left %" shows extreme values for farms with tiny
-      demand (workbook formula, quirk Q12/Q13) — decide how to display once the
-      hydrologist answers.
-- [ ] Overview tab: take `model`/`series`/`runs` props from the page (already
-      loaded) instead of fetching its own (not started).
-- [ ] A signed-in user opening `/register?invite=…` is sent home — explain it instead.
-- [ ] "Today" in the workspace freshness uses the UTC date while the project list
-      uses the local date — they can disagree by a day around midnight.
-- [ ] Long emails in member rows break mid-word on phones.
-- [ ] Re-shoot the auth split layout after the `html { overflow-y: scroll }` change.
+- [ ] **Thousands separator style:** the app uses commas (300,000). The
+      original ask was spaces (300 000). Pick one app-wide.
+- [ ] **"Sign out everywhere" button.** `POST /auth/logout-everywhere` exists,
+      but the header has no account menu for it yet.
+- [ ] **Exports carry unrounded values** now that the engine doesn't round.
+      Decide on export number formatting.
 
 ## Features left half-way
 
-- **Run comparison:** store a content hash per input series with each run so
-  "what changed" catches corrected values inside the same dates; per-node series
-  overlay; copies remembering their source nodes (renamed farms in a copy don't
-  match).
-- **Export:** `.xlsx` output; a path for exports > 5 MB (Lambda response
-  streaming or S3 pre-signed URL); summary CSV "fraction supplied" as %.
-- **Email:** SES in Terraform (domain identity + DKIM, MAIL FROM, SPF/DMARC,
-  IAM `ses:SendEmail`, VPC endpoint, sandbox exit — listed in
-  deployment.md § Email); adding an *unverified* existing account currently
-  makes it a member directly (should invite); verify-email links need a signed-in
-  user; decide whether sign-in requires a verified email and whether sign-up is
-  invite-only (client question).
-- **Data ingestion:** per-project API keys for logger feeds, scheduled CHIRPS /
-  DWS fetchers, auto re-run after new data, forecast days flagged (plan.md §1e).
-- **Data quality:** show more checks (outliers, flat-lines, gap filling); make the
-  gauge-vs-logger thresholds a project setting.
-- **Workbook import in the browser** (currently the Python CLI only).
+- **Run comparison:**
+  - per-node series overlay;
+  - copies that remember their source nodes (renamed farms in a copy don't
+    match);
+  - a value change is not isolated when the dates also changed.
+- **Export:**
+  - `.xlsx` output, which needs a spreadsheet library (operator call; not the
+    npm `xlsx` package);
+  - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
+    plus a local MinIO equivalent).
+- **Accounts:**
+  - Should sign-in require a verified email?
+  - Should sign-up be invite-only, or email-first? Email-first closes the last
+    account-squatting gap.
+  - Is a 5-attempt, 1–15 min lockout acceptable, given anyone can lock another
+    person's address that way?
+  - Should runs be pinnable, so a baseline survives the 20-run cap?
+- **Data ingestion:**
+  - per-project API keys for logger feeds;
+  - scheduled CHIRPS / DWS fetchers;
+  - auto re-run after new data;
+  - forecast days flagged (plan.md §1e).
+- **Data quality:** gap filling.
+- **Workbook import in the browser.** It is the Python CLI only today.
 
-## Deploy (nothing applied yet)
+## Pipelines
 
-- [ ] Operator steps in `infra/README.md` (account bootstrap via
-      `new-project-account.sh water-management`, sops secrets in infra-secrets,
-      Lambda concurrency quota, billing access, `terraform plan/apply`,
-      `export-tf-vars.sh`, first deploys) → `water-management.jaredhoward.com`.
-- [ ] Choose the region (af-south-1 is opt-in; check SES availability there).
-- [ ] Add `terraform fmt -check` / `validate` / `test` to CI; uncomment the
-      deploy workflows' release triggers when ready.
-- [ ] Re-run `new-project-account.sh` after the repo exists on GitHub so the
-      `CI gate` required check and the `production` environment are wired.
+- Releases are `web@X.Y.Z` / `backend@X.Y.Z` GitHub releases, run through a
+  preflight → build → `production` approval → deploy pipeline
+  ([deployment.md §4](./deployment.md)).
+- [ ] Optional:
+      - a read-only Terraform plan role, for a real `terraform plan` in CI;
+      - drop the Dependabot `pip` entry, which watches nothing;
+      - a CodeQL Python leg for `scripts/wbt-import`.
 
 ## Housekeeping
 
-- The repo's CLAUDE.md says "never push"; the first push to GitHub was done at
-  the owner's explicit request at the end of this session.
-- Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database
-  (three invented example catchments, a demo team, two demo users, Client Catchment
-  if the workbook is present).
-
-## Status of work in flight at the end of the session
-
-- **Independent Python implementation (`verify/`)**: stopped at the spec stage.
-  `verify/README.md` holds the formulas transcribed from the client catchment workbook
-  (Flow data pipeline, fragmentation, demand, farm row-17 balance, transfer cap);
-  Transfers, Fragmented EWR, EWR shortfalls and Shortfalls are not transcribed.
-  No Python model, runner or `diff.py` yet — nothing is verified by it. It flagged
-  workbook behaviours to test the engine against: month lists matched as text
-  (a summer list `[11]` also makes January summer), the day-1 base-flow factor
-  (2·f1 − f2), **dam capacity rounded to whole m³** (0.15 m³ dams become 0), and
-  Farm spec shares for three farms always using the area share whatever the method.
+- During early development, work is pushed straight to `main`, without PRs, at
+  the operator's request.
+- Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database.
+  It holds three invented catchments, a demo team, two demo users, and client
+  catchment if the workbook is present.
+- The domain personas (`/persona hydrologist,environmentalist,…`) are ready to
+  run against the merged app. See `.claude/personas/README.md`.
