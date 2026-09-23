@@ -36,6 +36,10 @@ export interface ProjectSummary {
 	team: ProjectTeam | null;
 	createdAt: string;
 	updatedAt: string;
+	/** Last day any of the project's time series covers (YYYY-MM-DD), or null with no data. */
+	dataUntil: string | null;
+	/** ISO timestamp of the newest run, or null. */
+	lastRunAt: string | null;
 }
 
 export interface Project extends ProjectSummary {
