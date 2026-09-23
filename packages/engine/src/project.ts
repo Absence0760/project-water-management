@@ -435,6 +435,11 @@ export interface RunSummary {
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
+		/**
+		 * Natural-flow volume / rain volume on the catchment over the run (engine
+		 * ≥ 0.4.0); null without rain. Above 1 is physically impossible and warns.
+		 */
+		runoffCoefficient?: number | null;
 		ewrDaysNotMet: number;
 		ewrFractionDaysNotMet: number;
 	};

@@ -170,6 +170,20 @@ The interpolated factor is clamped at 0, so an index below 1 (a pulse starting a
 `ShiftPeakIndexLo` < 1) can shrink a flow to nothing but never make it negative
 ([audit E2](./engine-audit.md)).
 
+**Checks on every run** (warnings, engine ≥ 0.4.0; [audit W1–W5](./engine-audit.md)):
+
+- **Runoff coefficient** = natural-flow volume / rain volume on the catchment
+  over the run (`summary.catchment.runoffCoefficient`). Above 1 the catchment
+  gives back more water than fell on it, which is impossible over a whole
+  record, so the run warns. The structure makes this easy to reach: a storm
+  resets the base flow to the storm's peak, which then recedes along the slow
+  part of the curve (audit H1, a question for the hydrologist).
+- **Days with no rainfall value** from any source are counted: the model treats
+  them as dry (0 mm), for runoff and for demand.
+- **Days of Pitman fallback** (quirk Q7) are counted.
+- **Recession table**: a factor outside 0–1, a curve that rises, or tables of
+  different length.
+
 The same sheet also:
 
 - Picks the **observed** flow series used for calibration: Pitman (1), gauge
@@ -197,7 +211,10 @@ method is chosen in `[Farm spec]`:
 | **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split, default 0.81 / 0.19) |
 | **Specific** | A value entered by hand ("external fragmentation") |
 
-The shares should sum to 1 within `0.0002` (fragmentation tolerance). Then:
+The shares should sum to 1 within `0.0002` (fragmentation tolerance). With the
+Hi/Lo method the run also warns about any farm whose area differs from its hi +
+lo areas by more than 1 %: the shares use hi + lo, the rain volume uses the area
+([audit W3](./engine-audit.md), engine review F7). Then:
 
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
@@ -460,7 +477,7 @@ stay reproducible and the engine version records which one was used.
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
-| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. Days with no rain data silently use a different source. | Mixed sources in one series. The UI should flag these days. |
+| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. From engine 0.4.0 the run warns with the number of fallback days and of days without rain data (audit W2, W5). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { runModel, runModelWith } from './run';
+import { defaultProjectSettings } from './project';
+
+const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { waterYearIndex } from './calendar';
@@ -490,8 +493,8 @@ describe('runModel — flow shares', () => {
 	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
 		const out = run({
 			nodes: [
-				node('A', { downstreamNodeId: 'B', areaHiKm2: 3, areaLoKm2: 1 }),
-				node('B', { sortOrder: 1, areaHiKm2: 1, areaLoKm2: 3 })
+				node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
+				node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
 			],
 			settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.8, lo: 0.2 } },
 			natural: [1000]
@@ -992,6 +995,68 @@ describe.skipIf(!dataDir)(
 		});
 	}
 );
+
+describe('runModel — soundness warnings (audit W1–W5)', () => {
+	const rainInput = (rain: (number | null)[], startDate = '2021-07-01', over: Partial<ProjectSettings> = {}): ModelInput => ({
+		settings: { ewrPragmaticM3PerDay: zeros, ...over },
+		model: { nodes: [node('A', { areaKm2: 100, downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 })], crops: [], cropAreas: [], transfers: [] },
+		series: { rain_catchment_mm: { startDate, values: rain } }
+	});
+	const warns = (out: { summary: { warnings: string[] } }, re: RegExp) => out.summary.warnings.filter((w) => re.test(w));
+
+	it('W1: warns when the rain model makes more runoff than the rain that fell, and reports the runoff coefficient', () => {
+		// One 10 mm winter storm on a dry 100 km² catchment: the base flow resets to the
+		// storm peak and recedes along the slow part of the default curve, giving ~7× the rain volume.
+		const rain = new Array(400).fill(0);
+		rain[1] = 10;
+		const out = runModel(rainInput(rain, '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
+		const c = out.summary.catchment.runoffCoefficient!;
+		const natural = get(out, null, 'natural_flow').reduce((a, b) => a + b, 0);
+		expect(c).toBeCloseTo(natural / (10 * 100 * 1000), 9);
+		expect(c).toBeGreaterThan(1);
+		expect(warns(out, /more runoff than rainfall/)).toHaveLength(1);
+		// A plausible catchment: no warning.
+		const calm = runModel(rainInput(new Array(30).fill(5), '2021-01-01'));
+		expect(calm.summary.catchment.runoffCoefficient!).toBeLessThan(1);
+		expect(warns(calm, /more runoff than rainfall/)).toHaveLength(0);
+	});
+
+	it('W2: counts days with no rainfall value from any source (treated as dry)', () => {
+		const out = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01'));
+		expect(warns(out, /3 of 6 days have no rainfall value/)).toHaveLength(1);
+		expect(warns(runModel(rainInput([0, 1, 2], '2021-01-01')), /no rainfall value/)).toHaveLength(0);
+	});
+
+	it('W3: hi/lo shares warn when a farm area differs from its hi + lo areas (rain volume uses the area)', () => {
+		const out = run({
+			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3, downstreamNodeId: 'B' }), node('B', { sortOrder: 1, areaKm2: 5, areaHiKm2: 2, areaLoKm2: 3 })],
+			settings: { flowShareMethod: 'hiLo' },
+			natural: [0]
+		});
+		expect(warns(out, /"A".*area 10 km² .*hi \+ lo 9 km²/)).toHaveLength(1);
+		expect(warns(out, /"B"/)).toHaveLength(0);
+	});
+
+	it('W4: warns about a recession table that cannot describe a recession', () => {
+		const cal = defaultCal();
+		const factors = [...cal.recessionFactors];
+		factors[3] = 1.2;
+		const curve = [...cal.recessionCurveM3Day];
+		curve[10] = curve[9]! + 1;
+		const out = runModel(rainInput([0, 0], '2021-01-01', { calibration: { ...cal, recessionFactors: factors, recessionCurveM3Day: curve } }));
+		expect(warns(out, /recession factor 4 is 1.2/)).toHaveLength(1);
+		expect(warns(out, /recession curve rises/)).toHaveLength(1);
+		expect(warns(runModel(rainInput([0, 0], '2021-01-01')), /recession/)).toHaveLength(0);
+	});
+
+	it('W5: warns on days natural flow came from Pitman flow instead of the rain model', () => {
+		const i = rainInput([0, 0, 20], '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } });
+		i.series.flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
+		const out = runModel(i);
+		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([43_200, 43_200]);
+		expect(warns(out, /2 days of natural flow are Pitman flow/)).toHaveLength(1);
+	});
+});
 
 describe('catchment area', () => {
 	it('defaults to the sum of farm areas and honours an explicit override', async () => {

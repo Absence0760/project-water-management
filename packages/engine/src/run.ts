@@ -11,7 +11,7 @@
 import { agreementWarning, observedAgreement } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
-import { computeNaturalFlow } from './flow';
+import { computeNaturalFlow, recessionTableWarnings } from './flow';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
 import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -39,6 +39,8 @@ const SEC_PER_DAY = 86_400;
 export interface NaturalFlowInput {
 	naturalFlowM3Day: ArrayLike<number>;
 	series?: { key: string; label: string; unit: string; values: number[] }[];
+	/** Problems found while producing the natural flow (added to the run's warnings). */
+	warnings?: string[];
 }
 
 /** Explicit catchment area, else the sum of the farm areas (the workbook's rFarmSpec_AreaTotal). */
@@ -55,16 +57,25 @@ function withCatchmentArea<T extends { catchmentAreaKm2: number | null }>(cal: T
 
 /** Run the full model: natural flow from rain (./flow.ts), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
-	return runModelWith(input, (ctx) =>
-		computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
+	return runModelWith(input, (ctx) => {
+		const nf = computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
 			startDate: ctx.startDate,
 			days: ctx.days,
 			rainCatchmentMm: ctx.aligned('rain_catchment_mm'),
 			rainChirpsMm: ctx.aligned('rain_chirps_mm'),
 			rainForecastMm: ctx.aligned('rain_forecast_mm'),
 			flowPitmanM3s: ctx.aligned('flow_pitman_m3s')
-		})
-	);
+		});
+		const warnings = recessionTableWarnings(ctx.settings.calibration);
+		// [Flow data] AB falls back to Pitman whenever the rain model gives 0, so
+		// one series can mix two sources (quirk Q7, audit W5).
+		if (nf.pitmanDays > 0) {
+			warnings.push(
+				`${nf.pitmanDays} days of natural flow are Pitman flow: the rain model gave 0 on those days, so the series mixes two sources`
+			);
+		}
+		return { ...nf, warnings };
+	});
 }
 
 export interface RunContext {
@@ -124,6 +135,8 @@ export function runModelWith(
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
+	warnings.push(...(nf.warnings ?? []));
+	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings);
 
 	// --- network ----------------------------------------------------------------
 	const nodes = model.nodes;
@@ -348,6 +361,7 @@ export function runModelWith(
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
+				runoffCoefficient,
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
 			},
@@ -361,6 +375,48 @@ export function runModelWith(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Natural-flow volume / rain volume over the run (null without rain). A value
+ * above 1 means the catchment gives back more water than fell on it, which no
+ * catchment can do over a whole record: warn (audit H1, W1). Also counts the
+ * days without any rainfall value, which the model silently treats as dry (W2).
+ */
+function catchmentRunoffCoefficient(
+	input: ModelInput,
+	settings: ProjectSettings,
+	natural: Float64Array,
+	aligned: (k: SeriesKind) => (number | null)[],
+	warnings: string[]
+): number | null {
+	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+	if (!kinds.some((k) => input.series?.[k])) return null;
+	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
+	let rainMm = 0;
+	let missing = 0;
+	for (let t = 0; t < natural.length; t++) {
+		const v = c[t] ?? ch[t] ?? f[t] ?? null;
+		if (v === null) missing++;
+		else if (v > 0) rainMm += v;
+	}
+	if (missing > 0) {
+		warnings.push(
+			`${missing} of ${natural.length} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm)`
+		);
+	}
+	const area = resolveCatchmentAreaKm2(settings.calibration, input);
+	if (!(rainMm > 0) || !(area > 0)) return null;
+	let flow = 0;
+	for (let t = 0; t < natural.length; t++) flow += natural[t]!;
+	const coefficient = flow / (rainMm * area * 1000); // 1 mm on 1 km² = 1000 m³
+	if (coefficient > 1) {
+		warnings.push(
+			`the rain model makes more runoff than rainfall: natural flow is ${coefficient.toFixed(2)}× the rain volume over the run. ` +
+				'Check the calibration (a, b, the season factors, the recession curve) and the catchment area'
+		);
+	}
+	return coefficient;
+}
 
 /**
  * settings.reportStart/reportEnd as day indices into the run, clipped to it.

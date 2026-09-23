@@ -38,6 +38,8 @@ export interface FlowSeries {
 export interface NaturalFlowResult {
 	naturalFlowM3Day: number[];
 	series: FlowSeries[];
+	/** Days where the rain model gave 0 and natural flow fell back to Pitman flow. */
+	pitmanDays: number;
 }
 
 /** Every intermediate column of [Flow data], one array per column, one entry per day. */
@@ -105,6 +107,28 @@ export function recessionIndex(cal: CalibrationParams, flow: number): number {
 	const span = at(c, hi) - at(c, lo);
 	const p = span === 0 ? 0 : (flow - at(c, lo)) / span;
 	return Math.max(1, Math.min(lo + p, cal.recessionDaysMax));
+}
+
+/**
+ * Problems with the recession table that make the model meaningless: a daily
+ * factor outside [0, 1] (a recession that grows or turns negative), a curve
+ * that rises (MATCH(…, -1) needs it descending), or tables of different length.
+ */
+export function recessionTableWarnings(cal: CalibrationParams): string[] {
+	const out: string[] = [];
+	const f = cal.recessionFactors;
+	const c = cal.recessionCurveM3Day;
+	f.forEach((v, i) => {
+		if (!(v >= 0 && v <= 1)) out.push(`recession factor ${i + 1} is ${v}; daily recession factors must be between 0 and 1`);
+	});
+	for (let i = 1; i < c.length; i++) {
+		if (c[i]! > c[i - 1]!) {
+			out.push(`recession curve rises at row ${i + 1} (${c[i - 1]} → ${c[i]} m³/day); it must fall row by row for the index lookup`);
+			break;
+		}
+	}
+	if (c.length !== f.length) out.push(`recession curve has ${c.length} rows but there are ${f.length} recession factors`);
+	return out;
 }
 
 /** fRainToFlow — peak flow (m³/day) produced by a day's rain. */
@@ -251,8 +275,11 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 /** Catchment natural flow (m³/day) from rain, plus the useful intermediates. */
 export function computeNaturalFlow(cal: CalibrationParams, inputs: NaturalFlowInputs): NaturalFlowResult {
 	const c = computeFlowColumns(cal, inputs);
+	let pitmanDays = 0;
+	for (let i = 0; i < c.naturalFlowM3Day.length; i++) if (!(c.resultantFlow[i]! > 0) && c.pitmanM3Day[i]! > 0) pitmanDays++;
 	return {
 		naturalFlowM3Day: c.naturalFlowM3Day,
+		pitmanDays,
 		series: [
 			{ key: 'rain_used', label: 'Rain used', unit: 'mm', values: c.rainUsedMm },
 			{ key: 'is_summer', label: 'Summer (1) / winter (0)', unit: 'flag', values: c.isSummer },
