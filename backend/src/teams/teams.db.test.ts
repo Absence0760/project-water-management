@@ -77,3 +77,20 @@ describe('teams', () => {
 		expect((await m.call('DELETE', `/teams/${teamId}/members/${m.id}`)).status).toBe(204); // leaving is fine
 	});
 });
+
+describe('moving projects between teams', () => {
+	it('lets a team admin (owner only via the team) move a team project to personal and keep it', async () => {
+		const creator = await signUp('Creator');
+		const admin = await signUp('OtherAdmin');
+		const teamId = (await creator.call('POST', '/teams', { name: 'Shared team' })).body.team.id;
+		await creator.call('POST', `/teams/${teamId}/members`, { email: admin.email, role: 'admin' });
+		const pid = (await creator.call('POST', '/projects', { name: 'Team catchment', teamId })).body.project.id;
+		// admin is owner purely through the team
+		expect((await admin.call('GET', `/projects/${pid}`)).body.project.role).toBe('owner');
+		const moved = await admin.call('PATCH', `/projects/${pid}`, { teamId: null });
+		expect(moved.status).toBe(200);
+		expect(moved.body.project.team).toBeNull();
+		expect(moved.body.project.role).toBe('owner');
+	});
+});
+

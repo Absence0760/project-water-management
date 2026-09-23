@@ -88,6 +88,15 @@ export const projectRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, body.teamId !== undefined ? 'owner' : 'editor');
 			if (body.teamId) await requireTeamMember(db, body.teamId);
+			if (body.teamId !== undefined) {
+				// Someone who owns the project only through the current team would
+				// lose access by moving it out; keep them as a direct owner.
+				await db.query(
+					`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, app_current_user_id(), 'owner')
+					 ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'owner'`,
+					[id]
+				);
+			}
 			const current = await getProject(db, id);
 			const settings = body.settings ? { ...mergeSettings(current.settings), ...body.settings } : undefined;
 			await db.query(
