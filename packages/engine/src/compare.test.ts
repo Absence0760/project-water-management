@@ -339,6 +339,62 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toContain('Rainfall (catchment) series now starts 2000-02-01 (was 2000-01-01)');
 	});
 
+	it('labels the report and calibration windows, the calibration series and data-quality thresholds', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		Object.assign(b.settings, {
+			reportStart: '2015-10-01',
+			calibrationEnd: '2018-09-30',
+			calibrationFlowKind: 'flow_logger_m3s',
+			dataQuality: { agreementMinRatio: 0.8 } // stored sparsely: the other two stay at their defaults
+		});
+		expect(texts(a, b)).toEqual([
+			'Curtailment report start: start of run → 2015-10-01',
+			'Calibration window end: end of record → 2018-09-30',
+			'Calibration flow series: default (observed, else logger) → Logger flow',
+			'Data quality gauge/logger lowest ratio: 66.67% → 80%'
+		]);
+		// A run stored before dataQuality existed compares equal to one with the defaults.
+		const old = structuredClone(a);
+		delete (old.settings as Record<string, unknown>).dataQuality;
+		expect(texts(old, a)).toEqual([]);
+	});
+
+	it('treats month lists as sets: order and repeats are not a change', () => {
+		const a = snapshot();
+		a.model.transfers = [{ id: 't', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 2, 1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.3, enabled: true }];
+		a.settings.calibration!.summerMonths = [12, 1, 11];
+		const b = structuredClone(a);
+		b.model.transfers[0]!.months = [1, 2, 10, 10];
+		b.settings.calibration!.summerMonths = [1, 11, 12];
+		expect(texts(a, b)).toEqual([]);
+		b.model.transfers[0]!.months = [1, 2];
+		expect(texts(a, b)).toEqual(['Transfer Rooikloof → Bergwater: months Oct, Jan, Feb → Jan, Feb']);
+	});
+
+	it('says when a series became empty or got values, instead of inventing a one-day range', () => {
+		const withRain = (length: number) => snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length } } });
+		expect(texts(withRain(366), withRain(0))).toEqual(['Rainfall (catchment) series now has no values (was 2000-01-01 to 2000-12-31)']);
+		expect(texts(withRain(0), withRain(31))).toEqual(['Rainfall (catchment) series now has values (2000-01-01 to 2000-01-31)']);
+		expect(texts(withRain(0), withRain(0))).toEqual([]);
+		expect(texts(snapshot({ series: {} }), withRain(0))).toEqual(['Rainfall (catchment) series added (no values)']);
+	});
+
+	it('describes series dates across a leap day the same in any time zone', () => {
+		const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env;
+		const tz = env.TZ;
+		const a = snapshot({ series: { rain_catchment_mm: { startDate: '2020-02-28', length: 1 } } });
+		const b = snapshot({ series: { rain_catchment_mm: { startDate: '2020-02-28', length: 3 } } });
+		try {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC']) {
+				env.TZ = zone;
+				expect(texts(a, b), zone).toEqual(['Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-28)']);
+			}
+		} finally {
+			env.TZ = tz;
+		}
+	});
+
 	it('tolerates missing snapshots (runs stored before a field existed)', () => {
 		expect(diffInputs(null, null)).toEqual([]);
 		expect(texts(null as unknown as RunInputsSnapshot, snapshot())).toContain('Farm "Rooikloof" added (10 km², dam 600,000 m³, drains into Outlet)');

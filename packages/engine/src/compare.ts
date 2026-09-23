@@ -294,6 +294,8 @@ export function describeCalendarMonths(months: readonly number[]): string {
 }
 
 const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+/** A month list as a sorted set: order and repeats don't change which months apply. */
+const monthSet = (v: unknown) => [...new Set(Array.isArray(v) ? v : [])].sort((p, q) => Number(p) - Number(q));
 
 /**
  * Describe a changed 12-value water-year table: the months that changed with
@@ -334,7 +336,17 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
-	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') }
+	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
+	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
+	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
+	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },
+	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
+	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') }
+};
+const DATA_QUALITY_FIELDS: Record<string, ScalarField> = {
+	agreementMinRatio: { label: 'gauge/logger lowest ratio', fmt: pct },
+	agreementMaxRatio: { label: 'gauge/logger highest ratio', fmt: pct },
+	agreementMinDays: { label: 'gauge/logger minimum shared days', fmt: withUnit('days') }
 };
 const SETTINGS_MONTHLY: Record<string, { label: string; unit: string }> = {
 	apanMm: { label: 'A-pan evaporation', unit: 'mm' },
@@ -369,7 +381,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...d,
 		...r,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
-		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) }
+		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
+		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) }
 	};
 }
 
@@ -390,12 +403,18 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
 
+	const qa = a.dataQuality as Record<string, unknown>;
+	const qb = b.dataQuality as Record<string, unknown>;
+	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) {
+		if (!same(qa[k], qb[k])) push(`Data quality ${f.label}`, `Data quality ${f.label}: ${f.fmt(qa[k])} → ${f.fmt(qb[k])}`);
+	}
+
 	const ka = a.calibration as Record<string, unknown>;
 	const kb = b.calibration as Record<string, unknown>;
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) {
 		if (!same(ka[k], kb[k])) push(`Calibration ${f.label}`, `Calibration ${f.label}: ${f.fmt(ka[k])} → ${f.fmt(kb[k])}`);
 	}
-	if (!same([...((ka.summerMonths as number[]) ?? [])].sort(), [...((kb.summerMonths as number[]) ?? [])].sort())) {
+	if (!same(monthSet(ka.summerMonths), monthSet(kb.summerMonths))) {
 		push(
 			'Calibration summer months',
 			`Calibration summer months: ${describeCalendarMonths((ka.summerMonths as number[]) ?? [])} → ${describeCalendarMonths((kb.summerMonths as number[]) ?? [])}`
@@ -405,7 +424,7 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
-	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration']);
+	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality']);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
 	}
@@ -542,7 +561,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const parts: string[] = [];
 		if (routeInB(x) !== r) parts.push(`route was ${route(na, x)}`);
 		if (x.enabled !== y.enabled) parts.push(y.enabled ? 'enabled' : 'disabled');
-		if (!same([...x.months].sort(), [...y.months].sort())) parts.push(`months ${describeCalendarMonths(x.months)} → ${describeCalendarMonths(y.months)}`);
+		if (!same(monthSet(x.months), monthSet(y.months))) parts.push(`months ${describeCalendarMonths(x.months)} → ${describeCalendarMonths(y.months)}`);
 		if (x.maxRateM3s !== y.maxRateM3s) parts.push(`max rate ${fmtValue(x.maxRateM3s)} → ${fmtValue(y.maxRateM3s)} m³/s`);
 		if (x.dailyCapM3 !== y.dailyCapM3) parts.push(`daily cap ${withUnit('m³', 0)(x.dailyCapM3)} → ${withUnit('m³', 0)(y.dailyCapM3)}`);
 		if (x.minStoragePct !== y.minStoragePct) parts.push(`minimum source storage ${pct(x.minStoragePct)} → ${pct(y.minStoragePct)}`);
@@ -568,7 +587,7 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 	const out: InputChange[] = [];
 	const range = (s: { startDate: string; length: number }) => {
 		const start = toEpochDay(s.startDate);
-		return { start: s.startDate, end: fromEpochDay(start + Math.max(0, s.length - 1)) };
+		return { start: s.startDate, end: fromEpochDay(start + Math.max(0, s.length - 1)), empty: !(s.length > 0) };
 	};
 	const kinds = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
 	for (const k of kinds) {
@@ -578,10 +597,22 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 		if (x && !y) out.push({ area: 'series', kind: 'removed', subject: label, text: `${label} series removed` });
 		else if (!x && y) {
 			const r = range(y);
-			out.push({ area: 'series', kind: 'added', subject: label, text: `${label} series added (${r.start} to ${r.end})` });
+			out.push({ area: 'series', kind: 'added', subject: label, text: `${label} series added (${r.empty ? 'no values' : `${r.start} to ${r.end}`})` });
 		} else if (x && y) {
 			const ra = range(x);
 			const rb = range(y);
+			// An empty series has no dates to compare: say it emptied or filled.
+			if (ra.empty || rb.empty) {
+				if (ra.empty !== rb.empty) {
+					out.push({
+						area: 'series',
+						kind: 'changed',
+						subject: label,
+						text: rb.empty ? `${label} series now has no values (was ${ra.start} to ${ra.end})` : `${label} series now has values (${rb.start} to ${rb.end})`
+					});
+				}
+				continue;
+			}
 			if (rb.end > ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended to ${rb.end} (was ${ra.end})` });
 			else if (rb.end < ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now ends ${rb.end} (was ${ra.end})` });
 			if (rb.start < ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended back to ${rb.start} (was ${ra.start})` });
