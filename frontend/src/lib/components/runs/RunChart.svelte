@@ -1,81 +1,90 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	// Explorer for any stored output series of a run: pick a node (catchment
+	// first, then the network order) and one of its series by name. Fetches
+	// only the series picked.
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { CATCHMENT, COMPARE, comparisonRefs, seriesForNode } from './chartPick';
+	import { cachedSeries } from './cache';
+	import { seriesGroups, toDisplayUnit } from './results';
 
 	let {
 		projectId,
 		runId,
 		refs,
-		nodeNames
-	}: { projectId: string; runId: string; refs: RunSeriesRef[]; nodeNames: Map<string, string> } = $props();
+		nodeNames,
+		nodeOrder = new Map(),
+		flowUnit = 'm³/day'
+	}: {
+		projectId: string;
+		runId: string;
+		refs: RunSeriesRef[];
+		nodeNames: Map<string, string>;
+		nodeOrder?: ReadonlyMap<string, number>;
+		flowUnit?: 'm³/s' | 'm³/day';
+	} = $props();
 
-	const compare = $derived(comparisonRefs(refs));
-	const nodeOptions = $derived.by(() => {
-		const ids = [...new Set(refs.map((r) => r.nodeId).filter((x): x is string => !!x))];
-		return ids
-			.map((id) => ({ id, name: nodeNames.get(id) ?? 'Unknown node' }))
-			.sort((a, b) => a.name.localeCompare(b.name));
-	});
-
+	const CATCHMENT = '__catchment';
+	const groups = $derived(seriesGroups(refs, nodeOrder, nodeNames));
 	let node = $state(CATCHMENT);
 	let key = $state('');
+	let log = $state(false);
 
-	const keyOptions = $derived(seriesForNode(refs, node));
+	const group = $derived(groups.find((g) => (g.nodeId ?? CATCHMENT) === node) ?? groups[0]);
+	const ref = $derived(group?.options.find((r) => r.key === key) ?? group?.options[0]);
 
-	// Default selection whenever the run (or the chosen node) changes.
+	// Reset to the catchment's simulated outflow when the run changes.
+	let lastRun = '';
 	$effect(() => {
-		void runId;
-		untrack(() => {
-			const hasCatchment = seriesForNode(refs, CATCHMENT).length > 0;
-			pickNode(hasCatchment ? CATCHMENT : (nodeOptions[0]?.id ?? CATCHMENT));
-		});
+		if (runId === lastRun) return;
+		lastRun = runId;
+		const first = groups[0];
+		node = first ? (first.nodeId ?? CATCHMENT) : CATCHMENT;
+		key = first?.options.find((r) => r.key === 'simulated_outflow')?.key ?? first?.options[0]?.key ?? '';
 	});
 
 	function pickNode(n: string) {
 		node = n;
-		key = n === CATCHMENT && compare.length > 1 ? COMPARE : (seriesForNode(refs, n)[0]?.key ?? '');
+		const g = groups.find((x) => (x.nodeId ?? CATCHMENT) === n);
+		// Keep the same kind of series when the new node has it.
+		if (!g?.options.some((r) => r.key === key)) key = g?.options[0]?.key ?? '';
 	}
 
-	const wanted = $derived<RunSeriesRef[]>(
-		key === COMPARE ? compare : keyOptions.filter((r) => r.key === key)
-	);
-
 	let data = $state<ChartSeries[]>([]);
+	let unit = $state('');
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let requestNo = 0;
 
-	async function fetchSeries(list: RunSeriesRef[]) {
-		const my = ++requestNo;
-		loading = true;
-		error = null;
-		try {
-			const results = await Promise.all(list.map((r) => api.runs.series(projectId, runId, r.key, r.nodeId)));
-			if (my !== requestNo) return; // a newer selection won
-			data = results.map((d, i) => ({ label: list[i]!.label, startDate: d.startDate, values: d.values }));
-		} catch (e) {
-			if (my === requestNo) error = e instanceof Error ? e.message : String(e);
-		} finally {
-			if (my === requestNo) loading = false;
-		}
-	}
-
 	$effect(() => {
-		const list = wanted;
-		untrack(() => {
-			if (list.length) fetchSeries(list);
-			else data = [];
-		});
+		const r = ref;
+		const fu = flowUnit;
+		if (!r) {
+			data = [];
+			return;
+		}
+		const my = ++requestNo;
+		loading = !data.length;
+		error = null;
+		cachedSeries(runId, r.key, r.nodeId, () => api.runs.series(projectId, runId, r.key, r.nodeId))
+			.then((d) => {
+				if (my !== requestNo) return;
+				const conv = toDisplayUnit(d.values, r.unit, fu);
+				unit = conv.unit;
+				data = [{ label: r.label, startDate: d.startDate, values: conv.values }];
+			})
+			.catch((e) => {
+				if (my === requestNo) error = e instanceof Error ? e.message : String(e);
+			})
+			.finally(() => {
+				if (my === requestNo) loading = false;
+			});
 	});
 
-	const title = $derived.by(() => {
-		const where = node === CATCHMENT ? 'Catchment' : (nodeNames.get(node) ?? 'Node');
-		return key === COMPARE ? `${where} · natural vs simulated vs observed flow` : `${where} · ${wanted[0]?.label ?? ''}`;
-	});
+	const where = $derived(node === CATCHMENT ? 'Catchment' : (nodeNames.get(node) ?? 'Node'));
+	const title = $derived(`${where} · ${ref?.label ?? ''}`);
+	const isFlow = $derived(ref?.unit === 'm³/day' && !/demand|supplied|deficit|ewr/.test(ref?.key ?? ''));
 </script>
 
 {#if refs.length === 0}
@@ -85,27 +94,40 @@
 		<div class="field">
 			<label for="rc-node">Node</label>
 			<select id="rc-node" value={node} onchange={(e) => pickNode(e.currentTarget.value)}>
-				{#if seriesForNode(refs, CATCHMENT).length}<option value={CATCHMENT}>Catchment (outflow)</option>{/if}
-				{#each nodeOptions as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+				{#each groups as g (g.nodeId ?? CATCHMENT)}
+					<option value={g.nodeId ?? CATCHMENT}>{g.label}</option>
+				{/each}
 			</select>
 		</div>
 		<div class="field">
 			<label for="rc-key">Series</label>
-			<select id="rc-key" bind:value={key}>
-				{#if node === CATCHMENT && compare.length > 1}
-					<option value={COMPARE}>Flow comparison ({compare.map((c) => c.label).join(' / ')})</option>
-				{/if}
-				{#each keyOptions as r (r.key)}<option value={r.key}>{r.label} ({r.unit})</option>{/each}
+			<select id="rc-key" value={ref?.key ?? ''} onchange={(e) => (key = e.currentTarget.value)}>
+				{#each group?.options ?? [] as r (r.key)}<option value={r.key}>{r.label} ({r.unit})</option>{/each}
 			</select>
 		</div>
 	</div>
-	<LoadState {loading} error={error}>
-		<LineChart {title} unit={wanted[0]?.unit ?? ''} series={data} />
+	<LoadState {loading} {error}>
+		<LineChart {title} {unit} series={data} logToggle={isFlow} bind:log recentDays={3 * 365} recentLabel="Last 3 years" />
 	</LoadState>
 {/if}
 
 <style>
 	.pickers .field {
 		min-width: 220px;
+		flex: 1;
+		max-width: 360px;
+	}
+	.pickers select {
+		width: 100%;
+	}
+	@media (max-width: 640px) {
+		.pickers .field {
+			min-width: 0;
+			max-width: none;
+			flex-basis: 100%;
+		}
+		.pickers select {
+			min-height: 44px;
+		}
 	}
 </style>

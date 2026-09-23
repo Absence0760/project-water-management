@@ -1,0 +1,376 @@
+<script lang="ts">
+	// The standard result views of one run: hydrograph, flow-duration curve,
+	// EWR vs outflow, a farm's dam storage and supply, and an explorer for any
+	// stored series. Each series is fetched once, on demand (see cache.ts).
+	import type { DailySeries, FarmSummary } from '@water-management/engine';
+	import { api, type RunSeriesRef } from '$lib/api';
+	import { flowDurationCurves, percentileFlows } from '$lib/components/charts/fdc';
+	import LineChart from '$lib/components/charts/LineChart.svelte';
+	import type { ChartSeries } from '$lib/components/charts/series';
+	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { cachedSeries } from './cache';
+	import RunChart from './RunChart.svelte';
+	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
+
+	let {
+		projectId,
+		runId,
+		refs,
+		farms,
+		nodeNames,
+		nodeOrder,
+		damCapacity
+	}: {
+		projectId: string;
+		runId: string;
+		refs: RunSeriesRef[];
+		farms: FarmSummary[];
+		nodeNames: Map<string, string>;
+		nodeOrder: ReadonlyMap<string, number>;
+		/** nodeId → dam capacity (m³) from the current model. */
+		damCapacity: ReadonlyMap<string, number>;
+	} = $props();
+
+	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
+	const get = (key: string, nodeId: string | null = null): Promise<DailySeries> =>
+		cachedSeries(runId, key, nodeId, () => api.runs.series(projectId, runId, key, nodeId));
+
+	let flowUnit = $state<'m³/s' | 'm³/day'>('m³/s');
+	let hydroLog = $state(false);
+	let fdcLog = $state(true);
+	let ewrLog = $state(false);
+
+	// --- catchment series -----------------------------------------------------
+	type Loaded = { natural?: DailySeries; simulated?: DailySeries; observed?: DailySeries; ewr?: DailySeries };
+	let catchment = $state<Loaded>({});
+	let catchError = $state<string | null>(null);
+	let catchLoading = $state(true);
+
+	$effect(() => {
+		const id = runId;
+		catchLoading = true;
+		catchError = null;
+		const want: [keyof Loaded, string][] = [
+			['natural', 'natural_flow'],
+			['simulated', 'simulated_outflow'],
+			['observed', 'observed_flow'],
+			['ewr', 'ewr']
+		];
+		Promise.all(want.filter(([, k]) => has(k)).map(async ([slot, k]) => [slot, await get(k)] as const))
+			.then((pairs) => {
+				if (id !== runId) return;
+				catchment = Object.fromEntries(pairs) as Loaded;
+			})
+			.catch((e) => {
+				if (id === runId) catchError = e instanceof Error ? e.message : String(e);
+			})
+			.finally(() => {
+				if (id === runId) catchLoading = false;
+			});
+	});
+
+	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
+	const hydroSeries = $derived.by<ChartSeries[]>(() => {
+		const out: ChartSeries[] = [];
+		const c = catchment;
+		if (c.observed) out.push({ label: 'Observed', startDate: c.observed.startDate, values: conv(c.observed), style: 'points', color: '--chart-obs' });
+		if (c.natural) out.push({ label: 'Natural', startDate: c.natural.startDate, values: conv(c.natural), color: '--series-1', width: 1.25 });
+		if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
+		return out;
+	});
+	const fdc = $derived.by(() => {
+		const list = [catchment.natural, catchment.simulated, catchment.observed];
+		const labels = ['Natural', 'Simulated outflow', 'Observed'];
+		const colors = ['--series-1', '--series-2', '--chart-obs'];
+		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
+		const xy = flowDurationCurves(present.map((x) => conv(x.d)));
+		return {
+			xy,
+			series: present.map(({ d, i }) => ({ label: labels[i]!, startDate: d!.startDate, values: [], color: colors[i], width: 1.5, style: i === 2 ? ('dashed' as const) : undefined })),
+			q: present.map(({ d, i }) => ({ label: labels[i]!, ...percentileFlows(conv(d)) }))
+		};
+	});
+	const ewrSeries = $derived.by<ChartSeries[]>(() => {
+		const c = catchment;
+		const out: ChartSeries[] = [];
+		if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
+		if (c.ewr) out.push({ label: 'Pragmatic EWR', startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
+		return out;
+	});
+
+	// --- one farm ------------------------------------------------------------------
+	const farmOptions = $derived(
+		[...farms].sort((a, b) => (nodeOrder.get(a.nodeId) ?? 1e9) - (nodeOrder.get(b.nodeId) ?? 1e9))
+	);
+	let farmId = $state('');
+	$effect(() => {
+		void runId;
+		if (!farmOptions.some((f) => f.nodeId === farmId)) {
+			// Open on the farm with the worst supply, if any fall short; else the first.
+			const worst = [...farmOptions].sort((a, b) => a.fractionSupplied - b.fractionSupplied)[0];
+			farmId = (worst && worst.fractionSupplied < SUPPLY_TARGET ? worst : farmOptions[0])?.nodeId ?? '';
+		}
+	});
+	const farm = $derived(farmOptions.find((f) => f.nodeId === farmId) ?? null);
+	const capacity = $derived(damCapacity.get(farmId) ?? 0);
+	let farmData = $state<{ storage?: DailySeries; demand?: DailySeries; supplied?: DailySeries }>({});
+	let farmLoading = $state(false);
+	let farmError = $state<string | null>(null);
+	$effect(() => {
+		const id = farmId;
+		const run = runId;
+		if (!id) return;
+		farmLoading = true;
+		farmError = null;
+		Promise.all([
+			has('dam_storage', id) ? get('dam_storage', id) : Promise.resolve(undefined),
+			has('demand', id) ? get('demand', id) : Promise.resolve(undefined),
+			has('supplied', id) ? get('supplied', id) : Promise.resolve(undefined)
+		])
+			.then(([storage, demand, supplied]) => {
+				if (id === farmId && run === runId) farmData = { storage, demand, supplied };
+			})
+			.catch((e) => {
+				if (id === farmId) farmError = e instanceof Error ? e.message : String(e);
+			})
+			.finally(() => {
+				if (id === farmId) farmLoading = false;
+			});
+	});
+	const storageSeries = $derived.by<ChartSeries[]>(() => {
+		const s = farmData.storage;
+		const pct = s ? storagePct(s.values, capacity) : null;
+		return s && pct ? [{ label: 'Dam storage', startDate: s.startDate, values: pct, color: '--series-1' }] : [];
+	});
+	const supplySeries = $derived.by<ChartSeries[]>(() => {
+		const out: ChartSeries[] = [];
+		const { demand, supplied } = farmData;
+		if (demand) out.push({ label: 'Demand (net)', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
+		if (supplied) out.push({ label: 'Supplied', startDate: supplied.startDate, values: supplied.values, color: '--series-1', width: 1.25 });
+		return out;
+	});
+
+	const RECENT = 3 * 365;
+</script>
+
+{#snippet unitToggle()}
+	<span class="seg" role="group" aria-label="Flow units">
+		<button type="button" class="btn btn-sm" aria-pressed={flowUnit === 'm³/s'} onclick={() => (flowUnit = 'm³/s')}>m³/s</button>
+		<button type="button" class="btn btn-sm" aria-pressed={flowUnit === 'm³/day'} onclick={() => (flowUnit = 'm³/day')}>m³/day</button>
+	</span>
+{/snippet}
+
+<div class="charts">
+	<section class="panel wide" aria-labelledby="hydro-h">
+		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
+		{#if catchError}
+			<div class="alert alert-error" role="alert">{catchError}</div>
+		{:else if catchLoading && !hydroSeries.length}
+			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
+		{:else}
+			<LineChart
+				title="Flow at the outflow gauge: natural, simulated and observed"
+				unit={flowUnit}
+				series={hydroSeries}
+				logToggle
+				bind:log={hydroLog}
+				recentDays={RECENT}
+				recentLabel="Last 3 years"
+				toolbar={unitToggle}
+				caption="Observed flow is drawn as dots underneath the lines."
+			/>
+		{/if}
+	</section>
+
+	<section class="panel" aria-labelledby="fdc-h">
+		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
+		{#if catchLoading && !fdc.series.length}
+			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
+		{:else}
+			<LineChart
+				title="Flow-duration curve"
+				unit={flowUnit}
+				height={260}
+				series={fdc.series}
+				xy={fdc.xy}
+				xLabel="Time flow is equalled or exceeded (%)"
+				xFormat={(v) => `${fmtNum(v, v < 1 ? 2 : 0, true)}%`}
+				logToggle
+				bind:log={fdcLog}
+			/>
+			{#if fdc.q.length}
+				<table class="data compact q">
+					<thead>
+						<tr>
+							<th scope="col"></th>
+							<th scope="col" class="num">Q10</th>
+							<th scope="col" class="num">Q50</th>
+							<th scope="col" class="num">Q90</th>
+							<th scope="col" class="num">Q95</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each fdc.q as q (q.label)}
+							<tr>
+								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
+								<td class="num">{fmtNum(q.q10, 3)}</td>
+								<td class="num">{fmtNum(q.q50, 3)}</td>
+								<td class="num">{fmtNum(q.q90, 3)}</td>
+								<td class="num">{fmtNum(q.q95, 3)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		{/if}
+	</section>
+
+	<section class="panel" aria-labelledby="ewr-h">
+		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
+		{#if catchLoading && !ewrSeries.length}
+			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
+		{:else}
+			<LineChart
+				title="EWR vs simulated outflow"
+				unit={flowUnit}
+				height={260}
+				series={ewrSeries}
+				logToggle
+				bind:log={ewrLog}
+				recentDays={RECENT}
+				recentLabel="Last 3 years"
+				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
+			/>
+		{/if}
+	</section>
+
+	{#if farmOptions.length}
+		<section class="panel wide" aria-labelledby="farm-h">
+			<div class="panel-head">
+				<h3 id="farm-h">Farm detail</h3>
+				<div class="field inline">
+					<label for="farm-pick">Farm</label>
+					<select id="farm-pick" bind:value={farmId}>
+						{#each farmOptions as f (f.nodeId)}
+							<option value={f.nodeId}>{f.name} · {fmtPct(f.fractionSupplied, 0)} supplied</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+			{#if farm}
+				<p class="muted small">
+					Demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
+					({fmtPct(farm.fractionSupplied)}){capacity >= 1 ? ` · dam ${fmtNum(capacity)} m³` : ' · no dam'}.
+				</p>
+			{/if}
+			{#if farmError}
+				<div class="alert alert-error" role="alert">{farmError}</div>
+			{:else}
+				<div class="pair">
+					<div>
+						{#if storageSeries.length}
+							<LineChart title="Dam storage, % of capacity" unit="%" height={240} series={storageSeries} recentDays={RECENT} recentLabel="Last 3 years" />
+						{:else if farmLoading}
+							<div class="chart-ph" style:height="310px" role="status">Loading…</div>
+						{:else}
+							<p class="muted nodam">This farm has no dam, so there is no storage to chart.</p>
+						{/if}
+					</div>
+					<div>
+						{#if supplySeries.length}
+							<LineChart title="Supply vs demand" unit="m³/day" height={240} series={supplySeries} recentDays={RECENT} recentLabel="Last 3 years" />
+						{:else}
+							<div class="chart-ph" style:height="310px" role="status">{farmLoading ? 'Loading…' : 'No demand series.'}</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	<section class="panel wide" aria-labelledby="exp-h">
+		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
+		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} />
+	</section>
+</div>
+
+<style>
+	.charts {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0 1rem;
+	}
+	.charts > .panel {
+		min-width: 0;
+	}
+	.wide {
+		grid-column: 1 / -1;
+	}
+	@media (max-width: 1100px) {
+		.charts {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	.chart-ph {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-muted);
+		background: var(--surface-2);
+		border-radius: var(--radius-sm);
+	}
+	.seg {
+		display: inline-flex;
+	}
+	.seg .btn:first-child {
+		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+	}
+	.seg .btn:last-child {
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+		margin-left: -1px;
+	}
+	.q {
+		margin-top: 0.5rem;
+		font-size: 0.8rem;
+	}
+	.u {
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.small {
+		font-size: 0.8rem;
+	}
+	.inline {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0;
+	}
+	.inline select {
+		max-width: 100%;
+	}
+	.pair {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+	}
+	@media (max-width: 900px) {
+		.pair {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	.nodam {
+		padding: 2rem 0;
+		text-align: center;
+	}
+	@media (max-width: 640px) {
+		.inline {
+			flex-wrap: wrap;
+			width: 100%;
+		}
+		.inline select {
+			width: 100%;
+			min-height: 44px;
+		}
+	}
+</style>
