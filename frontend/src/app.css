@@ -111,6 +111,9 @@
 html {
 	overflow-y: scroll;
 	scrollbar-gutter: stable;
+	/* In-page links and focus scrolling stop below the sticky app header, so
+	   the target (or the focused control) isn't hidden under it (WCAG 2.4.11). */
+	scroll-padding-top: calc(var(--header-h) + 0.75rem);
 }
 html,
 body {

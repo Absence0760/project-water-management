@@ -106,6 +106,10 @@ The settings are grouped by what they drive:
 
 ## Runs & results
 
+- A **Result sections** menu under the run's title links to each panel
+  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`; Farm
+  detail only when the run has farms). The page's `scroll-padding-top` keeps
+  a jumped-to section, or a focused control, clear of the sticky header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall (or Pitman) series. While a run is going it shows progress.
 - **Summary** (the "Run summary" region): headline cards give mean natural
