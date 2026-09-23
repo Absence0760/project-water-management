@@ -23,7 +23,11 @@ Settings has its own save button, which sits above that bar.
 - **Data up to 31 Mar 2025 · 12 days ago**: the latest end date across the
   input series. Click it for each series' end date. It turns amber when the
   newest data is more than 7 days old (`STALE_DAYS` in
-  `series/freshness.ts`; a candidate for a project setting).
+  `series/freshness.ts`; a candidate for a project setting). Ages count
+  calendar days up to the viewer's **local** date (`localIsoDate`), the same
+  as the project list's badge, so the two never differ by a day around
+  midnight. Series dates are calendar days, so the UTC date would be wrong
+  for anyone east or west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
   Dropping a CSV anywhere on the page opens it with that file.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
@@ -51,6 +55,11 @@ Settings has its own save button, which sits above that bar.
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
   The flow share in use (with the Settings method) and its total are shown.
+  The one-node form and the view-only table show thousands separators
+  (300,000, the app's usual `fmtNum` style) on the non-% fields; a field
+  switches to the plain number while it is being edited, and typed or pasted
+  separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
+  editable table keeps plain numbers.
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The

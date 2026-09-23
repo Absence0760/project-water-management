@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest';
+import { parseNum } from '$lib/format/number';
+import { groupedText } from './numberText';
+
+describe('groupedText', () => {
+	it('groups thousands and keeps the decimals that are there', () => {
+		expect(groupedText(300000)).toBe('300,000');
+		expect(groupedText(1234.5)).toBe('1,234.5');
+		expect(groupedText(0.15)).toBe('0.15');
+		expect(groupedText(0)).toBe('0');
+	});
+	it('applies the display scale without float noise', () => {
+		expect(groupedText(0.07, 100)).toBe('7');
+		expect(groupedText(12.5, 1000)).toBe('12,500');
+	});
+	it('shows nothing for a missing value', () => {
+		expect(groupedText(null)).toBe('');
+		expect(groupedText(NaN)).toBe('');
+	});
+});
+
+describe('reading grouped text back (parseNum)', () => {
+	it('round-trips grouped, spaced and plain input', () => {
+		expect(parseNum('300,000')).toBe(300000);
+		expect(parseNum('300 000')).toBe(300000);
+		expect(parseNum('1,234.5')).toBe(1234.5);
+		expect(parseNum(groupedText(987654.321))).toBe(987654.321);
+	});
+	it('rejects text that is not a number', () => {
+		expect(parseNum('')).toBeNull();
+		expect(parseNum('12a')).toBeNull();
+	});
+});
