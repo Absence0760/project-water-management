@@ -4,6 +4,7 @@
 	import { api, type Project, type RunMeta } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { cached } from './cache';
 	import { checklist } from './checklist';
 	import MembersPanel from './MembersPanel.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
@@ -36,12 +37,15 @@
 
 	const detailsDirty = $derived(name.trim() !== project.name || description.trim() !== (project.description ?? ''));
 
-	let series = $state<SeriesMeta[] | null>(null);
-	let runs = $state<RunMeta[] | null>(null);
+	// Start from what we saw last time on this project (see cache.ts) so the
+	// first frame already has the final layout; refresh in the background.
+	const memo = untrack(() => cached(project.id));
+	let series = $state<SeriesMeta[] | null>(memo.series ?? null);
+	let runs = $state<RunMeta[] | null>(memo.runs ?? null);
 	onMount(async () => {
 		const [s, r] = await Promise.allSettled([api.series.list(project.id), api.runs.list(project.id)]);
-		if (s.status === 'fulfilled') series = s.value;
-		if (r.status === 'fulfilled') runs = r.value;
+		if (s.status === 'fulfilled') series = memo.series = s.value;
+		if (r.status === 'fulfilled') runs = memo.runs = r.value;
 	});
 	const seriesCount = $derived(series?.length ?? null);
 	const runCount = $derived(runs?.length ?? null);

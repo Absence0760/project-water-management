@@ -7,6 +7,15 @@
 
 	const prog = $derived(progress(steps));
 	const next = $derived(nextStep(steps));
+	// While series/runs are loading, decide from the steps we already know:
+	// if any of those still needs work the list will end up open, so open it
+	// now; otherwise hold a compact bar the same height as "Setup complete".
+	// Either way the first frame has the final shape: never open-then-collapse.
+	const checking = $derived(steps.some((s) => s.status === 'unknown'));
+	const knownGap = $derived(
+		steps.some((s) => s.status !== 'unknown' && s.status !== 'done' && !(s.optional && s.status === 'partial'))
+	);
+	const mode = $derived(prog.complete ? 'complete' : checking && !knownGap ? 'checking' : 'open');
 	const STATUS: Record<StepStatus, string> = {
 		done: 'Done',
 		partial: 'Needs a look',
@@ -43,7 +52,12 @@
 {/snippet}
 
 <section class="panel checklist" aria-labelledby="setup-h">
-	{#if prog.complete}
+	{#if mode === 'checking'}
+		<div class="compact" role="status">
+			<h2 id="setup-h">Setup</h2>
+			<span class="muted">Checking data and runs…</span>
+		</div>
+	{:else if mode === 'complete'}
 		<details>
 			<summary>
 				<h2 id="setup-h">Setup complete</h2>
@@ -184,6 +198,7 @@
 		font-size: 0.8rem;
 		color: var(--text-2);
 	}
+	.compact,
 	details summary {
 		display: flex;
 		align-items: baseline;
@@ -201,10 +216,19 @@
 	details[open] summary::before {
 		content: '▾';
 	}
+	.compact {
+		cursor: default;
+	}
+	.compact::before {
+		content: '▸';
+		visibility: hidden;
+	}
+	.compact h2,
 	details summary h2 {
 		margin: 0;
 		font-size: 1rem;
 	}
+	.compact .muted,
 	details summary .muted {
 		font-size: 0.85rem;
 	}

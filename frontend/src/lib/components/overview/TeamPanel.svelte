@@ -1,9 +1,10 @@
 <script lang="ts">
 	// Which team (if any) owns the project, and — for owners — moving it into
 	// one of your teams or back to personal.
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, type Member, type Project, type Team } from '$lib/api';
+	import { cached } from './cache';
 
 	let {
 		project,
@@ -17,25 +18,26 @@
 		onProjectChange: (p: Project) => void;
 	} = $props();
 
-	let teams = $state<Team[]>([]);
-	let direct = $state<Member[] | null>(null);
-	let target = $state('');
+	// Last-seen teams/members first so the panel doesn't change shape on revisit.
+	const memo = untrack(() => cached(project.id));
+	let teams = $state<Team[] | null>(memo.teams ?? null);
+	let direct = $state<Member[] | null>(memo.members ?? null);
+	let target = $state(untrack(() => project.team?.id ?? ''));
 	let moving = $state(false);
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
 		if (!isOwner) return;
 		const [t, m] = await Promise.allSettled([api.teams.list(), api.members.list(project.id)]);
-		if (t.status === 'fulfilled') teams = t.value;
+		teams = memo.teams = t.status === 'fulfilled' ? t.value : [];
 		if (m.status === 'fulfilled') direct = m.value;
-		target = project.team?.id ?? '';
 	});
 
 	// Owners through a team admin role alone would lose the project if it left
 	// the team: the API can't move it to personal for them.
 	const directOwner = $derived(direct?.some((m) => m.userId === currentUserId && m.role === 'owner') ?? true);
 	const current = $derived(project.team?.id ?? '');
-	const targetName = $derived(target ? (teams.find((t) => t.id === target)?.name ?? 'the team') : 'Personal');
+	const targetName = $derived(target ? (teams?.find((t) => t.id === target)?.name ?? 'the team') : 'Personal');
 
 	async function move(e: SubmitEvent) {
 		e.preventDefault();
@@ -78,10 +80,10 @@
 				<label for="move-team">Move to</label>
 				<select id="move-team" bind:value={target} disabled={moving}>
 					<option value="" disabled={!!project.team && !directOwner}>Personal</option>
-					{#if project.team && !teams.some((t) => t.id === project.team?.id)}
+					{#if project.team && !teams?.some((t) => t.id === project.team?.id)}
 						<option value={project.team.id}>{project.team.name ?? 'Current team'}</option>
 					{/if}
-					{#each teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+					{#each teams ?? [] as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
@@ -92,7 +94,7 @@
 			<p class="muted small">
 				You're an owner through the team, so you can't make it personal: add yourself under Members as an owner first.
 			</p>
-		{:else if !teams.length}
+		{:else if teams && !teams.length}
 			<p class="muted small"><a href="{base}/teams">Create a team</a> to share this catchment with colleagues in one step.</p>
 		{/if}
 	{/if}

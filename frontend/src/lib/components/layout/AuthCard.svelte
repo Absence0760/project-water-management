@@ -44,6 +44,11 @@
 </div>
 
 <style>
+	/* The reserved scrollbar gutter (app.css) takes the root background:
+	   match the form side so it doesn't show as a strip. */
+	:global(html:has(.auth)) {
+		background: var(--surface);
+	}
 	.auth {
 		display: grid;
 		grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);

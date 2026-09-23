@@ -104,6 +104,11 @@
 	box-sizing: border-box;
 }
 
+/* Reserve the scrollbar's space even when a page (or a loading state) is
+   short, so the layout doesn't shift sideways as content height changes. */
+html {
+	scrollbar-gutter: stable;
+}
 html,
 body {
 	margin: 0;

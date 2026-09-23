@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, ROLES, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { cached } from './cache';
 
 	let {
 		projectId,
@@ -19,8 +20,14 @@
 		onLeftProject: () => void;
 	} = $props();
 
-	let members = $state<Member[]>([]);
-	let loading = $state(true);
+	// Last-seen list first (no loading flash when returning to the tab).
+	const memo = untrack(() => cached(projectId));
+	const hadCache = !!memo.members;
+	let members = $state<Member[]>(memo.members ?? []);
+	let loading = $state(!hadCache);
+	$effect(() => {
+		if (!loading && !loadError) memo.members = $state.snapshot(members);
+	});
 	let loadError = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let busy = $state<string | null>(null);
@@ -31,8 +38,8 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-	async function load() {
-		loading = true;
+	async function load(quiet = false) {
+		loading = !quiet;
 		loadError = null;
 		try {
 			members = await api.members.list(projectId);
@@ -42,7 +49,7 @@
 			loading = false;
 		}
 	}
-	onMount(load);
+	onMount(() => load(hadCache));
 
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
@@ -106,7 +113,16 @@
 		</p>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-	<LoadState {loading} error={loadError} retry={load} empty={members.length === 0} emptyText="No members.">
+	{#if loading}
+		<!-- Same shape as the loaded table, so nothing below moves when it fills in. -->
+		<div class="table-wrap skeleton" role="status" aria-label="Loading members">
+			<table class="data">
+				<thead><tr><th scope="col">Name</th><th scope="col" class="email">Email</th><th scope="col">Role</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+				<tbody><tr><td colspan="4"><span class="bone"></span></td></tr></tbody>
+			</table>
+		</div>
+	{:else}
+	<LoadState loading={false} error={loadError} retry={load} empty={members.length === 0} emptyText="No members.">
 		<div class="table-wrap">
 			<table class="data">
 				<thead>
@@ -157,6 +173,7 @@
 			</table>
 		</div>
 	</LoadState>
+	{/if}
 
 	{#if isOwner}
 		<form class="add form-row" onsubmit={add}>
@@ -198,6 +215,16 @@
 	select {
 		text-transform: capitalize;
 		min-width: 6.5rem;
+	}
+	.skeleton td {
+		height: 37px;
+	}
+	.bone {
+		display: block;
+		height: 0.8rem;
+		width: 60%;
+		border-radius: 3px;
+		background: var(--surface-sunken);
 	}
 	.team-note {
 		margin: -0.25rem 0 0.75rem;
