@@ -1,5 +1,11 @@
 // Wire shapes from docs/api.md that aren't in @water-management/engine.
-import type { ProjectSettings, RunSummary } from '@water-management/engine';
+import type {
+	InputChange,
+	ProjectSettings,
+	RunComparison,
+	RunInputsSnapshot,
+	RunSummary
+} from '@water-management/engine';
 
 export type Role = 'viewer' | 'editor' | 'owner';
 export const ROLES: readonly Role[] = ['viewer', 'editor', 'owner'];
@@ -82,6 +88,22 @@ export interface RunSeriesRef {
 	key: string;
 	label: string;
 	unit: string;
+}
+
+/** One side of GET /compare/runs. */
+export interface CompareSide {
+	project: { id: string; name: string };
+	run: Run & { inputs: RunInputsSnapshot };
+}
+
+/** GET /compare/runs response (docs/api.md § Compare runs). Deltas are b − a. */
+export interface RunCompareResponse {
+	a: CompareSide;
+	b: CompareSide;
+	comparison: RunComparison;
+	changes: InputChange[];
+	/** Catchment series both runs stored with the same unit. */
+	catchmentSeries: { key: string; label: string; unit: string }[];
 }
 
 const RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };

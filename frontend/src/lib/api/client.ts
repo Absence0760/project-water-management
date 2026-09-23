@@ -13,6 +13,7 @@ import type {
 	ProjectSummary,
 	Role,
 	Run,
+	RunCompareResponse,
 	RunMeta,
 	RunSeriesRef,
 	Team,
@@ -207,6 +208,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				return request<DailySeries>('GET', `${p(id)}/runs/${enc(runId)}/series?${q}`);
 			},
 			remove: (id: string, runId: string) => request<void>('DELETE', `${p(id)}/runs/${enc(runId)}`)
+		},
+		compare: {
+			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */
+			runs: (a: string, b: string) =>
+				request<RunCompareResponse>('GET', `/compare/runs?${new URLSearchParams({ a, b })}`)
 		}
 	};
 }

@@ -152,4 +152,10 @@ describe('teams client', () => {
 		expect(err.status).toBe(409);
 		expect(err.message).toBe('a team must keep at least one admin');
 	});
+
+	it('encodes both run refs for the compare endpoint', async () => {
+		const f = mockFetch(200, { changes: [] });
+		await createApi('http://x', f).compare.runs('p1:r1', 'p2:r2');
+		expect((f.mock.calls[0] as unknown as [string])[0]).toBe('http://x/compare/runs?a=p1%3Ar1&b=p2%3Ar2');
+	});
 });
