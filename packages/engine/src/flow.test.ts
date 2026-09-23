@@ -47,9 +47,9 @@ describe('recession helpers', () => {
 		expect(recede(c, 32, 79)).toBe(32); // 32 × 0.9845 = 31.504 → 32: the tail floor
 	});
 
-	it('recede with a blank (0) index extrapolates below the first factor, as the workbook does', () => {
-		// P = -1 → 0.255 − (0.396 − 0.255) = 0.114
-		expect(recede(c, 300, 0)).toBe(34);
+	it('recede below index 1 extrapolates below the first factor (pulse indices start at shiftPeakIndexLo = 0.9)', () => {
+		// P = -0.1 → 0.255 − 0.1 × (0.396 − 0.255) = 0.2409
+		expect(recede(c, 1000, 0.9)).toBeCloseTo(240.9, 0);
 	});
 
 	it('recessionIndex reads the fractional position off the curve', () => {
@@ -83,10 +83,48 @@ describe('seasonFlag', () => {
 	});
 });
 
+describe('day-1 state (audit E1)', () => {
+	it('recedes the initial base flow at its own recession index, not at a blank index 0', () => {
+		// The workbook's reserved row leaves the base index blank (0), so day 1
+		// recedes at the extrapolated factor 2·f1 − f2 (0.114): 300 → 34, an 89 %
+		// drop on the first day of every run. A steady base flow recedes at the
+		// factor for its own position on the curve (index 79 → 0.9845).
+		const c = computeFlowColumns(cal(), inputs([0, 0, 0]));
+		expect(c.baseFlow[0]).toBeCloseTo(300 * 0.9845, 0);
+		expect(c.baseIndex[0]).toBe(79);
+		expect(c.naturalFlowM3Day[0]).toBeCloseTo(300 * 0.9845, 0);
+	});
+
+	it('never turns the base flow negative, whatever the first two recession factors', () => {
+		// f2 > 2·f1 made the day-1 factor negative: base flow −30 m³/day, and a
+		// negative base can never reset (rain / negative base is never > 1.5).
+		const factors = [...cal().recessionFactors];
+		factors[0] = 0.1;
+		factors[1] = 0.3;
+		const c = computeFlowColumns(cal({ recessionFactors: factors }), inputs([0, 0, 50, 0, 0], '2021-07-01'));
+		expect(c.baseFlow.every((v) => v >= 0)).toBe(true);
+		expect(c.baseFlow[2]).toBe(c.rainFlow[2]); // the storm resets it
+	});
+});
+
+describe('recede (audit E2)', () => {
+	it('clamps an extrapolated factor at 0: flow never recedes below zero', () => {
+		// A pulse index below 1 (shiftPeakIndexLo < 1) extrapolates below the
+		// first factor; with index 0 and f2 > 2·f1 that is negative.
+		const factors = [...cal().recessionFactors];
+		factors[0] = 0.1;
+		factors[1] = 0.3;
+		expect(recede(cal({ recessionFactors: factors }), 1000, 0)).toBe(0);
+		// Inside the table nothing changes.
+		expect(Math.abs(recede(cal(), 1000, 1.5) - 1000 * 0.3255)).toBeLessThanOrEqual(0.5);
+	});
+});
+
 describe('computeNaturalFlow', () => {
 	it('recedes the initial base flow with no rain', () => {
 		const out = computeNaturalFlow(cal(), inputs([0, 0, 0, 0]));
-		expect(out.naturalFlowM3Day).toEqual([34, 33, 32, 32]);
+		const f = 0.9845; // factor at index 79, where 300 m³/day sits on the default curve
+		out.naturalFlowM3Day.forEach((v, i) => expect(v).toBeCloseTo(300 * f ** (i + 1), -0.5));
 		expect(out.series.map((s) => s.key)).toEqual([
 			'rain_used',
 			'is_summer',

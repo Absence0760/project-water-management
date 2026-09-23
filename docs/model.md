@@ -144,7 +144,7 @@ Per day *t*, with the workbook column letters:
 | R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold |
 | N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
 | V | **Rain-added flow** | `INT(a · R^b · RainToM3 · seasonFactor)` if R > 0, else 0 |
-| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index (or `BaseFlowInitial` on day 1). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. Rounded to 0 dp. |
+| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. Rounded to 0 dp. |
 | T | **Base recession index** | Where S sits on the recession curve, interpolated linearly and clamped to `[1, DaysMax]`, 4 dp |
 | U | **Response flow (start)** | Yesterday's resultant response receded by yesterday's resultant index |
 | W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1 (or the base index if yesterday's was 0). Capped at `DaysMax`, 4 dp. |
@@ -153,6 +153,10 @@ Per day *t*, with the workbook column letters:
 | AB | **Natural flow (m³/day)** | `Y` if > 0, else the Pitman natural flow (m³/day) if > 0, else 0 |
 
 `recede(flow, index) = ROUND(flow × lerp(factor[floor(index)], factor[floor(index)+1], frac(index)), 0)`
+
+The interpolated factor is clamped at 0, so an index below 1 (a pulse starting at
+`ShiftPeakIndexLo` < 1) can shrink a flow to nothing but never make it negative
+([audit E2](./engine-audit.md)).
 
 The same sheet also:
 

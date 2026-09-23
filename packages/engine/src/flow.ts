@@ -103,12 +103,13 @@ export function recede(cal: CalibrationParams, flow: number, index: number): num
 	const r = cal.recessionFactors;
 	const lo = Math.min(Math.max(Math.floor(index), 1), r.length);
 	const hi = Math.min(lo + 1, r.length);
-	// Below index 1 (e.g. a blank previous index = 0) P goes negative and the
-	// workbook extrapolates below the first factor; kept for fidelity.
+	// Below index 1 (a pulse starting at shiftPeakIndexLo < 1) P goes negative
+	// and the factor is extrapolated below the first one. Clamp it at 0: a
+	// recession can shrink a flow to nothing but never below (audit E2).
 	const p = index - lo;
 	const fLo = at(r, lo);
 	const fHi = at(r, hi);
-	return excelRound(flow * (fLo + p * (fHi - fLo)), 0);
+	return excelRound(flow * Math.max(0, fLo + p * (fHi - fLo)), 0);
 }
 
 /** fRfIndex — fractional recession index for a flow, read off the smoothed curve. */
@@ -195,16 +196,21 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 	};
 	const day0 = toEpochDay(inputs.startDate);
 
-	// The "reserved" row above the first day: only the base flow is filled in;
-	// every other cell is blank, which Excel reads as 0.
+	// The day before the run is a steady base-flow state: base flow and the
+	// resultant flow both equal baseFlowInitial, at that flow's own position on
+	// the recession curve. The workbook's "reserved" row fills in only the base
+	// flow and leaves its index blank (0), so day 1 receded at the extrapolated
+	// factor 2·f1 − f2 (300 → 34 m³/day with the default curve, or a negative
+	// base flow that can never reset when f2 > 2·f1) — audit E1.
+	const initialIndex = recessionIndex(cal, cal.baseFlowInitial);
 	let prevSummer = 0;
 	let prevRain = 0;
 	let prevBase = cal.baseFlowInitial;
-	let prevBaseIndex = 0;
+	let prevBaseIndex = initialIndex;
 	let prevAddedIndex = 0;
 	let prevResponseAdded = 0;
-	let prevResultant = 0;
-	let prevResultantIndex = 0;
+	let prevResultant = cal.baseFlowInitial;
+	let prevResultantIndex = initialIndex;
 
 	for (let i = 0; i < n; i++) {
 		const month = monthOfEpochDay(day0 + i);

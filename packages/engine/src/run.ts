@@ -32,7 +32,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.3.1';
+export const ENGINE_VERSION = '0.4.0';
 
 const SEC_PER_DAY = 86_400;
 
