@@ -88,7 +88,7 @@ export function collectCsv(lines: Iterable<string>, maxBytes = MAX_EXPORT_BYTES)
 export function slugify(s: string, fallback = 'export'): string {
 	const slug = s
 		.normalize('NFKD')
-		.replace(/[̀-ͯ]/g, '')
+		.replace(/[\u0300-\u036f]/g, '')
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '')
