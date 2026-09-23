@@ -44,7 +44,7 @@
 		<p class="muted small">
 			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = may gain.
 			<em>Reduce/gain</em> shares irrigation fairly (target − supplied). <em>Total change</em> also removes the
-			farm's EWR shortfall. 1 l/s = 86.4 m³/day; l/s values are truncated toward zero, as in the workbook.
+			farm's EWR shortfall. 1 l/s = 86.4 m³/day.
 			{#if cuts}
 				<span class="flag-key" aria-hidden="true"></span>
 				{cuts} of {rows.length} farm{rows.length === 1 ? '' : 's'} must cut (highlighted).

@@ -4,7 +4,6 @@
 //   FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
-import { excelRound } from './network/round';
 import { runModel } from './run';
 import type { ModelInput, ModelOutput } from './project';
 import { randomInput, shrink } from './testing/fuzz';
@@ -38,11 +37,12 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		if (n.kind === 'gauge') continue;
 		const g = (k: string) => get.get(`${n.id}|${k}`)!;
 		const [F, G, W, H, I, J, Q, R, AA, Z] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff', 'transfer', 'dam_storage', 'spill', 'ewr_shortfall', 'ewr_cumulative'].map(g) as number[][];
-		const cap = excelRound(n.damCapacityM3, 0);
-		let qPrev = excelRound(n.damInitialPct * cap, 0);
+		// The engine does not round (docs/engine-audit.md R1).
+		const cap = n.damCapacityM3;
+		let qPrev = n.damInitialPct * cap;
 		totIn += qPrev;
 		for (let t = 0; t < out.days; t++) {
-			const T = excelRound(G![t]! * n.returnFlowPct, 0);
+			const T = G![t]! * n.returnFlowPct;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev;
 			const rhs = U[t]! + G![t]! - T + Q![t]!;
 			const where = `${n.id} day ${t}`;

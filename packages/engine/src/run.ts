@@ -13,7 +13,6 @@ import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeNaturalFlow } from './flow';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
-import { WBT_PRECISION, excelRound } from './network/round';
 import { flowShares } from './network/shares';
 import { simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
@@ -155,14 +154,13 @@ export function runModelWith(
 		}
 		const activeMonth = new Uint8Array(13);
 		for (const m of tr.months) if (m >= 1 && m <= 12) activeMonth[m] = 1;
-		// b023: "Transfer capacity max" = ROUND(max rate m³/s × 86400); an explicit daily cap can only lower it.
-		let maxDaily = excelRound(tr.maxRateM3s * SEC_PER_DAY, 0);
+		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it); an explicit daily cap can only lower it.
+		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
 		transfers.push({
 			from,
 			to,
 			activeMonth,
-			// fGetDamCapacity reads the unrounded capacity from [Farm spec].
 			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
 			maxDailyM3: Math.max(0, maxDaily)
 		});
@@ -177,7 +175,8 @@ export function runModelWith(
 		naturalFlow: natural,
 		ewr,
 		nodes: nodes.map((n, i) => {
-			const cap = excelRound(n.damCapacityM3, 0);
+			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
+			const cap = n.damCapacityM3;
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -185,7 +184,7 @@ export function runModelWith(
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
-				initialStorageM3: excelRound(n.damInitialPct * cap, 0),
+				initialStorageM3: n.damInitialPct * cap,
 				returnFlowPct: n.returnFlowPct,
 				demand: demand[i]!
 			};
@@ -219,8 +218,8 @@ export function runModelWith(
 			'observed_flow',
 			OBSERVED_LABEL[observedKind],
 			'm³/day',
-			// b023 [Flow data] P: ROUND(m³/s × 86400); missing days are NaN so charts show gaps.
-			observedM3s.map((v) => (v === null ? NaN : excelRound(v * SEC_PER_DAY, 0)))
+			// m³/s × 86400 (the workbook rounds [Flow data] P); missing days are NaN so charts show gaps.
+			observedM3s.map((v) => (v === null ? NaN : v * SEC_PER_DAY))
 		);
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
@@ -523,18 +522,9 @@ function buildDemand(
 		}
 		if (cropped === 0) return d;
 		anyArea = true;
-		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays, {
-			cropMm: WBT_PRECISION.cropGrossMm,
-			farmM3Day: WBT_PRECISION.farmDemandM3Day
-		});
+		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
 		for (let t = 0; t < days; t++) {
-			d[t] = netDailyDemandM3(
-				gross[wy[t]!]!,
-				cropped,
-				rain[t]!,
-				settings.effectiveRainFraction,
-				WBT_PRECISION.netDemandM3Day
-			);
+			d[t] = netDailyDemandM3(gross[wy[t]!]!, cropped, rain[t]!, settings.effectiveRainFraction);
 		}
 		return d;
 	});

@@ -2,7 +2,8 @@
 // / GaugeTemplate, formula row 17) plus [Transfers], [Fragmented flow] and
 // [Fragmented EWR]. Column letters in comments are the FarmTemplate columns;
 // see ./README.md for the full mapping and the workbook quirks we mirror.
-import { excelRound, WBT_PRECISION } from './round';
+// Unlike the workbook nothing is rounded: every split conserves water exactly
+// (docs/engine-audit.md R1).
 
 export interface PlanNode {
 	kind: 'farm' | 'gauge';
@@ -12,7 +13,7 @@ export interface PlanNode {
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
 	divertCapacityM3Day: number;
-	/** Dam capacity, already rounded to whole m³ like the Element sheet's P14. */
+	/** Dam capacity (m³). */
 	damCapacityM3: number;
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
@@ -69,8 +70,6 @@ export interface NetworkResult {
 	transfers: Float64Array[];
 }
 
-const R0 = (x: number) => excelRound(x, 0);
-
 function allocNode(days: number): NodeResult {
 	const f = () => new Float64Array(days);
 	return {
@@ -97,7 +96,6 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 	const jToday = new Float64Array(nodes.length);
 	// Volume already committed today by earlier transfers from each source dam.
 	const drawnToday = new Float64Array(nodes.length);
-	const fragDigits = WBT_PRECISION.fragmentedM3Day;
 
 	for (let t = 0; t < days; t++) {
 		// [Transfers] "Draw from dam": uses the source dam's storage at the end of
@@ -148,16 +146,15 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 
 			const F = node.demand[t]!;
 			const H = sumU;
-			const I = excelRound(nat * node.share, fragDigits);
+			const I = nat * node.share;
 			const J = jToday[i]!;
-			// The workbook's ROUND(H·p, 0) can round *above* a fractional H (a
-			// fractional divert capacity upstream makes U, and so H, fractional),
-			// giving a negative bypass K and negative supply. Cap each rounded split
-			// at the volume it splits — identical whenever H and I are whole m³,
-			// as in client catchment (docs/engine-review.md; found by the invariant tests).
-			const L = Math.min(R0(H * node.pctUpstreamToDam), H);
+			// A split never exceeds the volume it splits (a fraction above 1 would
+			// otherwise make the bypass K negative). The workbook's ROUND(H·p, 0)
+			// could round above a fractional H; without rounding only an invalid
+			// fraction can.
+			const L = Math.min(H * node.pctUpstreamToDam, H);
 			const K = H - L;
-			const M = Math.min(R0(I * node.pctRunoffToDam), I);
+			const M = Math.min(I * node.pctRunoffToDam, I);
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
@@ -168,9 +165,9 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
-			const T = R0(G * node.returnFlowPct);
+			const T = G * node.returnFlowPct;
 			const U = Rr + S + T;
-			const Y = excelRound(ewrT * node.share, fragDigits);
+			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			const AA = Math.min(U - Z, 0);
 			const AB = Math.min(AA - sumAA, 0);

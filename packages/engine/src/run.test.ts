@@ -104,31 +104,31 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		startDate: '2020-10-01'
 	});
 
-	it('splits natural flow by area share (ROUND to whole m³)', () => {
-		expect(get(out, 'A', 'runoff')).toEqual([100, 0, 801]); // ROUND(800.5) = 801 (half away from zero)
-		expect(get(out, 'B', 'runoff')).toEqual([100, 0, 801]);
+	it('splits natural flow by area share, unrounded (audit R1)', () => {
+		expect(get(out, 'A', 'runoff')).toEqual([100, 0, 800.5]); // the workbook: ROUND(800.5) = 801
+		expect(get(out, 'B', 'runoff')).toEqual([100, 0, 800.5]);
 	});
 
 	it('supplies demand from the dam and carries storage day to day', () => {
 		// Day 0: Qprev 500 + M 100 → avail 600, G = 100, P = 500, Q = 500.
 		// Day 1: avail 500 → G 100, Q 400.
-		// Day 2: avail 400 + 801 = 1201 → G 100, P 1101, Q 1000, spill 101.
+		// Day 2: avail 400 + 800.5 = 1200.5 → G 100, P 1100.5, Q 1000, spill 100.5.
 		expect(get(out, 'A', 'demand')).toEqual([100, 100, 100]);
 		expect(get(out, 'A', 'supplied')).toEqual([100, 100, 100]);
 		expect(get(out, 'A', 'dam_storage')).toEqual([500, 400, 1000]);
-		expect(get(out, 'A', 'spill')).toEqual([0, 0, 101]);
-		// U = spill + below-dam (0) + return ROUND(100 × 0.1) = 10
-		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 111]);
+		expect(get(out, 'A', 'spill')).toEqual([0, 0, 100.5]);
+		// U = spill + below-dam (0) + return 100 × 0.1 = 10
+		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 110.5]);
 	});
 
 	it('routes upstream outflow into the next farm and on to the gauge', () => {
-		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 111]);
-		// B: capacity 0. M = ROUND(I × 0.5) goes to the (zero) dam and spills; N below dam.
+		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 110.5]);
+		// B: capacity 0. M = I × 0.5 goes to the (zero) dam and spills; N below dam.
 		// U = R + S + T = (K + M) + N + 0 = H + I.
-		expect(get(out, 'B', 'spill')).toEqual([60, 10, 512]); // K + M: 10 + 50, 10 + 0, 111 + ROUND(400.5)=401
-		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 912]);
-		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 912]);
-		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 912]);
+		expect(get(out, 'B', 'spill')).toEqual([60, 10, 510.75]); // K + M: 10 + 50, 10 + 0, 110.5 + 400.25
+		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 911]);
+		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 911]);
+		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 911]);
 	});
 
 	it('adds an EWR compliance grid for the outlet and each farm', () => {
@@ -136,7 +136,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		const g = withEwr.summary.ewrCompliance!;
 		expect(g.waterYears).toEqual([2020]);
 		expect(g.days[0]![0]).toBe(3);
-		// Outflow [110, 10, 912] vs EWR 100: only day 1 is short, by 90.
+		// Outflow [110, 10, 911] vs EWR 100: only day 1 is short, by 90.
 		expect(g.outlet.name).toBe('G');
 		expect(g.outlet.daysNotMet[0]![0]).toBe(1);
 		expect(g.outlet.shortfallM3[0]![0]).toBe(90);
@@ -153,7 +153,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(b.avgDemandM3Day).toBe(0);
 		expect(b.fractionSupplied).toBe(1);
 		expect(out.summary.farms.map((f) => f.nodeId)).toEqual(['A', 'B']); // gauges have no farm summary
-		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 912) / 3, 10);
+		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 911) / 3, 10);
 	});
 
 	it('runs over the rainfall period and emits catchment series', () => {
@@ -162,6 +162,36 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(out.days).toBe(3);
 		expect(get(out, null, 'natural_flow')).toEqual([200, 0, 1601]);
 		expect(out.summary.warnings).toEqual(['no observed flow series: calibration statistics not computed']);
+	});
+});
+
+describe('runModel — no rounding in the balance (audit R1)', () => {
+	it('fragmentation conserves natural flow: Σ farm runoff = natural flow', () => {
+		// Four equal farms: ROUND(0.25) = 0 lost 1 m³/day; ROUND(0.5) = 1 created 2 m³/day from 2.
+		const nodes = ['A', 'B', 'C', 'D'].map((id, i) => node(id, { sortOrder: i, downstreamNodeId: i < 3 ? 'ABCD'[i + 1]! : null }));
+		const natural = [1, 2, 5, 1234.5];
+		const out = run({ nodes, natural });
+		for (let t = 0; t < natural.length; t++) {
+			const sum = nodes.reduce((s, n) => s + get(out, n.id, 'runoff')[t]!, 0);
+			expect(sum).toBeCloseTo(natural[t]!, 9);
+		}
+		expect(get(out, null, 'simulated_outflow')).toEqual(natural.map((v) => expect.closeTo(v, 9)));
+	});
+
+	it('keeps a sub-m³ dam and the exact return flow', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, returnFlowPct: 0.25 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1 }],
+			settings: { apanMm: flat(31) as Monthly }, // 1 m² × 31 mm / 1000 / 31 = 0.001 m³/day
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'demand')[0]).toBeCloseTo(0.001, 12);
+		expect(get(out, 'D', 'supplied')[0]).toBeCloseTo(0.001, 12);
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(0.399, 12);
+		expect(get(out, 'D', 'outflow')[0]).toBeCloseTo(0.00025, 12);
 	});
 });
 
@@ -200,12 +230,12 @@ describe('runModel — dam behaviour', () => {
 		expect(get(out, 'D', 'outflow')).toEqual([0, 500]);
 	});
 
-	it('rounds the initial storage like the Element sheet (ROUND(pct × ROUND(capacity)))', () => {
+	it('initial storage is pct × capacity, unrounded (the Element sheet: ROUND(pct × ROUND(capacity)))', () => {
 		const out = run({
 			nodes: [node('D', { damCapacityM3: 1001.4, damInitialPct: 0.5 })],
 			natural: [0]
 		});
-		expect(get(out, 'D', 'dam_storage')).toEqual([501]); // ROUND(0.5 × 1001) = ROUND(500.5)
+		expect(get(out, 'D', 'dam_storage')).toEqual([500.7]); // the workbook: ROUND(0.5 × 1001) = 501
 	});
 
 	it('records a deficit when the dam runs dry', () => {
@@ -227,20 +257,20 @@ describe('runModel — dam behaviour', () => {
 });
 
 describe('runModel — irrigation demand', () => {
-	it('offsets gross demand by effective rain above the threshold and rounds like the workbook', () => {
+	it('offsets gross demand by effective rain above the threshold', () => {
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }];
 		const out = run({
 			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
 			crops,
 			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 10_000 }],
-			// A-pan 100 mm × 0.5 = 50 mm; 10 000 m² × 50 mm / 1000 / 31 = 16.129 → ROUND(,1) = 16.1
+			// A-pan 100 mm × 0.5 = 50 mm; 10 000 m² × 50 mm / 1000 / 31 = 16.129 m³/day
 			settings: { apanMm: flat(100) as Monthly },
 			startDate: '2021-01-01',
 			natural: [0, 0, 0, 0],
 			// 2 mm is at the threshold → ignored; 3 mm → 10 000 × 0.65/1000 × 3 = 19.5 → floored at 0
 			rain: [0, 2, 1, 3]
 		});
-		expect(get(out, 'F', 'demand')).toEqual([16, 16, 16, 0]);
+		expect(get(out, 'F', 'demand')).toEqual([500 / 31, 500 / 31, 500 / 31, 0]);
 	});
 
 	it('falls back to CHIRPS rain when catchment rain is missing', () => {
@@ -443,8 +473,8 @@ describe('runModel — flow shares', () => {
 			natural: [1000]
 		});
 		// A: 3/4 × 0.8 + 1/4 × 0.2 = 0.65; B: 0.35
-		expect(get(out, 'A', 'runoff')).toEqual([650]);
-		expect(get(out, 'B', 'runoff')).toEqual([350]);
+		expect(get(out, 'A', 'runoff')[0]).toBeCloseTo(650, 9);
+		expect(get(out, 'B', 'runoff')[0]).toBeCloseTo(350, 9);
 		expect(out.summary.warnings.some((w) => w.includes('flow shares'))).toBe(false);
 	});
 });

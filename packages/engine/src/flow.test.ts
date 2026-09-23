@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	computeFlowColumns,
 	computeNaturalFlow,
-	excelRound,
 	rainToFlow,
 	recede,
 	recessionIndex,
@@ -11,6 +10,7 @@ import {
 	type NaturalFlowInputs
 } from './flow';
 import { defaultProjectSettings, type CalibrationParams } from './project';
+import { excelRound } from './network/round';
 
 const cal = (over: Partial<CalibrationParams> = {}): CalibrationParams => ({
 	...defaultProjectSettings().calibration,
@@ -28,7 +28,7 @@ const inputs = (rain: (number | null)[], startDate = '2021-01-01'): NaturalFlowI
 	flowPitmanM3s: rain.map(() => null)
 });
 
-describe('excelRound', () => {
+describe('excelRound (test helper for replaying workbook cells)', () => {
 	it('rounds half away from zero on the decimal value', () => {
 		expect(excelRound(2.5)).toBe(3);
 		expect(excelRound(-2.5)).toBe(-3);
@@ -43,8 +43,8 @@ describe('recession helpers', () => {
 	const c = cal();
 	it('recede interpolates between table factors', () => {
 		// index 1.5 → halfway between 0.255 and 0.396
-		expect(recede(c, 1000, 1.5)).toBe(excelRound(1000 * 0.3255));
-		expect(recede(c, 32, 79)).toBe(32); // 32 × 0.9845 = 31.504 → 32: the tail floor
+		expect(recede(c, 1000, 1.5)).toBeCloseTo(1000 * 0.3255, 9);
+		expect(recede(c, 32, 79)).toBeCloseTo(31.504, 9); // the workbook's ROUND kept it at 32 for ever
 	});
 
 	it('recede below index 1 extrapolates below the first factor (pulse indices start at shiftPeakIndexLo = 0.9)', () => {
@@ -60,9 +60,9 @@ describe('recession helpers', () => {
 		expect(recessionIndex(c, mid)).toBe(3.5);
 	});
 
-	it('rainToFlow = INT(a · rain^b · area·1000 · season factor)', () => {
-		expect(rainToFlow(c, 10, false)).toBe(Math.floor(0.09 * 10 ** 1.2 * 205100 * 1));
-		expect(rainToFlow(c, 10, true)).toBe(Math.floor(0.09 * 10 ** 1.2 * 205100 * 0.1));
+	it('rainToFlow = a · rain^b · area·1000 · season factor (the workbook takes INT)', () => {
+		expect(rainToFlow(c, 10, false)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 1, 9);
+		expect(rainToFlow(c, 10, true)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 0.1, 9);
 		expect(rainToFlow(c, 0, false)).toBe(0);
 	});
 });
@@ -90,9 +90,9 @@ describe('day-1 state (audit E1)', () => {
 		// drop on the first day of every run. A steady base flow recedes at the
 		// factor for its own position on the curve (index 79 → 0.9845).
 		const c = computeFlowColumns(cal(), inputs([0, 0, 0]));
-		expect(c.baseFlow[0]).toBeCloseTo(300 * 0.9845, 0);
+		expect(c.baseFlow[0]).toBeCloseTo(300 * 0.9845, 9);
 		expect(c.baseIndex[0]).toBe(79);
-		expect(c.naturalFlowM3Day[0]).toBeCloseTo(300 * 0.9845, 0);
+		expect(c.naturalFlowM3Day[0]).toBeCloseTo(300 * 0.9845, 9);
 	});
 
 	it('never turns the base flow negative, whatever the first two recession factors', () => {
@@ -107,6 +107,20 @@ describe('day-1 state (audit E1)', () => {
 	});
 });
 
+describe('no rounding in the model state (audit R1)', () => {
+	it('keeps receding through a long dry spell instead of sticking at a rounding floor', () => {
+		// With ROUND(flow × f, 0) a flow stops receding once flow × (1 − f) < 0.5:
+		// 32 m³/day for the default tail factor 0.9845, however long the drought.
+		const c = computeFlowColumns(cal(), inputs(new Array(400).fill(0), '2021-07-01'));
+		expect(c.baseFlow[399]).toBeCloseTo(300 * 0.9845 ** 400, 6);
+		expect(c.baseFlow[399]).toBeLessThan(1);
+	});
+
+	it('rain-added flow is a·R^b·area·factor, not floored to whole m³', () => {
+		expect(rainToFlow(cal(), 3, true)).toBeCloseTo(0.09 * 3 ** 1.2 * 205_100 * 0.1, 9);
+	});
+});
+
 describe('recede (audit E2)', () => {
 	it('clamps an extrapolated factor at 0: flow never recedes below zero', () => {
 		// A pulse index below 1 (shiftPeakIndexLo < 1) extrapolates below the
@@ -116,7 +130,7 @@ describe('recede (audit E2)', () => {
 		factors[1] = 0.3;
 		expect(recede(cal({ recessionFactors: factors }), 1000, 0)).toBe(0);
 		// Inside the table nothing changes.
-		expect(Math.abs(recede(cal(), 1000, 1.5) - 1000 * 0.3255)).toBeLessThanOrEqual(0.5);
+		expect(recede(cal(), 1000, 1.5)).toBeCloseTo(1000 * 0.3255, 9);
 	});
 });
 
@@ -124,7 +138,7 @@ describe('computeNaturalFlow', () => {
 	it('recedes the initial base flow with no rain', () => {
 		const out = computeNaturalFlow(cal(), inputs([0, 0, 0, 0]));
 		const f = 0.9845; // factor at index 79, where 300 m³/day sits on the default curve
-		out.naturalFlowM3Day.forEach((v, i) => expect(v).toBeCloseTo(300 * f ** (i + 1), -0.5));
+		out.naturalFlowM3Day.forEach((v, i) => expect(v).toBeCloseTo(300 * f ** (i + 1), 9));
 		expect(out.series.map((s) => s.key)).toEqual([
 			'rain_used',
 			'is_summer',
