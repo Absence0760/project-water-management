@@ -310,6 +310,22 @@ describe('runModel — transfers', () => {
 		expect(get(off, 'R', 'transfer')).toEqual([0]);
 	});
 
+	it('shares one dam between several transfers on the same day (never overdraws)', () => {
+		// S: start 4000, keep 3000 → 1000 available. Two 864 m³/day rules from S:
+		// the first (document order) takes 864, the second only the remaining 136.
+		// Previously each rule saw yesterday's full storage and 1728 left the dam.
+		const out = run({
+			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2 })],
+			transfers: [transfer(), transfer({ id: 't2', toNodeId: 'R2' })],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(out, 'R', 'transfer')).toEqual([864]);
+		expect(get(out, 'R2', 'transfer')).toEqual([136]);
+		expect(get(out, 'S', 'transfer')).toEqual([-1000]);
+		expect(get(out, 'S', 'dam_storage')).toEqual([3000]);
+	});
+
 	it('skips transfers involving a gauge, with a warning', () => {
 		const out = run({
 			nodes: [...nodes(), node('G', { kind: 'gauge', areaKm2: 0 })].map((n) =>

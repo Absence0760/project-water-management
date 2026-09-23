@@ -95,18 +95,26 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 	const res = nodes.map(() => allocNode(days));
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
+	// Volume already committed today by earlier transfers from each source dam.
+	const drawnToday = new Float64Array(nodes.length);
 	const fragDigits = WBT_PRECISION.fragmentedM3Day;
 
 	for (let t = 0; t < days; t++) {
 		// [Transfers] "Draw from dam": uses the source dam's storage at the end of
 		// the previous day (Q, row N-1), so all transfers can be settled first.
 		jToday.fill(0);
+		drawnToday.fill(0);
 		for (let k = 0; k < transfers.length; k++) {
 			const tr = transfers[k]!;
 			if (!tr.activeMonth[month[t]!]) continue;
 			const prev = t === 0 ? nodes[tr.from]!.initialStorageM3 : res[tr.from]!.storage[t - 1]!;
-			// fGetTrfVolCapped: MIN(MAX(Qprev − cap × min%, 0), capMax)
-			const v = Math.min(Math.max(prev - tr.reserveM3, 0), tr.maxDailyM3);
+			// fGetTrfVolCapped: MIN(MAX(Qprev − cap × min%, 0), capMax), with Qprev
+			// reduced by what earlier rules already took from this dam today. The
+			// workbook caps each rule against the full Qprev, so two rules from one
+			// dam could overdraw it (docs/engine-review.md F1, quirk Q18); rules
+			// are served in document order. Identical for a single rule per dam.
+			const v = Math.min(Math.max(prev - drawnToday[tr.from]! - tr.reserveM3, 0), tr.maxDailyM3);
+			drawnToday[tr.from]! += v;
 			trOut[k]![t] = v;
 			jToday[tr.to]! += v;
 			jToday[tr.from]! -= v;
@@ -142,9 +150,14 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			const H = sumU;
 			const I = excelRound(nat * node.share, fragDigits);
 			const J = jToday[i]!;
-			const L = R0(H * node.pctUpstreamToDam);
+			// The workbook's ROUND(H·p, 0) can round *above* a fractional H (a
+			// fractional divert capacity upstream makes U, and so H, fractional),
+			// giving a negative bypass K and negative supply. Cap each rounded split
+			// at the volume it splits — identical whenever H and I are whole m³,
+			// as in client catchment (docs/engine-review.md; found by the invariant tests).
+			const L = Math.min(R0(H * node.pctUpstreamToDam), H);
 			const K = H - L;
-			const M = R0(I * node.pctRunoffToDam);
+			const M = Math.min(R0(I * node.pctRunoffToDam), I);
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
