@@ -36,10 +36,22 @@ export interface NaturalFlowInput {
 	series?: { key: string; label: string; unit: string; values: number[] }[];
 }
 
+/** Explicit catchment area, else the sum of the farm areas (the workbook's rFarmSpec_AreaTotal). */
+export function resolveCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }, input: ModelInput): number {
+	if (cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0) return cal.catchmentAreaKm2;
+	return input.model.nodes.filter((n) => n.kind === 'farm').reduce((sum, n) => sum + (n.areaKm2 || 0), 0);
+}
+
+function withCatchmentArea<T extends { catchmentAreaKm2: number | null }>(cal: T, input: ModelInput): T & { catchmentAreaKm2: number } {
+	const area = resolveCatchmentAreaKm2(cal, input);
+	if (!(area > 0)) throw new Error('catchment area is 0 — give the farms an area (km²) or set calibration.catchmentAreaKm2');
+	return { ...cal, catchmentAreaKm2: area };
+}
+
 /** Run the full model: natural flow from rain (./flow.ts), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
 	return runModelWith(input, (ctx) =>
-		computeNaturalFlow(ctx.settings.calibration, {
+		computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
 			startDate: ctx.startDate,
 			days: ctx.days,
 			rainCatchmentMm: ctx.aligned('rain_catchment_mm'),

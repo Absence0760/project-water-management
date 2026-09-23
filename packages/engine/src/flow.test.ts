@@ -14,6 +14,8 @@ import { defaultProjectSettings, type CalibrationParams } from './project';
 
 const cal = (over: Partial<CalibrationParams> = {}): CalibrationParams => ({
 	...defaultProjectSettings().calibration,
+	// Fixture area (the blank workbook's farm total); the real default is null = summed farm areas.
+	catchmentAreaKm2: 205.1,
 	...over
 });
 

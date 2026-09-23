@@ -25,8 +25,12 @@ export interface CalibrationParams {
 	summerMonths: number[];
 	/** Base flow (m³/day) in the row before the first simulated day ([Flow data] S20). */
 	baseFlowInitial: number;
-	/** Catchment area (km²) that rain falls on [rFarmSpec_AreaTotal]. */
-	catchmentAreaKm2: number;
+	/**
+	 * Catchment area (km²) that rain falls on [rFarmSpec_AreaTotal]. null (the
+	 * default) = the sum of the farm nodes' areas, which is what the workbook's
+	 * total is; set it only to override.
+	 */
+	catchmentAreaKm2: number | null;
 	/** Rain flow / receded base flow above this resets the base flow [rCalibration_MinFlowRatioToResetBase]. */
 	baseResetRatio: number;
 	/** Outside summer months: rain today ≥ this (mm) switches to winter the same day [rCalibration_WinterTodayThresh]. */
@@ -83,7 +87,7 @@ export function defaultProjectSettings(): ProjectSettings {
 			winterFactor: 1,
 			summerMonths: [1, 2, 3, 4, 5, 11, 12],
 			baseFlowInitial: 300,
-			catchmentAreaKm2: 205.1,
+			catchmentAreaKm2: null,
 			baseResetRatio: 1.5,
 			winterTodayRainMm: 35,
 			winterNextDayRainMm: 9,

@@ -601,3 +601,18 @@ describe.skipIf(!dataDir)(
 		});
 	}
 );
+
+describe('catchment area', () => {
+	it('defaults to the sum of farm areas and honours an explicit override', async () => {
+		const { resolveCatchmentAreaKm2 } = await import('./run');
+		const nodes = [
+			{ kind: 'gauge', areaKm2: 99 },
+			{ kind: 'farm', areaKm2: 30 },
+			{ kind: 'farm', areaKm2: 20.5 }
+		];
+		const input = { model: { nodes } } as unknown as Parameters<typeof resolveCatchmentAreaKm2>[1];
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: null }, input)).toBe(50.5);
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 0 }, input)).toBe(50.5);
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 205.1 }, input)).toBe(205.1);
+	});
+});

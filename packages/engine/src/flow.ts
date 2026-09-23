@@ -133,7 +133,8 @@ export function recessionIndex(cal: CalibrationParams, flow: number): number {
 export function rainToFlow(cal: CalibrationParams, rainMm: number, summer: boolean): number {
 	if (!(rainMm > 0)) return 0;
 	const factor = summer ? cal.summerFactor : cal.winterFactor;
-	const rainToM3 = (cal.catchmentAreaKm2 * 10 ** 6) / 1000; // rFlowData_RainToM3
+	// runModel resolves a null area to the summed farm areas before calling in.
+	const rainToM3 = ((cal.catchmentAreaKm2 ?? 0) * 10 ** 6) / 1000; // rFlowData_RainToM3
 	return excelInt(cal.a * rainMm ** cal.b * rainToM3 * factor);
 }
 
