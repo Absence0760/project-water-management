@@ -43,8 +43,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await page.getByRole('textbox', { name: 'Crop name' }).fill('Vines');
 	await page.getByLabel('Vines crop factor, Jan').fill('0.8');
 	await page.getByLabel('Vines crop factor, Feb').fill('0.75');
-	await page.getByLabel('Vines on Hilltop farm, m²').fill('250000');
-	await page.getByLabel('Vines on Valley farm, m²').fill('80000');
+	await page.getByLabel('Vines on Hilltop farm, ha').fill('25');
+	await page.getByLabel('Vines on Valley farm, ha').fill('8');
 	const totals = page.getByRole('row', { name: /^Total/ });
 	await expect(totals).toContainText('33.00 ha');
 
@@ -82,8 +82,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(page.getByLabel('Vines crop factor, Jan')).toHaveValue('0.8');
 	await expect(page.getByLabel('Vines crop factor, Feb')).toHaveValue('0.75');
 	await expect(page.getByLabel('Vines crop factor, Mar')).toHaveValue('0');
-	await expect(page.getByLabel('Vines on Hilltop farm, m²')).toHaveValue('250000');
-	await expect(page.getByLabel('Vines on Valley farm, m²')).toHaveValue('80000');
+	await expect(page.getByLabel('Vines on Hilltop farm, ha')).toHaveValue('25');
+	await expect(page.getByLabel('Vines on Valley farm, ha')).toHaveValue('8');
 
 	await tab(page, 'Network').click();
 	await expect(page.getByRole('textbox', { name: 'Name' })).toHaveCount(3);

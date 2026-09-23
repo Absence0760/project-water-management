@@ -70,9 +70,9 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await page.getByRole('button', { name: 'Add crop' }).click();
 	await page.getByRole('textbox', { name: 'Crop name' }).fill('Citrus');
 	for (const [i, m] of MONTHS.entries()) await page.getByLabel(`Citrus crop factor, ${m}`).fill(CROP_FACTORS[i]!);
-	await page.getByLabel('Citrus on Ridge farm, m²').fill('200000');
-	await page.getByLabel('Citrus on Middle farm, m²').fill('150000');
-	await page.getByLabel('Citrus on River farm, m²').fill('100000');
+	await page.getByLabel('Citrus on Ridge farm, ha').fill('20');
+	await page.getByLabel('Citrus on Middle farm, ha').fill('15');
+	await page.getByLabel('Citrus on River farm, ha').fill('10');
 	await expect(page.getByRole('row', { name: /^Total/ })).toContainText('45.00 ha');
 
 	// --- transfers: Ridge → River in summer ------------------------------------
@@ -121,16 +121,18 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await page.getByLabel(/^Run label/).fill('Catchment D baseline');
 	await page.getByRole('button', { name: 'Run model' }).click();
 
-	const runs = page.getByRole('region', { name: 'Runs' });
+	const runs = page.getByRole('region', { name: 'Runs', exact: true });
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toHaveAttribute('aria-current', 'true');
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toContainText('2020-10-01 → 2022-09-30');
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
-	const stat = (term: string) => summary.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
-	await expect(stat('Mean natural flow')).toHaveText(/^[\d\s,.]+m³\/day$/);
-	await expect(stat('Mean simulated outflow')).toHaveText(/^[\d\s,.]+m³\/day$/);
-	await expect(stat('Overlapping days')).toHaveText('730');
+	// Headline flows in m³/s, with the annual volume and m³/day beneath.
+	const stat = (term: string) => summary.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd[1]');
+	await expect(stat('Mean natural flow')).toHaveText(/^[\d\s,.]+m³\/s$/);
+	await expect(stat('Mean simulated outflow')).toHaveText(/^[\d\s,.]+m³\/s$/);
+	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
+	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' }).locator('xpath=following-sibling::dd[1]')).toContainText('730 days');
 
 	const farms = summary.getByRole('table');
 	for (const f of ['Ridge farm', 'Middle farm', 'River farm']) {

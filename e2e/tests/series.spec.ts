@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { createProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
@@ -72,4 +73,32 @@ test('a malformed CSV is rejected before upload', async ({ page, owner }) => {
 	});
 	await expect(form.getByRole('alert')).toHaveText('broken.csv: Line 3: "lots" is not a number');
 	await expect(form.getByRole('button', { name: 'Upload' })).toBeDisabled();
+});
+
+test('a later file appends to an existing series without erasing stored days', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series append');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const csv = (name: string, body: string) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(body) });
+
+	await form.getByLabel('CSV file').setInputFiles(csv('first.csv', 'date,value\n2021-10-01,1\n2021-10-02,2\n2021-10-03,3\n'));
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toHaveText('Uploaded 3 days to “Rainfall — catchment”.');
+
+	// Same kind and name: append/update is the default. 10-03 is corrected,
+	// 10-04 and 10-05 are new, and 10-02 (blank in the file) keeps its value.
+	await expect(form.getByRole('radio', { name: /^Append \/ update/ })).toBeChecked();
+	await form.getByLabel('CSV file').setInputFiles(csv('more.csv', 'date,value\n2021-10-02,\n2021-10-03,30\n2021-10-04,4\n2021-10-05,5\n'));
+	const summary = form.getByRole('definition');
+	await expect(summary.nth(4)).toHaveText('2'); // new days
+	await expect(summary.nth(5)).toHaveText('1'); // changed
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
+
+	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
+	await expect(row).toContainText('2021-10-05');
+	const stored = await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json();
+	const s = await (await page.request.get(`${API_URL}/projects/${project.id}/series/${stored.series[0].id}`)).json();
+	expect(s.values).toEqual([1, 2, 30, 4, 5]);
 });

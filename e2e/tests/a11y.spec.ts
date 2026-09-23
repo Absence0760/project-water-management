@@ -75,7 +75,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 					id: 'runs',
 					ready: async (p) => {
 						await expect(p.getByRole('region', { name: 'Run summary' })).toBeVisible();
-						await expect(p.getByRole('img', { name: /line chart/ }).locator('canvas')).toBeVisible();
+						await expect(p.getByRole('img', { name: /line chart/ }).first().locator('canvas')).toBeVisible();
 					}
 				}
 			];
