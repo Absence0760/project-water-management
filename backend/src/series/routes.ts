@@ -5,6 +5,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { mergeDaily } from './merge.js';
 
 export const MAX_SERIES_VALUES = 60_000;
 
@@ -53,6 +54,32 @@ export const seriesRoutes = new Hono<AuthEnv>()
 					start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now()
 				 RETURNING ${META}`,
 				[id, body.kind, body.name, body.unit, body.startDate, body.values]
+			);
+			return c.json(rows[0]);
+		});
+	})
+	// Append / merge new days into a series (daily or batch updates). Creates the
+	// series if it doesn't exist. Only the days sent are touched.
+	.post('/:id/series/merge', async (c) => {
+		const body = PutBody.parse(await c.req.json());
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			// Lock the row so two concurrent batches can't lose each other's days.
+			const { rows: cur } = await db.query<{ start_date: string; values: (number | null)[] }>(
+				`SELECT start_date, "values" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+				[id, body.kind, body.name]
+			);
+			const existing = cur[0] ? { startDate: cur[0].start_date, values: cur[0].values } : null;
+			const merged = mergeDaily(existing, { startDate: body.startDate, values: body.values });
+			if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
+			const { rows } = await db.query(
+				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
+				 VALUES ($1, $2, $3, $4, $5, $6)
+				 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
+					start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now()
+				 RETURNING ${META}`,
+				[id, body.kind, body.name, body.unit, merged.startDate, merged.values]
 			);
 			return c.json(rows[0]);
 		});

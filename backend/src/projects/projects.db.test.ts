@@ -174,3 +174,18 @@ describe('time series', () => {
 		).toBe(400);
 	});
 });
+
+describe('series append', () => {
+	it('merges a daily batch into an existing series and creates missing ones', async () => {
+		const u = await signUp('Append');
+		const { projectId } = await projectWithModel(u);
+		const merge = (startDate: string, values: (number | null)[]) =>
+			u.call('POST', `/projects/${projectId}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate, values });
+		expect((await merge('2025-01-01', [1, 2, 3])).body).toMatchObject({ startDate: '2025-01-01', length: 3 });
+		const next = await merge('2025-01-03', [30, 4]);
+		expect(next.body).toMatchObject({ startDate: '2025-01-01', length: 4 });
+		const full = await u.call('GET', `/projects/${projectId}/series/${next.body.id}`);
+		expect(full.body.values).toEqual([1, 2, 30, 4]);
+	});
+});
+
