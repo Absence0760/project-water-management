@@ -148,6 +148,14 @@ The settings are grouped by what they drive:
   (`runs/cache.ts`). A run stores about 170 series of about 16 000 values.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 
+## Help and glossary (`/help`)
+
+Every entry in `lib/help/content.ts`, grouped by topic, searchable, with a
+stable anchor per term (`/help#<id>`) that the ⓘ help tips link to. On wide
+screens (≥ 64rem) the table of contents is a sidebar that stays on screen as
+you scroll: it marks the topic and term you're reading (`aria-current`) and
+lists that topic's terms. On phones the topics wrap above the text.
+
 ## Viewers
 
 Viewers see a "View only" note. Inputs render as plain values instead of

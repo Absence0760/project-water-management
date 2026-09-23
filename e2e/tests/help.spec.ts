@@ -55,3 +55,43 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await page.getByRole('heading', { level: 1, name: 'Help tips' }).click();
 	await expect(bubble).toHaveCount(0);
 });
+
+test('the help contents stay on screen beside the text and follow the section being read', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/help');
+	const toc = page.getByRole('navigation', { name: 'Topics' });
+	const topics = page.getByRole('heading', { level: 2 });
+	const first = (await topics.first().textContent())!.trim();
+	const last = (await topics.last().textContent())!.trim();
+	expect(first).not.toBe(last);
+
+	await expect(toc.getByRole('link', { name: first, exact: true })).toHaveAttribute('aria-current', 'location');
+
+	// Scroll to the end: the contents are still in view, and mark the last topic.
+	await page.keyboard.press('End');
+	await expect(toc.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'location');
+	await expect(toc.getByRole('link', { name: first, exact: true })).not.toHaveAttribute('aria-current', 'location');
+	const box = await toc.boundingBox();
+	expect(box!.y).toBeGreaterThanOrEqual(0);
+	expect(box!.y).toBeLessThan(200);
+
+	// The current topic lists its terms, and a term link jumps to it.
+	const term = toc.getByRole('list').getByRole('list').getByRole('link').first();
+	const name = (await term.textContent())!.trim();
+	await term.click();
+	await expect(page.getByRole('article', { name })).toBeInViewport();
+});
+
+test('on a phone the help topics sit above the text, without a sidebar', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 800 });
+	await page.goto('/help');
+	const toc = page.getByRole('navigation', { name: 'Topics' });
+	const firstTopic = page.getByRole('heading', { level: 2 }).first();
+	const tocBox = (await toc.boundingBox())!;
+	const headBox = (await firstTopic.boundingBox())!;
+	expect(tocBox.y + tocBox.height).toBeLessThanOrEqual(headBox.y);
+	await page.keyboard.press('End');
+	await expect(toc).not.toBeInViewport();
+});
