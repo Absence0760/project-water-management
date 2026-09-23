@@ -243,6 +243,8 @@ export interface SeriesMeta {
 	unit: string;
 	startDate: string;
 	length: number;
+	/** ISO timestamp of the last upload/merge that changed the values. */
+	updatedAt?: string;
 }
 
 // ---------------------------------------------------------------------------

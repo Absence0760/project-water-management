@@ -259,6 +259,11 @@ describe('series append', () => {
 		expect(next.body).toMatchObject({ startDate: '2025-01-01', length: 4 });
 		const full = await u.call('GET', `/projects/${projectId}/series/${next.body.id}`);
 		expect(full.body.values).toEqual([1, 2, 30, 4]);
+		// updatedAt moves forward with each change (drives "new data since the last run").
+		const first = await merge('2025-01-05', [5]);
+		expect(Date.parse(first.body.updatedAt)).toBeGreaterThanOrEqual(Date.parse(next.body.updatedAt));
+		const list = await u.call('GET', `/projects/${projectId}/series`);
+		expect(list.body.series[0].updatedAt).toBe(first.body.updatedAt);
 	});
 });
 

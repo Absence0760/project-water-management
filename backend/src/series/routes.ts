@@ -17,7 +17,9 @@ const PutBody = z.object({
 	values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES)
 });
 
-const META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length`;
+// updatedAt: when the values last changed (upload, merge) — lets the UI tell
+// "new data since the last run" even for corrections inside the run period.
+const META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt"`;
 
 export const seriesRoutes = new Hono<AuthEnv>()
 	.get('/:id/series', async (c) =>
