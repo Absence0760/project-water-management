@@ -12,7 +12,8 @@
 		"test:watch": "vitest",
 		"start": "node dist/server.js",
 		"test:db": "vitest run --project db",
-		"db:migrate": "tsx scripts/migrate.ts"
+		"db:migrate": "tsx scripts/migrate.ts",
+		"import:project": "tsx scripts/import-project.ts"
 	},
 	"dependencies": {
 		"dotenv": "^17.4.1",

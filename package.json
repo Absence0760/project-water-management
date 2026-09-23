@@ -22,6 +22,10 @@
 		"dev:db:reset": "docker compose down -v && pnpm dev:db:up && pnpm dev:db:migrate",
 		"dev:db:psql": "psql postgresql://water:water@127.0.0.1:5434/water",
 
+		"//-- data --": "Workbook import. seed:demo extracts client catchment + the blank WBT from Original/ (Python venv, see scripts/wbt-import/README.md) and imports them for demo@example.com / demo-password.",
+		"import:project": "pnpm -C backend import:project",
+		"seed:demo": "bin/seed-demo.sh",
+
 		"//-- build --": "Production builds: static frontend (frontend/build) and the Lambda bundle (backend/dist/lambda.mjs).",
 		"build": "pnpm -r run build",
 		"build:frontend": "pnpm -C frontend build",
