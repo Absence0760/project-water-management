@@ -213,8 +213,8 @@
 	</p>
 	{#if !apanSet}
 		<div class="alert alert-info">
-			A-pan evaporation isn't set yet, so demand is zero. Enter the monthly A-pan values under
-			<a href="?tab=settings">Settings & calibration → Demand</a>.
+			A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+			(Settings & calibration, Demand).
 		</div>
 	{/if}
 	{#if farms.length === 0}

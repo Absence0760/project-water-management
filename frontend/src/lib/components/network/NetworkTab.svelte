@@ -227,7 +227,10 @@
 								</select>
 							</td>
 							{#each NODE_FIELDS as f (f.key)}
-								<td class:na={f.farmOnly && node.kind !== 'farm'}>
+								{#if f.farmOnly && node.kind !== 'farm'}
+									<td class="num na" title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
+								{:else}
+								<td>
 									<NumberInput
 										label={f.aria(label)}
 										min={0}
@@ -239,6 +242,7 @@
 										bind:value={node[f.key]}
 									/>
 								</td>
+								{/if}
 							{/each}
 							<td class="num share">{share === null ? '–' : fmtPct(share, 2)}</td>
 							{#if !readonly}
@@ -368,8 +372,8 @@
 	.net td:nth-child(3) {
 		min-width: 160px;
 	}
-	.net td.na :global(input) {
-		opacity: 0.45;
+	.net td.na {
+		color: var(--text-muted);
 	}
 	.net tr.sel {
 		background: var(--accent-soft);
