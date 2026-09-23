@@ -10,6 +10,7 @@ import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { runRoutes } from './runs/routes.js';
 import { seriesRoutes } from './series/routes.js';
+import { teamRoutes } from './teams/routes.js';
 
 export function createApp() {
 	const app = new Hono<AuthEnv>();
@@ -69,6 +70,11 @@ export function createApp() {
 	projects.route('/', seriesRoutes);
 	projects.route('/', runRoutes);
 	app.route('/projects', projects);
+
+	const teams = new Hono<AuthEnv>();
+	teams.use('*', requireUser);
+	teams.route('/', teamRoutes);
+	app.route('/teams', teams);
 
 	app.notFound((c) => c.json({ error: 'not found' }, 404));
 	app.onError(handleError);

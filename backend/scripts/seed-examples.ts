@@ -15,7 +15,6 @@ import { executeRun } from '../src/runs/execute.js';
 import { buildExamples } from './examples/catchments.js';
 import { importProjectData } from './import-project.js';
 
-config({ path: ['.env.development.local', '.env.development'] });
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
 export const DEMO = { email: 'demo@example.com', password: 'demo-password', displayName: 'Demo Hydrologist' };
@@ -56,6 +55,8 @@ export async function seedExamples(): Promise<string[]> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+	// CLI only: importing this module must not load dev env (see scripts/migrate.ts).
+	config({ path: ['.env.development.local', '.env.development'] });
 	seedExamples()
 		.then(() => console.log(`\nSign in as ${DEMO.email} or ${ANALYST.email} (password: ${DEMO.password})`))
 		.catch((err) => {

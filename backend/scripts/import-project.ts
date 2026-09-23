@@ -18,7 +18,6 @@ import { ModelBody, modelProblems } from '../src/model/validate.js';
 import { SettingsPatch } from '../src/projects/settings.js';
 import { MAX_SERIES_VALUES } from '../src/series/routes.js';
 
-config({ path: ['.env.development.local', '.env.development'] });
 
 const ProjectFile = z.object({
 	name: z.string().min(1).max(200),
@@ -101,6 +100,8 @@ function freshIds(m: z.infer<typeof ModelBody>) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+	// CLI only: importing this module must not load dev env (see scripts/migrate.ts).
+	config({ path: ['.env.development.local', '.env.development'] });
 	const { values, positionals } = parseArgs({
 		allowPositionals: true,
 		options: { email: { type: 'string' }, name: { type: 'string' }, password: { type: 'string' }, run: { type: 'boolean' } }

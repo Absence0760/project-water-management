@@ -11,6 +11,8 @@ type ProjectRow = {
 	id: string;
 	name: string;
 	description: string;
+	team_id: string | null;
+	team_name: string | null;
 	settings: unknown;
 	role: Role;
 	created_at: Date;
@@ -22,19 +24,26 @@ const summary = (r: ProjectRow) => ({
 	name: r.name,
 	description: r.description,
 	role: r.role,
+	team: r.team_id ? { id: r.team_id, name: r.team_name } : null,
 	createdAt: r.created_at.toISOString(),
 	updatedAt: r.updated_at.toISOString()
 });
 const full = (r: ProjectRow) => ({ ...summary(r), settings: mergeSettings(r.settings) });
 
+// RLS already limits rows to projects the user can see (directly or via a
+// team); app_project_role gives the effective role. The team name is only
+// visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
-	SELECT p.id, p.name, p.description, p.settings, p.created_at, p.updated_at, m.role
-	FROM project p JOIN project_member m ON m.project_id = p.id AND m.user_id = app_current_user_id()`;
+	SELECT p.id, p.name, p.description, p.settings, p.created_at, p.updated_at, p.team_id,
+		t.name AS team_name, app_project_role(p.id) AS role
+	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 
 const name = z.string().trim().min(1).max(200);
-const CreateBody = z.object({ name, description: z.string().max(5000).optional() });
+const CreateBody = z.object({ name, description: z.string().max(5000).optional(), teamId: z.string().uuid().nullable().optional() });
 const PatchBody = z.object({
 	name: name.optional(),
+	/** Move the project into a team you belong to (null = personal). Owner only. */
+	teamId: z.string().uuid().nullable().optional(),
 	description: z.string().max(5000).optional(),
 	settings: SettingsPatch.optional()
 });
@@ -59,9 +68,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 			// the SELECT policy before the AFTER trigger has made us a member.
 			const id = crypto.randomUUID();
+			if (body.teamId) await requireTeamMember(db, body.teamId);
 			await db.query(
-				`INSERT INTO project (id, name, description, created_by) VALUES ($1, $2, $3, app_current_user_id())`,
-				[id, body.name, body.description ?? '']
+				`INSERT INTO project (id, name, description, created_by, team_id) VALUES ($1, $2, $3, app_current_user_id(), $4)`,
+				[id, body.name, body.description ?? '', body.teamId ?? null]
 			);
 			return c.json({ project: full(await getProject(db, id)) }, 201);
 		});
@@ -76,7 +86,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const body = PatchBody.parse(await c.req.json());
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'editor');
+			await requireRole(db, id, body.teamId !== undefined ? 'owner' : 'editor');
+			if (body.teamId) await requireTeamMember(db, body.teamId);
 			const current = await getProject(db, id);
 			const settings = body.settings ? { ...mergeSettings(current.settings), ...body.settings } : undefined;
 			await db.query(
@@ -84,9 +95,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 					name = COALESCE($2, name),
 					description = COALESCE($3, description),
 					settings = COALESCE($4::jsonb, settings),
+					team_id = CASE WHEN $5 THEN $6::uuid ELSE team_id END,
 					updated_at = now()
 				 WHERE id = $1`,
-				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null]
+				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
+					body.teamId !== undefined, body.teamId ?? null]
 			);
 			return c.json({ project: full(await getProject(db, id)) });
 		});
@@ -106,9 +119,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const src = await getProject(db, srcId);
 			const newId = crypto.randomUUID();
 			await db.query(
-				`INSERT INTO project (id, name, description, settings, created_by)
-				 VALUES ($1, $2, $3, $4, app_current_user_id())`,
-				[newId, body.name, src.description, JSON.stringify(src.settings ?? {})]
+				`INSERT INTO project (id, name, description, settings, created_by, team_id)
+				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
+				// The copy stays in the team only if the copier belongs to it.
+				[newId, body.name, src.description, JSON.stringify(src.settings ?? {}), src.team_name !== null ? src.team_id : null]
 			);
 			await saveModel(db, newId, remapIds(await loadModel(db, srcId)));
 			await db.query(
@@ -200,6 +214,11 @@ async function assertNotLastOwner(db: import('../db/tx.js').Db, projectId: strin
 	if (rows[0]?.target_is_owner && rows[0].owners <= 1) {
 		throw new ApiError(409, 'a project must keep at least one owner');
 	}
+}
+
+async function requireTeamMember(db: import('../db/tx.js').Db, teamId: string) {
+	const { rows } = await db.query<{ role: string | null }>('SELECT app_team_role($1) AS role', [teamId]);
+	if (!rows[0]?.role) throw new ApiError(404, 'team not found');
 }
 
 /** Fresh ids for a copied model, keeping every internal reference intact. */

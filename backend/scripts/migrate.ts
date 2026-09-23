@@ -9,7 +9,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 
-config({ path: ['.env.development.local', '.env.development'] });
 
 export async function migrate(databaseUrl: string, log = console.log): Promise<string[]> {
 	const dir = join(import.meta.dirname, '..', 'migrations');
@@ -46,6 +45,10 @@ export async function migrate(databaseUrl: string, log = console.log): Promise<s
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+	// Only the CLI loads dev env files. Importing this module (tests, the
+	// migrate Lambda) must never touch process.env — the DB tests once ran
+	// against the dev database because this lived at module top level.
+	config({ path: ['.env.development.local', '.env.development'] });
 	const url = process.env.MIGRATION_DATABASE_URL;
 	if (!url) {
 		console.error('MIGRATION_DATABASE_URL is not set');

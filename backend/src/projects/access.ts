@@ -12,10 +12,8 @@ const rank: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
  */
 export async function requireRole(db: Db, projectId: string, min: Role): Promise<Role> {
 	if (!UUID.test(projectId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<{ role: Role }>(
-		'SELECT role FROM project_member WHERE project_id = $1 AND user_id = app_current_user_id()',
-		[projectId]
-	);
+	// Effective role: direct membership or via the project's team (002_teams).
+	const { rows } = await db.query<{ role: Role | null }>('SELECT app_project_role($1) AS role', [projectId]);
 	const role = rows[0]?.role;
 	if (!role) throw new ApiError(404, 'not found');
 	if (rank[role] < rank[min]) throw new ApiError(403, `requires ${min} role`);
