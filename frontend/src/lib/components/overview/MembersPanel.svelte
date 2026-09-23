@@ -1,14 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, ROLES, type Member, type Role } from '$lib/api';
+	import { base } from '$app/paths';
+	import { api, ROLES, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 
 	let {
 		projectId,
+		team = null,
 		isOwner,
 		currentUserId,
 		onLeftProject
-	}: { projectId: string; isOwner: boolean; currentUserId: string; onLeftProject: () => void } = $props();
+	}: {
+		projectId: string;
+		/** The owning team, if any: its members have access too (not listed here). */
+		team?: ProjectTeam | null;
+		isOwner: boolean;
+		currentUserId: string;
+		onLeftProject: () => void;
+	} = $props();
 
 	let members = $state<Member[]>([]);
 	let loading = $state(true);
@@ -86,9 +95,16 @@
 
 <section class="panel" aria-labelledby="members-h">
 	<div class="panel-head">
-		<h2 id="members-h">Members</h2>
+		<h2 id="members-h">{team ? 'Shared directly with' : 'Members'}</h2>
 		{#if !isOwner}<span class="muted small">Only owners can manage members.</span>{/if}
 	</div>
+	{#if team}
+		<p class="muted small team-note">
+			Everyone in
+			{#if team.name}<a href="{base}/teams/{team.id}">{team.name}</a>{:else}the owning team{/if}
+			also has access (admins as owners, members as editors). Add people here to share outside the team.
+		</p>
+	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<LoadState {loading} error={loadError} retry={load} empty={members.length === 0} emptyText="No members.">
 		<div class="table-wrap">
@@ -96,7 +112,7 @@
 				<thead>
 					<tr>
 						<th scope="col">Name</th>
-						<th scope="col">Email</th>
+						<th scope="col" class="email">Email</th>
 						<th scope="col">Role</th>
 						<th scope="col"><span class="visually-hidden">Actions</span></th>
 					</tr>
@@ -104,8 +120,11 @@
 				<tbody>
 					{#each members as m (m.userId)}
 						<tr>
-							<th scope="row">{m.displayName}{#if m.userId === currentUserId} <span class="muted">(you)</span>{/if}</th>
-							<td>{m.email}</td>
+							<th scope="row">
+								{m.displayName}{#if m.userId === currentUserId}&nbsp;<span class="muted">(you)</span>{/if}
+								<span class="sub-email">{m.email}</span>
+							</th>
+							<td class="email">{m.email}</td>
 							<td>
 								{#if isOwner}
 									<select
@@ -178,5 +197,27 @@
 	}
 	select {
 		text-transform: capitalize;
+		min-width: 6.5rem;
+	}
+	.team-note {
+		margin: -0.25rem 0 0.75rem;
+	}
+	.team-note a {
+		text-decoration: underline;
+	}
+	.sub-email {
+		display: none;
+		font-weight: 400;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	@media (max-width: 560px) {
+		.email {
+			display: none;
+		}
+		.sub-email {
+			display: block;
+		}
 	}
 </style>

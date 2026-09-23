@@ -86,11 +86,28 @@ only). Open the project, press **Run**, and compare the Shortfalls table with th
 The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's
 read-only mode, so memory stays bounded.
 
-## Multiple projects
+## Multiple projects and teams
 
 Each catchment is its own project. Create "Place A", "Place B" and "Place C"
 from the project list. **Copy** duplicates a project's model and input series
 (not its runs), which is the quickest way to start a what-if variant.
+
+The project list groups projects by owner: **Personal**, one group per team
+you're in, and **Shared with me** (projects shared with you directly). Filter by
+owner, search by name/description/team and sort by last update or name; the
+filters live in the URL (`/?owner=team:<id>&q=…&sort=name`), so Back and shared
+links keep them. `/?new=1` opens the New project dialog.
+
+**Teams** (header → Teams, `/teams`) own catchments together: team admins are
+owners of every team project and members are editors. Create a team, add
+colleagues by the email they registered with, and pick the team when creating
+a project, or move an existing one from its Overview tab (owners only). The
+Overview tab also shows a setup checklist (network → crops & areas → rainfall
+and flow data → evaporation/EWR settings → run) that ticks off as the
+catchment is filled in.
+
+With the seeded demo data, `demo@example.com` is admin of the team "Demo
+Catchment Consultants" and `analyst@example.com` is a member.
 
 ## Running pieces individually
 

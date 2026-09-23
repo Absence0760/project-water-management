@@ -32,7 +32,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	await expect(v.getByRole('button', { name: 'Save details' })).toHaveCount(0);
 	await expect(v.getByLabel('Add member by email')).toHaveCount(0);
 
-	await v.getByRole('link', { name: 'Network' }).click();
+	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
 	await expect(v.getByText('You have view-only access to this project.')).toBeVisible();
 	const names = v.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
@@ -86,7 +86,7 @@ test('an editor can change the shared model but cannot manage members', async ({
 	await expect(e.getByLabel('Add member by email')).toHaveCount(0);
 	await expect(e.getByLabel('Name', { exact: true })).toBeEditable();
 
-	await e.getByRole('link', { name: 'Network' }).click();
+	await e.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
 	await expect(e.getByLabel('Area of Upper farm, km²', { exact: true })).toBeEditable();
 	await expect(e.getByRole('button', { name: '+ Add node' })).toBeVisible();
 });

@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { api, type Project } from '$lib/api';
+	import type { SeriesMeta } from '@water-management/engine';
+	import { api, type Project, type RunMeta } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { checklist } from './checklist';
 	import MembersPanel from './MembersPanel.svelte';
+	import SetupChecklist from './SetupChecklist.svelte';
+	import TeamPanel from './TeamPanel.svelte';
 
 	let {
 		project,
@@ -32,13 +36,21 @@
 
 	const detailsDirty = $derived(name.trim() !== project.name || description.trim() !== (project.description ?? ''));
 
-	let seriesCount = $state<number | null>(null);
-	let runCount = $state<number | null>(null);
+	let series = $state<SeriesMeta[] | null>(null);
+	let runs = $state<RunMeta[] | null>(null);
 	onMount(async () => {
 		const [s, r] = await Promise.allSettled([api.series.list(project.id), api.runs.list(project.id)]);
-		if (s.status === 'fulfilled') seriesCount = s.value.length;
-		if (r.status === 'fulfilled') runCount = r.value.length;
+		if (s.status === 'fulfilled') series = s.value;
+		if (r.status === 'fulfilled') runs = r.value;
 	});
+	const seriesCount = $derived(series?.length ?? null);
+	const runCount = $derived(runs?.length ?? null);
+
+	// Built from the model as edited (unsaved changes included) so the
+	// checklist ticks as soon as the user fills a step in.
+	const steps = $derived(
+		checklist({ model: editor.model, settings: project.settings, series, runs, updatedAt: project.updatedAt })
+	);
 
 	const stats = $derived.by(() => {
 		const m = editor.model;
@@ -75,6 +87,8 @@
 	}
 </script>
 
+<SetupChecklist {steps} />
+
 <dl class="stats">
 	<div class="stat"><dt>Farms</dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
 	<div class="stat"><dt>Catchment area</dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
@@ -87,30 +101,34 @@
 </dl>
 
 <div class="grid">
-	<section class="panel" aria-labelledby="details-h">
-		<div class="panel-head"><h2 id="details-h">Project details</h2></div>
-		<form onsubmit={saveDetails}>
-			{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-			<div class="field">
-				<label for="pd-name">Name</label>
-				<input id="pd-name" required maxlength="200" readonly={!canEdit} bind:value={name} />
-			</div>
-			<div class="field">
-				<label for="pd-desc">Description</label>
-				<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={description}></textarea>
-			</div>
-			{#if canEdit}
-				<div class="form-row">
-					<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim()}>
-						{saving ? 'Saving…' : 'Save details'}
-					</button>
-					{#if savedAt && !detailsDirty}<span class="muted" role="status">Saved.</span>{/if}
+	<div class="col">
+		<section class="panel" aria-labelledby="details-h">
+			<div class="panel-head"><h2 id="details-h">Project details</h2></div>
+			<form onsubmit={saveDetails}>
+				{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+				<div class="field">
+					<label for="pd-name">Name</label>
+					<input id="pd-name" required maxlength="200" readonly={!canEdit} bind:value={name} />
 				</div>
-			{/if}
-		</form>
-	</section>
+				<div class="field">
+					<label for="pd-desc">Description</label>
+					<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={description}></textarea>
+				</div>
+				{#if canEdit}
+					<div class="form-row">
+						<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim()}>
+							{saving ? 'Saving…' : 'Save details'}
+						</button>
+						{#if savedAt && !detailsDirty}<span class="muted" role="status">Saved.</span>{/if}
+					</div>
+				{/if}
+			</form>
+		</section>
 
-	<MembersPanel projectId={project.id} {isOwner} {currentUserId} {onLeftProject} />
+		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
+	</div>
+
+	<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
 </div>
 
 <style>
@@ -119,6 +137,26 @@
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
 		gap: 1rem;
 		align-items: start;
+	}
+	/* Eight facts: one row on wide screens, then 4 × 2, then 2 × 4. */
+	dl.stats {
+		grid-template-columns: repeat(8, minmax(0, 1fr));
+	}
+	@media (max-width: 1280px) {
+		dl.stats {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 560px) {
+		dl.stats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.5rem;
+		}
+	}
+	.col {
+		display: grid;
+		gap: 0;
+		min-width: 0;
 	}
 	@media (max-width: 900px) {
 		.grid {
