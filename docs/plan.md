@@ -39,6 +39,10 @@ Status key: ✅ done · 🚧 in progress · ⬜ not started.
 
 ---
 
+
+> Feature ideas beyond this plan — what the initial design missed, grouped
+> Now / Next / Later with effort — live in [planned-work.md](./planned-work.md).
+
 ## Phase 0: Foundation ✅
 
 - ✅ Bootstrapped from `templates/web-minimal` (SvelteKit static frontend, Hono

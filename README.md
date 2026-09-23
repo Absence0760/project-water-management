@@ -68,6 +68,7 @@ The full list is in [docs/STACK.md](./docs/STACK.md#commands-run-from-repo-root)
 | Doc | What's in it |
 | --- | --- |
 | [docs/plan.md](./docs/plan.md) | Roadmap from V1 to a deployed product, acceptance criteria, **questions for the client**, risks |
+| [docs/planned-work.md](./docs/planned-work.md) | Feature backlog beyond V1 — gaps from the workbooks, hydrologist needs, multi-catchment team features (Now / Next / Later) |
 | [docs/model.md](./docs/model.md) | The water-balance model step by step, the AI modules, workbook quirks to confirm, glossary |
 | [docs/data-model.md](./docs/data-model.md) | Tables, mapping to the workbook's sheets, roles and RLS, time-series storage |
 | [docs/api.md](./docs/api.md) | HTTP API contract |
