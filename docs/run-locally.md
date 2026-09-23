@@ -57,7 +57,7 @@ user starts with no projects.
 The client workbooks live in `Original/` (gitignored, never committed). The
 quickest route is the demo seed. It extracts client catchment and the blank b023
 sample into `data/` (also gitignored), then imports both as projects for a local
-demo user:
+demo user (details in `scripts/wbt-import/README.md`):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install openpyxl
@@ -109,7 +109,8 @@ pnpm dev:db:reset           # DELETE all local data, recreate and migrate
 ```bash
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
-pnpm test:backend:db        # API + RLS tests against the water_test database
+pnpm test:backend:db        # API + RLS tests, catalogue guards and route-auth inventory (water_test DB)
+pnpm test:e2e               # Playwright end-to-end (being added; own water_e2e DB, servers on :3101/:7801)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 ```
 

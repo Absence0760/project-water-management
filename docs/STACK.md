@@ -16,8 +16,13 @@ sides share.
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
   (needs Postgres).
-- **frontend/**: SvelteKit 5 static site (`adapter-static`), Vite, TypeScript,
-  uPlot charts, vitest. Dev port `7777`.
+- **frontend/**: SvelteKit 5 **SPA** (`adapter-static` with a fallback
+  `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
+  charts, vitest. Dev port `7777`. `frontend/.env.production` sets
+  `PUBLIC_API_URL=/api`.
+- **e2e/** (being added): Playwright, fully local. It uses an isolated
+  `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
+  so it never collides with `pnpm dev`.
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
   bound by RLS. The `water_test` database is for DB tests.
@@ -28,7 +33,7 @@ sides share.
   ([plan.md](./plan.md)).
 
 pnpm monorepo with three workspaces (`frontend`, `backend`, `packages/*`).
-Node 24 (`.tool-versions`), pnpm 10.
+Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 
 ## Commands (run from repo root)
 
@@ -49,7 +54,11 @@ pnpm build                  # all workspaces (frontend/build, backend/dist/lambd
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB)
 pnpm test:engine | test:frontend | test:backend
-pnpm test:backend:db        # RLS/API tests against water_test (needs dev:db:up)
+pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
+pnpm test:e2e               # Playwright (being added; also test:e2e:ui, check:e2e)
+
+pnpm seed:demo              # extract + import client catchment and the blank b023 for demo@example.com / demo-password
+pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
 ```
 
@@ -107,7 +116,8 @@ Prefer reading these over guessing. Update them when behaviour changes.
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it
   out.
-- **Static frontend only.** No SSR adapters. `PUBLIC_API_URL` is
+- **Static SPA frontend only.** No SSR adapters. Routes render client-side from
+  the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
 - **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
