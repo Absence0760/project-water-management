@@ -155,10 +155,10 @@
 			class:dragging={drag?.moved}
 		>
 			<defs>
-				<marker id="sch-flow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+				<marker id="sch-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-river" />
 				</marker>
-				<marker id="sch-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+				<marker id="sch-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-transfer" />
 				</marker>
 			</defs>

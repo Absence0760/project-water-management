@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ProjectSettings } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { moveTo, reorderSubset } from '$lib/model/order';
@@ -80,7 +81,7 @@
 
 <section class="panel" aria-labelledby="crops-h">
 	<div class="panel-head">
-		<h2 id="crops-h">Crop factors</h2>
+		<h2 id="crops-h">Crop factors <HelpTip key="crop.cropFactor" /></h2>
 		<span class="muted small">Water year, October → September</span>
 	</div>
 	<p class="muted small intro">
@@ -202,7 +203,7 @@
 
 <section class="panel" aria-labelledby="dem-h">
 	<div class="panel-head">
-		<h2 id="dem-h">Irrigation demand preview</h2>
+		<h2 id="dem-h">Irrigation demand preview <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
 		<span class="muted small">Gross demand, m³/day per month</span>
 	</div>
 	<p class="muted small intro">

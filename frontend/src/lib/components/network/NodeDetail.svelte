@@ -3,6 +3,7 @@
 	// (and "focus on one node") alternative to the wide network table.
 	import type { NetworkNode, NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
 	import { GROUPS, isPct, NODE_FIELDS, type NodeField } from './fields';
 
@@ -48,14 +49,14 @@
 			<input id={id('name')} maxlength="100" readonly={readonly} bind:value={node.name} />
 		</div>
 		<div class="field">
-			<label for={id('kind')}>Kind</label>
+			<span class="lbl"><label for={id('kind')}>Kind</label><HelpTip key="node.kind" /></span>
 			<select id={id('kind')} disabled={readonly} bind:value={node.kind}>
 				<option value={'farm' satisfies NodeKind}>Farm (or stand-alone dam)</option>
 				<option value={'gauge' satisfies NodeKind}>Gauge</option>
 			</select>
 		</div>
 		<div class="field">
-			<label for={id('down')}>Drains into</label>
+			<span class="lbl"><label for={id('down')}>Drains into</label><HelpTip key="node.downstreamNodeId" /></span>
 			<select
 				id={id('down')}
 				disabled={readonly}
@@ -87,7 +88,7 @@
 			<div class="grid">
 				{#each fields as f (f.key)}
 					<div class="field">
-						<label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label>
+						<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
 						<NumberInput
 							id={id(f.key)}
 							min={0}
@@ -161,6 +162,16 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.lbl label {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
 	}
 	.computed {
 		padding: 0.35rem 0;

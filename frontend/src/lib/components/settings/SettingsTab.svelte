@@ -2,6 +2,8 @@
 	import { untrack } from 'svelte';
 	import type { CalibrationParams, FlowShareMethod, ProjectSettings } from '@water-management/engine';
 	import { api, type Project } from '$lib/api';
+	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { annualMm3 } from '$lib/components/crops/demand';
 	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
@@ -21,9 +23,17 @@
 	let {
 		project,
 		editor,
+		seriesKinds = null,
 		readonly,
 		onProjectChange
-	}: { project: Project; editor?: ModelEditor; readonly: boolean; onProjectChange: (p: Project) => void } = $props();
+	}: {
+		project: Project;
+		editor?: ModelEditor;
+		/** Kinds of the project's input series, to limit the calibration flow choices. */
+		seriesKinds?: string[] | null;
+		readonly: boolean;
+		onProjectChange: (p: Project) => void;
+	} = $props();
 
 	// Mutable view of the settings (the engine's Monthly type is a readonly tuple).
 	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'calibration'> & {
@@ -53,6 +63,11 @@
 			: null
 	);
 	const hasInvalidList = $derived(Object.values(listInvalid).some(Boolean));
+	let calWindowError = $state<string | null>(null);
+	const reportError = $derived(
+		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
+	);
+	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -83,7 +98,7 @@
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
-		if (dateError || hasInvalidList) return;
+		if (blocked) return;
 		saving = true;
 		error = null;
 		justSaved = false;
@@ -140,7 +155,7 @@
 				</thead>
 				<tbody>
 					<tr>
-						<th scope="row" class="sticky">A-pan evaporation <span class="u">mm</span></th>
+						<th scope="row" class="sticky">A-pan evaporation <span class="u">mm</span> <HelpTip key="settings.apanMm" /></th>
 						{#each WATER_YEAR_MONTHS as m, i (m)}
 							<td><NumberInput label="A-pan evaporation, {m}, mm" min={0} disabled={readonly} bind:value={s.apanMm[i]} /></td>
 						{/each}
@@ -154,12 +169,12 @@
 		</p>
 		<div class="fields">
 			<div class="field">
-				<label for="st-erf">Effective rainfall <span class="u">(%)</span></label>
+				<span class="lbl"><label for="st-erf">Effective rainfall <span class="u">(%)</span></label><HelpTip key="settings.effectiveRainFraction" /></span>
 				<NumberInput id="st-erf" min={0} max={100} scale={100} disabled={readonly} bind:value={s.effectiveRainFraction} aria-describedby="st-erf-h" />
 				<span class="hint" id="st-erf-h">Share of each day's rain on the cropped area that the crop can use, reducing that day's irrigation demand. The workbook default is 65 %.</span>
 			</div>
 			<div class="field">
-				<label for="st-feb">Days in February</label>
+				<span class="lbl"><label for="st-feb">Days in February</label><HelpTip key="settings.februaryDays" /></span>
 				<NumberInput id="st-feb" min={28} max={29} step={0.01} disabled={readonly} bind:value={s.februaryDays} aria-describedby="st-feb-h" />
 				<span class="hint" id="st-feb-h">Converts monthly volumes to per-day figures. 28.25 averages leap years, as the workbook does.</span>
 			</div>
@@ -175,7 +190,7 @@
 		<div class="fields">
 			{#each FLOW_PARAMS as p (p.key)}
 				<div class="field">
-					<label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label>
+					<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
 					<NumberInput
 						id="cal-{p.key}"
 						step={p.step ?? 'any'}
@@ -190,7 +205,7 @@
 				</div>
 			{/each}
 			<div class="field">
-				<label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label>
+				<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>
 				<NumberInput
 					id="cal-catchmentAreaKm2"
 					min={0}
@@ -208,7 +223,7 @@
 			</div>
 		</div>
 		<fieldset class="plain summer">
-			<legend>Summer months <span class="muted">({describeMonths(cal.summerMonths ?? [])})</span></legend>
+			<legend>Summer months <span class="muted">({describeMonths(cal.summerMonths ?? [])})</span> <HelpTip key="calibration.summerMonths" /></legend>
 			<MonthPicker label="Summer months" disabled={readonly} bind:months={s.calibration.summerMonths} />
 			<span class="hint">
 				Months always treated as summer (the summer factor applies). In other months a big rain day switches to winter behaviour
@@ -216,12 +231,23 @@
 			</span>
 		</fieldset>
 
+		<div class="cal-window">
+			<CalibrationWindowFields
+				bind:start={s.calibrationStart}
+				bind:end={s.calibrationEnd}
+				bind:flowKind={s.calibrationFlowKind}
+				bind:error={calWindowError}
+				{readonly}
+				availableKinds={seriesKinds}
+			/>
+		</div>
+
 		<details class="advanced">
 			<summary>Advanced: winter switch, recession and base flow</summary>
 			<div class="fields">
 				{#each ADVANCED_PARAMS as p (p.key)}
 					<div class="field">
-						<label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label>
+						<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
 						<NumberInput
 							id="cal-{p.key}"
 							step={p.step ?? 'any'}
@@ -312,14 +338,14 @@
 		</div>
 		<div class="fields">
 			<div class="field">
-				<label for="st-method">Method</label>
+				<span class="lbl"><label for="st-method">Method</label><HelpTip key="settings.flowShareMethod" /></span>
 				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
 				<span class="hint" id="st-method-h">{method?.help} The resulting share per farm is shown on the Network tab.</span>
 			</div>
 			<fieldset class="plain hilo">
-				<legend>High/low MAP split</legend>
+				<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
 				<div class="form-row">
 					<div class="field">
 						<label for="st-hi">High <span class="u">(%)</span></label>
@@ -363,7 +389,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<th scope="row" class="sticky">Pragmatic EWR <span class="u">m³/day</span></th>
+							<th scope="row" class="sticky">Pragmatic EWR <span class="u">m³/day</span> <HelpTip key="settings.ewrPragmaticM3PerDay" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td><NumberInput label="Pragmatic EWR, {m}, m³/day" min={0} disabled={readonly} bind:value={s.ewrPragmaticM3PerDay[i]} /></td>
 							{/each}
@@ -382,11 +408,28 @@
 				</p>
 			</div>
 		</div>
+		<fieldset class="plain report">
+			<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
+			<div class="form-row">
+				<div class="field">
+					<label for="st-rep-start">From</label>
+					<input id="st-rep-start" type="date" readonly={readonly} value={s.reportStart ?? ''} onchange={(e) => (s.reportStart = e.currentTarget.value || null)} />
+				</div>
+				<div class="field">
+					<label for="st-rep-end">To</label>
+					<input id="st-rep-end" type="date" readonly={readonly} value={s.reportEnd ?? ''} onchange={(e) => (s.reportEnd = e.currentTarget.value || null)} />
+				</div>
+			</div>
+			<span class="hint">
+				Period the curtailment targets on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
+			</span>
+			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
+		</fieldset>
 	</section>
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" aria-labelledby="per-h">
-		<div class="panel-head"><h2 id="per-h">Simulation period</h2></div>
+		<div class="panel-head"><h2 id="per-h">Simulation period <HelpTip key="settings.simulationStart" /></h2></div>
 		<div class="form-row">
 			<div class="field">
 				<label for="st-start">Simulation start</label>
@@ -421,7 +464,7 @@
 			{#if justSaved && !dirty}<span class="muted" role="status">Settings saved.</span>{/if}
 			{#if dirty}<span class="unsaved">Unsaved settings</span>{/if}
 			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
-			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || !!dateError || hasInvalidList}>
+			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
 				{saving ? 'Saving…' : 'Save settings'}
 			</button>
 		</div>
@@ -542,6 +585,31 @@
 	}
 	.ewr-side p {
 		margin: 0.3rem 0 0;
+	}
+	.report {
+		margin-top: 1rem;
+		display: grid;
+		gap: 0.25rem;
+	}
+	.cal-window {
+		margin: 0.25rem 0 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.lbl label {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	legend :global(.helptip),
+	h2 :global(.helptip),
+	th :global(.helptip) {
+		margin-left: 0.15rem;
 	}
 	.err {
 		color: var(--danger);

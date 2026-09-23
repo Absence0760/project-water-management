@@ -216,7 +216,7 @@
 					<IssueList issues={editor.issues} area="transfers" />
 					<TransfersTab {editor} readonly={!canEdit} />
 				{:else if tab === 'settings'}
-					<SettingsTab {project} {editor} readonly={!canEdit} {onProjectChange} />
+					<SettingsTab {project} {editor} seriesKinds={series?.map((x) => x.kind) ?? null} readonly={!canEdit} {onProjectChange} />
 				{:else if tab === 'series'}
 					<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} onSeriesChange={(l) => (series = l)} />
 				{:else if tab === 'runs'}
@@ -326,6 +326,11 @@
 	}
 	.readonly-note strong {
 		color: var(--text);
+	}
+	/* Absolutely positioned bits inside wide tables (visually-hidden labels)
+	   must be clipped by their scroll container, not widen the page. */
+	.tab-body :global(.table-wrap) {
+		position: relative;
 	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
 	.readonly :global(input:not([type='checkbox']):read-only),

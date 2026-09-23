@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { flowShares, type NodeKind, type ProjectSettings } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
@@ -165,8 +166,8 @@
 				<thead>
 					<tr class="groups">
 						<th scope="col" class="sticky" rowspan="2">{#if !readonly}<span class="visually-hidden">Order and </span>{/if}Name</th>
-						<th scope="col" rowspan="2">Kind</th>
-						<th scope="col" rowspan="2">Drains into</th>
+						<th scope="col" rowspan="2">Kind <HelpTip key="node.kind" /></th>
+						<th scope="col" rowspan="2">Drains into <HelpTip key="node.downstreamNodeId" /></th>
 						{#each groupSpans as g (g.group)}
 							<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
 						{/each}
@@ -174,7 +175,7 @@
 					</tr>
 					<tr>
 						{#each NODE_FIELDS as f (f.key)}
-							<th scope="col" class="num" title={f.help}>{f.label}<br /><span class="u">{f.unit}</span></th>
+							<th scope="col" class="num">{f.label} <HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /><br /><span class="u">{f.unit}</span></th>
 						{/each}
 						<th scope="col" class="num" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">In use<br /><span class="u">%</span></th>
 					</tr>
@@ -351,8 +352,8 @@
 		font-weight: 600;
 		color: var(--text);
 	}
-	.net thead th[title] {
-		cursor: help;
+	.net thead th :global(.helptip) {
+		margin-left: 0.1rem;
 	}
 	.net th.sticky {
 		position: sticky;

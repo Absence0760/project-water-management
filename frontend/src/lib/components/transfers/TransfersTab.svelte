@@ -1,5 +1,6 @@
 <script lang="ts">
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { describeMonths } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import MonthPicker from './MonthPicker.svelte';
@@ -29,12 +30,12 @@
 				<thead>
 					<tr>
 						<th scope="col">#</th>
-						<th scope="col">From</th>
+						<th scope="col">From <HelpTip key="transfer.fromNodeId" /></th>
 						<th scope="col">To</th>
-						<th scope="col">Months</th>
-						<th scope="col" class="num">Max rate<br /><span class="u">m³/s</span></th>
+						<th scope="col">Months <HelpTip key="transfer.months" /></th>
+						<th scope="col" class="num">Max rate <HelpTip key="transfer.maxRateM3s" /><br /><span class="u">m³/s</span></th>
 						<th scope="col" class="num">Daily cap<br /><span class="u">m³ (blank = none)</span></th>
-						<th scope="col" class="num">Min storage<br /><span class="u">% of source dam</span></th>
+						<th scope="col" class="num">Min storage <HelpTip key="transfer.minStoragePct" /><br /><span class="u">% of source dam</span></th>
 						<th scope="col">Enabled</th>
 						{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
