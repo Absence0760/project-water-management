@@ -42,3 +42,60 @@ export function parseNumberList(text: string): number[] | null {
 	const nums = parts.map(Number);
 	return nums.every(Number.isFinite) ? nums : null;
 }
+
+// ---------------------------------------------------------------------------
+// Known calibration parameters (CalibrationParams in the engine), grouped the
+// way a hydrologist tunes them, with units and help. Keys not listed here
+// still render through calibrationFields() under "Other".
+
+export interface CalParam {
+	key: string;
+	label: string;
+	unit?: string;
+	help: string;
+	step?: number;
+}
+
+export const FLOW_PARAMS: CalParam[] = [
+	{ key: 'a', label: 'Peak-flow coefficient a', help: 'In rain-driven flow = a · Rain^b. Scales how much flow a rain day produces.', step: 0.01 },
+	{ key: 'b', label: 'Peak-flow exponent b', help: 'In a · Rain^b. Above 1, big storms produce disproportionately more flow.', step: 0.01 },
+	{
+		key: 'rainThresholdMm',
+		label: 'Rain threshold',
+		unit: 'mm',
+		help: 'Rain at or below this produces no flow and does not reduce irrigation demand (it is lost to interception and wetting the soil).',
+		step: 0.1
+	},
+	{ key: 'summerFactor', label: 'Summer factor', help: 'Rain-to-flow multiplier in summer (dry soils, high evaporation), usually well below the winter factor.', step: 0.01 },
+	{ key: 'winterFactor', label: 'Winter factor', help: 'Rain-to-flow multiplier in winter, the wet season.', step: 0.01 },
+	{ key: 'baseFlowInitial', label: 'Initial base flow', unit: 'm³/day', help: 'Base flow on the day before the simulation starts; it then recedes day by day without rain.' }
+];
+
+export const ADVANCED_PARAMS: CalParam[] = [
+	{
+		key: 'baseResetRatio',
+		label: 'Base-flow reset ratio',
+		help: 'When a rain pulse exceeds this multiple of the receding base flow, the base flow resets to the new, higher level.',
+		step: 0.1
+	},
+	{ key: 'winterTodayRainMm', label: 'Winter switch, rain today', unit: 'mm', help: 'Outside the summer months: rain today at or above this switches to winter behaviour the same day.' },
+	{ key: 'winterNextDayRainMm', label: 'Winter switch, rain yesterday', unit: 'mm', help: 'Outside the summer months: rain yesterday at or above this switches to winter behaviour today.' },
+	{ key: 'shiftPeakIndexLo', label: 'Peak index, large events', help: 'Recession index a rain event as big as the amplitude below starts at (a low index recedes fast).', step: 0.1 },
+	{ key: 'shiftPeakIndexHi', label: 'Peak index, small events', help: 'Recession index a vanishingly small rain event starts at.', step: 0.1 },
+	{ key: 'amplitudeM3Day', label: 'Amplitude', unit: 'm³/day', help: 'Rain-driven flow that maps to the large-event peak index; smaller events start proportionally higher up the curve.' },
+	{ key: 'recessionDaysMax', label: 'Longest recession', unit: 'days', help: 'Highest recession index used; flow keeps receding at the last factor beyond it.' }
+];
+
+export const TABLE_PARAMS: CalParam[] = [
+	{ key: 'recessionFactors', label: 'Recession factors', help: 'Daily recession factor for each recession index (flow tomorrow ÷ flow today).' },
+	{ key: 'recessionCurveM3Day', label: 'Recession curve', unit: 'm³/day', help: 'Smoothed recession flow for each index, descending; used to find where a flow sits on the curve.' }
+];
+
+/** Keys the Settings tab renders with dedicated controls. */
+export const KNOWN_CAL_KEYS = new Set([
+	...FLOW_PARAMS.map((p) => p.key),
+	...ADVANCED_PARAMS.map((p) => p.key),
+	...TABLE_PARAMS.map((p) => p.key),
+	'summerMonths',
+	'catchmentAreaKm2'
+]);
