@@ -14,7 +14,7 @@ storage.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -34,6 +34,11 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 | Reset your password | `/reset-password?token=…` | 1 h |
 | Invitation | `/register?invite=…` (no account yet) or `/verify-email?token=…` (unverified account) | 7 days (invite) / 48 h (verify link) |
 
+- **`login` lockout:** the 5th attempt in a row without the right password
+  locks that address for 1 minute, doubling with each further attempt up to 15
+  minutes; a correct password or a password reset clears it. Addresses without
+  an account lock the same way, so a `429` says nothing about whether the
+  account exists ([security.md § Authentication](./security.md#authentication)).
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
 - **`forgot-password`** answers the same `202` whether or not the address has
@@ -58,7 +63,8 @@ Non-2xx responses are `{ error: string, details?: unknown }`. `401` = not signed
 in; `404` = not found **or** not a member (RLS hides the project — the API never
 reveals that a project exists); `403` = member without the needed role; `400` =
 validation (`details` = zod issues); `409` = conflict (duplicate name, last owner);
-`429` = an email was sent to this address moments ago.
+`429` = an email was sent to this address moments ago, or sign-in is locked
+for this address (with `Retry-After`).
 
 ## Projects
 

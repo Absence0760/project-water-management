@@ -23,6 +23,19 @@ const RegisterBody = z.object({
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
 
+/**
+ * Sign-in lockout per address: the 5th attempt in a row without a correct
+ * password locks the address for 1 minute, and each attempt after a lock
+ * doubles it, up to 15 minutes. A correct password or a password reset clears
+ * it; a day without attempts forgets it.
+ */
+export const LOGIN_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: '15 minutes' } as const;
+
+export function lockedMessage(seconds: number): string {
+	const wait = seconds <= 60 ? 'a minute' : `${Math.ceil(seconds / 60)} minutes`;
+	return `too many sign-in attempts for this address — try again in ${wait}, or reset your password`;
+}
+
 type UserRow = { id: string; email: string; display_name: string; email_verified_at: Date | null };
 const toUser = (r: UserRow) => ({
 	id: r.id,
@@ -64,15 +77,30 @@ export const authRoutes = new Hono<AuthEnv>()
 	})
 	.post('/login', async (c) => {
 		const body = LoginBody.parse(await c.req.json());
-		const row = await withoutUser(async (db) => {
+		// Per-address lockout (005_login_throttle.sql). Counted in its own
+		// transaction before the password check, so parallel guesses queue on
+		// the row lock and can't all get past it. Keyed by the typed address,
+		// so an unknown address is locked exactly like a real one.
+		const { lockedSeconds, row } = await withoutUser(async (db) => {
+			const { rows: t } = await db.query<{ locked: number }>(
+				'SELECT app_login_attempt($1, $2, $3::interval, $4::interval) AS locked',
+				[body.email, LOGIN_THROTTLE.freeAttempts, LOGIN_THROTTLE.baseLock, LOGIN_THROTTLE.maxLock]
+			);
+			const lockedSeconds = t[0]?.locked ?? 0;
+			if (lockedSeconds > 0) return { lockedSeconds, row: undefined };
 			const { rows } = await db.query<UserRow & { password_hash: string }>(
 				`SELECT ${USER_COLS}, password_hash FROM app_user WHERE email = $1`,
 				[body.email]
 			);
-			return rows[0];
+			return { lockedSeconds, row: rows[0] };
 		});
+		if (lockedSeconds > 0) {
+			c.header('Retry-After', String(lockedSeconds));
+			throw new ApiError(429, lockedMessage(lockedSeconds));
+		}
 		const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
 		if (!row || !ok) throw new ApiError(401, 'wrong email or password');
+		await withoutUser((db) => db.query('SELECT app_login_succeeded($1)', [body.email]));
 		await issueSession(c, row.id);
 		return c.json({ user: toUser(row) });
 	})

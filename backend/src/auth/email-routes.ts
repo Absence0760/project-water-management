@@ -88,8 +88,10 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 				newHash,
 				new Date()
 			]);
-			// Outstanding reset links are dead too.
+			// Outstanding reset links are dead too, and the address's sign-in
+			// lockout is lifted (the link proved the inbox).
 			await db.query("DELETE FROM email_token WHERE user_id = $1 AND purpose = 'reset'", [userId]);
+			await db.query('SELECT app_login_succeeded(email) FROM app_user WHERE id = $1', [userId]);
 			await markVerified(db, userId);
 			return true;
 		});

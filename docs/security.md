@@ -25,6 +25,20 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   clears the cookie only (that one token stays valid until expiry if it was
   copied). Rotating `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
+- **Sign-in lockout** (`login_throttle`, `backend/src/auth/routes.ts`
+  `LOGIN_THROTTLE`): the 5th sign-in attempt in a row without the right
+  password locks that **address** for 1 minute; each attempt after a lock ends
+  doubles it (2, 4, 8 … minutes), capped at 15. While locked, login answers
+  `429` with `Retry-After` and doesn't check the password. A correct password
+  or a password reset clears the count; a day without attempts forgets it.
+  It is keyed by the typed address, not the account, so an address with no
+  account locks exactly the same way and the lockout reveals nothing about
+  which accounts exist. Attempts are counted *before* the bcrypt check under
+  a row lock, so parallel guesses can't slip past. Accepted trade-off: anyone
+  can lock someone else's address for up to 15 minutes at a time (sessions
+  already signed in are unaffected, and a password reset lifts it). The
+  WAF's per-IP rate limit is still the first line against spraying many
+  addresses.
 
 ## Password reset, email verification and invites
 
@@ -188,7 +202,6 @@ readable by anyone. The rules:
   rule. (Phase 7)
 - No self-service "sign out everywhere" or password change while signed in;
   the `sessions_revoked_at` watermark is only set by a password reset. (Phase 7)
-- No per-account login lockout yet. (Phase 7)
 - **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
   allows inline scripts, because SvelteKit's static build emits an inline
   bootstrap script. Svelte's default escaping and the ban on `{@html}` with

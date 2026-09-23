@@ -205,6 +205,20 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `project_member` / `team_member` rows and deletes those invites. Invites
   cascade away with their project or team.
 
+### Sign-in lockout (005_login_throttle.sql)
+
+| Table | Holds |
+| --- | --- |
+| `login_throttle` | One row per **typed email address** (not per account, so unknown addresses behave the same): `failures` since the last correct password, `locked_until`, `last_attempt_at` |
+
+- Only touched through `SECURITY DEFINER` functions, before sign-in:
+  `app_login_attempt(email, free, base, max)` counts the attempt (row lock, so
+  parallel guesses are counted one by one) and returns the seconds left on a
+  lock, and `app_login_succeeded(email)` deletes the row (correct password or
+  password reset). A deny-all policy (`USING (false)`) closes direct access.
+  Rows untouched for a day are deleted on the next attempt. Numbers:
+  [security.md § Authentication](./security.md#authentication).
+
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role
 boundaries hold, that the last owner can't be removed, and that cross-project
