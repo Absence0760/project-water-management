@@ -1,4 +1,6 @@
+import pg from 'pg';
 import { createApp } from '../app.js';
+import { outbox, type Mail } from '../mail/transport.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
@@ -49,4 +51,40 @@ export function node(name: string, downstreamNodeId: string | null, extra: Recor
 		returnFlowPct: 0.1,
 		...extra
 	};
+}
+
+/** The newest email sent to `to` (MAIL_TRANSPORT=memory), or undefined. */
+export const lastMailTo = (to: string): Mail | undefined => outbox.filter((m) => m.to === to).at(-1);
+export const mailCount = (to: string) => outbox.filter((m) => m.to === to).length;
+
+/** The token from a link in an email (`?token=…` or `?invite=…`). */
+export function tokenIn(mail: Mail | undefined): string {
+	const m = mail?.text.match(/[?&](?:token|invite)=([A-Za-z0-9_-]+)/);
+	if (!m) throw new Error(`no token link in ${mail ? `"${mail.subject}"` : 'missing email'}`);
+	return m[1]!;
+}
+
+/** POST as an anonymous browser (no session cookie). */
+export async function anon(method: string, path: string, body?: unknown, cookie?: string) {
+	const r = await app.request(path, {
+		method,
+		headers: { origin: ORIGIN, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+		body: body !== undefined ? JSON.stringify(body) : undefined
+	});
+	const text = await r.text();
+	return { status: r.status, body: text ? JSON.parse(text) : null, headers: r.headers };
+}
+
+/**
+ * Run SQL as the schema owner — ONLY to arrange test state the API can't
+ * (backdating a token to test expiry). Never used to assert on data.
+ */
+export async function asOwner(sql: string, params: unknown[] = []) {
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		return (await client.query(sql, params)).rows;
+	} finally {
+		await client.end();
+	}
 }

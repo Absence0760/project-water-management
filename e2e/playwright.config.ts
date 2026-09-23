@@ -34,7 +34,9 @@ export default defineConfig({
 				PORT: String(API_PORT),
 				DATABASE_URL: APP_E2E_URL,
 				ALLOWED_ORIGINS: WEB_URL,
-				SITE_URL: WEB_URL
+				SITE_URL: WEB_URL,
+				// Print emails to the server log; e2e doesn't need Mailpit running.
+				MAIL_TRANSPORT: 'log'
 			}
 		},
 		{

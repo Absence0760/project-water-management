@@ -14,6 +14,8 @@ export interface User {
 	id: string;
 	email: string;
 	displayName: string;
+	/** False until the address is confirmed via the emailed link (VerifyEmailBanner). */
+	emailVerified?: boolean;
 }
 
 /**

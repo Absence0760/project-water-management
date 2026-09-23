@@ -18,10 +18,58 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   `/api/*`, so the cookie is first-party. Together with `SameSite=Lax`, this
   blocks cross-site POSTs from carrying the session. The API accepts JSON bodies
   only.
-- **Logout** clears the cookie. There is no revocation yet, so a stolen token
-  stays valid until it expires. Rotating `AUTH_JWT_SECRET` logs everyone out.
-  The planned fix is a per-user `sessions_revoked_at` watermark (Phase 7).
+- **Revocation:** every request re-reads `app_user.sessions_revoked_at`;
+  a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
+  as is a session for an account that no longer exists. A password reset sets
+  the watermark, so it signs out every device, including a thief's. Logout
+  clears the cookie only (that one token stays valid until expiry if it was
+  copied). Rotating `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
+
+## Password reset, email verification and invites
+
+- **Tokens** are 32 bytes from `crypto.randomBytes`, mailed as base64url. The
+  database stores **only the SHA-256 hash** (`email_token.token_hash`,
+  `invite.token_hash`), so a DB dump, replica or query log never yields a
+  working link. Tokens are **single-use** (consuming deletes the row), scoped to
+  a purpose (a verify token can't reset a password), and expire: reset **1 h**,
+  verify **48 h**, invite **7 days**. Issuing a new one replaces the old one.
+  Malformed tokens are rejected before any DB work.
+- **No account enumeration:** `POST /auth/forgot-password` answers `202` with
+  the same body for known and unknown addresses. Accepted residual risk:
+  response *timing* differs slightly (a known address does a DB write and an
+  SES call), and `POST /auth/register` already answers `409` for a taken
+  address, so enumeration is not fully closed — the WAF's per-IP rate limit is
+  the backstop. Don't "fix" this by making register lie without also making
+  sign-up email-first.
+- **Mail-bombing throttle:** at most one reset, verification or invite email
+  per address per minute, enforced in Postgres (`app_issue_email_token` with an
+  advisory lock; `invite.last_sent_at`) so it holds across Lambda instances.
+- **Mail failures never change the response** (`trySendMail` logs the error
+  without the body, which contains a live token). Mail is sent after the
+  transaction commits, so a mailed link always refers to a stored token.
+- **Email verification** is not required to sign in (V1). It *is* required to
+  claim invitations: `app_accept_invites()` only converts invites for a
+  **verified** address, so someone who registers an invitee's address first
+  gets nothing. Signing up through the invite link counts as verified only when
+  the link's invite is for the exact address being registered.
+- **Invites** are visible and revocable only by project owners / team admins
+  (RLS on `invite`); invitees have no access until they have an account.
+  Accepting goes through a `SECURITY DEFINER` function that re-checks
+  verification.
+- **Known gap — adding an existing but unverified account.** `POST
+  …/members` with an address that already has an account adds it directly
+  (unchanged V1 behaviour), even if that account never verified the address.
+  Someone who pre-registers a colleague's address could therefore be added in
+  their place. Durable fix: only add verified accounts directly, and send an
+  invite otherwise (needs the e2e sharing specs to verify their users first).
+- **Email content:** every user-controlled value (project/team names, display
+  names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
+  from config, never the request's Host header. The reset and verify pages
+  strip the token from the address bar and send `Referrer-Policy: no-referrer`.
+- **Transport:** SES via the Lambda's IAM role in production (no SMTP password
+  to hold). The `log` transport refuses to print message bodies inside Lambda,
+  so a misconfigured deploy can't write live links into CloudWatch.
 
 ## Authorization: per-project roles enforced by Postgres RLS
 
@@ -131,9 +179,10 @@ readable by anyone. The rules:
 
 - No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
   rule. (Phase 7)
-- No password reset or email verification: both need SES. (Phase 7)
-- No session revocation yet. Planned: a `sessions_revoked_at` watermark on
-  `app_user`, so tokens issued before it are rejected. (Phase 7)
+- No self-service "sign out everywhere" or password change while signed in;
+  the `sessions_revoked_at` watermark is only set by a password reset. (Phase 7)
+- Adding an existing but unverified account to a project or team (see
+  "Password reset, email verification and invites" above).
 - No per-account login lockout yet. (Phase 7)
 - **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
   allows inline scripts, because SvelteKit's static build emits an inline

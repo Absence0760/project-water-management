@@ -1,0 +1,249 @@
+// Inviting people who don't have an account yet (004_email.sql, invites.ts).
+import { describe, expect, it } from 'vitest';
+import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+
+const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
+
+/** Register through the API (optionally via an invite link); returns a signed-in caller. */
+async function register(email: string, inviteToken?: string) {
+	const res = await anon('POST', '/auth/register', {
+		email,
+		password: 'correct horse',
+		displayName: 'Invitee',
+		...(inviteToken ? { inviteToken } : {})
+	});
+	expect(res.status).toBe(201);
+	const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
+	return {
+		user: res.body.user,
+		call: (method: string, path: string, body?: unknown) => anon(method, path, body, cookie)
+	};
+}
+
+async function projectOf(owner: Awaited<ReturnType<typeof signUp>>, name = 'Catchment') {
+	return (await owner.call('POST', '/projects', { name })).body.project.id as string;
+}
+
+describe('project invites', () => {
+	it('invites an unknown address instead of 404, and lists it for owners only', async () => {
+		const owner = await signUp('InvOwner');
+		const editor = await signUp('InvEditor');
+		const outsider = await signUp('InvOutsider');
+		const pid = await projectOf(owner, 'Kloof <River>');
+		await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' });
+
+		const email = newEmail('guest');
+		const res = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		expect(res.status).toBe(201);
+		expect(res.body.invited).toBe(true);
+		expect(res.body.invite).toMatchObject({ email, role: 'viewer', invitedBy: 'InvOwner', expired: false });
+		// ~7 days.
+		const days = (Date.parse(res.body.invite.expiresAt) - Date.now()) / 86_400_000;
+		expect(days).toBeGreaterThan(6.9);
+		expect(days).toBeLessThanOrEqual(7);
+
+		const mail = lastMailTo(email)!;
+		expect(mail.subject).toBe('InvOwner invited you to Water Management');
+		expect(mail.text).toContain('Kloof <River>');
+		expect(mail.html).toContain('Kloof &lt;River&gt;');
+		expect(mail.html).not.toContain('<River>');
+		expect(mail.text).toMatch(/http:\/\/localhost:7777\/register\?invite=[A-Za-z0-9_-]{43}/);
+
+		const list = await owner.call('GET', `/projects/${pid}/invites`);
+		expect(list.status).toBe(200);
+		expect(list.body.invites.map((i: { email: string }) => i.email)).toEqual([email]);
+		expect((await editor.call('GET', `/projects/${pid}/invites`)).status).toBe(403);
+		expect((await outsider.call('GET', `/projects/${pid}/invites`)).status).toBe(404);
+		expect((await editor.call('POST', `/projects/${pid}/members`, { email: newEmail('x'), role: 'viewer' })).status).toBe(403);
+	});
+
+	it('RLS: only owners can read a project invite (with a positive control)', async () => {
+		const owner = await signUp('RlsOwner');
+		const viewer = await signUp('RlsViewer');
+		const outsider = await signUp('RlsOutsider');
+		const pid = await projectOf(owner);
+		await owner.call('POST', `/projects/${pid}/members`, { email: viewer.email, role: 'viewer' });
+		await owner.call('POST', `/projects/${pid}/members`, { email: newEmail('rls'), role: 'editor' });
+		const count = (uid: string) =>
+			withUser(uid, async (db) => (await db.query('SELECT id FROM invite WHERE project_id = $1', [pid])).rowCount);
+		expect(await count(owner.id)).toBe(1);
+		expect(await count(viewer.id)).toBe(0);
+		expect(await count(outsider.id)).toBe(0);
+		// A non-owner can't forge one either.
+		await expect(
+			withUser(viewer.id, (db) =>
+				db.query(
+					`INSERT INTO invite (email, project_id, project_role, invited_by, token_hash, expires_at)
+					 VALUES ('x@example.com', $1, 'owner', $2, decode(repeat('ab', 32), 'hex'), now() + interval '1 day')`,
+					[pid, viewer.id]
+				)
+			)
+		).rejects.toMatchObject({ code: '42501' });
+	});
+
+	it('joins the project after the invitee signs up and verifies their address', async () => {
+		const owner = await signUp('Joiner');
+		const pid = await projectOf(owner);
+		const email = newEmail('later');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'editor' });
+
+		// Plain sign-up (not via the link) proves nothing about the inbox yet.
+		const invitee = await register(email);
+		expect(invitee.user.emailVerified).toBe(false);
+		expect((await invitee.call('GET', `/projects/${pid}`)).status).toBe(404);
+
+		const verifyToken = tokenIn(lastMailTo(email));
+		expect((await anon('POST', '/auth/verify-email', { token: verifyToken })).status).toBe(200);
+		const p = await invitee.call('GET', `/projects/${pid}`);
+		expect(p.status).toBe(200);
+		expect(p.body.project.role).toBe('editor');
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+	});
+
+	it('signing up through the invite link verifies the address and joins at once', async () => {
+		const owner = await signUp('LinkOwner');
+		const pid = await projectOf(owner, 'Linked');
+		const email = newEmail('linked');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		const inviteToken = tokenIn(lastMailTo(email));
+
+		const info = await anon('POST', '/auth/invite-info', { token: inviteToken });
+		expect(info.status).toBe(200);
+		expect(info.body.invite).toEqual({ email, projectName: 'Linked', teamName: null, invitedBy: 'LinkOwner' });
+
+		const invitee = await register(email.toUpperCase(), inviteToken);
+		expect(invitee.user.emailVerified).toBe(true);
+		expect(mailCount(email)).toBe(1); // the invite only — no verification email needed
+		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('viewer');
+		// The link is spent.
+		expect((await anon('POST', '/auth/invite-info', { token: inviteToken })).status).toBe(404);
+	});
+
+	it("an invite link doesn't help someone signing up with a different address", async () => {
+		const owner = await signUp('Hijack');
+		const pid = await projectOf(owner);
+		const email = newEmail('victim');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'owner' });
+		const inviteToken = tokenIn(lastMailTo(email));
+
+		const attacker = await register(newEmail('attacker'), inviteToken);
+		expect(attacker.user.emailVerified).toBe(false);
+		expect((await attacker.call('GET', `/projects/${pid}`)).status).toBe(404);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toHaveLength(1);
+	});
+
+	it('expired invites are not accepted and show as expired', async () => {
+		const owner = await signUp('Expirer');
+		const pid = await projectOf(owner);
+		const email = newEmail('slow');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		const inviteToken = tokenIn(lastMailTo(email));
+		await asOwner(`UPDATE invite SET expires_at = now() - interval '1 second' WHERE email = $1`, [email]);
+
+		expect((await anon('POST', '/auth/invite-info', { token: inviteToken })).status).toBe(404);
+		const invitee = await register(email, inviteToken);
+		expect(invitee.user.emailVerified).toBe(false);
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		expect((await invitee.call('GET', `/projects/${pid}`)).status).toBe(404);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites[0].expired).toBe(true);
+	});
+
+	it('re-inviting updates the role; the email is re-sent only outside the cooldown, with a fresh link', async () => {
+		const owner = await signUp('Reinviter');
+		const pid = await projectOf(owner);
+		const email = newEmail('again');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		const first = tokenIn(lastMailTo(email));
+
+		const again = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'editor' });
+		expect(again.status).toBe(201);
+		expect(again.body.invite.role).toBe('editor');
+		expect(mailCount(email)).toBe(1);
+
+		await asOwner(`UPDATE invite SET last_sent_at = now() - interval '2 minutes' WHERE email = $1`, [email]);
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'editor' });
+		expect(mailCount(email)).toBe(2);
+		const second = tokenIn(lastMailTo(email));
+		expect(second).not.toBe(first);
+		expect((await anon('POST', '/auth/invite-info', { token: first })).status).toBe(404);
+		expect((await anon('POST', '/auth/invite-info', { token: second })).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toHaveLength(1);
+	});
+
+	it('owners revoke invites; a revoked invite grants nothing', async () => {
+		const owner = await signUp('Revoker');
+		const editor = await signUp('RevEditor');
+		const pid = await projectOf(owner);
+		await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' });
+		const email = newEmail('revoked');
+		const inviteId = (await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' })).body.invite.id;
+		const inviteToken = tokenIn(lastMailTo(email));
+
+		expect((await editor.call('DELETE', `/projects/${pid}/invites/${inviteId}`)).status).toBe(403);
+		expect((await owner.call('DELETE', `/projects/${pid}/invites/${inviteId}`)).status).toBe(204);
+		expect((await owner.call('DELETE', `/projects/${pid}/invites/${inviteId}`)).status).toBe(404);
+
+		const invitee = await register(email, inviteToken);
+		expect(invitee.user.emailVerified).toBe(false);
+		expect((await invitee.call('GET', `/projects/${pid}`)).status).toBe(404);
+	});
+
+	it('adding someone who has since registered makes them a member and clears the invite', async () => {
+		const owner = await signUp('Direct');
+		const pid = await projectOf(owner);
+		const email = newEmail('direct');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		await register(email);
+		const res = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		expect(res.status).toBe(201);
+		expect(res.body.member).toMatchObject({ email, role: 'viewer' });
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+	});
+
+	it('deleting the project deletes its invites', async () => {
+		const owner = await signUp('Cascade');
+		const pid = await projectOf(owner);
+		const email = newEmail('cascade');
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		expect((await owner.call('DELETE', `/projects/${pid}`)).status).toBe(204);
+		expect(await asOwner('SELECT 1 FROM invite WHERE email = $1', [email])).toHaveLength(0);
+	});
+});
+
+describe('team invites', () => {
+	it('admins invite by email; the invitee joins the team and reaches its projects', async () => {
+		const admin = await signUp('TAdmin');
+		const member = await signUp('TMember');
+		const teamId = (await admin.call('POST', '/teams', { name: 'Consultants' })).body.team.id;
+		await admin.call('POST', `/teams/${teamId}/members`, { email: member.email, role: 'member' });
+		const pid = (await admin.call('POST', '/projects', { name: 'Team catchment', teamId })).body.project.id;
+
+		const email = newEmail('teamguest');
+		const res = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' });
+		expect(res.status).toBe(201);
+		expect(res.body).toMatchObject({ invited: true, invite: { email, role: 'member' } });
+		expect(lastMailTo(email)!.text).toContain('the team “Consultants”');
+
+		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toHaveLength(1);
+		expect((await member.call('GET', `/teams/${teamId}/invites`)).status).toBe(403);
+		expect((await member.call('POST', `/teams/${teamId}/members`, { email: newEmail('y'), role: 'member' })).status).toBe(403);
+
+		const info = await anon('POST', '/auth/invite-info', { token: tokenIn(lastMailTo(email)) });
+		expect(info.body.invite).toMatchObject({ teamName: 'Consultants', projectName: null });
+
+		const invitee = await register(email, tokenIn(lastMailTo(email)));
+		expect((await invitee.call('GET', `/teams/${teamId}`)).status).toBe(200);
+		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('editor');
+		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([]);
+	});
+
+	it('admins revoke team invites', async () => {
+		const admin = await signUp('TRevoker');
+		const teamId = (await admin.call('POST', '/teams', { name: 'Revokers' })).body.team.id;
+		const email = newEmail('teamrevoked');
+		const inviteId = (await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'admin' })).body.invite.id;
+		expect((await admin.call('DELETE', `/teams/${teamId}/invites/${inviteId}`)).status).toBe(204);
+		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([]);
+	});
+});

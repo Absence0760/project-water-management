@@ -1,0 +1,73 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { escapeHtml, inviteMail, resetPasswordMail, siteLink, verifyEmailMail } from './templates.js';
+
+const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe('siteLink', () => {
+	it('joins SITE_URL, path and token, tolerating a trailing slash', () => {
+		vi.stubEnv('SITE_URL', 'https://water-management.jaredhoward.com/');
+		expect(siteLink('/reset-password', TOKEN)).toBe(`https://water-management.jaredhoward.com/reset-password?token=${TOKEN}`);
+		expect(siteLink('/register', TOKEN, 'invite')).toBe(`https://water-management.jaredhoward.com/register?invite=${TOKEN}`);
+	});
+
+	it('falls back to the local dev site', () => {
+		vi.stubEnv('SITE_URL', '');
+		expect(siteLink('/verify-email', TOKEN)).toBe(`http://localhost:7777/verify-email?token=${TOKEN}`);
+	});
+});
+
+describe('email templates', () => {
+	const url = `http://localhost:7777/reset-password?token=${TOKEN}`;
+
+	it.each([
+		['verify', verifyEmailMail('ann@example.com', url), /Confirm your email address — Water Management/, /48 hours/],
+		['reset', resetPasswordMail('ann@example.com', url), /Reset your password — Water Management/, /1 hour/],
+		[
+			'invite',
+			inviteMail('ann@example.com', url, 'Ben', { kind: 'project', name: 'Kloof', role: 'viewer' }),
+			/Ben invited you to Water Management/,
+			/7 days/
+		]
+	])('%s: subject, link and expiry in both the HTML and the text alternative', (_name, mail, subject, expiry) => {
+		expect(mail.to).toBe('ann@example.com');
+		expect(mail.subject).toMatch(subject);
+		expect(mail.text).toContain(url);
+		expect(mail.text).toMatch(expiry);
+		expect(mail.text).toContain('Water Management');
+		expect(mail.text).not.toMatch(/<[a-z]/i);
+		expect(mail.html).toContain(`href="${url}"`);
+		expect(mail.html).toMatch(expiry);
+		// Accessible basics: language, title, one heading, descriptive link text, no images.
+		expect(mail.html).toMatch(/<html lang="en">/);
+		expect(mail.html).toMatch(/<title>[^<]+<\/title>/);
+		expect(mail.html.match(/<h1/g)).toHaveLength(1);
+		expect(mail.html).not.toMatch(/<img|click here/i);
+	});
+
+	it('escapes user-controlled names in the HTML and keeps them readable in the text', () => {
+		const mail = inviteMail('x@example.com', url, 'Eve <script>', {
+			kind: 'team',
+			name: '"><img src=x onerror=alert(1)>',
+			role: 'admin'
+		});
+		expect(mail.html).not.toContain('<script>');
+		expect(mail.html).not.toContain('<img');
+		expect(mail.html).toContain('Eve &lt;script&gt;');
+		expect(mail.html).toContain('&quot;&gt;&lt;img src=x onerror=alert(1)&gt;');
+		expect(mail.text).toContain('the team “"><img src=x onerror=alert(1)>” as an admin');
+	});
+
+	it('uses the right article for the role', () => {
+		const t = (role: string) => inviteMail('x@example.com', url, 'A', { kind: 'project', name: 'P', role }).text;
+		expect(t('viewer')).toContain('as a viewer');
+		expect(t('editor')).toContain('as an editor');
+		expect(t('owner')).toContain('as an owner');
+		expect(t('member')).toContain('as a member');
+	});
+
+	it('escapeHtml covers the five HTML metacharacters', () => {
+		expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe('&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+	});
+});

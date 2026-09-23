@@ -4,21 +4,13 @@ import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { dropInvite, inviteByEmail } from '../invites/invites.js';
+import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
+import { requireTeamRole } from './access.js';
 
-type TeamRole = 'member' | 'admin';
 const RoleEnum = z.enum(['member', 'admin']);
 const Name = z.string().trim().min(1).max(200);
-
-/** 404 unless the current user is in the team; 403 if `admin` is required and they aren't. */
-async function requireTeamRole(db: Db, teamId: string, min: TeamRole): Promise<TeamRole> {
-	if (!UUID.test(teamId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<{ role: TeamRole | null }>('SELECT app_team_role($1) AS role', [teamId]);
-	const role = rows[0]?.role;
-	if (!role) throw new ApiError(404, 'not found');
-	if (min === 'admin' && role !== 'admin') throw new ApiError(403, 'requires team admin');
-	return role;
-}
 
 async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 	const { rows } = await db.query<{ admins: number; target_is_admin: boolean }>(
@@ -89,8 +81,8 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/members', async (c) => {
-		const body = z.object({ email: z.string().trim().toLowerCase().email(), role: RoleEnum }).parse(await c.req.json());
-		return withUser(c.get('userId'), async (db) => {
+		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await c.req.json());
+		const result = await withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string }>(
@@ -98,14 +90,22 @@ export const teamRoutes = new Hono<AuthEnv>()
 				[body.email]
 			);
 			const user = users[0];
-			if (!user) throw new ApiError(404, 'no account with that email — ask them to register first');
+			// No account yet: invite them by email (they join once they sign up).
+			if (!user) return { invited: await inviteByEmail(db, 'team', id, body.email, body.role) };
 			const { rowCount } = await db.query(
 				'INSERT INTO team_member (team_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
 				[id, user.id, body.role]
 			);
 			if (!rowCount) throw new ApiError(409, 'already a member');
-			return c.json({ member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } }, 201);
+			await dropInvite(db, 'team', id, user.email);
+			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } };
 		});
+		// Mail goes out after the transaction commits, and never fails the request.
+		if (result.invited) {
+			if (result.invited.mail) await trySendMail(result.invited.mail);
+			return c.json({ invited: true, invite: result.invited.invite }, 201);
+		}
+		return c.json({ member: result.member }, 201);
 	})
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z.object({ role: RoleEnum }).parse(await c.req.json());

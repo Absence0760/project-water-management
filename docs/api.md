@@ -13,19 +13,51 @@ storage.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName }` | `201 { user }` + cookie |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
+| POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
+| POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
+| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
+| POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago (signed in) |
+| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 
-`user = { id, email, displayName }`. Passwords: 8–200 chars.
+`user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
+
+**Email links.** Tokens are 32 random bytes (43 base64url chars), single-use,
+stored only as SHA-256 hashes. Links point at `SITE_URL`:
+
+| Email | Link | Lifetime |
+| --- | --- | --- |
+| Confirm your email | `/verify-email?token=…` | 48 h |
+| Reset your password | `/reset-password?token=…` | 1 h |
+| Invitation | `/register?invite=…` | 7 days |
+
+- **Sign-up** sends a verification email. Signing in doesn't require a
+  verified address; the UI shows a banner until it is.
+- **`forgot-password`** answers the same `202` whether or not the address has
+  an account, and sends at most one email per address per minute (later
+  requests inside the window get `202` and no email). Requesting again replaces
+  the previous link.
+- **`reset-password`** sets the new password, also marks the address verified
+  (the link proved the inbox), and **signs out every existing session**
+  (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
+  Sign in again afterwards.
+- **`verify-email`** marks the address verified and turns every pending invite
+  for it into a membership.
+- **`register` with `inviteToken`** (from `/register?invite=…`): if the token is
+  a live invite for *the same address*, the account starts verified and joins
+  the invited projects/teams immediately, with no verification email.
+  Otherwise the token is ignored and sign-up proceeds normally.
 
 ## Errors
 
 Non-2xx responses are `{ error: string, details?: unknown }`. `401` = not signed
 in; `404` = not found **or** not a member (RLS hides the project — the API never
 reveals that a project exists); `403` = member without the needed role; `400` =
-validation (`details` = zod issues); `409` = conflict (duplicate name, last owner).
+validation (`details` = zod issues); `409` = conflict (duplicate name, last owner);
+`429` = an email was sent to this address moments ago.
 
 ## Projects
 
@@ -64,12 +96,32 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` — user must already have an account | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for an existing account; `201 { invited: true, invite }` when no account has the address (see Invites) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | – |
 
 These are **direct** members only. People who reach a team project through the
 team are listed by `GET /teams/:id`, not here.
+
+### Invites
+
+Adding an address that has no account creates a **pending invite** and emails
+it a sign-up link (`/register?invite=…`, valid 7 days). The invite becomes a
+membership with the invited role once that address is **verified** — by
+signing up through the link, or by signing up normally and clicking the
+verification email. An unverified sign-up alone does not claim invites.
+Re-adding the same address updates the role; the email is re-sent (with a
+fresh link, the old one stops working) unless one went out in the last minute.
+Adding an address after it has registered makes it a member directly and
+clears its invite.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/invites` | – | `{ invites: Invite[] }` (newest first, expired ones included) | owner |
+| DELETE | `/projects/:id/invites/:inviteId` | – | `204` (revoke; the link stops working) | owner |
+
+- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired }` —
+  `invitedBy` is the display name of whoever last sent it.
 
 ## Teams
 
@@ -84,9 +136,11 @@ projects admins are owners and members are editors (see Projects above).
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first) | member |
 | PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` — `404` if no account has that email, `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }`, or `201 { invited: true, invite }` when no account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | member |
+| GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
+| DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 
 - `Team = { id, name, role, createdAt, memberCount, projectCount }` — `role` is
   **your** role in the team.

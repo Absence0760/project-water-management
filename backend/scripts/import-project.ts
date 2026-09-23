@@ -42,7 +42,10 @@ export async function importProjectData(raw: unknown, email: string, opts: Impor
 		if (!opts.password) throw new Error(`no user ${email} — register first or pass --password to create one`);
 		const hash = await hashPassword(opts.password);
 		const { rows: created } = await db.query<{ id: string }>(
-			'INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
+			// Created by an operator script (demo/seed users), not self-service
+			// sign-up, so no verification email: the address starts verified.
+			`INSERT INTO app_user (email, display_name, password_hash, email_verified_at)
+			 VALUES ($1, $2, $3, now()) RETURNING id`,
 			[email.toLowerCase(), opts.displayName ?? email.split('@')[0], hash]
 		);
 		return created[0]!.id;
