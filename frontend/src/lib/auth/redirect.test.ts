@@ -36,6 +36,15 @@ describe('routeAccess', () => {
 		expect(routeAccess('/projects/1', '', true)).toBe('show');
 	});
 
+	it('keeps an invitation link open to a signed-in user (the page explains it)', () => {
+		const q = (s: string) => new URLSearchParams(s);
+		expect(routeAccess('/register', '', true, q('invite=abc'))).toBe('show');
+		expect(routeAccess('/app/register', '/app', true, q('invite='))).toBe('show');
+		expect(routeAccess('/register', '', true, q('next=/x'))).toBe('leave');
+		expect(routeAccess('/login', '', true, q('invite=abc'))).toBe('leave');
+		expect(routeAccess('/register', '', false, q('invite=abc'))).toBe('show');
+	});
+
 	it('keeps emailed reset and confirmation links usable while signed in', () => {
 		expect(routeAccess('/reset-password', '', true)).toBe('show');
 		expect(routeAccess('/app/verify-email', '/app', true)).toBe('show');
