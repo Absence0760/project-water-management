@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type RunMeta } from '$lib/api';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { downloads } from '$lib/export';
 	import { fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { cached } from './cache';
 	import { checklist } from './checklist';
 	import MembersPanel from './MembersPanel.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
@@ -15,6 +14,8 @@
 	let {
 		project,
 		editor,
+		series,
+		runs,
 		canEdit,
 		isOwner,
 		currentUserId,
@@ -23,6 +24,10 @@
 	}: {
 		project: Project;
 		editor: ModelEditor;
+		/** The page's input-series list (null if it couldn't be loaded). */
+		series: SeriesMeta[] | null;
+		/** The page's runs list (null if it couldn't be loaded). */
+		runs: RunMeta[] | null;
 		canEdit: boolean;
 		isOwner: boolean;
 		currentUserId: string;
@@ -39,16 +44,9 @@
 
 	const detailsDirty = $derived(name.trim() !== project.name || description.trim() !== (project.description ?? ''));
 
-	// Start from what we saw last time on this project (see cache.ts) so the
-	// first frame already has the final layout; refresh in the background.
-	const memo = untrack(() => cached(project.id));
-	let series = $state<SeriesMeta[] | null>(memo.series ?? null);
-	let runs = $state<RunMeta[] | null>(memo.runs ?? null);
-	onMount(async () => {
-		const [s, r] = await Promise.allSettled([api.series.list(project.id), api.runs.list(project.id)]);
-		if (s.status === 'fulfilled') series = memo.series = s.value;
-		if (r.status === 'fulfilled') runs = memo.runs = r.value;
-	});
+	// The series and runs lists come from the page, which loads them before any
+	// tab renders and refreshes them after an upload or a run, so the counts and
+	// checklist are final on the first frame and never go stale.
 	const seriesCount = $derived(series?.length ?? null);
 	const runCount = $derived(runs?.length ?? null);
 

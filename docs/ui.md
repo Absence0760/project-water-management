@@ -2,7 +2,10 @@
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
-renders empty and then fills in. Tabs follow the modelling workflow:
+renders empty and then fills in. The Overview, Data and Runs tabs take those
+lists as props and report changes back, so an upload or a run made on one tab
+shows in the others (the Overview's counts and checklist included) without a
+refetch. Tabs follow the modelling workflow:
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |

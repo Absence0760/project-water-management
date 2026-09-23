@@ -327,6 +327,8 @@
 					<OverviewTab
 						{project}
 						{editor}
+						{series}
+						{runs}
 						{canEdit}
 						{isOwner}
 						currentUserId={session.user?.id ?? ''}
@@ -352,6 +354,7 @@
 						{project}
 						{editor}
 						{series}
+						{runs}
 						canRun={canEdit}
 						modelDirty={editor.dirty}
 						onRunsChange={(l) => (runs = l)}

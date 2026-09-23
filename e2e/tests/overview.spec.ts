@@ -36,3 +36,24 @@ test('a project with data and a run: setup complete, counts shown', async ({ pag
 	await expect(stat(page, 'Farms')).toHaveText('2+ 1 gauge');
 	await expect(stat(page, 'Outflow gauge')).toHaveText('Outflow gauge');
 });
+
+test('data added from the Overview tab shows up in its counts and checklist straight away', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Overview upload');
+	await page.goto(`/projects/${project.id}`);
+	await expect(stat(page, 'Time series')).toHaveText('0');
+
+	await page.getByRole('button', { name: 'Add data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add data' });
+	await dialog.getByLabel('Kind').selectOption({ label: 'Rainfall — catchment' });
+	await dialog.getByLabel('CSV file').setInputFiles({
+		name: 'rain.csv',
+		mimeType: 'text/csv',
+		buffer: Buffer.from('date,value\n2021-10-01,1\n2021-10-02,0\n2021-10-03,4\n')
+	});
+	await dialog.getByRole('button', { name: 'Upload' }).click();
+	await expect(dialog).toBeHidden();
+
+	await expect(stat(page, 'Time series')).toHaveText('1');
+	await expect(setup(page)).toContainText('Rainfall loaded. No observed flow yet');
+});
