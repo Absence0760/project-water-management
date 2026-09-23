@@ -13,7 +13,7 @@ const verifyMail = (email: string) => {
 
 describe('email verification', () => {
 	it('sends a link on sign-up; the link verifies once and only once', async () => {
-		const u = await signUp('Verify');
+		const u = await signUp('Verify', { verified: false });
 		expect((await u.call('GET', '/auth/me')).body.user.emailVerified).toBe(false);
 		const token = tokenIn(verifyMail(u.email));
 		expect(lastMailTo(u.email)!.text).toContain(`http://localhost:7777/verify-email?token=${token}`);
@@ -31,7 +31,7 @@ describe('email verification', () => {
 	});
 
 	it('rejects expired, malformed and unknown tokens', async () => {
-		const u = await signUp('Expire');
+		const u = await signUp('Expire', { verified: false });
 		const token = tokenIn(verifyMail(u.email));
 		await asOwner(`UPDATE email_token SET expires_at = now() - interval '1 second' WHERE user_id = $1`, [u.id]);
 		expect((await anon('POST', '/auth/verify-email', { token })).status).toBe(400);
@@ -42,7 +42,7 @@ describe('email verification', () => {
 	});
 
 	it('a verify token cannot reset a password', async () => {
-		const u = await signUp('Purpose');
+		const u = await signUp('Purpose', { verified: false });
 		const token = tokenIn(verifyMail(u.email));
 		expect((await anon('POST', '/auth/reset-password', { token, password: 'new password 1' })).status).toBe(400);
 		// …and it wasn't burned by the attempt.
@@ -50,7 +50,7 @@ describe('email verification', () => {
 	});
 
 	it('resend is throttled per address, replaces the old link, and stops once verified', async () => {
-		const u = await signUp('Resend');
+		const u = await signUp('Resend', { verified: false });
 		const first = tokenIn(verifyMail(u.email));
 		// The sign-up email went out moments ago.
 		const throttled = await u.call('POST', '/auth/resend-verification');
@@ -136,7 +136,7 @@ describe('password reset', () => {
 	});
 
 	it('stores only token hashes', async () => {
-		const u = await signUp('Hash');
+		const u = await signUp('Hash', { verified: false });
 		const token = tokenIn(verifyMail(u.email));
 		const rows = await asOwner(`SELECT encode(token_hash, 'hex') AS h FROM email_token WHERE user_id = $1`, [u.id]);
 		expect(rows).toHaveLength(1);

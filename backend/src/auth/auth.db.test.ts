@@ -9,11 +9,15 @@ const json = (body: unknown) => ({
 
 describe('auth', () => {
 	it('registers, reads /me from the cookie, and never returns the hash', async () => {
-		const u = await signUp('Ann');
+		const u = await signUp('Ann', { verified: false });
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
 		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false });
 		expect(JSON.stringify(me.body)).not.toContain('password');
+	});
+
+	it('the test helper verifies by default', async () => {
+		expect((await (await signUp('Bea')).call('GET', '/auth/me')).body.user.emailVerified).toBe(true);
 	});
 
 	it('sets an httpOnly SameSite=Lax session cookie', async () => {

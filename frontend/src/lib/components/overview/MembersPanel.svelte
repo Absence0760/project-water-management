@@ -67,7 +67,7 @@
 			const r = await api.members.add(projectId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				const m = r.member;
 				members = [...members.filter((x) => x.userId !== m.userId), m];

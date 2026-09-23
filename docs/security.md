@@ -57,12 +57,19 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (RLS on `invite`); invitees have no access until they have an account.
   Accepting goes through a `SECURITY DEFINER` function that re-checks
   verification.
-- **Known gap — adding an existing but unverified account.** `POST
-  …/members` with an address that already has an account adds it directly
-  (unchanged V1 behaviour), even if that account never verified the address.
-  Someone who pre-registers a colleague's address could therefore be added in
-  their place. Durable fix: only add verified accounts directly, and send an
-  invite otherwise (needs the e2e sharing specs to verify their users first).
+- **Adding an existing but unverified account** doesn't make it a member:
+  `POST …/members` adds only **verified** accounts directly. An unverified one
+  gets a pending invite (the same response as an address with no account, so
+  the owner learns nothing about whether it's registered) and an email to the
+  address asking to confirm it; confirming accepts the invite. This stops
+  someone who pre-registers a colleague's address from being added in their
+  place. Residual risk: if the real inbox owner clicks "confirm" on an account
+  someone else created, that account (whose password the squatter knows) is
+  verified and joins. The email tells them to use "Forgot password" instead if
+  they never created the account — a reset proves the inbox, sets their own
+  password, revokes the squatter's sessions and accepts the invite.
+  Closing this fully means sign-up that is email-first (confirm before the
+  account exists), which is an operator decision (see Known gaps).
 - **Email content:** every user-controlled value (project/team names, display
   names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
   from config, never the request's Host header. The reset and verify pages
@@ -181,8 +188,6 @@ readable by anyone. The rules:
   rule. (Phase 7)
 - No self-service "sign out everywhere" or password change while signed in;
   the `sessions_revoked_at` watermark is only set by a password reset. (Phase 7)
-- Adding an existing but unverified account to a project or team (see
-  "Password reset, email verification and invites" above).
 - No per-account login lockout yet. (Phase 7)
 - **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
   allows inline scripts, because SvelteKit's static build emits an inline

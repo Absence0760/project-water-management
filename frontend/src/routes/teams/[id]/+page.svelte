@@ -108,7 +108,7 @@
 			const r = await api.teams.addMember(teamId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they sign up and confirm their email.`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				addToMembers(r.member);
 				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());

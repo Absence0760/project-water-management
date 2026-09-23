@@ -32,7 +32,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 | --- | --- | --- |
 | Confirm your email | `/verify-email?token=…` | 48 h |
 | Reset your password | `/reset-password?token=…` | 1 h |
-| Invitation | `/register?invite=…` | 7 days |
+| Invitation | `/register?invite=…` (no account yet) or `/verify-email?token=…` (unverified account) | 7 days (invite) / 48 h (verify link) |
 
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
@@ -45,7 +45,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
   Sign in again afterwards.
 - **`verify-email`** marks the address verified and turns every pending invite
-  for it into a membership.
+  for it into a membership. It needs no session: the token is the credential,
+  so a link opened on another device works signed out.
 - **`register` with `inviteToken`** (from `/register?invite=…`): if the token is
   a live invite for *the same address*, the account starts verified and joins
   the invited projects/teams immediately, with no verification email.
@@ -100,7 +101,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for an existing account; `201 { invited: true, invite }` when no account has the address (see Invites) | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | – |
 
@@ -109,14 +110,25 @@ team are listed by `GET /teams/:id`, not here.
 
 ### Invites
 
-Adding an address that has no account creates a **pending invite** and emails
-it a sign-up link (`/register?invite=…`, valid 7 days). The invite becomes a
-membership with the invited role once that address is **verified** — by
-signing up through the link, or by signing up normally and clicking the
-verification email. An unverified sign-up alone does not claim invites.
+Adding an address that has no **verified** account creates a **pending
+invite**; the response is the same whether or not an account exists. The
+email depends on the case:
+
+- **No account:** a sign-up link (`/register?invite=…`, valid 7 days).
+- **An account that never verified the address** (it can't sign up again): a
+  confirm-your-email link for that account (`/verify-email?token=…`, 48 h),
+  with a note to use "Forgot password" instead if they never created the
+  account (someone else registered their address). No email if a
+  verification link went out in the last minute — that link accepts the
+  invite too.
+
+The invite becomes a membership with the invited role once that address is
+**verified** — by signing up through the link, by the verification email, or
+by a password reset. An unverified account alone never claims invites, so
+pre-registering a colleague's address doesn't get you added in their place.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
-Adding an address after it has registered makes it a member directly and
+Adding an address whose account *is* verified makes it a member directly and
 clears its invite.
 
 | Method | Path | Body | Response | Min role |
@@ -140,7 +152,7 @@ projects admins are owners and members are editors (see Projects above).
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first) | member |
 | PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }`, or `201 { invited: true, invite }` when no account has that email (see Projects § Invites); `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | member |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |

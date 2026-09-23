@@ -3,6 +3,7 @@
 // actually about. Every test creates its own users, so tests are independent
 // and can run in parallel against the one e2e database.
 import { expect, type APIRequestContext } from '@playwright/test';
+import { plantEmailToken } from './db.ts';
 import { API_URL } from './env.ts';
 
 export const PASSWORD = 'correct horse battery';
@@ -31,13 +32,26 @@ export function uniqueEmail(name: string): string {
  * Registers a user. When `request` belongs to a browser context
  * (`page.request` / `context.request`), that context is now signed in as
  * the user, because it shares the context's cookie jar.
+ *
+ * The address is confirmed by default (through the verify-email endpoint,
+ * with a planted link token), because only a verified account can be added
+ * to a project or team directly; pass `{ verified: false }` for a fresh,
+ * unconfirmed account.
  */
-export async function register(request: APIRequestContext, displayName: string): Promise<TestUser> {
+export async function register(
+	request: APIRequestContext,
+	displayName: string,
+	{ verified = true }: { verified?: boolean } = {}
+): Promise<TestUser> {
 	const email = uniqueEmail(displayName);
 	const res = await request.post(`${API_URL}/auth/register`, {
 		data: { email, password: PASSWORD, displayName }
 	});
 	const { user } = await json<{ user: { id: string } }>(res, 201);
+	if (verified) {
+		const token = await plantEmailToken(email, 'verify');
+		await json(await request.post(`${API_URL}/auth/verify-email`, { data: { token } }), 200);
+	}
 	return { id: user.id, email, displayName, password: PASSWORD };
 }
 
