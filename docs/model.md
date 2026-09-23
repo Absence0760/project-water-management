@@ -572,6 +572,59 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 5. **Every run records `engine_version`** and a snapshot of its inputs, so an
    old result can always be explained after the model or the project changes.
 
+### Verification
+
+Matching the workbook shows the port is faithful; it can't show the model is
+*sound*, and it stops being the goal wherever an algorithm is corrected. The
+main safety net is therefore a suite of **physical invariants** that any
+correct water balance must satisfy, whatever the formulas inside. They live in
+`packages/engine/src/testing/invariants.ts` (exported as
+`@water-management/engine/testing`) and each returns the first broken property
+as text:
+
+| Check | What must hold |
+| --- | --- |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(ROUND(rate × 86 400), daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the rounded window means; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied within rounding) and never exceed demand; N = M − I, S = N + R, U = M + R. |
+| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results (to 10⁻⁹ of the catchment's largest volume; counts exactly). Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
+| `checkDoubledCropAreas` | More irrigated land can't leave the catchment better supplied: doubling every crop area never raises Σ supplied / Σ demand (allowing for demand being rounded to whole m³). |
+| `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
+
+They run on:
+
+- **Random networks** (`run.invariants.test.ts`, generator in `testing/fuzz.ts`):
+  400 seeded cases per `pnpm test` — chains, fans, binary trees, gauges in the
+  middle, empty and huge dams, zero areas, share sums ≠ 1, several transfers
+  per dam, transfers to upstream farms, missing days, leap days, runs that
+  start mid water-year. A failure prints the seed, the broken property and a
+  **shrunk** reproduction (greedily dropping transfers, crops, nodes and days
+  while the same property still fails).
+- **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
+  15 years each, through the full rain model.
+- **client catchment** when `data/client-catchment` is present (skipped otherwise).
+
+The suite also checks itself: `run.invariants.test.ts` feeds each check a
+deliberately broken result (an unbalanced day, a transfer outside its months
+or above its limit, one below the reserve or held back, a grid cell or target
+that doesn't add up) and expects an objection.
+
+**Soak after any engine change** (about 35 ms per case; 20 000 cases take
+roughly 12 minutes):
+
+```bash
+FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
+FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
+```
+
+Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
+Write a new property as a physical statement ("storage never exceeds
+capacity"), not as a snapshot of today's numbers, so it survives algorithm
+fixes. Known open finding: **F8** in [engine-review.md](./engine-review.md)
+(order-dependent rounding residue in the incremental EWR shortfall); until it
+is fixed the random-network test lists, rather than fails, order-invariance
+differences in exactly those fields.
+
 ---
 
 ## 7. Glossary
