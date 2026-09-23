@@ -82,8 +82,9 @@
 	}
 	.movers {
 		display: inline-flex;
-		flex-direction: column;
 	}
+	/* Side by side at 24 × 24 px: the WCAG 2.2 minimum target size (2.5.8).
+	   Stacked, each button was 22 × 15. */
 	.mv {
 		display: inline-flex;
 		align-items: center;
@@ -91,8 +92,8 @@
 		border: 1px solid transparent;
 		background: none;
 		color: var(--text-muted);
-		width: 22px;
-		height: 15px;
+		width: 24px;
+		height: 24px;
 		padding: 0;
 		cursor: pointer;
 		border-radius: 3px;
