@@ -190,7 +190,7 @@
 		<div class="fields">
 			{#each FLOW_PARAMS as p (p.key)}
 				<div class="field">
-					<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
+					<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
 					<NumberInput
 						id="cal-{p.key}"
 						step={p.step ?? 'any'}
@@ -247,7 +247,7 @@
 			<div class="fields">
 				{#each ADVANCED_PARAMS as p (p.key)}
 					<div class="field">
-						<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
+						<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
 						<NumberInput
 							id="cal-{p.key}"
 							step={p.step ?? 'any'}
@@ -264,7 +264,7 @@
 			</div>
 			{#each TABLE_PARAMS as p (p.key)}
 				{@const arr = (cal[p.key] as number[] | undefined) ?? []}
-				<h3 class="tbl-h">{p.label}{#if p.unit} <span class="u">({p.unit})</span>{/if} <span class="muted small">· {arr.length} values</span></h3>
+				<h3 class="tbl-h">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if} <span class="muted small">· {arr.length} values</span></h3>
 				<p class="hint muted">{p.help}</p>
 				<div class="table-wrap">
 					<table class="data compact curve">
@@ -513,7 +513,7 @@
 		z-index: 3;
 	}
 	.monthly td {
-		min-width: 76px;
+		min-width: 92px;
 	}
 	.derived td,
 	.derived th {
