@@ -1,4 +1,5 @@
-# Local dev services. Start with `pnpm dev:db:up`.
+# Local dev services. Start with `pnpm dev:db:up` (Postgres) and
+# `pnpm dev:mail:up` (Mailpit).
 #
 # Postgres is published on 5434 — this workstation already runs Supabase's
 # container Postgres on 5432 and native Postgres on 5433.
@@ -22,6 +23,24 @@ services:
       - ./dev/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U water -d water"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Catches every email the backend sends in local dev (MAIL_TRANSPORT=smtp
+  # in backend/.env.development). Nothing leaves the laptop. Web UI:
+  # http://localhost:8026 (`pnpm dev:mail:open`). Published on 1026/8026 so it
+  # doesn't collide with other projects' Mailpit on the default 1025/8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    container_name: water-management-mail
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
       interval: 2s
       timeout: 3s
       retries: 30
