@@ -53,7 +53,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 | --- | --- | --- |
 | ⬜ **In-browser workbook import** | Upload a b023 `.xlsm` from the UI (SheetJS from its CDN tarball, parsed in a Web Worker) instead of the Python CLI. Lets the client onboard their other catchments themselves. | M |
 | ⬜ **Data feeds** | Per-project API keys (hashed, `series:write`, revocable) for logger gateways; scheduled fetchers for CHIRPS rainfall and DWS gauge records; auto re-run after new data. See plan.md §1e. | L |
-| ⬜ **Data quality tools** | Flag outliers and flat-lines, fill gaps (interpolate or from a neighbouring gauge), per-value flags (observed / estimated / forecast), source and unit provenance. | M |
+| 🚧 **Data quality tools** | Flag outliers and flat-lines, fill gaps (interpolate or from a neighbouring gauge), per-value flags (observed / estimated / forecast), source and unit provenance. — **First check built:** every run compares the gauge and logger records per water year and warns when they disagree (model.md §2.10a; caught Client Catchment's 2014–2017 gauge problem). Still to do: show the agreement table on the Data tab, then outliers, flat-lines, gap filling. | M |
 | ⬜ **Forecast mode** | Run with 7–14-day forecast rainfall appended, show forecast days distinctly, early warning of EWR failure or low dams. | M |
 | ⬜ **Spreadsheet templates** | Download a CSV/Excel template for farms, crops and series, fill it in, upload — faster than typing 12 monthly values × 20 farms. | S |
 

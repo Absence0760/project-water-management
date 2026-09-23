@@ -8,6 +8,7 @@
 //   5. EWR shortfalls, calibration statistics     [EWR shortfalls]       → ./network/stats.ts
 //   6. curtailment targets per farm               [Shortfalls]           → ./network/curtailment.ts
 // See ./network/README.md for the column-by-column mapping.
+import { agreementWarning, observedAgreement } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeNaturalFlow } from './flow';
@@ -31,7 +32,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.3.0';
+export const ENGINE_VERSION = '0.3.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -314,6 +315,11 @@ export function runModelWith(
 		);
 	}
 
+	// Input data quality: do the two observed flow records agree?
+	const agreement = observedAgreement(input.series);
+	const agreementNote = agreementWarning(agreement);
+	if (agreementNote) warnings.push(agreementNote);
+
 	const outflowNode = topo.outflow >= 0 ? nodes[topo.outflow]! : null;
 	const compliance = ewrCompliance(
 		startDate,
@@ -343,6 +349,7 @@ export function runModelWith(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
+			dataQuality: { observedAgreement: agreement },
 			warnings
 		}
 	};

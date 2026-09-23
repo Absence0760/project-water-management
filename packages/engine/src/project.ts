@@ -2,6 +2,7 @@
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
 import type { Monthly } from './calendar';
+import type { ObservedAgreement } from './quality';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -436,6 +437,11 @@ export interface RunSummary {
 	curtailment?: CurtailmentSummary;
 	/** EWR compliance grid; absent on runs saved by engines before 0.3.0. */
 	ewrCompliance?: EwrCompliance;
+	/**
+	 * Input data-quality checks (engine ≥ 0.3.1). observedAgreement is null when
+	 * the project doesn't have both observed flow records.
+	 */
+	dataQuality?: { observedAgreement: ObservedAgreement | null };
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }

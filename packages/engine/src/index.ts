@@ -6,6 +6,7 @@ export * from './demand';
 export * from './flow';
 export * from './project';
 export * from './run';
+export * from './quality';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, moriasiRating, waterYearOf, type CalibrationWindow, type MoriasiRating } from './network/stats';

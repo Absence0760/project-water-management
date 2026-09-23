@@ -338,6 +338,27 @@ volume ratio (`[Flow Calibration Cfg]` K27 = 1.2783). The gauge and the logger
 disagree badly from 2014 to 2017 (in one water year the gauge records less than
 a tenth of the logger's volume): a question for the hydrologist.
 
+### 2.10a Data quality: do the observed flow records agree?
+
+Not in the workbook — added after comparing client catchment's two observed records.
+When a project has both an observed gauge series (`flow_observed_m3s`, e.g.
+G1) and a logger series (`flow_logger_m3s`, e.g. A1), every run compares
+them per water year on the days **both** have a reading
+(`observedAgreement`, `packages/engine/src/quality.ts`): volume of each in
+Mm³, and the ratio gauge / logger. A year is **flagged** when the ratio falls
+outside 2/3 … 3/2 (one instrument reads less than two-thirds or more than 1.5×
+the other) on at least 90 shared days, or when one records nothing while the
+other records flow. Flagged years produce a run warning and are listed in
+`RunSummary.dataQuality.observedAgreement`.
+
+Two instruments on the same reach should roughly agree; a sustained gap
+usually means something physical at one of them (a damaged or silted weir, a
+changed rating curve, flow bypassing the structure, zero-filled gaps) — and
+calibrating to the wrong record skews every farm's supply and EWR result.
+client catchment: 95 % (2012/13), 83 % (2013/14), then **13 %, 33 %, 8 %** for
+2014/15–2016/17 → flagged. See the first hydrologist question in
+[plan.md](./plan.md#model-and-hydrology-for-the-hydrologist).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
