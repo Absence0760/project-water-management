@@ -23,6 +23,44 @@
 
 data "aws_iam_role" "github_deploy" {
   name = "${var.bootstrap_slug}-deploy"
+
+  # The trust policy is bootstrap-owned, but everything this file grants rides
+  # on it, so the plan refuses to attach permissions to a role whose trust has
+  # drifted from "this repo's production environment, and nothing else".
+  # The subject may be the slug form (repo:<owner>/<repo>) or GitHub's
+  # immutable-claims form (repo:<owner>@<id>/<repo>@<id>), which the bootstrap
+  # reads from the API; both are accepted, anything wider is not.
+  # (The provider returns assume_role_policy URL-decoded; IAM collapses
+  # single-element lists to strings, hence the flatten([...]).)
+  lifecycle {
+    postcondition {
+      condition = length([
+        for s in flatten([try(jsondecode(self.assume_role_policy).Statement, [])]) : s if try(s.Effect, "") == "Allow"
+        ]) > 0 && alltrue([
+        for s in flatten([try(jsondecode(self.assume_role_policy).Statement, [])]) :
+        try(s.Effect, "") != "Allow" || (
+          toset(flatten([try(s.Action, [])])) == toset(["sts:AssumeRoleWithWebIdentity"]) &&
+          length(flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])])) == 1 &&
+          alltrue([
+            for sub in flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])]) :
+            can(regex(local.deploy_sub_pattern, sub))
+          ]) &&
+          toset(flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:aud"], [])])) == toset(["sts.amazonaws.com"]) &&
+          length(keys(try(s.Condition.StringLike, {}))) == 0
+        )
+      ])
+      error_message = "The bootstrap deploy role's trust policy must allow only sts:AssumeRoleWithWebIdentity, with exactly one StringEquals sub for ${var.github_repo}'s `production` environment and aud = sts.amazonaws.com (no StringLike / wildcards). Fix the bootstrap (new-project-account.sh) before planning."
+    }
+  }
+}
+
+locals {
+  # ^repo:<owner>(@<id>)?/<repo>(@<id>)?:environment:production$
+  deploy_sub_pattern = format(
+    "^repo:%s(@[0-9]+)?/%s(@[0-9]+)?:environment:production$",
+    replace(split("/", var.github_repo)[0], ".", "\\."),
+    replace(split("/", var.github_repo)[1], ".", "\\."),
+  )
 }
 
 # ----------------------------------------------------------------------------

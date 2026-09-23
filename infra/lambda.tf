@@ -79,8 +79,9 @@ resource "aws_iam_role" "lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs + the EC2 ENI permissions a VPC Lambda needs. Nothing else: the API
-# reads its config from environment variables and calls no AWS APIs.
+# Logs + the EC2 ENI permissions a VPC Lambda needs. The API reads its config
+# from environment variables; its only AWS call is SES SendEmail, granted
+# separately and scoped to one identity + From address (ses.tf).
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -119,12 +120,21 @@ resource "aws_lambda_function" "backend" {
       ALLOWED_ORIGINS          = local.site_origin
       COOKIE_SECURE            = "true"
       NODE_EXTRA_CA_CERTS      = local.rds_ca_path
+
+      # Email (ses.tf, docs/deployment.md § Email). MAIL_TRANSPORT must be set:
+      # the default `log` sends nothing.
+      MAIL_TRANSPORT        = "ses"
+      MAIL_FROM             = "${var.mail_from_display_name} <${local.mail_from_address}>"
+      SITE_URL              = local.site_origin
+      SES_CONFIGURATION_SET = aws_sesv2_configuration_set.main.configuration_set_name
     }
   }
 
   depends_on = [
     aws_cloudwatch_log_group.lambda,
     aws_iam_role_policy_attachment.lambda_vpc,
+    aws_iam_role_policy.lambda_ses,
+    aws_vpc_endpoint.ses,
   ]
 
   lifecycle {

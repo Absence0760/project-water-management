@@ -66,6 +66,7 @@ pnpm seed:examples          # 3 invented example catchments + team + 2 demo user
 pnpm seed:demo              # seed:examples + the Client Catchment client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
+pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
 ```
 
 ## First-time setup

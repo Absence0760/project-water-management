@@ -174,6 +174,32 @@ jobs:
             e2e/test-results/
           retention-days: 7
 
+  # Credential-free Terraform checks: fmt, validate, and the plan-only
+  # `terraform test` suite against mocked providers. No AWS credentials, no
+  # state, no sops key — nothing here can touch the real account. Same
+  # script as `pnpm check:infra` locally.
+  terraform:
+    name: Terraform (fmt, validate, test)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read pinned Terraform version
+        id: tfver
+        run: echo "version=$(tr -d '[:space:]' < infra/.terraform-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tfver.outputs.version }}
+          terraform_wrapper: false
+
+      - name: fmt, validate, test
+        run: bin/check-infra.sh
+
   # Single required status check for branch protection (docs/USING.md
   # "The CI gate"). It fans in on every job above via `needs` + always(),
   # failing the merge if any upstream job did not succeed (a skipped job
@@ -185,7 +211,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, test, db-test, e2e]
+    needs: [changes, test, db-test, e2e, terraform]
     steps:
       - name: Require every upstream job to have passed
         env:
