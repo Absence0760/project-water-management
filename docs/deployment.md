@@ -145,6 +145,7 @@ Lambda environment:
 | `SITE_URL` | `https://water-management.jaredhoward.com` (the base of every emailed link) |
 | `SES_CONFIGURATION_SET` | optional, the configuration set name |
 | `SES_REGION` | optional; defaults to the Lambda's own region |
+| `RUNS_KEPT_PER_PROJECT` | optional; runs kept per project (default 20 — see [data-model.md § Run output volume](./data-model.md#time-series-storage)) |
 
 The Lambda bundle includes `@aws-sdk/client-sesv2` and `nodemailer` (the
 `dist/lambda.mjs` bundle is ~2.8 MB); both are loaded lazily, only for the

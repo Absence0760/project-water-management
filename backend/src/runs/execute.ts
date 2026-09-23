@@ -22,6 +22,35 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
 }
 
+/** Default for RUNS_KEPT_PER_PROJECT. */
+export const DEFAULT_RUNS_KEPT = 20;
+
+/**
+ * How many runs a project keeps (`RUNS_KEPT_PER_PROJECT`, default 20). A run
+ * of a long catchment is several MB of daily outputs, so without a cap
+ * storage grows with every press of Run. Invalid values fall back to the
+ * default rather than disabling the cap.
+ */
+export function runsKeptPerProject(env: string | undefined = process.env.RUNS_KEPT_PER_PROJECT): number {
+	const n = Number(env);
+	return env !== undefined && env.trim() !== '' && Number.isInteger(n) && n >= 1 ? n : DEFAULT_RUNS_KEPT;
+}
+
+/**
+ * Delete the project's oldest runs beyond the cap (run_series cascades).
+ * Runs inside the caller's transaction as the signed-in editor, so RLS
+ * (model_run_delete: editor) applies. Returns the ids removed.
+ */
+export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
+	const { rows } = await db.query<{ id: string }>(
+		`DELETE FROM model_run WHERE id IN (
+			SELECT id FROM model_run WHERE project_id = $1 ORDER BY created_at DESC, id DESC OFFSET $2
+		) RETURNING id`,
+		[projectId, keep]
+	);
+	return rows.map((r) => r.id);
+}
+
 /** Run the engine and persist outputs. Returns the new run id. */
 export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
 	const input = await loadModelInput(db, projectId);

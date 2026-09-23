@@ -97,11 +97,23 @@ ORDINALITY` (fine for occasional reports).
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, ~128 KB each before compression), so a client catchment run is a few
-MB to ~25 MB. Before this matters in production (see [plan.md](./plan.md)):
-store only the keys the UI and reports use, keep only the last *N* unpinned runs
-per project, and consider `real` (float4) for outputs if space becomes a
-problem. The engine is deterministic, so any run can be recomputed from its
-`inputs` snapshot plus `engine_version`.
+MB to ~25 MB. The engine is deterministic, so any run can be recomputed from
+its `inputs` snapshot plus `engine_version`.
+
+- **Cap per project.** Each new run deletes the project's oldest runs beyond
+  `RUNS_KEPT_PER_PROJECT` (default **20**; unset or invalid → 20), with their
+  `run_series` (cascade). It runs in the same transaction as the new run, as
+  the signed-in editor, so RLS applies. `POST …/runs` returns the removed ids
+  (`removedRunIds`). There is no pinning yet: a labelled baseline is trimmed
+  like any other run once 20 newer ones exist.
+- **Output keys: none trimmed, on measurement.** On the local examples,
+  TOAST compression already shrinks the constant or mostly-zero series
+  (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
+  to a few hundred bytes to a few KB per run, against 30–60 KB for the
+  high-entropy ones (`outflow`, `runoff`, `spill`, `inflow_upstream`). Every
+  high-entropy key is charted or exported, so dropping keys would save little
+  and change the API. If space ever matters, `real` (float4) outputs or a
+  lower cap are the levers.
 
 **Run input snapshots.** `model_run.inputs` holds the settings and model data
 the run used. Input *series* are not copied into it (they are large): the run

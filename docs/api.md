@@ -215,12 +215,14 @@ engine's `runModel`, stores the outputs, and returns the summary.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/runs` | `{ label? }` | `201 { run }` | editor |
+| POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run, series: { nodeId, key, label, unit }[] }` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
+- A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
+  run deletes the oldest beyond that, with their outputs.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
 - `RunSummary.calibration` (`CalibrationStats`) is scored over
