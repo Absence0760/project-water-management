@@ -41,6 +41,16 @@ export function fmtDate(iso: string | null | undefined, withTime = false): strin
 	return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
 }
 
+/**
+ * Today's calendar date where the viewer is (YYYY-MM-DD). Series dates are
+ * calendar days, so a data age is counted against the viewer's local date,
+ * never the UTC one (which is a day off around local midnight).
+ */
+export function localIsoDate(now: Date = new Date()): string {
+	const pad = (x: number) => String(x).padStart(2, '0');
+	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /** Parse user input that may contain thousands separators or spaces. Empty → null. */
 export function parseNum(input: string): number | null {
 	const s = input.replace(/[\s,]/g, '');

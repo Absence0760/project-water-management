@@ -18,6 +18,7 @@
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import SeriesTab from '$lib/components/series/SeriesTab.svelte';
 	import type { UploadResult } from '$lib/components/series/upload';
+	import { localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import SettingsTab from '$lib/components/settings/SettingsTab.svelte';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
@@ -62,7 +63,8 @@
 	let saveBarHeight = $state(0);
 
 	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
-	const today = new Date().toISOString().slice(0, 10);
+	// The viewer's calendar date, as on the project list (projects/freshness.ts).
+	const today = localIsoDate();
 	const fresh = $derived(freshness(series ?? [], today));
 	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
 	let addOpen = $state(false);
@@ -248,7 +250,7 @@
 						<details class="fresh" class:stale={fresh.stale}>
 							<summary>
 								<span class="dot" aria-hidden="true"></span>
-								Data up to <strong>{longDate(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden"> (older than {STALE_DAYS} days)</span>{/if}
+								Data up to <strong>{longDate(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
 							</summary>
 							<div class="fresh-pop">
 								<table class="data compact">

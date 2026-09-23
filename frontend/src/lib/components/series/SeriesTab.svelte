@@ -7,7 +7,7 @@
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { downloads } from '$lib/export';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
@@ -43,7 +43,8 @@
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
 	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
 	let values = $state.raw<Record<string, Daily>>({});
-	const today = new Date().toISOString().slice(0, 10);
+	// The viewer's calendar date, as on the project list (projects/freshness.ts).
+	const today = localIsoDate();
 
 	let selectedId = $state<string | null>(null);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
