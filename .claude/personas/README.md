@@ -147,3 +147,25 @@ was extracted from): `persona-approver` (approval limits, segregation of duties)
 and currency conventions). Other domains: a marketplace gets buyer/seller/
 dispute personas; a healthcare app gets patient/clinician/billing; a CMS gets
 author/editor/anonymous-reader.
+
+## Domain pack: water-management (this project)
+
+These personas test two things: **is there a need** (would this person adopt the
+app over what they use today?) and **does it work properly for them**. Each one
+adds a `## Need verdict` section (Adopt / Adopt if… / Would not adopt, the three
+things that would change it, what they use today) above `## Open findings`. Each
+labels missing capabilities as **gap** and broken behaviour as **defect**. They
+exercise the running **local** stack through the API with the seeded demo users,
+and clean up any scratch projects they create.
+
+| Persona | Point of view |
+|---|---|
+| `persona-hydrologist` | Primary user: data import, units, calibration, physical plausibility, beats Excel? |
+| `persona-environmentalist` | River NGO / ecologist: EWR compliance shown honestly, defaults that favour abstraction |
+| `persona-licence-applicant` | Developer building or raising a dam: baseline vs proposal, evidence fit for a licence application |
+| `persona-licensing-authority` | CMA/DWS assessor: reproducibility, audit trail, cumulative impact, resistance to gaming |
+| `persona-wua-manager` | Water User Association: running the season, freshness, who's short, fair restrictions |
+| `persona-farmer` | Irrigator on a phone: my water, curtailment in plain language, privacy from neighbours |
+
+Run the whole pack with
+`/persona hydrologist,environmentalist,licence-applicant,licensing-authority,wua-manager,farmer`.
