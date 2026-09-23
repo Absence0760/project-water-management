@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { fromEpochDay, observedAgreement, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { downloads } from '$lib/export';
 	import { fmtNum } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
+	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import { KIND_ROLES, seriesInUse } from './roles';
 	import { valuesCache } from './valuesCache';
@@ -107,6 +111,17 @@
 	const newerThanRun = $derived(
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
+
+	// Gauge vs logger, when both records exist (first of each kind by name, as a run reads them).
+	const agreement = $derived.by(() => {
+		const first = (k: string) =>
+			[...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
+		const o = first('flow_observed_m3s');
+		const l = first('flow_logger_m3s');
+		const vo = o && values[o.id];
+		const vl = l && values[l.id];
+		return vo && vl ? observedAgreement({ flow_observed_m3s: vo, flow_logger_m3s: vl }) : null;
+	});
 
 	async function remove(s: SeriesMeta) {
 		if (!confirm(`Delete the series "${s.name || kindLabel(s.kind)}"? Runs already stored are not affected.`)) return;
@@ -269,7 +284,11 @@
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
 								{#if role}
 									<span class="role" class:unused={!inUse.has(s.id)} title={role.help}>
-										{inUse.has(s.id) ? role.role : 'Not used (another series of this kind is)'}
+										{inUse.has(s.id)
+											? role.role
+											: s.kind === 'flow_logger_m3s' && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
+												? 'Calibration if chosen in settings'
+												: 'Not used (another series of this kind is)'}
 									</span>
 								{/if}
 							</th>
@@ -289,10 +308,13 @@
 								{/if}
 							</td>
 							<td class="act">
+								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => (selectedId = s.id)}>View</button>
+								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
 								{/if}
+								</div>
 							</td>
 						</tr>
 					{/each}
@@ -325,6 +347,12 @@
 	</section>
 {/if}
 
+{#if agreement}
+	<section class="panel" aria-label="Gauge vs logger agreement">
+		<AgreementTable {agreement} headingLevel={2} />
+	</section>
+{/if}
+
 <div class="lower">
 	<section class="panel" aria-labelledby="use-h">
 		<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
@@ -333,7 +361,7 @@
 				{@const r = KIND_ROLES[o.value]}
 				{@const have = list.some((s) => s.kind === o.value)}
 				<div>
-					<dt>{o.label} {#if have}<span class="have">✓ loaded</span>{/if}</dt>
+					<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
 					<dd>{r?.help}</dd>
 				</div>
 			{/each}
@@ -509,8 +537,11 @@
 		text-align: right;
 		white-space: nowrap;
 	}
-	.act .btn + .btn {
-		margin-left: 0.25rem;
+	.acts {
+		display: flex;
+		gap: 0.3rem;
+		justify-content: flex-end;
+		align-items: center;
 	}
 	.key {
 		margin: 0.5rem 0 0;
