@@ -56,7 +56,11 @@ describe('GET /compare/runs', () => {
 		expect(res.body.b.run.label).toBe('Dam raise');
 		// The stored inputs snapshot is exposed here (and only here).
 		expect(res.body.a.run.inputs.model.nodes[1].damCapacityM3).toBe(100_000);
-		expect(res.body.b.run.inputs.series.rain_catchment_mm).toEqual({ startDate: '2020-01-01', length: 60 });
+		expect(res.body.b.run.inputs.series.rain_catchment_mm).toEqual({
+			startDate: '2020-01-01',
+			length: 60,
+			valuesSha256: expect.stringMatching(/^[0-9a-f]{64}$/)
+		});
 		expect(res.body.b.run.summary.farms[0].name).toBe('Rooikloof');
 		expect(res.body.changes).toEqual([
 			{ area: 'network', kind: 'changed', subject: 'Rooikloof', text: 'Rooikloof: dam capacity 100,000 m³ → 150,000 m³' }
@@ -71,6 +75,34 @@ describe('GET /compare/runs', () => {
 
 		// The run's own detail endpoint still doesn't return inputs.
 		expect((await u.call('GET', `/projects/${projectId}/runs/${base}`)).body.run.inputs).toBeUndefined();
+	});
+
+	it('lists a series whose values were corrected within the same dates', async () => {
+		const u = await signUp('Corrector');
+		const { projectId } = await runnableProject(u);
+		const before = await run(u, projectId, 'Before');
+		const series = (await u.call('GET', `/projects/${projectId}/series`)).body.series as { id: string; kind: string }[];
+		const rain = series.find((x) => x.kind === 'rain_catchment_mm')!;
+		const values = (await u.call('GET', `/projects/${projectId}/series/${rain.id}`)).body.values as number[];
+		values[10] = 55; // a corrected reading, same dates
+		expect(
+			(await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values }))
+				.status
+		).toBe(200);
+		const after = await run(u, projectId, 'After');
+		// Positive control: an unchanged rerun lists nothing.
+		const same = await run(u, projectId, 'Same again');
+
+		const res = await compare(u, `${projectId}:${before}`, `${projectId}:${after}`);
+		expect(res.body.changes).toEqual([
+			{
+				area: 'series',
+				kind: 'changed',
+				subject: 'Rainfall (catchment)',
+				text: 'Rainfall (catchment) values changed (same dates, 2020-01-01 to 2020-02-29)'
+			}
+		]);
+		expect((await compare(u, `${projectId}:${after}`, `${projectId}:${same}`)).body.changes).toEqual([]);
 	});
 
 	it('compares runs across a copied project, matching farms by name', async () => {

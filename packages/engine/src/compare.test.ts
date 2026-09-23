@@ -339,6 +339,19 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toContain('Rainfall (catchment) series now starts 2000-02-01 (was 2000-01-01)');
 	});
 
+	it('reports values changed within the same dates from the series hash', () => {
+		const s = (valuesSha256?: string) =>
+			snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 366, ...(valuesSha256 ? { valuesSha256 } : {}) } } });
+		expect(texts(s('aa'), s('bb'))).toEqual(['Rainfall (catchment) values changed (same dates, 2000-01-01 to 2000-12-31)']);
+		expect(diffInputs(s('aa'), s('bb'))[0]).toMatchObject({ area: 'series', kind: 'changed', subject: 'Rainfall (catchment)' });
+		expect(texts(s('aa'), s('aa'))).toEqual([]);
+		// Runs stored before hashes existed: nothing to compare, nothing reported.
+		expect(texts(s(), s('bb'))).toEqual([]);
+		// Different dates: only the date change (the hash can't isolate shared days).
+		const longer = snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 367, valuesSha256: 'cc' } } });
+		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)']);
+	});
+
 	it('tolerates missing snapshots (runs stored before a field existed)', () => {
 		expect(diffInputs(null, null)).toEqual([]);
 		expect(texts(null as unknown as RunInputsSnapshot, snapshot())).toContain('Farm "Rooikloof" added (10 km², dam 600,000 m³, drains into Outlet)');

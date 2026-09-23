@@ -1,7 +1,12 @@
+import { createHash } from 'node:crypto';
 import { runModel, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
+
+/** SHA-256 hex of a series' values as JSON (null = missing day), stored in the run's input snapshot. */
+export const seriesHash = (values: readonly (number | null)[]): string =>
+	createHash('sha256').update(JSON.stringify(values)).digest('hex');
 
 /** Gather everything the engine needs for a project. */
 export async function loadModelInput(db: Db, projectId: string): Promise<ModelInput> {
@@ -24,8 +29,13 @@ export async function executeRun(db: Db, projectId: string, label: string): Prom
 	const snapshot = {
 		settings: input.settings,
 		model: input.model,
+		// Values aren't copied (they're large); a hash lets "what changed"
+		// catch values corrected within the same dates (compare.ts diffSeries).
 		series: Object.fromEntries(
-			Object.entries(input.series).map(([k, v]) => [k, { startDate: v.startDate, length: v.values.length }])
+			Object.entries(input.series).map(([k, v]) => [
+				k,
+				{ startDate: v.startDate, length: v.values.length, valuesSha256: seriesHash(v.values) }
+			])
 		)
 	};
 	const { rows } = await db.query<{ id: string }>(

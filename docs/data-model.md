@@ -106,13 +106,15 @@ problem. The engine is deterministic, so any run can be recomputed from its
 **Run input snapshots.** `model_run.inputs` holds the settings and model data
 the run used. Input *series* are not copied into it (they are large): the run
 refers to them as they were. If a series is re-uploaded, old runs can no longer
-be recomputed exactly. A later migration can add a content hash of each input
-series to the snapshot so the UI can flag "inputs changed since this run".
-For each series kind the snapshot keeps only `{ startDate, length }`.
-`GET /compare/runs` is the only endpoint that returns the snapshot. Its "what
-changed" list (engine `diffInputs`, see [run-comparison.md](./run-comparison.md))
-can therefore see a series being extended or trimmed, but not a value edited
-within the same dates. The content hash above would close that gap as well.
+be recomputed exactly. For each series kind the snapshot keeps
+`{ startDate, length, valuesSha256 }`, where `valuesSha256` is the SHA-256 hex
+of `JSON.stringify(values)` (`backend/src/runs/execute.ts` `seriesHash`; it
+lives in the `inputs` jsonb, so no column or migration). Runs stored before it
+have no hash. `GET /compare/runs` is the only endpoint that returns the
+snapshot. Its "what changed" list (engine `diffInputs`, see
+[run-comparison.md](./run-comparison.md)) sees a series being extended or
+trimmed, and values edited within the same dates when both runs carry a hash.
+The same hash could later drive an "inputs changed since this run" flag.
 
 ## Access control
 

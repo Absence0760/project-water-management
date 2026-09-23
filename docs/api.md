@@ -261,7 +261,8 @@ matched.
 
 - `RunInputsSnapshot`, `RunComparison` and `InputChange` are in
   `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run
-  (`{ settings, model, series: { [kind]: { startDate, length } } }`). This is the
+  (`{ settings, model, series: { [kind]: { startDate, length, valuesSha256? } } }`;
+  `valuesSha256` = SHA-256 hex of the values' JSON, absent on older runs). This is the
   only endpoint that returns it.
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
