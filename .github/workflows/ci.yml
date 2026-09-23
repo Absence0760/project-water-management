@@ -75,6 +75,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: CSP meta policy present
+        run: node infra/scripts/check-csp.mjs frontend/build
+
   db-test:
     name: Backend DB tests (Postgres + RLS)
     needs: changes
