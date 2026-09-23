@@ -34,7 +34,9 @@
 
 	// Full values per series (for coverage and the chart). Input series are few
 	// (one per kind, a handful of names), so fetching them all is cheap.
-	let values = $state<Record<string, Daily>>({});
+	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
+	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
+	let values = $state.raw<Record<string, Daily>>({});
 	const today = new Date().toISOString().slice(0, 10);
 
 	let selectedId = $state<string | null>(null);
@@ -71,14 +73,14 @@
 				const key = `${projectId}/${s.id}`;
 				const hit = valuesCache.get(key);
 				if (hit && hit.startDate === s.startDate && hit.values.length === s.length) {
-					values[s.id] = hit;
+					values = { ...values, [s.id]: hit };
 					return;
 				}
 				try {
 					const d = await api.series.get(projectId, s.id);
 					const v = { startDate: d.startDate, values: d.values };
 					valuesCache.set(key, v);
-					values[s.id] = v;
+					values = { ...values, [s.id]: v };
 				} catch {
 					/* coverage cells stay "–" */
 				}
@@ -124,7 +126,7 @@
 	let name = $state('');
 	let unit = $state(defaultUnit(KIND_OPTIONS[0]!.value));
 	let unitTouched = $state(false);
-	let parsed = $state<ParsedSeries | null>(null);
+	let parsed = $state.raw<ParsedSeries | null>(null);
 	let fileName = $state('');
 	let parseError = $state<string | null>(null);
 	let uploading = $state(false);
@@ -197,7 +199,7 @@
 				uploadDone = `Uploaded ${fmtNum(meta.length)} days to “${meta.name || label}”.`;
 			}
 			valuesCache.delete(`${projectId}/${meta.id}`);
-			delete values[meta.id];
+			values = Object.fromEntries(Object.entries(values).filter(([id]) => id !== meta.id));
 			parsed = null;
 			fileName = '';
 			if (fileInput) fileInput.value = '';

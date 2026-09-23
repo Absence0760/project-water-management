@@ -42,7 +42,9 @@
 
 	// --- catchment series -----------------------------------------------------
 	type Loaded = { natural?: DailySeries; simulated?: DailySeries; observed?: DailySeries; ewr?: DailySeries };
-	let catchment = $state<Loaded>({});
+	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
+	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
+	let catchment = $state.raw<Loaded>({});
 	let catchError = $state<string | null>(null);
 	let catchLoading = $state(true);
 
@@ -113,7 +115,7 @@
 	});
 	const farm = $derived(farmOptions.find((f) => f.nodeId === farmId) ?? null);
 	const capacity = $derived(damCapacity.get(farmId) ?? 0);
-	let farmData = $state<{ storage?: DailySeries; demand?: DailySeries; supplied?: DailySeries }>({});
+	let farmData = $state.raw<{ storage?: DailySeries; demand?: DailySeries; supplied?: DailySeries }>({});
 	let farmLoading = $state(false);
 	let farmError = $state<string | null>(null);
 	$effect(() => {

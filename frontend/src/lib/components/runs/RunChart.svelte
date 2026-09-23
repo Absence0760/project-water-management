@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	// Explorer for any stored output series of a run: pick a node (catchment
 	// first, then the network order) and one of its series by name. Fetches
 	// only the series picked.
@@ -51,7 +52,9 @@
 		if (!g?.options.some((r) => r.key === key)) key = g?.options[0]?.key ?? '';
 	}
 
-	let data = $state<ChartSeries[]>([]);
+	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
+	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
+	let data = $state.raw<ChartSeries[]>([]);
 	let unit = $state('');
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -65,7 +68,10 @@
 			return;
 		}
 		const my = ++requestNo;
-		loading = !data.length;
+		// untrack: reading `data` here would make it a dependency of this effect,
+		// and the fetch below writes `data` — an endless refetch loop that froze
+		// the Runs tab (the cached promise resolves immediately every time).
+		loading = untrack(() => !data.length);
 		error = null;
 		cachedSeries(runId, r.key, r.nodeId, () => api.runs.series(projectId, runId, r.key, r.nodeId))
 			.then((d) => {
