@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import type { CalibrationStats } from '@water-management/engine';
+import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, waterYearLabel, windowError } from './metrics';
+
+const base: CalibrationStats = {
+	days: 100,
+	nse: 0.7,
+	pbias: -12.34,
+	rmseM3s: 1.2345,
+	meanObservedM3s: 1,
+	meanSimulatedM3s: 1.1,
+	kge: 0.57,
+	kgeR: 0.693,
+	kgeAlpha: 1.114,
+	kgeBeta: 1.278,
+	r2: 0.48,
+	logNse: 0.49,
+	volumeErrorPct: 12.34,
+	annualVolumes: []
+};
+
+describe('metricRows', () => {
+	it('formats values and attaches Moriasi ratings to NSE and PBIAS only', () => {
+		const rows = Object.fromEntries(metricRows(base).map((r) => [r.key, r]));
+		expect(rows.nse!.value).toBe('0.70');
+		expect(rows.nse!.rating).toBe('good');
+		expect(rows.pbias!.value).toBe('-12.3%');
+		expect(rows.pbias!.rating).toBe('good');
+		expect(rows.kge!.rating).toBeNull();
+		expect(rows.rmseM3s!.unit).toBe('m³/s');
+		expect(metricRows(base).every((r) => r.help.length > 10)).toBe(true);
+	});
+
+	it('shows dashes for metrics an old run does not have', () => {
+		const old = { days: 10, nse: 0.2, pbias: 30, rmseM3s: 1, meanObservedM3s: 1, meanSimulatedM3s: 1 };
+		expect(isLegacyStats(old)).toBe(true);
+		expect(isLegacyStats(base)).toBe(false);
+		const rows = Object.fromEntries(metricRows(old).map((r) => [r.key, r]));
+		expect(rows.kge!.value).toBe('–');
+		expect(rows.volumeErrorPct!.value).toBe('–');
+		expect(rows.pbias!.rating).toBe('unsatisfactory');
+		expect(kgeComponents(old)).toBeNull();
+	});
+});
+
+describe('formatting helpers', () => {
+	it('labels water years as start/end', () => {
+		expect(waterYearLabel(2010)).toBe('2010/11');
+		expect(waterYearLabel(1999)).toBe('1999/00');
+	});
+
+	it('summarises KGE components', () => {
+		expect(kgeComponents(base)).toBe('r 0.69 · α 1.11 · β 1.28');
+	});
+
+	it('flags part years', () => {
+		const y = { waterYear: 2012, days: 169, daysInWindow: 365, observedMm3: 1, simulatedMm3: 1, diffPct: 0 };
+		expect(isPartYear(y)).toBe(true);
+		expect(isPartYear({ ...y, days: 365 })).toBe(false);
+	});
+
+	it('describes and validates the window', () => {
+		expect(describeWindow('2010-10-01', '2018-09-30')).toBe('2010-10-01 – 2018-09-30');
+		expect(describeWindow(null, null)).toBe('whole record');
+		expect(describeWindow('2010-10-01', null)).toBe('from 2010-10-01');
+		expect(windowError(null, null)).toBeNull();
+		expect(windowError('2010-10-01', '2018-09-30')).toBeNull();
+		expect(windowError('2018-10-01', '2010-09-30')).toMatch(/before the end/);
+		expect(windowError('2010-13-45', null)).toMatch(/must be a date/);
+	});
+});
