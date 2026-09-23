@@ -189,16 +189,85 @@ describe('project invites', () => {
 		expect((await invitee.call('GET', `/projects/${pid}`)).status).toBe(404);
 	});
 
-	it('adding someone who has since registered makes them a member and clears the invite', async () => {
+	it('adding someone who has since registered and verified makes them a member and clears the invite', async () => {
 		const owner = await signUp('Direct');
 		const pid = await projectOf(owner);
 		const email = newEmail('direct');
 		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
 		await register(email);
-		const res = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
-		expect(res.status).toBe(201);
-		expect(res.body.member).toMatchObject({ email, role: 'viewer' });
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		// Verifying already accepted the invite…
 		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+		// …and a direct add of a verified account is a plain membership.
+		const other = await signUp('DirectOther');
+		const res = await owner.call('POST', `/projects/${pid}/members`, { email: other.email, role: 'viewer' });
+		expect(res.status).toBe(201);
+		expect(res.body.member).toMatchObject({ email: other.email, role: 'viewer' });
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: other.email, role: 'viewer' })).status).toBe(409);
+	});
+
+	it('an existing but unverified account is invited, not added, until it confirms the address', async () => {
+		const owner = await signUp('Squat');
+		const pid = await projectOf(owner, 'Squatted');
+		const email = newEmail('squatted');
+		// Someone registers the colleague's address first and never verifies it.
+		const squatter = await register(email);
+		expect(squatter.user.emailVerified).toBe(false);
+		const before = mailCount(email);
+		// The sign-up verification email went out moments ago; let its cooldown pass.
+		await asOwner(`UPDATE email_token SET created_at = now() - interval '2 minutes' WHERE user_id = $1`, [squatter.user.id]);
+
+		const res = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'owner' });
+		expect(res.status).toBe(201);
+		// Same answer as for an address with no account at all.
+		expect(res.body).toMatchObject({ invited: true, invite: { email, role: 'owner' } });
+		expect(res.body.member).toBeUndefined();
+		expect((await squatter.call('GET', `/projects/${pid}`)).status).toBe(404);
+		expect((await owner.call('GET', `/projects/${pid}/members`)).body.members).toHaveLength(1);
+
+		// The email goes to the real inbox and asks to confirm (the account can't sign up again).
+		expect(mailCount(email)).toBe(before + 1);
+		const mail = lastMailTo(email)!;
+		expect(mail.text).toContain('There is already a Water Management account');
+		expect(mail.text).toMatch(/http:\/\/localhost:7777\/verify-email\?token=[A-Za-z0-9_-]{43}/);
+		expect(mail.text).toMatch(/Forgot password/);
+
+		// Positive control: confirming the address accepts the invite.
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(mail) })).status).toBe(200);
+		expect((await squatter.call('GET', `/projects/${pid}`)).body.project.role).toBe('owner');
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+	});
+
+	it('taking a squatted address back with a password reset also accepts the invite', async () => {
+		const owner = await signUp('Takeback');
+		const pid = await projectOf(owner);
+		const email = newEmail('takeback');
+		const squatter = await register(email);
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'editor' });
+		expect((await squatter.call('GET', `/projects/${pid}`)).status).toBe(404);
+
+		await anon('POST', '/auth/forgot-password', { email });
+		const reset = await anon('POST', '/auth/reset-password', { token: tokenIn(lastMailTo(email)), password: 'the real owner' });
+		expect(reset.status).toBe(204);
+		// The squatter's session is dead; the inbox owner signs in and has the seat.
+		expect((await squatter.call('GET', '/auth/me')).status).toBe(401);
+		const login = await anon('POST', '/auth/login', { email, password: 'the real owner' });
+		const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+		expect((await anon('GET', `/projects/${pid}`, undefined, cookie)).body.project.role).toBe('editor');
+	});
+
+	it('invites an unverified account without mailing again while its verification link is fresh', async () => {
+		const owner = await signUp('Fresh');
+		const pid = await projectOf(owner);
+		const email = newEmail('fresh');
+		const invitee = await register(email);
+		const signupLink = tokenIn(lastMailTo(email));
+		const res = await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		expect(res.body.invited).toBe(true);
+		expect(mailCount(email)).toBe(1); // just the sign-up verification
+		// That link (sent moments ago) accepts the invite too.
+		expect((await anon('POST', '/auth/verify-email', { token: signupLink })).status).toBe(200);
+		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('viewer');
 	});
 
 	it('deleting the project deletes its invites', async () => {
@@ -236,6 +305,20 @@ describe('team invites', () => {
 		expect((await invitee.call('GET', `/teams/${teamId}`)).status).toBe(200);
 		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('editor');
 		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([]);
+	});
+
+	it('an unverified account is invited to a team, and joins once it confirms', async () => {
+		const admin = await signUp('TSquat');
+		const teamId = (await admin.call('POST', '/teams', { name: 'Squatters' })).body.team.id;
+		const email = newEmail('teamsquat');
+		const invitee = await register(email);
+		await asOwner(`UPDATE email_token SET created_at = now() - interval '2 minutes' WHERE user_id = $1`, [invitee.user.id]);
+		const res = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'admin' });
+		expect(res.body).toMatchObject({ invited: true, invite: { email, role: 'admin' } });
+		expect((await invitee.call('GET', `/teams/${teamId}`)).status).toBe(404);
+		expect(lastMailTo(email)!.text).toContain('the team “Squatters”');
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		expect((await invitee.call('GET', `/teams/${teamId}`)).status).toBe(200);
 	});
 
 	it('admins revoke team invites', async () => {

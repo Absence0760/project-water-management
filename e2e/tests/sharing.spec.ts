@@ -1,5 +1,5 @@
-import { addMember, createProject, PASSWORD, putModel, sampleModel, uniqueEmail } from '../support/api.ts';
-import { plantInviteToken } from '../support/db.ts';
+import { addMember, createProject, PASSWORD, putModel, register, sampleModel, uniqueEmail } from '../support/api.ts';
+import { plantEmailToken, plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -126,6 +126,31 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	await expect(pending).toHaveCount(0);
 	await page.reload();
 	await expect(page.getByRole('heading', { level: 1, name: 'Invite catchment' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
+});
+
+test('adding an account that never confirmed its email invites it until the address is confirmed', async ({ page, owner, playwright }) => {
+	void owner;
+	const project = await createProject(page.request, 'Unconfirmed catchment');
+	const api = await playwright.request.newContext();
+	const unconfirmed = await register(api, 'Unconfirmed colleague', { verified: false });
+
+	await page.goto(`/projects/${project.id}`);
+	const members = page.getByRole('region', { name: 'Members' });
+	await members.getByLabel('Add member by email').fill(unconfirmed.email);
+	await members.getByLabel('Role', { exact: true }).selectOption('editor');
+	await members.getByRole('button', { name: 'Add' }).click();
+	await expect(members.getByText(`Invitation sent to ${unconfirmed.email}.`)).toBeVisible();
+	await expect(members.getByRole('rowheader').filter({ hasText: unconfirmed.email })).toHaveCount(0);
+	const pending = page.getByRole('region', { name: /Pending invitations/ });
+	await expect(pending.getByRole('listitem').filter({ hasText: unconfirmed.email })).toContainText('editor');
+
+	// Confirming the address (the emailed link) turns the invite into a membership.
+	const token = await plantEmailToken(unconfirmed.email, 'verify');
+	expect((await api.post(`${API_URL}/auth/verify-email`, { data: { token } })).status()).toBe(200);
+	await api.dispose();
+	await page.reload();
+	await expect(members.getByRole('rowheader').filter({ hasText: 'Unconfirmed colleague' })).toBeVisible();
 	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
 });
 

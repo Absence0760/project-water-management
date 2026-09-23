@@ -4,7 +4,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { executeRun } from './execute.js';
+import { executeRun, trimRuns } from './execute.js';
 
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy"`;
@@ -21,8 +21,10 @@ export const runRoutes = new Hono<AuthEnv>()
 				if (err instanceof ApiError || (err as { code?: string }).code) throw err;
 				throw new ApiError(400, `model run failed: ${err.message}`);
 			});
+			// Keep the newest N runs per project (the new one included).
+			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [runId]);
-			return c.json({ run: rows[0] }, 201);
+			return c.json({ run: rows[0], removedRunIds }, 201);
 		});
 	})
 	.get('/:id/runs', async (c) =>

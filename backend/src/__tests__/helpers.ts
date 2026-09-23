@@ -6,8 +6,13 @@ import { outbox, type Mail } from '../mail/transport.js';
 export const app = createApp();
 const ORIGIN = 'http://localhost:7777';
 
-/** A signed-in test user whose requests carry their session cookie. */
-export async function signUp(name = 'User') {
+/**
+ * A signed-in test user whose requests carry their session cookie. Verified by
+ * default (through the emailed link, as a real user would), because only a
+ * verified account can be added to a project or team directly; pass
+ * `{ verified: false }` to keep the fresh, unconfirmed state.
+ */
+export async function signUp(name = 'User', { verified = true }: { verified?: boolean } = {}) {
 	const email = `${name.toLowerCase()}-${crypto.randomUUID()}@example.com`;
 	const res = await app.request('/auth/register', {
 		method: 'POST',
@@ -17,6 +22,10 @@ export async function signUp(name = 'User') {
 	if (res.status !== 201) throw new Error(`register failed: ${res.status} ${await res.text()}`);
 	const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
 	const { user } = (await res.json()) as { user: { id: string } };
+	if (verified) {
+		const v = await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) });
+		if (v.status !== 200) throw new Error(`verify failed: ${v.status}`);
+	}
 	const call = async (method: string, path: string, body?: unknown) => {
 		const r = await app.request(path, {
 			method,

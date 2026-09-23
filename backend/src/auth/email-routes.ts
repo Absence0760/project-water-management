@@ -24,7 +24,7 @@ const INVALID_LINK = 'this link is invalid or has expired — request a new one'
  * Issue a verify/reset token for a user, unless one went out within the
  * cooldown. Returns the raw token to mail, or null when throttled.
  */
-async function issueToken(db: Db, userId: string, purpose: 'verify' | 'reset'): Promise<string | null> {
+export async function issueEmailToken(db: Db, userId: string, purpose: 'verify' | 'reset'): Promise<string | null> {
 	const { token: raw, hash } = newToken();
 	const { rows } = await db.query<{ issued: boolean }>(
 		'SELECT app_issue_email_token($1, $2, $3, $4::interval, $5::interval) AS issued',
@@ -45,7 +45,7 @@ export async function markVerified(db: Db, userId: string): Promise<void> {
  * refers to a stored token.
  */
 export async function verificationMail(db: Db, userId: string, to: string): Promise<Mail | null> {
-	const raw = await issueToken(db, userId, 'verify');
+	const raw = await issueEmailToken(db, userId, 'verify');
 	return raw ? verifyEmailMail(to, siteLink('/verify-email', raw)) : null;
 }
 
@@ -61,7 +61,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			]);
 			const user = rows[0];
 			if (!user) return null;
-			const raw = await issueToken(db, user.id, 'reset');
+			const raw = await issueEmailToken(db, user.id, 'reset');
 			return raw ? resetPasswordMail(user.email, siteLink('/reset-password', raw)) : null;
 		});
 		if (mail) await trySendMail(mail);
@@ -88,8 +88,10 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 				newHash,
 				new Date()
 			]);
-			// Outstanding reset links are dead too.
+			// Outstanding reset links are dead too, and the address's sign-in
+			// lockout is lifted (the link proved the inbox).
 			await db.query("DELETE FROM email_token WHERE user_id = $1 AND purpose = 'reset'", [userId]);
+			await db.query('SELECT app_login_succeeded(email) FROM app_user WHERE id = $1', [userId]);
 			await markVerified(db, userId);
 			return true;
 		});

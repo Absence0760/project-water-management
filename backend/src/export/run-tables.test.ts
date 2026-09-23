@@ -44,12 +44,23 @@ describe('summary sheet', () => {
 		expect(lines.slice(0, 2)).toEqual(['Project,Demo', 'Run,Baseline']);
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
 		expect(lines[farmHeader]).toContain('Average demand (m³/day)');
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",100,80,20,0.8,-5,3');
+		expect(lines[farmHeader]).toContain('Demand supplied (%)');
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
+		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records
 		expect(lines.filter((l) => l === '').length).toBe(4);
+	});
+
+	it('writes fractions as percentages without binary noise', () => {
+		const s = structuredClone(summary);
+		s.farms[0]!.fractionSupplied = 0.07;
+		s.catchment.ewrFractionDaysNotMet = 1 / 3;
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",100,80,20,7,-5,3');
+		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
 	});
 
 	it('keeps fields the engine adds later and says when calibration is missing', () => {

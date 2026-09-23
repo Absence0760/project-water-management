@@ -21,10 +21,26 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Revocation:** every request re-reads `app_user.sessions_revoked_at`;
   a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
   as is a session for an account that no longer exists. A password reset sets
-  the watermark, so it signs out every device, including a thief's. Logout
-  clears the cookie only (that one token stays valid until expiry if it was
-  copied). Rotating `AUTH_JWT_SECRET` logs everyone out.
+  the watermark, so it signs out every device, including a thief's, and so
+  does `POST /auth/logout-everywhere` ("sign out everywhere", for a lost
+  laptop or a suspected copied cookie). Plain logout clears the cookie only
+  (that one token stays valid until expiry if it was copied). Rotating
+  `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
+- **Sign-in lockout** (`login_throttle`, `backend/src/auth/routes.ts`
+  `LOGIN_THROTTLE`): the 5th sign-in attempt in a row without the right
+  password locks that **address** for 1 minute; each attempt after a lock ends
+  doubles it (2, 4, 8 … minutes), capped at 15. While locked, login answers
+  `429` with `Retry-After` and doesn't check the password. A correct password
+  or a password reset clears the count; a day without attempts forgets it.
+  It is keyed by the typed address, not the account, so an address with no
+  account locks exactly the same way and the lockout reveals nothing about
+  which accounts exist. Attempts are counted *before* the bcrypt check under
+  a row lock, so parallel guesses can't slip past. Accepted trade-off: anyone
+  can lock someone else's address for up to 15 minutes at a time (sessions
+  already signed in are unaffected, and a password reset lifts it). The
+  WAF's per-IP rate limit is still the first line against spraying many
+  addresses.
 
 ## Password reset, email verification and invites
 
@@ -57,12 +73,19 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (RLS on `invite`); invitees have no access until they have an account.
   Accepting goes through a `SECURITY DEFINER` function that re-checks
   verification.
-- **Known gap — adding an existing but unverified account.** `POST
-  …/members` with an address that already has an account adds it directly
-  (unchanged V1 behaviour), even if that account never verified the address.
-  Someone who pre-registers a colleague's address could therefore be added in
-  their place. Durable fix: only add verified accounts directly, and send an
-  invite otherwise (needs the e2e sharing specs to verify their users first).
+- **Adding an existing but unverified account** doesn't make it a member:
+  `POST …/members` adds only **verified** accounts directly. An unverified one
+  gets a pending invite (the same response as an address with no account, so
+  the owner learns nothing about whether it's registered) and an email to the
+  address asking to confirm it; confirming accepts the invite. This stops
+  someone who pre-registers a colleague's address from being added in their
+  place. Residual risk: if the real inbox owner clicks "confirm" on an account
+  someone else created, that account (whose password the squatter knows) is
+  verified and joins. The email tells them to use "Forgot password" instead if
+  they never created the account — a reset proves the inbox, sets their own
+  password, revokes the squatter's sessions and accepts the invite.
+  Closing this fully means sign-up that is email-first (confirm before the
+  account exists), which is an operator decision (see Known gaps).
 - **Email content:** every user-controlled value (project/team names, display
   names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
   from config, never the request's Host header. The reset and verify pages
@@ -179,11 +202,9 @@ readable by anyone. The rules:
 
 - No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
   rule. (Phase 7)
-- No self-service "sign out everywhere" or password change while signed in;
-  the `sessions_revoked_at` watermark is only set by a password reset. (Phase 7)
-- Adding an existing but unverified account to a project or team (see
-  "Password reset, email verification and invites" above).
-- No per-account login lockout yet. (Phase 7)
+- No password change while signed in (use "Forgot password"), and no
+  "Sign out everywhere" button in the UI yet — the endpoint exists
+  (`POST /auth/logout-everywhere`). (Phase 7)
 - **CSP `'unsafe-inline'` (accepted risk).** The planned Content-Security-Policy
   allows inline scripts, because SvelteKit's static build emits an inline
   bootstrap script. Svelte's default escaping and the ban on `{@html}` with

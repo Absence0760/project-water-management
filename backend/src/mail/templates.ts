@@ -73,15 +73,34 @@ export function resetPasswordMail(to: string, url: string): Mail {
 
 export type InviteTarget = { kind: 'project' | 'team'; name: string; role: string };
 
-export function inviteMail(to: string, url: string, inviterName: string, target: InviteTarget): Mail {
+/**
+ * `sign-up`: the address has no account; the link is `/register?invite=…`.
+ * `confirm`: an unverified account already has the address; the link is a
+ * verify-email link, and confirming accepts the invitation.
+ */
+export function inviteMail(
+	to: string,
+	url: string,
+	inviterName: string,
+	target: InviteTarget,
+	mode: 'sign-up' | 'confirm' = 'sign-up'
+): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
+	const invited = `${inviterName} invited you to ${what} as ${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}.`;
+	const confirm = mode === 'confirm';
 	return render(to, `${inviterName} invited you to ${PRODUCT}`, {
 		heading: `You're invited to ${PRODUCT}`,
-		paragraphs: [
-			`${inviterName} invited you to ${what} as ${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}.`,
-			`Create your ${PRODUCT} account with this email address (${to}) to accept.`
-		],
-		action: { label: 'Create account and accept', url },
-		footer: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
+		paragraphs: confirm
+			? [invited, `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`]
+			: [invited, `Create your ${PRODUCT} account with this email address (${to}) to accept.`],
+		action: confirm
+			? { label: 'Confirm email and accept', url }
+			: { label: 'Create account and accept', url },
+		footer: confirm
+			? [
+					'This link expires in 48 hours.',
+					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
+				]
+			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
 	});
 }

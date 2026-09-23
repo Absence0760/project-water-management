@@ -146,14 +146,15 @@ test('a signed-in user can still open a reset link, and a spent link says so', a
 	await expect(page.getByRole('link', { name: 'Send a new link' })).toBeVisible();
 });
 
-test('the confirm-email banner goes once the link is used', async ({ page, owner }) => {
+test('the confirm-email banner goes once the link is used', async ({ page }) => {
+	const user = await register(page.context().request, 'Unconfirmed', { verified: false });
 	const banner = page.getByRole('region', { name: 'Email confirmation' });
 	await page.goto('/');
-	await expect(banner).toContainText(`We sent a link to ${owner.email}`);
+	await expect(banner).toContainText(`We sent a link to ${user.email}`);
 
-	const token = await plantEmailToken(owner.email, 'verify');
+	const token = await plantEmailToken(user.email, 'verify');
 	await page.goto(`/verify-email?token=${token}`);
-	await expect(page.getByRole('status')).toContainText(`${owner.email} is confirmed`);
+	await expect(page.getByRole('status')).toContainText(`${user.email} is confirmed`);
 	await page.getByRole('link', { name: 'Go to your projects' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(banner).toHaveCount(0);
@@ -161,7 +162,7 @@ test('the confirm-email banner goes once the link is used', async ({ page, owner
 
 test('a confirmation link works signed out', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
-	const user = await register(api, 'Other device');
+	const user = await register(api, 'Other device', { verified: false });
 	await api.dispose();
 	const token = await plantEmailToken(user.email, 'verify');
 
