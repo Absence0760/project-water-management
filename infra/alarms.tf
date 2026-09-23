@@ -262,6 +262,41 @@ resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
   }
 }
 
+# --- SES reputation --------------------------------------------------------
+# Account-level rates SES publishes on its own (namespace AWS/SES, no
+# dimensions). AWS puts an account under review at a 5% bounce rate or 0.1%
+# complaint rate, and may pause sending above ~10% / 0.5%. Alarm at half of
+# the review thresholds so there is time to act. Nothing to page on while
+# nothing is sent, hence notBreaching.
+
+resource "aws_cloudwatch_metric_alarm" "ses_bounce_rate" {
+  alarm_name          = "${local.project}-ses-bounce-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Reputation.BounceRate"
+  namespace           = "AWS/SES"
+  period              = 3600
+  statistic           = "Maximum"
+  threshold           = 0.025
+  alarm_description   = "SES bounce rate above 2.5% (AWS reviews the account at 5%). Check who is being invited / registering with bad addresses."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "ses_complaint_rate" {
+  alarm_name          = "${local.project}-ses-complaint-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Reputation.ComplaintRate"
+  namespace           = "AWS/SES"
+  period              = 3600
+  statistic           = "Maximum"
+  threshold           = 0.0005
+  alarm_description   = "SES complaint rate above 0.05% (AWS reviews the account at 0.1%). Someone is marking account emails as spam — check invitations for abuse."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- CloudFront alarms (must live in us-east-1) ----------------------------
 # A CloudWatch alarm can only notify an SNS topic in its own region, so the
 # us-east-1 alarm gets its own topic (same subscriber).

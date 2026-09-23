@@ -2,17 +2,18 @@
 # Private-only VPC — no internet gateway, no NAT, no public subnets
 #
 # Nothing in the VPC needs the internet:
-#   - the API Lambda talks only to Postgres (the backend makes no outbound
-#     HTTP calls; CloudWatch Logs delivery is done by the Lambda service, not
-#     through the function's ENI);
+#   - the API Lambda talks to Postgres, and to SES (SendEmail) through the SES
+#     API interface endpoint in ses.tf. It makes no other outbound calls;
+#     CloudWatch Logs delivery is done by the Lambda service, not through the
+#     function's ENI;
 #   - RDS never initiates connections;
 #   - the migrate Lambda additionally needs Secrets Manager (to read the
 #     RDS-managed master credentials), reached through ONE interface endpoint.
 #
-# A NAT gateway would be ~$33/month + data before any traffic; the endpoint is
-# ~$7.30/month per AZ. If a future feature needs outbound calls (email, a
-# third-party API), add the specific VPC endpoint when it is an AWS service,
-# and only reach for a NAT for genuinely external hosts.
+# A NAT gateway would be ~$33/month + data before any traffic; an interface
+# endpoint is ~$7.30/month per AZ. If a future feature needs outbound calls
+# to another AWS service, add that service's VPC endpoint, and only reach for
+# a NAT for genuinely external hosts.
 #
 # Two subnets in two AZs because an RDS subnet group requires >= 2 AZs, and
 # the Lambdas get ENIs in both so an AZ outage doesn't take the API down with
@@ -66,7 +67,7 @@ resource "aws_default_security_group" "default" {
 
 resource "aws_security_group" "api_lambda" {
   name        = "${local.project}-api-lambda"
-  description = "API Lambda ENIs: egress to Postgres only."
+  description = "API Lambda ENIs: egress to Postgres and the SES API endpoint only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-api-lambda" }
 }
