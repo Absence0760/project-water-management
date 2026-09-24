@@ -374,15 +374,32 @@ The review in [calibration-research.md](./calibration-research.md) turned into
 34 recommendations (CR-1 … CR-34), with priorities and effort. Open items, in
 the suggested order (the IDs carry the detail):
 
-- [ ] **Cheap first:** CR-2 multi-start DDS, CR-3 KGE(Q)+KGE(1/Q) objective,
-      CR-6 drop Moriasi words on daily scores, CR-34 record-representativeness
-      note.
+- [ ] **Cheap first:** CR-3 KGE(Q)+KGE(1/Q) objective, CR-34
+      record-representativeness note. CR-2 multi-start DDS (engine 0.13.0,
+      model.md §2.10b) and CR-6 drop Moriasi words on daily scores
+      (model.md §2.10) are done.
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
       the rain slice that CR-18 then generalises.
+- [ ] **Fit-settings sweep (headless).** The free / typical-bounds / band /
+      both comparison (above, under "Make the logger fit identifiable") was
+      built by hand, and every further "what if we fit it this way" repeats
+      that. Generalise `backend/scripts/pan-sensitivity.ts` into a script
+      that takes a `project.json` and a grid of fit settings (pan preset ×
+      bounds × objective × named exclusion sets × WR2012 band on/off),
+      runs `calibrate()` with validation for each cell, and writes one
+      Markdown table: fitted parameters, in-sample and validation scores,
+      MAR and EWR days not met, with seed and engine version in the header.
+      It fits every cell and ranks nothing, so the choice stays the
+      hydrologist's and is recorded with a reason, as exclusions are. No DB
+      or UI; client output stays in the gitignored `data/`. This is not
+      CR-21, which perturbs the inputs of one fit rather than comparing fits.
+      CR-1 below can then reuse its batch and report code. Do it
+      before CR-1, or as soon as the hydrologist asks for another
+      side-by-side of fits.
 - [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
       → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
