@@ -200,6 +200,24 @@ formula ([api.md § Export](./api.md)).
 
 ## Settings & calibration
 
+- **On this page.** Under the intro, a **Settings sections** menu links to
+  each group (`#set-demand`, `#set-flow`, `#set-fit`, `#set-wr2012`,
+  `#set-share`, `#set-ewr`, `#set-period`, `#set-quality`; listed by
+  `settings/sections.ts`). It sticks under the app header down the long form
+  and marks the group being read with `aria-current="location"`, using the
+  Runs rail's scroll spy (`activeSectionId` from `runs/sections.ts`). It is a
+  bar rather than a side rail because the monthly input rows need the full
+  width. On phones it is one strip that scrolls sideways inside itself (the
+  marked link kept in view), never the page. While the tab is shown it raises
+  the page's `scroll-padding-top` by the menu's height and sets
+  `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
+  focused control is never hidden under either (WCAG 2.4.11).
+- **Save bar.** Sticky at the bottom (above the model save bar when that
+  shows). When something blocks Save it says how many groups have a problem
+  and links to each one (`saveBlockers`; the link's accessible name carries
+  the message), and that group's menu link gets a red dot ("has a problem").
+  Each problem is also shown next to its field.
+
 The settings are grouped by what they drive:
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
@@ -334,10 +352,11 @@ The settings are grouped by what they drive:
   published natural-MAR estimates for the catchment disagree.
   Blank fields and the engine's plausibility checks (MAR above the rain on
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
-  inverted band) show next to the field and block Save, with a count beside
-  the Save button.
+  inverted band) show next to the field and block Save; the save bar links
+  to the WR2012 group.
 - **Flow share between farms**.
-- **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
+- **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
+  months get the full width) a bar chart and the annual volume, and the
   curtailment reporting window.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
