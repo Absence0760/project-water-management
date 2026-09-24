@@ -405,6 +405,40 @@ the suggested order (the IDs carry the detail):
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
       thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
       FDC overlays and %nMAR.
+- [ ] **Automated calibration with pre-declared rules.** Today every pass
+      of the calibrate → review → adjust → refit loop needs a person, because
+      the choices (exclusions, forcing, which fit to keep) are made after the
+      scores are seen. Automating those choices by chasing the score would
+      overfit and be easy to game. The durable fix is a **rule set** stored
+      with the project and fixed before any result is seen, so the whole
+      loop can run unattended:
+      1. Exclusions come from the per-day quality flags (CR-18/19) by rule
+         (e.g. a water year with more than 20 % flagged days), each with a
+         machine reason naming the rule.
+      2. Forcing comes from the rule set, or each option becomes a sweep
+         case (the fit-settings sweep above).
+      3. The sweep fits every case; the rule set picks one by a **validation**
+         score (e.g. best dry → wet KGE′), never in-sample, among the fits
+         that pass stated filters (MAR inside the WR2012 band, parameters in
+         Perrin's typical range).
+      4. CR-1 builds the ensemble around the kept fit and reports the EWR
+         range.
+      5. New observed or rain data triggers a rerun (needs the Background
+         jobs item in [planned-work.md](./planned-work.md)); the fit record's
+         stale checks already say when one is due.
+
+      The rule set, seed and engine version go in the fit record, so a run
+      is reproducible and an assessor can challenge the rules rather than
+      the result. A rule-set change is versioned and shows in run
+      comparison, like any other settings change. Facts that aren't in the
+      data (which gauge is on the modelled river, the highest trusted
+      gauging, known gauge breaks) stay per-catchment metadata that a
+      person enters once. **Depends on:** the sweep → CR-18/19 → CR-1 →
+      Background jobs. **Needs the hydrologist to sign off** the default
+      rules (flag thresholds, selection score, filters) before any automated
+      fit is used as evidence; add that to [plan.md](./plan.md) with the
+      other hydrologist questions. Trigger: once the sweep and CR-18 have
+      landed.
 - [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q against the imported
       table), then CR-14 mass-conserving store once the hydrologist decides
       (question 1 below).
