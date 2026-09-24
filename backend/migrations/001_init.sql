@@ -77,7 +77,7 @@ CREATE TABLE node (
 	area_hi_km2           double precision NOT NULL DEFAULT 0 CHECK (area_hi_km2 >= 0),
 	area_lo_km2           double precision NOT NULL DEFAULT 0 CHECK (area_lo_km2 >= 0),
 	flow_share_manual     double precision CHECK (flow_share_manual BETWEEN 0 AND 1),
-	pct_upstream_to_dam   double precision NOT NULL DEFAULT 0 CHECK (pct_upstream_to_dam BETWEEN 0 AND 1),
+	pct_upstream_to_dam   double precision NOT NULL DEFAULT 1 CHECK (pct_upstream_to_dam BETWEEN 0 AND 1),
 	pct_runoff_to_dam     double precision NOT NULL DEFAULT 0 CHECK (pct_runoff_to_dam BETWEEN 0 AND 1),
 	dam_capacity_m3       double precision NOT NULL DEFAULT 0 CHECK (dam_capacity_m3 >= 0),
 	dam_initial_pct       double precision NOT NULL DEFAULT 0 CHECK (dam_initial_pct BETWEEN 0 AND 1),

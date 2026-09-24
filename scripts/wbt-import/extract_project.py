@@ -677,7 +677,7 @@ def extract(
         for order, e in enumerate(elements):
             s = spec.get(e["name"], {}) if e["kind"] == "farm" else {}
             if e["kind"] == "farm" and not s:
-                wb.notes.append(f"farm {e['name']} is missing from [Farm spec]; its parameters are 0")
+                wb.notes.append(f"farm {e['name']} is missing from [Farm spec]; its parameters are 0, except upstream inflow to dam (100 %)")
             nodes.append(
                 {
                     "id": uid(f"node:{e['name']}"),
@@ -689,7 +689,7 @@ def extract(
                     "areaHiKm2": s.get("areaHiKm2", 0),
                     "areaLoKm2": s.get("areaLoKm2", 0),
                     "flowShareManual": s.get("flowShareManual") if e["kind"] == "farm" else None,
-                    "pctUpstreamToDam": s.get("pctUpstreamToDam", 0),
+                    "pctUpstreamToDam": s.get("pctUpstreamToDam", 1),
                     "pctRunoffToDam": s.get("pctRunoffToDam", 0),
                     "damCapacityM3": s.get("damCapacityM3", 0),
                     "damInitialPct": s.get("damInitialPct", 0),
