@@ -19,7 +19,8 @@ function node(id: string, name: string, down: string | null): NetworkNode {
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0
+		irrigationEfficiency: 1,
+		lossReturnFraction: 0
 	};
 }
 
@@ -90,5 +91,11 @@ describe('validateModel', () => {
 			'"A": percentages must be between 0% and 100%.',
 			'"A": areas and capacities can\'t be negative.'
 		]);
+	});
+
+	it('needs an irrigation efficiency above 0% (abstraction = crop requirement ÷ efficiency, N1)', () => {
+		const a = node('a', 'A', null);
+		a.irrigationEfficiency = 0;
+		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
 	});
 });

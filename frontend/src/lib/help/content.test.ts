@@ -20,7 +20,7 @@ import { CATEGORY_TITLES, HELP, helpFieldKeys, helpFor, searchHelp } from './con
 const NODE: Record<keyof NetworkNode, true> = {
 	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
-	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, returnFlowPct: true
+	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -29,7 +29,7 @@ const TRANSFER: Record<keyof Transfer, true> = {
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
-	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true
+	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -44,7 +44,7 @@ const STATS: Record<keyof CalibrationStats, true> = {
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
-	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
+	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)
 	'gross_demand', 'effective_rain', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam',

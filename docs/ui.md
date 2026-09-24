@@ -82,6 +82,12 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
+- **Irrigation** group (engine ≥ 0.14.0, [engine-audit N1](./engine-audit.md)):
+  efficiency and the share of losses returning. The one-node form adds an
+  **Irrigation system** select that sets an indicative efficiency (drip 90 %,
+  micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
+  `IRRIGATION_SYSTEMS` in the engine), labelled indicative; "Other" keeps the
+  value as typed. New farms start at 80 % and 50 %.
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)).

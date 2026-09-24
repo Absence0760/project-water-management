@@ -111,7 +111,8 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * the catchment's Σ supplied / Σ demand.
  *
  * This is a law only without return flow, so both runs set every
- * returnFlowPct to 0. With return flow it can fail legitimately: a farm that
+ * lossReturnFraction to 0 (no losses return; irrigation efficiency stays as it
+ * is, audit N1). With return flow it can fail legitimately: a farm that
  * doubles its draw on stored water that would otherwise have stayed in its dam
  * returns part of it to the river, and a starved farm downstream gets more
  * than twice the water (found by the soak, seed 4660: 25.43 % → 25.72 %).
@@ -122,7 +123,7 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  */
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
-	for (const n of base.model.nodes) n.returnFlowPct = 0;
+	for (const n of base.model.nodes) n.lossReturnFraction = 0;
 	const x = cloneInput(base);
 	for (const a of x.model.cropAreas) a.areaM2 *= 2;
 	let o1: ModelOutput;

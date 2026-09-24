@@ -1,11 +1,11 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import type { NetworkNode, NodeKind } from '@water-management/engine';
+	import { IRRIGATION_SYSTEMS, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, isPct, NODE_FIELDS, type NodeField } from './fields';
+	import { damHints, GROUPS, isPct, NODE_FIELDS, systemOf, type NodeField } from './fields';
 
 	let {
 		node,
@@ -105,6 +105,27 @@
 						<span class="hint" id="{id(f.key)}-h">{f.help}</span>
 					</div>
 				{/each}
+				{#if g === 'irrigation'}
+					<div class="field">
+						<span class="lbl"><label for={id('system')}>Irrigation system</label><HelpTip key="node.irrigationEfficiency" /></span>
+						<select
+							id={id('system')}
+							disabled={readonly}
+							value={systemOf(node.irrigationEfficiency) ?? ''}
+							aria-describedby="{id('system')}-h"
+							onchange={(e) => {
+								const s = IRRIGATION_SYSTEMS.find((x) => x.id === e.currentTarget.value);
+								if (s) node.irrigationEfficiency = s.efficiency;
+							}}
+						>
+							<option value="">Other (efficiency as entered)</option>
+							{#each IRRIGATION_SYSTEMS as s (s.id)}
+								<option value={s.id}>{s.label}: {Math.round(s.efficiency * 100)} % (indicative)</option>
+							{/each}
+						</select>
+						<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
+					</div>
+				{/if}
 				{#if g === 'dam'}
 					{#each hints as h (h)}
 						<p class="hint dam-hint" role="note">{h}</p>

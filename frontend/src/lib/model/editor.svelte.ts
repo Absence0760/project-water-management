@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import type { CropDef, NetworkNode, ProjectModel, Transfer } from '@water-management/engine';
+import { NEW_FARM_IRRIGATION, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -28,7 +28,8 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0
+		// A typical mixed system with half its losses returning (audit N1).
+		...NEW_FARM_IRRIGATION
 	};
 }
 

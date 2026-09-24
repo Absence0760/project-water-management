@@ -105,11 +105,13 @@ describe('run daily export', () => {
 		expect(res.headers.get('content-disposition')).toContain('_baseline_farm-upper_daily_');
 		const header = lines(res.text)[0]!;
 		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.12.0).
-		expect(header.split(',').slice(0, 6)).toEqual([
+		// The crop requirement is the workbook's F; the abstraction demand (N1) has no workbook letter.
+		expect(header.split(',').slice(0, 7)).toEqual([
 			'date',
 			'Gross irrigation demand (before effective rain) (m³/day)',
 			'Effective rain on the cropped area (m³/day)',
-			'Irrigation demand (net) [F] (m³/day)',
+			'Crop water requirement (net irrigation need) [F] (m³/day)',
+			'Irrigation demand (abstraction: crop requirement ÷ efficiency) (m³/day)',
 			'Irrigation supplied [G] (m³/day)',
 			'Inflow from upstream [H] (m³/day)'
 		]);

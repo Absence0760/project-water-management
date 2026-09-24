@@ -141,7 +141,9 @@ export interface RunDay {
 		divertCapacityM3Day: number | null;
 		damCapacityM3: number | null;
 		damInitialPct: number | null;
-		returnFlowPct: number | null;
+		damMinPct: number | null;
+		irrigationEfficiency: number | null;
+		lossReturnFraction: number | null;
 	};
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
 }

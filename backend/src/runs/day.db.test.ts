@@ -16,7 +16,8 @@ const farm = node('Upper', outlet.id, {
 	damInitialPct: 0.4,
 	pctRunoffToDam: 0.5,
 	pctUpstreamToDam: 0,
-	returnFlowPct: 0.1,
+	irrigationEfficiency: 0.8,
+	lossReturnFraction: 0.5,
 	divertCapacityM3Day: 50
 });
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
@@ -45,9 +46,18 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		const res = await day(viewer, '2020-01-06');
 		expect(res.status).toBe(200);
 		expect(res.body).toMatchObject({ date: '2020-01-06', nodeId: farm.id, name: 'Upper', kind: 'farm' });
-		expect(res.body.params).toEqual({ pctUpstreamToDam: 0, pctRunoffToDam: 0.5, divertCapacityM3Day: 50, damCapacityM3: 5_000, damInitialPct: 0.4, returnFlowPct: 0.1 });
+		expect(res.body.params).toEqual({
+			pctUpstreamToDam: 0,
+			pctRunoffToDam: 0.5,
+			divertCapacityM3Day: 50,
+			damCapacityM3: 5_000,
+			damInitialPct: 0.4,
+			damMinPct: 0.1,
+			irrigationEfficiency: 0.8,
+			lossReturnFraction: 0.5
+		});
 		const keys = res.body.columns.map((c: { key: string }) => c.key);
-		for (const k of ['gross_demand', 'effective_rain', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
+		for (const k of ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
 		// Day index 5 of the stored series, and the day before's storage.
 		for (const key of ['supplied', 'dam_storage']) {
 			const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=${key}&nodeId=${farm.id}`);
@@ -69,12 +79,32 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 	});
 
 	it('takes the parameters from the run, not from the project as it is now', async () => {
-		const edited = { ...farm, name: 'Renamed', returnFlowPct: 0.9 };
+		const edited = { ...farm, name: 'Renamed', irrigationEfficiency: 0.5 };
 		const model = { nodes: [outlet, edited], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
 		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 		const res = await day(owner, '2020-01-02');
 		expect(res.body.name).toBe('Upper');
-		expect(res.body.params.returnFlowPct).toBe(0.1);
+		expect(res.body.params.irrigationEfficiency).toBe(0.8);
+	});
+
+	it('reads a run saved before engine 0.14.0 with its return flow % as migration 006 maps it', async () => {
+		// Rewrite the stored snapshot as an engine 0.13 run held it (as the owner role: runs are immutable to the app).
+		const pg = (await import('pg')).default;
+		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await db.connect();
+		try {
+			await db.query(
+				`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (
+					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'lossReturnFraction') || '{"returnFlowPct": 0.2}'::jsonb)
+					FROM jsonb_array_elements(inputs->'model'->'nodes') n)) WHERE id = $1`,
+				[runId]
+			);
+		} finally {
+			await db.end();
+		}
+		const res = await day(owner, '2020-01-02');
+		expect(res.body.params).toMatchObject({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		expect(res.body.params).not.toHaveProperty('returnFlowPct');
 	});
 
 	it('returns a gauge with its own columns and no storage', async () => {

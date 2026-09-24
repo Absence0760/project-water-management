@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
-import type { ModelInput } from './project';
+import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput, shrink } from './testing/fuzz';
 import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
 
@@ -103,7 +103,8 @@ function smallCase(): ModelInput {
 		damInitialPct: 0.8,
 		damMinPct: 0,
 		divertCapacityM3Day: 500,
-		returnFlowPct: 0.1,
+		irrigationEfficiency: 0.8,
+		lossReturnFraction: 0.5,
 		...over
 	});
 	const days = 120;
@@ -243,9 +244,12 @@ describe.skipIf(!dataDir)('engine invariants on the client catchment (needs data
 			model: ModelInput['model'];
 			series: { kind: string; startDate: string; values: (number | null)[] }[];
 		};
+		// As migration 006 stores an extracted project: return flow % → irrigation efficiency, dam minimum → 0.
+		const model = upgradeLegacyModel(project.model);
+		for (const n of model.nodes) n.damMinPct = 0;
 		const input: ModelInput = {
 			settings: project.settings,
-			model: project.model,
+			model,
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		for (const seed of [1, 2, 3]) expect(checkAll(input, seed)).toBeNull();

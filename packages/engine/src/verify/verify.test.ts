@@ -26,7 +26,8 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0,
+		irrigationEfficiency: 1,
+		lossReturnFraction: 0,
 		...over
 	};
 }
@@ -47,7 +48,8 @@ const handInput = (): ModelInput => ({
 				divertCapacityM3Day: 100,
 				damCapacityM3: 1000,
 				damInitialPct: 0.5,
-				returnFlowPct: 0.1
+				irrigationEfficiency: 0.8,
+				lossReturnFraction: 0.5
 			})
 		],
 		crops: [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }],
@@ -64,9 +66,11 @@ describe('farm working columns (engine 0.12.0)', () => {
 		const out = handRun();
 		const b = (k: string) => col(out, 'b', k)[0]!;
 		const F = 500 / 31; // 10 000 m² × 100 mm × 0.5 / 1000 / 31 days
+		const D = F / 0.8; // abstraction demand at 80 % efficiency (N1)
 		expect(b('gross_demand')).toBeCloseTo(F, 9);
 		expect(b('effective_rain')).toBe(0);
-		expect(b('demand')).toBeCloseTo(F, 9);
+		expect(b('crop_requirement')).toBeCloseTo(F, 9);
+		expect(b('demand')).toBeCloseTo(D, 9);
 		expect(b('inflow_upstream')).toBeCloseTo(250, 9); // H: farm u's quarter of 1000
 		expect(b('runoff')).toBeCloseTo(750, 9); // I
 		expect(b('upstream_to_dam')).toBeCloseTo(100, 9); // K = 250 × 0.4
@@ -74,13 +78,13 @@ describe('farm working columns (engine 0.12.0)', () => {
 		expect(b('runoff_to_dam')).toBeCloseTo(375, 9); // M = 750 × 0.5
 		expect(b('runoff_below_dam')).toBeCloseTo(375, 9); // N
 		expect(b('diverted_to_dam')).toBeCloseTo(100, 9); // O = MIN(100, 150 + 375)
-		expect(b('supplied')).toBeCloseTo(F, 9); // G: 500 + 375 + 100 + 100 is plenty
-		expect(b('interim_storage')).toBeCloseTo(1075 - F, 9); // P
+		expect(b('supplied')).toBeCloseTo(D, 9); // G: 500 + 375 + 100 + 100 is plenty
+		expect(b('interim_storage')).toBeCloseTo(1075 - D, 9); // P
 		expect(b('dam_storage')).toBe(1000); // Q
-		expect(b('spill')).toBeCloseTo(75 - F, 9); // R
+		expect(b('spill')).toBeCloseTo(75 - D, 9); // R
 		expect(b('below_dam_not_diverted')).toBeCloseTo(425, 9); // S
-		expect(b('return_flow')).toBeCloseTo(F / 10, 9); // T
-		expect(b('outflow')).toBeCloseTo(500 - (9 * F) / 10, 9); // U = R + S + T
+		expect(b('return_flow')).toBeCloseTo(D / 10, 9); // T = β (1 − e) G = 0.5 × 0.2 × D
+		expect(b('outflow')).toBeCloseTo(500 - (9 * D) / 10, 9); // U = R + S + T
 		expect(Math.abs(b('balance_residual'))).toBeLessThan(1e-9); // V
 		// Day 2: 3 mm of rain → 10 000 × 0.65 / 1000 × 3 = 19.5 m³ effective, more than the demand.
 		expect(col(out, 'b', 'effective_rain')[1]).toBeCloseTo(19.5, 9);

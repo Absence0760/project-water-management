@@ -442,7 +442,8 @@ describe('areaMismatches (engine-review F7)', () => {
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0
+		irrigationEfficiency: 1,
+		lossReturnFraction: 0
 	});
 
 	it('flags a difference over 1 % and passes one under it', () => {

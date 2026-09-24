@@ -17,3 +17,34 @@
 UPDATE node SET dam_min_pct = 0 WHERE dam_min_pct <> 0;
 COMMENT ON COLUMN node.dam_min_pct IS
 	'Minimum operating level (dead storage) as a fraction of capacity: irrigation draws only above it; transfers keep MAX(rule minimum, this). Engine >= 0.14.0.';
+
+-- ---------------------------------------------------------------------------
+-- N1: irrigation application efficiency e and the share β of the losses that
+-- returns to the river. Abstraction demand = crop requirement ÷ e; return
+-- flow = β × (1 − e) × supplied, replacing return_flow_pct × supplied.
+-- A new farm defaults to e = 0.80, β = 0.5 (a typical mixed system).
+-- Backfill from the old return flow r, so stored results stay explainable:
+--   r = 0 → e = 1, β = 0  (bit-identical results);
+--   r > 0 → e = 1 − r, β = 1 (the balance per unit supplied is as before, and
+--           the crop is now fully supplied at 1 / (1 − r) times the
+--           abstraction). r = 1 (every drop returned, the crop got nothing)
+--           maps to e = 0.01, the smallest efficiency the model accepts.
+-- The engine's upgradeLegacyModel applies the same mapping to project
+-- documents and run snapshots saved before 0.14.0.
+-- return_flow_pct is dropped here rather than in a later contract step: no
+-- deployed code reads it (the first production deploy is still ahead), and
+-- keeping a column nothing writes would invite the two to drift.
+-- ---------------------------------------------------------------------------
+ALTER TABLE node
+	ADD COLUMN irrigation_efficiency double precision NOT NULL DEFAULT 0.8
+		CHECK (irrigation_efficiency > 0 AND irrigation_efficiency <= 1),
+	ADD COLUMN loss_return_fraction double precision NOT NULL DEFAULT 0.5
+		CHECK (loss_return_fraction BETWEEN 0 AND 1);
+UPDATE node SET
+	irrigation_efficiency = CASE WHEN return_flow_pct > 0 THEN GREATEST(1 - return_flow_pct, 0.01) ELSE 1 END,
+	loss_return_fraction  = CASE WHEN return_flow_pct > 0 THEN 1 ELSE 0 END;
+ALTER TABLE node DROP COLUMN return_flow_pct;
+COMMENT ON COLUMN node.irrigation_efficiency IS
+	'Irrigation application efficiency e (0 < e <= 1): abstraction demand = crop requirement / e. Engine >= 0.14.0.';
+COMMENT ON COLUMN node.loss_return_fraction IS
+	'Share of the application losses (1 - e) x supplied that returns to the river the same day. Engine >= 0.14.0.';

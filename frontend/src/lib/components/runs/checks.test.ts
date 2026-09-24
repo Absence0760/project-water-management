@@ -72,10 +72,11 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 	name: 'Farm b',
 	kind: 'farm',
 	previousStorageM3: 500,
-	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, returnFlowPct: 0.1 },
+	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, damMinPct: 0, irrigationEfficiency: 0.9, lossReturnFraction: 1 },
 	columns: Object.entries({
 		gross_demand: F,
 		effective_rain: 0,
+		crop_requirement: 0.9 * F, // 90 % efficiency: demand = crop requirement ÷ 0.9
 		demand: F,
 		supplied: F,
 		inflow_upstream: 250,
@@ -107,7 +108,7 @@ describe('day trace', () => {
 		const rows = traceRows(farmDay());
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
-		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), F)' });
+		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), D)' });
 	});
 
 	it('leaves out working columns a pre-0.11 run does not have', () => {

@@ -19,7 +19,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * Daily balance identities and bounds, every node, every day:
  * - every value finite (observed flow may be NaN on missing days);
  * - routed inflow = Σ upstream outflow (gauges pass it through);
- * - farm balance H + I + J + Q[t−1] = U + G − T + Q (T = return flow);
+ * - farm balance H + I + J + Q[t−1] = U + G − T + Q (T = return flow
+ *   β·(1 − e)·G, audit N1);
  * - 0 ≤ storage ≤ capacity, spill only from a full dam, 0 ≤ supplied ≤ demand,
  *   deficit = demand − supplied, EWR shortfall = MIN(U − Z, 0) ≤ 0;
  * - transfers net to zero across farms each day;
@@ -61,8 +62,10 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const cap = n.damCapacityM3;
 		let qPrev = n.damInitialPct * cap;
 		totIn += qPrev;
+		// Return flow: the share β of the application losses (1 − e)·G (audit N1).
+		const returnPerSupplied = n.lossReturnFraction * (1 - n.irrigationEfficiency);
 		for (let t = 0; t < out.days; t++) {
-			const T = G![t]! * n.returnFlowPct;
+			const T = G![t]! * returnPerSupplied;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev;
 			const rhs = U[t]! + G![t]! - T + Q![t]!;
 			const where = `${n.id} day ${t}`;
@@ -390,13 +393,14 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  * A farm's intermediate columns (verify/columns.ts) follow their formulas and
  * add up to the published ones, so the export can be trusted for redoing a
  * day by hand:
- * - F = MAX(0, gross demand − effective rain);
+ * - crop requirement F = MAX(0, gross demand − effective rain), and the
+ *   abstraction demand D = F / e (audit N1);
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
- * - G = MIN(MAX(Q[t−1] + M + O + K + J − dead storage, 0), F): irrigation
+ * - G = MIN(MAX(Q[t−1] + M + O + K + J − dead storage, 0), D): irrigation
  *   takes what is above the minimum operating level, up to demand (Q5);
  * - P = Q[t−1] + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
- * - S = L + N − O, T = G × return %, U = R + S + T;
+ * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T;
  * - V is the recomputed balance residual and is float noise.
  */
 export function checkWorkings(input: ModelInput, out: ModelOutput): string | null {
@@ -404,30 +408,33 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	for (const n of input.model.nodes) {
 		if (n.kind !== 'farm') continue;
 		const g = (k: string) => get.get(`${n.id}|${k}`);
-		const keys = ['gross_demand', 'effective_rain', 'demand', 'supplied', 'inflow_upstream', 'runoff', 'transfer', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam', 'diverted_to_dam', 'interim_storage', 'dam_storage', 'spill', 'below_dam_not_diverted', 'return_flow', 'outflow', 'balance_residual'];
+		const keys = ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied', 'inflow_upstream', 'runoff', 'transfer', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam', 'diverted_to_dam', 'interim_storage', 'dam_storage', 'spill', 'below_dam_not_diverted', 'return_flow', 'outflow', 'balance_residual'];
 		const cols = keys.map(g);
 		const missing = keys.find((_, i) => !cols[i]);
 		if (missing) return `${n.id}: working column ${missing} missing`;
-		const [gross, eff, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V] = cols as number[][];
+		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V] = cols as number[][];
+		const e = n.irrigationEfficiency;
+		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
 		let qPrev = n.damInitialPct * cap;
 		const near = (a: number, b: number, scale: number) => Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b), scale));
 		for (let t = 0; t < out.days; t++) {
-			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
+			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			if (!near(f, Math.max(0, gr - ef), Math.max(Math.abs(gr), Math.abs(ef)))) return `${where}: demand ${f} ≠ MAX(0, gross ${gr} − effective rain ${ef})`;
+			if (!near(f, Math.max(0, gr - ef), Math.max(Math.abs(gr), Math.abs(ef)))) return `${where}: crop requirement ${f} ≠ MAX(0, gross ${gr} − effective rain ${ef})`;
+			if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
 			const avail = qPrev + m + o + k + j;
-			if (!near(gg, Math.min(Math.max(avail - dead, 0), f), Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), dead, f)))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + M + O + K + J − dead storage ${dead}, 0), F ${f})`;
+			if (!near(gg, Math.min(Math.max(avail - dead, 0), d), Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), dead, d)))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + M + O + K + J − dead storage ${dead}, 0), D ${d})`;
 			if (!near(p, avail - gg, Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + M + O + K + J − G`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
-			if (!near(tt, gg * n.returnFlowPct, 0)) return `${where}: return flow ${tt} ≠ G × ${n.returnFlowPct}`;
+			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			if (!near(u, r + ss + tt, Math.max(r, ss, tt))) return `${where}: outflow ${u} ≠ R + S + T`;
 			const vv = h + i + j - (gg - tt) - (q - qPrev) - u;
 			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u));

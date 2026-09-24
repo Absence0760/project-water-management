@@ -1,4 +1,4 @@
-"""Farm and dam operating rules the importer writes (engine >= 0.14.0, docs/engine-audit.md Q5).
+"""Farm and dam operating rules the importer writes (engine >= 0.14.0, docs/engine-audit.md Q5, N1).
 
     .venv/bin/python -m unittest discover -s scripts/wbt-import
     (or: uv run --no-project --with openpyxl python -m unittest discover -s scripts/wbt-import)
@@ -24,6 +24,19 @@ class OperatingRules(unittest.TestCase):
         notes: list[str] = []
         self.assertEqual(farm_operating_rules("Synthetic farm", {}, notes)["damMinPct"], 0)
         self.assertEqual(notes, [])
+
+    def test_n1_return_flow_becomes_efficiency_with_every_loss_returning(self):
+        ops = farm_operating_rules("Synthetic farm", {"returnFlowPct": 0.2}, [])
+        self.assertAlmostEqual(ops["irrigationEfficiency"], 0.8)
+        self.assertEqual(ops["lossReturnFraction"], 1)
+        self.assertNotIn("returnFlowPct", ops)
+
+    def test_n1_no_return_flow_is_full_efficiency_and_no_return(self):
+        ops = farm_operating_rules("Synthetic farm", {"returnFlowPct": 0}, [])
+        self.assertEqual((ops["irrigationEfficiency"], ops["lossReturnFraction"]), (1, 0))
+
+    def test_n1_all_returning_maps_to_the_smallest_efficiency(self):
+        self.assertEqual(farm_operating_rules("Synthetic farm", {"returnFlowPct": 1}, [])["irrigationEfficiency"], 0.01)
 
 
 if __name__ == "__main__":

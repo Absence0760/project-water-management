@@ -35,10 +35,12 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
+	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
 	type ModelInput,
+	type NetworkNode,
 	type ModelOutput,
 	type ProjectSettings,
 	type RunSeries,
@@ -157,7 +159,8 @@ export function runModelWith(
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
-		['demand', 'demand', 'Irrigation demand (net)'],
+		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
+		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
 		['deficit', 'deficit', 'Irrigation deficit'],
 		['inflowUpstream', 'inflow_upstream', 'Inflow from upstream'],
@@ -209,6 +212,7 @@ export function runModelWith(
 		const r = sim.nodes[i]!;
 		const avgDemand = mean(r.demand);
 		const avgSupplied = mean(r.supplied);
+		const avgCrop = mean(r.cropRequirement);
 		let notMet = 0;
 		for (let t = 0; t < days; t++) if (r.ewrShortfallIncremental[t]! < 0) notMet++;
 		farms.push({
@@ -218,6 +222,7 @@ export function runModelWith(
 			avgSuppliedM3Day: avgSupplied,
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
+			avgCropRequirementM3Day: avgCrop,
 			// Positive volume: the average EWR shortfall this farm adds (b023 [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: -mean(r.ewrShortfallIncremental),
 			daysEwrNotMet: notMet
@@ -419,7 +424,8 @@ export function buildNetworkPlan(
 	natural: Float64Array,
 	warnings: string[]
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology> } {
-	const { model } = input;
+	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
+	const model = upgradeLegacyModel(input.model);
 	const nodes = model.nodes;
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
@@ -430,7 +436,7 @@ export function buildNetworkPlan(
 	const ewr = new Float64Array(days);
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
-	const demand = buildDemand(input, settings, days, month, aligned, warnings);
+	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings);
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -483,7 +489,7 @@ export function buildNetworkPlan(
 				damCapacityM3: cap,
 				initialStorageM3: n.damInitialPct * cap,
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
-				returnFlowPct: n.returnFlowPct,
+				...irrigation(n, warnings),
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset
@@ -494,6 +500,24 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * A farm's irrigation efficiency and loss return (audit N1). Validation keeps
+ * 0 < e ≤ 1 and 0 ≤ β ≤ 1; a value outside that (a hand-edited document)
+ * runs as e = 1 and β clamped, with a warning, rather than dividing by 0.
+ */
+function irrigation(n: NetworkNode, warnings: string[]): { irrigationEfficiency: number; lossReturnFraction: number } {
+	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
+	let e = n.irrigationEfficiency;
+	if (!(e > 0 && e <= 1)) {
+		warnings.push(`farm "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
+		e = 1;
+	}
+	const b = n.lossReturnFraction;
+	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
+	if (beta !== b) warnings.push(`farm "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
+	return { irrigationEfficiency: e, lossReturnFraction: beta };
+}
 
 /**
  * Natural-flow volume / rain volume over the run (null without rain). A value

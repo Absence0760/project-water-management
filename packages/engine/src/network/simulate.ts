@@ -44,8 +44,11 @@ export interface PlanNode {
 	 * transfers keep at least this much in the source dam.
 	 */
 	deadStorageM3: number;
-	returnFlowPct: number;
-	/** Daily net irrigation demand (F); zeros for gauges. */
+	/** Irrigation application efficiency e, 0 < e ≤ 1 (audit N1): abstraction demand D = F / e. */
+	irrigationEfficiency: number;
+	/** Share β of the application losses (1 − e)·G that returns to the river the same day (audit N1). */
+	lossReturnFraction: number;
+	/** Daily crop water requirement (F, net irrigation need); zeros for gauges. */
 	demand: Float64Array;
 	/** Gross demand before effective rain and the rain offset taken off it (m³/day); only needed for workings. */
 	grossDemand?: Float64Array;
@@ -84,7 +87,10 @@ export interface NetworkPlan {
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
 export interface NodeResult {
-	demand: Float64Array; // F
+	/** Abstraction demand D = F / e (engine ≥ 0.14.0, audit N1). */
+	demand: Float64Array;
+	/** Crop water requirement F (net irrigation need). */
+	cropRequirement: Float64Array;
 	supplied: Float64Array; // G
 	inflowUpstream: Float64Array; // H
 	runoff: Float64Array; // I
@@ -114,8 +120,8 @@ export interface FarmWorkings {
 	divertedToDam: Float64Array; // O
 	interimStorage: Float64Array; // P
 	belowDamNotDiverted: Float64Array; // S
-	returnFlow: Float64Array; // T
-	/** V, signed: (H + I + J) − G·(1 − returnPct) − (Q[t] − Q[t−1]) − U. Float noise only. */
+	returnFlow: Float64Array; // T = β·(1 − e)·G
+	/** V, signed: (H + I + J) − (G − T) − (Q[t] − Q[t−1]) − U. Float noise only. */
 	balanceResidual: Float64Array;
 }
 
@@ -131,6 +137,7 @@ function allocNode(days: number): NodeResult {
 	const f = () => new Float64Array(days);
 	return {
 		demand: f(),
+		cropRequirement: f(),
 		supplied: f(),
 		inflowUpstream: f(),
 		runoff: f(),
@@ -227,6 +234,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			}
 
 			const F = node.demand[t]!;
+			// Abstraction demand: the crop requirement plus the application losses (audit N1).
+			const D = F / node.irrigationEfficiency;
 			const H = sumU;
 			const I = nat * node.share;
 			const J = jToday[i]!;
@@ -245,13 +254,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const avail = qPrev + M + O + K + J;
 			// Irrigation draws only what is above the dam's minimum operating
 			// level (dead storage, audit Q5); a dam below it supplies nothing.
-			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), F);
+			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), D);
 			const P = avail - G;
 			const cap = node.damCapacityM3;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
-			const T = G * node.returnFlowPct;
+			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
+			const T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
 			const U = Rr + S + T;
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
@@ -261,7 +271,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const AA = shortfall(U, Z, scale);
 			const AB = shortfall(AA, sumAA, scale);
 
-			r.demand[t] = F;
+			r.demand[t] = D;
+			r.cropRequirement[t] = F;
 			r.supplied[t] = G;
 			r.inflowUpstream[t] = H;
 			r.runoff[t] = I;
@@ -269,7 +280,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			r.storage[t] = Q;
 			r.spill[t] = Rr;
 			r.outflow[t] = U;
-			r.deficit[t] = F - G;
+			r.deficit[t] = D - G;
 			r.ewr[t] = Y;
 			r.ewrCumulative[t] = Z;
 			r.ewrShortfall[t] = AA;

@@ -27,7 +27,8 @@ const node = (over: Partial<NetworkNode>): NetworkNode => ({
 	damInitialPct: 0,
 	damMinPct: 0,
 	divertCapacityM3Day: 0,
-	returnFlowPct: 0,
+	irrigationEfficiency: 1,
+	lossReturnFraction: 0,
 	...over
 });
 

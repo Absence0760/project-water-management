@@ -1046,6 +1046,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** abstraction covers crop need plus losses; return flow is a share
   of the losses.
+- **Status: landed (engine 0.14.0)** on persona recommendation, pending the
+  hydrologist ([audit N1](../engine-audit.md)): per farm, backfill e = 1 − r
+  with β = 1, and `return_flow_pct` dropped in the same migration (006)
+  because it was never deployed.
 - **Changes:**
   - **engine:** `demand.ts` / `simulate.ts`:
     - abstraction demand = F / e;

@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import type { CropArea, CropDef, DailySeries, ModelInput, NetworkNode, ProjectSettings, SeriesKind, Transfer } from '../project';
+import { irrigationFromReturnFlow, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -77,6 +77,9 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  */
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
+	// Irrigation efficiency and loss return (engine ≥ 0.14.0) come from their own
+	// generator, so the rest of a seed's network is what it was before them.
+	const ops = new Rng(seed ^ 0x2c1b3c6d);
 	const maxNodes = opts.maxNodes ?? 25;
 	const maxDays = opts.maxDays ?? 1200;
 
@@ -115,7 +118,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			damInitialPct: rng.frac(),
 			damMinPct: rng.frac(),
 			divertCapacityM3Day: rng.bool(0.3) ? 0 : rng.bool(0.1) ? 1e9 : rng.bool(0.5) ? rng.logFloat(0.5, 1e5) : Math.round(rng.logFloat(1, 1e5)),
-			returnFlowPct: rng.bool(0.4) ? 0 : rng.frac(0, 0.05)
+			...irrigationOps(ops, rng.bool(0.4) ? 0 : rng.frac(0, 0.05))
 		});
 	}
 	const farms = nodes.filter((x) => x.kind === 'farm');
@@ -240,6 +243,20 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+}
+
+/**
+ * A farm's irrigation efficiency and loss return (audit N1). Half the time the
+ * migration 006 mapping of the pre-0.14 return flow `r` the main generator
+ * drew (so e = 1 − r, β = 1, and r = 1 gives e = 0.01); otherwise drawn
+ * directly, with the edges e = 1 and β = 0 or 1 over-weighted.
+ */
+function irrigationOps(g: Rng, r: number): Pick<NetworkNode, 'irrigationEfficiency' | 'lossReturnFraction'> {
+	if (g.bool(0.5)) return irrigationFromReturnFlow(r);
+	return {
+		irrigationEfficiency: g.bool(0.2) ? 1 : g.bool(0.05) ? g.float(0.01, 0.1) : g.float(0.5, 1),
+		lossReturnFraction: g.frac(0.25, 0.25)
+	};
 }
 
 /** Rain-model parameters: mostly the defaults, sometimes pushed around. */

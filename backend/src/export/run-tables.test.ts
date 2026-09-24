@@ -24,6 +24,7 @@ const summary: RunSummary = {
 		{
 			nodeId: 'n1',
 			name: 'Farm, upper',
+			avgCropRequirementM3Day: 90,
 			avgDemandM3Day: 100,
 			avgSuppliedM3Day: 80,
 			avgDeficitM3Day: 20,
@@ -42,8 +43,8 @@ describe('series column order', () => {
 		const keys = ['zeta', 'ewr', 'outflow', 'demand', 'alpha', 'dam_storage', 'supplied'];
 		expect(keys.sort(seriesKeyOrder('node'))).toEqual(['demand', 'supplied', 'dam_storage', 'outflow', 'ewr', 'alpha', 'zeta']);
 		// Farm columns follow the FarmTemplate letters, intermediate columns in between.
-		const farm = ['deficit', 'balance_residual', 'return_flow', 'outflow', 'interim_storage', 'upstream_to_dam', 'demand', 'gross_demand'];
-		expect(farm.sort(seriesKeyOrder('node'))).toEqual(['gross_demand', 'demand', 'upstream_to_dam', 'interim_storage', 'return_flow', 'outflow', 'balance_residual', 'deficit']);
+		const farm = ['deficit', 'balance_residual', 'return_flow', 'outflow', 'interim_storage', 'upstream_to_dam', 'demand', 'crop_requirement', 'gross_demand'];
+		expect(farm.sort(seriesKeyOrder('node'))).toEqual(['gross_demand', 'crop_requirement', 'demand', 'upstream_to_dam', 'interim_storage', 'return_flow', 'outflow', 'balance_residual', 'deficit']);
 		const cat = ['rain_chirps_corrected', 'is_summer', 'rain_used', 'ewr', 'rain_chirps', 'rain_final', 'natural_flow'];
 		// Final rainfall, then CHIRPS as uploaded and corrected, right after rain used.
 		expect(cat.sort(seriesKeyOrder('catchment'))).toEqual(['natural_flow', 'ewr', 'rain_used', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'is_summer']);
@@ -55,9 +56,9 @@ describe('summary sheet', () => {
 		const lines = [...summaryCsvLines(meta, summary)];
 		expect(lines.slice(0, 2)).toEqual(['Project,Demo', 'Run,Baseline']);
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
-		expect(lines[farmHeader]).toContain('Average demand (m³/day)');
+		expect(lines[farmHeader]).toContain('Average crop water requirement (m³/day),Average abstraction demand (m³/day)');
 		expect(lines[farmHeader]).toContain('Demand supplied (%)');
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",100,80,20,80,-5,3');
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",90,100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
@@ -72,7 +73,7 @@ describe('summary sheet', () => {
 		s.farms[0]!.fractionSupplied = 0.07;
 		s.catchment.ewrFractionDaysNotMet = 1 / 3;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",100,80,20,7,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",90,100,80,20,7,-5,3');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
 	});
 

@@ -169,6 +169,11 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
     transfers, which each transfer rule already carries as minStoragePct, so it
     is not imported as an operating level: damMinPct is 0 (irrigation may empty
     the dam, as in the workbook), with a note when the workbook had one.
+
+    N1: the workbook's irrigation return flow % r becomes an application
+    efficiency and a loss return fraction, as migration 006 maps it: r = 0 ->
+    e = 1, beta = 0; r > 0 -> e = 1 - r (at least 0.01), beta = 1. The balance
+    per unit supplied is the workbook's, and the crop is now fully supplied.
     """
     wb_min = num(spec.get("damMinPct"))
     if wb_min:
@@ -176,7 +181,12 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
             f"farm {name}: [Farm spec] min dam % {wb_min:g} is the workbook's transfer minimum (each transfer rule "
             "keeps its own); the dam's minimum operating level is left at 0 (docs/engine-audit.md Q5)"
         )
-    return {"damMinPct": 0}
+    r = num(spec.get("returnFlowPct"))
+    if r > 0:
+        irrigation = {"irrigationEfficiency": max(1 - min(r, 1), 0.01), "lossReturnFraction": 1}
+    else:
+        irrigation = {"irrigationEfficiency": 1, "lossReturnFraction": 0}
+    return {"damMinPct": 0, **irrigation}
 
 
 def month_list(v: Any) -> list[int]:
@@ -712,7 +722,6 @@ def extract(
                     "damCapacityM3": s.get("damCapacityM3", 0),
                     "damInitialPct": s.get("damInitialPct", 0),
                     "divertCapacityM3Day": s.get("divertCapacityM3Day", 0),
-                    "returnFlowPct": s.get("returnFlowPct", 0),
                     **farm_operating_rules(e["name"], s, wb.notes),
                 }
             )

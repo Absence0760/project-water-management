@@ -1,11 +1,17 @@
-import type { ProjectModel } from '@water-management/engine';
+import { upgradeLegacyModel, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const frac = z.number().min(0).max(1);
 const nonNeg = z.number().finite().min(0);
 
-export const ModelBody = z.object({
+/**
+ * A project model as PUT /model and a project document carry it. A model from
+ * an older engine (a document exported before 0.14.0, a stale browser tab) is
+ * read as migration 006 stored the database: `returnFlowPct` becomes irrigation
+ * efficiency and loss return (upgradeLegacyModel).
+ */
+export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgradeLegacyModel(v as { nodes?: unknown }) : v), z.object({
 	nodes: z
 		.array(
 			z.object({
@@ -24,7 +30,9 @@ export const ModelBody = z.object({
 				damInitialPct: frac,
 				damMinPct: frac,
 				divertCapacityM3Day: nonNeg,
-				returnFlowPct: frac
+				// 0 < e ≤ 1: abstraction demand is the crop requirement ÷ e (audit N1).
+				irrigationEfficiency: z.number().gt(0).max(1),
+				lossReturnFraction: frac
 			})
 		)
 		.max(500),
@@ -53,7 +61,7 @@ export const ModelBody = z.object({
 			})
 		)
 		.max(500)
-});
+}));
 
 /**
  * Structural rules zod can't express. Returns human-readable problems; empty

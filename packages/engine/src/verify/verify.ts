@@ -5,14 +5,15 @@
 // - waterBalance: where the water went, per water year and over the run.
 // Pure: it reads only the model input and the output's own series.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type {
-	ModelInput,
-	ModelOutput,
-	RunVerification,
-	VerificationCheck,
-	VerificationCheckId,
-	WaterBalance,
-	WaterBalanceRow
+import {
+	upgradeLegacyModel,
+	type ModelInput,
+	type ModelOutput,
+	type RunVerification,
+	type VerificationCheck,
+	type VerificationCheckId,
+	type WaterBalance,
+	type WaterBalanceRow
 } from '../project';
 import { checkBalance, checkReportTotals, checkRunoffBalance, checkTransferLimits, checkWorkings } from './checks';
 
@@ -24,7 +25,9 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals]
 ];
 
-export function verifyRun(input: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
+export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
+	// Read the model as the run did (runModel upgrades a model saved by an older engine).
+	const input = { ...raw, model: upgradeLegacyModel(raw.model) };
 	const names = new Map(input.model.nodes.map((n) => [n.id, n.name]));
 	const d0 = toEpochDay(out.startDate);
 	// "<uuid> day 12" → "Farm A on 2001-10-13", so the detail points at something the user can open.

@@ -12,6 +12,7 @@ import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import {
 	defaultProjectSettings,
+	upgradeLegacyModel,
 	type CalibrationStats,
 	type CropDef,
 	type FarmSummary,
@@ -670,14 +671,16 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damInitialPct', 'dam initial level', pct],
 	['damMinPct', 'dam minimum operating level', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
-	['returnFlowPct', 'return flow', pct]
+	['irrigationEfficiency', 'irrigation efficiency', pct],
+	['lossReturnFraction', 'share of losses returning', pct]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
 
 function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): InputChange[] {
-	const a: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [], ...(ma ?? {}) };
-	const b: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [], ...(mb ?? {}) };
+	// A run saved by an older engine is compared as migration 006 stored its model (return flow % → efficiency).
+	const a: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(ma ?? {}) });
+	const b: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(mb ?? {}) });
 	const out: InputChange[] = [];
 	const nameOf = (m: ProjectModel) => {
 		const nodes = new Map(m.nodes.map((n) => [n.id, n.name] as [string, string]));

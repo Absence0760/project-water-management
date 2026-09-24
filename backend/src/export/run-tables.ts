@@ -74,7 +74,8 @@ const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).t
 const PERCENT_KEYS = new Set(['fractionSupplied', 'ewrFractionDaysNotMet']);
 
 const FARM_COLUMNS: [key: string, header: string][] = [
-	['avgDemandM3Day', 'Average demand (m³/day)'],
+	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
+	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
 	['avgDeficitM3Day', 'Average deficit (m³/day)'],
 	['fractionSupplied', 'Demand supplied (%)'],
@@ -245,7 +246,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Natural flow (m³)', (r) => r.naturalFlowM3],
 	['Farm runoff (m³)', (r) => r.farmRunoffM3],
 	['Dam storage at start (m³)', (r) => r.openingStorageM3],
-	['Irrigation demand (m³)', (r) => r.demandM3],
+	['Irrigation abstraction demand (m³)', (r) => r.demandM3],
 	['Irrigation supplied (m³)', (r) => r.suppliedM3],
 	['Return flow (m³)', (r) => r.returnFlowM3],
 	['Consumptive use (m³)', (r) => r.consumptiveUseM3],

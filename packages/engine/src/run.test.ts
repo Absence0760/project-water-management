@@ -36,7 +36,8 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0,
+		irrigationEfficiency: 1,
+		lossReturnFraction: 0,
 		...over
 	};
 }
@@ -80,24 +81,27 @@ function get(out: { series: RunSeries[] }, nodeId: string | null, key: string): 
 
 describe('runModel — three-node network (A → B → gauge)', () => {
 	// Two farms of equal area share natural flow 50/50. A has a dam that takes
-	// all its own runoff; B has no dam and a 50% runoff-to-dam split (no dam, so
+	// all its own runoff and irrigates at 50 % efficiency, half its losses
+	// returning (N1); B has no dam and a 50% runoff-to-dam split (no dam, so
 	// that water just passes the "full" dam as spill).
 	const nodes = [
 		node('A', {
 			downstreamNodeId: 'B',
 			pctRunoffToDam: 1,
 			damCapacityM3: 1000,
-			damInitialPct: 0.5,
-			returnFlowPct: 0.1
+			damInitialPct: 0.9,
+			irrigationEfficiency: 0.5,
+			lossReturnFraction: 0.5
 		}),
-		node('B', { downstreamNodeId: 'G', sortOrder: 1, pctRunoffToDam: 0.5, returnFlowPct: 0 }),
+		node('B', { downstreamNodeId: 'G', sortOrder: 1, pctRunoffToDam: 0.5, irrigationEfficiency: 1, lossReturnFraction: 0 }),
 		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
 	];
 	// A: one crop, 1000 m², crop factor 1.
 	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 	const cropAreas: CropArea[] = [{ nodeId: 'A', cropId: 'c', areaM2: 1000 }];
 	const settings: Partial<ProjectSettings> = { apanMm: flat(31 * 100) as Monthly };
-	// October: 31 days → gross = 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day.
+	// October: 31 days → gross = 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day of crop
+	// requirement, so A abstracts 100 / 0.5 = 200 m³/day.
 
 	const out = run({
 		nodes,
@@ -114,26 +118,28 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 	});
 
 	it('supplies demand from the dam and carries storage day to day', () => {
-		// Day 0: Qprev 500 + M 100 → avail 600, G = 100, P = 500, Q = 500.
-		// Day 1: avail 500 → G 100, Q 400.
-		// Day 2: avail 400 + 800.5 = 1200.5 → G 100, P 1100.5, Q 1000, spill 100.5.
-		expect(get(out, 'A', 'demand')).toEqual([100, 100, 100]);
-		expect(get(out, 'A', 'supplied')).toEqual([100, 100, 100]);
-		expect(get(out, 'A', 'dam_storage')).toEqual([500, 400, 1000]);
-		expect(get(out, 'A', 'spill')).toEqual([0, 0, 100.5]);
-		// U = spill + below-dam (0) + return 100 × 0.1 = 10
-		expect(get(out, 'A', 'outflow')).toEqual([10, 10, 110.5]);
+		// Day 0: Qprev 900 + M 100 → avail 1000, G = 200, P = 800, Q = 800.
+		// Day 1: avail 800 → G 200, Q 600.
+		// Day 2: avail 600 + 800.5 = 1400.5 → G 200, P 1200.5, Q 1000, spill 200.5.
+		expect(get(out, 'A', 'crop_requirement')).toEqual([100, 100, 100]);
+		expect(get(out, 'A', 'demand')).toEqual([200, 200, 200]);
+		expect(get(out, 'A', 'supplied')).toEqual([200, 200, 200]);
+		expect(get(out, 'A', 'dam_storage')).toEqual([800, 600, 1000]);
+		expect(get(out, 'A', 'spill')).toEqual([0, 0, 200.5]);
+		// U = spill + below-dam (0) + return β (1 − e) G = 0.5 × 0.5 × 200 = 50
+		expect(get(out, 'A', 'return_flow')).toEqual([50, 50, 50]);
+		expect(get(out, 'A', 'outflow')).toEqual([50, 50, 250.5]);
 	});
 
 	it('routes upstream outflow into the next farm and on to the gauge', () => {
-		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 110.5]);
+		expect(get(out, 'B', 'inflow_upstream')).toEqual([50, 50, 250.5]);
 		// B: capacity 0, pctUpstreamToDam 0. M = I × 0.5 goes to the (zero) dam and
 		// spills; the upstream inflow and N pass below the dam (engine ≥ 0.9.0, Q1).
 		// U = R + S + T = M + (L + N) + 0 = H + I.
 		expect(get(out, 'B', 'spill')).toEqual([50, 0, 400.25]); // M only
-		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 911]);
-		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 911]);
-		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 911]);
+		expect(get(out, 'B', 'outflow')).toEqual([150, 50, 1051]);
+		expect(get(out, 'G', 'outflow')).toEqual([150, 50, 1051]);
+		expect(get(out, null, 'simulated_outflow')).toEqual([150, 50, 1051]);
 	});
 
 	it('adds an EWR compliance grid for the outlet and each farm', () => {
@@ -141,10 +147,10 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		const g = withEwr.summary.ewrCompliance!;
 		expect(g.waterYears).toEqual([2020]);
 		expect(g.days[0]![0]).toBe(3);
-		// Outflow [110, 10, 911] vs EWR 100: only day 1 is short, by 90.
+		// Outflow [150, 50, 1051] vs EWR 100: only day 1 is short, by 50.
 		expect(g.outlet.name).toBe('G');
 		expect(g.outlet.daysNotMet[0]![0]).toBe(1);
-		expect(g.outlet.shortfallM3[0]![0]).toBe(90);
+		expect(g.outlet.shortfallM3[0]![0]).toBe(50);
 		expect(g.farms.map((f) => f.nodeId)).toEqual(['A', 'B']);
 		const ewrDays = get(withEwr, null, 'ewr_shortfall').filter((v) => v < 0).length;
 		expect(ewrDays).toBe(withEwr.summary.catchment.ewrDaysNotMet);
@@ -152,13 +158,14 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 
 	it('reports per-farm averages', () => {
 		const a = out.summary.farms.find((f) => f.nodeId === 'A')!;
-		expect(a.avgDemandM3Day).toBe(100);
+		expect(a.avgDemandM3Day).toBe(200);
+		expect(a.avgCropRequirementM3Day).toBe(100);
 		expect(a.fractionSupplied).toBe(1);
 		const b = out.summary.farms.find((f) => f.nodeId === 'B')!;
 		expect(b.avgDemandM3Day).toBe(0);
 		expect(b.fractionSupplied).toBe(1);
 		expect(out.summary.farms.map((f) => f.nodeId)).toEqual(['A', 'B']); // gauges have no farm summary
-		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((110 + 10 + 911) / 3, 10);
+		expect(out.summary.catchment.meanSimulatedOutflowM3Day).toBeCloseTo((150 + 50 + 1051) / 3, 10);
 	});
 
 	it('runs over the rainfall period and emits catchment series', () => {
@@ -186,17 +193,18 @@ describe('runModel — no rounding in the balance (audit R1)', () => {
 	it('keeps a sub-m³ dam and the exact return flow', () => {
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 		const out = run({
-			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, returnFlowPct: 0.25 })],
+			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 })],
 			crops,
 			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1 }],
 			settings: { apanMm: flat(31) as Monthly }, // 1 m² × 31 mm / 1000 / 31 = 0.001 m³/day
 			natural: [0],
 			startDate: '2020-10-01'
 		});
-		expect(get(out, 'D', 'demand')[0]).toBeCloseTo(0.001, 12);
-		expect(get(out, 'D', 'supplied')[0]).toBeCloseTo(0.001, 12);
-		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(0.399, 12);
-		expect(get(out, 'D', 'outflow')[0]).toBeCloseTo(0.00025, 12);
+		expect(get(out, 'D', 'crop_requirement')[0]).toBeCloseTo(0.001, 12);
+		expect(get(out, 'D', 'demand')[0]).toBeCloseTo(0.00125, 12); // ÷ 0.8 efficiency
+		expect(get(out, 'D', 'supplied')[0]).toBeCloseTo(0.00125, 12);
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(0.39875, 12);
+		expect(get(out, 'D', 'outflow')[0]).toBeCloseTo(0.000125, 12); // 0.5 × 0.2 × 0.00125
 	});
 });
 
@@ -302,6 +310,89 @@ describe('runModel — dam behaviour', () => {
 		});
 		expect(get(out, 'D', 'supplied')).toEqual([0, 100]);
 		expect(get(out, 'D', 'dam_storage')).toEqual([250, 300]);
+	});
+});
+
+describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.14.0)', () => {
+	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+	// 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day of crop requirement in October.
+	const farm = (over: Partial<NetworkNode>, natural = [0]) =>
+		run({
+			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1, ...over })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural,
+			startDate: '2020-10-01'
+		});
+
+	it('abstracts crop requirement ÷ efficiency, so a fully supplied crop gets all it needs (F = 100, e = 0.9)', () => {
+		const out = farm({ irrigationEfficiency: 0.9, lossReturnFraction: 1 });
+		const G = get(out, 'F', 'supplied')[0]!;
+		expect(get(out, 'F', 'crop_requirement')[0]).toBe(100);
+		expect(get(out, 'F', 'demand')[0]).toBeCloseTo(111.111111, 5);
+		expect(G).toBeCloseTo(111.111111, 5);
+		expect(0.9 * G).toBeCloseTo(100, 9); // crop use = e × G
+		expect(get(out, 'F', 'deficit')[0]).toBe(0);
+		// All the losses return: T = 1 × 0.1 × G, consumptive use = G − T = the crop's 100.
+		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.1 * G, 9);
+		expect(G - get(out, 'F', 'return_flow')[0]!).toBeCloseTo(100, 9);
+	});
+
+	it('returns only the share β of the losses; the rest leaves the catchment', () => {
+		const out = farm({ irrigationEfficiency: 0.8, lossReturnFraction: 0.25 });
+		const G = get(out, 'F', 'supplied')[0]!;
+		expect(G).toBeCloseTo(125, 9);
+		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.25 * 0.2 * 125, 9);
+		expect(get(out, 'F', 'outflow')[0]).toBeCloseTo(6.25, 9);
+		expect(Math.abs(get(out, 'F', 'balance_residual')[0]!)).toBeLessThan(1e-9);
+	});
+
+	it('measures a shortage against the abstraction demand: deficit = D − G, supplied fraction = G / D', () => {
+		// 60 m³ in the dam and no inflow: D = 125, G = 60.
+		const out = farm({ damCapacityM3: 60, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 });
+		expect(get(out, 'F', 'supplied')).toEqual([60]);
+		expect(get(out, 'F', 'deficit')[0]).toBeCloseTo(65, 9);
+		const s = out.summary.farms[0]!;
+		expect(s.avgDemandM3Day).toBeCloseTo(125, 9);
+		expect(s.avgCropRequirementM3Day).toBe(100);
+		expect(s.fractionSupplied).toBeCloseTo(0.48, 9); // = crop use 48 / crop requirement 100
+		expect(out.summary.curtailment!.farms[0]!.demandM3Day).toBeCloseTo(125, 9);
+	});
+
+	it('e = 1 and β = 0 is the workbook with no return flow, bit for bit', () => {
+		const out = farm({ irrigationEfficiency: 1, lossReturnFraction: 0.7 });
+		expect(get(out, 'F', 'demand')).toEqual([100]);
+		expect(get(out, 'F', 'supplied')).toEqual([100]);
+		expect(get(out, 'F', 'return_flow')).toEqual([0]);
+	});
+
+	it('runs a model saved before engine 0.14.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
+		const legacy = farm({});
+		const input0 = input({
+			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		for (const n of input0.model.nodes as unknown as Record<string, unknown>[]) {
+			delete n.irrigationEfficiency;
+			delete n.lossReturnFraction;
+			n.returnFlowPct = 0.2;
+		}
+		const old = runModelWith(input0, () => ({ naturalFlowM3Day: [0] }));
+		const now = farm({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		expect(get(old, 'F', 'supplied')).toEqual(get(now, 'F', 'supplied'));
+		expect(get(old, 'F', 'return_flow')).toEqual(get(now, 'F', 'return_flow'));
+		expect(get(legacy, 'F', 'supplied')).toEqual([100]);
+	});
+
+	it('warns and runs e = 1 for an efficiency outside (0, 1] instead of dividing by 0', () => {
+		const out = farm({ irrigationEfficiency: 0, lossReturnFraction: 0.5 });
+		expect(get(out, 'F', 'demand')).toEqual([100]);
+		expect(out.summary.warnings.some((w) => w.includes('irrigation efficiency 0 is not in (0, 1]'))).toBe(true);
 	});
 });
 
@@ -1015,6 +1106,33 @@ describe.skipIf(!dataDir)(
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
 		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
 		const topo = buildTopology(project.model.nodes);
+		// N1 (engine ≥ 0.14.0): a farm's return flow % r becomes irrigation
+		// efficiency e = 1 − r with every loss returning (migration 006, which
+		// runModel also applies to the fixture's returnFlowPct). The crop is then
+		// fully supplied, so the farm abstracts F / (1 − r) where the workbook
+		// abstracted F: supplied and everything it feeds differ. Affected: every
+		// farm with r > 0, everything downstream of one, and both ends of a
+		// transfer touching an affected dam.
+		const n1Affected = (() => {
+			const legacy = project.model.nodes as unknown as { id: string; downstreamNodeId: string | null; returnFlowPct?: number }[];
+			const hit = new Set(legacy.filter((n) => (n.returnFlowPct ?? 0) > 0).map((n) => n.id));
+			for (let grown = true; grown; ) {
+				grown = false;
+				const add = (id: string | null | undefined) => {
+					if (id && !hit.has(id)) {
+						hit.add(id);
+						grown = true;
+					}
+				};
+				for (const n of legacy) if (hit.has(n.id)) add(n.downstreamNodeId);
+				for (const t of project.model.transfers) {
+					if (hit.has(t.fromNodeId)) add(t.toNodeId);
+					if (hit.has(t.toNodeId)) add(t.fromNodeId);
+				}
+			}
+			return hit;
+		})();
+		const N1_KEYS = new Set(['supplied', 'deficit', 'inflow_upstream', 'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_shortfall', 'ewr_shortfall_incremental']);
 		const index = new Map(project.model.nodes.map((n, i) => [n.id, i]));
 		const farmCount = (i: number): number =>
 			(project.model.nodes[i]!.kind === 'farm' ? 1 : 0) + Array.from(topo.upstream[i]!).reduce((s, u) => s + farmCount(u), 0);
@@ -1041,6 +1159,14 @@ describe.skipIf(!dataDir)(
 		//          with the correction off, and with it on only years holding
 		//          fallback days may differ. The mean columns fed by demand
 		//          (supplied, deficit, …) stay within their R1 bound.
+		//
+		//   N1     (engine ≥ 0.14.0) abstraction demand = crop requirement ÷
+		//          irrigation efficiency; return flow = β (1 − e) × supplied.
+		//          Workbook F is compared with `crop_requirement` (daily, R1).
+		//          supplied, deficit, inflow_upstream, transfer, dam_storage,
+		//          spill, outflow, ewr_shortfall and ewr_shortfall_incremental
+		//          are skipped on the nodes n1Affected names, and the catchment
+		//          outflow and EWR-not-met series when the outlet is one.
 		// -------------------------------------------------------------------------
 		type Rule =
 			| { kind: 'exact' }
@@ -1052,6 +1178,7 @@ describe.skipIf(!dataDir)(
 		function nodeRule(name: string, key: string): Rule {
 			const n = nodeByName.get(name)!;
 			const i = index.get(n.id)!;
+			if (n1Affected.has(n.id) && N1_KEYS.has(key)) return { kind: 'skip', why: 'N1' };
 			switch (key) {
 				case 'demand':
 					// R1: net ROUND(,0) 0.5 + farm ROUND(,1) 0.05 + crop mm ROUND(,2) 0.005 mm on the cropped area.
@@ -1142,7 +1269,9 @@ describe.skipIf(!dataDir)(
 				for (const key of keys) {
 					if (!(key in want) || (want.kind === 'gauge' && !['outflow', 'ewr_cumulative', 'ewr_shortfall'].includes(key)))
 						continue;
-					const bad = compare(get(out, id, key), want[key]!, nodeRule(name, key));
+					// The workbook's F is the crop requirement; the engine's `demand` is F ÷ efficiency (N1).
+					const engineKey = key === 'demand' && want.kind !== 'gauge' ? 'crop_requirement' : key;
+					const bad = compare(get(out, id, engineKey), want[key]!, nodeRule(name, key));
 					if (bad) report[key] = bad;
 				}
 				expect(report).toEqual({});
@@ -1158,9 +1287,11 @@ describe.skipIf(!dataDir)(
 		});
 
 		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
-			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, { kind: 'mean' })).toBeNull(); // R1
+			// N1: the outlet is downstream of farms with return flow on the client catchment, so its flow and shortfall differ.
+			const outletRule: Rule = n1Affected.has(topo.outflow >= 0 ? project.model.nodes[topo.outflow]!.id : '') ? { kind: 'skip', why: 'N1' } : { kind: 'mean' };
+			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, outletRule)).toBeNull(); // R1
 			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
-			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, { kind: 'mean' })).toBeNull(); // R1
+			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, outletRule)).toBeNull(); // R1
 		});
 
 		/** Water years whose end-to-end natural flow is off the workbook's by more than E1/R1 allow. */

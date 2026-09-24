@@ -90,7 +90,7 @@ exports round for display.
 | Sheet | Holds | App equivalent |
 | --- | --- | --- |
 | `[Network]` | Elements (Farm or Gauge), upstream elements (up to 7), "Has transfer?", the one **outflow gauge**. The rows must be in calculation order (upstream first). Bifurcation is not allowed. | `node` rows; `downstream_node_id` gives the tree, and the engine works out the calculation order |
-| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns + `project.settings.flowShareMethod`, `hiLoSplit` |
+| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns + `project.settings.flowShareMethod`, `hiLoSplit`. The return flow % becomes `irrigationEfficiency` and `lossReturnFraction` (N1); the min % is not imported (Q5) |
 | `[Crop demand]` | WR90 A-pan evaporation by month, effective-rainfall %, crop factors by month | `settings.apanMm`, `settings.effectiveRainFraction`, `crop` |
 | `[Farm demand]` | Crop area (m²) per farm per crop, days per month (Feb = 28.25 by default) | `crop_area`, `settings.februaryDays` |
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
@@ -126,6 +126,19 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    - `rainUsed[t]` is the *thresholded* rain from the Flow data sheet (§2.4).
      Rain at or below the threshold counts as 0, so light rain does not reduce
      demand.
+
+   This is the farm's **crop water requirement** F (run series
+   `crop_requirement`, the workbook's net irrigation demand).
+
+4. **Abstraction demand (engine ≥ 0.14.0, [audit N1](./engine-audit.md))**:
+   the farm abstracts enough to cover its application losses,
+
+   `D[f][t] = F[f][t] / e[f]`
+
+   with `e` = `irrigationEfficiency` (0 < e ≤ 1). D is the run series `demand`:
+   supply, deficit, the fraction supplied and the curtailment report are all
+   measured against it, so "100 % supplied" means the crop got its whole
+   requirement (crop use = e × G = F). The workbook has no such step (e = 1).
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
@@ -461,7 +474,8 @@ storage to whole m³; the engine doesn't (R1).
 
 | Step | Quantity | Formula |
 | --- | --- | --- |
-| F | Net irrigation demand | from §2.3 |
+| F | Crop water requirement | from §2.3 (`crop_requirement`) |
+| D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.14.0, N1). The workbook has no column: D = F there |
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
 | I | Farm runoff | fragmented natural flow (§2.5) |
 | J | Transfer in (+) / out (−) | from §2.6 |
@@ -470,15 +484,15 @@ storage to whole m³; the engine doesn't (R1).
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
-| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + M + O + K + J − damCapacity × damMinPct, 0), F)`: only the storage above the dam's minimum operating level (engine ≥ 0.14.0, Q5) |
+| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.14.0, Q5), up to the abstraction demand (N1) |
 | P | Interim storage | `store[t−1] + M + O + K + J − G` |
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
 | S | Below-dam flow not diverted | `L + N − O` |
-| T | Irrigation return flow | `G × returnPct` |
+| T | Irrigation return flow | `β × (1 − e) × G`: the share β (`lossReturnFraction`) of the application losses (engine ≥ 0.14.0, N1; the workbook's `G × returnPct`) |
 | U | **Farm outflow** | `R + S + T` |
-| V | Balance check | `abs((H+I+J) − G·(1−returnPct) − (store[t] − store[t−1]) − U)` must be 0 (the invariant tests check it on random networks) |
-| W | **Irrigation deficit** | `F − G` |
+| V | Balance check | `(H+I+J) − (G − T) − (store[t] − store[t−1]) − U` must be 0 (the invariant tests check it on random networks) |
+| W | **Irrigation deficit** | `D − G` |
 | Y | Fragmented EWR | §2.5 |
 | Z | Cumulative EWR | `Y + Σ Z` of the elements directly upstream (see quirk Q4) |
 | AA | EWR shortfall (−) | `MIN(U − Z, 0)` |
@@ -507,10 +521,34 @@ water to spare; the engine (≥ 0.4.0) doesn't ([audit G1](./engine-audit.md)). 
 catchment's simulated outflow that goes back into `[Flow data]` AG. That is
 compared with the full pragmatic EWR and the observed flow.
 
+**Irrigation efficiency and return flow (engine ≥ 0.14.0, [audit N1](./engine-audit.md)).**
+Each farm has an application efficiency `e` (`irrigationEfficiency`,
+0 < e ≤ 1) and a loss return fraction `β` (`lossReturnFraction`, 0–1). Per
+day: abstraction demand `D = F / e`; `G = MIN(available, D)`; the crop gets
+`e·G`; the losses `(1 − e)·G` split into return flow `T = β(1 − e)·G`, which
+joins the farm's outflow the same day, and `(1 − β)(1 − e)·G`, which leaves
+the catchment (evaporation, deep percolation); consumptive use is `G − T`;
+the supplied fraction is `G / D` (= crop use / F); the deficit is `D − G`;
+curtailment works in D and G. The balance keeps its form,
+`V = (H + I + J) − (G − T) − ΔQ − U`, with the new T. New farms default to
+e = 0.80 and β = 0.5; the one-node form offers indicative efficiencies by
+system (drip 0.90, micro 0.85, pivot 0.85, sprinkler 0.75, flood 0.65).
+Migration 006 converted the old `return_flow_pct` r so stored results stay
+explainable: r = 0 → e = 1, β = 0 (bit-identical); r > 0 → e = 1 − r, β = 1
+(the balance per unit supplied is unchanged, the crop is now fully supplied,
+and abstraction rises by 1 / (1 − r)); r = 1 → e = 0.01. `upgradeLegacyModel`
+applies the same mapping to project documents and run snapshots from older
+engines. With return flow on, a farm upstream of a starved neighbour can
+pass it water through its return flow; that is real under N1 (T is bounded by
+the upstream farm's own abstraction, G ≤ D), and attributing shortfalls by net
+consumptive use (Q17) accounts for it. Decided on persona recommendation
+(simulated hydrologist and licensing-assessor reviews, 2026-09-24), pending
+the real hydrologist.
+
 **Every column is a run series (engine ≥ 0.12.0).** Besides F, G, H, I, J, Q,
 R, U, W and Y–AB, each farm stores its working columns, so any day can be
 redone by hand from the farm's daily CSV: `gross_demand` and `effective_rain`
-(the two sides of F, §2.3), `upstream_to_dam` (K), `upstream_below_dam` (L),
+(the two sides of F, §2.3), `crop_requirement` (F) and `demand` (D, engine ≥ 0.14.0), `upstream_to_dam` (K), `upstream_below_dam` (L),
 `runoff_to_dam` (M), `runoff_below_dam` (N), `diverted_to_dam` (O),
 `interim_storage` (P), `below_dam_not_diverted` (S), `return_flow` (T) and
 `balance_residual` (V, signed, float noise). The letters and formulas live in
@@ -1316,12 +1354,12 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand − effective rain); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = G × return %; U = R + S + T; V is the recomputed residual and float noise. |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage, with return flow β(1 − e) × supplied. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand − effective rain); D = F / e; G = MIN(MAX(Q[t−1] + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T; V is the recomputed residual and float noise. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with return flows set to 0, doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
@@ -1454,7 +1492,8 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
-| **Return flow** | The share of irrigation water that runs back to the river. |
+| **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.14.0). Abstraction demand = crop requirement ÷ efficiency. |
+| **Return flow** | The part of the irrigation losses that runs back to the river the same day: loss return fraction × (1 − efficiency) × supplied. |
 | **Transfer** | Water moved from one farm's dam to another farm (pipeline or canal). |
 | **NSE** | Nash–Sutcliffe Efficiency = 1 − Σ(obs−sim)² / Σ(obs−mean obs)². 1 is perfect; ≤ 0 means no better than the mean. |
 | **PBIAS** | Percent bias = 100 × Σ(obs−sim) / Σobs (the engine's sign). Positive means the model under-predicts volume. |

@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import type { NetworkNode } from '@water-management/engine';
+import { IRRIGATION_SYSTEMS, type NetworkNode } from '@water-management/engine';
 
 export type NodeNumberKey =
 	| 'areaKm2'
@@ -12,7 +12,8 @@ export type NodeNumberKey =
 	| 'pctUpstreamToDam'
 	| 'pctRunoffToDam'
 	| 'divertCapacityM3Day'
-	| 'returnFlowPct'
+	| 'irrigationEfficiency'
+	| 'lossReturnFraction'
 	| 'flowShareManual';
 
 export interface NodeField {
@@ -20,7 +21,7 @@ export interface NodeField {
 	/** Short column / field label. */
 	label: string;
 	unit: 'km²' | 'm³' | '%' | 'm³/day';
-	group: 'area' | 'dam' | 'routing' | 'share';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
 	help: string;
@@ -33,6 +34,7 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	area: 'Catchment area',
 	dam: 'Farm dam',
 	routing: 'Routing',
+	irrigation: 'Irrigation',
 	share: 'Flow share'
 };
 
@@ -116,13 +118,22 @@ export const NODE_FIELDS: NodeField[] = [
 		help: 'Most water per day that can be diverted from the river below the dam back into the dam (a weir, furrow or pump). 0 means none.'
 	},
 	{
-		key: 'returnFlowPct',
-		label: 'Return flow',
+		key: 'irrigationEfficiency',
+		label: 'Efficiency',
 		unit: '%',
-		group: 'routing',
+		group: 'irrigation',
 		farmOnly: true,
-		aria: (n) => `Return flow of ${n}, %`,
-		help: 'Share of the irrigation water supplied that runs back to the river below the farm.'
+		aria: (n) => `Irrigation efficiency of ${n}, %`,
+		help: 'Share of the water abstracted that reaches the crop. The farm abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+	},
+	{
+		key: 'lossReturnFraction',
+		label: 'Losses returning',
+		unit: '%',
+		group: 'irrigation',
+		farmOnly: true,
+		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
+		help: 'Share of the application losses that drains back to the river below the farm the same day (return flow). The rest leaves the catchment.'
 	},
 	{
 		key: 'flowShareManual',
@@ -148,6 +159,14 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 	const hints: string[] = [];
 	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
 	return hints;
+}
+
+/**
+ * The irrigation system whose indicative efficiency (IRRIGATION_SYSTEMS) this
+ * value is, for the node form's helper; null for any other value.
+ */
+export function systemOf(efficiency: number): (typeof IRRIGATION_SYSTEMS)[number]['id'] | null {
+	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
 }
 
 /** Treat a dam under 1 m³ as no dam (the workbook uses tiny placeholders such as 0.15). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damHints, fmtVolume, hasDam, NODE_FIELDS } from './fields';
+import { damHints, fmtVolume, hasDam, NODE_FIELDS, systemOf } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -39,5 +39,15 @@ describe('damHints', () => {
 	it('says nothing for a farm without a dam or a gauge', () => {
 		expect(damHints({ kind: 'farm', damCapacityM3: 0, damMinPct: 0 })).toEqual([]);
 		expect(damHints({ kind: 'gauge', damCapacityM3: 40_000, damMinPct: 0 })).toEqual([]);
+	});
+});
+
+describe('systemOf (irrigation system helper, N1)', () => {
+	it('names the system whose indicative efficiency this is; the first listed wins a tie', () => {
+		expect(systemOf(0.9)).toBe('drip');
+		expect(systemOf(0.85)).toBe('micro');
+		expect(systemOf(0.75)).toBe('sprinkler');
+		expect(systemOf(0.65)).toBe('flood');
+		expect(systemOf(0.8)).toBeNull();
 	});
 });

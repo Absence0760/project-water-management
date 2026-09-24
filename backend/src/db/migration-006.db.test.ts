@@ -32,12 +32,14 @@ beforeAll(async () => {
 	for (const f of files.filter((x) => x < '006')) await apply(f);
 	const owner = (await db.query<{ id: string }>(`INSERT INTO app_user (email, display_name, password_hash) VALUES ('m@example.com', 'M', 'x') RETURNING id`)).rows[0]!.id;
 	await db.query(`INSERT INTO project (id, name, created_by) VALUES ($1, 'Migration', $2)`, [PROJECT, owner]);
-	// A dam whose "min %" came from the workbook's transfer minimum, and one without.
+	// A dam whose "min %" came from the workbook's transfer minimum, and one without;
+	// return flows of 0, 20 % and 100 %.
 	await db.query(
-		`INSERT INTO node (id, project_id, name, kind, dam_capacity_m3, dam_min_pct) VALUES
-			($1, $3, 'Dam with a min', 'farm', 1000, 0.3),
-			($2, $3, 'Dam without', 'farm', 1000, 0)`,
-		[node(1), node(2), PROJECT]
+		`INSERT INTO node (id, project_id, name, kind, dam_capacity_m3, dam_min_pct, return_flow_pct) VALUES
+			($1, $4, 'Dam with a min', 'farm', 1000, 0.3, 0.2),
+			($2, $4, 'Dam without', 'farm', 1000, 0, 0),
+			($3, $4, 'All returns', 'farm', 0, 0, 1)`,
+		[node(1), node(2), node(3), PROJECT]
 	);
 	await apply('006_farm_dam_ops.sql');
 }, 60_000);
@@ -54,5 +56,20 @@ describe('migration 006: farm and dam operating rules', () => {
 	it('Q5: resets every dam minimum to 0 (it was the transfer minimum, which the rules already carry)', async () => {
 		expect((await row(node(1))).dam_min_pct).toBe(0);
 		expect((await row(node(2))).dam_min_pct).toBe(0);
+	});
+
+	it('N1: maps return flow r to efficiency e = 1 − r with every loss returning, and r = 0 to e = 1, β = 0', async () => {
+		expect(await row(node(1))).toMatchObject({ irrigation_efficiency: 0.8, loss_return_fraction: 1 });
+		expect(await row(node(2))).toMatchObject({ irrigation_efficiency: 1, loss_return_fraction: 0 });
+		// r = 1 would divide by 0: the smallest efficiency the model accepts.
+		expect(await row(node(3))).toMatchObject({ irrigation_efficiency: 0.01, loss_return_fraction: 1 });
+		expect(await row(node(1))).not.toHaveProperty('return_flow_pct');
+	});
+
+	it('N1: a new farm defaults to 80 % efficiency with half its losses returning, and e must be above 0', async () => {
+		await db.query(`INSERT INTO node (project_id, name, kind) VALUES ($1, 'New farm', 'farm')`, [PROJECT]);
+		const r = (await db.query(`SELECT irrigation_efficiency, loss_return_fraction FROM node WHERE name = 'New farm'`)).rows[0];
+		expect(r).toEqual({ irrigation_efficiency: 0.8, loss_return_fraction: 0.5 });
+		await expect(db.query(`UPDATE node SET irrigation_efficiency = 0 WHERE name = 'New farm'`)).rejects.toThrow(/check constraint/);
 	});
 });

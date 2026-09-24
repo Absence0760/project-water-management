@@ -4,6 +4,7 @@
 // calibration against an (invented) observed record. Place and farm names are
 // fictional. Everything is deterministic — re-seeding gives identical projects.
 import {
+	NEW_FARM_IRRIGATION,
 	defaultProjectSettings,
 	runModel,
 	type CropDef,
@@ -52,7 +53,10 @@ interface FarmSpec {
 	upstreamToDam?: number;
 	runoffToDam?: number;
 	divertM3Day?: number;
-	returnFlow?: number;
+	/** Irrigation application efficiency (default NEW_FARM_IRRIGATION, audit N1). */
+	efficiency?: number;
+	/** Share of the application losses returning to the river. */
+	lossReturn?: number;
 	/** hectares per crop */
 	crops?: Record<string, number>;
 }
@@ -108,7 +112,8 @@ function build(spec: CatchmentSpec): ExampleProject {
 		// A minimum operating level (dead storage) irrigation stops at (engine ≥ 0.14.0, audit Q5).
 		damMinPct: f.damMin ?? 0.15,
 		divertCapacityM3Day: f.divertM3Day ?? 0,
-		returnFlowPct: f.returnFlow ?? 0.1
+		irrigationEfficiency: f.efficiency ?? NEW_FARM_IRRIGATION.irrigationEfficiency,
+		lossReturnFraction: f.lossReturn ?? NEW_FARM_IRRIGATION.lossReturnFraction
 	}));
 	const cropAreas = spec.farms.flatMap((f) =>
 		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000 }))

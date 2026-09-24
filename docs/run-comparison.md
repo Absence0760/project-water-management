@@ -112,6 +112,10 @@ dates changed too, only the date change is listed (one hash can't say whether
 the shared days changed), and runs stored before the hash existed have none,
 so an in-place edit between them isn't visible. If the results changed and
 the list shows nothing, one of those is the likely reason.
+A model from a run saved before engine 0.14.0 is read as migration 006 stored
+it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
+1 − r with every loss returning), so a project that only went through the
+migration shows no network line; the engine version line flags the change.
 Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting

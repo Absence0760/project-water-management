@@ -283,9 +283,72 @@ export interface NetworkNode {
 	pctRunoffToDam: number;
 	damCapacityM3: number;
 	damInitialPct: number;
+	/** Minimum operating level (dead storage), fraction of capacity: irrigation draws only above it (engine ≥ 0.14.0, audit Q5). */
 	damMinPct: number;
 	divertCapacityM3Day: number;
-	returnFlowPct: number;
+	/**
+	 * Irrigation application efficiency e, 0 < e ≤ 1 (engine ≥ 0.14.0, audit
+	 * N1): the share of the water abstracted that reaches the crop. Abstraction
+	 * demand = crop requirement ÷ e.
+	 */
+	irrigationEfficiency: number;
+	/**
+	 * Share β (0–1) of the application losses, (1 − e) × supplied, that
+	 * returns to the river below the farm the same day (engine ≥ 0.14.0). The
+	 * rest leaves the catchment (evaporation, deep percolation).
+	 */
+	lossReturnFraction: number;
+}
+
+/** Irrigation settings of a new farm (engine ≥ 0.14.0, audit N1): a typical mixed system, half of its losses returning. */
+export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.8, lossReturnFraction: 0.5 } as const;
+
+/**
+ * Indicative application efficiencies by irrigation system (audit N1), for
+ * the node form's helper. Typical values from the irrigation design
+ * literature; a scheme's own measurement is better.
+ */
+export const IRRIGATION_SYSTEMS = [
+	{ id: 'drip', label: 'Drip', efficiency: 0.9 },
+	{ id: 'micro', label: 'Micro-sprinkler', efficiency: 0.85 },
+	{ id: 'pivot', label: 'Centre pivot', efficiency: 0.85 },
+	{ id: 'sprinkler', label: 'Sprinkler (dragline, big gun)', efficiency: 0.75 },
+	{ id: 'flood', label: 'Flood / furrow', efficiency: 0.65 }
+] as const;
+
+/**
+ * The efficiency and loss return that replace an engine < 0.14.0 node's
+ * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
+ * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
+ * (consumptive use = supplied − return flow) is as before per unit supplied,
+ * and the crop is now fully supplied, at 1 / (1 − r) times the abstraction.
+ */
+export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; lossReturnFraction: number } {
+	if (!(r > 0)) return { irrigationEfficiency: 1, lossReturnFraction: 0 };
+	return { irrigationEfficiency: Math.max(1 - Math.min(r, 1), 0.01), lossReturnFraction: 1 };
+}
+
+/**
+ * A model saved by an older engine (a project document, a run's input
+ * snapshot, a workbook extract), brought to the current fields the way
+ * migration 006 brings the database: a node without `irrigationEfficiency`
+ * gets it from its `returnFlowPct` (irrigationFromReturnFlow), which is
+ * dropped. Fields already present are kept. Pure; returns a copy.
+ */
+export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unknown }>(model: M): M {
+	const nodes = Array.isArray(model.nodes)
+		? model.nodes.map((raw) => {
+				if (!raw || typeof raw !== 'object') return raw;
+				const { returnFlowPct, ...n } = raw as Record<string, unknown>;
+				if (n.irrigationEfficiency === undefined || n.lossReturnFraction === undefined) {
+					const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
+					n.irrigationEfficiency ??= up.irrigationEfficiency;
+					n.lossReturnFraction ??= up.lossReturnFraction;
+				}
+				return n;
+			})
+		: model.nodes;
+	return { ...model, nodes };
 }
 
 export interface CropDef {
@@ -364,11 +427,14 @@ export interface RunSeries {
 export interface FarmSummary {
 	nodeId: string;
 	name: string;
+	/** Mean abstraction demand D = crop requirement ÷ irrigation efficiency (engine ≥ 0.14.0; before, the crop requirement). */
 	avgDemandM3Day: number;
 	avgSuppliedM3Day: number;
 	avgDeficitM3Day: number;
-	/** 0–1 */
+	/** avg supplied / avg demand, 0–1: also the share of the crop requirement met (crop use = e × supplied). */
 	fractionSupplied: number;
+	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.14.0); absent on older runs. */
+	avgCropRequirementM3Day?: number;
 	avgEwrShortfallM3Day: number;
 	daysEwrNotMet: number;
 }

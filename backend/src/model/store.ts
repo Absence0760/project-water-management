@@ -10,7 +10,8 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 				flow_share_manual AS "flowShareManual", pct_upstream_to_dam AS "pctUpstreamToDam",
 				pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
 				dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
-				divert_capacity_m3_day AS "divertCapacityM3Day", return_flow_pct AS "returnFlowPct"
+				divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
+				loss_return_fraction AS "lossReturnFraction"
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
 		);
@@ -62,19 +63,20 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		await upserted(
 			`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 				flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
-				dam_min_pct, divert_capacity_m3_day, return_flow_pct)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+				dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 				area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
 				flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
 				pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
 				dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
-				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, return_flow_pct = EXCLUDED.return_flow_pct
+				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, irrigation_efficiency = EXCLUDED.irrigation_efficiency,
+				loss_return_fraction = EXCLUDED.loss_return_fraction
 			 WHERE node.project_id = EXCLUDED.project_id`,
 			[
 				n.id, projectId, n.name, n.kind, n.sortOrder, n.areaKm2, n.areaHiKm2, n.areaLoKm2, n.flowShareManual,
 				n.pctUpstreamToDam, n.pctRunoffToDam, n.damCapacityM3, n.damInitialPct, n.damMinPct,
-				n.divertCapacityM3Day, n.returnFlowPct
+				n.divertCapacityM3Day, n.irrigationEfficiency, n.lossReturnFraction
 			],
 			'node'
 		);

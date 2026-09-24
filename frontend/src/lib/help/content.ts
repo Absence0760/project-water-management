@@ -329,15 +329,28 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Farm spec'
 	},
 	{
+		id: 'irrigation-efficiency',
+		term: 'Irrigation efficiency',
+		short: 'Share of the water abstracted for irrigation that reaches the crop. The farm abstracts crop requirement ÷ efficiency.',
+		long: 'Application losses (evaporation from sprays, wind drift, runoff at the end of the field, deep percolation and leaks) mean a farm has to abstract more than its crops use. With efficiency e, abstraction demand = crop requirement ÷ e, and a fully supplied crop gets exactly its requirement. Indicative values by system: drip 90 %, micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood or furrow 65 %; a scheme’s own measurement is better. The one-node form offers these as a helper.\n\nSet 100 % for a stand-alone dam or natural area (no irrigation), or to leave losses out. New farms start at 80 %. Farms from before engine 0.14.0 were converted from their return flow % r as e = 1 − r with every loss returning, so their water balance per unit supplied is unchanged.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.14.0), pending confirmation by the project hydrologist.',
+		units: 'fraction 0–1 (shown as %), above 0',
+		category: 'farm',
+		aliases: ['application efficiency', 'irrigation system', 'drip', 'pivot', 'sprinkler', 'flood'],
+		fields: ['node.irrigationEfficiency'],
+		related: ['return-flow', 'irrigation-demand', 'crop-requirement'],
+		source: 'docs/engine-audit.md N1; Allen et al. 1998 (FAO-56); Keller & Bliesner 1990'
+	},
+	{
 		id: 'return-flow',
 		term: 'Irrigation return flow',
-		short: 'Fraction of the water used for irrigation that runs back into the river the same day.',
-		long: 'Over-irrigation, leaks and drainage return part of the applied water. It adds to the farm’s outflow. Set 0 % for a stand-alone dam or natural area.',
+		short: 'The part of the irrigation losses that runs back into the river the same day: loss return fraction × (1 − efficiency) × supplied.',
+		long: 'Of the water lost in application, some drains back to the river below the farm (tail-water, shallow drainage, leaks) and some leaves the catchment (evaporation, deep percolation). The loss return fraction is the share that returns; it adds to the farm’s outflow the same day. Consumptive use (what leaves the river) is supplied − return flow.\n\nNew farms start at 50 %. A farm upstream of a starved neighbour can pass it some water this way: that is real (the return is bounded by what the upstream farm abstracts) and attribution by net consumptive use accounts for it.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		fields: ['node.returnFlowPct'],
-		related: ['irrigation-supplied'],
-		source: 'b023 Farm spec'
+		aliases: ['loss return', 'return flow %', 'drainage return'],
+		fields: ['node.lossReturnFraction'],
+		related: ['irrigation-efficiency', 'irrigation-supplied'],
+		source: 'docs/engine-audit.md N1; docs/model.md §2.7'
 	},
 	{
 		id: 'spill',
@@ -447,22 +460,34 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Crop demand; docs/model.md §2.3'
 	},
 	{
-		id: 'irrigation-demand',
-		term: 'Irrigation demand (net)',
-		short: 'Water the farm’s crops need from irrigation on a given day, after effective rain, in m³/day.',
-		long: 'Gross demand comes from crop areas × A-pan × crop factor, spread over the days of the month. Net demand subtracts the effective rain on cropped land, and never goes below zero.',
+		id: 'crop-requirement',
+		term: 'Crop water requirement',
+		short: 'Water the farm’s crops need from irrigation on a given day, after effective rain, in m³/day (the workbook’s net irrigation demand).',
+		long: 'Gross demand comes from crop areas × A-pan × crop factor, spread over the days of the month. The requirement subtracts the effective rain on cropped land, and never goes below zero. The farm abstracts more than this to cover application losses: see irrigation demand.',
 		units: 'm³/day',
 		category: 'crops',
-		aliases: ['demand', 'crop water requirement'],
-		fields: ['run.demand', 'summary.avgDemandM3Day'],
-		related: ['irrigation-supplied', 'irrigation-deficit', 'effective-rainfall'],
+		aliases: ['crop water requirement', 'net irrigation need', 'net demand'],
+		fields: ['run.crop_requirement', 'summary.avgCropRequirementM3Day'],
+		related: ['irrigation-demand', 'irrigation-efficiency', 'effective-rainfall'],
 		source: 'b023 Irrigation Demand; docs/model.md §2.3'
+	},
+	{
+		id: 'irrigation-demand',
+		term: 'Irrigation demand (abstraction)',
+		short: 'Water the farm has to abstract to meet its crop water requirement: requirement ÷ irrigation efficiency, in m³/day.',
+		long: 'Supply, deficit, the fraction supplied and the curtailment report are all measured against this abstraction demand, so 100 % supplied means the crop got its full requirement. With 100 % efficiency it equals the crop water requirement, as in the b023 workbook.',
+		units: 'm³/day',
+		category: 'crops',
+		aliases: ['demand', 'abstraction', 'gross irrigation requirement'],
+		fields: ['run.demand', 'summary.avgDemandM3Day'],
+		related: ['crop-requirement', 'irrigation-efficiency', 'irrigation-supplied', 'irrigation-deficit'],
+		source: 'docs/engine-audit.md N1; docs/model.md §2.7'
 	},
 	{
 		id: 'irrigation-supplied',
 		term: 'Irrigation supplied',
 		short: 'Water actually delivered to the crops that day: the demand, or less when the dam and inflows run short.',
-		long: 'Irrigation draws on yesterday’s storage plus today’s captured inflows and transfers. Average supplied ÷ average demand is the fraction of demand supplied.',
+		long: 'Irrigation draws on yesterday’s storage above the dam’s minimum operating level plus today’s captured inflows and transfers, up to the abstraction demand. Average supplied ÷ average demand is the fraction of demand supplied; the crop gets efficiency × supplied, so the same fraction of its requirement.',
 		units: 'm³/day',
 		category: 'crops',
 		aliases: ['supply'],
@@ -473,7 +498,7 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'irrigation-deficit',
 		term: 'Irrigation deficit',
-		short: 'Demand that could not be met: demand minus supplied, in m³/day.',
+		short: 'Abstraction demand that could not be met: demand minus supplied, in m³/day.',
 		long: 'A farm with a persistent deficit is over-allocated for the water it can capture. The b023 Shortfalls sheet reports it per farm over a reporting window.',
 		units: 'm³/day',
 		category: 'crops',

@@ -58,7 +58,8 @@ function node(id: string, name: string, over: Partial<NetworkNode> = {}): Networ
 		damInitialPct: 0.5,
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0.1,
+		irrigationEfficiency: 0.8,
+		lossReturnFraction: 0.5,
 		...over
 	};
 }
@@ -298,7 +299,7 @@ describe('diffInputs', () => {
 	it('describes node percentages, additions, removals, renames and re-routing', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
-		b.model.nodes[1]!.returnFlowPct = 0.15;
+		b.model.nodes[1]!.irrigationEfficiency = 0.85;
 		b.model.nodes[2]!.name = 'Bergwater Suid'; // same id → rename
 		b.model.nodes[2]!.downstreamNodeId = 'f1';
 		b.model.nodes.push(node('f3', 'Klipfontein', { damCapacityM3: 0 }));
@@ -306,11 +307,27 @@ describe('diffInputs', () => {
 		c.model.nodes = c.model.nodes.filter((n) => n.id !== 'f2');
 		expect(texts(a, b)).toEqual([
 			'Farm "Klipfontein" added (10 km², drains into Outlet)',
-			'Rooikloof: return flow 10% → 15%',
+			'Rooikloof: irrigation efficiency 80% → 85%',
 			'Bergwater Suid: renamed from "Bergwater"',
 			'Bergwater Suid: drains into Rooikloof (was Outlet)'
 		]);
 		expect(texts(a, c)).toEqual(['Farm "Bergwater" removed']);
+	});
+
+	it('reads a run saved before engine 0.14.0 as migration 006 stored it: return flow % → efficiency (N1)', () => {
+		const old = snapshot();
+		for (const n of old.model.nodes as unknown as Record<string, unknown>[]) {
+			delete n.irrigationEfficiency;
+			delete n.lossReturnFraction;
+			n.returnFlowPct = n.kind === 'farm' ? 0.1 : 0;
+		}
+		// r = 0.1 became e = 0.9 with every loss returning: the same model, no line.
+		const migrated = snapshot();
+		for (const n of migrated.model.nodes) Object.assign(n, n.kind === 'farm' ? { irrigationEfficiency: 0.9, lossReturnFraction: 1 } : { irrigationEfficiency: 1, lossReturnFraction: 0 });
+		expect(texts(old, migrated)).toEqual([]);
+		// A real change since then is reported against the migrated values.
+		migrated.model.nodes[1]!.irrigationEfficiency = 0.8;
+		expect(texts(old, migrated)).toEqual(['Rooikloof: irrigation efficiency 90% → 80%']);
 	});
 
 	it('describes crops and crop areas in hectares', () => {
