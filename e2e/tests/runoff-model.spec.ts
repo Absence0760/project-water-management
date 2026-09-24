@@ -1,17 +1,18 @@
-// The runoff model choice (issue #4 phase 3): switch a project from the legacy
-// b023 model to GR4J in Settings, run it, read the runoff water balance, and
-// compare it with the legacy run of the same catchment.
+// The runoff model choice (issue #4 phase 3): GR4J is the default, legacy the
+// b023 model still selectable in Settings. Run GR4J, read the runoff water
+// balance, and compare it with the legacy run of the same catchment.
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-test('switching to GR4J shows its parameters, saves them, and a run reports the runoff balance', async ({ page, owner }) => {
+test('GR4J is the default; its parameters save, and a run reports the runoff balance', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'GR4J settings');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
 	const model = page.getByLabel('Runoff model', { exact: true });
-	await expect(model).toHaveValue('legacy');
+	await expect(model).toHaveValue('gr4j');
 	// Legacy shows its own parameters and none of GR4J's.
+	await model.selectOption('legacy');
 	await expect(page.getByLabel(/^Peak-flow coefficient a/)).toBeVisible();
 	await expect(page.getByLabel(/^Production store capacity X1/)).toHaveCount(0);
 
@@ -57,6 +58,7 @@ test('switching to GR4J shows its parameters, saves them, and a run reports the 
 test('a legacy run has no runoff model panel', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Legacy runoff');
+	await updateSettings(page.request, project.id, { runoffModel: 'legacy' });
 	await createRun(page.request, project.id, 'Legacy');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Legacy' })).toBeVisible();
@@ -67,6 +69,7 @@ test('a legacy run has no runoff model panel', async ({ page, owner }) => {
 test('run comparison shows legacy against GR4J on a copy of the project', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Legacy baseline');
+	await updateSettings(page.request, project.id, { runoffModel: 'legacy' });
 	const legacyRun = await createRun(page.request, project.id, 'Legacy');
 	const copy = await copyProject(page.request, project.id, 'GR4J copy');
 	await updateSettings(page.request, copy, { runoffModel: 'gr4j', gr4j: { x1: 300, x2: 0, x3: 60, x4: 1.5, warmupDays: 365 } });

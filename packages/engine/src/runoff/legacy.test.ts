@@ -6,8 +6,8 @@ import { randomInput } from '../testing/fuzz';
 import { NATURAL_FLOW, RUNOFF_MODELS } from '.';
 
 describe('runoff model seam', () => {
-	it('defaults to the legacy model', () => {
-		expect(defaultProjectSettings().runoffModel).toBe('legacy');
+	it('defaults to GR4J, with legacy still selectable', () => {
+		expect(defaultProjectSettings().runoffModel).toBe('gr4j');
 		expect(RUNOFF_MODELS).toContain('legacy');
 		expect(Object.keys(NATURAL_FLOW).sort()).toEqual([...RUNOFF_MODELS].sort());
 	});
@@ -15,7 +15,7 @@ describe('runoff model seam', () => {
 	it('legacy natural flow is computeNaturalFlow, bit for bit', () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i < 30 ? 0 : i % 13 === 0 ? 5 + (i % 7) * 9 : i % 5 === 0 ? 1.5 : 0));
 		const input = randomInput(5);
-		input.settings = { calibration: { ...defaultProjectSettings().calibration, baseFlowInitial: 0 } };
+		input.settings = { runoffModel: 'legacy', calibration: { ...defaultProjectSettings().calibration, baseFlowInitial: 0 } };
 		input.series = { rain_catchment_mm: { startDate: '2020-03-01', values: rain } };
 		const out = runModel(input);
 		const area = input.model.nodes.filter((n) => n.kind === 'farm').reduce((t, n) => t + n.areaKm2, 0);
@@ -28,11 +28,12 @@ describe('runoff model seam', () => {
 		expect(direct.naturalFlowM3Day.slice(0, 30)).toEqual(new Array(30).fill(0));
 	});
 
-	it('an explicit "legacy" gives the same run as the default', () => {
+	it('an explicit "gr4j" gives the same run as the default', () => {
 		for (const seed of [3, 17, 42]) {
 			const input = randomInput(seed);
+			delete input.settings.runoffModel;
 			const explicit = structuredClone(input);
-			explicit.settings.runoffModel = 'legacy';
+			explicit.settings.runoffModel = 'gr4j';
 			expect(JSON.stringify(runModel(explicit))).toBe(JSON.stringify(runModel(input)));
 		}
 	});
@@ -41,8 +42,9 @@ describe('runoff model seam', () => {
 		const input = randomInput(3);
 		(input.settings as Record<string, unknown>).runoffModel = 'pitman';
 		const out = runModel(input);
-		expect(out.summary.warnings).toContain('unknown runoff model "pitman"; using legacy');
+		expect(out.summary.warnings).toContain('unknown runoff model "pitman"; using gr4j');
 		const base = randomInput(3);
+		base.settings.runoffModel = 'gr4j';
 		expect(out.series).toEqual(runModel(base).series);
 	});
 });

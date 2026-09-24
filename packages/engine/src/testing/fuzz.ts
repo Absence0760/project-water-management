@@ -234,6 +234,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		settings.runoffModel = 'gr4j';
 		settings.gr4j = { x1: p.x1!, x2: p.x2!, x3: p.x3!, x4: p.x4!, warmupDays: g.pick([0, 0, 30, 365, 365, 1000]) };
 		settings.panCoefficient = g.bool(0.5) ? monthly(() => 0.7) : monthly(() => (g.bool(0.1) ? 0 : g.float(0.3, 1.2)));
+	} else {
+		// Explicit, so a change of the engine's default doesn't change what a seed runs.
+		settings.runoffModel = 'legacy';
 	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };

@@ -86,9 +86,9 @@ export interface ProjectSettings {
 	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
 	hiLoSplit: { hi: number; lo: number };
 	/**
-	 * Rain → natural-flow model (./runoff). 'legacy' = the b023 recession model
-	 * (./flow.ts), the default until the hydrologist signs off its replacement
-	 * (issue #4); then the setting is removed with the legacy model.
+	 * Rain → natural-flow model (./runoff). 'gr4j' (the default since engine
+	 * 0.11.0) or 'legacy', the b023 recession model (./flow.ts), kept
+	 * selectable to compare with the workbook (issue #4).
 	 */
 	runoffModel: RunoffModelId;
 	/** Parameters of the GR4J runoff model (used when runoffModel = 'gr4j'). */
@@ -179,7 +179,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
-		runoffModel: 'legacy',
+		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		chirpsBiasCorrection: 'monthly',

@@ -109,12 +109,12 @@ export const RUNOFF_MODEL_OPTIONS: { value: RunoffModelId; label: string; help: 
 	{
 		value: 'legacy',
 		label: 'Legacy (b023 recession model)',
-		help: 'The workbook’s own rain-to-flow model, ported unchanged. It does not conserve water at the event scale (engine audit H1); it stays the default until the hydrologist signs off GR4J.'
+		help: 'The workbook’s own rain-to-flow model, ported unchanged. It does not conserve water at the event scale (engine audit H1). Kept to compare with the workbook.'
 	},
 	{
 		value: 'gr4j',
 		label: 'GR4J (Perrin et al. 2003)',
-		help: 'A published daily model with four parameters that conserves water: rain leaves as evaporation or flow, or stays in a store. Needs A-pan evaporation.'
+		help: 'A published daily model with four parameters that conserves water: rain leaves as evaporation or flow, or stays in a store. The default. Needs A-pan evaporation.'
 	}
 ];
 

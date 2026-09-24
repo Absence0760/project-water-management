@@ -54,8 +54,8 @@ describe('SettingsPatch.runoffModel', () => {
 		for (const bad of ['pitman', '', null, 1]) expect(ok(bad), JSON.stringify(bad)).toBe(false);
 	});
 
-	it('defaults to legacy for settings stored before it existed', () => {
-		expect(mergeSettings({}).runoffModel).toBe('legacy');
+	it('defaults to GR4J when none is stored', () => {
+		expect(mergeSettings({}).runoffModel).toBe('gr4j');
 	});
 });
 

@@ -112,8 +112,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366); any subset may be sent.
-  `runoffModel` picks the rain → natural-flow model: `legacy` (the b023
-  recession model, the default) or `gr4j` (engine ≥ 0.5.0; model.md §2.4a).
+  `runoffModel` picks the rain → natural-flow model: `gr4j` (engine ≥ 0.5.0,
+  the default since 0.11.0; model.md §2.4a) or `legacy` (the b023 recession
+  model).
   `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
   (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
   `panCoefficient` is 12 monthly values, each 0–2, in water-year order.

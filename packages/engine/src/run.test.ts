@@ -939,7 +939,8 @@ describe.skipIf(!dataDir)(
 		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
 		// comparison below still tests the port, not the corrected meaning.
 		const modelInput: ModelInput = {
-			settings: project.settings,
+			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
+			settings: { ...project.settings, runoffModel: 'legacy' },
 			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam })) },
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
@@ -1347,7 +1348,7 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		// storm peak and recedes along the slow part of the default curve, giving ~7× the rain volume.
 		const rain = new Array(400).fill(0);
 		rain[1] = 10;
-		const out = runModel(rainInput(rain, '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
+		const out = runModel(rainInput(rain, '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
 		const c = out.summary.catchment.runoffCoefficient!;
 		const natural = get(out, null, 'natural_flow').reduce((a, b) => a + b, 0);
 		expect(c).toBeCloseTo(natural / (10 * 100 * 1000), 9);
@@ -1384,14 +1385,14 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		factors[3] = 1.2;
 		const curve = [...cal.recessionCurveM3Day];
 		curve[10] = curve[9]! + 1;
-		const out = runModel(rainInput([0, 0], '2021-01-01', { calibration: { ...cal, recessionFactors: factors, recessionCurveM3Day: curve } }));
+		const out = runModel(rainInput([0, 0], '2021-01-01', { runoffModel: 'legacy', calibration: { ...cal, recessionFactors: factors, recessionCurveM3Day: curve } }));
 		expect(warns(out, /recession factor 4 is 1.2/)).toHaveLength(1);
 		expect(warns(out, /recession curve rises/)).toHaveLength(1);
 		expect(warns(runModel(rainInput([0, 0], '2021-01-01')), /recession/)).toHaveLength(0);
 	});
 
 	it('P1: natural flow never falls back to a Pitman series, so there is no W5 warning', () => {
-		const i = rainInput([0, 0, 20], '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } });
+		const i = rainInput([0, 0, 20], '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } });
 		(i.series as Record<string, unknown>).flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
 		const out = runModel(i);
 		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([0, 0]);

@@ -67,7 +67,7 @@ describe('GET /projects/:id/model-input', () => {
 		const res = await u.call('GET', `/projects/${projectId}/model-input`);
 		expect(res.status).toBe(200);
 		const input = res.body.input;
-		expect(input.settings.runoffModel).toBe('legacy');
+		expect(input.settings.runoffModel).toBe('gr4j');
 		expect(input.settings.gr4j).toEqual({ x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 });
 		expect(input.model.nodes).toHaveLength(2);
 		expect(Object.keys(input.series)).toEqual(['rain_catchment_mm']);

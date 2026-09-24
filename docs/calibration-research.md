@@ -137,7 +137,7 @@ planned.
 | CR-14 | **Mass-conserving legacy store** (needs the hydrologist, H1). Turn the table into S(Q) through g(Q) = −ln k(Q) and add each rain pulse as volume. Drop the base-flow reset and the size-dependent start index. Add a water-balance invariant: one pulse returns its own volume within 0.1 % at 1, 10 and 100 mm. Bump `ENGINE_VERSION` and add an audit entry. | Kirchner 2009; Lamb & Beven 1997; Fenicia et al. 2006. This removes H1, and the legacy model becomes a one-store relative of GR4J. | 3–5 d | P1, after sign-off |
 | CR-15 | **Fitted recession table with uncertainty.** Fit −dQ/dt = aQ^b to each segment. Bin k by log Q and take the 10th/50th/90th percentiles. Bootstrap by segment. Derive a table from the median and report the bands. Tag segments by season and by whether they come before or after the dams spill, and add back estimated abstraction before fitting. Don't replace the imported table when there are fewer than about 8 segments. | Jachens et al. 2020; McMahon et al. 2026; Wang & Cai 2009; Thomas et al. 2013. | 1–2 wk | P2 |
 | CR-16 | **Recession validation signatures.** Report the skill on withheld segments, BFI by both the Eckhardt and the Hughes et al. (2003) filters (South African reviewers expect the second), and the slope and bias of the low-flow FDC. | Eckhardt 2005; Hughes, Hannart & Watkins 2003; Yilmaz et al. 2008. | ~1 wk | P2 |
-| CR-17 | **Recommend GR4J** for the client catchment until CR-13/14 pass. | GR4J already conserves water. | docs | P3 |
+| CR-17 | **Recommend GR4J** for the client catchment until CR-13/14 pass. | GR4J already conserves water. Done: GR4J is the default since engine 0.11.0. | docs | P3 |
 
 ### Data quality and uncertainty
 

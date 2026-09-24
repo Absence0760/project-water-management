@@ -130,8 +130,9 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 This is the calibrated rain→runoff routine, the engine's `legacy` runoff model
-(`settings.runoffModel = 'legacy'`, the default; `packages/engine/src/runoff/`
-holds the seam every runoff model plugs into, and issue #4 replaces this one).
+(`settings.runoffModel = 'legacy'`; GR4J, §2.4a, has been the default since
+engine 0.11.0. `packages/engine/src/runoff/` holds the seam every runoff model
+plugs into).
 One row runs per day, and each row reads the previous row. Parameters come from `[Flow Calibration Cfg]`. The
 defaults from the blank workbook are shown.
 
@@ -209,8 +210,10 @@ published daily rainfall–runoff model with four parameters. It is written from
 the paper's equations in `packages/engine/src/runoff/gr4j.ts`. The reference
 implementation, the R package airGR, is GPL-2, and no code is taken from it.
 Everything downstream (flow shares, farms, dams, transfers, EWR) is unchanged,
-so the two models compare run against run. Legacy stays the default until the
-hydrologist signs GR4J off (issue #4 phase 6).
+so the two models compare run against run. GR4J is the default since engine
+0.11.0 (the calibration research's CR-17): a project that never picked a model
+runs GR4J. Legacy stays selectable, and a stored run without a runoff model
+predates the setting, so run comparison reads it as legacy.
 
 **Parameters** (`settings.gr4j`). The typical range is Perrin's 80 % range over
 429 catchments; the bounds are enforced by the API and searched by calibration.

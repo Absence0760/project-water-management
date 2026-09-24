@@ -131,7 +131,7 @@ downloaded as CSV.
 The settings are grouped by what they drive:
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, and days in February.
-- **Flow calibration**: the **runoff model** picker (Legacy or GR4J,
+- **Flow calibration**: the **runoff model** picker (GR4J, the default, or Legacy,
   `settings.runoffModel`), the **CHIRPS bias correction** picker
   (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
   month, the default, or raw CHIRPS; it applies to both models and to

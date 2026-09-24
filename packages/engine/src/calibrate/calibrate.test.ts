@@ -99,6 +99,7 @@ describe('prepareCalibration for the legacy model', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 150 && checked < 20; seed++) {
 			const input = randomInput(seed);
+			input.settings.runoffModel = 'legacy';
 			let pb;
 			try {
 				pb = prepareCalibration(input);

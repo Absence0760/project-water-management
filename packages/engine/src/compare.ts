@@ -446,13 +446,18 @@ const CALIBRATION_ARRAYS: Record<string, string> = {
 	recessionCurveM3Day: 'recession curve'
 };
 
-/** Settings as the engine sees them: stored values merged over the defaults. */
+/**
+ * Settings as the engine sees them: stored values merged over the defaults.
+ * A run saved without a runoff model predates the setting (engine 0.5.0), so
+ * it ran legacy, whatever today's default is.
+ */
 function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Record<string, unknown> {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
 	const r = (raw ?? {}) as Record<string, unknown>;
 	return {
 		...d,
 		...r,
+		runoffModel: r.runoffModel ?? 'legacy',
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },

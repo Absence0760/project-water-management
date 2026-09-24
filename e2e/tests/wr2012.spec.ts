@@ -7,9 +7,16 @@ import type { Page } from '@playwright/test';
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-/** WCAG 2.2 A/AA scan of what is on screen (as a11y.spec.ts does). */
-async function expectNoViolations(page: Page) {
-	const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
+/**
+ * WCAG 2.2 A/AA scan of what is on screen (as a11y.spec.ts does), or of one
+ * part of it. Scope a scan made mid-page: axe's target-size rule counts
+ * whatever control is scrolled under the sticky app header as obscured,
+ * which depends on the scroll position rather than the control (focused
+ * controls clear the header through scroll-padding-top).
+ */
+async function expectNoViolations(page: Page, scope?: string) {
+	const axe = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']);
+	const { violations } = await (scope ? axe.include(scope) : axe).analyze();
 	expect(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }))).toEqual([]);
 }
 
@@ -28,7 +35,8 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	// A new reference needs every field before it can be saved.
 	await expect(section.getByText('Enter the quaternary area.')).toBeVisible();
 	await expect(save).toBeDisabled();
-	await expectNoViolations(page);
+	// Checking the box scrolled the page: scan the section under test.
+	await expectNoViolations(page, `section[aria-labelledby="${await section.getAttribute('aria-labelledby')}"]`);
 
 	await section.getByLabel(/^Quaternary catchment/).fill('Z99A');
 	await section.getByLabel(/^Quaternary area/).fill('50');

@@ -59,6 +59,7 @@ describe('engine invariants on random networks', () => {
 		// (Seed 4660 showed it until engine 0.9.0 turned the upstream-to-dam
 		// split round, model.md §3 Q1; 2538 is the first seed that shows it now.)
 		const input = randomInput(2538);
+		input.settings.runoffModel = 'legacy'; // found under legacy flow; the property is the network's, not the runoff model's
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
 			return t[1]! / t[0]!;
