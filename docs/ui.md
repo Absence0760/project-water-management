@@ -123,7 +123,15 @@ Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Uploads read year-last dates (DD/MM/YYYY or
+that series in the chart below. Below 640px wide each row becomes a card
+(series and role on top, then labelled Period / Data up to / Missing /
+Typical, the coverage strip, and the buttons wrapping underneath), so a phone
+never has to scroll the table sideways; explicit table roles keep it a table
+to screen readers, and the card labels are silent to them. For editors the
+**Upload CSV** form follows the series panels in reading order, so on a phone
+it sits right below them rather than after the whole *What the model uses*
+reference (wide screens still show it on the right); the empty state points at
+it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
 summary says so). In number fields, a comma is a thousands separator only in a
