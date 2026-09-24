@@ -212,7 +212,17 @@ export const FitRecord = z
 			.nullable()
 			.default(null),
 		notes: z.array(z.string().max(2000)).max(50),
-		editedParams: z.array(z.string().max(40)).max(30).default([])
+		editedParams: z.array(z.string().max(40)).max(30).default([]),
+		// The evaporation forcing the fit ran under (issue #4 pan-coefficient
+		// provenance): GR4J's parameters trade off against it, so it's held
+		// fixed and recorded, never fitted. Absent on records made before it.
+		forcing: z
+			.object({
+				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
+				apanMm: monthly
+			})
+			.strict()
+			.optional()
 	})
 	.strict();
 
