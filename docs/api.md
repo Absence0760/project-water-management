@@ -125,11 +125,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `scaling` (`area` | `areaRain`), `lowFlowMonths` (calendar months 1–12, at
   least one, or `null` = from each run), `flags` (the whole `{ notePct,
   queryPct, queryWetterPct, unusablePct }`, each 0–1 000 %, note ≤ query ≤
-  unusable and wetter ≤ query) and `calibrationPenalty` (`{ enabled, weight }`,
-  weight 0–10); any subset of these groups may be sent. The reference is also
-  checked for plausibility: with a MAP, the MAR can't exceed MAP × area ÷ 1 000
-  Mm³, and the monthly means must add up to the MAR within 5 %; otherwise
-  `400` naming the field.
+  unusable and wetter ≤ query) and `calibrationPenalty` (`{ enabled, weight,
+  marLowMm3, marHighMm3 }`, weight 0–10, `marLowMm3` / `marHighMm3` each
+  `null` or a number ≥ 0, already at the modelled catchment's scale — both
+  bounds or neither, low ≤ high); any subset of these groups may be sent. The
+  reference is also checked for plausibility: with a MAP, the MAR can't
+  exceed MAP × area ÷ 1 000 Mm³, and the monthly means must add up to the MAR
+  within 5 %; otherwise `400` naming the field.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
@@ -147,13 +149,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
   automatically.
   `fitRecord` is the record of the automatic fit whose parameters Apply wrote
   (`FitRecord` in `packages/engine/src/calibrate/provenance.ts`), or `null`:
-  `{ fittedAt (ISO timestamp), engineVersion, model, objective, seed, budget,
-  evaluations, cancelled, free, params, startParams, flowKind, simulatedKey,
-  calibrationStart, calibrationEnd, exclusions, validate, validationRecord,
-  fit, before, splitSample, differential, independentRecord, marPenalty,
-  notes, editedParams }`, each key required except `marPenalty` (the WR2012
-  MAR penalty result, `null` when it was off, the default) and
-  `editedParams`, and no others.
+  `{ fittedAt (ISO timestamp), engineVersion, model, objective, bounds, seed,
+  budget, evaluations, cancelled, free, params, startParams, flowKind,
+  simulatedKey, calibrationStart, calibrationEnd, exclusions, validate,
+  validationRecord, fit, before, splitSample, differential, independentRecord,
+  marPenalty, notes, editedParams }`, each key required except `marPenalty`
+  (the WR2012 MAR penalty result — `weight, targetMarMm3, marLowMm3,
+  marHighMm3, basis, marRatio, unpenalised`, `null` when it was off, the
+  default) and `editedParams`, and no others. `bounds` is `wide` (the
+  default: each parameter's calibration range) or `typical` (Perrin et al.'s
+  80 % range).
   The fit runs in the browser, so the record is what the client reports; the
   seed and engine version let anyone reproduce it. **The server recomputes
   `editedParams` on every `PATCH`** (fitted parameters whose value in the

@@ -165,6 +165,23 @@ conditions come before any client numbers:
          they differ by about 2×, so use the band between them, not one
          value. Also run a fit bounded to Perrin's 80 % ranges. Report both
          fits beside the free fit.
+
+         **Landed in code (2026-09-24):** the WR2012 calibration penalty
+         (`settings.wr2012.calibrationPenalty`, model.md §2.10c) takes an
+         optional MAR band (`marLowMm3` / `marHighMm3`) instead of one
+         target — zero inside it, a soft pull towards the nearer bound
+         outside it — for exactly this "two disagreeing published estimates"
+         case, validated (both bounds or neither, low ≤ high) by a shared
+         engine function the backend and the Settings form both use, and
+         recorded in the fit record and run comparison's *What changed*.
+         Automatic calibration also takes a `bounds: 'wide' | 'typical'`
+         option (a "Bounds" select in Fit automatically), the second
+         restricting the search to Perrin et al.'s 80 % ranges; it's recorded
+         on the fit record too. Free / typical-bounds / band / both fits
+         against the client logger record, with calibration and validation
+         scores: `data/client-catchment/logger-fit-constrained.md`
+         (gitignored, local only — the repo is public). Items 2–4 below are
+         still open.
       2. **Use the gauge as a regional wet/dry index only.** Use it to rank
          water years for the dry→wet test design and the Phase 9 forcing,
          never as a calibration or validation target for this river.

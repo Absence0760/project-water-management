@@ -682,8 +682,24 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     which rain days reduce demand. The recession tables stay as imported.
 
   Legacy can be fitted too so that the two models are compared calibrated
-  against calibrated (issue #4 phase 6). Bounds are the models' `ParamSpec`
-  min/max (§2.4a for GR4J, `runoff/legacy.ts` `LEGACY_PARAMS` for legacy).
+  against calibrated (issue #4 phase 6).
+- **Bounds** (`CalibrateOptions.bounds`, `CalibrationReport.bounds`; issue #4
+  phase 6 §"make the logger fit identifiable"): the box the search may
+  explore, per parameter.
+  - `'wide'` (default): each `ParamSpec`'s min/max (§2.4a for GR4J,
+    `runoff/legacy.ts` `LEGACY_PARAMS` for legacy).
+  - `'typical'`: Perrin et al.'s (2003) 80 % confidence range (`ParamSpec.typical`)
+    over 429 catchments — for GR4J, X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9
+    days. A short, drought-dominated record often can't pin down X1 and X3, so
+    the free fit can land well outside where GR4J parameters usually sit;
+    restricting the search to the typical range keeps the fit plausible, at
+    the cost of the fit to the observed record when the catchment genuinely
+    falls outside it — read the validation scores under both before trusting
+    one. The starting point is clamped into whichever box is used, so a
+    current value outside `typical` doesn't error.
+
+  Recorded on the report and the fit record, so a run's provenance says which
+  box was searched.
 - **What is scored.** The whole run, exactly as `runModel` scores it:
   runoff model → natural flow → network → simulated outflow for a gauge or
   logger record, or natural flow for Pitman (C1). So the fitted parameters
@@ -764,13 +780,14 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
   stores a `FitRecord` with the parameters: when (`fittedAt`), the engine
-  version, the runoff model, objective, seed, budget and runs used, the
-  parameters fitted and their values before and after, the record fitted to,
-  the calibration window and exclusions, whether validation was asked for and
-  against which independent record, every scored period (the in-sample fit,
-  the split-sample and dry → wet tests, the independent record), the WR2012
-  MAR penalty when it was on (§2.10c: its weight, the simulated MAR ratio
-  and the fit without it) and the notes.
+  version, the runoff model, objective, the bounds searched, seed, budget and
+  runs used, the parameters fitted and their values before and after, the
+  record fitted to, the calibration window and exclusions, whether validation
+  was asked for and against which independent record, every scored period
+  (the in-sample fit, the split-sample and dry → wet tests, the independent
+  record), the WR2012 MAR penalty when it was on (§2.10c: its weight, the MAR
+  band when one was used, the simulated MAR ratio and the fit without it) and
+  the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
   `editedParams` lists fitted parameters whose value in the settings no
   longer matches the fit; the backend recomputes it on every save
@@ -861,15 +878,32 @@ run with it (`RunSummary.wr2012`). It never changes model results.
 - **Other warnings:** no complete water year inside the reference period;
   the scaled MAR larger than the rain on the modelled catchment.
 - **Calibration penalty** (`settings.wr2012.calibrationPenalty`, **off** by
-  default). When on, automatic calibration (§2.10b) adds
-  weight × |ln(simulated natural MAR ÷ scaled WR2012 MAR)| to the loss (1 −
-  score), in every stage. The MAR is taken over the complete water years inside
-  the reference period among the simulated days (else those days). The log
-  makes it symmetric: half is as bad as double. `CalibrationReport.marPenalty`
-  records the weight, the target, the MAR ratio of the fitted parameters, and
-  the **same fit without the penalty** (one more optimisation, stage
-  `unpenalised`, same seed), so its cost to the fit is visible. Default weight
-  0.5, at most 10.
+  default). When on, automatic calibration (§2.10b) adds a term to the loss
+  (1 − score) in every stage, on the simulated natural MAR taken over the
+  complete water years inside the reference period among the simulated days
+  (else those days):
+  - **single target** (default: `marLowMm3` and `marHighMm3` both unset):
+    weight × |ln(simulated natural MAR ÷ scaled WR2012 MAR)|. The log makes it
+    symmetric: half is as bad as double.
+  - **MAR band** (`marLowMm3` / `marHighMm3`, both set, low ≤ high): zero
+    inside `[marLowMm3, marHighMm3]`, else weight × |ln(simulated ÷ the
+    nearer bound)|. Unlike `marMm3` (the quaternary's own figure, scaled to
+    the modelled catchment by area/rain), the band bounds are entered
+    **already at the modelled catchment's scale**: use it when two published
+    natural-MAR estimates for *this* catchment disagree (e.g. a scaled WR2012
+    figure and a quinary estimate, about 2× apart for the client catchment),
+    so there is a range to pull towards instead of one number picked between
+    them. Both-or-neither and low ≤ high are validated (`wr2012PenaltyIssues`,
+    shared by the engine, the backend's zod schema and the Settings form); an
+    invalid band is dropped with a warning and calibration falls back to the
+    single target.
+
+  `CalibrationReport.marPenalty` records the weight, the target (the band's
+  geometric mean when one is set, so it's the point equally far from both
+  bounds in log space), the band bounds (null without one), the MAR ratio of
+  the fitted parameters, and the **same fit without the penalty** (one more
+  optimisation, stage `unpenalised`, same seed), so its cost to the fit is
+  visible. Default weight 0.5, at most 10.
 - **Deterministic:** the same inputs and engine version give an identical
   report (tested).
 

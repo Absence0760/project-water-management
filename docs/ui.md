@@ -158,13 +158,16 @@ The settings are grouped by what they drive:
     coefficient** row. A notice appears when A-pan is 0 in every month.
   - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
     window) fits the selected model's parameters in a Web Worker
-    (`lib/calibration/`). It takes the objective, the model runs per fit
+    (`lib/calibration/`). It takes the objective, **Bounds** (a select: "Wide
+    (default)" — each parameter's full calibration range — or "Typical
+    (Perrin et al. 80 %)" — a tighter, published range, with a hint under it;
+    model.md §2.10b), the model runs per fit
     (default 1 500), the **seed** (default 1; the same seed, data and engine
     version give the same fit, and the seed is recorded), which parameters to
     fit (GR4J X2 only when exchange is on), and whether to validate.
     Validation runs the split-sample and dry → wet tests, which means three
     fits. The fit always leaves out the stored exclusions; the result line
-    gives the seed and the number of excluded periods.
+    gives the bounds, the seed and the number of excluded periods.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to
@@ -200,8 +203,11 @@ The settings are grouped by what they drive:
   - When the WR2012 MAR penalty is on (below) the panel says so, the fit runs
     once more without it (stage "Fitting again without the WR2012 penalty"),
     and the result adds a table (`calibration/MarPenaltyResult.svelte`) with
-    the weight: the objective score, simulated natural MAR ÷ WR2012 and the
-    fitted parameters, with and without the penalty.
+    the weight: the objective score, simulated natural MAR ÷ the target (the
+    scaled WR2012 MAR, or the MAR band when one is set) and the fitted
+    parameters, with and without the penalty. With a band, the row instead
+    reads "Simulated natural MAR ÷ band (low–high Mm³/a)" and the caption
+    below says the penalty is zero inside it.
 - **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
   `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
   naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,
@@ -211,9 +217,15 @@ The settings are grouped by what they drive:
   shows. Then the scaling (area, or area and rainfall; the current area ratio
   is shown), the dry-season months (from each run, or chosen), the four
   deviation thresholds (%), and the calibration penalty (off; weight 0.5).
+  Ticking it shows the weight, then **Use a MAR band instead of one target**:
+  unticked (default), the penalty pulls towards the scaled WR2012 MAR above;
+  ticked, two fields (**Band low** / **Band high**, Mm³/a, already at the
+  modelled catchment's scale — not the quaternary's) replace it, for when two
+  published natural-MAR estimates for the catchment disagree.
   Blank fields and the engine's plausibility checks (MAR above the rain on
-  the quaternary, monthly means more than 5 % off the MAR) show next to the
-  field and block Save, with a count beside the Save button.
+  the quaternary, monthly means more than 5 % off the MAR, a one-sided or
+  inverted band) show next to the field and block Save, with a count beside
+  the Save button.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
   curtailment reporting window.
