@@ -189,3 +189,54 @@ test('large values show thousands separators in the one-node form and the view-o
 	await expect(viewer.page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('300,000');
 	await expect(viewer.page.getByLabel('Dam capacity of Lower farm, m³')).toHaveValue('90,000');
 });
+
+test.describe('network layout', () => {
+	test('the node table fits a 1440px screen, flow share and remove included', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1440, height: 900 });
+		const project = await createProject(page.request, 'Network fit');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+
+		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
+		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
+		// Field headers wrap rather than widen their columns, so nothing is hidden off to the right.
+		const overflow = await table.evaluate((t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth);
+		expect(overflow).toBeLessThanOrEqual(0);
+		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
+		await expect(table.getByRole('button', { name: 'Remove Lower farm' })).toBeInViewport();
+	});
+
+	test.describe('phone', () => {
+		test.use({ viewport: { width: 390, height: 844 } });
+
+		test('a schematic tap brings the one-node form into view, and the picker stays under the header', async ({ page, owner }) => {
+			void owner;
+			const project = await createProject(page.request, 'Network phone');
+			await putModel(page.request, project.id, sampleModel());
+			await page.goto(`/projects/${project.id}?tab=network`);
+
+			// Phones open on the one-node form, below the schematic.
+			const picker = page.getByLabel('Node to edit');
+			await expect(picker.locator('option:checked')).toHaveText('1. Outflow gauge · gauge');
+
+			// Tapping a node on the drawing selects it and brings its form up the screen.
+			await page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' }).click();
+			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · farm');
+			await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
+			await expect.poll(() => picker.evaluate((p) => p.getBoundingClientRect().top)).toBeLessThan(844 * 0.6);
+			await expect(picker).toBeInViewport();
+
+			// Deep in the farm form, the picker and ‹ › are still on screen, just below the app header.
+			await page.getByLabel('Return flow (%)').scrollIntoViewIfNeeded();
+			await expect(picker).toBeInViewport();
+			await expect(page.getByRole('button', { name: 'Next node' })).toBeInViewport();
+			const headerBottom = await page.getByRole('banner').evaluate((h) => h.getBoundingClientRect().bottom);
+			const pickerTop = await picker.evaluate((p) => p.getBoundingClientRect().top);
+			expect(pickerTop).toBeGreaterThanOrEqual(headerBottom);
+			await page.getByRole('button', { name: 'Next node' }).click();
+			await expect(picker.locator('option:checked')).toHaveText('3. Lower farm · farm');
+			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		});
+	});
+});
