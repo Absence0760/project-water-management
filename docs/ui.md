@@ -324,11 +324,19 @@ The settings are grouped by what they drive:
 
 ## Runs & results
 
-- A **Result sections** menu under the run's title links to each panel
-  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`). Farm
-  detail appears only when the run has farms, and Runoff model only for a
-  GR4J run. The page's `scroll-padding-top` keeps
-  a jumped-to section, or a focused control, clear of the sticky header.
+- **The rail.** On wide screens (over 900px) a left rail holds the runs
+  list and, below it, an **On this page** menu (the "Result sections"
+  navigation) linking to each panel (`#res-summary` … `#res-explore`, listed
+  by `runs/sections.ts`). The rail is sticky, so the menu stays in view down
+  the long results page, and it marks the section being read with
+  `aria-current="location"` (scroll spy: `activeSectionId`, the last section
+  whose top has passed under the sticky header, or the last one at the
+  bottom of the page). A long runs list scrolls inside its panel so the menu
+  stays in reach. Narrower, the rail stacks above the results and the menu
+  becomes wrapping chips. Farm detail appears only when the run has farms,
+  and Runoff model only for a GR4J run. The page's `scroll-padding-top`
+  keeps a jumped-to section, or a focused control, clear of the sticky
+  header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall series. While a run is going it shows progress.
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the

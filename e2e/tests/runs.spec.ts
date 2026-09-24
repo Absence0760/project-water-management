@@ -102,6 +102,15 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Explore outputs'
 	]);
 
+	// The menu sits in the rail beside the results and stays in view as the page scrolls,
+	// marking the section being read.
+	await expect(menu.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
+	await menu.getByRole('link', { name: 'Hydrograph' }).click();
+	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ })).toBeInViewport();
+	await expect(menu).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Summary' })).not.toHaveAttribute('aria-current', 'location');
+
 	await menu.getByRole('link', { name: 'Farm detail' }).click();
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
 	const farm = page.getByRole('region', { name: 'Farm detail' });

@@ -23,7 +23,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Wr2012Panel from './Wr2012Panel.svelte';
-	import { resultSections } from './sections';
+	import { activeSectionId, resultSections } from './sections';
 
 	let {
 		projectId,
@@ -209,6 +209,40 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	});
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
+	// The rail's in-page menu, and which section is being read (scroll spy).
+	const sections = $derived(detail ? resultSections(detail.run.summary) : []);
+	let activeSection = $state<string | null>(null);
+	$effect(() => {
+		const ids = sections.map((x) => x.id);
+		if (!ids.length) return;
+		let frame = 0;
+		const update = () => {
+			frame = 0;
+			const root = document.documentElement;
+			// A section counts as reached once its top passes under the sticky header.
+			const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
+			const tops = ids.flatMap((id) => {
+				const el = document.getElementById(id);
+				return el ? [{ id, top: el.getBoundingClientRect().top }] : [];
+			});
+			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2);
+		};
+		const schedule = () => {
+			if (!frame) frame = requestAnimationFrame(update);
+		};
+		update();
+		window.addEventListener('scroll', schedule, { passive: true });
+		window.addEventListener('resize', schedule);
+		// Panels below load their charts after the summary, which moves every later section.
+		const grow = new ResizeObserver(schedule);
+		grow.observe(document.body);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener('scroll', schedule);
+			window.removeEventListener('resize', schedule);
+			grow.disconnect();
+		};
+	});
 	const downloadItems = $derived(
 		detail ? runDownloadItems(downloads, projectId, detail.run.id, editor.model.nodes.map((n) => ({ id: n.id, name: n.name }))) : []
 	);
@@ -249,43 +283,58 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
 
 <div class="layout">
-	<section class="panel list" aria-labelledby="runs-h">
-		<div class="panel-head">
-			<h2 id="runs-h">Runs</h2>
-			{#if runs.length >= 2}
-				<a class="small" href="{base}/compare?project={encodeURIComponent(projectId)}">Compare runs</a>
-			{:else if runs.length}
-				<span class="muted small">{runs.length} stored</span>
-			{/if}
-		</div>
-		{#if loading}
-			<ul class="runs skeleton" aria-hidden="true">
-				{#each [0, 1] as i (i)}<li><span class="sk sk-line"></span><span class="sk sk-short"></span></li>{/each}
-			</ul>
-			<p class="visually-hidden" role="status">Loading runs…</p>
-		{:else if loadError}
-			<div class="alert alert-error" role="alert">
-				{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+	<!-- The rail: the runs list, then an in-page menu of the result panels. It
+	     stays in view beside the long results page (sticky on wide screens) and
+	     marks the section being read. -->
+	<aside class="rail">
+		<section class="panel list" aria-labelledby="runs-h">
+			<div class="panel-head">
+				<h2 id="runs-h">Runs</h2>
+				{#if runs.length >= 2}
+					<a class="small" href="{base}/compare?project={encodeURIComponent(projectId)}">Compare runs</a>
+				{:else if runs.length}
+					<span class="muted small">{runs.length} stored</span>
+				{/if}
 			</div>
-		{:else if runs.length === 0}
-			<p class="empty">{canRun ? 'No runs yet. Run the model to see results.' : 'No runs yet.'}</p>
-		{:else}
-			<ul class="runs">
-				{#each runs as r, i (r.id)}
-					<li class:active={r.id === selectedId}>
-						<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
-							<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}</span>
-							<span class="meta">{r.startDate} → {r.endDate}</span>
-							<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
-						</button>
-						{#if canRun}
-							<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
-						{/if}
-					</li>
-				{/each}
-			</ul>
+			{#if loading}
+				<ul class="runs skeleton" aria-hidden="true">
+					{#each [0, 1] as i (i)}<li><span class="sk sk-line"></span><span class="sk sk-short"></span></li>{/each}
+				</ul>
+				<p class="visually-hidden" role="status">Loading runs…</p>
+			{:else if loadError}
+				<div class="alert alert-error" role="alert">
+					{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
+				</div>
+			{:else if runs.length === 0}
+				<p class="empty">{canRun ? 'No runs yet. Run the model to see results.' : 'No runs yet.'}</p>
+			{:else}
+				<ul class="runs">
+					{#each runs as r, i (r.id)}
+						<li class:active={r.id === selectedId}>
+							<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
+								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}</span>
+								<span class="meta">{r.startDate} → {r.endDate}</span>
+								<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
+							</button>
+							{#if canRun}
+								<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+		{#if sections.length}
+			<nav class="panel sections" aria-label="Result sections">
+				<h2 class="rail-h">On this page</h2>
+				<ul>
+					{#each sections as sec (sec.id)}
+						<li><a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{sec.label}</a></li>
+					{/each}
+				</ul>
+			</nav>
 		{/if}
-	</section>
+	</aside>
 
 	<div class="detail">
 		{#if detailError && !detail}
@@ -312,13 +361,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					</div>
 					<DownloadMenu items={downloadItems} />
 				</div>
-				<nav class="sections" aria-label="Result sections">
-					<ul>
-						{#each resultSections(detail.run.summary) as sec (sec.id)}
-							<li><a href="#{sec.id}">{sec.label}</a></li>
-						{/each}
-					</ul>
-				</nav>
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
@@ -492,9 +534,29 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	}
 	.layout {
 		display: grid;
-		grid-template-columns: 280px minmax(0, 1fr);
+		grid-template-columns: 250px minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
+	}
+	.rail {
+		display: grid;
+		gap: 1rem;
+		min-width: 0;
+	}
+	/* Wide screens: the rail rides along beside the results, scrolling on its own if taller than the window. */
+	@media (min-width: 901px) {
+		.rail {
+			position: sticky;
+			top: calc(var(--header-h) + 0.75rem);
+			max-height: calc(100vh - var(--header-h) - 1.5rem);
+			overflow-y: auto;
+			overscroll-behavior: contain;
+		}
+		/* A long runs list scrolls inside its panel, so the menu below stays in reach. */
+		.rail .runs {
+			max-height: 16rem;
+			overflow-y: auto;
+		}
 	}
 	@media (max-width: 900px) {
 		.layout {
@@ -538,11 +600,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	.pick:hover {
 		background: var(--row-hover);
 	}
+	/* Labels wrap rather than truncate, so the "latest" and legacy badges stay readable in the narrow rail. */
 	.lbl {
 		font-weight: 600;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.latest {
 		font-size: 0.68rem;
@@ -581,33 +642,57 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		text-align: center;
 		padding: 3rem 1rem;
 	}
-	/* In-page menu: the results run to about ten panels. */
+	/* In-page menu: the results run to about fifteen panels. A vertical list in
+	   the rail on wide screens, wrapping chips above the results on narrow ones. */
+	.rail-h {
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+		margin: 0 0 0.4rem;
+	}
 	.sections ul {
 		list-style: none;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		margin: 0 0 0.9rem;
+		margin: 0;
 		padding: 0;
 	}
 	.sections a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 28px;
-		padding: 0 0.6rem;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		font-size: 0.8rem;
+		display: block;
+		padding: 0.3rem 0.6rem;
+		border-left: 2px solid var(--border);
+		font-size: 0.85rem;
 		color: var(--text-2);
 		text-decoration: none;
 	}
 	.sections a:hover {
-		border-color: var(--accent);
 		color: var(--accent);
+		border-left-color: var(--accent);
 	}
-	@media (max-width: 640px) {
+	.sections a[aria-current='location'] {
+		color: var(--accent);
+		border-left-color: var(--accent);
+		background: var(--accent-soft);
+		font-weight: 600;
+	}
+	@media (max-width: 900px) {
+		.sections ul {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.35rem;
+		}
 		.sections a {
+			display: inline-flex;
+			align-items: center;
 			min-height: 36px;
+			padding: 0 0.6rem;
+			border: 1px solid var(--border);
+			border-radius: 999px;
+			font-size: 0.8rem;
+		}
+		.sections a:hover,
+		.sections a[aria-current='location'] {
+			border-color: var(--accent);
 		}
 	}
 	.agree {
