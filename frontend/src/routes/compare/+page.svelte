@@ -13,6 +13,8 @@
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
+	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
+	import { asFitRecord } from '$lib/components/compare/fit';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, type RunRef } from '$lib/components/compare/picker';
 	import { fmtDate } from '$lib/format/number';
@@ -260,6 +262,7 @@
 					<section class="panel" aria-labelledby="headline-h">
 						<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
 						<HeadlineDeltas comparison={data.comparison} />
+						<FitValidationCompare a={asFitRecord(data.a.run.inputs.settings?.fitRecord)} b={asFitRecord(data.b.run.inputs.settings?.fitRecord)} />
 					</section>
 
 					<section class="panel" aria-labelledby="ewr-agreement-h">

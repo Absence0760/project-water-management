@@ -238,9 +238,9 @@ The settings are grouped by what they drive:
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met, irrigation
   supplied, and NSE and PBIAS with Moriasi (2007) ratings
   (`runs/rating.ts`), labelled **calibration period (in-sample)**: they are
-  scored on the days the parameters were tuned on. Runs don't store
-  validation scores; the split-sample and wet/dry-year tests appear only in
-  Settings → Fit automatically ([followups.md](./followups.md)). Below them is the per-farm table: sortable, in network
+  scored on the days the parameters were tuned on. When the parameters came
+  from Fit automatically, the fit's validation scores sit beside the in-sample
+  one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text.
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or

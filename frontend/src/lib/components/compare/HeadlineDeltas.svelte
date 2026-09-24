@@ -86,9 +86,9 @@
 		<h3>Calibration against observed flow</h3>
 		{#if calibration.length}
 			<p class="muted small in-sample">
-				Calibration period (in-sample): each run is scored on the days its parameters were tuned on. Runs don't store
-				validation scores; see <a href="#ewr-agreement-h">the EWR test against observed flow</a> below for a check the fit
-				didn't optimise.
+				Calibration period (in-sample): each run is scored on the days its parameters were tuned on. The validation scores of
+				the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the EWR test against
+				observed flow</a> below is a check the fit didn't optimise.
 			</p>
 			{@render table(calibration, 'Calibration statistics for both runs, calibration period (in-sample)')}
 		{:else}

@@ -1,0 +1,39 @@
+<script lang="ts">
+	// Each run's fit record side by side (issue #4): which fit produced its
+	// parameters, its in-sample score and its validation scores.
+	import { fitValidationRows, type FitValidationRow } from './fit';
+	import type { FitRecord } from '@water-management/engine';
+
+	let { a, b }: { a: FitRecord | null; b: FitRecord | null } = $props();
+	const rows = $derived<FitValidationRow[] | null>(fitValidationRows(a, b));
+</script>
+
+<h3>Fit and validation</h3>
+{#if rows}
+	<p class="muted small">
+		From each run’s fit record: the score its parameters got on the calibration period they were fitted to (in-sample), and on days they
+		never saw. Judge the fit by the validation rows.
+	</p>
+	<div class="table-wrap">
+		<table class="data compact">
+			<caption class="visually-hidden">Fit and validation for both runs</caption>
+			<thead><tr><th scope="col">Fit record</th><th scope="col">Run A</th><th scope="col">Run B</th></tr></thead>
+			<tbody>
+				{#each rows as r (r.label)}
+					<tr><th scope="row">{r.label}</th><td>{r.a}</td><td>{r.b}</td></tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{:else}
+	<p class="muted small">Neither run’s parameters come from Fit automatically, so there are no validation scores to show.</p>
+{/if}
+
+<style>
+	h3 {
+		margin: 1rem 0 0.25rem;
+	}
+	.small {
+		font-size: 0.8rem;
+	}
+</style>

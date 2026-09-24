@@ -51,7 +51,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(prov.getByText('Parameters edited since fit')).toHaveCount(0);
 });
 
-test('editing a fitted parameter by hand marks the fit record as edited, in the form, once saved, and on the run', async ({ page, owner }) => {
+test('editing a fitted parameter by hand marks the fit record as edited: in the form, once saved, on the run and in run comparison', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Fit edited');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
@@ -61,6 +61,10 @@ test('editing a fitted parameter by hand marks the fit record as edited, in the 
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
 	await expect(record.getByText('This fit was not validated', { exact: false })).toBeVisible();
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	const fittedRun = await createRun(page.request, project.id, 'Fitted');
+
 	const x1 = page.getByLabel(/^Production store capacity X1/);
 	const fitted = Number((await x1.inputValue()).replace(/,/g, ''));
 	await x1.fill(String(Math.round(fitted) === 1234 ? 1235 : 1234));
@@ -73,11 +77,17 @@ test('editing a fitted parameter by hand marks the fit record as edited, in the 
 	await page.reload();
 	await expect(page.getByRole('region', { name: /^Fit record of these parameters/ }).getByText('Parameters edited since fit')).toBeVisible();
 
-	await createRun(page.request, project.id, 'Hand-tuned');
+	const tunedRun = await createRun(page.request, project.id, 'Hand-tuned');
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Hand-tuned' })).toBeVisible();
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
 	await expect(prov.getByText('Parameters edited since fit')).toBeVisible();
+
+	await page.goto(`/compare?a=${project.id}:${fittedRun}&b=${project.id}:${tunedRun}`);
+	await expect(page.getByText('Fit record: parameters edited since the fit (x1)')).toBeVisible();
+	const fits = page.getByRole('table', { name: 'Fit and validation for both runs' });
+	await expect(fits.getByRole('row', { name: /^Parameters edited since fit/ })).toHaveText(/no\s*yes \(x1\)$/);
+	await expect(fits.getByRole('row', { name: /^Split-sample: other half/ })).toContainText('not run');
 });
 
 test('a calibration exclusion needs a reason, and shows in What changed and on the run', async ({ page, owner }) => {

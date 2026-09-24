@@ -1,0 +1,60 @@
+import type { FitRecord, FitScores } from '@water-management/engine';
+import { describe, expect, it } from 'vitest';
+import { asFitRecord, fitValidationRows } from './fit';
+
+const scores = (v: number): FitScores => ({
+	days: 100,
+	kgePrime: v,
+	kgeYearly: null,
+	kgeNp: v,
+	nse: v,
+	nseSqrt: v,
+	nseLog: v,
+	volumeErrorPct: 0,
+	fdcHighPct: 0,
+	fdcMidSlopePct: 0,
+	fdcLowPct: 0
+});
+const period = (v: number) => ({ start: '2013-01-01', end: '2014-12-31', waterYears: [2012, 2013], scores: scores(v) });
+
+const record = (over: Partial<FitRecord> = {}): FitRecord =>
+	({
+		fittedAt: '2026-09-24T10:05:00.000Z',
+		model: 'gr4j',
+		objective: 'kgePrime',
+		seed: 7,
+		fit: period(0.81),
+		before: period(0.2),
+		splitSample: { params: {}, calibration: period(0.8), validation: period(0.456) },
+		differential: null,
+		independentRecord: null,
+		editedParams: [],
+		...over
+	}) as FitRecord;
+
+const row = (rows: ReturnType<typeof fitValidationRows>, label: string) => rows!.find((r) => r.label === label)!;
+
+describe('fitValidationRows', () => {
+	it('puts each run’s in-sample score next to its validation scores', () => {
+		const rows = fitValidationRows(record(), record({ seed: 8, editedParams: ['x1'] }));
+		expect(row(rows, 'Fit')).toEqual({ label: 'Fit', a: 'GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 7)', b: 'GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 8)' });
+		expect(row(rows, 'Calibration period (in-sample)')).toMatchObject({ a: '0.81', b: '0.81' });
+		expect(row(rows, 'Split-sample: other half')).toMatchObject({ a: '0.46', b: '0.46' });
+		expect(row(rows, 'Dry → wet: wet years')).toMatchObject({ a: 'not run', b: 'not run' });
+		expect(row(rows, 'Parameters edited since fit')).toMatchObject({ a: 'no', b: 'yes (x1)' });
+	});
+
+	it('says when a run has no fit record, and returns null when neither has', () => {
+		const rows = fitValidationRows(null, record());
+		expect(row(rows, 'Fit').a).toMatch(/^none/);
+		expect(row(rows, 'Calibration period (in-sample)').a).toBe('–');
+		expect(fitValidationRows(null, null)).toBeNull();
+	});
+});
+
+describe('asFitRecord', () => {
+	it('takes a stored record and nothing else', () => {
+		expect(asFitRecord(record())).not.toBeNull();
+		for (const v of [null, undefined, {}, 'x', { fittedAt: 'x' }]) expect(asFitRecord(v)).toBeNull();
+	});
+});

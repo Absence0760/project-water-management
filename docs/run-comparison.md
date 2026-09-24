@@ -38,8 +38,11 @@ The page has these sections, top to bottom:
    calibration statistics (KGE, NSE, percent bias, RMSE) for A and B side by
    side, with the change. The calibration table is labelled **calibration
    period (in-sample)**: each run is scored on the days its parameters were
-   tuned on. Runs don't store validation scores, so none are shown
-   ([followups.md](./followups.md)). To judge the runoff models against each other, copy
+   tuned on. Under it, **Fit and validation** sets each run's fit record side
+   by side: the fit (model, time, objective, seed), its in-sample score, its
+   split-sample, wet-year and independent-record scores ("not run" when that
+   test wasn't), and whether the parameters were edited since the fit. A run
+   whose parameters didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
    and compare them. The input diff then reads *"Runoff model: legacy (b023
    recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
