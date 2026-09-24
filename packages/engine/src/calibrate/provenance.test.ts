@@ -8,6 +8,7 @@ import {
 	exclusionError,
 	exclusionLabel,
 	exclusionRange,
+	exclusionsError,
 	fitRecordCaveats,
 	fitRecordFromReport,
 	fitRecordStatus,
@@ -91,6 +92,13 @@ describe('calibration exclusions', () => {
 		expect(sanitizeExclusions(undefined, warnings)).toEqual([]);
 		expect(sanitizeExclusions({}, warnings)).toEqual([]);
 		expect(warnings.at(-1)).toMatch(/not a list/);
+	});
+
+	it('checks a list: the first bad entry, by position, and the same period twice', () => {
+		expect(exclusionsError([])).toBeNull();
+		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { start: '2015-10-01', end: '2016-09-30', reason: 'b' }])).toBeNull();
+		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { waterYear: 2016, reason: '' }])).toBe('Exclusion 2: needs a reason');
+		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { waterYear: 2015, reason: 'b' }])).toBe('Exclusion 2: WY 2015/16 is listed twice');
 	});
 
 	it('marks the excluded days of a run, clipped to it', () => {

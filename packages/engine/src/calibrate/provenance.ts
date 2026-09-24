@@ -63,6 +63,23 @@ export function exclusionError(x: unknown): string | null {
 	return o.start > o.end ? 'ends before it starts' : null;
 }
 
+/** What identifies an exclusion (its period): the same period can't be listed twice. */
+export const exclusionKey = (x: CalibrationExclusion): string => ('waterYear' in x ? `wy:${x.waterYear}` : `${x.start}/${x.end}`);
+
+/** The first problem with a list of exclusions ("Exclusion 2: needs a reason"), or null. */
+export function exclusionsError(list: readonly unknown[]): string | null {
+	if (list.length > EXCLUSIONS_MAX) return `at most ${EXCLUSIONS_MAX} exclusions`;
+	const seen = new Set<string>();
+	for (let i = 0; i < list.length; i++) {
+		const err = exclusionError(list[i]);
+		if (err) return `Exclusion ${i + 1}: ${err}`;
+		const key = exclusionKey(list[i] as CalibrationExclusion);
+		if (seen.has(key)) return `Exclusion ${i + 1}: ${exclusionLabel(list[i] as CalibrationExclusion)} is listed twice`;
+		seen.add(key);
+	}
+	return null;
+}
+
 /**
  * Stored exclusions as the engine uses them: invalid entries are dropped with
  * a warning (the backend rejects them on save; this guards older or imported

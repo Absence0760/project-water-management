@@ -8,7 +8,7 @@
 // (across copies). See docs/run-comparison.md.
 import { fromEpochDay, toEpochDay } from './calendar';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
-import { exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
+import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import {
 	defaultProjectSettings,
@@ -592,8 +592,6 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 	}
 	return out;
 }
-
-const exclusionKey = (x: CalibrationExclusion) => ('waterYear' in x ? `wy:${x.waterYear}` : `${x.start}/${x.end}`);
 
 /** Calibration exclusions added, removed, or given another reason (matched by their period). */
 function diffExclusions(ra: unknown, rb: unknown): InputChange[] {

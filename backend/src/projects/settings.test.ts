@@ -244,6 +244,7 @@ describe('SettingsPatch.calibrationExclusions', () => {
 			[{ start: '2017-03-01', end: '2017-02-01', reason: 'x' }],
 			[{ start: '2017-03-01', reason: 'x' }],
 			[{ waterYear: 2015, reason: 'x', note: 'y' }],
+			[{ waterYear: 2015, reason: 'x' }, { waterYear: 2015, reason: 'again' }],
 			new Array(101).fill({ waterYear: 2015, reason: 'x' }),
 			{ waterYear: 2015, reason: 'x' },
 			null

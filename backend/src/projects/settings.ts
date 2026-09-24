@@ -4,6 +4,7 @@ import {
 	defaultProjectSettings,
 	EXCLUSION_REASON_MAX,
 	exclusionError,
+	exclusionKey,
 	EXCLUSIONS_MAX,
 	GR4J_PARAMS,
 	OBJECTIVES,
@@ -108,6 +109,12 @@ export const CalibrationExclusion = z
 		if (err) ctx.addIssue({ code: 'custom', message: `calibration exclusion ${err}` });
 	});
 
+/** At most EXCLUSIONS_MAX, and no period listed twice. */
+const ExclusionList = z
+	.array(CalibrationExclusion)
+	.max(EXCLUSIONS_MAX)
+	.refine((list) => new Set(list.map(exclusionKey)).size === list.length, 'a calibration exclusion period is listed twice');
+
 const scoreValue = z.number().finite().nullable();
 const ScoredPeriod = z
 	.object({
@@ -144,7 +151,7 @@ export const FitRecord = z
 		simulatedKey: z.enum(['natural_flow', 'simulated_outflow']),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
-		exclusions: z.array(CalibrationExclusion).max(EXCLUSIONS_MAX),
+		exclusions: ExclusionList,
 		validate: z.boolean(),
 		validationRecord: flowKind.nullable(),
 		fit: ScoredPeriod,
@@ -204,7 +211,7 @@ export const SettingsPatch = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
-		calibrationExclusions: z.array(CalibrationExclusion).max(EXCLUSIONS_MAX),
+		calibrationExclusions: ExclusionList,
 		fitRecord: FitRecord.nullable(),
 		// Gauge-vs-logger thresholds (engine resolveDataQuality). Each bound is
 		// checked on its own (min ≤ 1 ≤ max), so any subset can be patched.
