@@ -9,6 +9,7 @@ import {
 	type RunInputsSnapshot
 } from './compare';
 import { defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary } from './project';
+import { ewrAgreement } from './network/ewrAgreement';
 
 // Synthetic catchment — invented names and values only (public repo).
 
@@ -206,6 +207,38 @@ describe('compareRuns', () => {
 		expect(c.calibration!.kge.delta).toBeCloseTo(0.32, 12);
 		// Runs saved before either figure existed compare as missing, not as 0.
 		expect(compareRuns(run(summary([], { calibration: cal })), gr4j).calibration!.kge).toEqual({ a: null, b: 0.62, delta: null });
+	});
+
+	it('compares the EWR agreement with the observed record, legacy against GR4J (issue #4)', () => {
+		const catchment = summary([]).catchment;
+		// Synthetic tables over the same 100 observed days; the river was below the EWR on 20.
+		const legacyTable = ewrAgreement(
+			[...new Array(60).fill(50), ...new Array(40).fill(200)],
+			[...new Array(20).fill(50 / 86_400), ...new Array(80).fill(200 / 86_400)],
+			new Array(100).fill(100),
+			{ startDate: '2020-01-01' }
+		);
+		const gr4jTable = ewrAgreement(
+			[...new Array(18).fill(50), ...new Array(82).fill(200)],
+			[...new Array(20).fill(50 / 86_400), ...new Array(80).fill(200 / 86_400)],
+			new Array(100).fill(100),
+			{ startDate: '2020-01-01' }
+		);
+		const legacy = run(summary([], { catchment: { ...catchment, ewrAgreement: legacyTable } }));
+		const gr4j = run(summary([], { catchment: { ...catchment, ewrAgreement: gr4jTable } }));
+		const c = compareRuns(legacy, gr4j).ewrAgreement!;
+		expect(c.frequencyBias).toEqual({ a: 3, b: 0.9, delta: 0.9 - 3 });
+		expect(c.hitRate.a).toBe(1);
+		expect(c.hitRate.b).toBeCloseTo(0.9, 12);
+		expect(c.falseAlarmRatio.a).toBeCloseTo(40 / 60, 12);
+		expect(c.falseAlarmRatio.b).toBe(0);
+		expect(c.days).toEqual({ a: 100, b: 100, delta: 0 });
+		// Older runs (no table), no observed record (null) or no observed day compare as missing.
+		expect(compareRuns(run(summary([])), run(summary([]))).ewrAgreement).toBeNull();
+		const none = run(summary([], { catchment: { ...catchment, ewrAgreement: null } }));
+		expect(compareRuns(none, gr4j).ewrAgreement!.frequencyBias).toEqual({ a: null, b: 0.9, delta: null });
+		const empty = ewrAgreement([1], [null], [1], { startDate: '2020-01-01' });
+		expect(compareRuns(run(summary([], { catchment: { ...catchment, ewrAgreement: empty } })), none).ewrAgreement).toBeNull();
 	});
 
 	it('calibration is null when neither run has usable statistics, one-sided otherwise', () => {

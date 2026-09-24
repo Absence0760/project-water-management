@@ -447,6 +447,56 @@ describe('runModel — EWR', () => {
 	});
 });
 
+describe('runModel — EWR agreement with the observed record (issue #4)', () => {
+	// One farm into gauge G; EWR 150 m³/day. Natural flow 100/300/100/300 → the
+	// outflow is below the EWR on days 0 and 2. Observed (m³/s): below on 0 and 1.
+	const nodes = [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 1 })];
+	const settings = { ewrPragmaticM3PerDay: flat(150) as Monthly };
+	const natural = [100, 300, 100, 300];
+
+	it('cross-tabulates the outlet EWR test on observed days, next to ewrDaysNotMet', () => {
+		const out = run({ nodes, natural, settings, observed: [50 / 86_400, 50 / 86_400, null, 300 / 86_400] });
+		const a = out.summary.catchment.ewrAgreement!;
+		expect(out.summary.catchment.ewrDaysNotMet).toBe(2);
+		// Day 2 has no observation, so it is skipped even though the model fails it.
+		expect(a.days).toBe(3);
+		expect(a.overall).toMatchObject({ bothBelow: 1, falseAlarm: 0, miss: 1, bothAbove: 1 });
+		expect(a.overall.hitRate).toBe(0.5);
+		expect(a.overall.frequencyBias).toBe(0.5);
+		expect(a.byMonth[3]!.days).toBe(3); // January
+	});
+
+	it('scores every observed day, not only the calibration window', () => {
+		const out = run({
+			nodes,
+			natural,
+			settings: { ...settings, calibrationStart: '2020-01-04', calibrationEnd: null },
+			observed: [50 / 86_400, 50 / 86_400, 50 / 86_400, 300 / 86_400]
+		});
+		expect(out.summary.calibration!.days).toBe(1);
+		expect(out.summary.catchment.ewrAgreement!.days).toBe(4);
+	});
+
+	it('is null without an observed record, and for naturalised Pitman flow', () => {
+		expect(run({ nodes, natural, settings }).summary.catchment.ewrAgreement).toBeNull();
+		const i = input({ nodes, natural, settings });
+		i.series.flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 1, 1, 1] };
+		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
+		const pitman = runModelWith(i, () => ({ naturalFlowM3Day: natural }));
+		expect(pitman.summary.calibration!.flowKind).toBe('flow_pitman_m3s');
+		expect(pitman.summary.catchment.ewrAgreement).toBeNull();
+	});
+
+	it('uses the chosen logger record', () => {
+		const i = input({ nodes, natural, settings, observed: [300 / 86_400, 300 / 86_400, 300 / 86_400, 300 / 86_400] });
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: [50 / 86_400, null, null, null] };
+		i.settings.calibrationFlowKind = 'flow_logger_m3s';
+		const a = runModelWith(i, () => ({ naturalFlowM3Day: natural })).summary.catchment.ewrAgreement!;
+		expect(a.days).toBe(1);
+		expect(a.overall.bothBelow).toBe(1);
+	});
+});
+
 describe('runModel — EWR at a confluence gauge (audit G1)', () => {
 	it("a gauge's shortfall is its own flow against its own requirement, not the sum of its branches' shortfalls", () => {
 		// A stores all its runoff (outflow 0, 100 short of its 100 EWR share); B passes

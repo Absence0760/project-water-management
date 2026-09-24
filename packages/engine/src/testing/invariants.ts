@@ -231,6 +231,31 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		if (b) return b;
 	}
 
+	// EWR agreement with the observed record: it counts every observed day once,
+	// the model side is exactly the outlet test, and the breakdowns add back up.
+	const ag = out.summary.catchment.ewrAgreement;
+	const obsSeries = get.get('null|observed_flow');
+	if (ag) {
+		if (!obsSeries) return 'EWR agreement without an observed_flow series';
+		const shortDaily = get.get('null|ewr_shortfall')!;
+		let observed = 0;
+		let modelBelow = 0;
+		for (let t = 0; t < out.days; t++) {
+			if (!Number.isFinite(obsSeries[t]!)) continue;
+			observed++;
+			if (shortDaily[t]! < 0) modelBelow++;
+		}
+		const o = ag.overall;
+		if (ag.days + ag.excludedDays !== observed || o.days !== ag.days) return `EWR agreement: ${ag.days} days counted, ${observed} observed`;
+		if (o.bothBelow + o.falseAlarm + o.miss + o.bothAbove !== o.days) return 'EWR agreement: the 2×2 cells do not add up to its days';
+		if (o.bothBelow + o.falseAlarm !== modelBelow) return `EWR agreement: model below on ${o.bothBelow + o.falseAlarm} days, the outlet test on ${modelBelow}`;
+		for (const k of ['days', 'bothBelow', 'falseAlarm', 'miss', 'bothAbove'] as const) {
+			if (sum(ag.byMonth.map((m) => m[k])) !== o[k] || sum(ag.byWaterYear.map((y) => y[k])) !== o[k]) return `EWR agreement: ${k} by month / water year ≠ overall`;
+		}
+	} else if (obsSeries && out.summary.calibration?.simulatedKey !== 'natural_flow') {
+		return 'EWR agreement missing although the run has a gauge or logger record';
+	}
+
 	// FarmSummary: whole-run means of the daily series.
 	for (const f of out.summary.farms) {
 		const dm = sum(get.get(`${f.nodeId}|demand`)!) / out.days;

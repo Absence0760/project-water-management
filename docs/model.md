@@ -421,6 +421,56 @@ the Element sheets or `[EWR shortfalls]` (for example a farm whose daily AB is
 constant through a February shows a monthly sum that is not 28 × that value).
 Where the volumes are current, the running-total counts match exactly.
 
+### 2.9b EWR agreement with the observed record (engine ≥ 0.5.2, issue #4)
+
+The two runoff models can disagree strongly on how many days the EWR is not
+met at the outlet. The count alone can't say which is right, but the observed
+record can. A gauge or logger measures the same **impacted outflow** the
+outlet EWR test uses, so on every day with an observation the river can take
+the same test as the model. `ewrAgreement` (`network/ewrAgreement.ts`)
+cross-tabulates the two answers:
+
+| | Observed below the EWR | Observed at or above |
+| --- | --- | --- |
+| **Model below the EWR** | both below (hit) | false alarm |
+| **Model at or above** | miss | both above |
+
+"Below" is exactly the outlet test behind `ewrDaysNotMet`: `MIN(flow − EWR,
+0) < 0`, with float noise counted as met (`shortfall`, `belowEwr`). Observed
+flow is converted from m³/s to m³/day first. From the table:
+
+| Score | Formula | Reads as |
+| --- | --- | --- |
+| Hit rate | both below ÷ (both below + miss) | share of the river's failures the model also shows; 1 is ideal |
+| False-alarm ratio | false alarm ÷ (both below + false alarm) | share of the model's failures the river didn't have; 0 is ideal |
+| Frequency bias | (both below + false alarm) ÷ (both below + miss) | the model's share of days below ÷ the observed share; 1 = unbiased, > 1 = the model fails the EWR too often |
+
+A ratio whose denominator is 0 is null (for example no observed failure in a
+month). The table is given **overall, per calendar month** (water-year order,
+Oct … Sep) **and per water year**, so a model that is right on average but
+wrong in the dry season shows up.
+
+- **Which days.** Every day in the run with a finite observation. Missing days
+  are skipped. The run scores the whole observed record, not only the
+  calibration window: the parameters are fitted to flows, not to this test,
+  and days outside the window are out-of-sample evidence. The function takes
+  an optional window and **calibration exclusions** (`exclusions`, the same
+  shape as the automatic calibration's); excluded observed days are counted
+  in `excludedDays`, not scored. `runModel` passes none, because exclusions
+  are not saved with the project yet (only the automatic-calibration dialog
+  holds them).
+- **Which record.** The one `pickObservedKind` chooses (§2.10). Pitman flow is
+  naturalised, so it can't take the outlet test and the agreement is `null`,
+  as it is when the project has no observed record.
+- **Where it lives.** `RunSummary.catchment.ewrAgreement`, next to
+  `ewrDaysNotMet`; absent on runs saved before 0.5.2. Run comparison carries
+  the overall scores of both runs (`RunComparison.ewrAgreement`).
+- **How to use it.** Copy the project, set one copy to GR4J, run both, and
+  compare: the model with frequency bias nearer 1, the higher hit rate and the
+  lower false-alarm ratio reproduces the river's EWR failures better. Note that
+  on days inside the calibration window the scores are partly in-sample: the
+  same days were used to fit the flows.
+
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:
@@ -929,7 +979,7 @@ as text:
 | --- | --- |
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
-| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with return flows set to 0, doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |

@@ -101,6 +101,10 @@ warning.
 - Catchment `ewr` = `settings.ewrPragmaticM3PerDay` for the day's water-year
   month; `ewr_shortfall` = MIN(simulated outflow − EWR, 0);
   `ewrDaysNotMet` counts days where it is negative ([Flow data] AJ/AK).
+- `ewrAgreement` (`ewrAgreement.ts`, engine ≥ 0.5.2): the same "below the
+  EWR" test on the observed gauge/logger record vs the simulated outflow, as a
+  2×2 table with hit rate, false-alarm ratio and frequency bias, overall, per
+  month and per water year ([model.md §2.9b](../../../../docs/model.md)).
 - `FarmSummary`: averages over the whole run of demand, supplied and deficit
   (demand − supplied); `fractionSupplied` = supplied / demand (1 when there is
   no demand); `avgEwrShortfallM3Day` = −mean(AB), a positive volume (the

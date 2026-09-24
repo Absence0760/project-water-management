@@ -23,6 +23,7 @@ import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
+import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
 import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
@@ -206,6 +207,15 @@ export function runModelWith(
 		);
 	}
 
+	// The outlet EWR test on the observed record (issue #4): a gauge or logger
+	// measures the same impacted outflow, so on each observed day compare the
+	// model's "below the EWR" with the river's. Every observed day in the run
+	// counts, not just the calibration window: the parameters were fitted to
+	// flows, and days outside the window are the out-of-sample evidence.
+	// Pitman flow is naturalised and can't take this test.
+	const ewrObserved =
+		observedKind && !scoreNatural ? ewrAgreement(simOutflow, observedM3s, ewr, { startDate }) : null;
+
 	// Input data quality: do the two observed flow records agree? Are there
 	// impossible or suspicious values? Do the farm areas add up?
 	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
@@ -242,7 +252,8 @@ export function runModelWith(
 				meanSimulatedOutflowM3Day: mean(simOutflow),
 				runoffCoefficient,
 				ewrDaysNotMet,
-				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
+				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0,
+				ewrAgreement: ewrObserved
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
 			calibration,

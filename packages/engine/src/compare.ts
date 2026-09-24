@@ -97,7 +97,20 @@ export interface RunComparison {
 		/** Natural flow ÷ rain over the run (absent on runs saved before engine 0.4.0). */
 		runoffCoefficient: MetricDelta;
 	};
-	/** null when neither run has calibration statistics. */
+	/**
+	 * The outlet EWR test on each run's observed record (engine ≥ 0.5.2):
+	 * null when neither run has one. Each run's full tables stay in its
+	 * summary (summary.catchment.ewrAgreement).
+	 */
+	ewrAgreement: {
+		days: MetricDelta;
+		hitRate: MetricDelta;
+		falseAlarmRatio: MetricDelta;
+		frequencyBias: MetricDelta;
+		modelFractionBelow: MetricDelta;
+		observedFractionBelow: MetricDelta;
+	} | null;
+	/** null when neither run has calibration statistics (whole-record, in-sample scores). */
 	calibration: {
 		days: MetricDelta;
 		nse: MetricDelta;
@@ -227,6 +240,8 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	const ca = a.summary.catchment;
 	const cb = b.summary.catchment;
 	const cal = (s: CalibrationStats | null | undefined) => (s && s.days > 0 ? s : null);
+	const ea = ca?.ewrAgreement && ca.ewrAgreement.days > 0 ? ca.ewrAgreement.overall : null;
+	const eb = cb?.ewrAgreement && cb.ewrAgreement.days > 0 ? cb.ewrAgreement.overall : null;
 	const ka = cal(a.summary.calibration);
 	const kb = cal(b.summary.calibration);
 
@@ -250,6 +265,17 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 			ewrFractionDaysNotMet: metricDelta(ca?.ewrFractionDaysNotMet, cb?.ewrFractionDaysNotMet),
 			runoffCoefficient: metricDelta(ca?.runoffCoefficient, cb?.runoffCoefficient)
 		},
+		ewrAgreement:
+			ea || eb
+				? {
+						days: metricDelta(ea?.days, eb?.days),
+						hitRate: metricDelta(ea?.hitRate, eb?.hitRate),
+						falseAlarmRatio: metricDelta(ea?.falseAlarmRatio, eb?.falseAlarmRatio),
+						frequencyBias: metricDelta(ea?.frequencyBias, eb?.frequencyBias),
+						modelFractionBelow: metricDelta(ea?.modelFractionBelow, eb?.modelFractionBelow),
+						observedFractionBelow: metricDelta(ea?.observedFractionBelow, eb?.observedFractionBelow)
+					}
+				: null,
 		calibration:
 			ka || kb
 				? {

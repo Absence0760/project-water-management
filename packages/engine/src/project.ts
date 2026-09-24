@@ -415,6 +415,53 @@ export interface EwrCompliance {
 }
 
 /**
+ * One 2×2 table of "simulated outflow below the EWR" against "observed flow
+ * below the EWR" (network/ewrAgreement.ts), with its scores. Ratios are null
+ * when their denominator is 0.
+ */
+export interface EwrAgreementScores {
+	/** Observed days counted. */
+	days: number;
+	/** Both below the EWR (a hit). */
+	bothBelow: number;
+	/** The model is below, the river was not (a false alarm). */
+	falseAlarm: number;
+	/** The river was below, the model is not (a miss). */
+	miss: number;
+	/** Both at or above the EWR. */
+	bothAbove: number;
+	/** Probability of detection: bothBelow ÷ (bothBelow + miss). */
+	hitRate: number | null;
+	/** falseAlarm ÷ (bothBelow + falseAlarm). */
+	falseAlarmRatio: number | null;
+	/** Model share of days below ÷ observed share: (bothBelow + falseAlarm) ÷ (bothBelow + miss). 1 = unbiased. */
+	frequencyBias: number | null;
+	/** Share of the counted days the model is below the EWR. */
+	modelFractionBelow: number | null;
+	/** Share of the counted days the observed flow is below the EWR. */
+	observedFractionBelow: number | null;
+}
+
+/**
+ * Does the model fail the EWR on the days the river did (engine ≥ 0.5.2,
+ * issue #4)? The outlet EWR test applied to the observed gauge/logger record
+ * and to the simulated outflow on every day with an observation.
+ */
+export interface EwrAgreement {
+	/** Days counted (observed, inside any window, outside every exclusion). */
+	days: number;
+	/** Observed days left out by an exclusion. */
+	excludedDays: number;
+	firstObservedDate: string | null;
+	lastObservedDate: string | null;
+	overall: EwrAgreementScores;
+	/** Per calendar month, water-year order: index 0 = Oct … 11 = Sep. */
+	byMonth: EwrAgreementScores[];
+	/** Per water year (labelled by the calendar year it starts in), years with counted days only. */
+	byWaterYear: (EwrAgreementScores & { waterYear: number })[];
+}
+
+/**
  * One farm's row of the curtailment report (b023 [Shortfalls], workbook column
  * in brackets). Averages are over the reporting window. Nothing is rounded
  * (the sheet rounds and truncates; docs/engine-audit.md R1) — round for display.
@@ -512,6 +559,13 @@ export interface RunSummary {
 		runoffCoefficient?: number | null;
 		ewrDaysNotMet: number;
 		ewrFractionDaysNotMet: number;
+		/**
+		 * The outlet EWR test on the observed record vs the simulated outflow
+		 * (engine ≥ 0.5.2). null when the run has no gauge or logger record
+		 * (Pitman flow is naturalised, so it can't take the outlet test); absent
+		 * on older runs.
+		 */
+		ewrAgreement?: EwrAgreement | null;
 	};
 	calibration: CalibrationStats | null;
 	/**
