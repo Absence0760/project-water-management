@@ -1,14 +1,15 @@
 <!--
 	"Fit automatically" (issue #4 phase 5): fits the selected runoff model's
 	parameters to the observed record in a Web Worker, shows the fit next to
-	its validation, and can write the result into the Settings form. It never
-	saves: the user reviews the form and saves it.
+	its validation, and can write the result into the Settings form, with a
+	fit record of how it was made (issue #4). It never saves: the user reviews
+	the form and saves it.
 -->
 <script lang="ts">
-	import { OBJECTIVES, type CalibrationFlowKind, type CalibrationProgress, type CalibrationReport, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
+	import { OBJECTIVES, type CalibrationFlowKind, type CalibrationProgress, type CalibrationReport, type FitRecord, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { api } from '$lib/api';
-	import { fitInput, fitParams, marPenaltyOn, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
+	import { fitInput, fitParams, fitRecordFor, marPenaltyOn, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
@@ -41,13 +42,17 @@
 		/** The record the fit uses, as the form stands (null = the default pick). */
 		calibrationFlowKind?: CalibrationFlowKind | null;
 		readonly: boolean;
-		onApply: (report: CalibrationReport) => void;
+		/** Writes the fit into the form, with its record (never saves). */
+		onApply: (report: CalibrationReport, record: FitRecord) => void;
 	} = $props();
 
 	const uid = $props.id();
 	let objective = $state<ObjectiveId>('kgePrime');
 	let budget = $state<number | null>(1500);
 	let validate = $state(true);
+	// Shown and recorded: the same seed, inputs and engine version reproduce the fit.
+	let seed = $state<number | null>(1);
+	const seedProblem = $derived(seedError(seed));
 	let validationRecord = $state<CalibrationFlowKind | null>(null);
 	// Offered only when the project has both a gauge and a logger record.
 	const recordOptions = $derived(validationRecordOptions(seriesKinds, calibrationFlowKind));
@@ -59,6 +64,8 @@
 	let report = $state.raw<CalibrationReport | null>(null);
 	let error = $state<string | null>(null);
 	let handle: FitHandle | null = null;
+	// What the shown report was run on, for its fit record.
+	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null } | null = null;
 
 	const params = $derived(fitParams(runoffModel, x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
@@ -71,24 +78,27 @@
 	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
 	const runs = $derived(totalRuns(budget ?? 0, validate, penalty));
-	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && status !== 'running' && status !== 'loading');
+	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && status !== 'running' && status !== 'loading');
 	const columns = $derived(report ? scoreColumns(report) : []);
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty)) : 0);
 	// A report for another model than the form now shows can't be applied.
 	const stale = $derived(report !== null && report.model !== runoffModel);
 
 	async function start() {
-		if (!canStart || budget === null) return;
+		if (!canStart || budget === null || seed === null) return;
 		status = 'loading';
 		error = null;
 		report = null;
 		progress = null;
 		try {
 			const server = await api.runs.modelInput(projectId);
-			const input = fitInput(server, settings(), model?.());
+			const form = settings();
+			const input = fitInput(server, form, model?.());
+			const context = { settings: form, validate, validationRecord: chosenRecord };
 			status = 'running';
-			handle = startFit({ input, model: runoffModel, objective, budget, free, validate, seed: 1, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
+			handle = startFit({ input, model: runoffModel, objective, budget, free, validate, seed, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
+			ran = context;
 			status = 'done';
 		} catch (e) {
 			if (e instanceof FitCancelled) {
@@ -107,7 +117,7 @@
 	}
 
 	function apply() {
-		if (report && !stale) onApply(report);
+		if (report && ran && !stale) onApply(report, fitRecordFor(report, ran.settings, ran));
 	}
 
 	const fmtScore = (v: number | null, unit: '' | '%') => (v === null ? '–' : unit === '%' ? `${v > 0 ? '+' : ''}${fmtNum(v, 1)}%` : fmtNum(v, 2));
@@ -138,6 +148,11 @@
 				<label for="{uid}-budget">Model runs per fit</label>
 				<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
 				<span class="hint" id="{uid}-budget-h">{fmtNum(runs)} runs in all. Default 1 500.</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-seed">Seed</label>
+				<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
+				<span class="hint" id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
 			</div>
 			<fieldset class="plain params">
 				<legend>Parameters to fit</legend>
@@ -203,7 +218,7 @@
 			<div class="result" aria-live="polite">
 				<h4>Result</h4>
 				<p class="small muted">
-					{objectiveName(report.objective)} · {fmtNum(report.evaluations)} runs · fitted against the {report.simulatedKey === 'natural_flow' ? 'natural flow' : 'simulated outflow'}
+					{objectiveName(report.objective)} · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the {report.simulatedKey === 'natural_flow' ? 'natural flow' : 'simulated outflow'}
 				</p>
 				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
 				{#if stale}<p class="alert alert-info small">This fit is for the other runoff model; switch back to apply it.</p>{/if}
@@ -251,7 +266,7 @@
 				{#if !readonly}
 					<div class="row">
 						<button type="button" class="btn btn-primary" onclick={apply} disabled={stale}>Apply to form</button>
-						<span class="muted small">Fills in the fitted parameters; nothing is saved until you press Save settings.</span>
+						<span class="muted small">Fills in the fitted parameters and records this fit with them; nothing is saved until you press Save settings.</span>
 					</div>
 				{/if}
 			</div>

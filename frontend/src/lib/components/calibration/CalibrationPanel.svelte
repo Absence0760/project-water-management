@@ -45,7 +45,13 @@
 <section class="calibration" aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Calibration against observed flow</h3>
 
-	{#if !calibration || calibration.days === 0}
+	{#if calibration && calibration.days === 0 && calibration.excludedDays}
+		<p class="muted">
+			Every observed day inside the calibration window falls in a calibration exclusion
+			({calibration.exclusions?.map((x) => `${x.start} – ${x.end}: ${x.reason}`).join('; ')}), so there are no calibration statistics.
+			Change the exclusions in Settings.
+		</p>
+	{:else if !calibration || calibration.days === 0}
 		<p class="muted">
 			No observed flow falls inside the calibration window{requestedStart || requestedEnd
 				? ` (${describeWindow(requestedStart, requestedEnd)})`
@@ -77,6 +83,15 @@
 			{/if}
 			{#if calibration.simulatedKey}
 				<div><dt>Scored against</dt><dd>{SIMULATED_LABEL[calibration.simulatedKey]}</dd></div>
+			{/if}
+			{#if calibration.exclusions?.length}
+				<div>
+					<dt>Excluded</dt>
+					<dd>
+						{fmtNum(calibration.excludedDays ?? 0)} observed days in
+						{calibration.exclusions.map((x) => `${x.start} – ${x.end} (${x.reason})`).join('; ')}
+					</dd>
+				</div>
 			{/if}
 		</dl>
 

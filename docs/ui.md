@@ -136,10 +136,16 @@ The settings are grouped by what they drive:
   (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
   month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)), the
-  catchment area (blank = the sum of the farm areas, which is shown), and the
-  calibration window and flow series. A run that corrected CHIRPS lists the
-  monthly factors and the number of days in its warnings. The rest depends on
-  the model:
+  catchment area (blank = the sum of the farm areas, which is shown), the
+  calibration window and flow series, and the **calibration exclusions**
+  (`calibration/CalibrationExclusions.svelte`): "Exclude a water year" and
+  "Exclude a date range" add a row, each with a required **Reason**. A water
+  year shows the dates it covers ("WY 2015/16: 2015-10-01 – 2016-09-30"). A
+  blank reason, a reversed range or a period listed twice shows an alert and
+  blocks Save. Excluded days are left out of Fit automatically and the run's
+  calibration statistics (model.md §2.10). A run that corrected CHIRPS lists
+  the monthly factors and the number of days in its warnings. The rest
+  depends on the model:
   - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
     months as toggles. **Advanced** holds the winter switch, the recession
     parameters and the 80-value recession tables.
@@ -153,18 +159,18 @@ The settings are grouped by what they drive:
   - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
     window) fits the selected model's parameters in a Web Worker
     (`lib/calibration/`). It takes the objective, the model runs per fit
-    (default 1 500), which parameters to fit (GR4J X2 only when exchange is
-    on), and whether to validate. Validation runs the split-sample and dry →
-    wet tests, which means three fits.
+    (default 1 500), the **seed** (default 1; the same seed, data and engine
+    version give the same fit, and the seed is recorded), which parameters to
+    fit (GR4J X2 only when exchange is on), and whether to validate.
+    Validation runs the split-sample and dry → wet tests, which means three
+    fits. The fit always leaves out the stored exclusions; the result line
+    gives the seed and the number of excluded periods.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to
     "No other record". Choosing one adds an independent-record column: the
     fitted parameters scored against that record over its own days (model.md
     §2.10b). It costs no extra fit.
-  - Not in the panel yet: exclusion periods. The engine takes them
-    (`exclusions`, for example a whole bad water year), but the fit only
-    honours the calibration window.
   - While it runs there is a progress bar (`role="progressbar"`) with the
     stage and the best score so far. **Cancel** stops the worker at once and
     discards it.
@@ -177,7 +183,17 @@ The settings are grouped by what they drive:
     years interleave and are listed ("WY 2014/15, 2016/17"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
   - **Apply to form** (editors only) writes the fitted parameters into the
-    form, which then shows "Unsaved settings". Nothing is stored until Save.
+    form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
+    the form then shows "Unsaved settings". Nothing is stored until Save.
+    Below the panel, **Fit record of these parameters**
+    (`calibration/FitProvenance.svelte`) shows the record: model and time,
+    objective, seed, model runs, engine version, the record and window fitted
+    to, the exclusions, the fitted values, and a table with the in-sample
+    score ("Calibration period (in-sample)") next to each validation score,
+    plus the notes. Editing a fitted parameter by hand shows a **Parameters
+    edited since fit** badge and names the parameters at once; the server
+    records the same on save. A change of runoff model, window, exclusions or
+    flow series since the fit is called out too.
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -229,7 +245,16 @@ The settings are grouped by what they drive:
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
   the full period), the calibration panel (it opens with the same
-  in-sample note, and adds the gauge vs logger table when years disagree), the **runoff model** panel for GR4J runs (`RunoffPanel`:
+  in-sample note, and adds the gauge vs logger table when years disagree),
+  then **Where the parameters came from**: the fit record the
+  run was made with, from the run's own settings snapshot (same layout as in
+  Settings, with the in-sample score beside its validation scores and the
+  "Parameters edited since fit" badge when they were edited), or "No fit
+  record" when the parameters were set by hand or imported. It also lists the
+  calibration exclusions the run's statistics left out, which the calibration
+  panel shows as "Excluded" with the observed days removed (or explains that
+  every observed day was excluded). The calibration window shown is the run's,
+  not today's. Then the **runoff model** panel for GR4J runs (`RunoffPanel`:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
   `runs/runoff.ts`), and the production and routing stores through time),

@@ -29,7 +29,9 @@ The page has these sections, top to bottom:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,
    *"Crop "Apples" added to Bergwater (40 ha)"*,
    *"Calibration peak flow coefficient a: 0.09 → 0.12"*,
-   *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*.
+   *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*,
+   *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
+   *"Fit record: parameters edited since the fit (x1)"*.
 3. **Headline results.** Total irrigation supplied and deficit, share of demand
    supplied, farms below 95 % supplied, EWR days not met, mean outflow and
    natural flow, the runoff coefficient (natural flow ÷ rain), and the
@@ -112,7 +114,17 @@ window, the calibration window and flow series, and the gauge-vs-logger
 thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
-one-day range. Settings keys the engine doesn't know yet still appear as
+one-day range.
+
+**Calibration provenance.** Calibration exclusions are matched by their
+period (a water year, or a start–end range): one added or removed is listed
+with its reason, and a new reason for the same period reads *"reason “…” →
+“…”"*. The fit record each run carries (model.md §2.10b) is compared as a
+whole: *"Parameters now from a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed
+7)"* when one run has none, *"Fit record: … → …"* for a different fit (time,
+model or seed), and *"Fit record: parameters edited since the fit (x1)"* when
+the same fit's parameters were edited by hand in between (or *"back to the
+fitted values"*). A parameter edit itself still has its own line. Settings keys the engine doesn't know yet still appear as
 *Setting "x" changed*.
 
 ## Where the code lives

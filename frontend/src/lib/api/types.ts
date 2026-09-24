@@ -111,6 +111,11 @@ export interface RunMeta {
 
 export interface Run extends RunMeta {
 	summary: RunSummary;
+	/**
+	 * The settings the run used (GET …/runs/:runId only): its fit record and
+	 * calibration exclusions are the provenance of its parameters and scores.
+	 */
+	settings?: Partial<ProjectSettings> & Record<string, unknown>;
 }
 
 /** One output series available for a run (values fetched separately). */

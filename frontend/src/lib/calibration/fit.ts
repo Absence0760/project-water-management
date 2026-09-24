@@ -3,8 +3,11 @@
 // the worker (./autocal.worker.ts) and the panel (FitPanel.svelte) are thin.
 import {
 	CALIBRATION_PARAMS,
+	ENGINE_VERSION,
+	fitRecordFromReport,
 	OBJECTIVE_LABELS,
 	waterYearLabel,
+	type FitRecord,
 	type CalibrationFlowKind,
 	type CalibrationProgress,
 	type CalibrationReport,
@@ -118,8 +121,11 @@ export interface ScoreColumn {
 	validation: boolean;
 }
 
+/** What a score table is built from: a fresh report, or a stored fit record (same shape). */
+export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample' | 'differential' | 'independentRecord'>;
+
 /** The report's periods as table columns: before, fitted, then each test's calibration and validation part. */
-export function scoreColumns(r: CalibrationReport): ScoreColumn[] {
+export function scoreColumns(r: ScoredFit): ScoreColumn[] {
 	const p = (x: { start: string; end: string }) => `${x.start} – ${x.end}`;
 	const cols: ScoreColumn[] = [
 		{ id: 'before', label: 'Current parameters', period: p(r.before), scores: r.before.scores, validation: false },
@@ -162,3 +168,34 @@ export function applyReport<S extends Pick<ProjectSettings, 'gr4j' | 'calibratio
 		? { ...settings, gr4j: { ...settings.gr4j, ...fitted } }
 		: { ...settings, calibration: { ...settings.calibration, ...fitted } };
 }
+
+/** Largest seed: the engine's generator takes a 32-bit integer. */
+export const SEED_MAX = 2 ** 31 - 1;
+
+/** Why a seed can't be used, or null. */
+export function seedError(seed: number | null): string | null {
+	if (seed === null) return 'Enter a seed.';
+	return Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? null : `The seed must be a whole number from 0 to ${SEED_MAX.toLocaleString('en-US')}.`;
+}
+
+/**
+ * The fit record Apply stores with the parameters: the report plus the form
+ * it ran on (window, exclusions), whether validation was asked for, the
+ * engine version and the time.
+ */
+export function fitRecordFor(
+	r: CalibrationReport,
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions'>,
+	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date }
+): FitRecord {
+	return fitRecordFromReport(r, {
+		settings,
+		validate: opts.validate,
+		validationRecord: opts.validationRecord,
+		engineVersion: ENGINE_VERSION,
+		fittedAt: (opts.now ?? new Date()).toISOString()
+	});
+}
+
+/** "2026-09-24 10:05 UTC" for a fit record's ISO timestamp. */
+export const fittedAtText = (iso: string) => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC');

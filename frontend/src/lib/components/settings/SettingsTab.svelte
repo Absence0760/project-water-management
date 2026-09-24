@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { CALIBRATION_FLOW_KINDS, type CalibrationParams, type CalibrationReport, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
+	import { CALIBRATION_FLOW_KINDS, type CalibrationParams, type CalibrationReport, type FitRecord, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
 	import { applyReport } from '$lib/calibration/fit';
+	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
+	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import { api, type Project } from '$lib/api';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -75,12 +77,13 @@
 	);
 	const hasInvalidList = $derived(Object.values(listInvalid).some(Boolean));
 	let calWindowError = $state<string | null>(null);
+	let exclusionsError = $state<string | null>(null);
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	let wr2012Error = $state<string | null>(null);
-	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError || !!dqError || !!wr2012Error);
+	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!reportError || !!dqError || !!wr2012Error);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -108,9 +111,9 @@
 		if (!open) s.gr4j.x2 = 0;
 	}
 
-	/** Writes a fit's parameters into the form (unsaved). */
-	function applyFit(report: CalibrationReport) {
-		s = applyReport(s, report);
+	/** Writes a fit's parameters, and its record, into the form (unsaved). */
+	function applyFit(report: CalibrationReport, record: FitRecord) {
+		s = { ...applyReport(s, report), fitRecord: record };
 		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
 	}
 
@@ -344,6 +347,7 @@
 				{readonly}
 				availableKinds={seriesKinds}
 			/>
+			<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
 		</div>
 
 		<FitPanel
@@ -358,6 +362,9 @@
 			{readonly}
 			onApply={applyFit}
 		/>
+		{#if s.fitRecord}
+			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" />
+		{/if}
 
 		{#if !isGr4j}
 			<details class="advanced">

@@ -628,6 +628,28 @@ export const HELP: HelpEntry[] = [
 		source: 'docs/model.md § WR2012 check; issue #4 phase 8'
 	},
 	{
+		id: 'calibration-exclusions',
+		term: 'Calibration exclusions',
+		short: 'Water years or date ranges left out of every calibration score, each with a reason that runs keep on record.',
+		long: 'Use one for a period whose data you can’t trust: a suspect rain year, the gauge after a known break, an outage. Excluded days are left out of Fit automatically and of the run’s calibration statistics alike; the model still simulates them. A water year runs from 1 October to 30 September. A reason is required, every run stores the exclusions it applied, and comparing two runs lists any exclusion added, removed or re-reasoned, so dropping an awkward period always leaves a record.',
+		category: 'fit',
+		aliases: ['excluded periods', 'exclude water year', 'bad years'],
+		fields: ['settings.calibrationExclusions', 'stats.exclusions', 'stats.excludedDays'],
+		related: ['calibration-window', 'auto-calibration'],
+		source: 'Not in the workbook; docs/model.md §2.10'
+	},
+	{
+		id: 'fit-record',
+		term: 'Fit record',
+		short: 'What “Apply to form” stores with fitted parameters: how the fit was made and how it scored on days it never saw.',
+		long: 'The record keeps the runoff model, objective, seed, model runs per fit, calibration window, exclusions, the record fitted to, the engine version and the time, with every score: the in-sample fit and the split-sample, dry → wet and independent-record validation. The same inputs, engine version and seed give the same fit, so anyone can reproduce it. Each run keeps the record in effect, so its results show which fit produced their parameters. Change a fitted parameter by hand and the record is marked “parameters edited since fit”: it no longer describes them. The in-sample score is the fit to the calibration period; judge the parameters by the validation scores.',
+		category: 'fit',
+		aliases: ['fit provenance', 'seed', 'parameters edited since fit'],
+		fields: ['settings.fitRecord'],
+		related: ['auto-calibration', 'calibration-exclusions'],
+		source: 'docs/model.md §2.10b'
+	},
+	{
 		id: 'catchment-area',
 		term: 'Catchment area (rain)',
 		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the farm areas.',

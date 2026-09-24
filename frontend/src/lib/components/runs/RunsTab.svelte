@@ -6,6 +6,7 @@
 	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
+	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
 import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
@@ -311,6 +312,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<CurtailmentTable summary={detail.run.summary} {farmNames} />
 			</section>
 			{@const summary = detail.run.summary}
+			<!-- The run's own settings: older cached details lack them, so fall back to the project's. -->
+			{@const shownSettings = detail.run.settings}
+			{@const runSettings = shownSettings ?? project.settings}
 			{@const runSeries = detail.series}
 			{@const shownRunId = detail.run.id}
 			<RunCharts
@@ -326,9 +330,14 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					<div class="panel" id="res-calibration">
 						<CalibrationPanel
 							calibration={summary.calibration}
-							requestedStart={project.settings.calibrationStart}
-							requestedEnd={project.settings.calibrationEnd}
+							requestedStart={runSettings.calibrationStart ?? null}
+							requestedEnd={runSettings.calibrationEnd ?? null}
 						/>
+						{#if shownSettings}
+							<div class="provenance">
+								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} />
+							</div>
+						{/if}
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
@@ -376,6 +385,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 </div>
 
 <style>
+	.provenance {
+		margin-top: 1rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
+	}
 	.run-bar {
 		position: relative;
 		display: flex;

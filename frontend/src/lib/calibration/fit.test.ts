@@ -1,6 +1,6 @@
-import { calibrate, defaultProjectSettings, type CalibrationReport, type ModelInput } from '@water-management/engine';
+import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, type CalibrationReport, type ModelInput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyReport, fitInput, fitParams, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions, waterYearsText } from './fit';
+import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
 const scores = (kge: number) => ({
 	days: 100,
@@ -212,5 +212,49 @@ describe('applyReport', () => {
 		const r = calibrate(input, { budget: 80, validate: false });
 		const applied: ModelInput = { ...input, settings: applyReport(input.settings as ReturnType<typeof defaultProjectSettings>, r) as unknown as ModelInput['settings'] };
 		expect(calibrate(applied, { budget: 1, validate: false }).before.scores.kgePrime).toBeCloseTo(r.fit.scores.kgePrime!, 12);
+		// The record Apply stores describes the applied settings exactly: nothing edited, nothing changed.
+		const settings = applied.settings as ReturnType<typeof defaultProjectSettings>;
+		const record = fitRecordFor(r, settings, { validate: false, validationRecord: null });
+		expect(fitRecordStatus(settings, record)).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false });
+	});
+});
+
+describe('seedError', () => {
+	it('takes whole numbers 0 … 2³¹ − 1', () => {
+		for (const ok of [0, 1, 42, SEED_MAX]) expect(seedError(ok), String(ok)).toBeNull();
+		expect(seedError(null)).toBe('Enter a seed.');
+		for (const bad of [-1, 1.5, SEED_MAX + 1, NaN]) expect(seedError(bad), String(bad)).toMatch(/whole number/);
+	});
+});
+
+describe('fitRecordFor', () => {
+	it('records the report with the form it ran on, the engine version and the time', () => {
+		const form = { ...defaultProjectSettings(), calibrationStart: '2014-10-01', calibrationExclusions: [{ waterYear: 2016, reason: 'suspect rain' }] };
+		const r = report({ seed: 99, notes: ['A note.'], splitSample: { params: {}, calibration: period('2013-01-01', '2015-12-31', 0.8), validation: period('2016-01-01', '2018-12-31', 0.4) } });
+		const rec = fitRecordFor(r, form, { validate: true, validationRecord: 'flow_logger_m3s', now: new Date('2026-09-24T10:05:33.120Z') });
+		expect(rec).toMatchObject({
+			fittedAt: '2026-09-24T10:05:33.120Z',
+			engineVersion: ENGINE_VERSION,
+			seed: 99,
+			budget: 100,
+			objective: 'kgePrime',
+			calibrationStart: '2014-10-01',
+			calibrationEnd: null,
+			exclusions: [{ waterYear: 2016, reason: 'suspect rain' }],
+			validate: true,
+			validationRecord: 'flow_logger_m3s',
+			notes: ['A note.'],
+			editedParams: []
+		});
+		// The stored record draws the same score table as the report (in-sample fit next to its validation).
+		expect(scoreColumns(rec)).toEqual(scoreColumns(r));
+		// Later edits to the form don't reach the stored record.
+		form.calibrationExclusions[0]!.reason = 'changed';
+		expect(rec.exclusions[0]!.reason).toBe('suspect rain');
+	});
+
+	it('shows the fit time in UTC to the minute', () => {
+		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('2026-09-24 10:05 UTC');
+		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('2026-09-24 10:05 UTC');
 	});
 });
