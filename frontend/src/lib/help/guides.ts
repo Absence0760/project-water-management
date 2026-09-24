@@ -290,11 +290,16 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'formula',
-						text: 'net demand = max(0, gross − cropped area × rain above the threshold × effective-rain fraction)'
+						text: 'effective rain Pe = cropped area × rain above the threshold × effective-rain fraction; net demand = gross − min(soil store + Pe, gross)'
 					},
 					{
 						type: 'p',
-						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] then reduces the day’s demand, so wet days need less irrigation.'
+						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] covers the day’s demand first; what the crop can’t use that day stays in the [[soil-water-store]] (25 mm by default) and covers the following days, so wet spells need less irrigation after the rain too.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Crop factors multiply **A-pan** evaporation, not FAO reference ET₀. A published FAO-56 Kc overstates demand by about a quarter unless you first multiply it by the pan coefficient (0.7–0.85).'
 					}
 				]
 			},
@@ -307,7 +312,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, add each crop with its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
 							'Enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
 							'Check the **demand preview**: m³/day per month, the mean, and Mm³ per year per farm and for the catchment.',
-							'On **Settings & calibration**, enter the 12 monthly [[apan|A-pan evaporation]] values and the [[effective-rainfall|effective-rain fraction]].',
+							'On **Settings & calibration**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]].',
 							'Save both tabs.'
 						]
 					},

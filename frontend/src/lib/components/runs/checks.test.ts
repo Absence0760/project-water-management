@@ -76,6 +76,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 	columns: Object.entries({
 		gross_demand: F,
 		effective_rain: 0,
+		soil_water: 0,
 		demand: F,
 		supplied: F,
 		inflow_upstream: 250,
@@ -108,6 +109,17 @@ describe('day trace', () => {
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
 		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(Q[t−1] + M + O + K + J, F)' });
+	});
+
+	it('adds the day-before soil-water store after the storage when the run has one (engine 0.15.0)', () => {
+		const rows = traceRows(farmDay({ previousSoilWaterMm: 7.5 }));
+		expect(rows.slice(0, 2).map((r) => [r.key, r.value, r.unit])).toEqual([
+			['previous_storage', 500, 'm³'],
+			['previous_soil_water', 7.5, 'mm']
+		]);
+		expect(rows.slice(2).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
+		// An older API or run: no row, rather than a made-up 0.
+		expect(traceRows(farmDay({ previousSoilWaterMm: null })).map((r) => r.key)).not.toContain('previous_soil_water');
 	});
 
 	it('leaves out working columns a pre-0.11 run does not have', () => {

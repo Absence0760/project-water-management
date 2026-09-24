@@ -134,6 +134,12 @@ export interface RunDay {
 	kind: 'farm' | 'gauge';
 	/** Dam storage at the end of the day before (the run's initial storage on its first day); null for gauges. */
 	previousStorageM3: number | null;
+	/**
+	 * Soil-water store at the end of the day before, mm (0 on the run's first
+	 * day); null for gauges and runs from before engine 0.15.0. Absent from an
+	 * older API.
+	 */
+	previousSoilWaterMm?: number | null;
 	/** The node's parameters as the run used them. */
 	params: {
 		pctUpstreamToDam: number | null;
