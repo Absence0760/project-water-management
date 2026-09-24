@@ -767,7 +767,7 @@
 					<span class="err">{blockers.length} {blockers.length === 1 ? 'group has a problem' : 'groups have problems'} to fix before saving:</span>
 					<ul>
 						{#each blockers as b (b.id)}
-							<li><a href="#{b.id}">{b.label}<span class="visually-hidden">: {b.message}</span></a></li>
+							<li><a href="#{b.id}" aria-label="{b.label}: {b.message}">{b.label}</a></li>
 						{/each}
 					</ul>
 				{/if}
