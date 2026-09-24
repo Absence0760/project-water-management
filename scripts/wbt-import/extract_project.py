@@ -549,7 +549,8 @@ def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
     spans = "; ".join(f"{a} to {b} ({n} days)" for a, b, n in runs)
     return (
         f"[Flow data] catchment rain has {len(runs)} run(s) of zero rain covering {rule}: {spans}. "
-        "A zero blocks the CHIRPS fallback a blank day gets; if these are missing data, re-export them as blank"
+        "Runs treat them as missing (engine >= 0.15.0, settings.zeroRainRuns, default mode 'missing'), so "
+        "bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Zero-rain runs"
     )
 
 

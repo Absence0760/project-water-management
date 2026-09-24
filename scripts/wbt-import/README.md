@@ -78,8 +78,11 @@ rows and columns don't break it.
 - **Zero-rain runs** (issue #2): a `note:` lists runs of zero catchment rain
   that look like missing data, by the engine's `zeroRainRuns` rule (60+ days
   in the series' six wettest months, or 180+ days with under two years of
-  data; `docs/model.md` §2.10a). A zero blocks the CHIRPS fallback a blank day
-  gets. The values are imported unchanged. The low-vs-CHIRPS year check is
+  data; `docs/model.md` §2.10a). The values are imported unchanged: from
+  engine 0.15.0 a run treats a flagged run as missing by default
+  (`settings.zeroRainRuns`, `docs/model.md` §2.4c), so bias-corrected CHIRPS
+  fills it; Settings → Zero-rain runs keeps a real dry spell as recorded, so
+  there is no need to re-export the zeros as blanks. The low-vs-CHIRPS year check is
   engine-only (it shows in every run and on the Time series tab).
 - **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
   month, farm, summed shortfall, days not met). A macro writes that table, so

@@ -70,14 +70,18 @@ class ZeroRainRuns(unittest.TestCase):
         self.assertEqual(zero_rain_runs(START, short(179)), (None, []))
         self.assertEqual(zero_rain_runs(START, short(180)), (None, [("2010-01-02", "2010-06-30", 180)]))
 
-    def test_note_names_the_dates_and_the_blocked_fallback(self):
+    def test_note_names_the_dates_and_how_runs_treat_them(self):
         v = seasonal(WINTER)
         gap(v, "2012-06-01", "2012-08-15")
         series = [{"kind": "rain_catchment_mm", "startDate": START, "values": v}]
         note = zero_rain_note(series)
         self.assertIn("2012-06-01 to 2012-08-15 (76 days)", note)
         self.assertIn("months 4,5,6,7,8,9", note)
-        self.assertIn("blocks the CHIRPS fallback", note)
+        # Engine >= 0.15.0 treats a flagged run as missing by default (CR-20);
+        # the note must not tell the user to re-export it as blank any more.
+        self.assertIn("Runs treat them as missing", note)
+        self.assertIn("Zero-rain runs", note)
+        self.assertNotIn("re-export", note)
         # Negative controls: no gap, or only CHIRPS has the gap.
         self.assertIsNone(zero_rain_note([{"kind": "rain_catchment_mm", "startDate": START, "values": seasonal(WINTER)}]))
         self.assertIsNone(zero_rain_note([{"kind": "rain_chirps_mm", "startDate": START, "values": v}]))
