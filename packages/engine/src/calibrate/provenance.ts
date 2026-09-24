@@ -164,6 +164,14 @@ export interface FitRecord {
 	fit: ScoredPeriod;
 	/** The parameters before the fit, on the same days. */
 	before: ScoredPeriod;
+	/**
+	 * The evaporation forcing the fit ran under: `settings.panCoefficient` and
+	 * `settings.apanMm` at the time (water-year months). GR4J's parameters
+	 * trade off against evaporation, so a fit is only valid for the forcing it
+	 * was fitted under — the coefficient must be held fixed, never calibrated.
+	 * Absent on records made before it existed.
+	 */
+	forcing?: { panCoefficient: number[]; apanMm: number[] };
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
@@ -184,7 +192,7 @@ export interface FitRecord {
 
 export interface FitContext {
 	/** The Settings form the fit ran on. */
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd'> & { calibrationExclusions?: CalibrationExclusion[] | null };
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm'> & { calibrationExclusions?: CalibrationExclusion[] | null };
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
 	engineVersion: string;
@@ -217,6 +225,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		validationRecord: ctx.validationRecord,
 		fit: r.fit,
 		before: r.before,
+		forcing: { panCoefficient: [...ctx.settings.panCoefficient], apanMm: [...ctx.settings.apanMm] },
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
@@ -268,20 +277,41 @@ export interface FitRecordStatus {
 	windowChanged: boolean;
 	exclusionsChanged: boolean;
 	flowKindChanged: boolean;
+	/**
+	 * The pan coefficient or A-pan evaporation (the GR4J/legacy forcing) has
+	 * changed since the fit. False for records made before `forcing` was
+	 * recorded — there is nothing to compare against.
+	 */
+	forcingChanged: boolean;
 }
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Every element of two same-length numeric arrays is `close`. */
+const closeArray = (a: readonly number[] | null | undefined, b: readonly number[] | null | undefined): boolean =>
+	!!a && !!b && a.length === b.length && a.every((v, i) => close(v, b[i]));
+
+/** Which of a fit's recorded forcing arrays differ from the settings, or null when there is nothing recorded to compare. */
+function forcingDiff(settings: Partial<ProjectSettings>, record: FitRecord): { panCoefficient: boolean; apanMm: boolean } | null {
+	if (!record.forcing) return null;
+	return {
+		panCoefficient: !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
+		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm)
+	};
+}
+
 /** Compare a fit record with the settings (the form, or a run's snapshot). */
 export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitRecord): FitRecordStatus {
 	const kind = settings.calibrationFlowKind ?? null;
+	const forcing = forcingDiff(settings, record);
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (settings.runoffModel ?? 'legacy') !== record.model,
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
-		flowKindChanged: kind !== null && kind !== record.flowKind
+		flowKindChanged: kind !== null && kind !== record.flowKind,
+		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm)
 	};
 }
 
@@ -295,5 +325,8 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.windowChanged) out.push('The calibration window has changed since the fit.');
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
+	if (status.forcingChanged) {
+		out.push('The pan coefficient or A-pan evaporation has changed since the fit. GR4J’s parameters trade off against evaporation, so refit before relying on them.');
+	}
 	return out;
 }

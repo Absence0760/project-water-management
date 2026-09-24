@@ -4,6 +4,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
 import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
+import { LEGACY_PARAMS } from '../runoff/legacy';
 import { GR4J_NO_PET, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
@@ -65,6 +66,28 @@ function synthetic(truth: Gr4jParams, years = 8, start = '2010-10-01'): ModelInp
 	input.settings.gr4j = { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 };
 	return input;
 }
+
+describe('the pan coefficient / A-pan evaporation is forcing, never a calibratable parameter', () => {
+	it('is not among GR4J_PARAMS or LEGACY_PARAMS — the trade-off with X1/X3 means it must stay fixed', () => {
+		const keys = [...GR4J_PARAMS, ...LEGACY_PARAMS].map((p) => p.key);
+		expect(keys).not.toContain('panCoefficient');
+		expect(keys).not.toContain('apanMm');
+	});
+
+	it('calibrate never writes settings.panCoefficient or settings.apanMm, even when every GR4J parameter is free', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		input.settings.panCoefficient = [0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6];
+		const beforePan = [...(input.settings.panCoefficient ?? [])];
+		const beforeApan = [...(input.settings.apanMm ?? [])];
+		const report = calibrate(input, { budget: 100, free: ['x1', 'x2', 'x3', 'x4'], validate: false });
+		expect(input.settings.panCoefficient).toEqual(beforePan);
+		expect(input.settings.apanMm).toEqual(beforeApan);
+		expect(report.free).not.toContain('panCoefficient');
+		expect(report.free).not.toContain('apanMm');
+		expect(Object.keys(report.params)).not.toContain('panCoefficient');
+		expect(Object.keys(report.params)).not.toContain('apanMm');
+	}, 30_000);
+});
 
 describe('prepareCalibration scores what runModel produces', () => {
 	it('on random GR4J networks, gauge/logger records against simulated outflow', () => {
