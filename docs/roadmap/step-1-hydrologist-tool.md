@@ -278,7 +278,20 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   from calibration. Uses: a drowned sensor, "above rating" peaks, or a gauge
   period if #1 goes that way. Build it even if #1 stays "A1 only": A1's
   unmeasured high flows (above 1.73 m³/s) are the obvious first use.
-- **Changes:**
+- **Landed** (engine 0.6.0, issue #4 assessor review, with fit provenance),
+  with these departures from the plan below, reasoned in model.md §2.10:
+  - an entry is a whole water year *or* a date range, and its `reason` is
+    required (1–500 characters), not an optional note: an excluded period
+    must always leave a record;
+  - automatic calibration applies the same list, and each run's statistics
+    record `exclusions` and `excludedDays`;
+  - up to 100 entries; overlapping periods are allowed (their union is
+    excluded), only the same period listed twice is refused;
+  - the editor sits under the calibration window in Settings
+    (`CalibrationExclusions.svelte`), not inside `CalibrationWindowFields`;
+  - **not built:** shading the excluded bands on the hydrograph. The
+    calibration panel lists them with the days removed instead.
+- **Changes (as planned):**
   - **engine:**
     - `ProjectSettings.calibrationExclusions: { start, end, note }[]`
       (default `[]`);

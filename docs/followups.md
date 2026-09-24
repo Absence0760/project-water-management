@@ -236,8 +236,15 @@ the reports):
   corrected. The actual WR90 values for the evaporation zone haven't been
   read yet.
 - **Q5: split-sample periods.** Split-sample, dry→wet, and an independent
-  instrument. Cross-record validation has landed. Stored exclusions (whole
-  water years, each with a reason) are in progress with fit provenance.
+  instrument. Cross-record validation has landed, and so have stored
+  exclusions (whole water years or date ranges, each with a required reason;
+  model.md §2.10) and fit provenance: an applied fit is saved with its seed,
+  objective, window, exclusions and validation scores, each run snapshots
+  it, and a hand edit after Apply marks it "parameters edited since fit"
+  (model.md §2.10b). The Runs page shows the in-sample score next to those
+  validation scores.
+  - [ ] Shade excluded periods on the Runs hydrograph (WP-1.3 planned it;
+        the calibration panel lists them instead for now).
 - **Q6: uncertainty.** SA Reserve practice uses confidence ratings and
   assurance rules, not a numeric band. Show monthly compliance against the
   EWR assurance rules, not a raw count of days below the EWR. Phase 9
