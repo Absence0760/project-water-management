@@ -107,3 +107,13 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 	await expect(menu.getByRole('link', { name: 'Data quality' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+test('the data-quality ratios read as a short percentage, not the stored two thirds to nine places', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings ratio display');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByLabel('Lowest gauge/logger ratio (%)')).toHaveValue('66.7');
+	await expect(page.getByLabel('Highest gauge/logger ratio (%)')).toHaveValue('150');
+	// Showing it rounded doesn't change the stored value: nothing to save.
+	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+});

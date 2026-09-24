@@ -394,7 +394,8 @@ The settings are grouped by what they drive:
   curtailment reporting window.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
-  in %, minimum shared days; defaults 67 %, 150 %, 90 days). Out-of-range
+  in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
+  thirds), 150 %, 90 days). Out-of-range
   values block Save with a message. They only change which water years are
   flagged, never the results.
 

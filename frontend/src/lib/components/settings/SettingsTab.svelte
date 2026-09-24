@@ -741,12 +741,12 @@
 		<div class="fields">
 			<div class="field">
 				<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-min" min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
-				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 67 %.</span>
+				<NumberInput id="dq-min" decimals={1} min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
+				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 66.7 % (two thirds).</span>
 			</div>
 			<div class="field">
 				<label for="dq-max">Highest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-max" min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
+				<NumberInput id="dq-max" decimals={1} min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
 				<span class="hint" id="dq-max-h">… or more than this share. Default 150 %.</span>
 			</div>
 			<div class="field">

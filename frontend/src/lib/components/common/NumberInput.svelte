@@ -4,9 +4,10 @@
 	// the stored value unchanged. Invalid text is shown but not committed.
 	// `grouped` shows thousands separators (300,000) whenever the field isn't
 	// being edited; it is then a text input, since type="number" can't show them.
+	// `decimals` caps how many decimals a plain field shows (display only).
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { parseNum } from '$lib/format/number';
-	import { groupedText } from './numberText';
+	import { groupedText, plainText } from './numberText';
 
 	let {
 		value = $bindable(),
@@ -19,6 +20,7 @@
 		step = 'any',
 		disabled = false,
 		grouped = false,
+		decimals,
 		placeholder,
 		onchange,
 		...rest
@@ -30,6 +32,8 @@
 		disabled?: boolean;
 		/** Show thousands separators while not editing (a text input). */
 		grouped?: boolean;
+		/** Show at most this many decimals (display only; the stored value keeps its precision until edited). */
+		decimals?: number;
 		/** Accessible label (use when there's no visible <label for>). */
 		label?: string;
 		id?: string;
@@ -41,7 +45,7 @@
 	} & Omit<HTMLInputAttributes, 'value' | 'onchange' | 'min' | 'max' | 'step'> = $props();
 
 	const round = (n: number) => Math.round(n * 1e9) / 1e9;
-	const raw = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '' : String(round(v * scale)));
+	const raw = (v: number | null | undefined) => plainText(v, scale, decimals);
 	// Grouped fields show "300,000" at rest; read-only ones never switch to raw.
 	const display = (v: number | null | undefined) => (grouped ? groupedText(v, scale) : raw(v));
 
