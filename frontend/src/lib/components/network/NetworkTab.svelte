@@ -238,7 +238,7 @@
 							</td>
 							{#each NODE_FIELDS as f (f.key)}
 								{#if f.farmOnly && node.kind !== 'farm'}
-									<td class="num na" title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
+									<td class="num na" class:pct={isPct(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
 								{:else}
 								<td class:pct={isPct(f)}>
 									<NumberInput
@@ -270,12 +270,12 @@
 						<td></td>
 						<td></td>
 						{#each NODE_FIELDS as f (f.key)}
-							<td class="num">
+							<td class="num" class:pct={isPct(f)}>
 								{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
 							</td>
 						{/each}
 						<td class="num" class:warn={farms.length > 0 && Math.abs(shares.sum - 1) >= 0.0002}>{farms.length ? fmtPct(shares.sum, 2) : ''}</td>
-						{#if !readonly}<td></td>{/if}
+						{#if !readonly}<td class="rm"></td>{/if}
 					</tr>
 				</tfoot>
 			</table>
@@ -371,6 +371,8 @@
 	.net td {
 		min-width: 84px;
 	}
+	/* Every cell in a column carries pct / rm (not-used and footer cells too):
+	   a column is as wide as its widest cell's minimum. */
 	.net td.pct {
 		min-width: 60px;
 	}
