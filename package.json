@@ -29,6 +29,8 @@
 		"seed:examples": "pnpm -C backend seed:examples",
 		"import:project": "pnpm -C backend import:project",
 		"seed:demo": "bin/seed-demo.sh",
+		"//-- gen --": "Generated assets, committed. gen:help-art renders the /help landing illustration with Blender 5 + ImageMagick 7 (optional tooling; scripts/help-art/catchment.py).",
+		"gen:help-art": "bin/gen-help-art.sh",
 		"//-- build --": "Production builds: static frontend (frontend/build) and the Lambda bundle (backend/dist/lambda.mjs).",
 		"build": "pnpm -r run build",
 		"build:frontend": "pnpm -C frontend build",
