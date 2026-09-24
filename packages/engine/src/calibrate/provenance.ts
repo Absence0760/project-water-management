@@ -66,15 +66,20 @@ export function exclusionError(x: unknown): string | null {
 /** What identifies an exclusion (its period): the same period can't be listed twice. */
 export const exclusionKey = (x: CalibrationExclusion): string => ('waterYear' in x ? `wy:${x.waterYear}` : `${x.start}/${x.end}`);
 
-/** The first problem with a list of exclusions ("Exclusion 2: needs a reason"), or null. */
-export function exclusionsError(list: readonly unknown[]): string | null {
-	if (list.length > EXCLUSIONS_MAX) return `at most ${EXCLUSIONS_MAX} exclusions`;
+/**
+ * The first problem with a list of exclusions ("Exclusion 2: needs a reason"),
+ * or null. `noun` names the entries of another dated-period list, such as
+ * settings.zeroRainRuns' "keep-dry period".
+ */
+export function exclusionsError(list: readonly unknown[], noun = 'exclusion'): string | null {
+	const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
+	if (list.length > EXCLUSIONS_MAX) return `at most ${EXCLUSIONS_MAX} ${noun}s`;
 	const seen = new Set<string>();
 	for (let i = 0; i < list.length; i++) {
 		const err = exclusionError(list[i]);
-		if (err) return `Exclusion ${i + 1}: ${err}`;
+		if (err) return `${Noun} ${i + 1}: ${err}`;
 		const key = exclusionKey(list[i] as CalibrationExclusion);
-		if (seen.has(key)) return `Exclusion ${i + 1}: ${exclusionLabel(list[i] as CalibrationExclusion)} is listed twice`;
+		if (seen.has(key)) return `${Noun} ${i + 1}: ${exclusionLabel(list[i] as CalibrationExclusion)} is listed twice`;
 		seen.add(key);
 	}
 	return null;

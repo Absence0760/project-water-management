@@ -55,10 +55,9 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 // winter rain (4 mm every third day April–September, 1 mm every ninth day
 // otherwise) as CHIRPS over water years 2010/11–2015/16; the catchment reads
 // twice that, except in 2013/14 (two thirds of CHIRPS), and has 76 zero days in
-// the 2012 wet season.
-test('the Time series tab flags zero-rain runs and water years far below CHIRPS', async ({ page, owner }) => {
-	void owner;
-	const project = await createProject(page.request, 'Zero rain');
+// the 2012 wet season. Returns the project id.
+async function seedZeroRain(request: Parameters<typeof createProject>[0], name: string): Promise<string> {
+	const project = await createProject(request, name);
 	const start = Date.UTC(2010, 9, 1);
 	const days = (Date.UTC(2016, 9, 1) - start) / 86_400_000;
 	const monthOf = (i: number) => new Date(start + i * 86_400_000).getUTCMonth() + 1;
@@ -69,10 +68,16 @@ test('the Time series tab flags zero-rain runs and water years far below CHIRPS'
 	for (let i = index('2012-06-01'); i <= index('2012-08-15'); i++) catchment[i] = 0;
 	catchment[index('2012-05-31')] = 5;
 	catchment[index('2012-08-16')] = 5;
-	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2010-10-01', values: catchment });
-	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2010-10-01', values: chirps });
+	await putSeries(request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2010-10-01', values: catchment });
+	await putSeries(request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2010-10-01', values: chirps });
+	return project.id;
+}
 
-	await page.goto(`/projects/${project.id}?tab=series`);
+test('the Time series tab flags zero-rain runs and water years far below CHIRPS', async ({ page, owner }) => {
+	void owner;
+	const projectId = await seedZeroRain(page.request, 'Zero rain');
+
+	await page.goto(`/projects/${projectId}?tab=series`);
 	const items = page.getByTestId('series-checks').getByRole('listitem');
 	await expect(items).toHaveCount(2);
 	await expect(items.nth(0)).toContainText('Zero rain run');
@@ -82,4 +87,54 @@ test('the Time series tab flags zero-rain runs and water years far below CHIRPS'
 	await expect(items.nth(1)).toContainText('usual catchment / CHIRPS rain ratio (200 %)');
 	await expect(items.nth(1)).toContainText('2013/14:');
 	await expect(items.nth(1)).toContainText('67 % (365 days)');
+});
+
+// CR-20: a run treats the flagged zero run as missing (CHIRPS fills it). The
+// Data tab shades those days; Settings → Zero-rain runs keeps a run dry or
+// switches the rule off, and the shading follows the saved settings.
+test('flagged zero-rain runs are shaded as missing until Settings keeps them dry', async ({ page, owner }) => {
+	void owner;
+	const projectId = await seedZeroRain(page.request, 'Zero rain settings');
+	const chart = page.locator('figure.chart');
+	const tab = (name: string) => page.getByRole('link', { name, exact: true });
+	const shaded = page.getByText('Shaded: 1 period, 76 days, that a run treats as missing, so CHIRPS fills them (Settings → Zero-rain runs).');
+
+	await page.goto(`/projects/${projectId}?tab=series`);
+	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View' }).click();
+	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
+	await expect(shaded).toBeVisible();
+	await expect(chart).toHaveAttribute('data-shaded', '1');
+
+	// Keep the run dry: a period needs a reason before Save is allowed.
+	await tab('Settings & calibration').click();
+	const mode = page.getByLabel('Flagged zero runs');
+	await expect(mode).toHaveValue('missing');
+	const keepDry = page.getByRole('group', { name: /^Keep dry/ });
+	await expect(keepDry.getByText('None: every flagged zero run is treated as missing.')).toBeVisible();
+	await keepDry.getByRole('button', { name: 'Keep a date range dry' }).click();
+	await keepDry.getByLabel('From').fill('2012-06-01');
+	await keepDry.getByLabel('To').fill('2012-08-15');
+	const save = page.getByRole('button', { name: 'Save settings' });
+	await expect(keepDry.getByRole('alert')).toHaveText('Keep-dry period 1: needs a reason.');
+	await expect(save).toBeDisabled();
+	await keepDry.getByLabel('Reason').fill('Farm records show no rain');
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	// The Data tab follows the saved settings (in-app navigation, as a user moves between tabs).
+	await tab('Data').click();
+	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View' }).click();
+	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
+	await expect(shaded).toHaveCount(0);
+	await expect(chart).not.toHaveAttribute('data-shaded');
+
+	// "Run as recorded" hides the keep-dry list and survives a reload.
+	await tab('Settings & calibration').click();
+	await expect(page.getByRole('group', { name: /^Keep dry/ }).getByLabel('Reason')).toHaveValue('Farm records show no rain');
+	await mode.selectOption('asRecorded');
+	await expect(page.getByRole('group', { name: /^Keep dry/ })).toHaveCount(0);
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await page.reload();
+	await expect(mode).toHaveValue('asRecorded');
 });

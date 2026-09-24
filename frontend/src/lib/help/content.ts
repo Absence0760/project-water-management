@@ -999,6 +999,17 @@ export const HELP: HelpEntry[] = [
 		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
 	},
 	{
+		id: 'zero-rain-runs',
+		term: 'Zero-rain runs treated as missing',
+		short: 'Long wet-season runs of zero catchment rain count as missing, so bias-corrected CHIRPS fills them instead of running them dry.',
+		long: 'A zero is a reading, so a gap in the rain record exported as zeros stops CHIRPS filling it, and the catchment runs dry for weeks in its wettest months. The Data tab flags these runs: 60 or more zero days in the series\' six wettest months. By default a run treats the days of every flagged run as blank, so bias-corrected CHIRPS, then forecast rain, stand in, exactly as on any blank day. The rain series you uploaded is never changed.\n\nIf the hydrologist confirms a flagged run was a real dry spell, add it under **Keep dry**: its days stay 0 mm. **Run as recorded** keeps every flagged run dry, as the workbook does. **Also treat as missing** covers other bad periods whatever they read, such as the gap days inside a year that reads far below CHIRPS. Those days are also left out of the CHIRPS factor fit.\n\nEach run lists every period it filled, the rain that replaced it and any days with nothing to fill them, in its warnings and in the summary CSV. The daily column "Catchment rain treated as missing" is 1 on each day filled. Comparing runs lists any change to these settings. Not in the workbook (docs/engine-audit.md B2).',
+		category: 'data',
+		aliases: ['missing rainfall', 'zero rain', 'rain gaps', 'keep dry', 'infilled rainfall days'],
+		fields: ['settings.zeroRainRuns', 'run.rain_catchment_missing'],
+		related: ['rain-catchment', 'chirps-bias', 'rain-final'],
+		source: 'Not in the workbook; docs/model.md §2.4c; engine-audit.md B2'
+	},
+	{
 		id: 'rain-forecast',
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm, used after the other rain series run out, to look ahead a few days.',
