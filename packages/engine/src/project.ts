@@ -434,11 +434,11 @@ export interface CalibrationStats {
 	 */
 	simulatedKey?: 'natural_flow' | 'simulated_outflow';
 	/**
-	 * The stored calibration exclusions the run applied (engine ≥ 0.6.0), as
+	 * The stored calibration exclusions the run applied (engine ≥ 0.8.0), as
 	 * dates with their reasons; absent when none. Excluded days are not scored.
 	 */
 	exclusions?: ExclusionRange[];
-	/** Observed days inside the window that the exclusions left out (engine ≥ 0.6.0). */
+	/** Observed days inside the window that the exclusions left out (engine ≥ 0.8.0). */
 	excludedDays?: number;
 }
 

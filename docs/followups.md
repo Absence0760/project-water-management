@@ -213,7 +213,8 @@ the reports):
   doesn't conserve water (H1). If both models run, declare the primary one
   before seeing results.
 - **Q2: WR2012.** Always report it; never make it a hard constraint. Keep
-  the soft MAR penalty off by default and record its weight when it's on.
+  the soft MAR penalty off by default and record its weight when it's on
+  (an applied fit's record keeps the weight and the MAR ratio with and without it).
   Flag a simulated MAR that differs from WR2012 by more than 10 %, 25 % (or
   15 % wetter) or 50 %. Those bands are persona judgement for a CMA official
   to confirm. Phase 8 is being built to these criteria.

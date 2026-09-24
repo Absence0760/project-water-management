@@ -33,6 +33,7 @@ export function fitValidationRows(ra: FitRecord | null, rb: FitRecord | null): F
 		{ label: 'Split-sample: other half', ...both((r) => at(r, (x) => x.splitSample?.validation)) },
 		{ label: 'Dry → wet: wet years', ...both((r) => at(r, (x) => x.differential?.validation)) },
 		{ label: 'Independent record', ...both((r) => at(r, (x) => x.independentRecord?.validation)) },
+		{ label: 'WR2012 MAR penalty', ...both((r) => (r.marPenalty ? `weight ${r.marPenalty.weight}, MAR ${score(r.marPenalty.marRatio)} × WR2012` : 'off')) },
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) }
 	];
 }

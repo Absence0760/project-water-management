@@ -296,6 +296,10 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok(record)).toBe(true);
 		expect(ok(null)).toBe(true);
 		expect(ok({ ...record, splitSample: null, differential: null, independentRecord: null, notes: [] })).toBe(true);
+		const marPenalty = { weight: 0.5, targetMarMm3: 12, basis: 'overlap', marRatio: 1.05, unpenalised: { params: { x1: 400 }, fit: period, marRatio: 1.4 } };
+		expect(ok({ ...record, marPenalty })).toBe(true);
+		expect(ok({ ...record, marPenalty: { ...marPenalty, weight: 11 } })).toBe(false);
+		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
 	it('rejects a record missing its provenance, with an unknown objective or model, a bad time, or extra keys', () => {

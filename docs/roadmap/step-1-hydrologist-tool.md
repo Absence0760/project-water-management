@@ -278,7 +278,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   from calibration. Uses: a drowned sensor, "above rating" peaks, or a gauge
   period if #1 goes that way. Build it even if #1 stays "A1 only": A1's
   unmeasured high flows (above 1.73 m³/s) are the obvious first use.
-- **Landed** (engine 0.6.0, issue #4 assessor review, with fit provenance),
+- **Landed** (engine 0.8.0, issue #4 assessor review, with fit provenance),
   with these departures from the plan below, reasoned in model.md §2.10:
   - an entry is a whole water year *or* a date range, and its `reason` is
     required (1–500 characters), not an optional note: an excluded period

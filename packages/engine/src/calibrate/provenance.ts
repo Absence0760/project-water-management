@@ -16,7 +16,7 @@ import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
 import type { RunoffModelId } from '../runoff/types';
-import type { CalibrationReport, DifferentialTest, IndependentRecordTest, ParamSet, ScoredPeriod, ValidationTest } from './calibrate';
+import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ParamSet, ScoredPeriod, ValidationTest } from './calibrate';
 import type { ObjectiveId } from './objective';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
@@ -162,6 +162,11 @@ export interface FitRecord {
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
+	/**
+	 * The soft WR2012 MAR penalty when it was on: its weight, the simulated
+	 * MAR ratio, and the fit without it. null when it was off.
+	 */
+	marPenalty: MarPenaltyResult | null;
 	/** The report's notes (limits of the validation, cancellation). */
 	notes: string[];
 	/**
@@ -207,6 +212,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
+		marPenalty: r.marPenalty ?? null,
 		notes: [...r.notes],
 		editedParams: []
 	};

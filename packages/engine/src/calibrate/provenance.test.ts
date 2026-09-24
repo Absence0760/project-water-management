@@ -135,6 +135,9 @@ describe('fit record', () => {
 		});
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
+		expect(r.marPenalty).toBeNull();
+		const penalty = { weight: 0.5, targetMarMm3: 12, basis: 'overlap' as const, marRatio: 1.05, unpenalised: null };
+		expect(fitRecordFromReport(report({ marPenalty: penalty }), ctx).marPenalty).toEqual(penalty);
 		// Survives a JSON round trip unchanged (it is stored in jsonb).
 		expect(JSON.parse(JSON.stringify(r))).toEqual(r);
 	});

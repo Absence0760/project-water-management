@@ -67,6 +67,15 @@
 					{:else}none{/if}
 				</dd>
 			</div>
+			{#if record.marPenalty}
+				{@const m = record.marPenalty}
+				<div>
+					<dt>WR2012 MAR penalty</dt>
+					<dd>
+						weight {fmtNum(m.weight, 2)}: simulated MAR {fmtNum(m.marRatio, 2)} × WR2012{m.unpenalised ? ` (${fmtNum(m.unpenalised.marRatio, 2)} × without the penalty)` : ''}
+					</dd>
+				</div>
+			{/if}
 			<div><dt>Parameters fitted</dt><dd>{record.free.map((k) => `${paramLabel(record.model, k)} ${fmtNum(record.params[k], 3)}`).join(', ')}</dd></div>
 		</dl>
 		<div class="table-wrap">

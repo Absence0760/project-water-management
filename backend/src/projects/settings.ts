@@ -171,6 +171,17 @@ export const FitRecord = z
 		})
 			.strict()
 			.nullable(),
+		marPenalty: z
+			.object({
+				weight: z.number().min(0).max(WR2012_MAX_PENALTY_WEIGHT),
+				targetMarMm3: z.number().finite().min(0),
+				basis: z.enum(['overlap', 'whole']),
+				marRatio: z.number().finite(),
+				unpenalised: z.object({ params, fit: ScoredPeriod, marRatio: z.number().finite() }).strict().nullable()
+			})
+			.strict()
+			.nullable()
+			.default(null),
 		notes: z.array(z.string().max(2000)).max(50),
 		editedParams: z.array(z.string().max(40)).max(30).default([])
 	})

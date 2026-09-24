@@ -536,7 +536,7 @@ wrong in the dry season shows up.
   and days outside the window are out-of-sample evidence. The function takes
   an optional window and **calibration exclusions** (`exclusions`, the same
   shape as the automatic calibration's); excluded observed days are counted
-  in `excludedDays`, not scored. From engine 0.6.0 `runModel` passes the
+  in `excludedDays`, not scored. From engine 0.8.0 `runModel` passes the
   project's stored calibration exclusions (§2.10), so a period whose record
   isn't trusted is left out of this test too.
 - **Which record.** The one `pickObservedKind` chooses (§2.10). Pitman flow is
@@ -618,7 +618,7 @@ from the rain model; the workbook compared the outflow with whichever record
 quantity ([audit C1](./engine-audit.md)). `CalibrationStats.simulatedKey` says
 which series was scored.
 
-**Calibration exclusions (engine ≥ 0.6.0).** `settings.calibrationExclusions`
+**Calibration exclusions (engine ≥ 0.8.0).** `settings.calibrationExclusions`
 lists periods left out of every calibration score: a whole water year
 (`{ waterYear: 2015, reason }` = 1 October 2015 to 30 September 2016) or a date
 range (`{ start, end, reason }`, inclusive). Each needs a reason, so an awkward
@@ -768,7 +768,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   parameters fitted and their values before and after, the record fitted to,
   the calibration window and exclusions, whether validation was asked for and
   against which independent record, every scored period (the in-sample fit,
-  the split-sample and dry → wet tests, the independent record) and the notes.
+  the split-sample and dry → wet tests, the independent record), the WR2012
+  MAR penalty when it was on (§2.10c: its weight, the simulated MAR ratio
+  and the fit without it) and the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
   `editedParams` lists fitted parameters whose value in the settings no
   longer matches the fit; the backend recomputes it on every save

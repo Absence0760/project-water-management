@@ -150,8 +150,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `{ fittedAt (ISO timestamp), engineVersion, model, objective, seed, budget,
   evaluations, cancelled, free, params, startParams, flowKind, simulatedKey,
   calibrationStart, calibrationEnd, exclusions, validate, validationRecord,
-  fit, before, splitSample, differential, independentRecord, notes,
-  editedParams }`, each key required except `editedParams`, and no others.
+  fit, before, splitSample, differential, independentRecord, marPenalty,
+  notes, editedParams }`, each key required except `marPenalty` (the WR2012
+  MAR penalty result, `null` when it was off, the default) and
+  `editedParams`, and no others.
   The fit runs in the browser, so the record is what the client reports; the
   seed and engine version let anyone reproduce it. **The server recomputes
   `editedParams` on every `PATCH`** (fitted parameters whose value in the
@@ -297,7 +299,7 @@ engine's `runModel`, stores the outputs, and returns the summary.
   `settings.calibrationStart`…`calibrationEnd` against
   `settings.calibrationFlowKind`, and carries NSE, PBIAS, RMSE, KGE (r, α, β),
   R², log-NSE, volume error and the per-water-year `annualVolumes` table.
-  From engine 0.6.0 it skips `settings.calibrationExclusions` and, when any
+  From engine 0.8.0 it skips `settings.calibrationExclusions` and, when any
   are set, carries `exclusions` (`{ start, end, reason }[]`) and
   `excludedDays` (observed days in the window they removed).
   `RunSummary.ewrCompliance` is the water-year × month EWR grid for the outlet
