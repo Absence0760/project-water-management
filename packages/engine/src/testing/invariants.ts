@@ -27,10 +27,13 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * - the catchment balance closes over the run: opening storage + runoff =
  *   outflow + consumptive use + closing storage.
  */
+const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected']);
+
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
 	for (const s of out.series) {
-		if (s.key === 'observed_flow') continue;
+		// Inputs shown as they are: a missing day is NaN (a gap), never a made-up value.
+		if (GAPPY_SERIES.has(s.key)) continue;
 		for (let t = 0; t < s.values.length; t++) {
 			if (!Number.isFinite(s.values[t]!)) return `${s.nodeId}/${s.key}[${t}] is ${s.values[t]}`;
 		}

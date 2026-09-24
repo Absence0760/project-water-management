@@ -261,6 +261,51 @@ describe('runModel with the CHIRPS correction', () => {
 		expect(get(out, null, 'rain_used').slice(0, fallbackDays[0])).toEqual(input.series.rain_catchment_mm!.values.slice(0, fallbackDays[0]));
 	});
 
+	it('outputs CHIRPS as uploaded and, beside it, CHIRPS × the monthly factor on every day', () => {
+		const input = runInput();
+		const h = input.series.rain_chirps_mm!.values;
+		h[5] = null; // a missing CHIRPS day is a gap in both columns
+		const out = runModel(input);
+		const keys = out.series.filter((x) => x.nodeId === null).map((x) => x.key);
+		expect(keys.indexOf('rain_chirps_corrected')).toBe(keys.indexOf('rain_chirps') + 1);
+		const raw = get(out, null, 'rain_chirps');
+		const corrected = get(out, null, 'rain_chirps_corrected');
+		const factors = out.summary.chirpsCorrection!.months.map((m) => m.factor!);
+		for (let i = 0; i < DAYS; i++) {
+			if (h[i] === null) {
+				expect(raw[i]).toBeNaN();
+				expect(corrected[i]).toBeNaN();
+				continue;
+			}
+			expect(raw[i]).toBe(h[i]);
+			// Every day, not only where CHIRPS filled in for blank catchment rain.
+			expect(corrected[i]).toBeCloseTo(h[i]! * factors[monthAt(i) - 1]!, 12);
+		}
+		// Rain used only takes the corrected value on the fallback days.
+		const rain = get(out, null, 'rain_used');
+		for (const i of fallbackDays) if (h[i]! > 2) expect(rain[i]).toBeCloseTo(corrected[i]!, 12);
+		// Final rainfall: catchment where present, corrected CHIRPS where not, gaps where neither; no threshold.
+		const final = get(out, null, 'rain_final');
+		expect(keys.indexOf('rain_final')).toBe(keys.indexOf('rain_chirps') - 1);
+		const c = input.series.rain_catchment_mm!.values;
+		for (let i = 0; i < DAYS; i++) {
+			if (c[i] !== null) expect(final[i]).toBe(c[i]);
+			else if (h[i] === null) expect(final[i]).toBeNaN();
+			else expect(final[i]).toBeCloseTo(corrected[i]!, 12);
+		}
+		expect(final.some((v, i) => v > 0 && v <= 2 && rain[i] === 0)).toBe(true);
+		expect(corrected.some((v, i) => h[i] !== null && h[i]! > 0 && v !== raw[i])).toBe(true);
+	});
+
+	it("outputs only the uploaded CHIRPS column in mode 'none', and neither without CHIRPS", () => {
+		const off = runModel(runInput({ chirpsBiasCorrection: 'none' }));
+		expect(off.series.some((x) => x.key === 'rain_chirps')).toBe(true);
+		expect(off.series.some((x) => x.key === 'rain_chirps_corrected')).toBe(false);
+		const input = runInput();
+		delete input.series.rain_chirps_mm;
+		expect(runModel(input).series.some((x) => x.key.startsWith('rain_chirps'))).toBe(false);
+	});
+
 	it('falls back to the default for an unknown setting, with a warning', () => {
 		const out = runModel(runInput({ chirpsBiasCorrection: 'yearly' as never }));
 		expect(out.summary.warnings).toContain('unknown CHIRPS bias correction "yearly"; using monthly');

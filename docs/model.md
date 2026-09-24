@@ -363,6 +363,19 @@ correction. A run that corrected any day adds one warning listing the
 factors (Oct–Sep) and the day count. GR4J's `rain_used` series shows the
 corrected rain day by day.
 
+**Rain columns in every run (engine ≥ 0.10.1).** Beside the model's own
+`rain_used`, a run outputs three catchment series (`chirpsColumns` and
+`runRain` in `run.ts`), which sit next to each other in the daily CSV export
+and the series explorer:
+
+| Key | What | Missing days |
+| --- | --- | --- |
+| `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so the legacy `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
+| `rain_chirps` | CHIRPS as uploaded | NaN |
+| `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
+
+Runs saved before 0.10.1 don't have these series; re-run to see them.
+
 **Why a setting.** The operator's policy is no workbook-compatibility modes
 (plan.md risks; roadmap D3): an unsound workbook algorithm is replaced
 outright, and `engineVersion` explains older results. `chirpsBiasCorrection`
@@ -465,6 +478,7 @@ compared with the full pragmatic EWR and the observed flow.
 | --- | --- | --- |
 | `[EWR shortfalls]` | Per day: unfragmented EWR, EWR volume not met at the gauge, a not-met flag, Σ incremental farm shortfalls, and per-farm incremental shortfall | Run series (`ewr_*` keys) + chart |
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
+| `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 

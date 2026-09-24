@@ -864,8 +864,20 @@ export const HELP: HelpEntry[] = [
 		category: 'data',
 		aliases: ['rain', 'rainfall', 'precipitation'],
 		fields: ['series.rain_catchment_mm'],
-		related: ['chirps', 'rain-threshold'],
+		related: ['chirps', 'rain-threshold', 'rain-final'],
 		source: 'b023 Flow data'
+	},
+	{
+		id: 'rain-final',
+		term: 'Final catchment rainfall',
+		short: 'The daily rainfall a run works from after filling gaps: catchment rain, else bias-corrected CHIRPS, else forecast rain, in mm.',
+		long: 'One value per day from the first source that has one. CHIRPS is the corrected value when the CHIRPS bias correction is on. This is before any rain threshold: the legacy model then treats rain at or below the threshold as 0 (see Rain used). A day with no value from any source is left empty; the model treats it as dry.\n\nIn the daily CSV export it sits beside CHIRPS as uploaded and bias-corrected CHIRPS, so the filled days can be checked against both.',
+		units: 'mm/day',
+		category: 'data',
+		aliases: ['rain after gap filling', 'patched rainfall', 'infilled rainfall'],
+		fields: ['run.rain_final'],
+		related: ['rain-catchment', 'chirps', 'chirps-bias', 'rain-threshold'],
+		source: 'docs/model.md §2.4, §2.4b'
 	},
 	{
 		id: 'chirps',
@@ -875,7 +887,7 @@ export const HELP: HelpEntry[] = [
 		units: 'mm/day',
 		category: 'data',
 		aliases: ['satellite rainfall'],
-		fields: ['series.rain_chirps_mm'],
+		fields: ['series.rain_chirps_mm', 'run.rain_chirps'],
 		related: ['rain-catchment', 'chirps-bias'],
 		source: 'b023 Flow data; docs/model.md §7'
 	},
@@ -883,10 +895,10 @@ export const HELP: HelpEntry[] = [
 		id: 'chirps-bias',
 		term: 'CHIRPS bias correction',
 		short: 'Scales CHIRPS rain, on days it fills in for blank catchment rain, by a catchment ÷ CHIRPS factor for the calendar month.',
-		long: 'For each calendar month the factor is the catchment rain divided by the CHIRPS rain, summed over the days both have a reading. Water years the rain checks flag (long zero runs, far below CHIRPS) are left out, because their catchment rain is suspect. A month with fewer than 90 shared days, or less than 50 mm of CHIRPS on them, uses the factor pooled over all months; with too little overlap for even that, CHIRPS is used as it is and the run says so. Factors are kept between 0.25 and 4.\n\nOnly CHIRPS that is actually used is scaled. Catchment rain and forecast rain are never changed. Each run lists the factors and the number of days corrected in its warnings.\n\nChoose "Raw CHIRPS" only if the CHIRPS series you loaded is already corrected to the catchment; otherwise it would be corrected twice. Not in the workbook, which used raw CHIRPS (docs/engine-audit.md B1).',
+		long: 'For each calendar month the factor is the catchment rain divided by the CHIRPS rain, summed over the days both have a reading. Water years the rain checks flag (long zero runs, far below CHIRPS) are left out, because their catchment rain is suspect. A month with fewer than 90 shared days, or less than 50 mm of CHIRPS on them, uses the factor pooled over all months; with too little overlap for even that, CHIRPS is used as it is and the run says so. Factors are kept between 0.25 and 4.\n\nOnly CHIRPS that is actually used is scaled. Catchment rain and forecast rain are never changed. Each run lists the factors and the number of days corrected in its warnings, and outputs the corrected CHIRPS (CHIRPS × its month\'s factor, on every day, not only the days it filled in) as a daily series beside CHIRPS as uploaded, in the series explorer and the daily CSV export. Rain used shows which value the model took each day.\n\nChoose "Raw CHIRPS" only if the CHIRPS series you loaded is already corrected to the catchment; otherwise it would be corrected twice. Not in the workbook, which used raw CHIRPS (docs/engine-audit.md B1).',
 		category: 'data',
 		aliases: ['bias correction', 'CHIRPS factor', 'rain scaling'],
-		fields: ['settings.chirpsBiasCorrection'],
+		fields: ['settings.chirpsBiasCorrection', 'run.rain_chirps_corrected'],
 		related: ['chirps', 'rain-catchment'],
 		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
 	},

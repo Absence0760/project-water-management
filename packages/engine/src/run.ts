@@ -44,7 +44,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.10.0';
+export const ENGINE_VERSION = '0.10.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -76,6 +76,8 @@ export function runModelWith(
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
+	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
+	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
 	// WR2012 flows are naturalised: compare them with natural flow, never the outflow.
 	const wr2012 = wr2012Report(
 		{
@@ -83,7 +85,7 @@ export function runModelWith(
 			startDate,
 			natural,
 			areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
-			rainMm: runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days)
+			rainMm: finalRain
 		},
 		warnings
 	);
@@ -127,6 +129,9 @@ export function runModelWith(
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
+	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
+	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
+	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, 'mm', s.values);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
 		['demand', 'demand', 'Irrigation demand (net)'],
@@ -566,6 +571,34 @@ export function pickObservedKind(
 		warnings.push(DEFAULT_GAUGE_PICK_WARNING);
 	}
 	return series.flow_observed_m3s ? 'flow_observed_m3s' : series.flow_logger_m3s ? 'flow_logger_m3s' : null;
+}
+
+/**
+ * CHIRPS as uploaded and, beside it, CHIRPS × its calendar month's bias factor
+ * (§2.4b) on every day it has a value, not only the fallback days, so the two
+ * columns can be read side by side. Rain used still only takes the corrected
+ * value where the catchment rain is blank. The corrected column is left out
+ * when the setting is 'none' or no month has a factor; a month without one
+ * keeps its raw value. Missing days are NaN, so charts show gaps.
+ */
+export function chirpsColumns(
+	chirps: DailySeries | undefined,
+	corr: ChirpsCorrection | null,
+	start: number,
+	days: number,
+	month: Uint8Array
+): { key: string; label: string; values: number[] }[] {
+	if (!chirps) return [];
+	const raw = alignSeries(chirps, start, days).map((v) => (v === null ? NaN : v));
+	const out = [{ key: 'rain_chirps', label: 'CHIRPS rain as uploaded', values: raw }];
+	if (corr?.mode === 'monthly' && corr.months.some((m) => m.factor !== null)) {
+		const corrected = raw.map((v, t) => {
+			const f = corr.months[month[t]! - 1]!.factor;
+			return f === null ? v : v * f;
+		});
+		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', values: corrected });
+	}
+	return out;
 }
 
 function alignSeries(s: DailySeries | undefined, start: number, days: number): (number | null)[] {

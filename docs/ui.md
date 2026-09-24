@@ -287,7 +287,10 @@ The settings are grouped by what they drive:
   without a gauge or logger record, or saved before engine 0.5.3, says why
   there is no table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
-  stored series, grouped by node.
+  stored series, grouped by node. The catchment's series include the final
+  catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
+  (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1),
+  which the catchment daily CSV puts in adjacent columns after rain used.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores about 170 series of about 16 000 values.
   Large arrays live in `$state.raw` and are replaced, never mutated.
