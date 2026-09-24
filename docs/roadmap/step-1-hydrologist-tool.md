@@ -9,7 +9,7 @@ Step 1 is for consulting hydrologists and the first client's modelling team.
 It ends with a deployed replacement for the b023 spreadsheet that they trust
 and use every day. For them this means:
 
-- a model a hydrologist has signed off (issue #2 decided, the engine-audit
+- a model a hydrologist has signed off (issue #5 decided, the engine-audit
   questions answered or explicitly accepted);
 - the spreadsheet chores gone: `.xlsx` in and out, instant what-if, automatic
   calibration, templates for bulk entry;
@@ -31,8 +31,8 @@ Farmers, WUAs and licensing users are **not** Step 1 users (see §3).
 ### In scope
 
 - **Model sign-off:**
-  - issue #2, closed in code and docs;
-  - issue #3, the rainfall zero-run check;
+  - issue #5, closed in code and docs;
+  - issue #6, the rainfall zero-run check;
   - calibration exclusion ranges;
   - the client catchment regression run on real data;
   - a decision on `verify/`;
@@ -89,7 +89,7 @@ Still needed, with the WP each one blocks:
 
 | Prerequisite | Needed by | Who |
 | --- | --- | --- |
-| A hydrologist agrees to a review session. Answers to issue #2's short confirmation, issue #3 and the engine-audit "Open questions" | WP-1.1, then WP-1.19–1.25 | Operator arranges; hydrologist answers |
+| A hydrologist agrees to a review session. Answers to issue #5's short confirmation, issue #6 and the engine-audit "Open questions" | WP-1.1, then WP-1.19–1.25 | Operator arranges; hydrologist answers |
 | The client catchment workbook back in `../project-water-management-source/Original/` | WP-1.4, WP-1.5, WP-1.25, WP-1.31 parity | Operator |
 | Client answer to plan.md Q15: may client data live in AWS, and must it stay in South Africa? | WP-1.14 (region), and loading client data into production | Client |
 | Client answer to plan.md Q10/Q11: who needs accounts; open or invite-only sign-up | WP-1.12 | Client |
@@ -148,9 +148,9 @@ track B fills the gap.
 | WP | Title | Track | Size | Depends on |
 | --- | --- | --- | --- | --- |
 | 1.1 | Hydrologist review pack and session | A | S | – |
-| 1.2 | Close issue #2 in code | A | S | – |
+| 1.2 | Close issue #5 in code | A | S | – |
 | 1.3 | Calibration exclusion ranges | A | S | – |
-| 1.4 | Rainfall zero-run check (#3) | A | S | – |
+| 1.4 | Rainfall zero-run check (#6) | A | S | – |
 | 1.5 | Client catchment regression on real data | A | S | workbook |
 | 1.6 | `verify/` decision | A | S | 1.5 |
 | 1.7 | Client-name scrub, repo public | C | M | term list |
@@ -194,9 +194,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Changes:**
   - **scripts / docs:** a one-page question sheet built from:
     - engine-audit.md "Open questions" 1–7;
-    - issue #2 "To close this issue" (confirm A1; who applied the area scaling; the
+    - issue #5 "To close this issue" (confirm A1; who applied the area scaling; the
       A1-b rating; who ran A1 after mid-2015; the June 2016 peak);
-    - issue #3 (are the zero runs missing data?);
+    - issue #6 (are the zero runs missing data?);
     - followups.md § Hydrologist: the data-quality limits (5×/10× P99,
       5/14-day flat-lines), the "Demand left %" extremes, the return-flow
       and curtailment note, the help-text read-through of
@@ -212,7 +212,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Docs to update:**
   - answers, dated, in plan.md § Questions and model.md §3;
   - the "Decision" column of engine-audit.md;
-  - issue #2 and issue #3 comments;
+  - issue #5 and issue #6 comments;
   - followups.md ticks.
 - **Acceptance criteria:**
   - every question has an answer, "accepted as is", or "not answerable
@@ -223,10 +223,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   calendar.
 - **Depends on:** –
 
-### WP-1.2 Close issue #2 in code
+### WP-1.2 Close issue #5 in code
 
 - **Goal:** the engine never picks a calibration record silently, and the
-  agreement warning doesn't assume an instrument fault. These are issue #2
+  agreement warning doesn't assume an instrument fault. These are issue #5
   plan items 1–3. Neither has landed: `pickObservedKind` in
   `packages/engine/src/run.ts` still falls back to the gauge silently.
 - **Changes:**
@@ -253,7 +253,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     records are two different rivers, so the warning is expected);
   - plan.md (replace the "Ask this first" block with the answer once WP-1.1
     confirms it);
-  - followups.md; close issue #2 after sign-off.
+  - followups.md; close issue #5 after sign-off.
 - **Acceptance criteria:**
   - a project with both series and no kind set gets exactly one warning;
   - with a kind set it gets none;
@@ -265,7 +265,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** let the hydrologist exclude date ranges of the observed record
   from calibration. Uses: a drowned sensor, "above rating" peaks, or a gauge
-  period if #2 goes that way. Build it even if #2 stays "A1 only": A1's
+  period if #5 goes that way. Build it even if #5 stays "A1 only": A1's
   unmeasured high flows (above 1.73 m³/s) are the obvious first use.
 - **Changes:**
   - **engine:**
@@ -309,7 +309,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Size:** S.
 - **Depends on:** –
 
-### WP-1.4 Rainfall zero-run check (issue #3)
+### WP-1.4 Rainfall zero-run check (issue #6)
 
 - **Goal:** flag runs of zero rainfall that look like missing data. Stored
   zeros block the CHIRPS fallback.
@@ -338,7 +338,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     positive control of a real 30-day summer dry spell that is not flagged;
   - **Python `test_*.py`:** the importer note;
   - **e2e:** extend `data-quality.spec.ts`.
-- **Docs to update:** model.md §2.10a, ui.md § Data, followups.md, issue #3.
+- **Docs to update:** model.md §2.10a, ui.md § Data, followups.md, issue #6.
 - **Acceptance criteria:**
   - a synthetic 1999/00-style year is flagged, and a dry summer is not;
   - the thresholds are editable;
@@ -419,7 +419,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
       "Farm 7");
     - rename the `data/client-catchment/` fixture path constant to a neutral one,
       keeping a fallback to the old path during the move.
-  - **Issues:** edit or re-post issue #2 and #3 bodies and comments without
+  - **Issues:** edit or re-post issue #5 and #3 bodies and comments without
     farm names. Public DWS/WRC facts (gauge IDs, report numbers) can stay if the
     client agrees.
   - **History:**
@@ -894,7 +894,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - `nelderMead.ts`: bounded through a logit/log transform, with
       restarts;
     - `objective.ts`: NSE, KGE, log-NSE, and a **year-balanced KGE** (the
-      mean of per-water-year KGE; issue #2 item 5, Fowler 2016/18), all
+      mean of per-water-year KGE; issue #5 item 5, Fowler 2016/18), all
       honouring the calibration window and exclusions (WP-1.3);
     - `calibrate.ts`: returns the best parameters, the score trace, and
       **validation** stats outside the window (Klemeš split-sample).
@@ -1179,7 +1179,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - model.md (header: signed-off version and date);
   - plan.md (questions answered);
   - followups.md § Hydrologist emptied or moved to Step 2;
-  - close issues #2 and #3.
+  - close issues #5 and #6.
 - **Acceptance criteria:** a written sign-off from the hydrologist (an email
   or issue comment is enough) naming the engine version and the baseline run.
 - **Size:** M.
@@ -1599,8 +1599,8 @@ Questions for the hydrologist: the WP-1.1 pack.
 ## 10. Exit criteria (these open Step 2)
 
 1. **Model signed off.**
-   - Issue #2 is closed with the hydrologist's confirmation.
-   - Issue #3 is resolved (data fixed or accepted).
+   - Issue #5 is closed with the hydrologist's confirmation.
+   - Issue #6 is resolved (data fixed or accepted).
    - Every engine-audit.md "Needs hydrologist" row is decided and
      implemented, or explicitly accepted.
    - A written sign-off names the engine version and the pinned baseline run
@@ -1639,7 +1639,7 @@ Questions for the hydrologist: the WP-1.1 pack.
 
 | # | Decision | Options | Recommendation | Who |
 | --- | --- | --- | --- | --- |
-| D1 | Calibration record (issue #2) | A1 logger; G1 gauge; A1 with excluded periods | A1 (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
+| D1 | Calibration record (issue #5) | A1 logger; G1 gauge; A1 with excluded periods | A1 (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
 | D2 | Audit questions H1, N1–N4, Q1, Q3, Q5, Q7, Q11–Q13, Q17, Q18 | Per engine-audit.md | Per engine-audit.md recommendations; N1 backfill e = 1 − `return_flow_pct` | Hydrologist |
 | D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term) | Operator + hydrologist |
 | D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6) | Operator |

@@ -14,13 +14,13 @@ Tick items off (or move them into an issue) as they are done.
 
       Make the repo public (after the scrub below) or upgrade the plan. Then
       make `CI gate` a required check.
-- [ ] **Client names (WP-1.7).** The tree and the local history are scrubbed
-      (2026-09: `git filter-repo --replace-text`; `check_client_terms.mjs
-      --history` is clean). Left for the operator: force-push `main`; delete
-      the stale Dependabot branches and re-file issues #2 and #3 without the
-      names (GitHub keeps edit history); and clear the old commits GitHub
-      still holds under `refs/pull/*` (GitHub Support, or recreate the repo)
-      before making it public.
+- [ ] **Client names (WP-1.7).** Done: the tree and the history are scrubbed
+      (2026-09, `git filter-repo --replace-text`; force-pushed), and the
+      calibration and rainfall issues are re-filed without the names as #5
+      and #6 (originals archived in `infra-secrets/water-management/`).
+      Left: GitHub still holds the old commits under the Dependabot PR refs
+      (`refs/pull/1`, `refs/pull/4`); have GitHub Support purge them, or
+      recreate the repo, before making it public.
 - [ ] **`production` environment:** run
       `templates/scripts/backfill-prod-environment.sh --apply`, with the
       operator as required reviewer.
@@ -33,7 +33,7 @@ Tick items off (or move them into an issue) as they are done.
 ## Hydrologist
 
 - [ ] **Calibration record:** gauge G1 vs logger A1 from 2014/15, tracked in
-      [#2](https://github.com/Absence0760/project-water-management/issues/2).
+      [#5](https://github.com/Absence0760/project-water-management/issues/5).
       The runoff-ratio check needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):

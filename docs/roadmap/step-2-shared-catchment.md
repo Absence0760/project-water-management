@@ -83,7 +83,7 @@ version.
 Must be true before starting:
 
 1. **Step 1 exit criteria are met**: the hydrologist has signed off the
-   model, issue #2 is decided, the engine-audit questions are answered or
+   model, issue #5 is decided, the engine-audit questions are answered or
    explicitly accepted, and the app is deployed. Farmers must never see
    numbers the modeller doesn't stand behind.
 2. **Curtailment policy answered** (plan.md Q13, model.md §2.11 Q11–Q13). The

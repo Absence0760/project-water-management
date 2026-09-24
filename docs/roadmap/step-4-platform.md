@@ -717,7 +717,7 @@ run in parallel after WP-4.1.
   replaces it):
   - delineating farm sub-catchments and the network for complex catchments;
   - calibration sign-off, and choosing which observed record to trust
-    (issue #2 is the pattern);
+    (issue #5 is the pattern);
   - EWR / Reserve determination;
   - dam area–capacity surveys and water-use verification;
   - the transfer rules;

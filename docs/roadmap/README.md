@@ -27,7 +27,7 @@ step plan says which catalogue rows it delivers. Short-term loose ends live in
 A step starts only when the previous step's exit criteria are met. Exit criteria
 are in each plan's **Exit criteria** section.
 
-- **Step 1 → 2.** A hydrologist has signed off the model: issue #2 is decided,
+- **Step 1 → 2.** A hydrologist has signed off the model: issue #5 is decided,
   and the audit questions in engine-audit.md are answered or explicitly
   accepted. The app is deployed. Nobody but the modeller should rely on its
   numbers before this.
