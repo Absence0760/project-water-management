@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damHints, fmtVolume, hasDam, NODE_FIELDS, systemOf } from './fields';
+import { damHints, fmtVolume, hasDam, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -55,5 +55,16 @@ describe('systemOf (irrigation system helper, N1)', () => {
 		expect(systemOf(0.75)).toBe('sprinkler');
 		expect(systemOf(0.65)).toBe('flood');
 		expect(systemOf(0.8)).toBeNull();
+	});
+});
+
+describe('TABLE_FIELDS', () => {
+	it('keeps the rarely edited dam physics in the one-node form only, so the table fits a laptop screen', () => {
+		const keys = TABLE_FIELDS.map((f) => f.key);
+		expect(keys).not.toContain('damAreaFullM2');
+		expect(keys).not.toContain('damAreaExponent');
+		expect(keys).not.toContain('damSeepagePerDay');
+		expect(keys).toContain('irrigationEfficiency');
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 3);
 	});
 });

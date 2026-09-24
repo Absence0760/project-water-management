@@ -58,6 +58,35 @@ pnpm dev
 Register an account on the site. The first user needs no invitation, and each
 user starts with no projects.
 
+## Example catchments
+
+```bash
+pnpm seed:examples          # needs dev:db:up; about 10 s
+```
+
+This loads three invented catchments, each with one run, for two local demo
+users: `demo@example.com` and `analyst@example.com`, password `demo-password`
+(they exist only in your docker Postgres). The team "Demo Catchment
+Consultants" (demo is admin, analyst a member) owns Kleinberg and Droëvlei;
+analyst owns Sandspruit and shares it with demo as a viewer. Every name and
+number is synthetic, so the examples are committed
+(`backend/scripts/examples/`) and work on any clone. Re-seeding gives the same
+projects. Between them they show every feature of the current engine:
+
+| Example | What it shows |
+| --- | --- |
+| **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
+| **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
+| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. |
+
+Every dam has a surveyed full-supply area, so dam evaporation and rain on the
+dam are not estimated. The only run warnings are the ones each example is built
+to show (the CHIRPS and zero-rain infill, the drowned weir, the logger, the
+WR2012 note). `backend/scripts/examples/catchments.test.ts` fails if any other
+warning appears, if a self-check fails, or if an example stops parsing as a
+project document. So an engine or schema change that leaves the examples
+behind shows up in `pnpm test`.
+
 ## Email
 
 Every email the backend sends locally (confirm your address, password reset,

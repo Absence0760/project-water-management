@@ -1369,14 +1369,21 @@ describe.skipIf(!dataDir)(
 		const topo = buildTopology(project.model.nodes);
 		// N1 (engine ≥ 0.16.0): a farm's return flow % r becomes irrigation
 		// efficiency e = 1 − r with every loss returning (migration 006, which
-		// runModel also applies to the fixture's returnFlowPct). The crop is then
+		// runModel also applies to an older fixture's returnFlowPct; the current
+		// importer writes e and β itself, e < 1 exactly where r > 0). The crop is then
 		// fully supplied, so the farm abstracts F / (1 − r) where the workbook
 		// abstracted F: supplied and everything it feeds differ. Affected: every
 		// farm with r > 0, everything downstream of one, and both ends of a
 		// transfer touching an affected dam.
 		const n1Affected = (() => {
-			const legacy = project.model.nodes as unknown as { id: string; downstreamNodeId: string | null; returnFlowPct?: number }[];
-			const hit = new Set(legacy.filter((n) => (n.returnFlowPct ?? 0) > 0).map((n) => n.id));
+			const legacy = project.model.nodes as unknown as {
+				id: string;
+				downstreamNodeId: string | null;
+				returnFlowPct?: number;
+				irrigationEfficiency?: number;
+			}[];
+			// An extract from either importer: returnFlowPct (before engine 0.16.0) or irrigationEfficiency.
+			const hit = new Set(legacy.filter((n) => (n.returnFlowPct ?? 0) > 0 || (n.irrigationEfficiency ?? 1) < 1).map((n) => n.id));
 			for (let grown = true; grown; ) {
 				grown = false;
 				const add = (id: string | null | undefined) => {

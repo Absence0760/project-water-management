@@ -51,7 +51,7 @@
 		"test:backend:db": "pnpm -C backend test:db",
 		"test:scripts": "node scripts/check_root_scripts.mjs",
 		"test:guards": "node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs",
-		"//-- e2e --": "Playwright (Chromium), fully local. Needs dev:db:up; rebuilds the water_e2e database and starts its own backend :3101 + frontend :7801 (dev servers untouched). First time: test:e2e:install. See e2e/README.md.",
+		"//-- e2e --": "Playwright (Chromium), fully local. Needs dev:db:up; rebuilds the water_e2e database and starts its own backend :3101 + a production build of the frontend on :7801 (frontend/build-e2e; dev servers and frontend/build untouched). First time: test:e2e:install. See e2e/README.md.",
 		"test:e2e": "pnpm -C e2e e2e",
 		"test:e2e:ui": "pnpm -C e2e e2e:ui",
 		"test:e2e:install": "pnpm -C e2e install:browsers",

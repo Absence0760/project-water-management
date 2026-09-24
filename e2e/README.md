@@ -23,11 +23,25 @@ pnpm -C e2e e2e:list      # list the tests without running them
    schema, and applies `backend/migrations` with the backend's own migrator.
    Every run starts from an empty schema.
 2. **Servers.** Playwright's `webServer` starts the backend on **:3101** (as the
-   RLS-bound `water_app` role, against `water_e2e`) and the frontend dev server
-   on **:7801** (with `PUBLIC_API_URL=http://localhost:3101`). It never reuses
-   an existing server, so a stray process on those ports fails the run loudly
-   instead of testing the wrong build. `pnpm dev` (:7777 / :3001, database
-   `water`) can keep running alongside.
+   RLS-bound `water_app` role, against `water_e2e`) and the frontend on
+   **:7801**. The frontend is a **production build**, not the Vite dev server:
+   `vite build` with `PUBLIC_API_URL=http://localhost:3101` baked in (it is
+   `$env/static/public`), written to `frontend/build-e2e/` (with
+   `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
+   gitignored) so the production output in `frontend/build/` is never touched,
+   then served by `support/static-server.mjs` with the SPA fallback the way
+   CloudFront serves it. The build adds about 20 s to the start of a run.
+   It never reuses an existing server, so a stray process on those ports fails
+   the run loudly instead of testing the wrong build. `pnpm dev` (:7777 /
+   :3001, database `water`) can keep running alongside.
+
+   Why not the dev server: every full page load there fetches several hundred
+   unbundled modules, and by the fourth `page.goto` in one test Chromium ran
+   out of request resources (`net::ERR_INSUFFICIENT_RESOURCES`, "Failed to
+   fetch dynamically imported module") and the page never rendered.
+   `tests/repeated-loads.spec.ts` guards this. To debug against `vite dev`
+   (HMR, unminified source) anyway, run `E2E_DEV_SERVER=1 pnpm test:e2e …`;
+   specs that load a page many times may fail there.
 
 Only Chromium is configured. On Fedora, Playwright prints "your OS is not
 officially supported" and downloads its Ubuntu build, which runs fine here.
@@ -41,11 +55,12 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 
 | Path | What |
 | --- | --- |
-| `playwright.config.ts` | Ports, web servers, `timezoneId: 'UTC'`, no retries |
+| `playwright.config.ts` | Ports, web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`), `timezoneId: 'UTC'`, no retries |
 | `support/env.ts` | Ports and database URLs (dev-only docker credentials) |
 | `support/global-setup.ts` | Rebuilds `water_e2e` |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into `water_e2e` (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows |
+| `support/static-server.mjs` | Serves the e2e frontend build on :7801: files as they are, `index.html` for any other path (the SPA fallback, as CloudFront does). No dependencies |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path |
 | `tests/golden-path.spec.ts` | One user journey done only through the UI: register, create "Catchment D", build the network, crops and a transfer, save, set A-pan and EWR, upload two years of rain and flow, run the model, read the results, reload, then add two more catchments |
@@ -60,6 +75,7 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `tests/auth-layout.spec.ts` | The split sign-in / register layout beside a classic 15 px scrollbar (`html { overflow-y: scroll }`), desktop and phone, light and dark: no sideways overflow, full-height brand panel, gutter in the form's colour; saves a screenshot of each |
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run |
 | `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |
+| `tests/repeated-loads.spec.ts` | Six full loads of the Settings tab in a row, with no failed request or page error (the dev-server resource-exhaustion regression) |
 | `tests/a11y.spec.ts` | axe WCAG 2.2 A/AA scan of every page (sign-in pages, emailed-link dead states, project list, teams, a team, help, compare), every workspace tab, dialogs, save bar, one-node form, view-only workspace and a signed-in invitation, in light and dark; every tab again at phone width; sideways-scrolling boxes take focus and scroll by keyboard |
 
 ## Rules for writing specs

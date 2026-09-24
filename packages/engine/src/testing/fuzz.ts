@@ -253,6 +253,17 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
 	// Dam evaporation (N2): the default, none, anything up to well above an open-water factor.
 	settings.lakeEvapFactor = dl.pick([0.75, 0.75, 0, dl.float(0, 2)]);
+	// Calibration exclusions: date ranges and water years, in or around the run,
+	// overlapping or not. Their own stream too.
+	const cx = new Rng(seed ^ 0x1f83d9ab);
+	if (cx.bool(0.3)) {
+		settings.calibrationExclusions = Array.from({ length: cx.int(1, 3) }, (_, i) => {
+			const a = cx.int(-60, days);
+			return cx.bool(0.3)
+				? { waterYear: Number(iso(a).slice(0, 4)) + i * 3, reason: 'fuzz' }
+				: { start: iso(a), end: iso(a + cx.int(0, 400)), reason: 'fuzz' };
+		});
+	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }

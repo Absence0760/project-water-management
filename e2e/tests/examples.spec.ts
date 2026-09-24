@@ -21,6 +21,11 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ playwright }) => {
+	// Seeding is real work, not waiting: it runs Kleinberg's automatic GR4J
+	// calibration for its stored fit (~7 s alone) and three 15-year model runs:
+	// 15–20 s on an idle laptop, too close to the default 30 s once the e2e
+	// servers share the machine.
+	test.setTimeout(90_000);
 	const api = await playwright.request.newContext();
 	const probe = await api.post(`${API_URL}/auth/login`, { data: DEMO });
 	await api.dispose();
