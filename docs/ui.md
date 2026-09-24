@@ -299,11 +299,34 @@ The settings are grouped by what they drive:
 
 ## Help and glossary (`/help`)
 
-Every entry in `lib/help/content.ts`, grouped by topic, searchable, with a
-stable anchor per term (`/help#<id>`) that the ⓘ help tips link to. On wide
-screens (≥ 64rem) the table of contents is a sidebar that stays on screen as
-you scroll: it marks the topic and term you're reading (`aria-current`) and
-lists that topic's terms. On phones the topics wrap above the text.
+The page has two parts, and one search box covers both (guide matches are
+listed above glossary matches).
+
+- **Guides** (`lib/help/guides.ts`), grouped as *Start here* (the whole
+  process), *How to* (one task each: network, crops, data, transfers, EWR,
+  calibrating by hand, Fit automatically, WR2012, running, comparing) and *How
+  it works* (the model chain, a day on a farm, GR4J, calibration and
+  validation, rain gap filling, curtailment). Each guide has its own page,
+  `/help/guides/<id>` (`routes/help/guides/[id]`), with an "On this page" list,
+  numbered steps, tip and caution notes, formulas, diagrams, the glossary terms
+  it uses and related guides. Guide text is plain strings with a small markup
+  (`**UI label**`, `[[glossary-id]]`, `[[guide:id|label]]`) parsed by
+  `inline()`, so nothing is rendered as HTML; `guides.test.ts` fails on a
+  reference that doesn't resolve.
+- **Diagrams** are inline SVG components in
+  `lib/components/help/diagrams/`, wrapped by `help/Diagram.svelte`, which
+  holds the only styles they use (the app's colour tokens, so they follow the
+  light and dark themes). Each SVG is `role="img"` with a full text description,
+  plus a visible caption. On a phone the drawing keeps a readable size and
+  scrolls sideways (a `data-scroll-region`). A diagram carries no colours or
+  `<style>` of its own, and marker ids are unique across diagrams (both
+  guarded by `guides.test.ts`).
+- **Glossary**: every entry in `lib/help/content.ts`, grouped by topic, with a
+  stable anchor per term (`/help#<id>`) that the ⓘ help tips link to. On wide
+  screens (≥ 64rem) its table of contents ("Glossary topics") is a sidebar that
+  stays on screen as you scroll: it marks the topic and term you're reading
+  (`aria-current`) and lists that topic's terms. On phones the topics wrap
+  above the text.
 
 ## Viewers
 
