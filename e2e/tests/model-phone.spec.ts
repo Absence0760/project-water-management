@@ -68,7 +68,7 @@ test.describe('phone', () => {
 		])
 			await expectOnScreen(page.getByLabel(label, { exact: true }), page);
 		const months = page.getByRole('group', { name: /^Months transfer 1 runs/ });
-		await expectOnScreen(months.getByRole('checkbox', { name: /September$/ }), page);
+		await expectOnScreen(months.getByRole('checkbox', { name: 'Sep', exact: true }), page);
 		// The month toggles are tap-sized on a phone.
 		const box = await months.locator('label').first().boundingBox();
 		expect(box!.height).toBeGreaterThanOrEqual(44);

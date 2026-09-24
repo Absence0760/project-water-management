@@ -236,7 +236,7 @@
 			display: flex;
 			align-items: center;
 			gap: 0.5rem;
-			min-height: 2.75rem;
+			min-height: 44px;
 			cursor: pointer;
 		}
 		.on-toggle input {
@@ -255,13 +255,13 @@
 		}
 		.c-months :global(.months label) {
 			width: auto;
-			height: 2.75rem;
+			height: 44px;
 			font-size: 0.875rem;
 		}
 		.c-months :global(.months .all) {
 			grid-column: 1 / -1;
 			margin: 0;
-			min-height: 2.75rem;
+			min-height: 44px;
 			border: 1px solid var(--border);
 			justify-content: center;
 		}

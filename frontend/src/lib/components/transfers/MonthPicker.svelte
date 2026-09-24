@@ -22,7 +22,8 @@
 				{disabled}
 				onchange={(e) => toggle(m, e.currentTarget.checked)}
 			/>
-			<span>{monthName(m).slice(0, 1)}</span>
+			<!-- The initial is visual only; each toggle is named by its full month ("Oct", not "O Oct"). -->
+			<span aria-hidden="true">{monthName(m).slice(0, 1)}</span>
 			<span class="visually-hidden">{monthName(m)}</span>
 		</label>
 	{/each}
