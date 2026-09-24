@@ -138,11 +138,11 @@ migration**.
 Numbering is the build order for one developer. Three tracks can run in
 parallel in git worktrees:
 
-- **A (model sign-off):** 1.1–1.6, 1.19–1.25
+- **A (model sign-off):** 1.1–1.6, 1.19–1.25, 1.33–1.35
 - **B (workflow):** 1.9–1.11, 1.17–1.18, 1.26–1.32
 - **C (go-live):** 1.7–1.8, 1.12–1.16
 
-WP-1.19–1.24 start only when the hydrologist's answers arrive. Until then
+WP-1.19–1.24 and 1.33–1.35 start only when the hydrologist's answers arrive. Until then
 track B fills the gap.
 
 | WP | Title | Track | Size | Depends on |
@@ -179,8 +179,11 @@ track B fills the gap.
 | 1.30 | Spreadsheet templates for bulk entry | B | S | 1.28 |
 | 1.31 | In-browser b023 workbook import | B | L | 1.8, 1.28 |
 | 1.32 | Gap filling for input series | B | M | — |
+| 1.33 | Other water users (towns, unlisted users) | A | S | 1.1 answers |
+| 1.34 | Groundwater abstraction and base-flow reduction | A | M | 1.1 answers, 1.24 |
+| 1.35 | Land-cover streamflow reductions (invasive plants, forestry) | A | M | 1.1 answers, 1.24 |
 
-Rough total: about 22–28 developer-weeks. With tracks in parallel and
+Rough total: about 25–32 developer-weeks. With tracks in parallel and
 operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 **4–6 calendar months**. H1 and the workbook import are the long poles.
 
@@ -197,6 +200,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - issue #1 "To close this issue" (confirm A1; who applied the area scaling; the
       A1-b rating; who ran A1 after mid-2015; the June 2016 peak);
     - issue #2 (are the zero runs missing data?);
+    - human impacts b023 leaves out (WP-1.33–1.35): are there towns or
+      unlisted users on the river, and what do they take; do farms pump
+      boreholes, and is the aquifer connected to the river; how much of the
+      catchment is under invasive trees or forestry, and which reduction
+      method is acceptable;
     - followups.md § Hydrologist: the data-quality limits (5×/10× P99,
       5/14-day flat-lines), the "Demand left %" extremes, the return-flow
       and curtailment note, the help-text read-through of
@@ -1487,6 +1495,125 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Size:** M (1–2 weeks).
 - **Depends on:** none. Bumps `ENGINE_VERSION` only if runs start using fills
   by default (they don't: fills are opt-in per series).
+
+### WP-1.33 Other water users (towns, unlisted users)
+
+- **Goal:** water taken from the river by users that aren't modelled farms
+  (a town or municipal scheme, industry, unlisted or unlawful irrigators) is
+  accounted for, so the model stops handing that water to the listed farms
+  and over-stating their supply and the EWR.
+- **Changes:**
+  - **engine:** a new node kind `user`: a monthly demand (m³/day per month),
+    an optional share returned downstream (treated wastewater), and a
+    priority against the farms (before farms by default: a municipal
+    allocation is usually senior). It draws from the river at its position in
+    the network only, with no dam, crops or rain. New outputs `supplied`,
+    `deficit` and `returned` per user node; the gauge and EWR see the flow
+    after it.
+  - **migration:** `node.kind` gains `'user'`; `node.user_demand_m3_day`
+    (12-month array, nullable) and `node.user_return_pct` (default 0), with
+    CHECKs.
+  - **scripts:** the importer creates none (b023 has no such node).
+- **Data model:** `node` columns; RLS unchanged (same table).
+- **API:** `NetworkNode` fields; new run series keys; api.md.
+- **UI:** "Add other user" in the Network tab and schematic; demand table by
+  month; results in farm-style detail.
+- **Local-first equivalent:** n/a.
+- **Tests:**
+  - engine unit: a user above a farm reduces that farm's river supply by
+    exactly the user's take; priority order both ways; return share
+    reappears downstream the same day;
+  - `checkBalance` includes user takes and returns; storage and flow never
+    negative;
+  - DB migration and guards; e2e add a user node and run.
+- **Docs to update:** model.md (new node kind), data-model.md, api.md, ui.md.
+- **Acceptance criteria:** the balance closes; with a user node present, the
+  outlet flow falls by the net take on days with enough flow.
+- **Size:** S.
+- **Depends on:** WP-1.1 (does the client catchment have such users; which
+  priority rule applies).
+
+### WP-1.34 Groundwater abstraction and base-flow reduction
+
+- **Goal:** borehole pumping is modelled as a supply source for farms and
+  as a loss to the river's base flow, instead of being invisible.
+  Groundwater is a separate resource with its own licences, but pumping near
+  a river lowers the dry-season flow the EWR depends on.
+- **Changes:**
+  - **engine:**
+    - per farm: a borehole capacity (m³/day) and a use rule (none /
+      supplemental after dam and river / primary / drought-only below a dam
+      storage trigger), taken from the existing node-based design (model.md
+      §4);
+    - a stream-depletion fraction `d` (0–1) per farm: a share of the pumped
+      volume removed from the river's base flow, with an optional lag
+      (a first-order store, so depletion keeps going for a while after
+      pumping stops);
+    - depends on WP-1.24 (a flow model with a base-flow store to take it
+      from);
+    - new outputs `groundwaterUsed` and `baseflowDepletion` per farm.
+  - **migration:** `node.borehole_capacity_m3_day`, `node.borehole_rule`,
+    `node.stream_depletion_frac`, `node.stream_depletion_lag_days`, all
+    nullable with CHECKs. Null means no boreholes: existing projects are
+    unchanged.
+- **Data model / API / UI:** node fields; farm form "Groundwater" section;
+  farm detail shows groundwater use and the depletion it causes.
+- **Local-first equivalent:** n/a.
+- **Tests:**
+  - engine unit: supplemental use covers only what dam and river can't;
+    depletion equals `d` × pumping over a long run (lag conserves volume);
+    base flow never goes negative (depletion is clamped and the unmet part
+    reported as a warning);
+  - `checkBalance` includes groundwater in and depletion out;
+  - DB migration and guards; e2e borehole edit.
+- **Docs to update:** model.md, engine-audit.md (new finding row: groundwater
+  was not modelled), data-model.md, api.md, ui.md.
+- **Acceptance criteria:** the balance closes; a farm with boreholes shows
+  less deficit and the outlet shows the depletion.
+- **Size:** M.
+- **Depends on:** WP-1.1 (do boreholes matter in the client catchment; is
+  there any data on pumping volumes or aquifer connection), WP-1.24.
+
+### WP-1.35 Land-cover streamflow reductions (invasive plants, forestry)
+
+- **Goal:** the rain-to-flow step accounts for land cover that uses more
+  water than the natural vegetation it replaced: invasive alien trees,
+  commercial forestry (a declared streamflow reduction activity under the
+  National Water Act), and optionally orchards and vineyards. This is the
+  basis for "clear the invasive trees and see what the river gets back", a
+  question licensing (Step 3) and environmental users ask.
+- **Changes:**
+  - **engine:** per hydrological unit, a list of land-cover patches (area km²,
+    cover class, condensed-cover % for invasives). Each class reduces natural
+    runoff by a monthly fraction of the patch's share of the unit (the method
+    South Africa's national water resources study uses for afforestation and
+    invasive plants), applied to the natural flow before farms take water.
+    The reduction is reported as its own series so it is never hidden inside
+    calibration. Class defaults come from published tables and are marked
+    as defaults; the hydrologist can override them per project.
+  - **migration:** a `land_cover` table (project_id, node_id, class, area_km2,
+    density_pct, factors jsonb null), with RLS policies, same-project
+    trigger, covering FK indexes and `GRANT … TO water_app` in the same file
+    (`/safe-migration`).
+  - **scenarios:** a what-if "clear class X from area Y" works through the
+    existing copy-and-compare flow (run comparison).
+- **Data model / API / UI:** new table and CRUD routes (auth-gated, inventory
+  test); a "Land cover" panel per farm; the reduction series in results.
+- **Local-first equivalent:** n/a (no external data source; tables are
+  entered or imported by hand).
+- **Tests:**
+  - engine unit: zero patches changes nothing; the reduction never exceeds
+    natural flow; clearing all patches returns the natural series exactly;
+  - DB/RLS: members see, non-members can't (with a positive control);
+  - route-auth inventory; e2e add a patch and compare against the copy
+    without it.
+- **Docs to update:** model.md, data-model.md, api.md, ui.md, security.md
+  (new table).
+- **Acceptance criteria:** the natural-flow reduction is visible as its own
+  series and the clearing scenario reproduces the unreduced run.
+- **Size:** M.
+- **Depends on:** WP-1.1 (which covers matter in the client catchment, and
+  which reduction method the hydrologist accepts), WP-1.24.
 
 ## 7. Security, privacy and compliance
 

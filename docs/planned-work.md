@@ -43,7 +43,9 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 | ⬜ **Assurance of supply & yield** | Reliability (% of time demand met), firm yield of each dam, storage–yield curves. Standard planning outputs. | M |
 | ⬜ **Dam evaporation, seepage, area–volume curves** | b023 ignores dam losses; material for small farm dams in summer. | M |
 | ⬜ **Operating rules** | Pump scenarios from the node-based design (dam-first, river-first, trigger-based, run-of-river) and drought restrictions (curtail when storage < x %). | L |
-| ⬜ **Groundwater abstraction** | Placeholder in the node-based model; many farms supplement from boreholes. | M |
+| ⬜ **Groundwater abstraction** | Placeholder in the node-based model; many farms supplement from boreholes, and pumping near the river lowers dry-season base flow. Roadmap WP-1.34. | M |
+| ⬜ **Other water users** | Towns, industry and unlisted irrigators take river water the model currently hands to the listed farms. Roadmap WP-1.33. | S |
+| ⬜ **Land-cover streamflow reductions** | Invasive alien trees and forestry use more water than natural vegetation; needed for "clear the invasives" scenarios. Roadmap WP-1.35. | M |
 | ⬜ **Full EWR tables** | Import Desktop Version 2 percentile tables, high-flow components, EWR at more than one site (not only the outlet). | M |
 | ⬜ **Stress classes & water account** | Port the node-based System/Monthly stress classes (Low → Critical) and the catchment water account (runoff − irrigation − outflow) as results views. | S |
 | ⬜ **Runoff module as an alternative flow generator** | The AI bucket model (soil store, quickflow/baseflow) with multiple rain gauges per hydrological unit — after fixing its unaccounted 56 % of rainfall. | L |
