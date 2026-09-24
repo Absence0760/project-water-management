@@ -1058,6 +1058,15 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
       0.7) and `node.dam_seepage_per_day` (default 0), with CHECKs;
     - settings `lakeEvapFactor` monthly (default WR90 lake factors, or 0.75
       flat; hydrologist decides).
+    - **Pan basis.** The WR90 (Midgley 1994) lake factors are ratios to
+      **S-pan** evaporation, but the project's `apanMm` is A-pan. Applying
+      them straight to A-pan is wrong. Either convert A-pan to S-pan first
+      (the WR90 monthly pan-conversion factors for the evaporation zone),
+      or store a single A-pan-based lake factor and label it as such.
+      The WR90 values themselves have not been checked yet: read them from
+      the WRC report for the catchment's evaporation zone before building.
+      This setting is separate from the GR4J `panCoefficient` (A-pan →
+      PET for the land surface), and neither setting is calibrated.
   - **scripts:** the importer leaves area null (b023 has none) and prints a
     note.
 - **Data model:** `node` columns. Null area means no evaporation, so
