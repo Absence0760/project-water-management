@@ -7,6 +7,12 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Blocking releases (operator)
 
+- [ ] **Client flow volumes in git history.** Until 2026-09-24,
+      `docs/plan.md` quoted the client catchment's per-water-year gauge and
+      logger volumes (commit 4f931bb onward). The tree no longer has them,
+      but history does. Scrub them (`git filter-repo --replace-text`, as for
+      WP-1.7) before the repo is made public.
+
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
@@ -279,9 +285,30 @@ conditions come before any client numbers:
 
       The hydrologist still signs off the logger as the target (#1). This
       plan doesn't need them to settle a conflict.
-- [ ] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
-      It trades off against X1 and X3, so it must never be calibrated. The
-      EWR result is sensitive to it: re-run at 0.6 and 0.85.
+- [x] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
+      Done 2026-09-24 (model.md §2.4a, §2.10b): it is never a calibrated
+      parameter (guard test); a fit records the forcing it ran under (pan
+      coefficient, A-pan, CHIRPS bias correction) and shows "Forcing changed
+      since fit" when any differs; Settings offers generic / winter-rainfall /
+      summer-rainfall presets (indicative, FAO-56 Table 5 classes) and a run
+      warns outside 0.6–0.85. `pnpm pan-sensitivity <project.json>` runs GR4J
+      at 0.60 / 0.70 / 0.85 and the winter preset, fixed and refitted. On the
+      client catchment (table in gitignored
+      `data/client-catchment/pan-sensitivity.md`):
+      - with parameters fixed, 0.60 → 0.85 lowers MAR by roughly 10–15 % and
+        raises EWR days not met by roughly a tenth;
+      - refitting does **not** absorb it: EWR days not met is, if anything,
+        more sensitive after refitting;
+      - refits score better at flat 0.70 and the winter preset than at the
+        extremes, a mild hint that the true forcing sits mid-range.
+      Still open: the hydrologist picks the monthly values (plan.md Q4).
+- [ ] **The stored GR4J parameters don't fit the logger.** The same
+      sensitivity run found the client catchment's current GR4J parameters
+      score a negative NSE against the logger at every pan coefficient;
+      refitting gives positive NSE/KGE and cuts simulated MAR by roughly a
+      third to a half. Refit (typical bounds + the WR2012 MAR band, the fit
+      recommended above) once the pan coefficient is chosen, and before any
+      client numbers are shown.
 
 **Answers to put to the hydrologist and the CMA** (the full reasoning is in
 the reports):
@@ -576,6 +603,12 @@ the suggested order (the IDs carry the detail):
       Run `persona-hydrologist` on the panel, the farm daily CSV and the
       summary CSV: do they answer what a hydrologist checks first? Log gaps
       here. Cheap; decides whether the Excel audit workbook is worth a day.
+- [x] **See every input series and how the model used it** (2026-09-24):
+      the Data tab's Preview dialog joins every input series by day with
+      rain used and its source, CHIRPS factor and corrected value, flow in
+      m³/day, per-series flags and calibration exclusions (ui.md). Its e2e
+      spec `e2e/tests/series-preview.spec.ts` has not been run yet (the e2e
+      ports were busy); run it.
 - [ ] **More columns in the Data tab downloads** (the original request that
       led to the self-checks). `GET /series/:id/export.csv` still writes only
       `date` + the uploaded value. Add how the model used each series: for
