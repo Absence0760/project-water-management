@@ -947,6 +947,17 @@ export const GUIDES: Guide[] = [
 	}
 ];
 
+/** The setup path on the /help landing page: one step per workspace tab. */
+export const SETUP_STEPS: { tab: TabId; text: string; guide: string; optional?: boolean }[] = [
+	{ tab: 'overview', text: 'Create a project, or copy one for a what-if.', guide: 'create-a-project' },
+	{ tab: 'network', text: 'Farms, dams and gauges, draining to one outlet.', guide: 'build-the-network' },
+	{ tab: 'crops', text: 'Crop factors and the hectares on each farm.', guide: 'set-up-crops-and-demand', optional: true },
+	{ tab: 'transfers', text: 'Pipelines or canals between farm dams.', guide: 'add-a-transfer', optional: true },
+	{ tab: 'series', text: 'Daily rain, and observed flow to calibrate.', guide: 'add-data' },
+	{ tab: 'settings', text: 'Evaporation, runoff parameters and the EWR.', guide: 'fit-automatically' },
+	{ tab: 'runs', text: 'Run the model, read and compare results.', guide: 'run-and-read-results' }
+];
+
 // ---------------------------------------------------------------------------
 // Lookup, inline markup and search
 // ---------------------------------------------------------------------------
@@ -981,6 +992,16 @@ export type InlinePart =
 
 const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 
+/**
+ * A glossary term as it reads mid-sentence: an ordinary capitalised first
+ * word is lowercased ("Runoff model" → "runoff model"); acronyms and names
+ * (EWR, CHIRPS, GR4J, A-pan, NSE) are left alone. Give a [[id|label]] when a
+ * link starts a sentence.
+ */
+export function inSentence(term: string): string {
+	return /^[A-Z][a-z]+(?![-\w])/.test(term) ? term[0]!.toLowerCase() + term.slice(1) : term;
+}
+
 /** Splits guide text into plain text, bold UI labels and links. */
 export function inline(text: string): InlinePart[] {
 	const out: InlinePart[] = [];
@@ -999,7 +1020,7 @@ export function inline(text: string): InlinePart[] {
 			out.push(g ? { kind: 'guide', id: g.id, text: label ?? g.title } : { kind: 'broken', ref, text: label ?? ref });
 		} else {
 			const e = helpFor(ref);
-			out.push(e ? { kind: 'term', id: e.id, text: label ?? e.term } : { kind: 'broken', ref, text: label ?? ref });
+			out.push(e ? { kind: 'term', id: e.id, text: label ?? inSentence(e.term) } : { kind: 'broken', ref, text: label ?? ref });
 		}
 	}
 	if (last < text.length) out.push({ kind: 'text', text: text.slice(last) });

@@ -297,36 +297,54 @@ The settings are grouped by what they drive:
   (`runs/cache.ts`). A run stores about 170 series of about 16 000 values.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 
-## Help and glossary (`/help`)
+## Help (`/help`)
 
-The page has two parts, and one search box covers both (guide matches are
-listed above glossary matches).
+Every help page shares one shell (`routes/help/+layout.svelte`): a sidebar
+(`help/HelpNav.svelte`) with the search box, the overview, every guide by group
+(*Start here*, *How it works*, *How to*) and the glossary, which marks the page
+you're on (`aria-current`). On wide screens (≥ 64rem) it stays beside the text
+as you scroll; on phones it folds behind a **Help contents** button above the
+page, and closes again when you pick a page.
 
-- **Guides** (`lib/help/guides.ts`), grouped as *Start here* (the whole
-  process), *How to* (one task each: network, crops, data, transfers, EWR,
-  calibrating by hand, Fit automatically, WR2012, running, comparing) and *How
-  it works* (the model chain, a day on a farm, GR4J, calibration and
-  validation, rain gap filling, curtailment). Each guide has its own page,
-  `/help/guides/<id>` (`routes/help/guides/[id]`), with an "On this page" list,
-  numbered steps, tip and caution notes, formulas, diagrams, the glossary terms
-  it uses and related guides. Guide text is plain strings with a small markup
+- **Overview** (`/help`): the illustrated catchment tour
+  (`help/CatchmentTour.svelte`, stops in `lib/help/tour.ts`), the setup path
+  (one step per workspace tab, `SETUP_STEPS` in `lib/help/guides.ts`) and the
+  model guides. The tour's picture is a Blender render of an invented
+  catchment, with eight numbered stops that follow the water from rain to the
+  outlet. The numbered list under it is the full text; the markers on the
+  picture are a pointer shortcut (out of the tab order and hidden from screen
+  readers, since the list says the same). Clicking a marker lights its stop,
+  and hovering or focusing a stop lights its marker. The picture and the
+  marker positions are generated together by `pnpm gen:help-art`
+  (`bin/gen-help-art.sh`, scene in `scripts/help-art/catchment.py`): the
+  script projects each feature through the render camera and writes
+  `lib/help/catchment-hotspots.json`, so a marker always sits on its feature.
+  The output is committed; re-run it (needs Blender 5 and ImageMagick 7) only
+  after changing the scene. An old `/help#<term>` link goes on to
+  `/help/glossary#<term>`.
+- **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
+  or one idea each, with an "On this page" list, numbered steps, tip and
+  caution notes, formulas, diagrams, the glossary terms it uses, related
+  guides and previous / next. Guide text is plain strings with a small markup
   (`**UI label**`, `[[glossary-id]]`, `[[guide:id|label]]`) parsed by
-  `inline()`, so nothing is rendered as HTML; `guides.test.ts` fails on a
-  reference that doesn't resolve.
-- **Diagrams** are inline SVG components in
-  `lib/components/help/diagrams/`, wrapped by `help/Diagram.svelte`, which
-  holds the only styles they use (the app's colour tokens, so they follow the
-  light and dark themes). Each SVG is `role="img"` with a full text description,
-  plus a visible caption. On a phone the drawing keeps a readable size and
-  scrolls sideways (a `data-scroll-region`). A diagram carries no colours or
-  `<style>` of its own, and marker ids are unique across diagrams (both
-  guarded by `guides.test.ts`).
-- **Glossary**: every entry in `lib/help/content.ts`, grouped by topic, with a
-  stable anchor per term (`/help#<id>`) that the ⓘ help tips link to. On wide
-  screens (≥ 64rem) its table of contents ("Glossary topics") is a sidebar that
-  stays on screen as you scroll: it marks the topic and term you're reading
-  (`aria-current`) and lists that topic's terms. On phones the topics wrap
-  above the text.
+  `inline()`, so nothing is rendered as HTML; a term link reads in lower case
+  mid-sentence unless it is an acronym or name (`inSentence`), and
+  `guides.test.ts` fails on a reference that doesn't resolve.
+- **Diagrams** are inline SVG components in `lib/components/help/diagrams/`,
+  wrapped by `help/Diagram.svelte`, which holds the only styles they use (the
+  app's colour tokens, so they follow the light and dark themes). Each SVG is
+  `role="img"` with a full text description, plus a visible caption. On a
+  phone the drawing keeps a readable size and scrolls sideways (a
+  `data-scroll-region`). A diagram carries no colours or `<style>` of its own,
+  and marker ids are unique across diagrams (both guarded by
+  `guides.test.ts`).
+- **Glossary** (`/help/glossary`): every entry in `lib/help/content.ts`,
+  grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
+  the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the
+  sidebar which topic and term are on screen; the sidebar lists the current
+  topic's terms.
+- **Search** (`/help/search?q=`): results update as you type in the sidebar's
+  box, which keeps focus; guides first, then glossary terms.
 
 ## Viewers
 

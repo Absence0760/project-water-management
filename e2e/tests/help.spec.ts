@@ -54,56 +54,96 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await expect(bubble).toBeVisible();
 	await page.getByRole('heading', { level: 1, name: 'Help tips' }).click();
 	await expect(bubble).toHaveCount(0);
+
+	// "More in the glossary" lands on the term's entry.
+	await tip.click();
+	await bubble.getByRole('link', { name: 'More in the glossary' }).click();
+	await expect(page).toHaveURL(/\/help\/glossary#element-farm$/);
+	await expect(page.getByRole('article', { name: 'Farm element' })).toBeInViewport();
 });
 
-test('the help contents stay on screen beside the text and follow the section being read', async ({ page, owner }) => {
+test('the help sidebar stays beside the glossary and follows the section being read', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
-	await page.goto('/help');
-	const toc = page.getByRole('navigation', { name: 'Glossary topics' });
-	const topics = page.locator('.content').getByRole('heading', { level: 3 });
+	await page.goto('/help/glossary');
+	const nav = page.getByRole('navigation', { name: 'Help' });
+	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
 	const first = (await topics.first().textContent())!.trim();
 	const last = (await topics.last().textContent())!.trim();
 	expect(first).not.toBe(last);
 
-	await expect(toc.getByRole('link', { name: first, exact: true })).toHaveAttribute('aria-current', 'location');
+	await expect(nav.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
+	await expect(nav.getByRole('link', { name: first, exact: true })).toHaveAttribute('aria-current', 'location');
 
-	// Scroll to the end: the contents are still in view, and mark the last topic.
+	// Scroll to the end: the sidebar is still in view (its search box at the
+	// top, the list scrolled within it), and marks the last topic, on screen.
 	await page.keyboard.press('End');
-	await expect(toc.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'location');
-	await expect(toc.getByRole('link', { name: first, exact: true })).not.toHaveAttribute('aria-current', 'location');
-	const box = await toc.boundingBox();
+	await expect(nav.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'location');
+	await expect(nav.getByRole('link', { name: first, exact: true })).not.toHaveAttribute('aria-current', 'location');
+	await expect(nav.getByRole('link', { name: last, exact: true })).toBeInViewport();
+	const box = await page.getByRole('searchbox', { name: 'Search help' }).boundingBox();
 	expect(box!.y).toBeGreaterThanOrEqual(0);
 	expect(box!.y).toBeLessThan(200);
 
 	// The current topic lists its terms, and a term link jumps to it.
-	const term = toc.getByRole('list').getByRole('list').getByRole('link').first();
+	// (The Glossary item holds every topic, so the topic's own item is the innermost match.)
+	const current = nav.getByRole('listitem').filter({ has: page.getByRole('link', { name: last, exact: true }) }).last();
+	const term = current.getByRole('list').getByRole('link').first();
 	const name = (await term.textContent())!.trim();
 	await term.click();
 	await expect(page.getByRole('article', { name })).toBeInViewport();
 });
 
-test('on a phone the help topics sit above the text, without a sidebar', async ({ page, owner }) => {
+test('on a phone the help contents fold behind a button above the page', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 390, height: 800 });
 	await page.goto('/help');
-	const toc = page.getByRole('navigation', { name: 'Glossary topics' });
-	const firstTopic = page.locator('.content').getByRole('heading', { level: 3 }).first();
-	const tocBox = (await toc.boundingBox())!;
-	const headBox = (await firstTopic.boundingBox())!;
-	expect(tocBox.y + tocBox.height).toBeLessThanOrEqual(headBox.y);
-	await page.keyboard.press('End');
-	await expect(toc).not.toBeInViewport();
+	const toggle = page.getByRole('button', { name: 'Help contents' });
+	const nav = page.getByRole('navigation', { name: 'Help' });
+	await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+	await expect(nav).toBeHidden();
+	const toggleBox = (await toggle.boundingBox())!;
+	const h1Box = (await page.getByRole('heading', { level: 1 }).boundingBox())!;
+	expect(toggleBox.y + toggleBox.height).toBeLessThanOrEqual(h1Box.y);
+
+	await toggle.click();
+	await expect(nav).toBeVisible();
+	await nav.getByRole('link', { name: 'Add a transfer' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Add a transfer' })).toBeVisible();
+	// Choosing a page folds the contents away again.
+	await expect(nav).toBeHidden();
+	await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('a guide opens from the help page, shows its diagram, and links into the glossary', async ({ page, owner }) => {
+test('the catchment tour links each picture marker to its stop', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.goto('/help');
+	await expect(page.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
+	const stops = page.getByRole('main').getByRole('list').filter({ has: page.getByRole('heading', { name: 'Rain falls on the catchment' }) });
+	await expect(stops.getByRole('heading', { level: 3 })).toHaveCount(8);
+
+	// The markers are the pointer shortcut (hidden from assistive tech: the list is the text).
+	await page.locator('.marker', { hasText: '5' }).click();
+	const irrigation = stops.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Crops are irrigated from the dams' }) });
+	await expect(irrigation).toHaveClass(/\bon\b/);
+	await expect(page.locator('.marker', { hasText: '5' })).toHaveClass(/\bon\b/);
+
+	await irrigation.getByRole('link', { name: /Set up crops and irrigation demand/ }).click();
+	await expect(page).toHaveURL(/\/help\/guides\/set-up-crops-and-demand$/);
+});
+
+test('a guide shows its diagrams and links into the glossary', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/help');
-	const guides = page.getByRole('region', { name: 'Guides' });
-	await guides.getByRole('link', { name: 'How calibration works' }).click();
+	await page.getByRole('region', { name: 'Understand the model' }).getByRole('link', { name: 'How calibration works' }).click();
 
 	await expect(page).toHaveURL(/\/help\/guides\/how-calibration-works$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Help' }).getByRole('link', { name: 'How calibration works' })).toHaveAttribute(
+		'aria-current',
+		'page'
+	);
 	await expect(page.getByRole('img', { name: /DDS perturbs fewer parameters/ })).toBeVisible();
 	await expect(page.getByRole('img', { name: /dry to wet test fits on the four driest years/ })).toBeVisible();
 
@@ -113,17 +153,30 @@ test('a guide opens from the help page, shows its diagram, and links into the gl
 
 	// A term link lands on its glossary entry.
 	await page.getByRole('region', { name: 'Terms in this guide' }).getByRole('link', { name: 'Fit record' }).click();
-	await expect(page).toHaveURL(/\/help#fit-record$/);
+	await expect(page).toHaveURL(/\/help\/glossary#fit-record$/);
 	await expect(page.getByRole('article', { name: 'Fit record' })).toBeInViewport();
 });
 
-test('help search finds guides and glossary terms together', async ({ page, owner }) => {
+test('help search finds guides and glossary terms as you type', async ({ page, owner }) => {
 	void owner;
-	await page.goto('/help');
-	await page.getByRole('searchbox', { name: 'Search guides and the glossary' }).fill('transfer');
-	const results = page.getByRole('region', { name: 'Search results' });
-	await expect(results.getByRole('link', { name: 'Add a transfer' })).toBeVisible();
-	await expect(results.getByRole('article', { name: 'Transfer', exact: true })).toBeVisible();
+	await page.goto('/help/guides/how-gr4j-works');
+	const box = page.getByRole('searchbox', { name: 'Search help' });
+	await box.fill('transfer');
+	await expect(page).toHaveURL(/\/help\/search\?q=transfer$/);
+	await expect(box).toBeFocused();
+	await expect(page.getByRole('status')).toContainText('match “transfer”');
+	await expect(page.getByRole('region', { name: 'Guides' }).getByRole('link', { name: 'Add a transfer' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Glossary' }).getByRole('link', { name: 'Transfer', exact: true })).toBeVisible();
+
+	await box.fill('zzzz');
+	await expect(page.getByText('Nothing matches.')).toBeVisible();
+});
+
+test('an old /help#term link goes on to the glossary entry', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help#nse');
+	await expect(page).toHaveURL(/\/help\/glossary#nse$/);
+	await expect(page.getByRole('article', { name: /^NSE/ })).toBeInViewport();
 });
 
 test('an unknown guide says so and links back to help', async ({ page, owner }) => {

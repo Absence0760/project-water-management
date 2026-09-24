@@ -111,7 +111,7 @@
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
 					{#if entry.units}<span class="units">Units: {entry.units}</span>{/if}
-					<a class="more" href="{base}/help#{entry.id}">More in the glossary</a>
+					<a class="more" href="{base}/help/glossary#{entry.id}">More in the glossary</a>
 				</span>
 			{/if}
 		</span>

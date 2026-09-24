@@ -198,7 +198,17 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 
 				await page.goto('/help');
-				await expect(page.getByRole('heading', { level: 1, name: 'Help and glossary' })).toBeVisible();
+				await expect(page.getByRole('heading', { level: 1, name: 'How the catchment model works' })).toBeVisible();
+				await expect(page.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
+				await expectNoViolations(page);
+
+				await page.goto('/help/glossary');
+				await expect(page.getByRole('heading', { level: 1, name: 'Glossary' })).toBeVisible();
+				await expectNoViolations(page);
+
+				await page.goto('/help/search?q=dam');
+				await expect(page.getByRole('heading', { level: 1, name: 'Search help' })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'Guides' })).toBeVisible();
 				await expectNoViolations(page);
 
 				// A guide with every block type and two diagrams.
@@ -231,6 +241,18 @@ test.describe('phone', () => {
 	test('the login page has no violations', async ({ page }) => {
 		await page.goto('/login');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expectNoViolations(page);
+	});
+
+	test('help, with its contents open, and a guide with diagrams have no violations', async ({ page, owner }) => {
+		void owner;
+		await page.goto('/help');
+		await page.getByRole('button', { name: 'Help contents' }).click();
+		await expect(page.getByRole('navigation', { name: 'Help' })).toBeVisible();
+		await expectNoViolations(page);
+
+		await page.goto('/help/guides/how-the-model-works');
+		await expect(page.getByRole('img', { name: /runoff model, GR4J or legacy/ })).toBeVisible();
 		await expectNoViolations(page);
 	});
 

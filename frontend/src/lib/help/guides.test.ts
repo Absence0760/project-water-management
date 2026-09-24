@@ -9,6 +9,7 @@ import {
 	TAB_TITLES,
 	guideFor,
 	inline,
+	inSentence,
 	plainText,
 	searchGuides,
 	sectionId,
@@ -114,8 +115,19 @@ describe('inline', () => {
 	});
 
 	it('resolves a field key to its glossary entry, and marks unknown references', () => {
-		expect(inline('[[node.damCapacityM3]]')).toEqual([{ kind: 'term', id: 'dam-capacity', text: 'Dam capacity' }]);
+		expect(inline('[[node.damCapacityM3]]')).toEqual([{ kind: 'term', id: 'dam-capacity', text: 'dam capacity' }]);
 		expect(inline('[[nope]] [[guide:nope|x]]').filter((p) => p.kind === 'broken')).toHaveLength(2);
+	});
+
+	it('lowercases an ordinary term mid-sentence but keeps acronyms and names', () => {
+		expect(inSentence('Runoff model')).toBe('runoff model');
+		expect(inSentence('Transfer')).toBe('transfer');
+		expect(inSentence('Days in February')).toBe('days in February');
+		expect(inSentence('EWR (Environmental Water Requirement)')).toBe('EWR (Environmental Water Requirement)');
+		expect(inSentence('CHIRPS rainfall')).toBe('CHIRPS rainfall');
+		expect(inSentence('GR4J')).toBe('GR4J');
+		expect(inSentence('A-pan evaporation')).toBe('A-pan evaporation');
+		expect(inSentence('NSE (Nash–Sutcliffe efficiency)')).toBe('NSE (Nash–Sutcliffe efficiency)');
 	});
 
 	it('leaves plain text alone', () => {

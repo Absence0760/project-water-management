@@ -1,6 +1,6 @@
 <script lang="ts">
 	// One guide from $lib/help/guides: sections of text, steps, notes,
-	// formulas and diagrams, with links into the glossary (/help#<id>) and to
+	// formulas and diagrams, with links into the glossary (/help/glossary#<id>) and to
 	// other guides. Guide text is plain strings with a small markup that
 	// inline() parses, so nothing here is {@html}.
 	import { base } from '$app/paths';
@@ -22,18 +22,18 @@
 {#snippet rich(text: string)}
 	{#each inline(text) as part, i (i)}
 		{#if part.kind === 'strong'}<strong>{part.text}</strong>
-		{:else if part.kind === 'term'}<a href="{base}/help#{part.id}">{part.text}</a>
+		{:else if part.kind === 'term'}<a href="{base}/help/glossary#{part.id}">{part.text}</a>
 		{:else if part.kind === 'guide'}<a href="{base}/help/guides/{part.id}">{part.text}</a>
 		{:else}{part.text}{/if}
 	{/each}
 {/snippet}
 
-<main class="page guide-page">
+<article class="guide-page">
 	<nav aria-label="Breadcrumb" class="crumbs">
 		<ol>
 			<li><a href="{base}/help">Help</a></li>
-			<li><a href="{base}/help#guides-h">Guides</a></li>
-			{#if guide}<li aria-current="page">{guide.title}</li>{/if}
+			{#if guide}<li>{GUIDE_KIND_TITLES[guide.kind]}</li>
+				<li aria-current="page">{guide.title}</li>{/if}
 		</ol>
 	</nav>
 
@@ -42,7 +42,6 @@
 		<p>There is no guide called “{page.params.id}”. <a href="{base}/help">See all guides and the glossary</a>.</p>
 	{:else}
 		<header class="head">
-			<p class="kind">{GUIDE_KIND_TITLES[guide.kind]}</p>
 			<h1>{guide.title}</h1>
 			<p class="lede">{guide.summary}</p>
 			{#if guide.tab}
@@ -51,7 +50,7 @@
 		</header>
 
 		{#if guide.sections.length > 1}
-			<nav class="panel onpage" aria-label="On this page">
+			<nav class="onpage" aria-label="On this page">
 				<p class="muted">On this page</p>
 				<ul>
 					{#each guide.sections as s (s.heading)}
@@ -95,7 +94,7 @@
 				<dl>
 					{#each terms as e (e.id)}
 						<div>
-							<dt><a href="{base}/help#{e.id}">{e.term}</a></dt>
+							<dt><a href="{base}/help/glossary#{e.id}">{e.term}</a></dt>
 							<dd class="muted">{e.short}</dd>
 						</div>
 					{/each}
@@ -108,7 +107,7 @@
 				<h2 id="related-h">Related guides</h2>
 				<ul class="related">
 					{#each related as g (g.id)}
-						<li class="panel">
+						<li>
 							<a href="{base}/help/guides/{g.id}">{g.title}</a>
 							<p class="muted">{g.summary}</p>
 						</li>
@@ -122,11 +121,11 @@
 			{#if next}<a href="{base}/help/guides/{next.id}" rel="next" class="next"><span class="muted">Next</span> {next.title}</a>{/if}
 		</nav>
 	{/if}
-</main>
+</article>
 
 <style>
 	.guide-page {
-		max-width: 52rem;
+		max-width: 46rem;
 	}
 	.crumbs ol {
 		display: flex;
@@ -145,16 +144,9 @@
 	.crumbs [aria-current='page'] {
 		color: var(--text-muted);
 	}
-	.kind {
-		margin: 0;
-		color: var(--accent);
-		font-size: 0.8rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
 	.head h1 {
-		margin: 0.2rem 0 0.4rem;
+		margin: 0 0 0.4rem;
+		font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
 	}
 	.lede {
 		margin: 0;
@@ -167,6 +159,10 @@
 	}
 	.onpage {
 		margin: 1.25rem 0 0.5rem;
+		padding: 0.6rem 0.9rem;
+		border-left: 3px solid var(--border-strong);
+		background: var(--surface-2);
+		border-radius: 0 var(--radius) var(--radius) 0;
 	}
 	.onpage p {
 		margin: 0 0 0.25rem;
@@ -246,15 +242,13 @@
 		font-size: 0.9rem;
 	}
 	.related {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-		gap: 0.75rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 	.related li {
-		margin: 0;
+		padding: 0.6rem 0;
+		border-bottom: 1px solid var(--border);
 	}
 	.related a {
 		font-weight: 600;
