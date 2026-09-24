@@ -37,6 +37,8 @@ interface LoadedRun {
 	createdBy: string | null;
 	summary: RunSummary;
 	inputs: RunInputsSnapshot;
+	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
+	legacy: boolean;
 }
 
 async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
@@ -46,7 +48,8 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	const { rows } = await db.query<LoadedRun & { projectName: string }>(
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 		        r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
-		        r.summary, r.inputs, p.name AS "projectName"
+		        r.summary, r.inputs, p.name AS "projectName",
+		        COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy
 		 FROM model_run r
 		 JOIN project p ON p.id = r.project_id
 		 JOIN app_user u ON u.id = r.created_by

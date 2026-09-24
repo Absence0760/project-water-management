@@ -77,6 +77,22 @@ describe('GET /compare/runs', () => {
 
 		// The run's own detail endpoint still doesn't return inputs.
 		expect((await u.call('GET', `/projects/${projectId}/runs/${base}`)).body.run.inputs).toBeUndefined();
+		// Neither run used the legacy runoff model (audit H1): both GR4J.
+		expect(res.body.a.run.legacy).toBe(false);
+		expect(res.body.b.run.legacy).toBe(false);
+	});
+
+	it('flags a legacy-runoff-model run on its own side, independently of the other (audit H1)', async () => {
+		const u = await signUp('Hydrolegacy');
+		const { projectId } = await runnableProject(u);
+		const gr4jRun = await run(u, projectId, 'GR4J');
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		const legacyRun = await run(u, projectId, 'Legacy');
+
+		const res = await compare(u, `${projectId}:${gr4jRun}`, `${projectId}:${legacyRun}`);
+		expect(res.status).toBe(200);
+		expect(res.body.a.run.legacy).toBe(false);
+		expect(res.body.b.run.legacy).toBe(true);
 	});
 
 	it('keeps the WR2012 reference in the run snapshot and summary, lists every change to it, and rejects implausible data', async () => {

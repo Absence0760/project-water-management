@@ -7,8 +7,12 @@ import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { executeRun, loadModelInput, trimRuns } from './execute.js';
 
+// A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
+// only model there was, legacy — same "absent → legacy" convention the
+// engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
-	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy"`;
+	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
+	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by`;
 
 export const runRoutes = new Hono<AuthEnv>()

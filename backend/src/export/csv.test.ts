@@ -7,10 +7,12 @@ import {
 	dailyCsvLines,
 	dayRange,
 	exportFilename,
+	LEGACY_RUN_CSV_COMMENT,
 	numCell,
 	seriesHeader,
 	slugify,
-	textCell
+	textCell,
+	withLegacyComment
 } from './csv.js';
 
 describe('csv cells', () => {
@@ -71,6 +73,20 @@ describe('daily table', () => {
 		expect(dayRange('2020-01-01', 10, '2019-01-01', '2030-01-01')).toEqual({ offset: 0, days: 10 });
 		expect(dayRange('2020-01-01', 10, '2021-01-01')).toBeNull();
 		expect(dayRange('2020-01-01', 10, undefined, '2019-12-31')).toBeNull();
+	});
+});
+
+describe('legacy-run CSV comment (audit H1)', () => {
+	it('prepends the comment only when legacy, leaving the header row first otherwise', () => {
+		const lines = ['date,Flow (m³/day)', '2020-01-01,1'];
+		expect([...withLegacyComment(true, lines)]).toEqual([LEGACY_RUN_CSV_COMMENT, ...lines]);
+		expect([...withLegacyComment(false, lines)]).toEqual(lines);
+		expect(LEGACY_RUN_CSV_COMMENT).toMatch(/^# runoff_model=legacy;/);
+	});
+
+	it('lands as the first line of the collected CSV body, ahead of the BOM-prefixed header', () => {
+		const body = collectCsv(withLegacyComment(true, ['date,x', '2020-01-01,1']));
+		expect(body).toBe(`${BOM}${LEGACY_RUN_CSV_COMMENT}\r\ndate,x\r\n2020-01-01,1\r\n`);
 	});
 });
 

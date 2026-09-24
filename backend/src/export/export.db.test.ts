@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, monthly, node, signUp } from '../__tests__/helpers.js';
+import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -158,6 +159,46 @@ describe('run summary export', () => {
 		const other = await owner.call('POST', '/projects', { name: 'Other' });
 		const res = await download(owner, `/projects/${other.body.project.id}/runs/${runId}/export/summary.csv`);
 		expect(res.status).toBe(404);
+	});
+});
+
+describe('legacy run CSV comment (audit H1)', () => {
+	let legacyProjectId: string;
+	let legacyRunId: string;
+
+	beforeAll(async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Legacy export' });
+		legacyProjectId = body.project.id;
+		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		const legacyOutlet = node('Outlet', null);
+		const legacyFarm = node('Farm', legacyOutlet.id);
+		expect((await owner.call('PUT', `/projects/${legacyProjectId}/model`, { nodes: [legacyOutlet, legacyFarm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect(
+			(await owner.call('PUT', `/projects/${legacyProjectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: rain })).status
+		).toBe(200);
+		const run = await owner.call('POST', `/projects/${legacyProjectId}/runs`, { label: 'Legacy' });
+		expect(run.status).toBe(201);
+		legacyRunId = run.body.run.id;
+	});
+
+	it('starts daily.csv and summary.csv with the legacy comment, header still row 1 after it', async () => {
+		const daily = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/daily.csv`);
+		const dailyRows = lines(daily.text);
+		expect(dailyRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(dailyRows[1]).toMatch(/^date,/);
+		expect(daily.text.startsWith(BOM)).toBe(true);
+
+		const summary = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/summary.csv`);
+		const summaryRows = lines(summary.text);
+		expect(summaryRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(summaryRows[1]).toBe('Project,Legacy export');
+	});
+
+	it('does not prefix a GR4J run’s exports (positive control, the Baseline run from the outer suite)', async () => {
+		const daily = await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv`);
+		expect(lines(daily.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
+		const summary = await download(owner, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
+		expect(lines(summary.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
 	});
 });
 
