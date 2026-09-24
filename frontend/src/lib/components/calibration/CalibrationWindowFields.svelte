@@ -81,6 +81,19 @@
 		margin: 0;
 		min-width: 0;
 	}
+	/* The form's own label and hint styles, so the window reads like its neighbours. */
+	legend {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		margin-bottom: 0.35rem;
+		padding: 0;
+	}
+	.hint {
+		font-size: 0.8rem;
+		max-width: 75ch;
+		margin: 0.4rem 0 0.75rem;
+	}
 	.err {
 		color: var(--danger);
 		font-size: 0.85rem;

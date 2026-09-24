@@ -260,8 +260,9 @@ formula ([api.md § Export](./api.md)).
 ## Settings & calibration
 
 - **On this page.** Under the intro, a **Settings sections** menu links to
-  each group (`#set-demand`, `#set-flow`, `#set-fit`, `#set-wr2012`,
-  `#set-share`, `#set-ewr`, `#set-period`, `#set-quality`; listed by
+  each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-period`,
+  `#set-quality`; listed by
   `settings/sections.ts`). It sticks under the app header down the long form
   and marks the group being read with `aria-current="location"`, using the
   Runs rail's scroll spy (`activeSectionId` from `runs/sections.ts`). It is a
@@ -290,6 +291,15 @@ value such as 108700.
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
   and days in February.
+- **Calibration is four panels**, each its own menu entry, rather than one
+  long one: **Flow calibration (rain → natural flow)** (runoff model,
+  catchment area, the model's parameters and pan coefficient, and Legacy's
+  Advanced), **Rain gaps and CHIRPS** (the CHIRPS bias correction picker and
+  Zero-rain runs: which days CHIRPS fills, and how), **Calibration record**
+  (the calibration window and flow series, and the calibration exclusions;
+  their errors point the save bar here), and **Fit automatically** (the fit
+  panel and the fit record of the parameters). The items below are described
+  in their old order; the panels hold them as listed here.
 - **Flow calibration**: the **runoff model** picker (GR4J, the default, or
   "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
   doesn't conserve water at the event scale (audit H1), so it's kept for
