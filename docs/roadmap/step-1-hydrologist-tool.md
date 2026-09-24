@@ -357,7 +357,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   fills them, with per-project keep-dry and missing periods. The stored data
   still isn't changed. Engine 0.17.0 makes the CHIRPS factor fit follow the
   same decisions (flagged runs left out day by day, kept-dry days kept, a
-  keep-dry guard; model.md §2.4b).
+  keep-dry guard; model.md §2.4b) and adds CR-20's double-mass check
+  against CHIRPS, a warning plus a Data-tab chart (model.md §2.10a).
 - **Changes (as planned):**
   - **engine:** `quality.ts` `checkSeries` gains two checks:
     - `zerorun`: ≥ N consecutive zero days, default 60, counted only when

@@ -1343,12 +1343,13 @@ reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
 | Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
 | Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
+| Double mass vs CHIRPS (CR-20, engine ≥ 0.17.0) | cumulative catchment rain against cumulative CHIRPS over water years with **300+ shared days and 100+ mm of CHIRPS** (10+ such years, else no result); a **break** where the slope (Σ catchment / Σ CHIRPS) changes by **20 %+** and a Pettitt test or the BIC gain confirms it (see below) | a station change, a moved gauge or a new way of building the catchment average; the CHIRPS factors then blend eras |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
 
 The outlier, flat-line and rain limits are engine constants
 (`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `ZERO_RUN_MIN_WET_DAYS`,
 `ZERO_RUN_PLAIN_DAYS`, `CLIMATOLOGY_MIN_DAYS_PER_MONTH`, `LOW_VS_CHIRPS_*`,
-`RATIO_BASELINE_MIN_YEARS`), not settings; whether they suit these catchments
+`RATIO_BASELINE_MIN_YEARS`, `DOUBLE_MASS_*`), not settings; whether they suit these catchments
 is a question for the hydrologist. Like the other series checks they look at
 the whole stored series, not only the run window.
 
@@ -1397,6 +1398,68 @@ confirms it is missing.
   last year, or a dry half-year, from producing a noisy ratio. Days where
   either series is blank are left out, so a blank stretch (which already falls
   back to CHIRPS) doesn't count against the year.
+
+**Double mass against CHIRPS (engine ≥ 0.17.0, CR-20, `doubleMass` in
+`packages/engine/src/doublemass.ts`).** Two records of the same rain should
+keep a steady ratio, so cumulative catchment rain plotted against cumulative
+CHIRPS is a straight line; a kink means one record changed (Searcy & Hardison
+1960, USGS WSP 1541-B; WMO 2011, WMO-No. 100, on homogenisation). In South
+Africa the likeliest cause is the catchment average itself: the rain-gauge
+network has thinned since about 2000 (the WR2012 documentation discusses
+it), so a "catchment average" can be built from different stations in
+different decades. The CHIRPS factors (§2.4b) are one ratio per calendar
+month over the whole record, so a break means they blend eras that disagree,
+and a gap in the latest era is filled with an older era's ratio.
+
+- *Inputs.* Catchment rain and CHIRPS on the days both have a reading,
+  leaving out the days a run treats as suspect (a flagged zero run not kept
+  dry, a period listed as missing: `suspectRainDays` in `rain.ts`), over the
+  whole stored record.
+- *Water-year totals, not days.* A year is judged with at least **300**
+  shared days and **100 mm** of CHIRPS (`DOUBLE_MASS_MIN_DAYS`,
+  `DOUBLE_MASS_MIN_CHIRPS_MM`). A daily curve is dominated by timing
+  mismatches (CHIRPS days run from 06:00 UTC, gauge days from 08:00 local)
+  and overstates the sample size. With fewer than **10** judged years
+  (`DOUBLE_MASS_MIN_YEARS`) there is no result.
+- *Output per year.* Totals, the ratio, the cumulative sums, and the
+  departure from the whole-record line, (cumulative catchment − whole slope ×
+  cumulative CHIRPS) ÷ cumulative catchment. That departure shows drift far
+  better than the curve; it ends at 0 by construction.
+- *Breaks.* A segment's slope is Σ catchment / Σ CHIRPS over its years, the
+  same ratio the CHIRPS fit uses, so consecutive segment lines meet on the
+  curve. For 0, 1 and 2 breaks (`DOUBLE_MASS_MAX_BREAKS`) the best positions
+  come from an exhaustive search (O(N²) for two breaks), each segment at
+  least **5** water years long (`DOUBLE_MASS_MIN_SEGMENT_YEARS`). The number
+  of breaks is the one with the lowest BIC on the **annual ratios**, weighted
+  by CHIRPS (so the weighted least-squares level of a segment is exactly its
+  slope), with 2k + 1 parameters for k breaks. BIC on the cumulative curve
+  would overstate significance, because its residuals are autocorrelated.
+  Two breaks, not one, because the thing to catch can be a rise followed by
+  a fall, which a single-change test misses.
+- *Reported only when big and real.* A chosen break is reported when the
+  slope changes by at least **20 %** (`DOUBLE_MASS_MIN_CHANGE`) **and**
+  either a Pettitt test (Pettitt 1979) on the annual ratios of the two
+  segments either side gives **p < 0.05** (`DOUBLE_MASS_PETTITT_P`) or
+  keeping the break improves BIC by at least **6**
+  (`DOUBLE_MASS_MIN_BIC_GAIN`, "strong" evidence on the usual scale). Two
+  tests guard against one odd year making a break. A failing break is
+  dropped (the weakest first) and the rest are judged again; the remaining
+  breaks keep their place.
+- *It only warns.* A slope break doesn't say which record is wrong: it may be
+  the catchment network, CHIRPS, or a real improvement such as a better-placed
+  gauge. Leaving a segment out automatically could remove the only era that
+  matches today's network. So the fit and the rain a run uses don't change.
+  The run reports the result in `RunSummary.dataQuality.doubleMass`, a
+  `doublemass` data check lists the breaks, and a **run warning** says when
+  CHIRPS fills days in a segment whose slope differs by
+  `DOUBLE_MASS_RUN_WARN_CHANGE` (20 %) or more from the fit's pooled
+  catchment / CHIRPS ratio (a water year before the first judged year counts
+  in the first segment, after the last in the last). The Data tab draws the
+  curve with the whole-record line and the segments, and the departure by
+  year; the run's summary CSV has a *Double-mass check* block
+  (`doubleMassLines` in `backend/src/export/run-tables.ts`). The durable
+  response to a real break, a fit period or per-segment factors, is a
+  followup ([followups.md](./followups.md), *CHIRPS fit period*).
 
 On the client catchment both checks flag the stretches issue #2 describes;
 which runs and years are client data, so only their presence is tested (the

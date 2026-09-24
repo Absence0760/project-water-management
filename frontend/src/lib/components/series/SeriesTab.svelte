@@ -3,6 +3,8 @@
 	import {
 		agreementOptions,
 		checkSeries,
+		doubleMass,
+		doubleMassCheck,
 		fromEpochDay,
 		observedAgreement,
 		rainVsChirps,
@@ -28,6 +30,7 @@
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
+	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import SeriesPreviewDialog from './SeriesPreviewDialog.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
@@ -192,6 +195,19 @@
 		return check ? { id: `${c!.id}-${check.check}`, series: c!, check } : null;
 	});
 
+	// Double mass of catchment rain against CHIRPS (engine ≥ 0.17.0), on the days a run would use: the zero-rain settings decide which are suspect.
+	const dm = $derived.by(() => {
+		const c = first('rain_catchment_mm');
+		const h = first('rain_chirps_mm');
+		const vc = c && values[c.id];
+		const vh = h && values[h.id];
+		return vc && vh ? { series: c!, result: doubleMass({ rain_catchment_mm: vc, rain_chirps_mm: vh }, resolveZeroRain(zeroRainRuns, [])) } : null;
+	});
+	const dmCheck = $derived.by(() => {
+		const check = dm ? doubleMassCheck(dm.result) : null;
+		return check ? { id: `${dm!.series.id}-${check.check}`, series: dm!.series, check } : null;
+	});
+
 	// Negative values, outliers, flat-lines and zero runs per series (the checks a run reports as warnings).
 	const checks = $derived([
 		...list.flatMap((s) => {
@@ -199,14 +215,16 @@
 			if (!v || !(SERIES_KINDS as readonly string[]).includes(s.kind)) return [];
 			return checkSeries(s.kind as SeriesKind, v).map((c) => ({ id: `${s.id}-${c.check}`, series: s, check: c }));
 		}),
-		...(lowVsChirps ? [lowVsChirps] : [])
+		...(lowVsChirps ? [lowVsChirps] : []),
+		...(dmCheck ? [dmCheck] : [])
 	]);
 	const CHECK_LABEL: Record<SeriesCheckKind, string> = {
 		negative: 'Negative values',
 		outlier: 'Outliers',
 		flatline: 'Flat stretch',
 		zerorun: 'Zero rain run',
-		lowvschirps: 'Low vs CHIRPS'
+		lowvschirps: 'Low vs CHIRPS',
+		doublemass: 'Double mass vs CHIRPS'
 	};
 
 	async function remove(s: SeriesMeta) {
@@ -367,11 +385,15 @@
 	</section>
 {/if}
 
+{#if dm?.result}
+	<DoubleMassPanel dm={dm.result} />
+{/if}
+
 {#if list.length && Object.keys(values).length}
 	<section class="panel" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
 			<h2 id="chk-h">Data checks</h2>
-			<span class="muted small">Negative values, outliers, flat stretches, and catchment rain that looks missing but reads 0. Runs list the same checks as warnings.</span>
+			<span class="muted small">Negative values, outliers, flat stretches, catchment rain that looks missing but reads 0, and changes in its ratio to CHIRPS. Runs list the same checks as warnings.</span>
 		</div>
 		{#if checks.length}
 			<ul class="checks">
@@ -385,7 +407,7 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="muted small">No negative values, outliers, flat stretches or suspicious zero rain found in the loaded series.</p>
+			<p class="muted small">No negative values, outliers, flat stretches, suspicious zero rain or breaks against CHIRPS found in the loaded series.</p>
 		{/if}
 	</section>
 {/if}

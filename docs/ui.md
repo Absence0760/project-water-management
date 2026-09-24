@@ -208,6 +208,18 @@ missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
 naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)).
 `LineChart`'s `shade` prop draws the bands.
+When both catchment rain and CHIRPS are loaded, a **Double mass: catchment
+rain vs CHIRPS** panel (`series/DoubleMassPanel.svelte`, data from
+`series/doubleMass.ts` over the engine's `doubleMass`, with the project's
+zero-rain settings deciding which days are suspect; engine ≥ 0.17.0, CR-20)
+says in a sentence whether the ratio breaks, then draws cumulative catchment
+rain against cumulative CHIRPS (water-year points, the whole-record line
+dashed, the segments between breaks solid, each slope in the caption), a
+small chart of the departure from the whole-record line by water year, and a
+collapsible table of the water-year totals (the charts' text equivalent).
+It needs 10 judged water years; without them the panel is absent. A break
+also shows in Data checks with a **Double mass vs CHIRPS** badge
+([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
 "What the model uses" explains every kind. A **reference gauge (other
 catchment)** series (`flow_reference_m3s`, e.g. imported with
 `--gauge-as-reference`) is badged *Reference only*: it can be charted here as a

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	zeroRainLines,
+	doubleMassLines,
 	columnGuideLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
@@ -65,8 +66,8 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, water balance,
-		// CHIRPS factors, rain treated as missing, calibration, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(9);
+		// CHIRPS factors, rain treated as missing, double-mass check, calibration, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(10);
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -130,6 +131,48 @@ describe('catchment rain treated as missing block (CR-20)', () => {
 		]);
 		expect([...zeroRainLines(null)][1]).toBe('No catchment rain series');
 		expect([...zeroRainLines(undefined)][1]).toMatch(/before engine 0\.15\.0/);
+	});
+});
+
+describe('double-mass block (engine ≥ 0.17.0)', () => {
+	const year = (wy: number, ratio: number, cum: number) => ({
+		waterYear: wy, days: 365, catchmentMm: 100 * ratio, chirpsMm: 100, ratio, cumChirpsMm: cum * 100, cumCatchmentMm: cum * 150, residualPct: -2.5
+	});
+	const dm = {
+		years: [year(2001, 1.5, 1), year(2002, 1.5, 2)],
+		skippedYears: [2000],
+		wholeSlope: 1.5,
+		segments: [
+			{ fromWaterYear: 2001, toWaterYear: 2010, years: 10, days: 3650, slope: 1.5 },
+			{ fromWaterYear: 2011, toWaterYear: 2016, years: 6, days: 2190, slope: 2.1 }
+		],
+		breaks: [{ afterWaterYear: 2010, slopeBefore: 1.5, slopeAfter: 2.1, change: 0.4, pettittP: 0.01, bicGain: 9 }]
+	};
+
+	it('lists the slope, segments, breaks and each judged year with units', () => {
+		expect([...doubleMassLines(dm)]).toEqual([
+			'Double-mass check: catchment rain vs CHIRPS',
+			'Whole-record slope: catchment / CHIRPS (×),1.5',
+			'Segment from water year,to water year,Years,Shared days,Slope (×)',
+			'2001,2010,10,3650,1.5',
+			'2011,2016,6,2190,2.1',
+			'Break after water year,Slope before (×),Slope after (×),Change (%),Pettitt p,BIC gain',
+			'2010,1.5,2.1,40,0.01,9',
+			'Water year,Shared days,Catchment rain (mm),CHIRPS (mm),Ratio (×),Cumulative catchment (mm),Cumulative CHIRPS (mm),Residual (%)',
+			'2001,365,150,100,1.5,150,100,-2.5',
+			'2002,365,150,100,1.5,300,200,-2.5',
+			'Water years too short to judge,2000'
+		]);
+	});
+
+	it('says why there is no check, and is part of the summary sheet', () => {
+		expect([...doubleMassLines({ ...dm, breaks: [] })]).toContain('No break found');
+		expect([...doubleMassLines(null)][1]).toMatch(/^Not checked: needs catchment rain and CHIRPS with at least 10 water years of 300\+ shared days/);
+		expect([...doubleMassLines(undefined)][1]).toMatch(/before engine 0\.17\.0/);
+		const lines = [...summaryCsvLines(meta, { ...summary, dataQuality: { observedAgreement: null, doubleMass: dm } })];
+		expect(lines).toContain('Double-mass check: catchment rain vs CHIRPS');
+		expect(lines).toContain('2010,1.5,2.1,40,0.01,9');
+		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.17.0: no double-mass check');
 	});
 });
 

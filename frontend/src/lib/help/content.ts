@@ -1011,6 +1011,16 @@ export const HELP: HelpEntry[] = [
 		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
 	},
 	{
+		id: 'double-mass',
+		term: 'Double mass: catchment rain vs CHIRPS',
+		short: 'Cumulative catchment rain against cumulative CHIRPS: a kink means one record changed, e.g. a station opened, closed or moved.',
+		long: 'Two records of the same rain should keep a steady ratio, so cumulative catchment rain plotted against cumulative CHIRPS is a straight line. A kink means one of them changed: a rain gauge opened, closed or moved, the catchment average was built differently, or CHIRPS changed. The check adds up each water year on the days both have a reading (leaving out zero runs treated as missing and periods listed as missing), and needs 10 years with at least 300 such days and 100 mm of CHIRPS. It fits up to two breaks, each segment at least 5 years long, and reports a break only when the slope changes by 20 % or more and a statistical test (Pettitt, or the gain in fit) says it is more than one odd year.\n\nThe chart shows the curve, the whole-record line (dashed) and the segments (solid), with each segment\'s slope, and below it how far the curve departs from the whole-record line each year. The check only warns: a break doesn\'t say which record is wrong, so the CHIRPS factors are still fitted over the whole record. A run also warns when CHIRPS fills gaps in a segment whose ratio differs by 20 % or more from the ratio the factors were fitted on, because those days may then run too wet or too dry. The run\'s summary CSV has the table.',
+		category: 'data',
+		aliases: ['double mass curve', 'homogeneity', 'rain gauge change', 'station change', 'CHIRPS ratio drift'],
+		related: ['chirps-bias', 'chirps', 'rain-catchment'],
+		source: 'Not in the workbook; Searcy & Hardison 1960; docs/model.md §2.10a; calibration-research.md CR-20'
+	},
+	{
 		id: 'zero-rain-runs',
 		term: 'Zero-rain runs treated as missing',
 		short: 'Long wet-season runs of zero catchment rain count as missing, so bias-corrected CHIRPS fills them instead of running them dry.',
