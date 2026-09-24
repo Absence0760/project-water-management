@@ -274,7 +274,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{#each runs as r, i (r.id)}
 					<li class:active={r.id === selectedId}>
 						<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
-							<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}</span>
+							<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}</span>
 							<span class="meta">{r.startDate} → {r.endDate}</span>
 							<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
 						</button>
@@ -298,6 +298,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<div class="panel-head">
 					<div>
 						<h2 id="res-h">{detail.run.label || 'Untitled run'}</h2>
+						{#if detail.run.legacy}
+							<span
+								class="badge badge-warn"
+								title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence."
+								>Workbook comparison</span
+							>
+						{/if}
 						<span class="muted small">
 							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
@@ -545,6 +552,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		border-radius: 999px;
 		background: var(--surface-2);
 		color: var(--text-2);
+		vertical-align: 1px;
+	}
+	.lbl .badge {
+		margin-left: 0.4rem;
 		vertical-align: 1px;
 	}
 	.meta {

@@ -7,7 +7,7 @@ const nonNeg = z.number().finite().min(0);
 
 /**
  * A project model as PUT /model and a project document carry it. A model from
- * an older engine (a document exported before 0.14.0, a stale browser tab) is
+ * an older engine (a document exported before 0.15.0, a stale browser tab) is
  * read as migration 006 stored the database: `returnFlowPct` becomes irrigation
  * efficiency and loss return (upgradeLegacyModel).
  */

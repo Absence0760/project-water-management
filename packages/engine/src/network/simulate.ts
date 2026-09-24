@@ -40,7 +40,7 @@ export interface PlanNode {
 	initialStorageM3: number;
 	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
-	 * 0.14.0, audit Q5). Irrigation draws only the storage above it, and
+	 * 0.15.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
 	 */
 	deadStorageM3: number;
@@ -50,9 +50,14 @@ export interface PlanNode {
 	lossReturnFraction: number;
 	/** Daily crop water requirement (F, net irrigation need); zeros for gauges. */
 	demand: Float64Array;
-	/** Gross demand before effective rain and the rain offset taken off it (m³/day); only needed for workings. */
+	/**
+	 * Gross demand before effective rain, the effective rain used against it
+	 * (m³/day) and the soil-water store at the end of the day (mm); only
+	 * needed for workings (../demand.ts farmDailyDemand).
+	 */
 	grossDemand?: Float64Array;
 	rainOffset?: Float64Array;
+	soilWater?: Float64Array;
 }
 
 export interface PlanTransfer {
@@ -87,7 +92,7 @@ export interface NetworkPlan {
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
 export interface NodeResult {
-	/** Abstraction demand D = F / e (engine ≥ 0.14.0, audit N1). */
+	/** Abstraction demand D = F / e (engine ≥ 0.15.0, audit N1). */
 	demand: Float64Array;
 	/** Crop water requirement F (net irrigation need). */
 	cropRequirement: Float64Array;
@@ -112,7 +117,8 @@ export interface NodeResult {
  */
 export interface FarmWorkings {
 	grossDemand: Float64Array; // before effective rain
-	rainOffset: Float64Array; // cropped area × effective fraction × rain
+	rainOffset: Float64Array; // effective rain used: MIN(soil store + today's effective rain, gross)
+	soilWater: Float64Array; // soil-water store at the end of the day (mm)
 	upstreamToDam: Float64Array; // K
 	upstreamBelowDam: Float64Array; // L
 	runoffToDam: Float64Array; // M
@@ -158,6 +164,7 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 	return {
 		grossDemand: node.grossDemand ?? node.demand,
 		rainOffset: node.rainOffset ?? f(),
+		soilWater: node.soilWater ?? f(),
 		upstreamToDam: f(),
 		upstreamBelowDam: f(),
 		runoffToDam: f(),

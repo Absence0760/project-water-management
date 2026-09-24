@@ -57,7 +57,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 			lossReturnFraction: 0.5
 		});
 		const keys = res.body.columns.map((c: { key: string }) => c.key);
-		for (const k of ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
+		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
 		// Day index 5 of the stored series, and the day before's storage.
 		for (const key of ['supplied', 'dam_storage']) {
 			const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=${key}&nodeId=${farm.id}`);
@@ -76,6 +76,21 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		const res = await day(owner, '2020-01-01');
 		expect(res.status).toBe(200);
 		expect(res.body.previousStorageM3).toBe(2_000); // 0.4 × 5 000 m³
+		expect(res.body.previousSoilWaterMm).toBe(0); // the soil-water store starts empty
+	});
+
+	it('returns the soil-water store the day started from, so the carried-over rain can be redone (N3)', async () => {
+		// 10 mm on the 6th: 10 000 m² × 0.65 × 10 / 1000 = 65 m³, more than the day's gross demand; the rest is kept.
+		const res = await day(viewer, '2020-01-07');
+		const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=soil_water&nodeId=${farm.id}`);
+		expect(res.body.previousSoilWaterMm).toBe(s.body.values[5]);
+		expect(res.body.previousSoilWaterMm).toBeGreaterThan(0);
+		// A dry day: the rain used is what the store held (in m³ over 10 000 m²), up to the gross demand.
+		const v = (k: string) => valueOf(res.body, k);
+		expect(v('effective_rain')).toBeCloseTo(Math.min((res.body.previousSoilWaterMm * 10_000) / 1000, v('gross_demand')), 9);
+		expect(v('crop_requirement')).toBeCloseTo(v('gross_demand') - v('effective_rain'), 9);
+		// The farm abstracts the crop requirement ÷ its 80 % efficiency (N1, engine 0.15.0).
+		expect(v('demand')).toBeCloseTo(v('crop_requirement') / 0.8, 9);
 	});
 
 	it('takes the parameters from the run, not from the project as it is now', async () => {
@@ -87,8 +102,8 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(res.body.params.irrigationEfficiency).toBe(0.8);
 	});
 
-	it('reads a run saved before engine 0.14.0 with its return flow % as migration 006 maps it', async () => {
-		// Rewrite the stored snapshot as an engine 0.13 run held it (as the owner role: runs are immutable to the app).
+	it('reads a run saved before engine 0.15.0 with its return flow % as migration 006 maps it', async () => {
+		// Rewrite the stored snapshot as an engine 0.14 run held it (as the owner role: runs are immutable to the app).
 		const pg = (await import('pg')).default;
 		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 		await db.connect();
@@ -112,6 +127,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(res.status).toBe(200);
 		expect(res.body.kind).toBe('gauge');
 		expect(res.body.previousStorageM3).toBeNull();
+		expect(res.body.previousSoilWaterMm).toBeNull();
 		expect(res.body.columns.map((c: { key: string }) => c.key).sort()).toEqual(['ewr_cumulative', 'ewr_shortfall', 'inflow_upstream', 'outflow']);
 	});
 

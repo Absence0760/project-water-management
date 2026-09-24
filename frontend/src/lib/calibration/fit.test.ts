@@ -1,4 +1,4 @@
-import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, type CalibrationReport, type ModelInput } from '@water-management/engine';
+import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, stageText, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
@@ -230,7 +230,14 @@ describe('applyReport', () => {
 		// The record Apply stores describes the applied settings exactly: nothing edited, nothing changed.
 		const settings = applied.settings as ReturnType<typeof defaultProjectSettings>;
 		const record = fitRecordFor(r, settings, { validate: false, validationRecord: null });
-		expect(fitRecordStatus(settings, record)).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false });
+		expect(fitRecordStatus(settings, record)).toEqual({
+			editedParams: [],
+			otherModel: false,
+			windowChanged: false,
+			exclusionsChanged: false,
+			flowKindChanged: false,
+			forcingChanged: false
+		});
 	});
 });
 
@@ -268,6 +275,14 @@ describe('fitRecordFor', () => {
 		// Later edits to the form don't reach the stored record.
 		form.calibrationExclusions[0]!.reason = 'changed';
 		expect(rec.exclusions[0]!.reason).toBe('suspect rain');
+	});
+
+	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
+		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
+		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm });
+		(form.panCoefficient as unknown as number[])[0] = 0.9;
+		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});
 
 	it('shows the fit time in UTC to the minute', () => {

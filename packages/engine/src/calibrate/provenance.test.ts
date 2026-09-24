@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Monthly } from '../calendar';
 import { defaultProjectSettings, type ProjectSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
@@ -111,8 +112,10 @@ describe('calibration exclusions', () => {
 });
 
 describe('fit record', () => {
+	const panCoefficient: Monthly = [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
+	const apanMm: Monthly = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 	const ctx = {
-		settings: { calibrationStart: '2012-10-01', calibrationEnd: null, calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] },
+		settings: { calibrationStart: '2012-10-01', calibrationEnd: null, calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }], panCoefficient, apanMm },
 		validate: true,
 		validationRecord: null,
 		engineVersion: '9.9.9',
@@ -136,6 +139,7 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
+		expect(r.forcing).toEqual({ panCoefficient, apanMm });
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -170,10 +174,11 @@ describe('fit record', () => {
 	});
 
 	it('says when the fit no longer describes the settings', () => {
-		const rec = fitRecordFromReport(report(), ctx);
 		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
+		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
+		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -182,13 +187,29 @@ describe('fit record', () => {
 				gr4j: { ...s.gr4j, x1: 1 },
 				calibrationEnd: '2014-01-01',
 				calibrationExclusions: [],
-				calibrationFlowKind: 'flow_observed_m3s'
+				calibrationFlowKind: 'flow_observed_m3s',
+				panCoefficient: [0.9, ...s.panCoefficient.slice(1)] as unknown as ProjectSettings['panCoefficient']
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: true, windowChanged: true, exclusionsChanged: true, flowKindChanged: true });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: true, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
-		expect(caveats).toHaveLength(5);
+		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
+		expect(caveats.at(-1)).toMatch(/pan coefficient or A-pan evaporation has changed since the fit/);
+	});
+
+	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
+		const rec = fitRecordFromReport(report(), ctx);
+		const mono = (arr: number[]): Monthly => arr as unknown as Monthly;
+		expect(fitRecordStatus({ panCoefficient, apanMm }, rec).forcingChanged).toBe(false);
+		// Same tolerance as `close` / `editedParams`: negligible float noise doesn't count.
+		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v) => v + 1e-12)), apanMm }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v, i) => (i === 0 ? v + 0.1 : v))), apanMm }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ panCoefficient, apanMm: mono(apanMm.map((v, i) => (i === 3 ? v + 5 : v))) }, rec).forcingChanged).toBe(true);
+		// A record made before `forcing` existed: nothing to compare, so it is never flagged.
+		const old = { ...rec, forcing: undefined };
+		const zeros = mono([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+		expect(fitRecordStatus({ panCoefficient: zeros, apanMm: zeros }, old).forcingChanged).toBe(false);
 	});
 });

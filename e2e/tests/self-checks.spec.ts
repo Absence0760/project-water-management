@@ -13,8 +13,8 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 5 self-checks passed.');
-	await expect(checks.getByRole('listitem')).toHaveCount(5);
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 6 self-checks passed.');
+	await expect(checks.getByRole('listitem')).toHaveCount(6);
 
 	// 120 days from 2021-10-01: one water year, then the whole run.
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });
@@ -26,7 +26,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await trace.getByRole('button', { name: 'Trace' }).click();
 	const table = trace.getByRole('table', { name: 'Upper farm on 2021-11-15' });
 	await expect(table).toBeVisible();
-	for (const name of ['Dam storage at the end of the day before', 'Upstream inflow into the dam', 'Irrigation return flow', 'Balance check (should be 0)']) {
+	for (const name of ['Dam storage at the end of the day before', 'Soil-water store at the end of the day before', 'Soil-water store at the end of the day', 'Upstream inflow into the dam', 'Irrigation return flow', 'Balance check (should be 0)']) {
 		await expect(table.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');

@@ -7,8 +7,12 @@ import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { executeRun, loadModelInput, trimRuns } from './execute.js';
 
+// A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
+// only model there was, legacy — same "absent → legacy" convention the
+// engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
-	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy"`;
+	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
+	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by`;
 
 export const runRoutes = new Hono<AuthEnv>()
@@ -124,13 +128,17 @@ export const runRoutes = new Hono<AuthEnv>()
 			// Storage at the end of the day before: the run's initial storage on its first day.
 			const previousStorageM3 =
 				node.kind !== 'farm' ? null : r.index === 0 ? (node.damInitialPct ?? 0) * (node.damCapacityM3 ?? 0) : (storage?.previous ?? null);
+			// Soil-water store at the end of the day before (engine ≥ 0.14.0): empty on the first day; null without the column.
+			const soil = rows.find((x) => x.key === 'soil_water');
+			const previousSoilWaterMm = node.kind !== 'farm' || !soil ? null : r.index === 0 ? 0 : soil.previous;
 			return c.json({
 				date: q.date,
 				nodeId: q.nodeId,
 				name: node.name,
 				kind: node.kind,
 				previousStorageM3,
-				// A run saved before engine 0.14.0 reads as migration 006 stored its model (return flow % → efficiency).
+				previousSoilWaterMm,
+				// A run saved before engine 0.15.0 reads as migration 006 stored its model (return flow % → efficiency).
 				params: pick(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as Record<string, unknown>, DAY_PARAMS),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});

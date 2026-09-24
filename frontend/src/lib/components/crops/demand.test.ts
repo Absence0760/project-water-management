@@ -1,6 +1,6 @@
 import type { ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { annualMm3, farmDemands } from './demand';
+import { annualMm3, farmDemands, highCropFactors } from './demand';
 
 const apan = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
 
@@ -45,5 +45,21 @@ describe('farmDemands', () => {
 describe('annualMm3', () => {
 	it('weights by days per month (February = februaryDays)', () => {
 		expect(annualMm3(new Array(12).fill(1_000_000), 28)).toBeCloseTo(365, 9);
+	});
+});
+
+describe('highCropFactors', () => {
+	const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+
+	it('names each crop with a factor above 1.0 and the months it happens in', () => {
+		const crops = [
+			{ id: 'a', name: 'Lucerne', cropFactor: [1.2, 1, 0.9, 1.05, 0, 0, 0, 0, 0, 0, 0, 0] },
+			{ id: 'b', name: 'Vines', cropFactor: new Array(12).fill(0.6) }
+		];
+		expect(highCropFactors(crops, months)).toEqual([{ id: 'a', name: 'Lucerne', months: ['Oct', 'Jan'] }]);
+	});
+
+	it('lets exactly 1.0 pass: a pan factor of 1 is high but plausible', () => {
+		expect(highCropFactors([{ id: 'a', name: 'X', cropFactor: new Array(12).fill(1) }], months)).toEqual([]);
 	});
 });

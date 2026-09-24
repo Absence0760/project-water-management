@@ -19,6 +19,22 @@ export const BOM = '\uFEFF';
 /** RFC 4180 line terminator. */
 export const EOL = '\r\n';
 
+/**
+ * Leading comment line on every CSV exported from a legacy-runoff-model run
+ * (audit H1, operator decision 2026-09-24): the model doesn't conserve water
+ * at the event scale, so results are a workbook comparison, not evidence.
+ * A leading "#" line is either skipped or read as one harmless extra cell by
+ * spreadsheet and CSV tooling; either way the header row a parser expects as
+ * row 1 still follows right after it.
+ */
+export const LEGACY_RUN_CSV_COMMENT = '# runoff_model=legacy; workbook comparison only; not evidence (audit H1)';
+
+/** Prepend LEGACY_RUN_CSV_COMMENT ahead of `lines` when `legacy` is true; otherwise pass them through unchanged. */
+export function* withLegacyComment(legacy: boolean, lines: Iterable<string>): Generator<string> {
+	if (legacy) yield LEGACY_RUN_CSV_COMMENT;
+	yield* lines;
+}
+
 /** A number cell: empty for null / NaN / ±Infinity (missing days). */
 export function numCell(v: number | null | undefined): string {
 	return typeof v === 'number' && Number.isFinite(v) ? String(v) : '';

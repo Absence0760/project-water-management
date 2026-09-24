@@ -154,12 +154,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   budget, evaluations, cancelled, free, params, startParams, flowKind,
   simulatedKey, calibrationStart, calibrationEnd, exclusions, validate,
   validationRecord, fit, before, splitSample, differential, independentRecord,
-  marPenalty, notes, editedParams }`, each key required except `marPenalty`
-  (the WR2012 MAR penalty result — `weight, targetMarMm3, marLowMm3,
-  marHighMm3, basis, marRatio, unpenalised`, `null` when it was off, the
-  default) and `editedParams`, and no others. `bounds` is `wide` (the
-  default: each parameter's calibration range) or `typical` (Perrin et al.'s
-  80 % range).
+  marPenalty, notes, editedParams, forcing }`, each key required except
+  `marPenalty` (the WR2012 MAR penalty result — `weight, targetMarMm3,
+  marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
+  off, the default), `editedParams` and `forcing`, and no others. `bounds` is
+  `wide` (the default: each parameter's calibration range) or `typical`
+  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm }`, each
+  12 monthly numbers, same bounds as the settings fields) is the pan
+  coefficient and A-pan evaporation the fit ran under: GR4J's parameters
+  trade off against it, so it is never calibrated and a fit is only valid for
+  the forcing it recorded — absent on a record made before this was tracked.
+  `fitRecordStatus`'s `forcingChanged` compares it against the current
+  settings, tolerant of float noise, and is `false` when there is nothing
+  recorded to compare.
   The fit runs in the browser, so the record is what the client reports; the
   seed and engine version let anyone reproduce it. **The server recomputes
   `editedParams` on every `PATCH`** (fitted parameters whose value in the
@@ -289,7 +296,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
-| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`) come from the run's input snapshot (a run from before engine 0.14.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
+| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`) come from the run's input snapshot (a run from before engine 0.15.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -298,7 +305,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   potential evaporation (A-pan × pan coefficient 0 in every month).
 - A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
   run deletes the oldest beyond that, with their outputs.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy }` —
+  `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
+  saved before the setting existed), so the app can badge it without a second
+  fetch (audit H1, workbook comparison only — not evidence).
 - `run = RunMeta & { summary: RunSummary }`
 - `GET …/runs/:runId` also returns the run's **settings snapshot** (the
   settings it ran with, from `model_run.inputs`), so the Runs page shows the
@@ -355,7 +365,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
-  with `id` one of `balance`, `workings`, `runoff`, `transfers`, `reports`, and
+  with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`, and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
   one row per water year (Oct–Sep, `waterYear` = its start year) and one for
@@ -418,11 +428,14 @@ routes (`401` signed out, `404` not a member). Responses carry
 `Content-Disposition: attachment; filename="<project-slug>_<parts>_<YYYY-MM-DD>.<ext>"`
 (ASCII slug, UTC date) and `Cache-Control: no-store`; CORS exposes
 `Content-Disposition` so the SPA can read the name when it downloads with
-`fetch`.
+`fetch`. `daily.csv` and `summary.csv` for a **legacy-runoff-model run** (audit
+H1) start with a leading comment line,
+`# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
+ahead of the usual header row.
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain, F, G, H, I, J, K … P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F, G, H, I, J, K … P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
 | `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |

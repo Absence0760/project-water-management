@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
@@ -10,6 +10,7 @@ import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
+import { netDailyDemandM3 } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 
 // ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ describe('runModel — dam behaviour', () => {
 		expect(s.fractionSupplied).toBe(0.75);
 	});
 
-	it('irrigation stops at the minimum operating level: storage below it is dead storage (Q5, engine 0.14.0)', () => {
+	it('irrigation stops at the minimum operating level: storage below it is dead storage (Q5, engine 0.15.0)', () => {
 		// 150 m³ dam, full, minimum 20 % = 30 m³ dead storage; demand 100 m³/day.
 		// Day 0 takes 100 (120 above the floor), day 1 only the 20 left above it, day 2 nothing.
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
@@ -313,7 +314,7 @@ describe('runModel — dam behaviour', () => {
 	});
 });
 
-describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.14.0)', () => {
+describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.15.0)', () => {
 	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 	// 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day of crop requirement in October.
 	const farm = (over: Partial<NetworkNode>, natural = [0]) =>
@@ -367,7 +368,7 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		expect(get(out, 'F', 'return_flow')).toEqual([0]);
 	});
 
-	it('runs a model saved before engine 0.14.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
+	it('runs a model saved before engine 0.15.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
 		const legacy = farm({});
 		const input0 = input({
 			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1 })],
@@ -428,6 +429,54 @@ describe('runModel — irrigation demand', () => {
 		const out = runModelWith(base, () => ({ naturalFlowM3Day: [0, 0] }));
 		// day 0: CHIRPS 100 mm → offset 1000 × 0.65 × 0.1 = 65 → 35; day 1: catchment 0 wins
 		expect(get(out, 'F', 'demand')).toEqual([35, 100]);
+	});
+
+	describe('soil-water store (N3, engine 0.14.0)', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }];
+		const fixture = (rain: number[], settings: Partial<ProjectSettings> = {}): Fixture => ({
+			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 10_000 }],
+			// 10 000 m² × 50 mm / 1000 / 31 = 500/31 m³/day gross in January
+			settings: { apanMm: flat(100) as Monthly, ...settings },
+			startDate: '2021-01-01',
+			natural: rain.map(() => 0),
+			rain
+		});
+		const G = 500 / 31;
+
+		it('carries the effective rain the crop could not use on the day into the following days', () => {
+			// 30 mm → 10 000 × 0.65 / 1000 × 30 = 195 m³: G used today, 195 − G kept (17.9 mm < 25 mm).
+			const out = run(fixture([0, 30, 0, 0, 0, 0]));
+			expect(get(out, 'F', 'demand')).toEqual([G, 0, 0, 0, 0, 0]);
+			expect(get(out, 'F', 'effective_rain').slice(1)).toEqual([G, G, G, G, G]);
+			const store = get(out, 'F', 'soil_water');
+			expect(store[0]).toBe(0);
+			for (let t = 2; t < 6; t++) expect(store[t]).toBeCloseTo(((195 - t * G) * 1000) / 10_000, 9);
+			expect(out.summary.warnings.filter((w) => w.includes('soil-water'))).toEqual([]);
+		});
+
+		it('with a 0 mm store the demand is bit for bit the workbook rule, day by day', () => {
+			const rain = Array.from({ length: 62 }, (_, t) => [0, 1, 2, 2.5, 7, 30, 0, 0, 120, 0.3][t % 10]!);
+			const out = run(fixture(rain, { effectiveRainStoreMm: 0 }));
+			const gross = get(out, 'F', 'gross_demand');
+			const demand = get(out, 'F', 'demand');
+			const bad = demand.filter((d, t) => !Object.is(d, netDailyDemandM3(gross[t]!, 10_000, rain[t]! > 2 ? rain[t]! : 0, 0.65)));
+			expect(bad).toEqual([]);
+			expect(get(out, 'F', 'soil_water').every((w) => w === 0)).toBe(true);
+			// … and the default store only ever lowers demand.
+			const withStore = get(run(fixture(rain)), 'F', 'demand');
+			expect(withStore.every((d, t) => d <= demand[t]!)).toBe(true);
+			expect(withStore.reduce((a, b) => a + b, 0)).toBeLessThan(demand.reduce((a, b) => a + b, 0));
+		});
+
+		it('falls back to the default 25 mm, with a warning, for a size that is not one', () => {
+			for (const bad of [-1, Number.NaN, '10' as unknown as number]) {
+				const out = run(fixture([30, 0], { effectiveRainStoreMm: bad }));
+				expect(out.summary.warnings.some((w) => w.includes('soil-water store') && w.includes('using 25 mm'))).toBe(true);
+				expect(get(out, 'F', 'demand')).toEqual(get(run(fixture([30, 0], { effectiveRainStoreMm: 25 })), 'F', 'demand'));
+			}
+		});
 	});
 });
 
@@ -498,7 +547,7 @@ describe('runModel — transfers', () => {
 		expect(get(out, 'S', 'dam_storage')).toEqual([3000]);
 	});
 
-	it("keeps the source dam's minimum operating level when it is above the rule's minimum (Q5, engine 0.14.0)", () => {
+	it("keeps the source dam's minimum operating level when it is above the rule's minimum (Q5, engine 0.15.0)", () => {
 		// S: start 4000 of 10 000; rule keeps 30 %, the dam's own floor is 35 % → 3500 kept, 500 moves.
 		const out = run({
 			nodes: nodes().map((n) => (n.id === 'S' ? { ...n, damMinPct: 0.35 } : n)),
@@ -1074,13 +1123,16 @@ describe.skipIf(!dataDir)(
 		// inflow INTO the dam, as the column's label says; the workbook's formula
 		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
 		// comparison below still tests the port, not the corrected meaning.
-		// Q5 (engine ≥ 0.14.0): a dam's minimum operating level stops irrigation.
+		// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
+		// store; the workbook has none. The replay switches it off (0 mm), which
+		// is bit for bit the workbook's rule; the N3 test below runs it on.
+		// Q5 (engine ≥ 0.15.0): a dam's minimum operating level stops irrigation.
 		// The workbook's "min %" column is the transfer minimum, which each
 		// transfer rule already carries; migration 006 sets every stored value to
 		// 0 and the importer no longer fills it, so the replay does the same.
 		const modelInput: ModelInput = {
 			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
-			settings: { ...project.settings, runoffModel: 'legacy' },
+			settings: { ...project.settings, runoffModel: 'legacy', effectiveRainStoreMm: 0 },
 			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0 })) },
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
@@ -1106,7 +1158,7 @@ describe.skipIf(!dataDir)(
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
 		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
 		const topo = buildTopology(project.model.nodes);
-		// N1 (engine ≥ 0.14.0): a farm's return flow % r becomes irrigation
+		// N1 (engine ≥ 0.15.0): a farm's return flow % r becomes irrigation
 		// efficiency e = 1 − r with every loss returning (migration 006, which
 		// runModel also applies to the fixture's returnFlowPct). The crop is then
 		// fully supplied, so the farm abstracts F / (1 − r) where the workbook
@@ -1159,8 +1211,14 @@ describe.skipIf(!dataDir)(
 		//          with the correction off, and with it on only years holding
 		//          fallback days may differ. The mean columns fed by demand
 		//          (supplied, deficit, …) stay within their R1 bound.
+		//   N3     (engine ≥ 0.14.0) effective rain carries over through a
+		//          soil-water store (default 25 mm). Demand, and everything fed
+		//          by it (supplied, deficit, storage, spill, outflow, the EWR
+		//          shortfalls, curtailment), differ on the days after rain. Every
+		//          comparison here runs with effectiveRainStoreMm: 0, the
+		//          workbook's rule; the "N3:" test checks the store's effect.
 		//
-		//   N1     (engine ≥ 0.14.0) abstraction demand = crop requirement ÷
+		//   N1     (engine ≥ 0.15.0) abstraction demand = crop requirement ÷
 		//          irrigation efficiency; return flow = β (1 − e) × supplied.
 		//          Workbook F is compared with `crop_requirement` (daily, R1).
 		//          supplied, deficit, inflow_upstream, transfer, dam_storage,
@@ -1284,6 +1342,26 @@ describe.skipIf(!dataDir)(
 				const Z = get(out, n.id, 'ewr_cumulative');
 				expect(get(out, n.id, 'ewr_shortfall')).toEqual(U.map((u, t) => Math.min(u - Z[t]!, 0)));
 			}
+		});
+
+		it('N3: the soil-water store only lowers demand, and only on days it starts with water in it', () => {
+			const withStore: ModelInput = { ...modelInput, settings: { ...modelInput.settings, effectiveRainStoreMm: defaultProjectSettings().effectiveRainStoreMm } };
+			const on = withVerification(withStore, runModelWith(withStore, () => ({ naturalFlowM3Day: natural })));
+			expect(on.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+			let lowered = 0;
+			const bad: string[] = [];
+			for (const n of project.model.nodes.filter((x) => x.kind === 'farm')) {
+				const dOn = get(on, n.id, 'demand');
+				const dOff = get(out, n.id, 'demand');
+				const store = get(on, n.id, 'soil_water');
+				for (let t = 0; t < dOn.length; t++) {
+					const carried = t > 0 && store[t - 1]! > 0;
+					if (carried ? dOn[t]! > dOff[t]! : !Object.is(dOn[t], dOff[t])) bad.push(`${n.name} day ${t}: ${dOn[t]} vs ${dOff[t]}`);
+					if (dOn[t]! < dOff[t]!) lowered++;
+				}
+			}
+			expect(bad.slice(0, 5)).toEqual([]);
+			expect(lowered).toBeGreaterThan(0);
 		});
 
 		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
@@ -1578,6 +1656,14 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		const out = runModel(i);
 		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([0, 0]);
 		expect(warns(out, /Pitman/)).toHaveLength(0);
+	});
+
+	it('H1: every legacy run carries LEGACY_NOT_EVIDENCE; a GR4J run never does', () => {
+		const legacy = runModel(rainInput([0, 0, 20], '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
+		expect(legacy.summary.warnings).toContain(LEGACY_NOT_EVIDENCE_WARNING);
+		const gr4j = runModel(rainInput([0, 0, 20], '2021-07-01'));
+		expect(gr4j.summary.warnings).not.toContain(LEGACY_NOT_EVIDENCE_WARNING);
+		expect(gr4j.summary.warnings.some((w) => w.startsWith('LEGACY_NOT_EVIDENCE'))).toBe(false);
 	});
 });
 

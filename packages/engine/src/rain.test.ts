@@ -232,9 +232,11 @@ describe('runModel with the CHIRPS correction', () => {
 	});
 
 	it('the legacy model and irrigation demand see the corrected rain too; days with catchment rain do not change', () => {
-		const on = runModel(runInput());
-		const off = runModel(runInput({ chirpsBiasCorrection: 'none' }));
-		expect(checkInvariants(runInput(), on)).toBeNull();
+		// No soil-water store (N3), so a fallback day's rain can't carry into the days after it.
+		const on = runModel(runInput({ effectiveRainStoreMm: 0 }));
+		const off = runModel(runInput({ chirpsBiasCorrection: 'none', effectiveRainStoreMm: 0 }));
+		expect(checkInvariants(runInput({ effectiveRainStoreMm: 0 }), on)).toBeNull();
+		expect(checkInvariants(runInput(), runModel(runInput()))).toBeNull();
 		const dOn = get(on, 'A', 'demand');
 		const dOff = get(off, 'A', 'demand');
 		const fallback = new Set(fallbackDays);

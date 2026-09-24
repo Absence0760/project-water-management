@@ -2,10 +2,21 @@
 	// Each run's fit record side by side (issue #4): which fit produced its
 	// parameters, its in-sample score and its validation scores.
 	import { fitValidationRows, type FitValidationRow } from './fit';
-	import type { FitRecord } from '@water-management/engine';
+	import type { FitRecord, ProjectSettings } from '@water-management/engine';
 
-	let { a, b }: { a: FitRecord | null; b: FitRecord | null } = $props();
-	const rows = $derived<FitValidationRow[] | null>(fitValidationRows(a, b));
+	let {
+		a,
+		b,
+		settingsA = null,
+		settingsB = null
+	}: {
+		a: FitRecord | null;
+		b: FitRecord | null;
+		/** Each run's own settings snapshot, so "Evaporation changed since fit" can be said for that run. */
+		settingsA?: Partial<ProjectSettings> | null;
+		settingsB?: Partial<ProjectSettings> | null;
+	} = $props();
+	const rows = $derived<FitValidationRow[] | null>(fitValidationRows(a, b, settingsA, settingsB));
 </script>
 
 <h3>Fit and validation</h3>

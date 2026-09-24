@@ -18,6 +18,7 @@ import {
 	exportFilename,
 	MAX_EXPORT_BYTES,
 	seriesHeader,
+	withLegacyComment,
 	type DailyColumn
 } from './csv.js';
 import { nodeColumnHeader, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
@@ -58,13 +59,16 @@ interface RunRow {
 	endDate: string;
 	createdAt: Date;
 	summary: RunSummary;
+	/** settings.runoffModel === 'legacy' (absent → legacy, for runs saved before the setting existed). */
+	legacy: boolean;
 }
 
 async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: string): Promise<RunRow> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 	const { rows } = await db.query<RunRow>(
 		`SELECT label, engine_version AS "engineVersion", start_date AS "startDate", end_date AS "endDate",
-			created_at AS "createdAt", summary
+			created_at AS "createdAt", summary,
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -107,7 +111,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
-			const body = collectCsv(dailyCsvLines(run.startDate, columns, range));
+			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvResponse(c, body, exportFilename(name, parts, 'csv'));
@@ -131,7 +135,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 				},
 				run.summary
 			);
-			const body = collectCsv(lines);
+			const body = collectCsv(withLegacyComment(run.legacy, lines));
 			if (body === null) throw tooLarge('the run summary is unexpectedly large');
 			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv'));
 		});

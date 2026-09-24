@@ -35,7 +35,7 @@ erDiagram
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
-| `project` | One catchment/place. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain, `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`) |
+| `project` | One catchment/place. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`) |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm` or `gauge`, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) | `[Crop demand]` crop table |
@@ -52,13 +52,13 @@ erDiagram
 | `area_km2` | Total area farms (km²) | Used by the *Area* flow-share method and for `RainToM3` |
 | `area_hi_km2` / `area_lo_km2` | Farm area high / low MAP | *Hi/Lo* method |
 | `flow_share_manual` | External fragmentation (%) | *Specific* method (0–1) |
-| `pct_upstream_to_dam` | "Upstream inflow above dam (%)" | The share of upstream inflow that enters the dam (engine ≥ 0.9.0). The workbook's formula applied it to the water passing below the dam; the client confirmed the label's meaning ([model.md Q1](./model.md#3-workbook-quirks-and-suspected-bugs)). |
+| `pct_upstream_to_dam` | "Upstream inflow above dam (%)" | The share of upstream inflow that enters the dam (engine ≥ 0.9.0). The workbook's formula applied it to the water passing below the dam; the client confirmed the label's meaning ([model.md Q1](./model.md#3-workbook-quirks-and-suspected-bugs)). Defaults to 1 (a dam on the river). |
 | `pct_runoff_to_dam` | Farm runoff above (into) dam (%) | |
 | `dam_capacity_m3` | Composite dam capacity (m³) | |
 | `dam_initial_pct` | Initial dam volume (%) | |
-| `dam_min_pct` | (not imported; the workbook's "Min dam volume" is the transfer minimum) | The dam's **minimum operating level** (dead storage, engine ≥ 0.14.0, Q5): irrigation draws only above `capacity × dam_min_pct`, and transfers keep `capacity × MAX(rule min, dam_min_pct)`. Migration 006 reset every stored value to 0; the importer writes 0 |
+| `dam_min_pct` | (not imported; the workbook's "Min dam volume" is the transfer minimum) | The dam's **minimum operating level** (dead storage, engine ≥ 0.15.0, Q5): irrigation draws only above `capacity × dam_min_pct`, and transfers keep `capacity × MAX(rule min, dam_min_pct)`. Migration 006 reset every stored value to 0; the importer writes 0 |
 | `divert_capacity_m3_day` | Downstream diversion back to dam | The workbook enters m³/s and converts it. We store m³/day. |
-| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.14.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
+| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.15.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
 | `loss_return_fraction` | (1 when r > 0, else 0) | Share β (0–1) of the application losses `(1 − e) × supplied` that returns to the river the same day; default 0.5. Migration 006 backfilled both from `return_flow_pct` and dropped that column |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
@@ -119,7 +119,7 @@ its `inputs` snapshot plus `engine_version`.
   lower cap are the levers.
 - **Working columns (engine ≥ 0.12.0).** Each farm also stores its 11
   intermediate columns (gross demand, effective rain, K–P, S, T and the
-  balance check V; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
+  balance check V; engine ≥ 0.14.0 adds a 12th, `soil_water`; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
   so a day can be checked by hand from the export. On the two-farm e2e
   catchment (120 days) they added 52 % to the run's `run_series` bytes
   (21.6 KB on 41.3 KB); expect roughly that share on a long run, since most of
@@ -145,8 +145,10 @@ migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
 with a required reason. `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
-in-sample and validation scores, notes, engine version and time
-([model.md §2.10b](./model.md)). The backend recomputes its `editedParams` on
+in-sample and validation scores, notes, engine version and time, and the pan
+coefficient / A-pan evaporation it ran under (`forcing`, since it is held
+fixed and never calibrated — a fit is only valid for the forcing it was
+fitted under) ([model.md §2.10b](./model.md)). The backend recomputes its `editedParams` on
 every settings save (`patchSettings` in `backend/src/projects/settings.ts`) and
 again when a run snapshots the settings (`executeRun`), so each
 `model_run.inputs.settings` carries the fit record as it stood for that run's

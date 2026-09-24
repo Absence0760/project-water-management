@@ -80,6 +80,15 @@ export interface ProjectSettings {
 	februaryDays: number;
 	/** Fraction of rainfall on cropped land that offsets irrigation demand. */
 	effectiveRainFraction: number;
+	/**
+	 * Size of each farm's soil-water store, mm over the cropped area (engine ≥
+	 * 0.14.0, docs/engine-audit.md N3): effective rain the crop can't use on
+	 * the day it falls is kept for the following days, up to this depth
+	 * (./demand.ts farmDailyDemand). Default 25 mm, the readily available water
+	 * of 0.5 m of roots in a soil holding 100 mm/m with p = 0.5 (FAO-56 Tables
+	 * 19 and 22). 0 = no carry-over, the b023 workbook's rule.
+	 */
+	effectiveRainStoreMm: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -176,6 +185,7 @@ export function defaultProjectSettings(): ProjectSettings {
 	return {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
+		effectiveRainStoreMm: 25,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -283,24 +293,24 @@ export interface NetworkNode {
 	pctRunoffToDam: number;
 	damCapacityM3: number;
 	damInitialPct: number;
-	/** Minimum operating level (dead storage), fraction of capacity: irrigation draws only above it (engine ≥ 0.14.0, audit Q5). */
+	/** Minimum operating level (dead storage), fraction of capacity: irrigation draws only above it (engine ≥ 0.15.0, audit Q5). */
 	damMinPct: number;
 	divertCapacityM3Day: number;
 	/**
-	 * Irrigation application efficiency e, 0 < e ≤ 1 (engine ≥ 0.14.0, audit
+	 * Irrigation application efficiency e, 0 < e ≤ 1 (engine ≥ 0.15.0, audit
 	 * N1): the share of the water abstracted that reaches the crop. Abstraction
 	 * demand = crop requirement ÷ e.
 	 */
 	irrigationEfficiency: number;
 	/**
 	 * Share β (0–1) of the application losses, (1 − e) × supplied, that
-	 * returns to the river below the farm the same day (engine ≥ 0.14.0). The
+	 * returns to the river below the farm the same day (engine ≥ 0.15.0). The
 	 * rest leaves the catchment (evaporation, deep percolation).
 	 */
 	lossReturnFraction: number;
 }
 
-/** Irrigation settings of a new farm (engine ≥ 0.14.0, audit N1): a typical mixed system, half of its losses returning. */
+/** Irrigation settings of a new farm (engine ≥ 0.15.0, audit N1): a typical mixed system, half of its losses returning. */
 export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.8, lossReturnFraction: 0.5 } as const;
 
 /**
@@ -317,7 +327,7 @@ export const IRRIGATION_SYSTEMS = [
 ] as const;
 
 /**
- * The efficiency and loss return that replace an engine < 0.14.0 node's
+ * The efficiency and loss return that replace an engine < 0.15.0 node's
  * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
  * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
  * (consumptive use = supplied − return flow) is as before per unit supplied,
@@ -427,13 +437,13 @@ export interface RunSeries {
 export interface FarmSummary {
 	nodeId: string;
 	name: string;
-	/** Mean abstraction demand D = crop requirement ÷ irrigation efficiency (engine ≥ 0.14.0; before, the crop requirement). */
+	/** Mean abstraction demand D = crop requirement ÷ irrigation efficiency (engine ≥ 0.15.0; before, the crop requirement). */
 	avgDemandM3Day: number;
 	avgSuppliedM3Day: number;
 	avgDeficitM3Day: number;
 	/** avg supplied / avg demand, 0–1: also the share of the crop requirement met (crop use = e × supplied). */
 	fractionSupplied: number;
-	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.14.0); absent on older runs. */
+	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.15.0); absent on older runs. */
 	avgCropRequirementM3Day?: number;
 	avgEwrShortfallM3Day: number;
 	daysEwrNotMet: number;
@@ -734,7 +744,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'runoff' | 'transfers' | 'reports';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

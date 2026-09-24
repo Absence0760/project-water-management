@@ -82,7 +82,7 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
-- **Irrigation** group (engine ≥ 0.14.0, [engine-audit N1](./engine-audit.md)):
+- **Irrigation** group (engine ≥ 0.15.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets an indicative efficiency (drip 90 %,
   micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
@@ -104,7 +104,12 @@ are entered in **ha** (stored as m²), with farm rows in network order and
 reorderable. A **demand preview** uses the engine's
 `grossFarmDemandM3PerDay`: m³/day per month, the mean, and Mm³/a per farm and
 for the catchment. It is gross demand, before the daily effective-rain
-reduction.
+reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0).
+The crop-factor intro says the factors are **× A-pan, not FAO Kc** (FAO-56 Kc
+multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
+every crop and month with a factor above 1.0: a hint to check for an FAO Kc
+entered as it is, never a block on saving (`highCropFactors` in
+`components/crops/demand.ts`).
 
 ## Data
 
@@ -152,9 +157,17 @@ formula ([api.md § Export](./api.md)).
 
 The settings are grouped by what they drive:
 
-- **Demand**: A-pan (Oct–Sep), effective rainfall %, and days in February.
-- **Flow calibration**: the **runoff model** picker (GR4J, the default, or Legacy,
-  `settings.runoffModel`), the **CHIRPS bias correction** picker
+- **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
+  (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
+  the workbook does; [model.md §2.3](./model.md#23-irrigation-demand) step 4),
+  and days in February.
+- **Flow calibration**: the **runoff model** picker (GR4J, the default, or
+  "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
+  doesn't conserve water at the event scale (audit H1), so it's kept for
+  workbook comparison only, never evidence: a legacy run carries an amber
+  "Workbook comparison" badge on the Runs list and the run header, a matching
+  label on its CSV exports and on legacy fit records in FitProvenance, and
+  run comparison notes it when either side is legacy. Then the **CHIRPS bias correction** picker
   (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
   month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)), the
@@ -220,12 +233,17 @@ The settings are grouped by what they drive:
     Below the panel, **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`) shows the record: model and time,
     objective, seed, model runs, engine version, the record and window fitted
-    to, the exclusions, the fitted values, and a table with the in-sample
+    to, the pan coefficient and A-pan evaporation it ran under (month by
+    month, or "not recorded" for a fit made before this was tracked), the
+    exclusions, the fitted values, and a table with the in-sample
     score ("Calibration period (in-sample)") next to each validation score,
     plus the notes. Editing a fitted parameter by hand shows a **Parameters
     edited since fit** badge and names the parameters at once; the server
     records the same on save. A change of runoff model, window, exclusions or
-    flow series since the fit is called out too.
+    flow series since the fit is called out too, and a change to the pan
+    coefficient or A-pan since the fit shows an **Evaporation changed since
+    fit** badge and a caveat explaining why (it trades off against X1/X3, so
+    the fit needs redoing).
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -306,8 +324,9 @@ The settings are grouped by what they drive:
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
   and a date (it opens on the farm-day with the largest residual) and it
   fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
-  with its letter, value and formula, starting from the day before's storage,
-  then works the day's balance out from the numbers shown: in (H + I + J) −
+  with its letter, value and formula, starting from the day before's storage
+  (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
+  day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J) −
   used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
   the run's input snapshot, not today's model. A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
@@ -319,8 +338,10 @@ The settings are grouped by what they drive:
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
-  Settings, with the in-sample score beside its validation scores and the
-  "Parameters edited since fit" badge when they were edited), or "No fit
+  Settings, with the in-sample score beside its validation scores, the
+  "Parameters edited since fit" badge when they were edited, and an
+  "Evaporation changed since fit" badge when this run's pan coefficient or
+  A-pan differs from what the fit was made under), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

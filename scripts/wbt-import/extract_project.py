@@ -162,7 +162,7 @@ def iso(d: Any) -> str:
 
 
 def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> dict[str, Any]:
-    """The node's operating-rule fields (engine >= 0.14.0, docs/engine-audit.md).
+    """The node's operating-rule fields (engine >= 0.15.0, docs/engine-audit.md).
 
     Q5: the app's damMinPct is the dam's minimum operating level (irrigation
     stops there). The workbook's [Farm spec] "min %" is the minimum for
@@ -705,7 +705,7 @@ def extract(
         for order, e in enumerate(elements):
             s = spec.get(e["name"], {}) if e["kind"] == "farm" else {}
             if e["kind"] == "farm" and not s:
-                wb.notes.append(f"farm {e['name']} is missing from [Farm spec]; its parameters are 0")
+                wb.notes.append(f"farm {e['name']} is missing from [Farm spec]; its parameters are 0, except upstream inflow to dam (100 %)")
             nodes.append(
                 {
                     "id": uid(f"node:{e['name']}"),
@@ -717,7 +717,7 @@ def extract(
                     "areaHiKm2": s.get("areaHiKm2", 0),
                     "areaLoKm2": s.get("areaLoKm2", 0),
                     "flowShareManual": s.get("flowShareManual") if e["kind"] == "farm" else None,
-                    "pctUpstreamToDam": s.get("pctUpstreamToDam", 0),
+                    "pctUpstreamToDam": s.get("pctUpstreamToDam", 1),
                     "pctRunoffToDam": s.get("pctRunoffToDam", 0),
                     "damCapacityM3": s.get("damCapacityM3", 0),
                     "damInitialPct": s.get("damInitialPct", 0),

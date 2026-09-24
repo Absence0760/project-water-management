@@ -22,7 +22,7 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		areaHiKm2: 0,
 		areaLoKm2: 0,
 		flowShareManual: null,
-		pctUpstreamToDam: 0,
+		pctUpstreamToDam: 1,
 		pctRunoffToDam: 0,
 		damCapacityM3: 0,
 		damInitialPct: 0,

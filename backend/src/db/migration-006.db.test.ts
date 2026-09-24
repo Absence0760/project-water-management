@@ -1,4 +1,4 @@
-// Migration 006 (farm and dam operating rules, engine 0.14.0) rewrites stored
+// Migration 006 (farm and dam operating rules, engine 0.15.0) rewrites stored
 // model values. This builds a throwaway database at the schema before 006,
 // stores a model the old way, applies 006 and checks what each value became
 // (docs/data-model.md § Migrations, docs/engine-audit.md Q5).

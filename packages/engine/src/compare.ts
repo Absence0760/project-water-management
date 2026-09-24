@@ -395,6 +395,7 @@ interface ScalarField {
 const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
+	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
@@ -450,7 +451,8 @@ const CALIBRATION_ARRAYS: Record<string, string> = {
 /**
  * Settings as the engine sees them: stored values merged over the defaults.
  * A run saved without a runoff model predates the setting (engine 0.5.0), so
- * it ran legacy, whatever today's default is.
+ * it ran legacy, whatever today's default is; one without a soil-water store
+ * predates it (engine 0.14.0), so it ran with none (0 mm).
  */
 function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Record<string, unknown> {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
@@ -459,6 +461,9 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...d,
 		...r,
 		runoffModel: r.runoffModel ?? 'legacy',
+		// Runs store settings merged over the defaults, so a snapshot without a
+		// store size predates it (engine < 0.14.0) and carried no rain over.
+		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },

@@ -52,13 +52,15 @@ describe('engine invariants on random networks', () => {
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
-	it('doubling crop areas can raise the supply fraction only through return flow (seed 2538)', () => {
-		// Why checkDoubledCropAreas zeroes return flows: with them, extra draw on
-		// stored water partly returns to the river and a starved farm downstream
-		// gains more than twice the water. That is physics, not an engine bug.
+	it('doubling crop areas can raise the supply fraction only through return flow (seed 2079)', () => {
+		// Why checkDoubledCropAreas zeroes the loss return fractions: with return
+		// flow, extra draw on stored water partly returns to the river and a
+		// starved farm downstream gains more than twice the water. That is
+		// physics, not an engine bug (audit N1: bounded by G ≤ D).
 		// (Seed 4660 showed it until engine 0.9.0 turned the upstream-to-dam
-		// split round, model.md §3 Q1; 2538 is the first seed that shows it now.)
-		const input = randomInput(2538);
+		// split round, model.md §3 Q1; 2538 until engine 0.15.0 (N1, and the
+		// soil-water store's draws in the generator); 2079 is the first seed now.)
+		const input = randomInput(2079);
 		input.settings.runoffModel = 'legacy'; // found under legacy flow; the property is the network's, not the runoff model's
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);

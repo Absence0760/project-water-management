@@ -73,6 +73,17 @@ export function traceRows(day: RunDay): TraceRow[] {
 			formula: 'the run’s initial storage (initial % × capacity) on its first day',
 			value: day.previousStorageM3
 		});
+		// The store the day's effective rain was added to (engine ≥ 0.14.0).
+		if (day.previousSoilWaterMm != null) {
+			rows.push({
+				key: 'previous_soil_water',
+				letter: 'soil[t−1]',
+				label: 'Soil-water store at the end of the day before',
+				unit: 'mm',
+				formula: 'empty (0) on the run’s first day',
+				value: day.previousSoilWaterMm
+			});
+		}
 	}
 	for (const c of catalogue) {
 		const col = byKey.get(c.key);

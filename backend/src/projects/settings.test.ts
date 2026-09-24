@@ -330,6 +330,16 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
+	it('accepts an optional forcing block (the pan coefficient / A-pan the fit ran under), and a record from before it without', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		expect(ok(record)).toBe(true); // no forcing: a record from before it existed
+		expect(ok({ ...record, forcing })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(11).fill(0.7) } })).toBe(false); // wrong length
+		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(12).fill(2.1) } })).toBe(false); // out of bounds (0–2)
+		expect(ok({ ...record, forcing: { ...forcing, apanMm: forcing.apanMm.map(() => Infinity) } })).toBe(false); // must be finite
+		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
+	});
+
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {
 		const startResults = [
 			{ seed: 7, params: { x1: 512, x2: 0, x3: 61, x4: 2.2 }, score: 0.8, best: true },
@@ -379,5 +389,22 @@ describe('SettingsPatch.fitRecord', () => {
 		const replaced = patchSettings({ ...stored, fitRecord: { ...record, seed: 1, oldKey: true } }, { fitRecord: record });
 		expect(replaced.fitRecord).not.toHaveProperty('oldKey');
 		expect(replaced.fitRecord!.seed).toBe(7);
+	});
+});
+
+describe('SettingsPatch.effectiveRainStoreMm (engine N3)', () => {
+	const ok = (effectiveRainStoreMm: unknown) => SettingsPatch.safeParse({ effectiveRainStoreMm }).success;
+
+	it('accepts 0 (no carry-over) up to 500 mm', () => {
+		for (const v of [0, 12.5, 25, 500]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects a negative, oversized or non-numeric store', () => {
+		for (const v of [-1, 501, Infinity, '25', null]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to 25 mm for a project that never set it', () => {
+		expect(mergeSettings({}).effectiveRainStoreMm).toBe(25);
+		expect(defaultProjectSettings().effectiveRainStoreMm).toBe(25);
 	});
 });

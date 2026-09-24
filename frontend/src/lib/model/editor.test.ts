@@ -20,6 +20,17 @@ describe('ModelEditor', () => {
 		expect(ed.model.nodes).toHaveLength(0);
 	});
 
+	it('starts a new farm with all upstream inflow entering its dam (Q1: 1 = on-river dam)', () => {
+		// Since engine 0.9.0 the share means water INTO the dam; 0 would make a
+		// new farm's dam an off-channel one that only the diversion fills.
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const farm = ed.addNode();
+		expect(farm.kind).toBe('farm');
+		expect(farm.pctUpstreamToDam).toBe(1);
+	});
+
 	it('re-routes children and drops references when a node is removed', () => {
 		const ed = new ModelEditor();
 		const g = ed.addNode();

@@ -14,8 +14,14 @@ export interface FarmColumn {
 
 export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'gross_demand', letter: null, formula: 'Σ crop area × A-pan × crop factor ÷ 1000 ÷ days in month' },
-	{ key: 'effective_rain', letter: null, formula: 'cropped area × effective rain fraction ÷ 1000 × rain (rain ≤ threshold counts as 0)' },
-	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand − effective rain)' },
+	{
+		key: 'effective_rain',
+		letter: null,
+		formula:
+			"MIN(soil store[t−1] + Pe, MAX(0, gross demand)), in m³ (Pe = cropped area × effective rain fraction ÷ 1000 × rain; rain ≤ threshold counts as 0; the store in m³ = mm × cropped area ÷ 1000)"
+	},
+	{ key: 'soil_water', letter: null, formula: 'MIN(store size, soil store[t−1] + Pe − effective rain used), in mm over the cropped area; starts empty' },
+	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used' },
 	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
 	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), D)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },

@@ -212,7 +212,17 @@ export const FitRecord = z
 			.nullable()
 			.default(null),
 		notes: z.array(z.string().max(2000)).max(50),
-		editedParams: z.array(z.string().max(40)).max(30).default([])
+		editedParams: z.array(z.string().max(40)).max(30).default([]),
+		// The evaporation forcing the fit ran under (issue #4 pan-coefficient
+		// provenance): GR4J's parameters trade off against it, so it's held
+		// fixed and recorded, never fitted. Absent on records made before it.
+		forcing: z
+			.object({
+				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
+				apanMm: monthly
+			})
+			.strict()
+			.optional()
 	})
 	.strict();
 
@@ -224,6 +234,9 @@ export const SettingsPatch = z
 	.object({
 		februaryDays: z.number().min(28).max(29),
 		effectiveRainFraction: z.number().min(0).max(1),
+		// Soil-water store, mm over the cropped area (engine N3). 500 mm is well
+		// past the readily available water of deep roots in a heavy soil.
+		effectiveRainStoreMm: z.number().finite().min(0).max(500),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

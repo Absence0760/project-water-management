@@ -15,11 +15,12 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkBalance, checkReportTotals, checkRunoffBalance, checkTransferLimits, checkWorkings } from './checks';
+import { checkBalance, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
 	['workings', 'The intermediate columns follow their formulas (the daily farm CSV)', checkWorkings],
+	['soilWater', 'Each farm’s soil-water store stays between empty and full and hands out no more effective rain than fell', checkSoilWater],
 	['runoff', 'The runoff model balances: rain − evaporation − flow + exchange = change in storage', checkRunoffBalance],
 	['transfers', 'Transfers stay within their months, rates, daily caps and minimum storage', checkTransferLimits],
 	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals]

@@ -23,7 +23,10 @@ The page has these sections, top to bottom:
 1. **Runs compared.** Label, project, period and time of each run. There is a
    warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
-   from the dates. There is a note when the **engine version** differs.
+   from the dates. There is a note when the **engine version** differs, and a
+   warning when **either run used the legacy runoff model** (audit H1): it
+   doesn't conserve water at the event scale, so the comparison is a workbook
+   comparison only, not evidence.
 2. **What changed.** Every difference in the inputs, grouped by network, crops,
    transfers, settings and time series. Examples:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,
@@ -42,9 +45,11 @@ The page has these sections, top to bottom:
    by side: the fit (model, time, objective, seed), the bounds it searched
    (wide or typical, model.md §2.10b), its in-sample score, its split-sample,
    wet-year and independent-record scores ("not run" when that test wasn't),
-   whether (and what) the WR2012 MAR penalty pulled towards, and whether the
-   parameters were edited since the fit. A run whose parameters didn't come
-   from Fit automatically reads "none". To judge the runoff models against each other, copy
+   whether (and what) the WR2012 MAR penalty pulled towards, whether the
+   parameters were edited since the fit, and whether that run's own pan
+   coefficient / A-pan evaporation has changed since its fit ("no" when the
+   fit predates recorded forcing — nothing to compare). A run whose parameters
+   didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
    and compare them. The input diff then reads *"Runoff model: legacy (b023
    recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
@@ -112,7 +117,7 @@ dates changed too, only the date change is listed (one hash can't say whether
 the shared days changed), and runs stored before the hash existed have none,
 so an in-place edit between them isn't visible. If the results changed and
 the list shows nothing, one of those is the likely reason.
-A model from a run saved before engine 0.14.0 is read as migration 006 stored
+A model from a run saved before engine 0.15.0 is read as migration 006 stored
 it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
 1 − r with every loss returning), so a project that only went through the
 migration shows no network line; the engine version line flags the change.
@@ -120,7 +125,12 @@ Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
-thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*). Month
+thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*), and the
+soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
+mm"*). Runs store their settings merged over the defaults, so a snapshot
+without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
+is what that run used; the same rule reads a snapshot without a runoff model
+as legacy. Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range.

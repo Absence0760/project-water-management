@@ -77,7 +77,7 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  */
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
-	// Irrigation efficiency and loss return (engine ≥ 0.14.0) come from their own
+	// Irrigation efficiency and loss return (engine ≥ 0.15.0) come from their own
 	// generator, so the rest of a seed's network is what it was before them.
 	const ops = new Rng(seed ^ 0x2c1b3c6d);
 	const maxNodes = opts.maxNodes ?? 25;
@@ -241,6 +241,10 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		// Explicit, so a change of the engine's default doesn't change what a seed runs.
 		settings.runoffModel = 'legacy';
 	}
+	// The soil-water store (N3): none, the default, anything, or practically
+	// endless. From its own stream, so a seed still builds the same network.
+	const sw = new Rng(seed ^ 0x2545f491);
+	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }

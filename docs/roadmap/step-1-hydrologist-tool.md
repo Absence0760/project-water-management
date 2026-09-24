@@ -1004,7 +1004,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     shuffle exemption in `checkOrderInvariance`.
   - **Q5:** irrigation stops at `node.damMinPct` (today only transfers
     respect it); the help text in `lib/help/content.ts` changes too.
-    **Landed (engine 0.14.0)** on persona recommendation, pending the
+    **Landed (engine 0.15.0)** on persona recommendation, pending the
     hydrologist ([audit Q5](../engine-audit.md)); stored values were reset to
     0 in migration 006.
   - ~~**Q7:** Pitman fallback only on days with **no rain value**.~~ Done
@@ -1046,7 +1046,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** abstraction covers crop need plus losses; return flow is a share
   of the losses.
-- **Status: landed (engine 0.14.0)** on persona recommendation, pending the
+- **Status: landed (engine 0.15.0)** on persona recommendation, pending the
   hydrologist ([audit N1](../engine-audit.md)): per farm, backfill e = 1 − r
   with β = 1, and `return_flow_pct` dropped in the same migration (006)
   because it was never deployed.
