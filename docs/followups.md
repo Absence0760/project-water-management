@@ -111,7 +111,7 @@ Tick items off (or move them into an issue) as they are done.
       Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
       catchment with the correction on (condition 1), and record the result
       in the issue.
-- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
+- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
@@ -380,7 +380,7 @@ the suggested order (the IDs carry the detail):
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
-      panel. CR-20 went first (2026-09-24, in progress; plan under
+      panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
       the rain slice that CR-18 then generalises.
 - [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
