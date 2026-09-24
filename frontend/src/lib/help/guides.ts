@@ -364,7 +364,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS.'
+						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS. By default a run treats the flagged zero runs as missing, so CHIRPS fills them; Settings → [[zero-rain-runs|Zero-rain runs]] keeps a confirmed dry spell dry.'
 					}
 				]
 			},

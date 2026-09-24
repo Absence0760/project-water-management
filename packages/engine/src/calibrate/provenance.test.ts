@@ -103,6 +103,9 @@ describe('calibration exclusions', () => {
 		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { start: '2015-10-01', end: '2016-09-30', reason: 'b' }])).toBeNull();
 		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { waterYear: 2016, reason: '' }])).toBe('Exclusion 2: needs a reason');
 		expect(exclusionsError([{ waterYear: 2015, reason: 'a' }, { waterYear: 2015, reason: 'b' }])).toBe('Exclusion 2: WY 2015/16 is listed twice');
+		// Other dated-period lists name their own entries.
+		expect(exclusionsError([{ waterYear: 2015, reason: '' }], 'keep-dry period')).toBe('Keep-dry period 1: needs a reason');
+		expect(exclusionsError(new Array(101).fill({ waterYear: 2015, reason: 'x' }), 'missing-rain period')).toBe('at most 100 missing-rain periods');
 	});
 
 	it('marks the excluded days of a run, clipped to it', () => {

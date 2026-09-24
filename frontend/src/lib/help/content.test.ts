@@ -44,7 +44,7 @@ const STATS: Record<keyof CalibrationStats, true> = {
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
-	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
+	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'rain_catchment_missing', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)
 	'gross_demand', 'effective_rain', 'soil_water', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam',
@@ -138,7 +138,10 @@ describe('help content', () => {
 		walk(root);
 		const used: string[] = [];
 		for (const f of files) {
-			for (const m of readFileSync(f, 'utf8').matchAll(/<HelpTip\b[^>]*?\bkey=["']([^"']+)["']/g)) used.push(m[1]!);
+			const src = readFileSync(f, 'utf8');
+			for (const m of src.matchAll(/<HelpTip\b[^>]*?\bkey=["']([^"']+)["']/g)) used.push(m[1]!);
+			// Components that place the HelpTip themselves take the key as a helpKey prop (PeriodList).
+			for (const m of src.matchAll(/\bhelpKey=["']([^"']+)["']/g)) used.push(m[1]!);
 		}
 		for (const k of used) expect(helpFor(k), `HelpTip key "${k}"`).toBeDefined();
 	});

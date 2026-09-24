@@ -42,6 +42,7 @@
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
+	import ZeroRainSection from './ZeroRainSection.svelte';
 
 	let {
 		project,
@@ -93,12 +94,13 @@
 	const hasInvalidList = $derived(Object.values(listInvalid).some(Boolean));
 	let calWindowError = $state<string | null>(null);
 	let exclusionsError = $state<string | null>(null);
+	let zeroRainError = $state<string | null>(null);
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	let wr2012Error = $state<string | null>(null);
-	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!reportError || !!dqError || !!wr2012Error);
+	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!reportError || !!dqError || !!wr2012Error);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -395,6 +397,7 @@
 			/>
 			<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
 		</div>
+		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 
 		<FitPanel
 			projectId={project.id}

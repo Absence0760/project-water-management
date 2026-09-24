@@ -23,7 +23,8 @@
 		recentDays,
 		recentLabel = 'Recent',
 		toolbar,
-		caption
+		caption,
+		shade = []
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -41,6 +42,8 @@
 		recentLabel?: string;
 		toolbar?: Snippet;
 		caption?: string;
+		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption`). */
+		shade?: { start: string; end: string }[];
 	} = $props();
 
 	let host: HTMLDivElement | undefined = $state();
@@ -70,6 +73,15 @@
 	const isDecade = (v: number) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
 	const utc = (ts: number) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
 	const isoDay = (v: number) => new Date(v * 1000).toISOString().slice(0, 10);
+	const epochSec = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
+
+	/** A hex colour token as rgba with the given alpha (canvas can't read color-mix). */
+	function withAlpha(hex: string, alpha: number): string {
+		const m = /^#([0-9a-f]{6})$/i.exec(hex);
+		if (!m) return `rgba(200, 140, 40, ${alpha})`;
+		const n = parseInt(m[1]!, 16);
+		return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+	}
 
 	function seriesOpts(s: ChartSeries, i: number): uPlot.Series {
 		const stroke = token(s.color ?? `--series-${(i % 4) + 1}`, '#2a78d6');
@@ -107,6 +119,7 @@
 			height,
 			tzDate: utc,
 			cursor: { drag: { x: true, y: false }, points: { size: 7 } },
+			hooks: isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {},
 			scales: {
 				x: isTime ? { time: true } : { time: false },
 				y: log ? { distr: 3, log: 10 } : {}
@@ -155,6 +168,19 @@
 		if (canWindow) showRecent();
 	}
 
+	/** Tints each `shade` range over the full plot height, a day wide at each end. */
+	function drawShade(u: uPlot, fill: string) {
+		const { ctx, bbox } = u;
+		ctx.save();
+		ctx.fillStyle = fill;
+		for (const r of shade) {
+			const x0 = Math.max(bbox.left, u.valToPos(epochSec(r.start), 'x', true));
+			const x1 = Math.min(bbox.left + bbox.width, u.valToPos(epochSec(r.end) + 86_400, 'x', true));
+			if (x1 > x0) ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height);
+		}
+		ctx.restore();
+	}
+
 	function showRecent() {
 		if (!plot || !recentDays || !aligned.x.length) return;
 		const max = aligned.x[aligned.x.length - 1]!;
@@ -187,7 +213,7 @@
 
 	// Rebuild when data, unit, scale, height or theme change…
 	$effect(() => {
-		void [plotted, unit, height, themeTick, hasData, host, log, series];
+		void [plotted, unit, height, themeTick, hasData, host, log, series, shade];
 		untrack(build);
 	});
 	// …and only resize in place when the container width changes.
@@ -202,7 +228,7 @@
 	onDestroy(() => plot?.destroy());
 </script>
 
-<figure class="chart">
+<figure class="chart" data-shaded={shade.length || undefined}>
 	<figcaption class="head">
 		<span class="ttl">{title}</span>
 		<span class="tools">

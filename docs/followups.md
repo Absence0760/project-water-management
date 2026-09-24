@@ -113,8 +113,11 @@ Tick items off (or move them into an issue) as they are done.
       in the issue.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
-      (audit B2, model.md §2.4c); the Settings UI, the daily-chart shading
-      and the help text are next.** The issue #2 checks find runs of zero catchment rain
+      (audit B2, model.md §2.4c), then the Settings section, the Data tab
+      shading and the help entry (ui.md). Still to do: record
+      `zeroRainRuns` in a fit record's `forcing` (fit provenance), like
+      `chirpsBiasCorrection`, because it changes the rain a fit saw; and the
+      hydrologist's answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season
@@ -448,6 +451,21 @@ the suggested order (the IDs carry the detail):
 - [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
       formulas, which the engine no longer follows. Decide whether to delete it
       or rebuild it against the audited model. Operator call.
+- [ ] **A fourth full page load of the Settings tab fails in e2e** with
+      `net::ERR_INSUFFICIENT_RESOURCES` / "Failed to fetch dynamically
+      imported module" against the Vite dev server (:7801), so the page never
+      renders. Reproduced 2026-09-24 in isolation (`--workers=1`, one spec
+      that only runs `page.goto(…?tab=settings)` four times) and on an
+      unmodified checkout of `bfa7d4e`. Other sessions were running vitest at
+      the same time (load average ~7), so load may contribute, but it isn't
+      the whole cause. Suspected cause: each full load
+      re-requests several hundred unbundled dev modules, and Chromium runs out
+      of request resources. Durable fix to evaluate: run e2e against a built
+      site (`vite build` + `vite preview`) instead of the dev server, which
+      also matches production. Meanwhile specs navigate between tabs in the
+      app (as a user does) rather than with repeated `page.goto`. Trigger:
+      before the next e2e infrastructure change, or when an idle-machine run
+      still shows it.
 - [ ] **e2e runs from parallel worktrees share one `water_e2e` database and
       fixed ports** (:3101 and :7801). When two sessions run `pnpm test:e2e` at
       once, unrelated specs fail (seen 2026-09-24: `sharing.spec.ts` and

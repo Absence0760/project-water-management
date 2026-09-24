@@ -124,6 +124,11 @@ badge for water years far below the usual catchment / CHIRPS share (engine
 `rainVsChirps`, on the first catchment and first CHIRPS series by name, as a
 run reads them). These are the same checks a run reports as warnings; rules in
 [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
+Charting that catchment rain series tints the days a run will treat as
+missing (flagged zero runs and listed periods, per Settings → *Zero-rain
+runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
+naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)).
+`LineChart`'s `shade` prop draws the bands.
 "What the model uses" explains every kind. A **reference gauge (other
 catchment)** series (`flow_reference_m3s`, e.g. imported with
 `--gauge-as-reference`) is badged *Reference only*: it can be charted here as a
@@ -170,7 +175,14 @@ The settings are grouped by what they drive:
   blank reason, a reversed range or a period listed twice shows an alert and
   blocks Save. Excluded days are left out of Fit automatically and the run's
   calibration statistics (model.md §2.10). A run that corrected CHIRPS lists
-  the monthly factors and the number of days in its warnings. The rest
+  the monthly factors and the number of days in its warnings. Below that,
+  **Zero-rain runs in the catchment rain** (`settings/ZeroRainSection.svelte`,
+  `settings.zeroRainRuns`, [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)):
+  a **Flagged zero runs** picker ("Treat as missing", the default, or "Run as
+  recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
+  treat as missing** period lists. These share the calibration exclusions'
+  editor (`common/PeriodList.svelte`), with the same required reason and the
+  same checks that block Save. The rest
   depends on the model:
   - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
     months as toggles. **Advanced** holds the winter switch, the recession

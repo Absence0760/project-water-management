@@ -8,12 +8,14 @@
 		rainVsChirps,
 		rainVsChirpsCheck,
 		resolveDataQuality,
+		resolveZeroRain,
 		SERIES_KINDS,
 		toEpochDay,
 		type DataQualitySettings,
 		type SeriesCheckKind,
 		type SeriesKind,
-		type SeriesMeta
+		type SeriesMeta,
+		type ZeroRainSettings
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -31,6 +33,7 @@
 	import type { UploadResult } from './upload';
 	import { KIND_ROLES, seriesInUse } from './roles';
 	import { valuesCache } from './valuesCache';
+	import { zeroRainShading } from './zeroRain';
 
 	let {
 		projectId,
@@ -38,6 +41,7 @@
 		initial = null,
 		runs = null,
 		dataQuality = null,
+		zeroRainRuns = null,
 		onSeriesChange
 	}: {
 		projectId: string;
@@ -47,6 +51,8 @@
 		runs?: RunMeta[] | null;
 		/** The project's settings.dataQuality (gauge-vs-logger thresholds); null = the engine defaults. */
 		dataQuality?: Partial<DataQualitySettings> | null;
+		/** The project's settings.zeroRainRuns: which catchment-rain days a run treats as missing; null = the engine defaults. */
+		zeroRainRuns?: ZeroRainSettings | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();
 
@@ -142,6 +148,13 @@
 
 	// The series a run reads for a kind: the first of that kind by name.
 	const first = (k: string) => [...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
+
+	// Days a run treats as missing (CR-20), shaded on the catchment rain a run reads: the first by name.
+	const shading = $derived.by(() => {
+		if (!viewing || viewing.kind !== 'rain_catchment_mm' || viewing.id !== first('rain_catchment_mm')?.id) return null;
+		const v = values[viewing.id];
+		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, [])) : null;
+	});
 
 	// Gauge vs logger, when both records exist.
 	const agreement = $derived.by(() => {
@@ -316,6 +329,8 @@
 				bind:log={flowLog}
 				recentDays={3 * 365}
 				recentLabel="Last 3 years"
+				shade={shading?.ranges ?? []}
+				caption={shading?.caption ?? undefined}
 			/>
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
