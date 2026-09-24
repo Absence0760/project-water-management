@@ -20,7 +20,10 @@ function node(id: string, name: string, down: string | null): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0
+		lossReturnFraction: 0,
+		damAreaFullM2: null,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0
 	};
 }
 
@@ -97,5 +100,19 @@ describe('validateModel', () => {
 		const a = node('a', 'A', null);
 		a.irrigationEfficiency = 0;
 		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
+	});
+
+	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {
+		const a = node('a', 'A', null);
+		a.damAreaFullM2 = null;
+		expect(messages(model([a]))).toEqual([]);
+		a.damAreaFullM2 = -1;
+		a.damAreaExponent = 0;
+		a.damSeepagePerDay = 2;
+		expect(messages(model([a]))).toEqual([
+			'"A": percentages must be between 0% and 100%.',
+			'"A": the dam area exponent must be above 0 and at most 3.',
+			'"A": the dam area can\'t be negative.'
+		]);
 	});
 });

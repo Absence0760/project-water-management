@@ -39,6 +39,9 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
 		lossReturnFraction: 0,
+		damAreaFullM2: 0,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...over
 	};
 }
@@ -394,6 +397,101 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		const out = farm({ irrigationEfficiency: 0, lossReturnFraction: 0.5 });
 		expect(get(out, 'F', 'demand')).toEqual([100]);
 		expect(out.summary.warnings.some((w) => w.includes('irrigation efficiency 0 is not in (0, 1]'))).toBe(true);
+	});
+});
+
+describe('runModel — dam evaporation and seepage (audit N2, engine 0.15.0)', () => {
+	// October (31 days), A-pan 248 mm: 0.75 × 248 / 31 = 6 mm/day of open-water evaporation.
+	const dam = (over: Partial<NetworkNode>, f: Partial<Fixture> = {}) =>
+		run({
+			nodes: [node('D', { areaKm2: 0, damCapacityM3: 100_000, damInitialPct: 1, damAreaFullM2: 30_000, ...over })],
+			settings: { apanMm: flat(248) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01',
+			...f
+		});
+
+	it('evaporates lake factor × A-pan from the surface: 100 000 m³, 3 ha, 6 mm/day ≈ 180 m³/day', () => {
+		const out = dam({});
+		expect(get(out, 'D', 'dam_area')).toEqual([30_000]);
+		expect(get(out, 'D', 'dam_evaporation')[0]).toBeCloseTo(180, 9);
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(100_000 - 180, 9);
+		expect(Math.abs(get(out, 'D', 'balance_residual')[0]!)).toBeLessThan(1e-9);
+	});
+
+	it('shrinks the surface with the storage: A = A_full × (Q[t−1] / capacity)^b', () => {
+		const out = dam({ damInitialPct: 0.5, damAreaExponent: 0.7 });
+		expect(get(out, 'D', 'dam_area')[0]).toBeCloseTo(30_000 * Math.pow(0.5, 0.7), 9);
+		expect(get(out, 'D', 'dam_evaporation')[0]).toBeCloseTo((6 * 30_000 * Math.pow(0.5, 0.7)) / 1000, 9);
+	});
+
+	it('adds the rain on the surface, before any rain threshold, and the lake factor setting scales evaporation', () => {
+		const out = dam({ damInitialPct: 0.5 }, { settings: { apanMm: flat(248) as Monthly, lakeEvapFactor: 0 }, rain: [1.5] });
+		const A = 30_000 * Math.pow(0.5, 0.7);
+		expect(get(out, 'D', 'dam_evaporation')).toEqual([0]);
+		expect(get(out, 'D', 'rain_on_dam')[0]).toBeCloseTo((1.5 * A) / 1000, 9); // 1.5 mm is below the 2 mm threshold
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(50_000 + (1.5 * A) / 1000, 9);
+	});
+
+	it('seeps a fraction of the storage, which joins the outflow the same day', () => {
+		const out = dam({ damSeepagePerDay: 0.01 }, { settings: { apanMm: flat(0) as Monthly } });
+		expect(get(out, 'D', 'dam_seepage')).toEqual([1000]);
+		expect(get(out, 'D', 'outflow')).toEqual([1000]);
+		expect(get(out, 'D', 'dam_storage')).toEqual([99_000]);
+	});
+
+	it('never takes a dam below empty: evaporation takes at most what is there, seepage what is left', () => {
+		const out = dam({ damCapacityM3: 10, damAreaFullM2: 1e6, damSeepagePerDay: 1 });
+		expect(get(out, 'D', 'dam_evaporation')).toEqual([10]);
+		expect(get(out, 'D', 'dam_seepage')).toEqual([0]);
+		expect(get(out, 'D', 'dam_storage')).toEqual([0]);
+		// Empty, the dam has no surface: nothing more evaporates.
+		const two = dam({ damCapacityM3: 10, damAreaFullM2: 1e6 }, { natural: [0, 0] });
+		expect(get(two, 'D', 'dam_area')).toEqual([1e6, 0]);
+		expect(get(two, 'D', 'dam_evaporation')).toEqual([10, 0]);
+	});
+
+	it('estimates an unknown area as capacity ÷ 3 m and says how many dams used the estimate (W6)', () => {
+		const out = run({
+			nodes: [
+				node('D', { areaKm2: 0, damCapacityM3: 90_000, damInitialPct: 1, damAreaFullM2: null, downstreamNodeId: 'G' }),
+				node('E', { areaKm2: 0, damCapacityM3: 90_000, damInitialPct: 1, damAreaFullM2: 20_000, downstreamNodeId: 'G' }),
+				node('F', { areaKm2: 0, damCapacityM3: 0, damAreaFullM2: null, downstreamNodeId: 'G' }),
+				node('G', { kind: 'gauge', areaKm2: 0 })
+			],
+			settings: { apanMm: flat(248) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'dam_area')).toEqual([30_000]);
+		expect(get(out, 'E', 'dam_area')).toEqual([20_000]);
+		const w6 = out.summary.warnings.filter((w) => w.includes('no full-supply area'));
+		expect(w6).toEqual(['1 dam has no full-supply area, so dam evaporation uses an estimate: capacity ÷ 3 m mean depth (Mantel & Hughes 2023). Enter the area for (D)']);
+	});
+
+	it('leaves a farm without a dam alone', () => {
+		const out = dam({ damCapacityM3: 0, damInitialPct: 0, damAreaFullM2: null, damSeepagePerDay: 1 }, { rain: [50] });
+		for (const k of ['dam_area', 'dam_evaporation', 'rain_on_dam', 'dam_seepage', 'outflow']) expect(get(out, 'D', k), k).toEqual([0]);
+		expect(out.summary.warnings.some((w) => w.includes('no full-supply area'))).toBe(false);
+	});
+
+	it('takes the losses before irrigation, and the water balance still closes', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { areaKm2: 0, damCapacityM3: 1000, damInitialPct: 0.1, damAreaFullM2: 10_000, damSeepagePerDay: 0.05 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 100_000 }], // 800 m³/day of demand
+			settings: { apanMm: flat(248) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		// 100 m³ in the dam: A = 10 000 × 0.1^0.7; E = 6 mm × A; seepage 5 m³; irrigation gets the rest.
+		const A = 10_000 * Math.pow(0.1, 0.7);
+		const E = (6 * A) / 1000;
+		expect(get(out, 'D', 'supplied')[0]).toBeCloseTo(100 - E - 5, 9);
+		expect(get(out, 'D', 'dam_storage')[0]).toBeCloseTo(0, 9);
+		expect(get(out, 'D', 'outflow')[0]).toBeCloseTo(5, 9); // the seepage
+		expect(Math.abs(get(out, 'D', 'balance_residual')[0]!)).toBeLessThan(1e-9);
 	});
 });
 
@@ -1130,10 +1228,17 @@ describe.skipIf(!dataDir)(
 		// The workbook's "min %" column is the transfer minimum, which each
 		// transfer rule already carries; migration 006 sets every stored value to
 		// 0 and the importer no longer fills it, so the replay does the same.
+		// N2 (engine ≥ 0.15.0): dams lose evaporation and seepage and gain the rain
+		// on their surface; the workbook's dams have none. The replay gives every
+		// dam a surface of 0 m² and no seepage, which is bit for bit the
+		// workbook's dam; the "N2:" test below runs the estimated areas.
 		const modelInput: ModelInput = {
 			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
 			settings: { ...project.settings, runoffModel: 'legacy', effectiveRainStoreMm: 0 },
-			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0 })) },
+			model: {
+				...project.model,
+				nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0, damAreaFullM2: 0, damSeepagePerDay: 0 }))
+			},
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		// B1: days where CHIRPS stands in for blank catchment rain. The engine
@@ -1184,6 +1289,7 @@ describe.skipIf(!dataDir)(
 			}
 			return hit;
 		})();
+		const outletN1 = n1Affected.has(topo.outflow >= 0 ? project.model.nodes[topo.outflow]!.id : '');
 		const N1_KEYS = new Set(['supplied', 'deficit', 'inflow_upstream', 'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_shortfall', 'ewr_shortfall_incremental']);
 		const index = new Map(project.model.nodes.map((n, i) => [n.id, i]));
 		const farmCount = (i: number): number =>
@@ -1225,6 +1331,11 @@ describe.skipIf(!dataDir)(
 		//          spill, outflow, ewr_shortfall and ewr_shortfall_incremental
 		//          are skipped on the nodes n1Affected names, and the catchment
 		//          outflow and EWR-not-met series when the outlet is one.
+		//
+		//   N2     (engine ≥ 0.15.0) dams evaporate, seep and catch the rain on
+		//          their surface. Every comparison here runs with each dam's
+		//          area 0 m² and seepage 0, which is the workbook's dam bit for
+		//          bit; the "N2:" test checks the losses with estimated areas.
 		// -------------------------------------------------------------------------
 		type Rule =
 			| { kind: 'exact' }
@@ -1364,9 +1475,25 @@ describe.skipIf(!dataDir)(
 			expect(lowered).toBeGreaterThan(0);
 		});
 
+		it('N2: with the estimated dam areas every self-check passes, the dams evaporate, and W6 counts them', () => {
+			const withAreas: ModelInput = {
+				...modelInput,
+				model: { ...modelInput.model, nodes: modelInput.model.nodes.map((n) => ({ ...n, damAreaFullM2: null })) }
+			};
+			const on = withVerification(withAreas, runModelWith(withAreas, () => ({ naturalFlowM3Day: natural })));
+			expect(on.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+			const dams = project.model.nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
+			const evap = dams.reduce((s, n) => s + get(on, n.id, 'dam_evaporation').reduce((a, v) => a + v, 0), 0);
+			expect(evap).toBeGreaterThan(0);
+			expect(on.summary.warnings.some((w) => w.startsWith(`${dams.length} dam`) && w.includes('no full-supply area'))).toBe(true);
+			// Water only leaves: the catchment's total storage never ends a day above the run without losses... on average.
+			const store = (o: typeof out) => dams.reduce((s, n) => s + get(o, n.id, 'dam_storage').reduce((a, v) => a + v, 0), 0);
+			expect(store(on)).toBeLessThan(store(out));
+		});
+
 		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
 			// N1: the outlet is downstream of farms with return flow on the client catchment, so its flow and shortfall differ.
-			const outletRule: Rule = n1Affected.has(topo.outflow >= 0 ? project.model.nodes[topo.outflow]!.id : '') ? { kind: 'skip', why: 'N1' } : { kind: 'mean' };
+			const outletRule: Rule = outletN1 ? { kind: 'skip', why: 'N1' } : { kind: 'mean' };
 			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, outletRule)).toBeNull(); // R1
 			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
 			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, outletRule)).toBeNull(); // R1
@@ -1418,7 +1545,8 @@ describe.skipIf(!dataDir)(
 			const sim = get(raw, null, 'simulated_outflow');
 			const simW = expected.catchment.simulated_outflow!;
 			const mean = (v: ArrayLike<number | null>) => Array.from(v).reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
-			expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
+			// N1: an outlet below farms with return flow abstracts more than the workbook (skipped as above).
+			if (!outletN1) expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
 		});
 

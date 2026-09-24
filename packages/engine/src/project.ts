@@ -89,6 +89,15 @@ export interface ProjectSettings {
 	 * 19 and 22). 0 = no carry-over, the b023 workbook's rule.
 	 */
 	effectiveRainStoreMm: number;
+	/**
+	 * Open-water evaporation from a farm dam as a fraction of **A-pan**
+	 * evaporation (engine ≥ 0.15.0, docs/engine-audit.md N2): the dam loses
+	 * lakeEvapFactor × A-pan × its surface area each day. Default 0.75 (0.7–0.8
+	 * × Class-A pan, Linsley et al. 1982). The WR90 / WR2012 lake factors are
+	 * ratios to S-pan evaporation and must not be applied to A-pan directly.
+	 * 0 = no dam evaporation.
+	 */
+	lakeEvapFactor: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -186,6 +195,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
 		effectiveRainStoreMm: 25,
+		lakeEvapFactor: 0.75,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -308,7 +318,29 @@ export interface NetworkNode {
 	 * rest leaves the catchment (evaporation, deep percolation).
 	 */
 	lossReturnFraction: number;
+	/**
+	 * Dam surface area when full, m² (engine ≥ 0.15.0, audit N2). null = not
+	 * known: the run estimates capacity ÷ 3 m (ESTIMATED_DAM_DEPTH_M) and warns.
+	 */
+	damAreaFullM2: number | null;
+	/**
+	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b
+	 * (0 < b ≤ 3). Default 0.7 (Liebe et al. 2005, small reservoirs).
+	 */
+	damAreaExponent: number;
+	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
+	damSeepagePerDay: number;
 }
+
+/** Default exponent of the dam area–storage relation (Liebe et al. 2005). */
+export const DAM_AREA_EXPONENT = 0.7;
+
+/**
+ * Mean depth used to estimate a dam's full-supply area when none is entered:
+ * area = capacity ÷ 3 m, about the median mean depth of South African minor
+ * dams (Mantel & Hughes 2023). A run that uses it says so (warning W6).
+ */
+export const ESTIMATED_DAM_DEPTH_M = 3;
 
 /** Irrigation settings of a new farm (engine ≥ 0.15.0, audit N1): a typical mixed system, half of its losses returning. */
 export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.8, lossReturnFraction: 0.5 } as const;
@@ -343,7 +375,9 @@ export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: num
  * snapshot, a workbook extract), brought to the current fields the way
  * migration 006 brings the database: a node without `irrigationEfficiency`
  * gets it from its `returnFlowPct` (irrigationFromReturnFlow), which is
- * dropped. Fields already present are kept. Pure; returns a copy.
+ * dropped; a node without the dam evaporation fields gets their defaults
+ * (area unknown, exponent 0.7, no seepage). Fields already present are kept.
+ * Pure; returns a copy.
  */
 export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unknown }>(model: M): M {
 	const nodes = Array.isArray(model.nodes)
@@ -355,6 +389,10 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 					n.irrigationEfficiency ??= up.irrigationEfficiency;
 					n.lossReturnFraction ??= up.lossReturnFraction;
 				}
+				// Dam evaporation and seepage (N2): unknown area, the default exponent, no seepage.
+				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;
+				n.damAreaExponent ??= DAM_AREA_EXPONENT;
+				n.damSeepagePerDay ??= 0;
 				return n;
 			})
 		: model.nodes;
@@ -802,10 +840,14 @@ export interface WaterBalanceRow {
 	consumptiveUseM3: number;
 	/** Net transfers across all farms; 0 up to float noise. */
 	transfersM3: number;
+	/** Rain falling on the dams' surface (engine ≥ 0.15.0, audit N2); absent on older runs. */
+	rainOnDamsM3?: number;
+	/** Open-water evaporation from the dams (engine ≥ 0.15.0); absent on older runs. Seepage is in the outflow. */
+	damEvaporationM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers − consumptive use − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − outflow − closing. */
 	residualM3: number;
 }
 

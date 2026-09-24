@@ -32,7 +32,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				divertCapacityM3Day: nonNeg,
 				// 0 < e ≤ 1: abstraction demand is the crop requirement ÷ e (audit N1).
 				irrigationEfficiency: z.number().gt(0).max(1),
-				lossReturnFraction: frac
+				lossReturnFraction: frac,
+				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
+				damAreaFullM2: nonNeg.nullable(),
+				damAreaExponent: z.number().gt(0).max(3),
+				damSeepagePerDay: frac
 			})
 		)
 		.max(500),

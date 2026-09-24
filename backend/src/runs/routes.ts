@@ -164,7 +164,10 @@ const DAY_PARAMS = [
 	'damInitialPct',
 	'damMinPct',
 	'irrigationEfficiency',
-	'lossReturnFraction'
+	'lossReturnFraction',
+	'damAreaFullM2',
+	'damAreaExponent',
+	'damSeepagePerDay'
 ] as const;
 
 const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]): Record<K, unknown> =>

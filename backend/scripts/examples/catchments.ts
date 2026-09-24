@@ -4,6 +4,7 @@
 // calibration against an (invented) observed record. Place and farm names are
 // fictional. Everything is deterministic — re-seeding gives identical projects.
 import {
+	DAM_AREA_EXPONENT,
 	NEW_FARM_IRRIGATION,
 	defaultProjectSettings,
 	runModel,
@@ -113,7 +114,11 @@ function build(spec: CatchmentSpec): ExampleProject {
 		damMinPct: f.damMin ?? 0.15,
 		divertCapacityM3Day: f.divertM3Day ?? 0,
 		irrigationEfficiency: f.efficiency ?? NEW_FARM_IRRIGATION.irrigationEfficiency,
-		lossReturnFraction: f.lossReturn ?? NEW_FARM_IRRIGATION.lossReturnFraction
+		lossReturnFraction: f.lossReturn ?? NEW_FARM_IRRIGATION.lossReturnFraction,
+		// Dam area unknown, as for most farm dams: the run estimates capacity ÷ 3 m and says so (audit N2, W6).
+		damAreaFullM2: null,
+		damAreaExponent: DAM_AREA_EXPONENT,
+		damSeepagePerDay: 0
 	}));
 	const cropAreas = spec.farms.flatMap((f) =>
 		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000 }))

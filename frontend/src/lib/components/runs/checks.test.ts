@@ -72,7 +72,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 	name: 'Farm b',
 	kind: 'farm',
 	previousStorageM3: 500,
-	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, damMinPct: 0, irrigationEfficiency: 0.9, lossReturnFraction: 1 },
+	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, damMinPct: 0, irrigationEfficiency: 0.9, lossReturnFraction: 1, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
 	columns: Object.entries({
 		gross_demand: F,
 		effective_rain: 0,
@@ -88,6 +88,10 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		runoff_to_dam: 375,
 		runoff_below_dam: 375,
 		diverted_to_dam: 100,
+		dam_area: 0,
+		rain_on_dam: 0,
+		dam_evaporation: 0,
+		dam_seepage: 0,
 		interim_storage: 1075 - F,
 		dam_storage: 1000,
 		spill: 75 - F,
@@ -109,7 +113,7 @@ describe('day trace', () => {
 		const rows = traceRows(farmDay());
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
-		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), D)' });
+		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' });
 	});
 
 	it('adds the day-before soil-water store after the storage when the run has one (engine 0.14.0)', () => {
@@ -151,6 +155,15 @@ describe('day trace', () => {
 		expect(c.inflow).toBeCloseTo(1000, 9);
 		expect(c.consumptive).toBeCloseTo((9 * F) / 10, 9);
 		expect(c.storageChange).toBe(500);
+		expect(Math.abs(c.residual)).toBeLessThan(1e-9);
+	});
+
+	it('counts the rain on the dam in and the evaporation out (N2)', () => {
+		const day = farmDay();
+		day.columns.push({ key: 'rain_on_dam', label: 'rain_on_dam', unit: 'm³/day', value: 30 }, { key: 'dam_evaporation', label: 'dam_evaporation', unit: 'm³/day', value: 30 });
+		const c = dayClosure(day)!;
+		expect(c.inflow).toBeCloseTo(1030, 9);
+		expect(c.evaporation).toBe(30);
 		expect(Math.abs(c.residual)).toBeLessThan(1e-9);
 	});
 

@@ -20,7 +20,8 @@ import { CATEGORY_TITLES, HELP, helpFieldKeys, helpFor, searchHelp } from './con
 const NODE: Record<keyof NetworkNode, true> = {
 	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
-	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true
+	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true,
+	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -49,6 +50,8 @@ const RUN_KEYS = [
 	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)
 	'gross_demand', 'effective_rain', 'soil_water', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam',
 	'diverted_to_dam', 'interim_storage', 'below_dam_not_diverted', 'return_flow', 'balance_residual',
+	// Dam evaporation, rain on the dam and seepage (engine 0.16.0, audit N2)
+	'dam_area', 'rain_on_dam', 'dam_evaporation', 'dam_seepage',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];

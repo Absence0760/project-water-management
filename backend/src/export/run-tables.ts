@@ -251,6 +251,8 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Return flow (m³)', (r) => r.returnFlowM3],
 	['Consumptive use (m³)', (r) => r.consumptiveUseM3],
 	['Transfers, net (m³)', (r) => r.transfersM3],
+	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
+	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
@@ -259,8 +261,9 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 
 /**
  * Where the water went, one row per water year and one for the run (engine ≥
- * 0.12.0). The network closes: start storage + farm runoff + transfers =
- * consumptive use + outflow + end storage + residual.
+ * 0.12.0). The network closes: start storage + farm runoff + transfers +
+ * rain on dams = consumptive use + dam evaporation + outflow + end storage +
+ * residual (the dam terms from engine 0.16.0; blank on older runs).
  */
 export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<string> {
 	yield csvRow(['Water balance by water year (Oct–Sep)']);
@@ -268,7 +271,7 @@ export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<st
 		yield csvRow(['Run made before engine 0.12.0: no water balance recorded. Run it again to see it.']);
 		return;
 	}
-	yield csvRow(['Start storage + farm runoff + transfers = consumptive use + outflow + end storage + residual; the residual should be 0']);
+	yield csvRow(['Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage + residual; the residual should be 0']);
 	yield csvRow(['Water year', ...BALANCE_COLUMNS.map(([h]) => h)]);
 	for (const r of [...wb.years, wb.total]) {
 		const year = r.waterYear === null ? 'Whole run' : `${r.waterYear}/${String((r.waterYear + 1) % 100).padStart(2, '0')}`;

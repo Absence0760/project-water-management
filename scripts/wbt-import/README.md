@@ -55,7 +55,9 @@ rows and columns don't break it.
   names any farm that had one (docs/engine-audit.md Q5). The irrigation
   return flow % r becomes `irrigationEfficiency` e = 1 − r with
   `lossReturnFraction` 1 (r = 0: e = 1, 0), the same mapping as migration
-  006 (docs/engine-audit.md N1).
+  006 (docs/engine-audit.md N1). The workbook has no dam surface areas:
+  `damAreaFullM2` is null (runs estimate capacity ÷ 3 m and warn, N2),
+  `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer

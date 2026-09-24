@@ -152,6 +152,9 @@ export interface RunDay {
 		damMinPct: number | null;
 		irrigationEfficiency: number | null;
 		lossReturnFraction: number | null;
+		damAreaFullM2: number | null;
+		damAreaExponent: number | null;
+		damSeepagePerDay: number | null;
 	};
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
 }

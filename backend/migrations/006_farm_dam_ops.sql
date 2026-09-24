@@ -48,3 +48,25 @@ COMMENT ON COLUMN node.irrigation_efficiency IS
 	'Irrigation application efficiency e (0 < e <= 1): abstraction demand = crop requirement / e. Engine >= 0.15.0.';
 COMMENT ON COLUMN node.loss_return_fraction IS
 	'Share of the application losses (1 - e) x supplied that returns to the river the same day. Engine >= 0.15.0.';
+
+-- ---------------------------------------------------------------------------
+-- N2: dam evaporation and seepage. Each day, before irrigation, a dam's
+-- surface A = dam_area_full_m2 × (storage[t−1] / capacity)^dam_area_exponent
+-- loses lake factor × A-pan × A (settings.lakeEvapFactor, A-pan based) and
+-- gains the rain on A; dam_seepage_per_day × storage[t−1] seeps out and joins
+-- the farm's outflow. dam_area_full_m2 NULL = unknown: the run estimates
+-- capacity ÷ 3 m mean depth and warns (W6). The exponent's default 0.7 is
+-- Liebe et al. (2005) for small reservoirs. Existing rows get NULL / 0.7 / 0.
+-- ---------------------------------------------------------------------------
+ALTER TABLE node
+	ADD COLUMN dam_area_full_m2 double precision CHECK (dam_area_full_m2 >= 0),
+	ADD COLUMN dam_area_exponent double precision NOT NULL DEFAULT 0.7
+		CHECK (dam_area_exponent > 0 AND dam_area_exponent <= 3),
+	ADD COLUMN dam_seepage_per_day double precision NOT NULL DEFAULT 0
+		CHECK (dam_seepage_per_day BETWEEN 0 AND 1);
+COMMENT ON COLUMN node.dam_area_full_m2 IS
+	'Dam surface area when full (m2); NULL = unknown, the run estimates capacity / 3 m. Engine >= 0.16.0.';
+COMMENT ON COLUMN node.dam_area_exponent IS
+	'Exponent b of A = A_full x (S / capacity)^b (0 < b <= 3; Liebe et al. 2005: 0.7). Engine >= 0.16.0.';
+COMMENT ON COLUMN node.dam_seepage_per_day IS
+	'Seepage per day as a fraction of storage; it joins the outflow. Engine >= 0.16.0.';

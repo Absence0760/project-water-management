@@ -317,6 +317,30 @@ export const HELP: HelpEntry[] = [
 		source: 'docs/engine-audit.md Q5; docs/model.md §2.7'
 	},
 	{
+		id: 'dam-evaporation',
+		term: 'Dam evaporation and rain on the dam',
+		short: 'A dam loses open-water evaporation from its surface and catches the rain falling on it, every day before irrigation, in m³/day.',
+		long: 'The surface shrinks as the dam empties: area = area when full × (yesterday’s storage ÷ capacity)^exponent, with exponent 0.7 for small reservoirs (Liebe et al. 2005). Evaporation = dam evaporation factor × the month’s A-pan ÷ days in the month × area; the factor (Settings, default 0.75) is an A-pan factor: the WR90 / WR2012 lake factors are ratios to S-pan evaporation and must not be entered unchanged. Rain on the dam = the day’s rain (before the rain threshold) × area. Evaporation never takes more than the dam holds.\n\nWhen a dam’s area isn’t known the run estimates it as capacity ÷ 3 m (about the median mean depth of South African farm dams, Mantel & Hughes 2023) and its warnings say how many dams used the estimate. A 100 000 m³ dam of 3 ha loses about 180 m³/day at 6 mm/day of evaporation.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
+		units: 'm³/day; area m²; factor × A-pan',
+		category: 'farm',
+		aliases: ['evaporation', 'lake evaporation', 'open-water evaporation', 'surface area', 'area–volume', 'lake factor'],
+		fields: ['settings.lakeEvapFactor', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam'],
+		related: ['dam-capacity', 'dam-seepage', 'dam-storage'],
+		source: 'docs/engine-audit.md N2; Linsley et al. 1982; Liebe et al. 2005; Mantel & Hughes 2023'
+	},
+	{
+		id: 'dam-seepage',
+		term: 'Dam seepage',
+		short: 'The share of a dam’s storage that seeps out each day; it reaches the river below the dam the same day.',
+		long: 'Seepage = seepage per day × yesterday’s storage, taken after evaporation and never more than is left. It is part of the farm’s outflow, so it stays in the catchment. 0 % (the default) for a sealed dam.',
+		units: 'fraction of storage per day (shown as %)',
+		category: 'farm',
+		aliases: ['leakage', 'leak'],
+		fields: ['node.damSeepagePerDay', 'run.dam_seepage'],
+		related: ['dam-evaporation', 'dam-storage'],
+		source: 'docs/engine-audit.md N2'
+	},
+	{
 		id: 'diversion',
 		term: 'Diversion back to dam',
 		short: 'Daily capacity to pump or channel water from the river below the dam back into it, in m³/day.',
@@ -401,7 +425,7 @@ export const HELP: HelpEntry[] = [
 		id: 'balance-check',
 		term: 'Self-checks and the balance check',
 		short: 'Every run checks its own output: each farm’s day must balance, and the reports must add up to the daily series.',
-		long: 'The balance check (column V) is, for each farm and day: water in (upstream inflow + runoff + transfers) − water used (supplied − return flow) − the change in dam storage − outflow. It must be 0; in practice it is float noise, many orders of magnitude below the flows.\n\nEvery run also runs the checks the test suite runs on thousands of random networks: storage stays between 0 and the dam capacity, supply never exceeds demand, transfers keep to their months, rates, caps and minimum storage, the runoff model’s stores balance, and the EWR grid, farm summaries and curtailment report add up to the daily series. The results show which passed and, for a failure, the first farm and date where it broke. A failed check means a bug in the model, not in your data: report it.\n\nThe water balance per water year shows where the water went: start storage + farm runoff + transfers = consumptive use (supplied − return flow) + outflow + end storage, with a residual that should be 0.',
+		long: 'The balance check (column V) is, for each farm and day: water in (upstream inflow + runoff + transfers + rain on the dam) − water used (supplied − return flow) − dam evaporation − the change in dam storage − outflow (which includes dam seepage). It must be 0; in practice it is float noise, many orders of magnitude below the flows.\n\nEvery run also runs the checks the test suite runs on thousands of random networks: storage stays between 0 and the dam capacity, supply never exceeds demand, transfers keep to their months, rates, caps and minimum storage, the runoff model’s stores balance, and the EWR grid, farm summaries and curtailment report add up to the daily series. The results show which passed and, for a failure, the first farm and date where it broke. A failed check means a bug in the model, not in your data: report it.\n\nThe water balance per water year shows where the water went: start storage + farm runoff + transfers + rain on dams = consumptive use (supplied − return flow) + dam evaporation + outflow + end storage, with a residual that should be 0.',
 		units: 'm³/day',
 		category: 'results',
 		aliases: ['verification', 'invariants', 'mass balance', 'water balance', 'residual'],

@@ -7,7 +7,7 @@
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { defaultProjectSettings, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
+import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 
 const SEC_PER_DAY = 86_400;
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -19,8 +19,9 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * Daily balance identities and bounds, every node, every day:
  * - every value finite (observed flow may be NaN on missing days);
  * - routed inflow = Σ upstream outflow (gauges pass it through);
- * - farm balance H + I + J + Q[t−1] = U + G − T + Q (T = return flow
- *   β·(1 − e)·G, audit N1);
+ * - farm balance H + I + J + rain on dam + Q[t−1] = U + G − T + evaporation
+ *   + Q (T = return flow β·(1 − e)·G, audit N1; rain on the dam and
+ *   evaporation from it, audit N2; seepage is part of U), each loss ≥ 0;
  * - 0 ≤ storage ≤ capacity, spill only from a full dam, 0 ≤ supplied ≤ demand,
  *   deficit = demand − supplied, EWR shortfall = MIN(U − Z, 0) ≤ 0;
  * - transfers net to zero across farms each day;
@@ -64,12 +65,19 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		totIn += qPrev;
 		// Return flow: the share β of the application losses (1 − e)·G (audit N1).
 		const returnPerSupplied = n.lossReturnFraction * (1 - n.irrigationEfficiency);
+		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.15.0 have neither.
+		const Pd = get.get(`${n.id}|rain_on_dam`);
+		const Ev = get.get(`${n.id}|dam_evaporation`);
+		const Sp = get.get(`${n.id}|dam_seepage`);
 		for (let t = 0; t < out.days; t++) {
 			const T = G![t]! * returnPerSupplied;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev;
-			const rhs = U[t]! + G![t]! - T + Q![t]!;
+			const pd = Pd?.[t] ?? 0;
+			const ev = Ev?.[t] ?? 0;
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
+			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
 			if (Q![t]! < -1e-9 || Q![t]! > cap + 1e-9) return `${where}: storage ${Q![t]} outside [0, ${cap}]`;
 			if (R![t]! < 0 || (R![t]! > 0 && Math.abs(Q![t]! - cap) > 1e-9)) return `${where}: spill ${R![t]} with storage ${Q![t]}/${cap}`;
 			if (G![t]! > F![t]! + 1e-9) return `${where}: supplied ${G![t]} > demand ${F![t]}`;
@@ -87,8 +95,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const AB = ABs![t]!;
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
-			totIn += I![t]!;
-			totOut += G![t]! - T;
+			totIn += I![t]! + pd;
+			totOut += G![t]! - T + ev;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -398,22 +406,48 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   abstraction demand D = F / e (audit N1);
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
- * - G = MIN(MAX(Q[t−1] + M + O + K + J − dead storage, 0), D): irrigation
+ * - the dam's surface A = A_full × (Q[t−1] / capacity)^b (A_full as entered,
+ *   or capacity ÷ 3 m); rain on it Pd = rain × A / 1000; evaporation
+ *   E = MIN(lake factor × A-pan ÷ days in month × A / 1000, Q[t−1] + Pd + J);
+ *   seepage Sp = MIN(seepage × Q[t−1], Q[t−1] + Pd + J − E) (audit N2), and
+ *   S0 = Q[t−1] + Pd − E − Sp is what the day starts from;
+ * - G = MIN(MAX(S0 + M + O + K + J − dead storage, 0), D): irrigation
  *   takes what is above the minimum operating level, up to demand (Q5);
- * - P = Q[t−1] + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
- * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T;
+ * - P = S0 + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
+ * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T + Sp;
  * - V is the recomputed balance residual and is float noise.
  */
 export function checkWorkings(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
+	// Open-water evaporation depth per day and the day's rain on a dam (audit N2), from the run's own settings and rain.
+	const d0 = defaultProjectSettings();
+	const st = input.settings ?? {};
+	const lakeK = typeof st.lakeEvapFactor === 'number' && Number.isFinite(st.lakeEvapFactor) && st.lakeEvapFactor >= 0 ? st.lakeEvapFactor : d0.lakeEvapFactor;
+	const feb = typeof st.februaryDays === 'number' ? st.februaryDays : d0.februaryDays;
+	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)) : [...d0.apanMm];
+	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
+	const day0 = toEpochDay(out.startDate);
+	const evapMmDay = Array.from({ length: out.days }, (_, t) => {
+		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
+		return (lakeK * (apan[wy] ?? 0)) / monthLen[wy]!;
+	});
+	const rainFinal = get.get('null|rain_final');
+	const damRain = (t: number) => {
+		const v = rainFinal?.[t];
+		return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+	};
 	for (const n of input.model.nodes) {
 		if (n.kind !== 'farm') continue;
 		const g = (k: string) => get.get(`${n.id}|${k}`);
-		const keys = ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied', 'inflow_upstream', 'runoff', 'transfer', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam', 'diverted_to_dam', 'interim_storage', 'dam_storage', 'spill', 'below_dam_not_diverted', 'return_flow', 'outflow', 'balance_residual'];
+		const keys = ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied', 'inflow_upstream', 'runoff', 'transfer', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam', 'diverted_to_dam', 'dam_area', 'rain_on_dam', 'dam_evaporation', 'dam_seepage', 'interim_storage', 'dam_storage', 'spill', 'below_dam_not_diverted', 'return_flow', 'outflow', 'balance_residual'];
 		const cols = keys.map(g);
 		const missing = keys.find((_, i) => !cols[i]);
 		if (missing) return `${n.id}: working column ${missing} missing`;
-		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V] = cols as number[][];
+		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, AREA, PD, EV, SP, P, Q, R, S, T, U, V] = cols as number[][];
+		// The dam's area–storage relation, as runModel resolves it (audit N2).
+		const areaFull = n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0;
+		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
+		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
 		const e = n.irrigationEfficiency;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
@@ -430,16 +464,28 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
-			const avail = qPrev + m + o + k + j;
-			if (!near(gg, Math.min(Math.max(avail - dead, 0), d), Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), dead, d)))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + M + O + K + J − dead storage ${dead}, 0), D ${d})`;
-			if (!near(p, avail - gg, Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + M + O + K + J − G`;
+			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
+			const a = cap > 0 && qPrev > 0 ? areaFull * Math.pow(Math.min(qPrev / cap, 1), b) : 0;
+			if (!near(area, a, a)) return `${where}: dam area ${area} ≠ A_full ${areaFull} × (Q[t−1] ${qPrev} / capacity ${cap})^${b}`;
+			const pdWant = (damRain(t) * a) / 1000;
+			const there = Math.max(qPrev + pdWant + j, 0);
+			const evWant = Math.min((evapMmDay[t]! * a) / 1000, there);
+			const spWant = Math.min(seep * qPrev, there - evWant);
+			if (!near(pd, pdWant, qPrev) || !near(ev, evWant, qPrev) || !near(sp, spWant, qPrev))
+				return `${where}: rain on dam ${pd} / evaporation ${ev} / seepage ${sp} ≠ ${pdWant} / ${evWant} / ${spWant}`;
+			const s0 = qPrev + pd - ev - sp;
+			if (s0 + j < -tol(qPrev)) return `${where}: the dam losses and transfers take it below empty (${s0 + j})`;
+			const avail = s0 + m + o + k + j;
+			const availScale = Math.max(Math.abs(qPrev), pd, ev, sp, m, o, k, Math.abs(j), dead, d);
+			if (!near(gg, Math.min(Math.max(avail - dead, 0), d), availScale))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dead storage ${dead}, 0), D ${d})`;
+			if (!near(p, avail - gg, Math.max(availScale, gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
-			if (!near(u, r + ss + tt, Math.max(r, ss, tt))) return `${where}: outflow ${u} ≠ R + S + T`;
-			const vv = h + i + j - (gg - tt) - (q - qPrev) - u;
-			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u));
+			if (!near(u, r + ss + tt + sp, Math.max(r, ss, tt, sp))) return `${where}: outflow ${u} ≠ R + S + T + seepage`;
+			const vv = h + i + j + pd - (gg - tt) - ev - (q - qPrev) - u;
+			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
 		}

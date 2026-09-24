@@ -60,6 +60,9 @@ function node(id: string, name: string, over: Partial<NetworkNode> = {}): Networ
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
 		lossReturnFraction: 0.5,
+		damAreaFullM2: 0,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...over
 	};
 }
@@ -281,11 +284,27 @@ describe('diffInputs', () => {
 	it('does not flag settings stored sparsely vs merged over the defaults', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
-		// Likewise the soil-water store: none stored means none used (engine < 0.14.0).
+		// Likewise the soil-water store: none stored means none used (engine < 0.14.0),
+		// and dam evaporation (engine < 0.15.0).
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
 		b.settings.effectiveRainStoreMm = 0;
+		b.settings.lakeEvapFactor = 0;
 		expect(diffInputs(a, b)).toEqual([]);
+	});
+
+	it('lists a change of the dam evaporation factor and of a dam\'s evaporation fields (N2)', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.lakeEvapFactor = 0.6;
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		f.damAreaFullM2 = null;
+		f.damSeepagePerDay = 0.002;
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: dam area when full 0 m² → estimated (capacity ÷ 3 m)',
+			'Rooikloof: dam seepage per day 0% → 0.2%',
+			'Dam evaporation factor (× A-pan): 0.75 → 0.6'
+		]);
 	});
 
 	it('describes a dam raise on a copied project by farm name', () => {

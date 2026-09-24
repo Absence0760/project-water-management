@@ -43,7 +43,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	}
 
 	// Ranges (the API rejects these with a 400)
-	const FRACTIONS = ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'irrigationEfficiency', 'lossReturnFraction'] as const;
+	const FRACTIONS = ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'irrigationEfficiency', 'lossReturnFraction', 'damSeepagePerDay'] as const;
 	const NON_NEG = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'damCapacityM3', 'divertCapacityM3Day'] as const;
 	for (const n of nodes) {
 		const label = `"${nodeName(n.id)}"`;
@@ -51,6 +51,8 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
 		if (badFrac) issues.push({ area: 'network', message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', message: `${label}: irrigation efficiency must be above 0%.` });
+		if (!(n.damAreaExponent > 0 && n.damAreaExponent <= 3)) issues.push({ area: 'network', message: `${label}: the dam area exponent must be above 0 and at most 3.` });
+		if (n.damAreaFullM2 !== null && !inRange(n.damAreaFullM2, 0, Infinity)) issues.push({ area: 'network', message: `${label}: the dam area can't be negative.` });
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
 			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });
 		}

@@ -66,6 +66,13 @@ describe('migration 006: farm and dam operating rules', () => {
 		expect(await row(node(1))).not.toHaveProperty('return_flow_pct');
 	});
 
+	it('N2: existing dams get an unknown area (estimated by the run), the exponent 0.7 and no seepage', async () => {
+		expect(await row(node(1))).toMatchObject({ dam_area_full_m2: null, dam_area_exponent: 0.7, dam_seepage_per_day: 0 });
+		await expect(db.query(`UPDATE node SET dam_area_exponent = 0 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
+		await expect(db.query(`UPDATE node SET dam_seepage_per_day = 1.5 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
+		await expect(db.query(`UPDATE node SET dam_area_full_m2 = -1 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
+	});
+
 	it('N1: a new farm defaults to 80 % efficiency with half its losses returning, and e must be above 0', async () => {
 		await db.query(`INSERT INTO node (project_id, name, kind) VALUES ($1, 'New farm', 'farm')`, [PROJECT]);
 		const r = (await db.query(`SELECT irrigation_efficiency, loss_return_fraction FROM node WHERE name = 'New farm'`)).rows[0];

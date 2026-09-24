@@ -18,7 +18,7 @@ import {
 	seriesChecks
 } from './quality';
 import { applyChirpsCorrection, chirpsBiasFactors, chirpsCorrectionWarning, type ChirpsCorrection } from './rain';
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
+import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
@@ -34,7 +34,9 @@ import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowI
 import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
+	DAM_AREA_EXPONENT,
 	defaultProjectSettings,
+	ESTIMATED_DAM_DEPTH_M,
 	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
@@ -186,6 +188,10 @@ export function runModelWith(
 		['divertedToDam', 'diverted_to_dam', 'Diverted back to the dam', 'm³/day'],
 		['interimStorage', 'interim_storage', 'Interim storage (before spill)', 'm³'],
 		['belowDamNotDiverted', 'below_dam_not_diverted', 'Below-dam flow not diverted', 'm³/day'],
+		['damArea', 'dam_area', 'Dam surface area (start of day)', 'm²'],
+		['rainOnDam', 'rain_on_dam', 'Rain on the dam surface', 'm³/day'],
+		['damEvaporation', 'dam_evaporation', 'Evaporation from the dam', 'm³/day'],
+		['damSeepage', 'dam_seepage', 'Seepage from the dam (joins the outflow)', 'm³/day'],
 		['returnFlow', 'return_flow', 'Irrigation return flow', 'm³/day'],
 		['balanceResidual', 'balance_residual', 'Balance check (should be 0)', 'm³/day']
 	];
@@ -469,9 +475,30 @@ export function buildNetworkPlan(
 		});
 	}
 
+	// Dam evaporation and rain on the dams (audit N2): open-water evaporation
+	// depth = lake factor × A-pan for the month ÷ days in the month; rain on the
+	// surface is the day's rain before any threshold (missing = 0).
+	const monthDays = daysPerMonth(settings.februaryDays);
+	const lakeEvapMmDay = new Float64Array(days);
+	for (let t = 0; t < days; t++) {
+		const m = waterYearIndex(month[t]!);
+		lakeEvapMmDay[t] = (settings.lakeEvapFactor * settings.apanMm[m]!) / monthDays[m]!;
+	}
+	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
+	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
+	const estimated = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0 && (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined));
+	if (estimated.length) {
+		warnings.push(
+			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
+				`capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m mean depth (Mantel & Hughes 2023). Enter the area for (${estimated.map((n) => n.name).join('; ')})`
+		);
+	}
+
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
+		lakeEvapMmDay,
+		...(damRainMm ? { damRainMm } : {}),
 		// Sum each node's upstream in node-id order, not display order, so the
 		// float result can't depend on how the nodes are listed (review F8).
 		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
@@ -492,6 +519,7 @@ export function buildNetworkPlan(
 				initialStorageM3: n.damInitialPct * cap,
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings),
+				...damLosses(n, warnings),
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
@@ -503,6 +531,31 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * A dam's evaporation and seepage parameters (audit N2): the full-supply area
+ * as entered, or capacity ÷ 3 m when it isn't known (warning W6, in
+ * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning);
+ * seepage per day clamped to 0–1. A node without a dam gets none.
+ */
+function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
+	const cap = n.damCapacityM3;
+	if (n.kind !== 'farm' || !(cap > 0)) return { damAreaFullM2: 0, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
+	let area = n.damAreaFullM2 ?? cap / ESTIMATED_DAM_DEPTH_M;
+	if (!(Number.isFinite(area) && area >= 0)) {
+		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m`);
+		area = cap / ESTIMATED_DAM_DEPTH_M;
+	}
+	let b = n.damAreaExponent;
+	if (!(b > 0 && b <= 3)) {
+		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
+		b = DAM_AREA_EXPONENT;
+	}
+	const s = n.damSeepagePerDay;
+	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;
+	if (seep !== s) warnings.push(`farm "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
+	return { damAreaFullM2: area, damAreaExponent: b, damSeepagePerDay: seep };
+}
 
 /**
  * A farm's irrigation efficiency and loss return (audit N1). Validation keeps
@@ -717,6 +770,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
+	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
+		warnings.push(`dam evaporation factor "${String(s.lakeEvapFactor)}" is not a number ≥ 0; using ${d.lakeEvapFactor}`);
+		s.lakeEvapFactor = d.lakeEvapFactor;
+	}
 	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
 		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);
 		s.effectiveRainStoreMm = d.effectiveRainStoreMm;

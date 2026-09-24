@@ -1085,6 +1085,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.21 N2 dam area–volume, evaporation, seepage
 
 - **Goal:** dams lose open-water evaporation and optional seepage.
+- **Status: landed (engine 0.15.0)** on persona recommendation, pending the
+  hydrologist ([audit N2](../engine-audit.md)). As built: one A-pan-based
+  lake factor (0.75), rain on the dam added, seepage joining the outflow, and
+  an unknown area *estimated* as capacity ÷ 3 m with warning W6 (not "no
+  evaporation"), so existing projects do change.
 - **Changes:**
   - **engine:**
     - E = `k_lake(month) × A-pan(month)/days × A(S)`, with

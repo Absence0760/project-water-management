@@ -1,4 +1,4 @@
-"""Farm and dam operating rules the importer writes (engine >= 0.15.0, docs/engine-audit.md Q5, N1).
+"""Farm and dam operating rules the importer writes (engine >= 0.15.0, docs/engine-audit.md Q5, N1, N2).
 
     .venv/bin/python -m unittest discover -s scripts/wbt-import
     (or: uv run --no-project --with openpyxl python -m unittest discover -s scripts/wbt-import)
@@ -37,6 +37,10 @@ class OperatingRules(unittest.TestCase):
 
     def test_n1_all_returning_maps_to_the_smallest_efficiency(self):
         self.assertEqual(farm_operating_rules("Synthetic farm", {"returnFlowPct": 1}, [])["irrigationEfficiency"], 0.01)
+
+    def test_n2_no_surface_area_in_the_workbook(self):
+        ops = farm_operating_rules("Synthetic farm", {"damCapacityM3": 90000}, [])
+        self.assertEqual((ops["damAreaFullM2"], ops["damAreaExponent"], ops["damSeepagePerDay"]), (None, 0.7, 0))
 
 
 if __name__ == "__main__":

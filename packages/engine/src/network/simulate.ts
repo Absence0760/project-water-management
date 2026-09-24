@@ -48,6 +48,16 @@ export interface PlanNode {
 	irrigationEfficiency: number;
 	/** Share β of the application losses (1 − e)·G that returns to the river the same day (audit N1). */
 	lossReturnFraction: number;
+	/**
+	 * Dam surface area when full (m²), as entered or estimated (capacity ÷ 3 m
+	 * mean depth); the area on a day is A = full × (Q[t−1] / capacity)^b
+	 * (engine ≥ 0.15.0, audit N2). 0 for a node without a dam.
+	 */
+	damAreaFullM2: number;
+	/** Exponent b of the area–storage relation (Liebe et al. 2005: 0.7). */
+	damAreaExponent: number;
+	/** Seepage per day as a fraction of the storage at the start of the day (audit N2). */
+	damSeepagePerDay: number;
 	/** Daily crop water requirement (F, net irrigation need); zeros for gauges. */
 	demand: Float64Array;
 	/**
@@ -88,6 +98,13 @@ export interface NetworkPlan {
 	naturalFlow: Float64Array;
 	/** Unfragmented pragmatic EWR at the outflow, m³/day. */
 	ewr: Float64Array;
+	/**
+	 * Open-water evaporation depth per day (mm): lake factor × A-pan for the
+	 * month ÷ days in the month (engine ≥ 0.15.0, audit N2). Absent = none.
+	 */
+	lakeEvapMmDay?: Float64Array;
+	/** Rain falling on a dam's surface per day (mm): the day's rain before any threshold (audit N2). Absent = none. */
+	damRainMm?: Float64Array;
 }
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
@@ -127,7 +144,15 @@ export interface FarmWorkings {
 	interimStorage: Float64Array; // P
 	belowDamNotDiverted: Float64Array; // S
 	returnFlow: Float64Array; // T = β·(1 − e)·G
-	/** V, signed: (H + I + J) − (G − T) − (Q[t] − Q[t−1]) − U. Float noise only. */
+	/** Dam surface area at the start of the day (m²), audit N2. */
+	damArea: Float64Array;
+	/** Open-water evaporation from the dam, after the clamp (m³/day). */
+	damEvaporation: Float64Array;
+	/** Rain falling on the dam's surface (m³/day). */
+	rainOnDam: Float64Array;
+	/** Seepage out of the dam, after the clamp (m³/day); it joins the outflow U. */
+	damSeepage: Float64Array;
+	/** V, signed: (H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U. Float noise only. */
 	balanceResidual: Float64Array;
 }
 
@@ -173,12 +198,16 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 		interimStorage: f(),
 		belowDamNotDiverted: f(),
 		returnFlow: f(),
+		damArea: f(),
+		damEvaporation: f(),
+		rainOnDam: f(),
+		damSeepage: f(),
 		balanceResidual: f()
 	};
 }
 
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } = {}): NetworkResult {
-	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr } = plan;
+	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map(() => allocNode(days));
 	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
@@ -258,18 +287,38 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
-			const avail = qPrev + M + O + K + J;
+			// Dam losses and gains before irrigation (audit N2). The surface area
+			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
+			// that surface is a gain, open-water evaporation and seepage losses.
+			// Evaporation takes at most what is there (yesterday's storage, the
+			// rain and today's net transfer, which was settled first), seepage at
+			// most what evaporation leaves, so storage stays ≥ 0.
+			const cap = node.damCapacityM3;
+			let A = 0;
+			let E = 0;
+			let Pd = 0;
+			let Sp = 0;
+			if (cap > 0 && qPrev > 0) {
+				A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), node.damAreaExponent);
+				Pd = damRainMm ? (damRainMm[t]! * A) / 1000 : 0;
+				// A transfer out never takes more than yesterday's storage, so this is ≥ 0 up to float noise.
+				const there = Math.max(qPrev + Pd + J, 0);
+				E = Math.min(lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0, there);
+				Sp = Math.min(node.damSeepagePerDay * qPrev, there - E);
+			}
+			const qStart = qPrev + Pd - E - Sp;
+			const avail = qStart + M + O + K + J;
 			// Irrigation draws only what is above the dam's minimum operating
 			// level (dead storage, audit Q5); a dam below it supplies nothing.
 			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), D);
 			const P = avail - G;
-			const cap = node.damCapacityM3;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
 			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
 			const T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
-			const U = Rr + S + T;
+			// Seepage leaves the dam below the wall and joins the outflow the same day (N2).
+			const U = Rr + S + T + Sp;
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
@@ -302,7 +351,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				w.interimStorage[t] = P;
 				w.belowDamNotDiverted[t] = S;
 				w.returnFlow[t] = T;
-				w.balanceResidual[t] = H + I + J - (G - T) - (Q - qPrev) - U;
+				w.damArea[t] = A;
+				w.damEvaporation[t] = E;
+				w.rainOnDam[t] = Pd;
+				w.damSeepage[t] = Sp;
+				w.balanceResidual[t] = H + I + J + Pd - (G - T) - E - (Q - qPrev) - U;
 			}
 		}
 	}

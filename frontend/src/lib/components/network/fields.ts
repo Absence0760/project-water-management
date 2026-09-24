@@ -9,6 +9,9 @@ export type NodeNumberKey =
 	| 'damCapacityM3'
 	| 'damInitialPct'
 	| 'damMinPct'
+	| 'damAreaFullM2'
+	| 'damAreaExponent'
+	| 'damSeepagePerDay'
 	| 'pctUpstreamToDam'
 	| 'pctRunoffToDam'
 	| 'divertCapacityM3Day'
@@ -20,7 +23,7 @@ export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | '%' | 'm³/day';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×';
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
@@ -91,6 +94,34 @@ export const NODE_FIELDS: NodeField[] = [
 		help: 'Dead storage: irrigation draws only the water above this level, and transfers out of the dam leave at least this much. 0 % means irrigation may empty the dam.'
 	},
 	{
+		key: 'damAreaFullM2',
+		label: 'Area when full',
+		unit: 'm²',
+		group: 'dam',
+		farmOnly: true,
+		nullable: true,
+		aria: (n) => `Dam surface area when full at ${n}, m²`,
+		help: 'Water surface of the full dam, for evaporation and the rain it catches. Empty: estimated as capacity ÷ 3 m (a typical farm dam’s mean depth), and the run says so.'
+	},
+	{
+		key: 'damAreaExponent',
+		label: 'Area exponent',
+		unit: '×',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam area exponent of ${n}`,
+		help: 'How the surface shrinks as the dam empties: area = area when full × (storage ÷ capacity)^exponent. 0.7 suits small dams (Liebe et al. 2005); 1 is a flat-sided pan; allowed 0–3.'
+	},
+	{
+		key: 'damSeepagePerDay',
+		label: 'Seepage',
+		unit: '%/day',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam seepage of ${n}, % of storage per day`,
+		help: 'Share of the stored water that seeps out each day. It reaches the river below the dam the same day. 0 % for a sealed dam.'
+	},
+	{
 		key: 'pctUpstreamToDam',
 		label: 'Upstream inflow to dam',
 		unit: '%',
@@ -147,17 +178,19 @@ export const NODE_FIELDS: NodeField[] = [
 	}
 ];
 
-export const isPct = (f: NodeField) => f.unit === '%';
+export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
 
 /**
  * Hints (not errors) about a node's dam settings, shown under its fields.
  * A dam with no minimum operating level can be emptied by irrigation, which
  * the workbook allowed but few farmers do (docs/engine-audit.md Q5).
  */
-export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'>): string[] {
+export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'> & Partial<Pick<NetworkNode, 'damAreaFullM2'>>): string[] {
 	if (!hasDam(n)) return [];
 	const hints: string[] = [];
 	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
+	if (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined)
+		hints.push(`No surface area: evaporation uses capacity ÷ 3 m, about ${fmtArea(n.damCapacityM3 / 3)}. Enter the dam's area when full for a better figure.`);
 	return hints;
 }
 
@@ -171,6 +204,11 @@ export function systemOf(efficiency: number): (typeof IRRIGATION_SYSTEMS)[number
 
 /** Treat a dam under 1 m³ as no dam (the workbook uses tiny placeholders such as 0.15). */
 export const hasDam = (n: Pick<NetworkNode, 'kind' | 'damCapacityM3'>) => n.kind === 'farm' && n.damCapacityM3 >= 1;
+
+/** 30 000 → "3.0 ha"; 5 000 → "5,000 m²". */
+function fmtArea(m2: number): string {
+	return m2 >= 10_000 ? `${(m2 / 10_000).toFixed(1)} ha` : `${Math.round(m2).toLocaleString('en-US')} m²`;
+}
 
 /** 1 050 000 → "1.05 Mm³"; 40 000 → "40,000 m³". */
 export function fmtVolume(m3: number): string {

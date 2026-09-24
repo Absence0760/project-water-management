@@ -11,7 +11,8 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 				pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
 				dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
 				divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
-				loss_return_fraction AS "lossReturnFraction"
+				loss_return_fraction AS "lossReturnFraction", dam_area_full_m2 AS "damAreaFullM2",
+				dam_area_exponent AS "damAreaExponent", dam_seepage_per_day AS "damSeepagePerDay"
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
 		);
@@ -63,20 +64,23 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		await upserted(
 			`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 				flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
-				dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+				dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
+				dam_area_full_m2, dam_area_exponent, dam_seepage_per_day)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 				area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
 				flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
 				pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
 				dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
 				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, irrigation_efficiency = EXCLUDED.irrigation_efficiency,
-				loss_return_fraction = EXCLUDED.loss_return_fraction
+				loss_return_fraction = EXCLUDED.loss_return_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
+				dam_area_exponent = EXCLUDED.dam_area_exponent, dam_seepage_per_day = EXCLUDED.dam_seepage_per_day
 			 WHERE node.project_id = EXCLUDED.project_id`,
 			[
 				n.id, projectId, n.name, n.kind, n.sortOrder, n.areaKm2, n.areaHiKm2, n.areaLoKm2, n.flowShareManual,
 				n.pctUpstreamToDam, n.pctRunoffToDam, n.damCapacityM3, n.damInitialPct, n.damMinPct,
-				n.divertCapacityM3Day, n.irrigationEfficiency, n.lossReturnFraction
+				n.divertCapacityM3Day, n.irrigationEfficiency, n.lossReturnFraction, n.damAreaFullM2, n.damAreaExponent,
+				n.damSeepagePerDay
 			],
 			'node'
 		);

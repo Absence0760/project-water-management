@@ -32,8 +32,14 @@ describe('hasDam / fmtVolume', () => {
 
 describe('damHints', () => {
 	it('flags a dam irrigation may empty (minimum operating level 0 %), as a hint (Q5)', () => {
-		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0 })).toEqual(['Irrigation may empty this dam: its minimum operating level is 0 %.']);
-		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1 })).toEqual([]);
+		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0, damAreaFullM2: 15_000 })).toEqual(['Irrigation may empty this dam: its minimum operating level is 0 %.']);
+	});
+
+	it('says when evaporation uses an estimated surface area (N2)', () => {
+		expect(damHints({ kind: 'farm', damCapacityM3: 90_000, damMinPct: 0.1, damAreaFullM2: null })).toEqual([
+			"No surface area: evaporation uses capacity ÷ 3 m, about 3.0 ha. Enter the dam's area when full for a better figure."
+		]);
+		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1, damAreaFullM2: 15_000 })).toEqual([]);
 	});
 
 	it('says nothing for a farm without a dam or a gauge', () => {

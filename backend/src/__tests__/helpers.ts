@@ -59,6 +59,9 @@ export function node(name: string, downstreamNodeId: string | null, extra: Recor
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
 		lossReturnFraction: 0.5,
+		damAreaFullM2: null,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...extra
 	};
 }

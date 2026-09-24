@@ -183,6 +183,9 @@ const farm = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
 	lossReturnFraction: 0,
+	damAreaFullM2: 0,
+	damAreaExponent: 0.7,
+	damSeepagePerDay: 0,
 	...over
 });
 

@@ -54,10 +54,13 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 			damInitialPct: 0.4,
 			damMinPct: 0.1,
 			irrigationEfficiency: 0.8,
-			lossReturnFraction: 0.5
+			lossReturnFraction: 0.5,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0
 		});
 		const keys = res.body.columns.map((c: { key: string }) => c.key);
-		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
+		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'dam_evaporation', 'rain_on_dam', 'dam_seepage', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
 		// Day index 5 of the stored series, and the day before's storage.
 		for (const key of ['supplied', 'dam_storage']) {
 			const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=${key}&nodeId=${farm.id}`);
@@ -68,7 +71,9 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(valueOf(res.body, 'effective_rain')).toBeGreaterThan(0);
 		// The day closes from the returned numbers alone.
 		const v = (k: string) => valueOf(res.body, k);
-		const closes = v('inflow_upstream') + v('runoff') + v('transfer') - (v('supplied') - v('return_flow')) - (v('dam_storage') - res.body.previousStorageM3) - v('outflow');
+		// Rain on the dam in, evaporation out (N2); seepage is part of the outflow.
+		const closes =
+			v('inflow_upstream') + v('runoff') + v('transfer') + v('rain_on_dam') - (v('supplied') - v('return_flow')) - v('dam_evaporation') - (v('dam_storage') - res.body.previousStorageM3) - v('outflow');
 		expect(Math.abs(closes)).toBeLessThan(1e-6);
 	});
 

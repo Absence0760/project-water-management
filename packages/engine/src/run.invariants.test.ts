@@ -52,15 +52,16 @@ describe('engine invariants on random networks', () => {
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
-	it('doubling crop areas can raise the supply fraction only through return flow (seed 2079)', () => {
+	it('doubling crop areas can raise the supply fraction only through return flow (seed 25)', () => {
 		// Why checkDoubledCropAreas zeroes the loss return fractions: with return
 		// flow, extra draw on stored water partly returns to the river and a
 		// starved farm downstream gains more than twice the water. That is
 		// physics, not an engine bug (audit N1: bounded by G ≤ D).
 		// (Seed 4660 showed it until engine 0.9.0 turned the upstream-to-dam
-		// split round, model.md §3 Q1; 2538 until engine 0.15.0 (N1, and the
-		// soil-water store's draws in the generator); 2079 is the first seed now.)
-		const input = randomInput(2079);
+		// split round, model.md §3 Q1; 2538 until N1 and the soil-water store's
+		// draws in the generator, then 2079 until dam evaporation (N2); 25 is
+		// the first seed that shows it now.)
+		const input = randomInput(25);
 		input.settings.runoffModel = 'legacy'; // found under legacy flow; the property is the network's, not the runoff model's
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
@@ -107,6 +108,9 @@ function smallCase(): ModelInput {
 		divertCapacityM3Day: 500,
 		irrigationEfficiency: 0.8,
 		lossReturnFraction: 0.5,
+		damAreaFullM2: 0,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...over
 	});
 	const days = 120;
@@ -150,6 +154,28 @@ describe('the invariants reject broken results', () => {
 		// Checked against a 99 % floor, C drew dead storage.
 		x.model.nodes[0]!.damMinPct = 0.99;
 		expect(checkWorkings(x, o)).toMatch(/supplied .* dead storage/);
+	});
+
+	it('catches dam evaporation, rain on the dam or seepage that does not follow the dam (N2)', () => {
+		const x = structuredClone(input);
+		const a = x.model.nodes.find((n) => n.id === 'A')!;
+		a.damAreaFullM2 = 20_000;
+		a.damSeepagePerDay = 0.001;
+		const o = runModel(x);
+		expect(checkInvariants(x, o)).toBeNull();
+		expect(o.series.find((s) => s.nodeId === 'A' && s.key === 'dam_evaporation')!.values.some((v) => v > 0)).toBe(true);
+		const bump = (key: string) => {
+			const y = structuredClone(o);
+			const s = y.series.find((z) => z.nodeId === 'A' && z.key === key)!;
+			const t = s.values.findIndex((v) => v > 0);
+			s.values[t] = s.values[t]! * 2;
+			return y;
+		};
+		for (const key of ['dam_evaporation', 'rain_on_dam', 'dam_seepage']) expect(checkWorkings(x, bump(key)), key).toMatch(/rain on dam|evaporation|seepage|balance/);
+		// A dam checked against a different area: the surface doesn't follow the storage.
+		const smaller = structuredClone(x);
+		smaller.model.nodes.find((n) => n.id === 'A')!.damAreaFullM2 = 10_000;
+		expect(checkWorkings(smaller, o)).toMatch(/dam area/);
 	});
 
 	it('catches a broken farm balance, a negative storage and supply above demand', () => {

@@ -174,6 +174,10 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
     efficiency and a loss return fraction, as migration 006 maps it: r = 0 ->
     e = 1, beta = 0; r > 0 -> e = 1 - r (at least 0.01), beta = 1. The balance
     per unit supplied is the workbook's, and the crop is now fully supplied.
+
+    N2: the workbook has no dam surface areas, so damAreaFullM2 is None (the
+    run estimates capacity / 3 m and warns), with the default area exponent
+    0.7 and no seepage; the caller notes the dams once.
     """
     wb_min = num(spec.get("damMinPct"))
     if wb_min:
@@ -186,7 +190,7 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
         irrigation = {"irrigationEfficiency": max(1 - min(r, 1), 0.01), "lossReturnFraction": 1}
     else:
         irrigation = {"irrigationEfficiency": 1, "lossReturnFraction": 0}
-    return {"damMinPct": 0, **irrigation}
+    return {"damMinPct": 0, **irrigation, "damAreaFullM2": None, "damAreaExponent": 0.7, "damSeepagePerDay": 0}
 
 
 def month_list(v: Any) -> list[int]:
@@ -726,6 +730,12 @@ def extract(
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}
+        dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
+        if dams:
+            wb.notes.append(
+                f"{len(dams)} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam "
+                "evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure"
+            )
 
         crop_defs = [{"id": uid(f"crop:{c['name']}"), "name": c["name"], "cropFactor": c["cropFactor"]} for c in crops]
         crop_id = {c["name"]: c["id"] for c in crop_defs}

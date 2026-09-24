@@ -130,7 +130,10 @@ soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
 mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
 is what that run used; the same rule reads a snapshot without a runoff model
-as legacy. Month
+as legacy, and one without a dam evaporation factor (engine < 0.15.0) as 0,
+no dam evaporation. A dam's area when full, area exponent and seepage have
+their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
+(capacity ÷ 3 m)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range.

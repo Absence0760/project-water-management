@@ -396,6 +396,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
+	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
@@ -464,6 +465,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		// Runs store settings merged over the defaults, so a snapshot without a
 		// store size predates it (engine < 0.14.0) and carried no rain over.
 		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
+		// Likewise dams evaporated only from engine 0.16.0 (audit N2).
+		lakeEvapFactor: r.lakeEvapFactor ?? 0,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
@@ -675,6 +678,9 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damCapacityM3', 'dam capacity', withUnit('m³', 0)],
 	['damInitialPct', 'dam initial level', pct],
 	['damMinPct', 'dam minimum operating level', pct],
+	['damAreaFullM2', 'dam area when full', (v) => (v === null || v === undefined ? 'estimated (capacity ÷ 3 m)' : `${fmtValue(v, 0)} m²`)],
+	['damAreaExponent', 'dam area exponent', plain],
+	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
 	['lossReturnFraction', 'share of losses returning', pct]

@@ -80,6 +80,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Irrigation efficiency and loss return (engine ≥ 0.15.0) come from their own
 	// generator, so the rest of a seed's network is what it was before them.
 	const ops = new Rng(seed ^ 0x2c1b3c6d);
+	// Dam evaporation and seepage (N2) likewise.
+	const dl = new Rng(seed ^ 0x6a09e667);
 	const maxNodes = opts.maxNodes ?? 25;
 	const maxDays = opts.maxDays ?? 1200;
 
@@ -118,7 +120,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			damInitialPct: rng.frac(),
 			damMinPct: rng.frac(),
 			divertCapacityM3Day: rng.bool(0.3) ? 0 : rng.bool(0.1) ? 1e9 : rng.bool(0.5) ? rng.logFloat(0.5, 1e5) : Math.round(rng.logFloat(1, 1e5)),
-			...irrigationOps(ops, rng.bool(0.4) ? 0 : rng.frac(0, 0.05))
+			...irrigationOps(ops, rng.bool(0.4) ? 0 : rng.frac(0, 0.05)),
+			...damLossOps(dl)
 		});
 	}
 	const farms = nodes.filter((x) => x.kind === 'farm');
@@ -245,13 +248,29 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// endless. From its own stream, so a seed still builds the same network.
 	const sw = new Rng(seed ^ 0x2545f491);
 	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
+	// Dam evaporation (N2): the default, none, anything up to well above an open-water factor.
+	settings.lakeEvapFactor = dl.pick([0.75, 0.75, 0, dl.float(0, 2)]);
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }
 
 /**
+ * A dam's evaporation and seepage parameters (audit N2): the area unknown
+ * (estimated from the capacity), none, or anything from a pond to a lake far
+ * bigger than its volume suggests; the exponent at its default, flat or
+ * steep; no seepage, a little, or a leaky dam losing it all in a day.
+ */
+function damLossOps(g: Rng): Pick<NetworkNode, 'damAreaFullM2' | 'damAreaExponent' | 'damSeepagePerDay'> {
+	return {
+		damAreaFullM2: g.pick([null, null, 0, g.logFloat(1, 1e6)]),
+		damAreaExponent: g.pick([0.7, 0.7, 3, g.float(0.05, 3)]),
+		damSeepagePerDay: g.pick([0, 0, 1, g.logFloat(1e-5, 0.2)])
+	};
+}
+
+/**
  * A farm's irrigation efficiency and loss return (audit N1). Half the time the
- * migration 006 mapping of the pre-0.14 return flow `r` the main generator
+ * migration 006 mapping of the pre-0.15 return flow `r` the main generator
  * drew (so e = 1 − r, β = 1, and r = 1 gives e = 0.01); otherwise drawn
  * directly, with the edges e = 1 and β = 0 or 1 over-weighted.
  */

@@ -21,6 +21,9 @@ const node = (over: Partial<NetworkNode>): NetworkNode => ({
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
 	lossReturnFraction: 0,
+	damAreaFullM2: null,
+	damAreaExponent: 0.7,
+	damSeepagePerDay: 0,
 	...over
 });
 const empty: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [] };
