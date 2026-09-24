@@ -32,6 +32,16 @@
 //             (the engine and the workspace page are still growing), and a
 //             100 KB per-asset ceiling that no single font or image should
 //             ever need.
+// 2026-09-24  total 280 → 295 KB, largest chunk 100 → 105 KB. main @ 1a8ff06
+//             already measured 281 KB total and a 99 KB nodes/7 after the
+//             WR2012 check and CHIRPS correction landed; fit provenance and
+//             calibration exclusions (issue #4: the fit record panel, the
+//             exclusions editor, run comparison's fit-and-validation table,
+//             the engine's provenance and diff code) bring it to 289 KB total
+//             and 101 KB for nodes/7, the catchment workspace page. No new
+//             dependency: the growth is feature code in the page that needs
+//             it. ~6 KB of headroom on the total and ~4 KB on the chunk, so
+//             the next feature is measured again rather than waved through.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -43,8 +53,8 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 280,
-	largestChunkKb: 100,
+	totalCodeKb: 295,
+	largestChunkKb: 105,
 	largestAssetKb: 100,
 });
 
