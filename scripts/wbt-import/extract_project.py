@@ -161,6 +161,24 @@ def iso(d: Any) -> str:
     raise ValueError(f"not a date: {d!r}")
 
 
+def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> dict[str, Any]:
+    """The node's operating-rule fields (engine >= 0.14.0, docs/engine-audit.md).
+
+    Q5: the app's damMinPct is the dam's minimum operating level (irrigation
+    stops there). The workbook's [Farm spec] "min %" is the minimum for
+    transfers, which each transfer rule already carries as minStoragePct, so it
+    is not imported as an operating level: damMinPct is 0 (irrigation may empty
+    the dam, as in the workbook), with a note when the workbook had one.
+    """
+    wb_min = num(spec.get("damMinPct"))
+    if wb_min:
+        notes.append(
+            f"farm {name}: [Farm spec] min dam % {wb_min:g} is the workbook's transfer minimum (each transfer rule "
+            "keeps its own); the dam's minimum operating level is left at 0 (docs/engine-audit.md Q5)"
+        )
+    return {"damMinPct": 0}
+
+
 def month_list(v: Any) -> list[int]:
     """The months a b023 month-list cell ("1,2,11,12") names.
 
@@ -693,9 +711,9 @@ def extract(
                     "pctRunoffToDam": s.get("pctRunoffToDam", 0),
                     "damCapacityM3": s.get("damCapacityM3", 0),
                     "damInitialPct": s.get("damInitialPct", 0),
-                    "damMinPct": s.get("damMinPct", 0),
                     "divertCapacityM3Day": s.get("divertCapacityM3Day", 0),
                     "returnFlowPct": s.get("returnFlowPct", 0),
+                    **farm_operating_rules(e["name"], s, wb.notes),
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}

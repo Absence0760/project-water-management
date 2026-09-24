@@ -1004,6 +1004,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     shuffle exemption in `checkOrderInvariance`.
   - **Q5:** irrigation stops at `node.damMinPct` (today only transfers
     respect it); the help text in `lib/help/content.ts` changes too.
+    **Landed (engine 0.14.0)** on persona recommendation, pending the
+    hydrologist ([audit Q5](../engine-audit.md)); stored values were reset to
+    0 in migration 006.
   - ~~**Q7:** Pitman fallback only on days with **no rain value**.~~ Done
     differently: engine 0.10.0 removed the fallback and the Pitman input
     ([audit P1](../engine-audit.md)).

@@ -82,6 +82,9 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
+- **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
+  under a dam's fields when irrigation may empty it (minimum operating level
+  0 %, [engine-audit Q5](./engine-audit.md)).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The

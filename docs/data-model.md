@@ -56,7 +56,7 @@ erDiagram
 | `pct_runoff_to_dam` | Farm runoff above (into) dam (%) | |
 | `dam_capacity_m3` | Composite dam capacity (m³) | |
 | `dam_initial_pct` | Initial dam volume (%) | |
-| `dam_min_pct` | Min dam volume for transfers (%) | Only transfers respect it (Q5) |
+| `dam_min_pct` | (not imported; the workbook's "Min dam volume" is the transfer minimum) | The dam's **minimum operating level** (dead storage, engine ≥ 0.14.0, Q5): irrigation draws only above `capacity × dam_min_pct`, and transfers keep `capacity × MAX(rule min, dam_min_pct)`. Migration 006 reset every stored value to 0; the importer writes 0 |
 | `divert_capacity_m3_day` | Downstream diversion back to dam | The workbook enters m³/s and converts it. We store m³/day. |
 | `return_flow_pct` | Irrigation return flow (%) | |
 

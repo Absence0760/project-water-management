@@ -668,7 +668,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pctRunoffToDam', 'own runoff to dam', pct],
 	['damCapacityM3', 'dam capacity', withUnit('m³', 0)],
 	['damInitialPct', 'dam initial level', pct],
-	['damMinPct', 'dam minimum level', pct],
+	['damMinPct', 'dam minimum operating level', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['returnFlowPct', 'return flow', pct]
 ];

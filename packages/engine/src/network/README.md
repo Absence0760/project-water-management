@@ -52,7 +52,7 @@ day trace read.
 | M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
 | N | `runoff_below_dam` | I − M — own runoff below the dam |
 | O | `diverted_to_dam` | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
-| G | `supplied` | MIN(Qprev + M + O + K + J, F) |
+| G | `supplied` | MIN(MAX(Qprev + M + O + K + J − capacity × `damMinPct`, 0), F): only the storage above the minimum operating level (engine ≥ 0.14.0, audit Q5) |
 | P | `interim_storage` | Qprev + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |

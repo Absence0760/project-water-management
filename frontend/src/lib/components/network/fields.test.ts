@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtVolume, hasDam, NODE_FIELDS } from './fields';
+import { damHints, fmtVolume, hasDam, NODE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -27,5 +27,17 @@ describe('hasDam / fmtVolume', () => {
 	it('uses Mm³ for large dams', () => {
 		expect(fmtVolume(1_050_000)).toBe('1.05 Mm³');
 		expect(fmtVolume(40_000)).toBe('40,000 m³');
+	});
+});
+
+describe('damHints', () => {
+	it('flags a dam irrigation may empty (minimum operating level 0 %), as a hint (Q5)', () => {
+		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0 })).toEqual(['Irrigation may empty this dam: its minimum operating level is 0 %.']);
+		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1 })).toEqual([]);
+	});
+
+	it('says nothing for a farm without a dam or a gauge', () => {
+		expect(damHints({ kind: 'farm', damCapacityM3: 0, damMinPct: 0 })).toEqual([]);
+		expect(damHints({ kind: 'gauge', damCapacityM3: 40_000, damMinPct: 0 })).toEqual([]);
 	});
 });

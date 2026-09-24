@@ -45,7 +45,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.14.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -455,7 +455,8 @@ export function buildNetworkPlan(
 			from,
 			to,
 			activeMonth,
-			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
+			// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
+			reserveM3: nodes[from]!.damCapacityM3 * Math.max(tr.minStoragePct, nodes[from]!.damMinPct),
 			maxDailyM3: Math.max(0, maxDaily)
 		});
 	}
@@ -481,6 +482,7 @@ export function buildNetworkPlan(
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
 				initialStorageM3: n.damInitialPct * cap,
+				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				returnFlowPct: n.returnFlowPct,
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,

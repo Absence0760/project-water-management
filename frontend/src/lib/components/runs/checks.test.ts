@@ -107,7 +107,7 @@ describe('day trace', () => {
 		const rows = traceRows(farmDay());
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
-		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(Q[t−1] + M + O + K + J, F)' });
+		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), F)' });
 	});
 
 	it('leaves out working columns a pre-0.11 run does not have', () => {

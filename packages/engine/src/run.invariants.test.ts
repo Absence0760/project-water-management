@@ -8,7 +8,7 @@ import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import type { ModelInput } from './project';
 import { randomInput, shrink } from './testing/fuzz';
-import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits } from './testing/invariants';
+import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const CASES = Number(env.FUZZ_CASES ?? 400);
@@ -134,6 +134,19 @@ describe('the invariants reject broken results', () => {
 	it('passes the real output, which moves water through the transfer', () => {
 		expect(checkInvariants(input, out)).toBeNull();
 		expect(out.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values.some((v) => v > 0)).toBe(true);
+	});
+
+	it('catches irrigation below the minimum operating level (Q5)', () => {
+		// C alone, its dam draining to irrigation with no inflow; the run has no floor.
+		const x = structuredClone(input);
+		x.model.nodes = [{ ...x.model.nodes.find((n) => n.id === 'C')!, downstreamNodeId: null, damCapacityM3: 50_000, damInitialPct: 1, pctRunoffToDam: 0 }];
+		x.model.transfers = [];
+		x.model.cropAreas = x.model.cropAreas.filter((a) => a.nodeId === 'C');
+		const o = runModel(x);
+		expect(checkWorkings(x, o)).toBeNull();
+		// Checked against a 99 % floor, C drew dead storage.
+		x.model.nodes[0]!.damMinPct = 0.99;
+		expect(checkWorkings(x, o)).toMatch(/supplied .* dead storage/);
 	});
 
 	it('catches a broken farm balance, a negative storage and supply above demand', () => {

@@ -435,6 +435,10 @@ The workbook has two blocks of columns:
 
   `draw[t] = monthIn(t, months) ? MIN( MAX(storage[src][t−1] − cap[src] × minPct[src], 0), maxRate_m3s × 86400 ) : 0`
 
+  The engine's reserve is `cap[src] × MAX(minPct, damMinPct[src])`: the
+  rule's own minimum, or the source dam's minimum operating level when that
+  is higher (engine ≥ 0.14.0, Q5).
+
 - **InOut** (one column per farm with "Has transfer? = Yes"): the net volume
   entering (+) or leaving (−) that farm. Each is a **hand-written formula**, for
   example `<source farm> = −draw₁`, `<receiving farm> = +draw₁`.
@@ -466,7 +470,7 @@ storage to whole m³; the engine doesn't (R1).
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
-| G | **Irrigation supplied** | `MIN(store[t−1] + M + O + K + J, F)` |
+| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + M + O + K + J − damCapacity × damMinPct, 0), F)`: only the storage above the dam's minimum operating level (engine ≥ 0.14.0, Q5) |
 | P | Interim storage | `store[t−1] + M + O + K + J − G` |
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
@@ -481,6 +485,19 @@ storage to whole m³; the engine doesn't (R1).
 | AB | Incremental EWR shortfall (−) | `MIN(AA − Σ AA of the elements directly upstream, 0)` |
 
 Initial storage = `initialPct × damCapacity` (workbook: `ROUND(initialPct × ROUND(damCapacity, 0), 0)`).
+
+**Minimum operating level (engine ≥ 0.14.0, [Q5](#3-workbook-quirks-and-suspected-bugs)).**
+`damMinPct` is the dam's dead storage: irrigation draws only what is above
+`damCapacity × damMinPct` (G above), and a transfer keeps the higher of its
+own minimum and this level in the source dam (§2.6). Storage can still sit
+below the level (a dam that starts low, or that loses water to evaporation,
+§2.7a); irrigation then waits until inflows lift it back above. 0 (the
+default, and every imported dam) means irrigation may empty the dam, as in
+the workbook; the network editor shows that as a hint. The workbook's
+"min %" column is the transfer minimum, which each transfer rule carries, so
+migration 006 reset every stored `dam_min_pct` to 0 and the importer no
+longer fills it. Decided on persona recommendation (simulated hydrologist
+review, 2026-09-24), pending the real hydrologist.
 
 A **gauge** element records the sum of its upstream elements' outflow (`= simulated flow`),
 the sum of their cumulative EWR (Z), and its shortfall `MIN(flow − Z, 0)`. The workbook's
@@ -1157,7 +1174,7 @@ from the workbook.
 | Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). The client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. | It is unclear whether the order (transfer vs irrigation) and the spill of transferred water are intended. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
-| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
+| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.14.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |

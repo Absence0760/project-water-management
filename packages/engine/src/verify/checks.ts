@@ -125,7 +125,8 @@ interface Rule {
  *   −J ≤ Σ limits of today's rules out of it (limit = MIN(rate × 86 400,
  *   daily cap));
  * - minimum storage: −J ≤ yesterday's storage − the lowest reserve among
- *   today's outgoing rules (never below 0);
+ *   today's outgoing rules (never below 0); a rule's reserve is the source
+ *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ limits, yesterday's
  *   storage − the highest reserve), and exactly that when the reserves agree.
@@ -140,7 +141,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm') continue;
 		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
-		rules.push({ from: a.id, to: b.id, months: new Set(tr.months), maxDaily: Math.max(0, maxDaily), reserve: a.damCapacityM3 * tr.minStoragePct });
+		// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
+		rules.push({ from: a.id, to: b.id, months: new Set(tr.months), maxDaily: Math.max(0, maxDaily), reserve: a.damCapacityM3 * Math.max(tr.minStoragePct, a.damMinPct) });
 	}
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
@@ -391,6 +393,8 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  * - F = MAX(0, gross demand − effective rain);
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
+ * - G = MIN(MAX(Q[t−1] + M + O + K + J − dead storage, 0), F): irrigation
+ *   takes what is above the minimum operating level, up to demand (Q5);
  * - P = Q[t−1] + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
  * - S = L + N − O, T = G × return %, U = R + S + T;
  * - V is the recomputed balance residual and is float noise.
@@ -406,6 +410,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (missing) return `${n.id}: working column ${missing} missing`;
 		const [gross, eff, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V] = cols as number[][];
 		const cap = n.damCapacityM3;
+		const dead = n.damMinPct * cap;
 		let qPrev = n.damInitialPct * cap;
 		const near = (a: number, b: number, scale: number) => Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b), scale));
 		for (let t = 0; t < out.days; t++) {
@@ -416,7 +421,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
-			if (!near(p, qPrev + m + o + k + j - gg, Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + M + O + K + J − G`;
+			const avail = qPrev + m + o + k + j;
+			if (!near(gg, Math.min(Math.max(avail - dead, 0), f), Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), dead, f)))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + M + O + K + J − dead storage ${dead}, 0), F ${f})`;
+			if (!near(p, avail - gg, Math.max(Math.abs(qPrev), m, o, k, Math.abs(j), gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + M + O + K + J − G`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (!near(tt, gg * n.returnFlowPct, 0)) return `${where}: return flow ${tt} ≠ G × ${n.returnFlowPct}`;

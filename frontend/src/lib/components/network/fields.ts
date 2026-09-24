@@ -81,12 +81,12 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damMinPct',
-		label: 'Minimum',
+		label: 'Minimum level',
 		unit: '%',
 		group: 'dam',
 		farmOnly: true,
-		aria: (n) => `Dam minimum storage of ${n}, %`,
-		help: "The workbook's minimum storage for transfers. Kept for reference: each transfer rule has its own minimum source storage, which is the one the model uses."
+		aria: (n) => `Dam minimum operating level of ${n}, %`,
+		help: 'Dead storage: irrigation draws only the water above this level, and transfers out of the dam leave at least this much. 0 % means irrigation may empty the dam.'
 	},
 	{
 		key: 'pctUpstreamToDam',
@@ -137,6 +137,18 @@ export const NODE_FIELDS: NodeField[] = [
 ];
 
 export const isPct = (f: NodeField) => f.unit === '%';
+
+/**
+ * Hints (not errors) about a node's dam settings, shown under its fields.
+ * A dam with no minimum operating level can be emptied by irrigation, which
+ * the workbook allowed but few farmers do (docs/engine-audit.md Q5).
+ */
+export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'>): string[] {
+	if (!hasDam(n)) return [];
+	const hints: string[] = [];
+	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
+	return hints;
+}
 
 /** Treat a dam under 1 m³ as no dam (the workbook uses tiny placeholders such as 0.15). */
 export const hasDam = (n: Pick<NetworkNode, 'kind' | 'damCapacityM3'>) => n.kind === 'farm' && n.damCapacityM3 >= 1;

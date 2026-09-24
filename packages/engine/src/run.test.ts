@@ -271,6 +271,38 @@ describe('runModel — dam behaviour', () => {
 		expect(s.avgDeficitM3Day).toBe(25);
 		expect(s.fractionSupplied).toBe(0.75);
 	});
+
+	it('irrigation stops at the minimum operating level: storage below it is dead storage (Q5, engine 0.14.0)', () => {
+		// 150 m³ dam, full, minimum 20 % = 30 m³ dead storage; demand 100 m³/day.
+		// Day 0 takes 100 (120 above the floor), day 1 only the 20 left above it, day 2 nothing.
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 150, damInitialPct: 1, damMinPct: 0.2 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0, 0, 0],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'supplied')).toEqual([100, 20, 0]);
+		expect(get(out, 'D', 'dam_storage')).toEqual([50, 30, 30]);
+		expect(get(out, 'D', 'deficit')).toEqual([0, 80, 100]);
+	});
+
+	it('a dam that starts below its minimum operating level supplies nothing until it fills above it (Q5)', () => {
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: [node('D', { damCapacityM3: 1000, damInitialPct: 0.1, damMinPct: 0.3, pctRunoffToDam: 1 })],
+			crops,
+			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			// 100 m³ in the dam, floor 300: day 0 gets 150 of runoff (250, still below), day 1 another 150 (400: 100 above).
+			natural: [150, 150],
+			startDate: '2020-10-01'
+		});
+		expect(get(out, 'D', 'supplied')).toEqual([0, 100]);
+		expect(get(out, 'D', 'dam_storage')).toEqual([250, 300]);
+	});
 });
 
 describe('runModel — irrigation demand', () => {
@@ -373,6 +405,18 @@ describe('runModel — transfers', () => {
 		expect(get(out, 'R2', 'transfer')).toEqual([136]);
 		expect(get(out, 'S', 'transfer')).toEqual([-1000]);
 		expect(get(out, 'S', 'dam_storage')).toEqual([3000]);
+	});
+
+	it("keeps the source dam's minimum operating level when it is above the rule's minimum (Q5, engine 0.14.0)", () => {
+		// S: start 4000 of 10 000; rule keeps 30 %, the dam's own floor is 35 % → 3500 kept, 500 moves.
+		const out = run({
+			nodes: nodes().map((n) => (n.id === 'S' ? { ...n, damMinPct: 0.35 } : n)),
+			transfers: [transfer()],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(out, 'R', 'transfer')).toEqual([500]);
+		expect(get(out, 'S', 'dam_storage')).toEqual([3500]);
 	});
 
 	it('skips transfers involving a gauge, with a warning', () => {
@@ -939,10 +983,14 @@ describe.skipIf(!dataDir)(
 		// inflow INTO the dam, as the column's label says; the workbook's formula
 		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
 		// comparison below still tests the port, not the corrected meaning.
+		// Q5 (engine ≥ 0.14.0): a dam's minimum operating level stops irrigation.
+		// The workbook's "min %" column is the transfer minimum, which each
+		// transfer rule already carries; migration 006 sets every stored value to
+		// 0 and the importer no longer fills it, so the replay does the same.
 		const modelInput: ModelInput = {
 			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
 			settings: { ...project.settings, runoffModel: 'legacy' },
-			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam })) },
+			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0 })) },
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		// B1: days where CHIRPS stands in for blank catchment rain. The engine

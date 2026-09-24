@@ -38,6 +38,12 @@ export interface PlanNode {
 	damCapacityM3: number;
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
+	/**
+	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
+	 * 0.14.0, audit Q5). Irrigation draws only the storage above it, and
+	 * transfers keep at least this much in the source dam.
+	 */
+	deadStorageM3: number;
 	returnFlowPct: number;
 	/** Daily net irrigation demand (F); zeros for gauges. */
 	demand: Float64Array;
@@ -237,7 +243,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
 			const avail = qPrev + M + O + K + J;
-			const G = Math.min(avail, F);
+			// Irrigation draws only what is above the dam's minimum operating
+			// level (dead storage, audit Q5); a dam below it supplies nothing.
+			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), F);
 			const P = avail - G;
 			const cap = node.damCapacityM3;
 			const Q = Math.min(P, cap);

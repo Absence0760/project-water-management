@@ -49,7 +49,10 @@ rows and columns don't break it.
 - **Nodes** come from [Network] and [Farm spec]. `downstreamNodeId` is the
   inverse of the "Upstream element" columns. `areaKm2` is the farm's total area
   (hi + lo). `flowShareManual` is the "External fragmentation" column.
-  `divertCapacityM3Day` is the m³/day column.
+  `divertCapacityM3Day` is the m³/day column. `damMinPct` (the dam's minimum
+  operating level, engine ≥ 0.14.0) is written as 0: the workbook's "min %"
+  is the transfer minimum, which each transfer rule carries, and a `note:`
+  names any farm that had one (docs/engine-audit.md Q5).
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer

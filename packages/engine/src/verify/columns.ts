@@ -16,7 +16,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'gross_demand', letter: null, formula: 'Σ crop area × A-pan × crop factor ÷ 1000 ÷ days in month' },
 	{ key: 'effective_rain', letter: null, formula: 'cropped area × effective rain fraction ÷ 1000 × rain (rain ≤ threshold counts as 0)' },
 	{ key: 'demand', letter: 'F', formula: 'MAX(0, gross demand − effective rain)' },
-	{ key: 'supplied', letter: 'G', formula: 'MIN(Q[t−1] + M + O + K + J, F)' },
+	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + M + O + K + J − dam capacity × minimum operating level, 0), F)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
 	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share" },
 	{ key: 'transfer', letter: 'J', formula: 'Σ transfers in − Σ transfers out (limited by rate, daily cap and minimum storage)' },

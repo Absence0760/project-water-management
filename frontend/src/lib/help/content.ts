@@ -306,15 +306,15 @@ export const HELP: HelpEntry[] = [
 	},
 	{
 		id: 'dam-min',
-		term: 'Minimum dam storage',
-		short: 'A reserve level recorded with the dam, as a fraction of capacity. The model does not use it yet: neither irrigation nor transfers read it.',
-		long: 'Irrigation can empty the dam completely. A transfer keeps its own minimum storage in the source dam (set on the transfer, not here). Whether this dam-level reserve should limit irrigation or transfers is open question Q5 for the hydrologist; until then changing it does not change results.',
+		term: 'Minimum operating level',
+		short: 'Dead storage, as a fraction of capacity: irrigation draws only the water above it, and transfers leave at least this much.',
+		long: 'The level below which a farmer stops irrigating from the dam (a pump intake, a reserve for stock water or the dam wall). Each day irrigation can take only yesterday’s storage plus today’s inflows above capacity × this level. A transfer out of the dam keeps the higher of its own minimum storage and this level.\n\n0 % means irrigation may empty the dam, which is how the b023 workbook works; the network editor flags such dams as a hint. The workbook’s “min %” column was the minimum for transfers, which each transfer rule carries, so imported dams start at 0 %.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.14.0), pending confirmation by the project hydrologist.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		aliases: ['min dam volume'],
+		aliases: ['min dam volume', 'dead storage', 'minimum storage'],
 		fields: ['node.damMinPct'],
-		related: ['transfer', 'transfer-min-storage'],
-		source: 'b023 Farm spec; docs/model.md §3 Q5'
+		related: ['transfer', 'transfer-min-storage', 'irrigation-supplied'],
+		source: 'docs/engine-audit.md Q5; docs/model.md §2.7'
 	},
 	{
 		id: 'diversion',
@@ -520,8 +520,8 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
-		short: 'The source dam is not drawn below this fraction of its capacity by this transfer.',
-		long: 'Checked against yesterday’s end-of-day storage. The receiving dam’s free space is not checked: water that doesn’t fit spills (open question Q3).',
+		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',
+		long: 'Checked against yesterday’s end-of-day storage. The reserve kept is the higher of this value and the source dam’s minimum operating level. The receiving dam’s free space is not checked: water that doesn’t fit spills (open question Q3).',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'transfers',
 		fields: ['transfer.minStoragePct'],

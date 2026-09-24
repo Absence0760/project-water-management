@@ -50,7 +50,7 @@ engine 0.4.0.
 | Q2 transfer reads spill | Not mirrored (already). |
 | Q3 transfer order / spill at the receiver | **Needs hydrologist**, see N4. |
 | Q4 | Doc only. |
-| Q5 irrigation may empty the dam | **Needs hydrologist** (an operating rule). Note that `node.damMinPct` isn't used by the engine; only `transfer.minStoragePct` is. |
+| Q5 irrigation may empty the dam | **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.14.0.** `node.damMinPct` is the dam's minimum operating level (dead storage): `G = MIN(MAX(avail − cap·damMinPct, 0), F)` with `avail = Q[t−1] + M + O + K + J`, and a transfer keeps `cap × MAX(rule minStoragePct, damMinPct)` in its source. Migration 006 reset every stored value to 0 (the importer had filled it with the workbook's transfer minimum, which each rule already carries), so no existing result changes; the importer writes 0 and notes the workbook value. The editor flags a dam with a 0 floor as a hint ("irrigation may empty this dam"), not an error. Tests: `run.test.ts` › "irrigation stops at the minimum operating level", "keeps the source dam's minimum operating level"; `checkWorkings` checks the G formula and `checkTransferLimits` the reserve. |
 | Q6 threshold on the demand offset | Defensible: small rains are mostly intercepted ([Dastane 1974]). See N3 for the larger issue. |
 | Q7 Pitman fallback | **Removed (P1, engine 0.10.0).** Natural flow comes only from the runoff model. Days without rain data are still warned about (W2). |
 | Q8 hi/lo over listed farms | Sound (the shares are normalised); W3 catches area drift. |
@@ -205,7 +205,11 @@ the bound.
    space? Priority between rules?
 6. **Q17:** how should an EWR shortfall be attributed to farms (pro rata to
    net impact, or assessed at gauges only)?
-7. **Q5, Q11, Q13:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
+7. **Q11, Q13:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
+8. **Q5 (confirm the decision):** irrigation stops at the dam's minimum
+   operating level (dead storage), and transfers keep the higher of their own
+   minimum and that level (engine 0.14.0). Which dams keep a reserve, and how
+   much?
 
 ## References
 

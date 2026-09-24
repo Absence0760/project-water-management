@@ -105,6 +105,7 @@ function build(spec: CatchmentSpec): ExampleProject {
 		pctRunoffToDam: f.runoffToDam ?? 0.6,
 		damCapacityM3: f.damM3 ?? 0,
 		damInitialPct: f.damStart ?? 0.6,
+		// A minimum operating level (dead storage) irrigation stops at (engine ≥ 0.14.0, audit Q5).
 		damMinPct: f.damMin ?? 0.15,
 		divertCapacityM3Day: f.divertM3Day ?? 0,
 		returnFlowPct: f.returnFlow ?? 0.1
