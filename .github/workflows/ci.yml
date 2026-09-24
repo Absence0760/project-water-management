@@ -177,7 +177,7 @@ jobs:
         run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
 
       # Global setup creates + migrates water_e2e; Playwright starts the
-      # backend (:3101) and frontend (:7801) itself.
+      # backend (:3101) and builds + serves the frontend (:7801) itself.
       - name: E2E tests
         run: pnpm test:e2e
 

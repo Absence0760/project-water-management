@@ -529,21 +529,20 @@ the suggested order (the IDs carry the detail):
 - [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
       formulas, which the engine no longer follows. Decide whether to delete it
       or rebuild it against the audited model. Operator call.
-- [ ] **A fourth full page load of the Settings tab fails in e2e** with
+- [x] **A fourth full page load of the Settings tab fails in e2e** with
       `net::ERR_INSUFFICIENT_RESOURCES` / "Failed to fetch dynamically
-      imported module" against the Vite dev server (:7801), so the page never
-      renders. Reproduced 2026-09-24 in isolation (`--workers=1`, one spec
-      that only runs `page.goto(…?tab=settings)` four times) and on an
-      unmodified checkout of `bfa7d4e`. Other sessions were running vitest at
-      the same time (load average ~7), so load may contribute, but it isn't
-      the whole cause. Suspected cause: each full load
-      re-requests several hundred unbundled dev modules, and Chromium runs out
-      of request resources. Durable fix to evaluate: run e2e against a built
-      site (`vite build` + `vite preview`) instead of the dev server, which
-      also matches production. Meanwhile specs navigate between tabs in the
-      app (as a user does) rather than with repeated `page.goto`. Trigger:
-      before the next e2e infrastructure change, or when an idle-machine run
-      still shows it.
+      imported module" against the Vite dev server (:7801). Done 2026-09-24:
+      e2e now runs against a production build of the frontend
+      (`vite build` into `frontend/build-e2e/` with the e2e API URL baked in,
+      served with the SPA fallback by `e2e/support/static-server.mjs`), which
+      also matches production. Measured with `tests/repeated-loads.spec.ts`
+      (six `page.goto(…?tab=settings)` in a row, `--workers=1
+      --repeat-each`): dev server 3 of 3 failed at the fourth load; built site
+      5 of 5 passed. That spec stays as the regression guard.
+      `E2E_DEV_SERVER=1` still runs against `vite dev` for debugging
+      ([e2e/README.md](../e2e/README.md)). Specs that already navigate between
+      tabs in the app rather than with repeated `page.goto` can stay as they
+      are: that is how a user moves around anyway.
 - [ ] **e2e runs from parallel worktrees share one `water_e2e` database and
       fixed ports** (:3101 and :7801). When two sessions run `pnpm test:e2e` at
       once, unrelated specs fail (seen 2026-09-24: `sharing.spec.ts` and

@@ -24,7 +24,9 @@ sides share.
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
-  so it never collides with `pnpm dev`.
+  so it never collides with `pnpm dev`. The site is a production build
+  (`frontend/build-e2e/`, API URL baked in), not the Vite dev server
+  ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
   http://localhost:8026, `pnpm dev:mail:up`).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
