@@ -1,7 +1,7 @@
 // Automatic calibration in the browser (issue #4 phase 5): fit GR4J to the
 // observed record in a Web Worker, read the fit and its validation, apply the
 // result to the form and save it. A fit never saves anything by itself.
-import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, putSeries, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('fitting GR4J fills the form, and only Save stores it', async ({ page, owner }) => {
@@ -46,6 +46,8 @@ test('turning groundwater exchange on offers X2 without resetting the other tick
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	// Only a gauge record: nothing else to validate against, so no choice is offered.
+	await expect(fit.getByLabel('Also validate against')).toHaveCount(0);
 	const x4 = fit.getByRole('checkbox', { name: /^Unit hydrograph time base X4/ });
 	await x4.uncheck();
 	await expect(fit.getByRole('checkbox', { name: /^Groundwater exchange X2/ })).toHaveCount(0);
@@ -84,4 +86,31 @@ test('a viewer can fit but not apply', async ({ page, owner, signIn }) => {
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
 	await expect(fit.getByRole('table', { name: 'Parameters', exact: true })).toBeVisible();
 	await expect(fit.getByRole('button', { name: 'Apply to form' })).toHaveCount(0);
+});
+
+test('with a gauge and a logger record, the fit can be validated against the other one', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Auto-calibration two records');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', calibrationFlowKind: 'flow_observed_m3s' });
+	// Synthetic second instrument: 70 % of the gauge, over the same 120 days.
+	const logger = syntheticFlow(120).map((q) => Math.round(q * 0.7 * 1000) / 1000);
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', unit: 'm³/s', startDate: '2021-10-01', values: logger });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	const record = fit.getByLabel('Also validate against');
+	await expect(record).toHaveValue('');
+	// The fit uses the gauge, so only the logger is offered.
+	await expect(record.getByRole('option')).toHaveText(['No other record', 'Logger flow']);
+	await record.selectOption({ label: 'Logger flow' });
+	await fit.getByLabel('Model runs per fit').fill('50');
+	await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();
+	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
+
+	const scores = fit.getByRole('table', { name: /^Fit, and validation/ });
+	const col = scores.getByRole('columnheader', { name: /^Independent record: Logger flow/ });
+	await expect(col).toBeVisible();
+	await expect(col).toContainText('2021-10-01 – 2022-01-28');
+	// Every logger day was also fitted to (on the gauge), and the note says what that means.
+	await expect(fit.getByText(/120 of the 120 days scored against the logger record were also fitted to/)).toBeVisible();
 });

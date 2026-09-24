@@ -14,12 +14,16 @@
 // - differential split-sample, where the record allows it: fit on the driest
 //   half of the water years, score the wettest half. A short, drought-heavy
 //   record can't show how the model behaves in wet years, and the report says
-//   so instead of hiding it.
+//   so instead of hiding it;
+// - independent record, when asked (`validationRecord`): the fitted
+//   parameters scored against another observed record (a logger when the fit
+//   used the gauge, or the reverse), over that record's own days. It tests
+//   the fit against a second instrument, not just a second period.
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { computeNaturalFlow } from '../flow';
 import { simulateNetwork } from '../network/simulate';
 import { waterYearOf } from '../network/stats';
-import type { ModelInput } from '../project';
+import type { CalibrationFlowKind, ModelInput } from '../project';
 import { buildNetworkPlan, pickObservedKind, prepareRun } from '../run';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
@@ -65,6 +69,14 @@ export interface CalibrateOptions {
 	exclusions?: DateRange[];
 	/** Also run the split-sample and differential split-sample tests. Default true. */
 	validate?: boolean;
+	/**
+	 * Another observed record to validate the fit against (e.g. the logger
+	 * when the fit uses the gauge). Scored over that record's own observed
+	 * days outside the exclusions, whatever the calibration window. Unset: no
+	 * independent-record test. Set but missing from the project: none either,
+	 * and a note says so.
+	 */
+	validationRecord?: CalibrationFlowKind;
 	/** Progress after every model run; return true to cancel (the best so far is returned). */
 	onProgress?: (p: CalibrationProgress) => boolean | void;
 }
@@ -81,9 +93,15 @@ export interface CalibrationProgress {
 }
 
 export interface ScoredPeriod {
-	/** First and last observed day scored. */
+	/**
+	 * First and last observed day scored. For a set of days that isn't one
+	 * stretch (the dry → wet test's years) this is only the envelope, and two
+	 * disjoint sets can have overlapping envelopes: show `waterYears` then.
+	 */
 	start: string;
 	end: string;
+	/** Water years (by the calendar year they start in) with at least one scored day, ascending. */
+	waterYears: number[];
 	scores: FitScores;
 }
 
@@ -100,6 +118,16 @@ export interface DifferentialTest extends ValidationTest {
 	wetYears: number[];
 	/** Mean observed flow of the wet years ÷ that of the dry years. */
 	wetDryRatio: number;
+}
+
+/** The fitted parameters scored against a second observed record (`validationRecord`). */
+export interface IndependentRecordTest extends ValidationTest {
+	/** The record validated against. */
+	flowKind: CalibrationFlowKind;
+	/** What it was compared with: natural flow for Pitman, simulated outflow for a gauge or logger. */
+	simulatedKey: 'natural_flow' | 'simulated_outflow';
+	/** Validation days that were also fitted to: when > 0 that part tests the instrument, not unseen days. */
+	overlapDays: number;
 }
 
 export interface CalibrationReport {
@@ -120,6 +148,8 @@ export interface CalibrationReport {
 	before: ScoredPeriod;
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
+	/** Validation against `validationRecord`; null when unset, missing, or too short. */
+	independentRecord: IndependentRecordTest | null;
 	/** Plain-language limits of the validation (e.g. no wet years to test on). */
 	notes: string[];
 	/** Model runs used, over every stage. */
@@ -142,6 +172,22 @@ export interface CalibrationProblem {
 	scoredDays: Int32Array;
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
+	/**
+	 * Another observed record, for independent validation: its observed days
+	 * outside the exclusions (the calibration window doesn't apply), and the
+	 * series it is compared with. null when the project has no such series.
+	 */
+	record(kind: CalibrationFlowKind): RecordProblem | null;
+}
+
+/** A second observed record to score a parameter set against. */
+export interface RecordProblem {
+	kind: CalibrationFlowKind;
+	scoreNatural: boolean;
+	/** Observed flow (m³/day), NaN where missing. */
+	observed: Float64Array;
+	scoredDays: Int32Array;
+	simulate(p: ParamSet): Float64Array;
 }
 
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
@@ -160,8 +206,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const kind = pickObservedKind(settings.calibrationFlowKind, input.series ?? {}, warnings);
 	if (!kind) throw new Error('no observed flow series to calibrate against: upload a gauge or logger record');
 	const scoreNatural = kind === 'flow_pitman_m3s';
-	const obs = aligned(kind);
-	const observed = Float64Array.from(obs, (v) => (v === null ? NaN : v * SEC_PER_DAY));
+	const observedOf = (k: CalibrationFlowKind) => Float64Array.from(aligned(k), (v) => (v === null ? NaN : v * SEC_PER_DAY));
+	const observed = observedOf(kind);
 
 	const d0 = run.start;
 	const lo = settings.calibrationStart ? toEpochDay(settings.calibrationStart) - d0 : 0;
@@ -181,33 +227,40 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// The network is causal: nothing after the last scored day changes a
 	// score, so each evaluation stops there (a full run is ~20 ms on a
 	// 44-year catchment; a record that ends early saves the rest).
-	const n = idx[idx.length - 1]! + 1;
-	const shortPlan = { ...plan, days: n };
 	const toM3 = area * 1000;
-	let runoff: (p: ParamSet) => void;
+	let runoff: (p: ParamSet, n: number) => void;
 	if (modelId === 'gr4j') {
 		const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 		const forcing = runoffForcing(settings, { startDate, days, aligned });
 		// The warm-up cycles the *full* forcing, as runModel's does, so a
 		// scored day sees exactly the state a normal run would give it.
-		runoff = (p) => {
+		runoff = (p, n) => {
 			const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n });
 			for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
 		};
 	} else {
-		const inputs = {
+		const base = {
 			startDate,
-			days: n,
 			rainCatchmentMm: aligned('rain_catchment_mm'),
 			rainChirpsMm: aligned('rain_chirps_mm'),
 			rainForecastMm: aligned('rain_forecast_mm'),
 			flowPitmanM3s: aligned('flow_pitman_m3s')
 		};
-		runoff = (p) => {
-			const nf = computeNaturalFlow({ ...settings.calibration, ...p, catchmentAreaKm2: area }, inputs).naturalFlowM3Day;
+		runoff = (p, n) => {
+			const nf = computeNaturalFlow({ ...settings.calibration, ...p, catchmentAreaKm2: area }, { ...base, days: n }).naturalFlowM3Day;
 			for (let t = 0; t < n; t++) natural[t] = Number.isFinite(nf[t]!) ? nf[t]! : 0;
 		};
 	}
+	/** The series a record is scored against, simulated for days 0 … n − 1. */
+	const simulator = (n: number, toNatural: boolean) => {
+		const shortPlan = { ...plan, days: n };
+		return (p: ParamSet): Float64Array => {
+			runoff(p, n);
+			if (toNatural) return natural;
+			if (topo.outflow < 0) return new Float64Array(days);
+			return simulateNetwork(shortPlan).nodes[topo.outflow]!.outflow;
+		};
+	};
 	return {
 		model: modelId,
 		startDate,
@@ -218,11 +271,15 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		scoreNatural,
 		observed,
 		scoredDays: Int32Array.from(idx),
-		simulate(p) {
-			runoff(p);
-			if (scoreNatural) return natural;
-			if (topo.outflow < 0) return new Float64Array(days);
-			return simulateNetwork(shortPlan).nodes[topo.outflow]!.outflow;
+		simulate: simulator(idx[idx.length - 1]! + 1, scoreNatural),
+		record(k) {
+			if (!input.series?.[k]) return null;
+			const obs = k === kind ? observed : observedOf(k);
+			const on: number[] = [];
+			for (let t = 0; t < days; t++) if (Number.isFinite(obs[t]!) && !excluded[t]) on.push(t);
+			const toNatural = k === 'flow_pitman_m3s';
+			const n = on.length ? on[on.length - 1]! + 1 : 0;
+			return { kind: k, scoreNatural: toNatural, observed: obs, scoredDays: Int32Array.from(on), simulate: simulator(n, toNatural) };
 		}
 	};
 }
@@ -244,10 +301,17 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
 	return Int32Array.from(idx, (t) => waterYearOf(d0 + t));
 }
 
-function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array): ScoredPeriod {
-	const [o, s] = pair(pb.observed, pb.simulate(p), idx);
+/** Score a parameter set on the given days of a record (the calibration record by default). */
+function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<RecordProblem, 'observed' | 'simulate'> = pb): ScoredPeriod {
+	const [o, s] = pair(rec.observed, rec.simulate(p), idx);
 	const d0 = toEpochDay(pb.startDate);
-	return { start: fromEpochDay(d0 + idx[0]!), end: fromEpochDay(d0 + idx[idx.length - 1]!), scores: fitScores(o, s, yearsOf(pb, idx)) };
+	const years = yearsOf(pb, idx);
+	return {
+		start: fromEpochDay(d0 + idx[0]!),
+		end: fromEpochDay(d0 + idx[idx.length - 1]!),
+		waterYears: [...new Set(years)].sort((a, b) => a - b),
+		scores: fitScores(o, s, years)
+	};
 }
 
 interface FitResult {
@@ -299,6 +363,16 @@ function waterYears(pb: CalibrationProblem, minDays: number): { year: number; id
 		.map(([year, idx]) => ({ year, idx, mean: idx.reduce((a, t) => a + pb.observed[t]!, 0) / idx.length }));
 }
 
+/** How a record is named in the notes. */
+const RECORD_NAME: Record<CalibrationFlowKind, string> = {
+	flow_observed_m3s: 'gauge record',
+	flow_logger_m3s: 'logger record',
+	flow_pitman_m3s: 'Pitman record'
+};
+
+/** Fewest observed days an independent record is scored on (as for the calibration record). */
+const MIN_RECORD_DAYS = 30;
+
 /** A validation score this much below its calibration score is called out. */
 export const VALIDATION_DROP = 0.2;
 
@@ -307,7 +381,12 @@ export const VALIDATION_DROP = 0.2;
  * part of the record the model wasn't fitted to, or a dry → wet test resting
  * on very few years.
  */
-export function validationNotes(objective: ObjectiveId, split: ValidationTest | null, dsst: DifferentialTest | null): string[] {
+export function validationNotes(
+	objective: ObjectiveId,
+	split: ValidationTest | null,
+	dsst: DifferentialTest | null,
+	independent: IndependentRecordTest | null = null
+): string[] {
 	const out: string[] = [];
 	const label = OBJECTIVE_LABELS[objective].replace(/ \(.*\)$/, '');
 	const drop = (t: ValidationTest) => {
@@ -331,6 +410,19 @@ export function validationNotes(objective: ObjectiveId, split: ValidationTest | 
 	if (dsst && dsst.wetYears.length < 3) {
 		out.push(
 			`The dry → wet test rests on ${dsst.dryYears.length} dry and ${dsst.wetYears.length} wet water year${dsst.wetYears.length === 1 ? '' : 's'}, too few for a firm conclusion.`
+		);
+	}
+	const r = independent && drop(independent);
+	if (r) {
+		out.push(
+			`Scored against the ${RECORD_NAME[independent!.flowKind]} instead, ${label} falls from ${r[0]!.toFixed(2)} to ${r[1]!.toFixed(2)}: ` +
+				'the fit does not hold on the other instrument. Check which record measures this river before trusting either.'
+		);
+	}
+	if (independent && independent.overlapDays > 0) {
+		out.push(
+			`${independent.overlapDays} of the ${independent.validation.scores.days} days scored against the ${RECORD_NAME[independent.flowKind]} were also fitted to: ` +
+				'that part tests the instrument, not the model on days it never saw.'
 		);
 	}
 	return out;
@@ -407,7 +499,31 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			}
 		}
 	}
-	notes.push(...validationNotes(objective, splitSample, differential));
+	let independentRecord: IndependentRecordTest | null = null;
+	if (opts.validationRecord) {
+		const want = opts.validationRecord;
+		const rec = pb.record(want);
+		if (!rec) {
+			notes.push(`The project has no ${RECORD_NAME[want]}, so the fit was not validated against one.`);
+		} else if (rec.scoredDays.length < MIN_RECORD_DAYS) {
+			notes.push(
+				`The ${RECORD_NAME[want]} has only ${rec.scoredDays.length} observed days outside the exclusions, too few to validate against (at least ${MIN_RECORD_DAYS}).`
+			);
+		} else {
+			const fitted = new Set(all);
+			let overlapDays = 0;
+			for (const t of rec.scoredDays) if (fitted.has(t)) overlapDays++;
+			independentRecord = {
+				flowKind: want,
+				simulatedKey: rec.scoreNatural ? 'natural_flow' : 'simulated_outflow',
+				params,
+				calibration: scored(pb, params, all),
+				validation: scored(pb, params, rec.scoredDays, rec),
+				overlapDays
+			};
+		}
+	}
+	notes.push(...validationNotes(objective, splitSample, differential, independentRecord));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	return {
@@ -424,6 +540,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		before: scored(pb, pb.startParams, all),
 		splitSample,
 		differential,
+		independentRecord,
 		notes,
 		evaluations,
 		cancelled

@@ -17,6 +17,7 @@ self.onmessage = (e: MessageEvent<FitRequest>) => {
 			free: req.free,
 			validate: req.validate,
 			seed: req.seed,
+			validationRecord: req.validationRecord,
 			onProgress: (progress) => {
 				const now = performance.now();
 				if (now - last >= 100 || progress.evaluations === progress.budget) {

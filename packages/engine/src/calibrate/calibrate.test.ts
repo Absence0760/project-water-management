@@ -82,6 +82,14 @@ describe('prepareCalibration scores what runModel produces', () => {
 			const want = out.series.find((s) => s.nodeId === null && s.key === key)!.values;
 			const got = pb.simulate(pb.startParams);
 			for (const t of pb.scoredDays) expect(got[t], `seed ${seed} day ${t}`).toBe(want[t]);
+			// A validation record is simulated over its own days (beyond the calibration window) just as exactly.
+			for (const kind of ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const) {
+				const rec = pb.record(kind);
+				if (!rec) continue;
+				const w = out.series.find((s) => s.nodeId === null && s.key === (rec.scoreNatural ? 'natural_flow' : 'simulated_outflow'))!.values;
+				const g = rec.simulate(pb.startParams);
+				for (const t of rec.scoredDays) expect(g[t], `seed ${seed} ${kind} day ${t}`).toBe(w[t]);
+			}
 			checked++;
 		}
 		expect(checked).toBeGreaterThanOrEqual(20);
@@ -207,6 +215,27 @@ describe('calibrate', () => {
 		expect(report.evaluations).toBe(3 * 150);
 	}, 60_000);
 
+	it('reports the dry → wet test by the water years it used, which never overlap (skewed TZ)', () => {
+		const tz = process.env.TZ;
+		process.env.TZ = 'Pacific/Kiritimati'; // UTC+14: a local-time slip would move 1 October into September
+		try {
+			const report = calibrate(synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 8), { budget: 40, seed: 2 });
+			const dsst = report.differential!;
+			expect(dsst.calibration.waterYears).toEqual(dsst.dryYears);
+			expect(dsst.validation.waterYears).toEqual(dsst.wetYears);
+			expect(dsst.calibration.waterYears.filter((y) => dsst.validation.waterYears.includes(y))).toEqual([]);
+			// Every water year of the 8-year record is 2010/11 … 2017/18.
+			expect([...dsst.dryYears, ...dsst.wetYears].sort()).toEqual([2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017]);
+			// Contiguous periods list their years too.
+			expect(report.fit.waterYears).toEqual([2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017]);
+			expect(report.fit).toMatchObject({ start: '2010-10-01' });
+			const ss = report.splitSample!;
+			expect(ss.calibration.waterYears.at(-1)).toBeLessThanOrEqual(ss.validation.waterYears[0]!);
+		} finally {
+			process.env.TZ = tz;
+		}
+	}, 60_000);
+
 	it('says plainly when the record can’t test wet years', () => {
 		const report = calibrate(synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2.5), { budget: 60 });
 		expect(report.differential).toBeNull();
@@ -260,8 +289,84 @@ describe('calibrate', () => {
 	});
 });
 
+describe('calibrate with an independent validation record', () => {
+	/**
+	 * The gauge is the truth; the logger is a second instrument that reads 60 %
+	 * of it, and only from 2015-10-01 (its own days, outside the gauge's
+	 * calibration window).
+	 */
+	function twoRecords(): ModelInput {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 8);
+		const gauge = input.series.flow_observed_m3s!;
+		const from = toEpochDay('2015-10-01') - toEpochDay(gauge.startDate);
+		input.series.flow_logger_m3s = { startDate: '2015-10-01', values: gauge.values.slice(from).map((q) => (q === null ? null : q * 0.6)) };
+		input.settings.calibrationFlowKind = 'flow_observed_m3s';
+		input.settings.calibrationEnd = '2015-09-30';
+		return input;
+	}
+
+	it('scores the fitted parameters against the other record over its own days, beside the other tests', () => {
+		const input = twoRecords();
+		const report = calibrate(input, { budget: 200, seed: 3, validate: false, validationRecord: 'flow_logger_m3s' });
+		const ind = report.independentRecord!;
+		expect(ind.flowKind).toBe('flow_logger_m3s');
+		expect(ind.simulatedKey).toBe('simulated_outflow');
+		expect(ind.params).toEqual(report.params);
+		expect(ind.calibration).toEqual(report.fit);
+		// The logger's own days, not the gauge's calibration window.
+		const loggerDays = input.series.flow_logger_m3s!.values.filter((v) => v !== null).length;
+		expect(ind.validation).toMatchObject({ start: '2015-10-01', waterYears: [2015, 2016, 2017] });
+		expect(ind.validation.scores.days).toBe(loggerDays);
+		expect(ind.overlapDays).toBe(0);
+		// Fitted to the gauge, the model overshoots a logger that reads 60 % of it by ≈ 1/0.6.
+		expect(ind.validation.scores.volumeErrorPct!).toBeGreaterThan(50);
+		expect(ind.validation.scores.fdcHighPct).not.toBeNull();
+		expect(report.notes.join(' ')).toMatch(/Scored against the logger record instead, KGE′ falls from 0\.\d\d to .*does not hold on the other instrument/);
+		// Exclusions apply to it too.
+		const excl = calibrate(input, { budget: 50, validate: false, validationRecord: 'flow_logger_m3s', exclusions: [{ start: '2016-01-01', end: '2016-01-31' }] });
+		expect(excl.independentRecord!.validation.scores.days).toBe(loggerDays - 31);
+	}, 60_000);
+
+	it('positive control: validating on the calibration record itself reproduces the fit score', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		const report = calibrate(input, { budget: 100, validate: false, validationRecord: 'flow_observed_m3s' });
+		const ind = report.independentRecord!;
+		expect(ind.validation.scores).toEqual(report.fit.scores);
+		expect(ind.validation.waterYears).toEqual(report.fit.waterYears);
+		expect(ind.overlapDays).toBe(report.fit.scores.days);
+		expect(report.notes.join(' ')).toMatch(/were also fitted to: that part tests the instrument/);
+	}, 60_000);
+
+	it('is skipped, with a note, when the record is absent or too short; unset changes nothing', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		const plain = calibrate(input, { budget: 60, seed: 2 });
+		expect(plain.independentRecord).toBeNull();
+		const absent = calibrate(input, { budget: 60, seed: 2, validationRecord: 'flow_logger_m3s' });
+		expect(absent.independentRecord).toBeNull();
+		expect(absent.notes).toContain('The project has no logger record, so the fit was not validated against one.');
+		expect({ ...absent, notes: plain.notes }).toEqual(plain);
+
+		const short = structuredClone(input);
+		short.series.flow_logger_m3s = { startDate: '2011-01-01', values: new Array(20).fill(1) };
+		const r = calibrate(short, { budget: 60, validate: false, validationRecord: 'flow_logger_m3s' });
+		expect(r.independentRecord).toBeNull();
+		expect(r.notes.join(' ')).toMatch(/logger record has only 20 observed days/);
+		// A second record in the project, not asked for: the report is as without it.
+		expect(calibrate(short, { budget: 60, seed: 2 })).toEqual(plain);
+	}, 60_000);
+
+	it('scores a Pitman record against natural flow', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		input.series.flow_pitman_m3s = structuredClone(input.series.flow_observed_m3s!);
+		const r = calibrate(input, { budget: 40, validate: false, validationRecord: 'flow_pitman_m3s' });
+		expect(r.independentRecord!.simulatedKey).toBe('natural_flow');
+		// One farm draining to the gauge: natural flow = outflow, so the scores agree.
+		expect(r.independentRecord!.validation.scores.kgePrime).toBeCloseTo(r.fit.scores.kgePrime!, 12);
+	}, 60_000);
+});
+
 describe('validationNotes', () => {
-	const period = (kge: number) => ({ start: '2014-10-01', end: '2015-09-30', scores: { ...fitScores([1, 2, 3], [1, 2, 3]), kgePrime: kge } });
+	const period = (kge: number) => ({ start: '2014-10-01', end: '2015-09-30', waterYears: [2014], scores: { ...fitScores([1, 2, 3], [1, 2, 3]), kgePrime: kge } });
 	const test = (cal: number, val: number): ValidationTest => ({ params: {}, calibration: period(cal), validation: period(val) });
 
 	it('calls out a validation score well below the calibration score, and a dry → wet test on few years', () => {

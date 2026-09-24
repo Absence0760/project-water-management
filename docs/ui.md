@@ -147,14 +147,25 @@ The settings are grouped by what they drive:
     (default 1 500), which parameters to fit (GR4J X2 only when exchange is
     on), and whether to validate. Validation runs the split-sample and dry →
     wet tests, which means three fits.
+  - **Also validate against** appears only when the project has both a gauge
+    and a logger record. It offers the record the fit doesn't use (the
+    calibration flow series above, else the default gauge) and defaults to
+    "No other record". Choosing one adds an independent-record column: the
+    fitted parameters scored against that record over its own days (model.md
+    §2.10b). It costs no extra fit.
+  - Not in the panel yet: exclusion periods. The engine takes them
+    (`exclusions`, for example a whole bad water year), but the fit only
+    honours the calibration window.
   - While it runs there is a progress bar (`role="progressbar"`) with the
     stage and the best score so far. **Cancel** stops the worker at once and
     discards it.
   - The result shows the engine's plain-language notes (for example "wet-year
     behaviour is weakly constrained"), current against fitted parameters, and
     a scores table. Its columns are current parameters, fitted, then each
-    test's fitted part and validation part; the validation columns are
-    shaded. Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
+    test's fitted part and validation part, then the independent record if
+    one was chosen; the validation columns are shaded. Each column header
+    gives its period: a date range, except for the dry → wet test, whose
+    years interleave and are listed ("WY 2014/15, 2016/17"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, which then shows "Unsaved settings". Nothing is stored until Save.

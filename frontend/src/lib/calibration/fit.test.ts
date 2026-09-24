@@ -1,6 +1,6 @@
 import { calibrate, defaultProjectSettings, type CalibrationReport, type ModelInput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyReport, fitInput, fitParams, progressFraction, SCORE_ROWS, scoreColumns, totalRuns } from './fit';
+import { applyReport, fitInput, fitParams, progressFraction, SCORE_ROWS, scoreColumns, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
 const scores = (kge: number) => ({
 	days: 100,
@@ -15,7 +15,12 @@ const scores = (kge: number) => ({
 	fdcMidSlopePct: 20,
 	fdcLowPct: 3
 });
-const period = (start: string, end: string, kge: number) => ({ start, end, scores: scores(kge) });
+/** Water years (Oct–Sep) a date span touches. */
+const wys = (start: string, end: string) => {
+	const wy = (d: string) => Number(d.slice(0, 4)) - (Number(d.slice(5, 7)) < 10 ? 1 : 0);
+	return Array.from({ length: wy(end) - wy(start) + 1 }, (_, i) => wy(start) + i);
+};
+const period = (start: string, end: string, kge: number, waterYears = wys(start, end)) => ({ start, end, waterYears, scores: scores(kge) });
 
 function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 	return {
@@ -32,6 +37,7 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 		before: period('2013-01-01', '2018-12-31', 0.2),
 		splitSample: null,
 		differential: null,
+		independentRecord: null,
 		notes: [],
 		evaluations: 100,
 		cancelled: false,
@@ -76,7 +82,14 @@ describe('scoreColumns', () => {
 	it('lists before and fitted, then each test’s fitted and validation part, validation marked', () => {
 		const r = report({
 			splitSample: { params: {}, calibration: period('2013-01-01', '2015-12-31', 0.8), validation: period('2016-01-01', '2018-12-31', 0.4) },
-			differential: { params: {}, calibration: period('2014-10-01', '2017-09-30', 0.7), validation: period('2013-10-01', '2018-09-30', 0.3), dryYears: [2014, 2016], wetYears: [2013, 2017], wetDryRatio: 2 }
+			differential: {
+				params: {},
+				calibration: period('2014-10-01', '2017-09-30', 0.7, [2014, 2016]),
+				validation: period('2013-10-01', '2018-09-30', 0.3, [2013, 2017]),
+				dryYears: [2014, 2016],
+				wetYears: [2013, 2017],
+				wetDryRatio: 2
+			}
 		});
 		const cols = scoreColumns(r);
 		expect(cols.map((c) => [c.id, c.validation])).toEqual([
@@ -88,8 +101,60 @@ describe('scoreColumns', () => {
 			['dsst-val', true]
 		]);
 		expect(cols[3]!.period).toBe('2016-01-01 – 2018-12-31');
-		expect(cols[5]!.period).toBe('2013/14, 2017/18');
+		expect(cols[5]!.period).toBe('WY 2013/14, 2017/18');
 		expect(scoreColumns(report()).map((c) => c.id)).toEqual(['before', 'fit']);
+	});
+
+	it('shows the dry → wet test as the water years scored, never an overlapping date envelope', () => {
+		// Interleaved years: the dry set's first–last dates (2014-10-01 … 2017-09-30)
+		// sit inside the wet set's (2013-10-01 … 2018-09-30), although no year is in both.
+		const r = report({
+			differential: {
+				params: {},
+				calibration: period('2014-10-01', '2017-09-30', 0.7, [2014, 2016]),
+				validation: period('2013-10-01', '2018-09-30', 0.3, [2013, 2015, 2017]),
+				dryYears: [2014, 2016],
+				wetYears: [2013, 2015, 2017],
+				wetDryRatio: 2
+			}
+		});
+		const [dry, wet] = scoreColumns(r).filter((c) => c.id.startsWith('dsst'));
+		expect(dry!.period).toBe('WY 2014/15, 2016/17');
+		expect(wet!.period).toBe('WY 2013/14, 2015/16, 2017/18');
+		for (const c of [dry!, wet!]) expect(c.period).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+		expect(waterYearsText([1999])).toBe('WY 1999/00');
+		expect(waterYearsText([])).toBe('–');
+	});
+
+	it('adds the independent-record validation column when the report has one', () => {
+		const r = report({
+			independentRecord: {
+				flowKind: 'flow_logger_m3s',
+				simulatedKey: 'simulated_outflow',
+				params: {},
+				calibration: period('2013-01-01', '2018-12-31', 0.8),
+				validation: period('2015-10-01', '2018-09-30', 0.5),
+				overlapDays: 0
+			}
+		});
+		const last = scoreColumns(r).at(-1)!;
+		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '2015-10-01 – 2018-09-30', validation: true });
+		expect(last.scores.kgePrime).toBe(0.5);
+	});
+});
+
+describe('validationRecordOptions', () => {
+	const both = ['rain_catchment_mm', 'flow_observed_m3s', 'flow_logger_m3s'];
+	it('offers the other record only when both a gauge and a logger record exist', () => {
+		expect(validationRecordOptions(both, null)).toEqual(['flow_logger_m3s']);
+		expect(validationRecordOptions(both, 'flow_observed_m3s')).toEqual(['flow_logger_m3s']);
+		expect(validationRecordOptions(both, 'flow_logger_m3s')).toEqual(['flow_observed_m3s']);
+		expect(validationRecordOptions([...both, 'flow_pitman_m3s'], 'flow_pitman_m3s')).toEqual(['flow_observed_m3s', 'flow_logger_m3s']);
+		// A chosen record the project lacks falls back to the gauge, as the engine does.
+		expect(validationRecordOptions(both, 'flow_pitman_m3s')).toEqual(['flow_logger_m3s']);
+		expect(validationRecordOptions(['flow_observed_m3s'], null)).toEqual([]);
+		expect(validationRecordOptions(['flow_logger_m3s', 'flow_pitman_m3s'], 'flow_pitman_m3s')).toEqual([]);
+		expect(validationRecordOptions(null, null)).toEqual([]);
 	});
 
 	it('has a row for every score the engine reports', () => {

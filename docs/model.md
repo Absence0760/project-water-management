@@ -527,6 +527,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   which is exact because the network is causal.
 - **Scored days.** Days with an observation inside the calibration window,
   outside any exclusion period (`exclusions`). At least 30 are needed.
+  `exclusions` takes any date ranges, so a whole water year can be left out
+  (1 October to 30 September), but the app doesn't offer it yet: Fit
+  automatically uses the calibration window only.
 - **Optimiser: DDS** (Tolson & Shoemaker 2007, `calibrate/dds.ts`). It is
   greedy, with perturbation size r = 0.2 of each parameter's range. Early on
   it perturbs every parameter, and later fewer (probability 1 − ln i / ln m).
@@ -559,12 +562,33 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     days, score the second half.
   - **Differential split-sample**, when at least 4 water years have 180 or
     more observed days: fit on the driest half of those years (by mean
-    observed flow), score the wettest half.
+    observed flow), score the wettest half. The dry and wet years
+    interleave, so the two sets' first and last days overlap even though no
+    year is in both. Every `ScoredPeriod` therefore carries the `waterYears`
+    it scored, and the report shows this test by those years
+    ("WY 2014/15, 2016/17"), never as a date range.
+  - **Independent record** (optional, `validationRecord`): the parameters
+    fitted to the calibration record, scored against a second observed
+    record, for example the logger when the fit used the DWS gauge. It is
+    scored over that record's own observed days outside the exclusions,
+    whatever the calibration window, with the same objectives and FDC
+    signatures, against simulated outflow (natural flow for Pitman). It
+    costs one model run, not a fit, so it runs with or without the other
+    tests. It tests the fit against a second instrument rather than a
+    second period, which catches a gauge that measures another reach.
+    `overlapDays` counts its days that were also fitted to (on the other
+    record). Unset, nothing changes; set but missing from the project, or
+    with fewer than 30 days, there is no block and a note says why. Scoring
+    the calibration record itself reproduces the fit score exactly (the
+    positive control in `calibrate.test.ts`).
   - `notes` state the limits in plain language:
     - too few years to test wet years;
     - wet years that carry under 1.5× the dry years' flow;
-    - a validation score more than 0.2 below its calibration score;
-    - a dry → wet test resting on fewer than 3 years each way.
+    - a validation score more than 0.2 below its calibration score (on
+      either test, or on the independent record);
+    - a dry → wet test resting on fewer than 3 years each way;
+    - independent-record days that were also fitted to, since that part
+      tests the instrument, not the model on unseen days.
 
   A short record that is mostly drought gets these notes rather than a
   clean bill of health.

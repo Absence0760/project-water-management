@@ -342,6 +342,8 @@
 			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
 			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
 			hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+			{seriesKinds}
+			calibrationFlowKind={s.calibrationFlowKind}
 			{readonly}
 			onApply={applyFit}
 		/>

@@ -4,6 +4,8 @@
 import {
 	CALIBRATION_PARAMS,
 	OBJECTIVE_LABELS,
+	waterYearLabel,
+	type CalibrationFlowKind,
 	type CalibrationProgress,
 	type CalibrationReport,
 	type CalibrationStage,
@@ -14,6 +16,7 @@ import {
 	type ProjectSettings,
 	type RunoffModelId
 } from '@water-management/engine';
+import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 
 export interface FitRequest {
 	input: ModelInput;
@@ -23,6 +26,8 @@ export interface FitRequest {
 	free: string[];
 	validate: boolean;
 	seed: number;
+	/** A second observed record to validate the fit against; undefined = none. */
+	validationRecord?: CalibrationFlowKind;
 }
 
 export type WorkerMessage =
@@ -44,6 +49,24 @@ export function fitParams(model: RunoffModelId, x2Open = false) {
 	return CALIBRATION_PARAMS[model]
 		.filter((p) => !(model === 'gr4j' && p.key === 'x2' && !x2Open))
 		.map((p) => ({ key: p.key, label: p.label, unit: p.unit, min: p.min, max: p.max, checked: !p.fixedByDefault }));
+}
+
+/**
+ * Records the fit can be validated against independently: offered only when
+ * the project has both a gauge and a logger record, and never the record the
+ * fit itself uses (the form's choice, else the default gauge pick).
+ * `seriesKinds` null = not known yet: nothing is offered.
+ */
+export function validationRecordOptions(seriesKinds: readonly string[] | null, calibrationKind: CalibrationFlowKind | null): CalibrationFlowKind[] {
+	const both: CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
+	if (!seriesKinds || !both.every((k) => seriesKinds.includes(k))) return [];
+	const fitted = calibrationKind && seriesKinds.includes(calibrationKind) ? calibrationKind : 'flow_observed_m3s';
+	return both.filter((k) => k !== fitted);
+}
+
+/** "WY 1983/84, 1992/93": a set of water years, never a date envelope (the years need not be consecutive). */
+export function waterYearsText(years: readonly number[]): string {
+	return years.length ? `WY ${years.map(waterYearLabel).join(', ')}` : '–';
 }
 
 /** Runs the fit will make: one optimisation, or three with validation. */
@@ -87,7 +110,7 @@ export const SCORE_ROWS: ScoreRow[] = [
 export interface ScoreColumn {
 	id: string;
 	label: string;
-	/** "2013-04-15 – 2015-10-02" */
+	/** "2013-04-15 – 2015-10-02", or "WY 1983/84, 1992/93" for a set of water years. */
 	period: string;
 	scores: FitScores;
 	/** Validation columns are scored on days the parameters were not fitted to. */
@@ -108,11 +131,16 @@ export function scoreColumns(r: CalibrationReport): ScoreColumn[] {
 		);
 	}
 	if (r.differential) {
-		const years = (ys: number[]) => ys.map((y) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`).join(', ');
+		// The dry and wet years interleave, so their first–last dates overlap: list the years scored.
+		const d = r.differential;
 		cols.push(
-			{ id: 'dsst-cal', label: 'Dry years (fitted)', period: years(r.differential.dryYears), scores: r.differential.calibration.scores, validation: false },
-			{ id: 'dsst-val', label: 'Wet years', period: years(r.differential.wetYears), scores: r.differential.validation.scores, validation: true }
+			{ id: 'dsst-cal', label: 'Dry years (fitted)', period: waterYearsText(d.calibration.waterYears), scores: d.calibration.scores, validation: false },
+			{ id: 'dsst-val', label: 'Wet years', period: waterYearsText(d.validation.waterYears), scores: d.validation.scores, validation: true }
 		);
+	}
+	if (r.independentRecord) {
+		const v = r.independentRecord.validation;
+		cols.push({ id: 'record-val', label: `Independent record: ${FLOW_KIND_LABEL[r.independentRecord.flowKind]}`, period: p(v), scores: v.scores, validation: true });
 	}
 	return cols;
 }

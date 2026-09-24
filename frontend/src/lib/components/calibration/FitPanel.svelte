@@ -5,10 +5,11 @@
 	saves: the user reviews the form and saves it.
 -->
 <script lang="ts">
-	import { OBJECTIVES, type CalibrationProgress, type CalibrationReport, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
+	import { OBJECTIVES, type CalibrationFlowKind, type CalibrationProgress, type CalibrationReport, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { api } from '$lib/api';
-	import { fitInput, fitParams, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns } from '$lib/calibration/fit';
+	import { fitInput, fitParams, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
+	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -21,6 +22,8 @@
 		settings,
 		model,
 		hasObserved,
+		seriesKinds = null,
+		calibrationFlowKind = null,
 		readonly,
 		onApply
 	}: {
@@ -32,6 +35,10 @@
 		/** The network with unsaved edits, if any (else the saved one is used). */
 		model?: () => ProjectModel | undefined;
 		hasObserved: boolean;
+		/** Series kinds the project has (null = not known): decides which records can validate the fit. */
+		seriesKinds?: string[] | null;
+		/** The record the fit uses, as the form stands (null = the default pick). */
+		calibrationFlowKind?: CalibrationFlowKind | null;
 		readonly: boolean;
 		onApply: (report: CalibrationReport) => void;
 	} = $props();
@@ -40,6 +47,10 @@
 	let objective = $state<ObjectiveId>('kgePrime');
 	let budget = $state<number | null>(1500);
 	let validate = $state(true);
+	let validationRecord = $state<CalibrationFlowKind | null>(null);
+	// Offered only when the project has both a gauge and a logger record.
+	const recordOptions = $derived(validationRecordOptions(seriesKinds, calibrationFlowKind));
+	const chosenRecord = $derived(validationRecord && recordOptions.includes(validationRecord) ? validationRecord : null);
 	// Seeded from the defaults up front, so the checkbox bindings never see a missing key.
 	let picked = $state<Record<string, boolean>>(untrack(() => Object.fromEntries(fitParams(runoffModel, x2Open).map((p) => [p.key, p.checked]))));
 	let status = $state<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
@@ -73,7 +84,7 @@
 			const server = await api.runs.modelInput(projectId);
 			const input = fitInput(server, settings(), model?.());
 			status = 'running';
-			handle = startFit({ input, model: runoffModel, objective, budget, free, validate, seed: 1 }, (p) => (progress = p));
+			handle = startFit({ input, model: runoffModel, objective, budget, free, validate, seed: 1, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
 			status = 'done';
 		} catch (e) {
@@ -138,6 +149,16 @@
 				<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
 				Validate: split-sample and dry → wet tests (three fits)
 			</label>
+			{#if recordOptions.length}
+				<div class="field">
+					<label for="{uid}-record">Also validate against</label>
+					<select id="{uid}-record" bind:value={validationRecord} disabled={status === 'running'} aria-describedby="{uid}-record-h">
+						<option value={null}>No other record</option>
+						{#each recordOptions as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
+					</select>
+					<span class="hint" id="{uid}-record-h">Scores the fit against a second instrument over that record’s own days. No extra fit.</span>
+				</div>
+			{/if}
 		</div>
 		<div class="row">
 			{#if status === 'running' || status === 'loading'}
