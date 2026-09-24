@@ -475,6 +475,86 @@ volume ratio (`[Flow Calibration Cfg]` K27 = 1.2783). The gauge and the logger
 disagree badly from 2014 to 2017 (in one water year the gauge records less than
 a tenth of the logger's volume): a question for the hydrologist.
 
+### 2.10b Automatic calibration (engine ≥ 0.5.0, issue #4 phase 4)
+
+`packages/engine/src/calibrate/` fits a runoff model's parameters to the
+project's observed record. It is pure and deterministic for a seed, so the
+browser runs it in a Web Worker and a test can pin it. It doesn't change
+`runModel`.
+
+- **What is fitted.**
+  - GR4J: X1, X3 and X4 by default; X2 only when asked (`free`).
+  - Legacy: a, b and the two season factors by default; the base-flow reset
+    ratio when asked. The rain threshold is left out, because it also decides
+    which rain days reduce demand. The recession tables stay as imported.
+
+  Legacy can be fitted too so that the two models are compared calibrated
+  against calibrated (issue #4 phase 6). Bounds are the models' `ParamSpec`
+  min/max (§2.4a for GR4J, `runoff/legacy.ts` `LEGACY_PARAMS` for legacy).
+- **What is scored.** The whole run, exactly as `runModel` scores it:
+  runoff model → natural flow → network → simulated outflow for a gauge or
+  logger record, or natural flow for Pitman (C1). So the fitted parameters
+  describe the natural catchment, and the network adds the impacts. A test
+  checks this, day for day, on random networks for both models.
+  `prepareCalibration` builds everything but natural flow once
+  (`prepareRun` + `buildNetworkPlan`, shared with `runModel`). Each candidate
+  swaps in its natural flow and simulates only up to the last scored day,
+  which is exact because the network is causal.
+- **Scored days.** Days with an observation inside the calibration window,
+  outside any exclusion period (`exclusions`). At least 30 are needed.
+- **Optimiser: DDS** (Tolson & Shoemaker 2007, `calibrate/dds.ts`). It is
+  greedy, with perturbation size r = 0.2 of each parameter's range. Early on
+  it perturbs every parameter, and later fewer (probability 1 − ln i / ln m).
+  Candidates are reflected into the bounds, so no model run ever uses an
+  out-of-bounds value. It starts from the project's current parameters.
+  The budget is 1 500 runs per fit by default. It replaces WP-1.18's
+  Nelder–Mead, which handles bounds and surfaces of 4+ parameters worse.
+- **Objectives** (`calibrate/objective.ts`; the optimiser minimises 1 − score):
+  - **KGE′** (Kling et al. 2012), the default. Simulating the mean observed
+    flow scores 1 − √2 ≈ −0.41, the benchmark of Knoben et al. (2019);
+  - **year-balanced KGE′**: the mean KGE′ over the water years with at least
+    30 scored days (Fowler et al. 2018; issue #1 item 5). Each year counts
+    once, so a few wet years can't dominate a drought-heavy record;
+  - **non-parametric KGE** (Pool et al. 2018);
+  - **NSE on √Q** (medium flows);
+  - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows).
+
+  KGE is never applied to log flows (Santos et al. 2018).
+- **Reported with every fit** (`FitScores`): all of the above, plain NSE, the
+  volume error, and the Yilmaz et al. (2008) flow-duration signatures:
+  - %BiasFHV: volume of the top 2 % of flows;
+  - %BiasFMS: the slope between 20 % and 70 % exceedance, in log space;
+  - %BiasFLV: the low 30 %, log flows above the minimum, scored
+    −100·(sim − obs)/obs.
+
+  The project's parameters before the fit are scored on the same days
+  (`before`).
+- **Validation, always.**
+  - **Split-sample** (Klemeš 1986): fit on the first half of the scored
+    days, score the second half.
+  - **Differential split-sample**, when at least 4 water years have 180 or
+    more observed days: fit on the driest half of those years (by mean
+    observed flow), score the wettest half.
+  - `notes` state the limits in plain language:
+    - too few years to test wet years;
+    - wet years that carry under 1.5× the dry years' flow;
+    - a validation score more than 0.2 below its calibration score;
+    - a dry → wet test resting on fewer than 3 years each way.
+
+  A short record that is mostly drought gets these notes rather than a
+  clean bill of health.
+- **Cost.** About 20 ms per model run on the 44-year client catchment, so
+  1 500 runs per fit and three fits (full, split, dry → wet) take about 70 s
+  in Node. `onProgress` reports every run and returns true to cancel, which
+  keeps the best found so far.
+
+On the client catchment's logger record (1 803 days, 2013–2018), a GR4J fit
+with the defaults (budget 1 500, seed 1) moved KGE′ from 0.22 (default
+parameters) to 0.78. The split-sample validation half scored 0.36, and the
+dry → wet test, on two dry and two wet years, scored 0.34. That is why the
+hydrologist's decision gate (issue #4 phase 6) weighs validation, not the
+fit.
+
 ### 2.10a Data quality: do the observed flow records agree?
 
 Not in the workbook — added after comparing the client catchment's two observed records.

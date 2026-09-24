@@ -61,42 +61,7 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	const warnings: string[] = [];
-	const settings = mergeSettings(input.settings, warnings);
-	const { model } = input;
-	const series = input.series ?? {};
-
-	// --- run window ---------------------------------------------------------
-	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'flow_pitman_m3s'];
-	let first = Infinity;
-	let last = -Infinity;
-	for (const k of drivers) {
-		const s = series[k];
-		if (!s || s.values.length === 0) continue;
-		const d0 = toEpochDay(s.startDate);
-		first = Math.min(first, d0);
-		last = Math.max(last, d0 + s.values.length - 1);
-	}
-	const start = settings.simulationStart ? toEpochDay(settings.simulationStart) : first;
-	const end = settings.simulationEnd ? toEpochDay(settings.simulationEnd) : last;
-	if (!Number.isFinite(start) || !Number.isFinite(end)) {
-		throw new Error('no rainfall or Pitman flow series: cannot work out the simulation period');
-	}
-	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
-	const days = end - start + 1;
-	const startDate = fromEpochDay(start);
-	const aligned = (kind: SeriesKind) => alignSeries(series[kind], start, days);
-
-	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
-		warnings.push(
-			settings.runoffModel === 'legacy'
-				? 'no rainfall series: natural flow falls back to Pitman flow and demand is not reduced by rain'
-				: 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'
-		);
-	}
-
-	const month = new Uint8Array(days);
-	for (let t = 0; t < days; t++) month[t] = monthOfEpochDay(start + t);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -108,72 +73,9 @@ export function runModelWith(
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
 
 	// --- network ----------------------------------------------------------------
-	const nodes = model.nodes;
-	const topo = buildTopology(nodes);
-	warnings.push(...topo.warnings);
-	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
-	warnings.push(...shares.warnings);
-
-	const ewrWy = settings.ewrPragmaticM3PerDay;
-	const ewr = new Float64Array(days);
-	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
-
-	const demand = buildDemand(input, settings, days, month, aligned, warnings);
-
-	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
-	const transfers: PlanTransfer[] = [];
-	for (const tr of model.transfers) {
-		if (!tr.enabled) continue;
-		const from = indexById.get(tr.fromNodeId);
-		const to = indexById.get(tr.toNodeId);
-		if (from === undefined || to === undefined) {
-			warnings.push(`transfer ${tr.id} references a node that does not exist; skipped`);
-			continue;
-		}
-		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
-			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between farms; skipped`);
-			continue;
-		}
-		const activeMonth = new Uint8Array(13);
-		for (const m of tr.months) if (m >= 1 && m <= 12) activeMonth[m] = 1;
-		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it); an explicit daily cap can only lower it.
-		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
-		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
-		transfers.push({
-			from,
-			to,
-			activeMonth,
-			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
-			maxDailyM3: Math.max(0, maxDaily)
-		});
-	}
-
-	const plan: NetworkPlan = {
-		days,
-		order: topo.order,
-		// Sum each node's upstream in node-id order, not display order, so the
-		// float result can't depend on how the nodes are listed (review F8).
-		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
-		transfers,
-		month,
-		naturalFlow: natural,
-		ewr,
-		nodes: nodes.map((n, i) => {
-			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
-			const cap = n.damCapacityM3;
-			return {
-				kind: n.kind,
-				share: shares.share[i]!,
-				pctUpstreamToDam: n.pctUpstreamToDam,
-				pctRunoffToDam: n.pctRunoffToDam,
-				divertCapacityM3Day: n.divertCapacityM3Day,
-				damCapacityM3: cap,
-				initialStorageM3: n.damInitialPct * cap,
-				returnFlowPct: n.returnFlowPct,
-				demand: demand[i]!
-			};
-		})
-	};
+	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
+	const nodes = input.model.nodes;
+	const ewr = plan.ewr;
 	const sim = simulateNetwork(plan);
 
 	// --- outputs -----------------------------------------------------------------
@@ -352,6 +254,148 @@ export function runModelWith(
 	};
 }
 
+
+/** The run's settings, window and aligned inputs: everything before natural flow. */
+export interface PreparedRun {
+	warnings: string[];
+	settings: ProjectSettings;
+	series: ModelInput['series'];
+	/** First and last simulated epoch day. */
+	start: number;
+	end: number;
+	days: number;
+	startDate: string;
+	aligned: (kind: SeriesKind) => (number | null)[];
+	/** Calendar month (1–12) of each simulated day. */
+	month: Uint8Array;
+}
+
+/** Merge the settings, work out the run window and align the input series to it. */
+export function prepareRun(input: ModelInput): PreparedRun {
+	const warnings: string[] = [];
+	const settings = mergeSettings(input.settings, warnings);
+	const series = input.series ?? {};
+
+	// --- run window ---------------------------------------------------------
+	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'flow_pitman_m3s'];
+	let first = Infinity;
+	let last = -Infinity;
+	for (const k of drivers) {
+		const s = series[k];
+		if (!s || s.values.length === 0) continue;
+		const d0 = toEpochDay(s.startDate);
+		first = Math.min(first, d0);
+		last = Math.max(last, d0 + s.values.length - 1);
+	}
+	const start = settings.simulationStart ? toEpochDay(settings.simulationStart) : first;
+	const end = settings.simulationEnd ? toEpochDay(settings.simulationEnd) : last;
+	if (!Number.isFinite(start) || !Number.isFinite(end)) {
+		throw new Error('no rainfall or Pitman flow series: cannot work out the simulation period');
+	}
+	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
+	const days = end - start + 1;
+	const startDate = fromEpochDay(start);
+	const aligned = (kind: SeriesKind) => alignSeries(series[kind], start, days);
+
+	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
+		warnings.push(
+			settings.runoffModel === 'legacy'
+				? 'no rainfall series: natural flow falls back to Pitman flow and demand is not reduced by rain'
+				: 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'
+		);
+	}
+
+	const month = new Uint8Array(days);
+	for (let t = 0; t < days; t++) month[t] = monthOfEpochDay(start + t);
+
+	return { warnings, settings, series, start, end, days, startDate, aligned, month };
+}
+
+/**
+ * Everything the network simulation needs besides natural flow: topology,
+ * flow shares, EWR, irrigation demand and transfers, as a NetworkPlan with
+ * `natural` as its natural flow. Calibration builds it once and swaps the
+ * natural flow for each candidate (./calibrate).
+ */
+export function buildNetworkPlan(
+	input: ModelInput,
+	settings: ProjectSettings,
+	days: number,
+	month: Uint8Array,
+	aligned: (k: SeriesKind) => (number | null)[],
+	natural: Float64Array,
+	warnings: string[]
+): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology> } {
+	const { model } = input;
+	const nodes = model.nodes;
+	const topo = buildTopology(nodes);
+	warnings.push(...topo.warnings);
+	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
+	warnings.push(...shares.warnings);
+
+	const ewrWy = settings.ewrPragmaticM3PerDay;
+	const ewr = new Float64Array(days);
+	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
+
+	const demand = buildDemand(input, settings, days, month, aligned, warnings);
+
+	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
+	const transfers: PlanTransfer[] = [];
+	for (const tr of model.transfers) {
+		if (!tr.enabled) continue;
+		const from = indexById.get(tr.fromNodeId);
+		const to = indexById.get(tr.toNodeId);
+		if (from === undefined || to === undefined) {
+			warnings.push(`transfer ${tr.id} references a node that does not exist; skipped`);
+			continue;
+		}
+		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
+			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between farms; skipped`);
+			continue;
+		}
+		const activeMonth = new Uint8Array(13);
+		for (const m of tr.months) if (m >= 1 && m <= 12) activeMonth[m] = 1;
+		// b023 "Transfer capacity max" = max rate m³/s × 86400 (the workbook rounds it); an explicit daily cap can only lower it.
+		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
+		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
+		transfers.push({
+			from,
+			to,
+			activeMonth,
+			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
+			maxDailyM3: Math.max(0, maxDaily)
+		});
+	}
+
+	const plan: NetworkPlan = {
+		days,
+		order: topo.order,
+		// Sum each node's upstream in node-id order, not display order, so the
+		// float result can't depend on how the nodes are listed (review F8).
+		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
+		transfers,
+		month,
+		naturalFlow: natural,
+		ewr,
+		nodes: nodes.map((n, i) => {
+			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
+			const cap = n.damCapacityM3;
+			return {
+				kind: n.kind,
+				share: shares.share[i]!,
+				pctUpstreamToDam: n.pctUpstreamToDam,
+				pctRunoffToDam: n.pctRunoffToDam,
+				divertCapacityM3Day: n.divertCapacityM3Day,
+				damCapacityM3: cap,
+				initialStorageM3: n.damInitialPct * cap,
+				returnFlowPct: n.returnFlowPct,
+				demand: demand[i]!
+			};
+		})
+	};
+	return { plan, topo };
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -456,7 +500,7 @@ const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
  * configured kind when that series exists, else observed gauge flow, else the
  * logger.
  */
-function pickObservedKind(
+export function pickObservedKind(
 	wanted: CalibrationFlowKind | null,
 	series: ModelInput['series'],
 	warnings: string[]

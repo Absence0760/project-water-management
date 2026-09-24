@@ -102,7 +102,7 @@ Still needed, with the WP each one blocks:
 ```
 browser (SvelteKit SPA)
  ├─ lib/preview/engine.worker.ts      runModel on the unsaved model        (WP-1.17)
- ├─ lib/calibration/autocal.worker.ts Nelder–Mead over CalibrationParams    (WP-1.18)
+ ├─ lib/calibration/autocal.worker.ts DDS over the runoff model's params   (WP-1.18, issue #4)
  ├─ lib/spreadsheet/*.worker.ts       SheetJS CE: .xlsx export, templates,
  │                                    b023 workbook import                  (WP-1.28/1.30/1.31)
  └─ /account, /privacy routes; account menu in AppHeader                    (WP-1.9, 1.13)
@@ -120,7 +120,7 @@ Postgres (new next-free NNN_ migrations)
  ├─ created_by nullable on project/team/model_run; app_delete_account()     (WP-1.13)
  └─ node: irrigation efficiency, dam area–volume, seepage; Q1 rename        (WP-1.19–1.21)
 packages/engine (pure)
- ├─ calibrate/ (nelderMead, objectives), buildModelInput                    (WP-1.17/1.18)
+ ├─ calibrate/ (dds, objectives, calibrate), buildModelInput               (WP-1.17/1.18)
  ├─ quality.ts: zero-rain runs, rain below CHIRPS                           (WP-1.4)
  └─ flow.ts / demand.ts / network/simulate.ts / curtailment.ts physics      (WP-1.19–1.24)
 AWS: RDS pg17 + VPC Lambdas as already in infra/; add a Route 53 health check
@@ -899,6 +899,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > (Phases 4–5): the optimiser is **DDS** (not Nelder–Mead), the objectives add
 > KGE′, non-parametric KGE, NSE on √Q/log Q and FDC signatures, and it fits the
 > GR4J parameters as well as the legacy ones. Follow the issue where they differ.
+> **Engine done (issue #4 phase 4):** `packages/engine/src/calibrate/` (DDS,
+> objectives, split-sample and differential split-sample validation, exclusions,
+> both models, the year-balanced KGE below); [model.md §2.10b](../model.md).
 
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the

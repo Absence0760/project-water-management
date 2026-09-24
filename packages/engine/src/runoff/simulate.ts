@@ -61,14 +61,16 @@ export function simulateRunoff<P, S>(
 	model: RunoffModel<P, S>,
 	p: P,
 	forcing: RunoffForcing,
-	opts: { warmupDays: number; fill?: number; trace?: boolean }
+	opts: { warmupDays: number; fill?: number; trace?: boolean; days?: number }
 ): RunoffTrace {
-	const n = forcing.rainMm.length;
+	// The warm-up cycles the whole forcing; `days` (default all) cuts the output short.
+	const len = forcing.rainMm.length;
+	const n = Math.min(len, opts.days ?? len);
 	const trace = opts.trace ?? true;
 	const st = model.init(p, opts.fill);
 	const day: DayFluxes = { qMm: 0, aetMm: 0, exchangeMm: 0 };
-	const warm = n > 0 ? Math.max(0, Math.floor(opts.warmupDays)) : 0;
-	for (let k = 0; k < warm; k++) model.step(p, st, forcing.rainMm[k % n]!, forcing.petMm[k % n]!, day);
+	const warm = len > 0 ? Math.max(0, Math.floor(opts.warmupDays)) : 0;
+	for (let k = 0; k < warm; k++) model.step(p, st, forcing.rainMm[k % len]!, forcing.petMm[k % len]!, day);
 
 	const qMm = new Float64Array(n);
 	const aetMm = new Float64Array(trace ? n : 0);
