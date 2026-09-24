@@ -74,7 +74,36 @@ export function observedFrom(simulatedM3Day: number[], seed: number, gapFraction
 		}
 		const lagged = 0.7 * simulatedM3Day[i]! + 0.3 * (simulatedM3Day[Math.max(0, i - 1)] ?? 0);
 		const noise = Math.exp((r() - 0.5) * 1.1);
-		out.push(Math.round(((lagged * noise) / 86_400) * 1000) / 1000);
+		out.push(sig3((lagged * noise) / 86_400));
 	}
 	return out;
+}
+
+/**
+ * Three significant figures, as a rated gauge reports. Rounding to a fixed
+ * 0.001 m³/s instead turned every summer low flow into weeks of identical
+ * 0.001 readings, which the flat-line check rightly flags as a stuck logger.
+ */
+export const sig3 = (v: number): number => (v > 0 ? Number(v.toPrecision(3)) : 0);
+
+/**
+ * A CHIRPS-like satellite estimate of the same rain: scaled per calendar month
+ * by `bias` (CHIRPS under-reads orographic winter rain in the Western Cape),
+ * with multiplicative noise, part of each storm smeared onto the next day (a
+ * 0.05° pixel and a day boundary that doesn't match the gauge's 08:00
+ * reading), and a light drizzle on some dry days. Rounded to 0.1 mm.
+ */
+export function chirpsFrom(rainMm: number[], startDate: string, bias: number[], seed: number): number[] {
+	const r = rng(seed);
+	const start = Date.parse(`${startDate}T00:00:00Z`);
+	const out = new Array<number>(rainMm.length).fill(0);
+	for (let i = 0; i < rainMm.length; i++) {
+		const m = new Date(start + i * 86_400_000).getUTCMonth();
+		const noise = Math.exp((r() - 0.5) * 0.8);
+		const v = rainMm[i]! * bias[m]! * noise;
+		out[i]! += 0.75 * v;
+		if (i + 1 < out.length) out[i + 1]! += 0.25 * v;
+		if (rainMm[i] === 0 && r() < 0.03) out[i]! += 0.5 + r() * 1.5;
+	}
+	return out.map((v) => Math.round(v * 10) / 10);
 }
