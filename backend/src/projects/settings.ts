@@ -1,4 +1,5 @@
 import {
+	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
@@ -13,6 +14,7 @@ import {
 	WR2012_MAX_PENALTY_WEIGHT,
 	WR2012_SCALINGS,
 	wr2012FlagIssues,
+	wr2012PenaltyIssues,
 	wr2012ReferenceIssues,
 	type ProjectSettings
 } from '@water-management/engine';
@@ -86,6 +88,23 @@ const Wr2012Flags = z
 	.superRefine((f, ctx) => {
 		for (const i of wr2012FlagIssues(f)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
 	});
+/**
+ * The calibration penalty group: a weight, plus an optional MAR band
+ * (marLowMm3 / marHighMm3, engine reference/wr2012.ts) — both or neither, low
+ * ≤ high — used instead of the single scaled WR2012 MAR when two published
+ * estimates disagree (issue #4 phase 6).
+ */
+const Wr2012CalibrationPenalty = z
+	.object({
+		enabled: z.boolean(),
+		weight: z.number().min(0).max(WR2012_MAX_PENALTY_WEIGHT),
+		marLowMm3: z.number().min(0).max(1e6).nullable(),
+		marHighMm3: z.number().min(0).max(1e6).nullable()
+	})
+	.strict()
+	.superRefine((p, ctx) => {
+		for (const i of wr2012PenaltyIssues(p)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
+	});
 const bounded = (key: string) => {
 	const p = GR4J_PARAMS.find((x) => x.key === key)!;
 	return z.number().min(p.min).max(p.max);
@@ -140,6 +159,7 @@ export const FitRecord = z
 		engineVersion: z.string().max(40),
 		model: z.enum(RUNOFF_MODELS),
 		objective: z.enum(OBJECTIVES),
+		bounds: z.enum(CALIBRATION_BOUNDS),
 		seed: z.number().int().min(0).max(2 ** 31 - 1),
 		budget: z.number().int().min(1).max(1_000_000),
 		evaluations: z.number().int().min(0),
@@ -175,6 +195,8 @@ export const FitRecord = z
 			.object({
 				weight: z.number().min(0).max(WR2012_MAX_PENALTY_WEIGHT),
 				targetMarMm3: z.number().finite().min(0),
+				marLowMm3: z.number().finite().min(0).nullable(),
+				marHighMm3: z.number().finite().min(0).nullable(),
 				basis: z.enum(['overlap', 'whole']),
 				marRatio: z.number().finite(),
 				unpenalised: z.object({ params, fit: ScoredPeriod, marRatio: z.number().finite() }).strict().nullable()
@@ -241,7 +263,7 @@ export const SettingsPatch = z
 				scaling: z.enum(WR2012_SCALINGS),
 				lowFlowMonths: z.array(z.number().int().min(1).max(12)).min(1).max(12).nullable(),
 				flags: Wr2012Flags,
-				calibrationPenalty: z.object({ enabled: z.boolean(), weight: z.number().min(0).max(WR2012_MAX_PENALTY_WEIGHT) }).strict()
+				calibrationPenalty: Wr2012CalibrationPenalty
 			})
 			.partial()
 			.strict()

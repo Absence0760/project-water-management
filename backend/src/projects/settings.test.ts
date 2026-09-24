@@ -135,7 +135,8 @@ describe('SettingsPatch.wr2012', () => {
 		expect(ok({ reference: { ...reference, mapMm: null } })).toBe(true);
 		expect(ok({ reference: null })).toBe(true);
 		expect(ok({ scaling: 'areaRain', lowFlowMonths: [12, 1, 2] })).toBe(true);
-		expect(ok({ calibrationPenalty: { enabled: true, weight: 10 } })).toBe(true);
+		expect(ok({ calibrationPenalty: { enabled: true, weight: 10, marLowMm3: null, marHighMm3: null } })).toBe(true);
+		expect(ok({ calibrationPenalty: { enabled: true, weight: 10, marLowMm3: 5, marHighMm3: 5 } })).toBe(true); // equal bounds: a zero-width band
 		expect(ok({})).toBe(true);
 	});
 
@@ -173,6 +174,11 @@ describe('SettingsPatch.wr2012', () => {
 			{ flags: { notePct: 0, queryPct: 25, queryWetterPct: 15, unusablePct: 50 } },
 			{ calibrationPenalty: { enabled: true, weight: 11 } },
 			{ calibrationPenalty: { enabled: 'yes', weight: 1 } },
+			{ calibrationPenalty: { enabled: true, weight: 1 } }, // missing the (now required) band fields
+			{ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: 10, marHighMm3: 5 } }, // low > high
+			{ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: 5, marHighMm3: null } }, // one-sided
+			{ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: null, marHighMm3: 5 } },
+			{ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: -1, marHighMm3: 5 } },
 			{ penalty: true }
 		]) {
 			expect(ok(bad), JSON.stringify(bad)).toBe(false);
@@ -185,8 +191,16 @@ describe('SettingsPatch.wr2012', () => {
 			scaling: 'area',
 			lowFlowMonths: null,
 			flags: { notePct: 10, queryPct: 25, queryWetterPct: 15, unusablePct: 50 },
-			calibrationPenalty: { enabled: false, weight: 0.5 }
+			calibrationPenalty: { enabled: false, weight: 0.5, marLowMm3: null, marHighMm3: null }
 		});
+	});
+
+	it('accepts a valid MAR band', () => {
+		expect(ok({ calibrationPenalty: { enabled: true, weight: 2, marLowMm3: 5, marHighMm3: 10 } })).toBe(true);
+		expect(
+			SettingsPatch.safeParse({ wr2012: { calibrationPenalty: { enabled: true, weight: 2, marLowMm3: 5, marHighMm3: 10 } } }).data?.wr2012
+				?.calibrationPenalty
+		).toEqual({ enabled: true, weight: 2, marLowMm3: 5, marHighMm3: 10 });
 	});
 });
 
@@ -261,6 +275,7 @@ describe('SettingsPatch.fitRecord', () => {
 		engineVersion: '0.6.0',
 		model: 'gr4j',
 		objective: 'kgePrime',
+		bounds: 'wide',
 		seed: 7,
 		budget: 300,
 		evaluations: 900,
@@ -296,8 +311,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok(record)).toBe(true);
 		expect(ok(null)).toBe(true);
 		expect(ok({ ...record, splitSample: null, differential: null, independentRecord: null, notes: [] })).toBe(true);
-		const marPenalty = { weight: 0.5, targetMarMm3: 12, basis: 'overlap', marRatio: 1.05, unpenalised: { params: { x1: 400 }, fit: period, marRatio: 1.4 } };
+		const marPenalty = {
+			weight: 0.5,
+			targetMarMm3: 12,
+			marLowMm3: null,
+			marHighMm3: null,
+			basis: 'overlap',
+			marRatio: 1.05,
+			unpenalised: { params: { x1: 400 }, fit: period, marRatio: 1.4 }
+		};
 		expect(ok({ ...record, marPenalty })).toBe(true);
+		expect(ok({ ...record, marPenalty: { ...marPenalty, marLowMm3: 5, marHighMm3: 10 } })).toBe(true);
 		expect(ok({ ...record, marPenalty: { ...marPenalty, weight: 11 } })).toBe(false);
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
@@ -307,11 +331,13 @@ describe('SettingsPatch.fitRecord', () => {
 		for (const bad of [
 			without('seed'),
 			without('objective'),
+			without('bounds'),
 			without('fittedAt'),
 			without('engineVersion'),
 			without('exclusions'),
 			{ ...record, objective: 'rmse' },
 			{ ...record, model: 'pitman' },
+			{ ...record, bounds: 'narrow' },
 			{ ...record, seed: -1 },
 			{ ...record, seed: 1.5 },
 			{ ...record, fittedAt: 'yesterday' },

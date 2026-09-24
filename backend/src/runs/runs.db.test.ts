@@ -96,6 +96,7 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 		engineVersion: '0.6.0',
 		model: 'legacy',
 		objective: 'kgePrime',
+		bounds: 'wide',
 		seed: 42,
 		budget: 300,
 		evaluations: 900,

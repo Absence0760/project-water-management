@@ -90,7 +90,7 @@ describe('GET /compare/runs', () => {
 		const first = await run(u, projectId, 'With WR2012');
 
 		// Patching another WR2012 group keeps the stored reference.
-		expect((await set({ scaling: 'areaRain', calibrationPenalty: { enabled: true, weight: 1 } })).status).toBe(200);
+		expect((await set({ scaling: 'areaRain', calibrationPenalty: { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null } })).status).toBe(200);
 		expect((await set({ reference: { ...reference, marMm3: 13, monthlyMm3: monthlyMm3.map((v) => (v * 13) / 12) } })).status).toBe(200);
 		const second = await run(u, projectId, 'Changed WR2012');
 
