@@ -8,6 +8,8 @@
 // (across copies). See docs/run-comparison.md.
 import { fromEpochDay, toEpochDay } from './calendar';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
+import { exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
+import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import {
 	defaultProjectSettings,
 	type CalibrationStats,
@@ -503,8 +505,20 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
 	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
+	out.push(...diffExclusions(a.calibrationExclusions, b.calibrationExclusions));
+	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
-	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality', 'gr4j', 'wr2012']);
+	const known = new Set([
+		...Object.keys(SETTINGS_FIELDS),
+		...Object.keys(SETTINGS_MONTHLY),
+		'hiLoSplit',
+		'calibration',
+		'dataQuality',
+		'gr4j',
+		'wr2012',
+		'calibrationExclusions',
+		'fitRecord'
+	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
 	}
@@ -577,6 +591,64 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 		push('changed', 'WR2012 calibration penalty weight', `WR2012 calibration penalty weight: ${fmtValue(pa?.weight)} → ${fmtValue(pb?.weight)}`);
 	}
 	return out;
+}
+
+const exclusionKey = (x: CalibrationExclusion) => ('waterYear' in x ? `wy:${x.waterYear}` : `${x.start}/${x.end}`);
+
+/** Calibration exclusions added, removed, or given another reason (matched by their period). */
+function diffExclusions(ra: unknown, rb: unknown): InputChange[] {
+	const list = (v: unknown) => (Array.isArray(v) ? (v as CalibrationExclusion[]).filter((x) => x && typeof x === 'object') : []);
+	const a = new Map(list(ra).map((x) => [exclusionKey(x), x]));
+	const b = new Map(list(rb).map((x) => [exclusionKey(x), x]));
+	const out: InputChange[] = [];
+	for (const [k, x] of a) {
+		if (!b.has(k)) out.push({ area: 'settings', kind: 'removed', subject: `Calibration exclusion ${exclusionLabel(x)}`, text: `Calibration exclusion ${exclusionLabel(x)} removed (was: “${x.reason}”)` });
+	}
+	for (const [k, y] of b) {
+		const x = a.get(k);
+		const subject = `Calibration exclusion ${exclusionLabel(y)}`;
+		if (!x) out.push({ area: 'settings', kind: 'added', subject, text: `${subject} added: “${y.reason}”` });
+		else if (x.reason !== y.reason) out.push({ area: 'settings', kind: 'changed', subject, text: `${subject}: reason “${x.reason}” → “${y.reason}”` });
+	}
+	return out;
+}
+
+const MODEL_NAME: Record<string, string> = { gr4j: 'GR4J', legacy: 'legacy' };
+
+/** "GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)". */
+export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed'>): string {
+	const when = typeof r.fittedAt === 'string' ? r.fittedAt.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC') : 'unknown time';
+	const objective = (OBJECTIVE_LABELS[r.objective as ObjectiveId] ?? String(r.objective)).replace(/ \(.*\)$/, '');
+	return `${MODEL_NAME[r.model] ?? String(r.model)} fit of ${when} (${objective}, seed ${r.seed})`;
+}
+
+/** The fit record the parameters came from: set, cleared, replaced, or edited since. */
+function diffFitRecord(ra: unknown, rb: unknown): InputChange[] {
+	const rec = (v: unknown) => (v && typeof v === 'object' ? (v as FitRecord) : null);
+	const a = rec(ra);
+	const b = rec(rb);
+	const subject = 'Fit record';
+	if (!a && !b) return [];
+	if (!a) return [{ area: 'settings', kind: 'added', subject, text: `Parameters now from a ${describeFitRecord(b!)}` }];
+	if (!b) return [{ area: 'settings', kind: 'removed', subject, text: `Fit record removed (was a ${describeFitRecord(a)})` }];
+	if (a.fittedAt !== b.fittedAt || a.model !== b.model || a.seed !== b.seed) {
+		return [{ area: 'settings', kind: 'changed', subject, text: `Fit record: ${describeFitRecord(a)} → ${describeFitRecord(b)}` }];
+	}
+	const ea = Array.isArray(a.editedParams) ? a.editedParams : [];
+	const eb = Array.isArray(b.editedParams) ? b.editedParams : [];
+	if (!same(ea, eb)) {
+		return [
+			{
+				area: 'settings',
+				kind: 'changed',
+				subject,
+				text: eb.length
+					? `Fit record: parameters edited since the fit (${eb.join(', ')})${ea.length ? `, was ${ea.join(', ')}` : ''}`
+					: `Fit record: parameters back to the fitted values (were edited: ${ea.join(', ')})`
+			}
+		];
+	}
+	return same(a, b) ? [] : [{ area: 'settings', kind: 'changed', subject, text: 'Fit record changed' }];
 }
 
 const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [

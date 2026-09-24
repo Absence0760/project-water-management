@@ -618,8 +618,21 @@ from the rain model; the workbook compared the outflow with whichever record
 quantity ([audit C1](./engine-audit.md)). `CalibrationStats.simulatedKey` says
 which series was scored.
 
+**Calibration exclusions (engine ≥ 0.6.0).** `settings.calibrationExclusions`
+lists periods left out of every calibration score: a whole water year
+(`{ waterYear: 2015, reason }` = 1 October 2015 to 30 September 2016) or a date
+range (`{ start, end, reason }`, inclusive). Each needs a reason, so an awkward
+period (a suspect rain year, the gauge after a known break) can't be dropped
+without leaving a record. The run's statistics skip excluded days, the annual
+table counts them out of each year's window (so a year with an exclusion reads
+as a part year), and `CalibrationStats.exclusions` / `excludedDays` record what
+was applied and how many observed days it removed. Automatic calibration
+(§2.10b) always applies the same list. With none, every number is unchanged.
+Invalid stored entries are dropped with a run warning; the API rejects them on
+save. `calibrate/provenance.ts` holds the helpers.
+
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
-have an observation, in m³/s:
+have an observation and are not excluded, in m³/s:
 
 | Metric | Formula | Reads as |
 | --- | --- | --- |
@@ -680,10 +693,10 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   swaps in its natural flow and simulates only up to the last scored day,
   which is exact because the network is causal.
 - **Scored days.** Days with an observation inside the calibration window,
-  outside any exclusion period (`exclusions`). At least 30 are needed.
-  `exclusions` takes any date ranges, so a whole water year can be left out
-  (1 October to 30 September), but the app doesn't offer it yet: Fit
-  automatically uses the calibration window only.
+  outside every stored calibration exclusion (§2.10, whole water years or
+  date ranges, each with a reason) and any extra `exclusions` passed in. At
+  least 30 are needed. The report lists the exclusions it applied, and the
+  run's statistics score exactly the same days.
 - **Optimiser: DDS** (Tolson & Shoemaker 2007, `calibrate/dds.ts`). It is
   greedy, with perturbation size r = 0.2 of each parameter's range. Early on
   it perturbs every parameter, and later fewer (probability 1 − ln i / ln m).
@@ -748,6 +761,21 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   clean bill of health.
 - **In the app:** Settings → Flow calibration → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
+- **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
+  stores a `FitRecord` with the parameters: when (`fittedAt`), the engine
+  version, the runoff model, objective, seed, budget and runs used, the
+  parameters fitted and their values before and after, the record fitted to,
+  the calibration window and exclusions, whether validation was asked for and
+  against which independent record, every scored period (the in-sample fit,
+  the split-sample and dry → wet tests, the independent record) and the notes.
+  The same engine version, inputs and seed reproduce the fit exactly.
+  `editedParams` lists fitted parameters whose value in the settings no
+  longer matches the fit; the backend recomputes it on every save
+  (`resolveFitRecord`), so a hand edit marks the record ("parameters edited
+  since fit") rather than silently keeping it valid, and a client can't clear
+  the mark. Each run snapshots the record in effect in `model_run.inputs`.
+  `fitRecordStatus` also says when the runoff model, window, exclusions or
+  flow record have changed since the fit. The record never changes a result.
 - **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
   elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
   about 70 s in Node. `onProgress` reports every run and returns true to cancel, which

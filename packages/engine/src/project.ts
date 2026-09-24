@@ -1,6 +1,7 @@
 // Shape of a project's model configuration, shared by the backend (storage +
 // validation) and the frontend (forms). See docs/data-model.md for how each
 // field maps onto the b023 workbook.
+import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { ChirpsCorrection } from './rain';
@@ -128,6 +129,18 @@ export interface ProjectSettings {
 	 * null = observed gauge flow if present, else the logger.
 	 */
 	calibrationFlowKind: CalibrationFlowKind | null;
+	/**
+	 * Periods left out of every calibration score (automatic calibration and
+	 * the run's calibration statistics): whole water years or date ranges,
+	 * each with a reason (./calibrate/provenance.ts). Default none.
+	 */
+	calibrationExclusions: CalibrationExclusion[];
+	/**
+	 * The automatic fit whose parameters "Apply to form" wrote, with its
+	 * validation (./calibrate/provenance.ts). null = none: the parameters were
+	 * set by hand or imported. Never changes model results.
+	 */
+	fitRecord: FitRecord | null;
 	/** Thresholds of the input data-quality checks (./quality.ts). They never change model results. */
 	dataQuality: DataQualitySettings;
 	/**
@@ -217,6 +230,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationStart: null,
 		calibrationEnd: null,
 		calibrationFlowKind: null,
+		calibrationExclusions: [],
+		fitRecord: null,
 		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 },
 		wr2012: defaultWr2012Settings()
 	};
@@ -418,6 +433,13 @@ export interface CalibrationStats {
 	 * logger records measure impacted flow). Older runs always scored the outflow.
 	 */
 	simulatedKey?: 'natural_flow' | 'simulated_outflow';
+	/**
+	 * The stored calibration exclusions the run applied (engine ≥ 0.6.0), as
+	 * dates with their reasons; absent when none. Excluded days are not scored.
+	 */
+	exclusions?: ExclusionRange[];
+	/** Observed days inside the window that the exclusions left out (engine ≥ 0.6.0). */
+	excludedDays?: number;
 }
 
 /** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */

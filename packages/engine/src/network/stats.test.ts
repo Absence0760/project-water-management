@@ -175,3 +175,41 @@ describe('moriasiRating (Moriasi et al. 2007)', () => {
 		expect(moriasiRating('nse', NaN)).toBeNull();
 	});
 });
+
+describe('calibrationStats — exclusions', () => {
+	// Four days, 2020-09-29 … 2020-10-02; the last two are water year 2020.
+	const obs = [1, 2, 3, 4];
+	const sim = m3day([2, 2, 4, 4]);
+
+	it('leaves excluded days out of every score and reports what was left out', () => {
+		const c = calibrationStats(sim, obs, {
+			startDate: '2020-09-29',
+			exclusions: [{ start: '2020-10-01', end: '2020-10-02', reason: 'gauge outage' }]
+		});
+		const onlyFirstTwo = calibrationStats(sim.slice(0, 2), obs.slice(0, 2), { startDate: '2020-09-29' });
+		expect(c.days).toBe(2);
+		expect(c.nse).toBe(onlyFirstTwo.nse);
+		expect(c.pbias).toBe(onlyFirstTwo.pbias);
+		expect(c.excludedDays).toBe(2);
+		expect(c.exclusions).toEqual([{ start: '2020-10-01', end: '2020-10-02', reason: 'gauge outage' }]);
+		// The excluded water year has no paired days, so no row.
+		expect(c.annualVolumes!.map((y) => y.waterYear)).toEqual([2019]);
+	});
+
+	it("counts excluded days out of a year's window, so it reads as a part year", () => {
+		const c = calibrationStats(sim, obs, { startDate: '2020-09-29', exclusions: [{ start: '2020-09-29', end: '2020-09-29', reason: 'x' }] });
+		expect(c.annualVolumes!.find((y) => y.waterYear === 2019)!.daysInWindow).toBe(1);
+	});
+
+	it('is unchanged, with no exclusion fields, when there are none', () => {
+		const plain = calibrationStats(sim, obs, { startDate: '2020-09-29' });
+		expect(calibrationStats(sim, obs, { startDate: '2020-09-29', exclusions: [] })).toEqual(plain);
+		expect('excludedDays' in plain).toBe(false);
+	});
+
+	it('when everything is excluded, scores nothing', () => {
+		const c = calibrationStats(sim, obs, { startDate: '2020-09-29', exclusions: [{ start: '2020-01-01', end: '2021-01-01', reason: 'x' }] });
+		expect(c.days).toBe(0);
+		expect(c.excludedDays).toBe(4);
+	});
+});

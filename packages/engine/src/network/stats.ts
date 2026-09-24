@@ -1,5 +1,6 @@
 // Goodness-of-fit of simulated outflow against an observed flow record.
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
+import { excludedDayMask, type ExclusionRange } from '../calibrate/provenance';
 import type { AnnualVolume, CalibrationStats } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -10,6 +11,8 @@ export interface CalibrationWindow {
 	startDate: string;
 	windowStart?: string | null;
 	windowEnd?: string | null;
+	/** Periods left out of every score (settings.calibrationExclusions as dates). Needs startDate. */
+	exclusions?: readonly ExclusionRange[];
 }
 
 /**
@@ -44,15 +47,21 @@ export function calibrationStats(
 		if (window.windowEnd) to = Math.min(to, toEpochDay(window.windowEnd) - d0);
 	}
 	const hasWindow = d0 !== null && from <= to;
-	const base = {
-		windowStart: hasWindow ? fromEpochDay(d0! + from) : null,
-		windowEnd: hasWindow ? fromEpochDay(d0! + to) : null
-	};
-
-	const obsAt = (t: number): number | null => {
+	const exclusions = d0 !== null && window?.exclusions?.length ? window.exclusions : null;
+	const excluded = exclusions ? excludedDayMask(exclusions, window!.startDate, len) : null;
+	const rawObsAt = (t: number): number | null => {
 		const o = observedM3s[t];
 		return o === null || o === undefined || !Number.isFinite(o) ? null : o;
 	};
+	let excludedDays = 0;
+	if (excluded) for (let t = from; t <= to; t++) if (excluded[t] && rawObsAt(t) !== null) excludedDays++;
+	const base = {
+		windowStart: hasWindow ? fromEpochDay(d0! + from) : null,
+		windowEnd: hasWindow ? fromEpochDay(d0! + to) : null,
+		...(exclusions ? { exclusions: exclusions.map((x) => ({ ...x })), excludedDays } : {})
+	};
+
+	const obsAt = (t: number): number | null => (excluded?.[t] ? null : rawObsAt(t));
 
 	let n = 0;
 	let sumObs = 0;
@@ -144,7 +153,10 @@ export function calibrationStats(
 		// Days of this water year inside the window (whether observed or not): flags part years.
 		const a = Math.max(d0! + from, toEpochDay(`${y.waterYear}-10-01`));
 		const b = Math.min(d0! + to, toEpochDay(`${y.waterYear + 1}-09-30`));
-		y.daysInWindow = b - a + 1;
+		// Excluded days are outside the window too: a year with an exclusion reads as a part year.
+		let out = 0;
+		if (excluded) for (let e = a; e <= b; e++) out += excluded[e - d0!]!;
+		y.daysInWindow = b - a + 1 - out;
 		y.diffPct = y.observedMm3 !== 0 ? (100 * (y.simulatedMm3 - y.observedMm3)) / y.observedMm3 : null;
 	}
 

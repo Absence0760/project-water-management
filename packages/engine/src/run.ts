@@ -25,6 +25,7 @@ import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
+import { exclusionRanges, sanitizeExclusions } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
 import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
@@ -43,7 +44,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.7.1';
+export const ENGINE_VERSION = '0.8.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -206,7 +207,8 @@ export function runModelWith(
 				...calibrationStats(scoreNatural ? natural : simOutflow, observedM3s, {
 					startDate,
 					windowStart: settings.calibrationStart,
-					windowEnd: settings.calibrationEnd
+					windowEnd: settings.calibrationEnd,
+					exclusions: exclusionRanges(settings.calibrationExclusions)
 				}),
 				flowKind: observedKind,
 				simulatedKey: scoreNatural ? ('natural_flow' as const) : ('simulated_outflow' as const)
@@ -215,9 +217,11 @@ export function runModelWith(
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
-			settings.calibrationStart || settings.calibrationEnd
-				? 'observed flow has no values inside the calibration window'
-				: 'observed flow has no values inside the simulation period'
+			calibration.excludedDays
+				? 'every observed day inside the calibration window falls in a calibration exclusion'
+				: settings.calibrationStart || settings.calibrationEnd
+					? 'observed flow has no values inside the calibration window'
+					: 'observed flow has no values inside the simulation period'
 		);
 	}
 
@@ -603,6 +607,9 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		s.calibrationFlowKind = null;
 	}
 	s.calibrationFlowKind ??= null;
+	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
+	// Provenance only: never read by the model.
+	s.fitRecord = (raw?.fitRecord as ProjectSettings['fitRecord'] | undefined) ?? null;
 	for (const key of ['calibrationStart', 'calibrationEnd'] as const) {
 		const v = s[key];
 		if (v == null || v === '') {

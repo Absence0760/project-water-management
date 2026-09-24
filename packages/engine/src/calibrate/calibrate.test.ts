@@ -202,6 +202,46 @@ describe('calibrate', () => {
 		expect(report.fit.scores.days).toBe(700);
 	});
 
+	it('always leaves out the stored exclusions (a whole water year, a range), on top of any passed in', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
+		const all = prepareCalibration(input).scoredDays.length;
+		input.settings.calibrationExclusions = [
+			{ waterYear: 2011, reason: 'suspect rain' },
+			{ start: '2013-01-01', end: '2013-01-10', reason: 'gauge outage' }
+		];
+		const pb = prepareCalibration(input, [{ start: '2013-01-05', end: '2013-01-20' }]);
+		const d0 = toEpochDay('2010-10-01');
+		const dates = Array.from(pb.scoredDays, (t) => fromEpochDay(d0 + t));
+		expect(dates.some((d) => d >= '2011-10-01' && d <= '2012-09-30')).toBe(false);
+		expect(dates.some((d) => d >= '2013-01-01' && d <= '2013-01-20')).toBe(false);
+		expect(pb.scoredDays.length).toBe(all - 366 - 20);
+		expect(pb.exclusions).toEqual([
+			{ start: '2011-10-01', end: '2012-09-30' },
+			{ start: '2013-01-01', end: '2013-01-10' },
+			{ start: '2013-01-05', end: '2013-01-20' }
+		]);
+		const report = calibrate(input, { budget: 30, validate: false });
+		expect(report.exclusions).toHaveLength(2);
+		expect(report.fit.waterYears).not.toContain(2011);
+		// The same days runModel's calibration statistics score.
+		const stats = runModel(input).summary.calibration!;
+		expect(stats.days).toBe(report.fit.scores.days);
+		expect(stats.excludedDays).toBe(366 + 10);
+	});
+
+	it('runModel warns when the exclusions leave nothing to score, and drops an invalid one', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
+		input.settings.calibrationExclusions = [
+			{ start: '2000-01-01', end: '2030-01-01', reason: 'everything' },
+			{ waterYear: 2011, reason: '' }
+		];
+		const { summary } = runModel(input);
+		expect(summary.calibration!.days).toBe(0);
+		expect(summary.calibration!.exclusions).toEqual([{ start: '2000-01-01', end: '2030-01-01', reason: 'everything' }]);
+		expect(summary.warnings).toContain('every observed day inside the calibration window falls in a calibration exclusion');
+		expect(summary.warnings.some((w) => /calibration exclusion .* needs a reason; ignored/.test(w))).toBe(true);
+	});
+
 	it('reports a split-sample test, and a dry → wet test when there are enough water years', () => {
 		const report = calibrate(synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 8), { budget: 150, seed: 2 });
 		const ss = report.splitSample!;

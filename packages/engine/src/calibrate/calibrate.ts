@@ -32,6 +32,7 @@ import type { ParamSpec, RunoffModelId } from '../runoff/types';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { dds } from './dds';
+import { excludedDayMask, exclusionRanges } from './provenance';
 import { fitScores, OBJECTIVE_LABELS, objectiveLoss, type FitScores, type ObjectiveId } from './objective';
 
 const SEC_PER_DAY = 86_400;
@@ -66,7 +67,11 @@ export interface CalibrateOptions {
 	 * 0; legacy a, b and the season factors).
 	 */
 	free?: string[];
-	/** Periods left out of every score (a gauge outage, a known bad stretch). */
+	/**
+	 * Periods left out of every score (a gauge outage, a known bad stretch),
+	 * on top of the project's stored settings.calibrationExclusions, which
+	 * always apply.
+	 */
 	exclusions?: DateRange[];
 	/** Also run the split-sample and differential split-sample tests. Default true. */
 	validate?: boolean;
@@ -159,6 +164,8 @@ export interface CalibrationReport {
 	 * was on: its weight, and the fit with and without it. null (or absent) when off.
 	 */
 	marPenalty?: MarPenaltyResult | null;
+	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
+	exclusions: DateRange[];
 	/** Model runs used, over every stage. */
 	evaluations: number;
 	cancelled: boolean;
@@ -193,6 +200,8 @@ export interface CalibrationProblem {
 	natural: Float64Array;
 	/** The WR2012 MAR penalty when settings.wr2012.calibrationPenalty is on (and there is a reference), else null. */
 	marPenalty: Wr2012Penalty | null;
+	/** The exclusions applied: settings.calibrationExclusions, then the caller's. */
+	exclusions: DateRange[];
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
 	/**
@@ -235,12 +244,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const d0 = run.start;
 	const lo = settings.calibrationStart ? toEpochDay(settings.calibrationStart) - d0 : 0;
 	const hi = settings.calibrationEnd ? toEpochDay(settings.calibrationEnd) - d0 : days - 1;
-	const excluded = new Uint8Array(days);
-	for (const x of exclusions) {
-		const a = Math.max(0, toEpochDay(x.start) - d0);
-		const b = Math.min(days - 1, toEpochDay(x.end) - d0);
-		for (let t = a; t <= b; t++) excluded[t] = 1;
-	}
+	const allExclusions: DateRange[] = [...exclusionRanges(settings.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
+	const excluded = excludedDayMask(allExclusions, startDate, days);
 	const idx: number[] = [];
 	for (let t = Math.max(0, lo); t <= Math.min(days - 1, hi); t++) if (Number.isFinite(observed[t]!) && !excluded[t]) idx.push(t);
 	if (idx.length < 30) {
@@ -303,6 +308,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			area,
 			runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1)
 		),
+		exclusions: allExclusions,
 		simulate: simulator(idx[idx.length - 1]! + 1, scoreNatural),
 		record(k) {
 			if (!input.series?.[k]) return null;
@@ -591,6 +597,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		independentRecord,
 		marPenalty,
 		notes,
+		exclusions: pb.exclusions,
 		evaluations,
 		cancelled
 	};

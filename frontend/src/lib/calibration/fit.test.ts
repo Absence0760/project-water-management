@@ -39,6 +39,7 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 		differential: null,
 		independentRecord: null,
 		notes: [],
+		exclusions: [],
 		evaluations: 100,
 		cancelled: false,
 		...over

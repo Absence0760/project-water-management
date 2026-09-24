@@ -379,6 +379,62 @@ describe('diffInputs', () => {
 		expect(diffInputs(a, b).every((c) => c.area === 'settings' && c.kind === 'changed')).toBe(true);
 	});
 
+	it('describes calibration exclusions added, removed and re-reasoned', () => {
+		const a = snapshot();
+		a.settings.calibrationExclusions = [
+			{ waterYear: 2015, reason: 'suspect rain' },
+			{ start: '2017-01-01', end: '2017-02-01', reason: 'gauge outage' }
+		];
+		const b = structuredClone(a);
+		b.settings.calibrationExclusions = [
+			{ waterYear: 2015, reason: 'rain gauge moved' },
+			{ waterYear: 2018, reason: 'after the flood broke the weir' }
+		];
+		expect(diffInputs(a, b)).toEqual([
+			{
+				area: 'settings',
+				kind: 'removed',
+				subject: 'Calibration exclusion 2017-01-01 – 2017-02-01',
+				text: 'Calibration exclusion 2017-01-01 – 2017-02-01 removed (was: “gauge outage”)'
+			},
+			{
+				area: 'settings',
+				kind: 'changed',
+				subject: 'Calibration exclusion WY 2015/16',
+				text: 'Calibration exclusion WY 2015/16: reason “suspect rain” → “rain gauge moved”'
+			},
+			{
+				area: 'settings',
+				kind: 'added',
+				subject: 'Calibration exclusion WY 2018/19',
+				text: 'Calibration exclusion WY 2018/19 added: “after the flood broke the weir”'
+			}
+		]);
+		// Runs saved before exclusions existed compare as none.
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).calibrationExclusions;
+		expect(diffInputs(old, snapshot())).toEqual([]);
+	});
+
+	it('describes the fit record: set, replaced, edited since, and removed', () => {
+		const rec = { fittedAt: '2026-09-24T10:05:33.120Z', model: 'gr4j', objective: 'kgePrime', seed: 7, editedParams: [] as string[] };
+		const a = snapshot();
+		const b = structuredClone(a);
+		(b.settings as Record<string, unknown>).fitRecord = rec;
+		expect(texts(a, b)).toEqual(['Parameters now from a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 7)']);
+		expect(texts(b, a)).toEqual(['Fit record removed (was a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 7))']);
+		const edited = structuredClone(b);
+		(edited.settings as Record<string, unknown>).fitRecord = { ...rec, editedParams: ['x1'] };
+		expect(texts(b, edited)).toEqual(['Fit record: parameters edited since the fit (x1)']);
+		expect(texts(edited, b)).toEqual(['Fit record: parameters back to the fitted values (were edited: x1)']);
+		const refit = structuredClone(b);
+		(refit.settings as Record<string, unknown>).fitRecord = { ...rec, seed: 8, fittedAt: '2026-09-25T08:00:00Z' };
+		expect(texts(b, refit)).toEqual([
+			'Fit record: GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 7) → GR4J fit of 2026-09-25 08:00 UTC (KGE′, seed 8)'
+		]);
+		expect(diffInputs(b, structuredClone(b))).toEqual([]);
+	});
+
 	it('describes a switch of runoff model and GR4J parameter changes', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
