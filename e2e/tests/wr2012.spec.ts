@@ -51,6 +51,21 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(save).toBeDisabled();
 	await map.fill('');
 
+	// The MAR band (issue #4 phase 6): both bounds or neither, low ≤ high.
+	await section.getByLabel('Add a soft penalty on the MAR when fitting automatically').check();
+	await section.getByLabel('Use a MAR band instead of one target').check();
+	// Both blank is still valid (no band, a single target): only a nudge, Save stays enabled.
+	await expect(section.getByText('Enter both bounds, or untick')).toBeVisible();
+	await expect(save).toBeEnabled();
+	await section.getByLabel(/^Band low/).fill('20');
+	await expect(section.getByText('Enter both a low and high bound for the MAR band, or leave both blank.')).toBeVisible();
+	await expect(save).toBeDisabled();
+	await section.getByLabel(/^Band high/).fill('10');
+	await expect(section.getByText('The MAR band’s low bound can’t be above its high bound.')).toBeVisible();
+	await expect(save).toBeDisabled();
+	await section.getByLabel(/^Band high/).fill('30');
+	await expect(section.getByText('The MAR band’s low bound can’t be above its high bound.')).toHaveCount(0);
+
 	await expect(save).toBeEnabled();
 	await save.click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
@@ -60,6 +75,8 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(section.getByLabel(/^Naturalised MAR/)).toHaveValue('1200');
 	await expect(section.getByLabel('WR2012 monthly mean, Jul, Mm³')).toHaveValue('100');
 	await expect(section.getByLabel('Scale the reference by')).toHaveValue('area');
+	await expect(section.getByLabel(/^Band low/)).toHaveValue('20');
+	await expect(section.getByLabel(/^Band high/)).toHaveValue('30');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('With WR2012');
@@ -95,7 +112,7 @@ test('run comparison lists the WR2012 inputs that changed and compares the ratio
 	await updateSettings(page.request, copy, {
 		wr2012: {
 			reference: { quaternary: 'Z99A', areaKm2: 60, marMm3: 6, monthlyMm3, periodStart: 1990, periodEnd: 2025, mapMm: null, source: 'Synthetic' },
-			calibrationPenalty: { enabled: true, weight: 1 }
+			calibrationPenalty: { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null }
 		}
 	});
 	const after = await createRun(page.request, copy, 'With reference');

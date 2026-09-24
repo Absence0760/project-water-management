@@ -9,9 +9,10 @@ import { expect, test } from '../support/fixtures.ts';
 /** The <dd> next to a <dt> in a definition list. */
 const definition = (scope: Locator, term: string) => scope.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) }).locator('xpath=following-sibling::dd[1]');
 
-async function fitAndApply(page: Page, { seed, validate }: { seed: string; validate: boolean }) {
+async function fitAndApply(page: Page, { seed, validate, bounds }: { seed: string; validate: boolean; bounds?: 'wide' | 'typical' }) {
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await fit.getByLabel('Seed').fill(seed);
+	if (bounds) await fit.getByLabel(/^Bounds/).selectOption(bounds);
 	await fit.getByLabel('Model runs per fit').fill('50');
 	if (!validate) await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
@@ -27,9 +28,10 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Seed')).toHaveValue('1');
 
-	await fitAndApply(page, { seed: '7', validate: true });
+	await fitAndApply(page, { seed: '7', validate: true, bounds: 'typical' });
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
 	await expect(definition(record, 'Seed')).toHaveText('7');
+	await expect(definition(record, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
@@ -42,6 +44,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(prov).toContainText(/GR4J fit of \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
 	await expect(definition(prov, 'Seed')).toHaveText('7');
 	await expect(definition(prov, 'Objective')).toHaveText('KGE′ (Kling–Gupta, 2012)');
+	await expect(definition(prov, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	// Full fit and split-sample; 120 days hold no water years for the dry → wet test.
 	await expect(definition(prov, 'Model runs')).toHaveText('50 per fit, 100 in all');
 	// The in-sample score sits next to the validation scores.
