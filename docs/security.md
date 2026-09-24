@@ -179,7 +179,9 @@ readable by anyone. The rules:
 - **gitleaks** runs as a pre-commit hook (`pre-commit install`, never
   `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
   weekly over the whole history (`gitleaks-sweep.yml`, which opens a
-  `secret-scan` issue when it fails). Before pushing a branch, check the diff
+  `secret-scan` issue when it fails). Reviewed false positives are pinned by
+  exact fingerprint in `.gitleaksignore` (m³/day field names,
+  fake test tokens); add one only after checking the match isn't real. Before pushing a branch, check the diff
   for client names as well as for keys.
 - If something slips in: **don't push**. Rewrite the history locally, then tell
   the operator (see the incident playbook below).
