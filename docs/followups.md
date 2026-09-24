@@ -1,4 +1,4 @@
-# Follow-ups: open work (updated 2026-09-23, after the audit and hardening round)
+# Follow-ups: open work (updated 2026-09-24, after the Phase 6 persona review)
 
 Everything below is known, unfinished work. Longer-term features live in
 [planned-work.md](./planned-work.md); client and hydrologist questions are in
@@ -63,10 +63,135 @@ Tick items off (or move them into an issue) as they are done.
       Are these right for these catchments? They're fixed in code
       ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree));
       make them settings if the hydrologist wants to tune them.
+      A simulated hydrologist review (2026-09-24; see "Issue #4 Phase 6"
+      below) recommends:
+      1. Make two limits editable in `settings.dataQuality`: the minimum
+         wet-season zero-rain days and the CHIRPS ratio cutoff. Keep the
+         sample-size floors as constants.
+      2. **Check zero runs against CHIRPS:** if CHIRPS recorded at least half
+         its usual rain over the run, call it "probably missing data";
+         otherwise, "a long dry spell that may be real". This fixes the false
+         alarms that fixed day-counts would raise in the semi-arid Karoo and
+         Northern Cape.
+      3. Judge a zero run by the rain the climatology would have put on those
+         days (flag it at 25 % or more of mean annual rain, with 60 days as a
+         secondary floor), not by how many days it lasted.
+      4. Compare each year with a moving median of about ±5 years instead of
+         one record-wide median, because the catchment/CHIRPS ratio drifts
+         over decades.
+      5. Scale the CHIRPS minimum: the larger of 50 mm and 25 % of median
+         annual CHIRPS.
+
+      Test the semi-arid defaults on a Karoo gauge record with a known
+      drought (e.g. 2015–19) before changing them. Do this after the CHIRPS
+      fallback bias correction lands, because it uses these flags.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny
       demand (Q12/Q13). Decide how to show it once answered.
+
+## Issue #4 Phase 6: simulated review findings (2026-09-24)
+
+The `persona-hydrologist` and `persona-licensing-authority` agents answered
+the six Phase 6 questions in issue #4. Their full reports are in
+`reviews/persona-*-phase6.md`, gitignored and local only, because they quote
+client numbers. **These are simulated reviews: a pre-filled pack for the real
+hydrologist and a CMA official, not sign-off.** Nothing below is recorded as
+a decision in `docs/plan.md` (D3).
+
+**Recommendation to put to the hydrologist.** Make GR4J (with X2 = 0) the
+default, and don't build the IHACRES-CMD benchmark (Phase 7) first. Three
+conditions come before any client numbers:
+- [ ] **CHIRPS fallback bias correction.** Raw CHIRPS reads well below the
+      catchment rain, especially in winter, so fallback years produce almost
+      no flow under a water-conserving model. This is in progress on its own
+      branch.
+- [ ] **Recalibrate on a long, trusted record.** The logger-only fit gives
+      X1 and X3 outside the typical GR4J ranges, and natural flow *below* the
+      impacted gauge, which is physically impossible.
+
+      ⚠ **Conflict to resolve with the hydrologist.** The persona recommends
+      calibrating on the long gauge record (water years 1981–2013, excluding
+      bad-rain years) and validating on the logger. But issue #1's research
+      found that the gauge column is a *neighbouring* river's gauge,
+      area-scaled from 2010, and "not a valid target for natural flow here".
+      The persona's case rests on the two records agreeing closely over their
+      overlap. The real hydrologist must decide whether the gauge may be used
+      for calibration before either advice is followed.
+- [ ] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
+      It trades off against X1 and X3, so it must never be calibrated. The
+      EWR result is sensitive to it: re-run at 0.6 and 0.85.
+
+**Answers to put to the hydrologist and the CMA** (the full reasoning is in
+the reports):
+- **Q1: model on record.** GR4J is fine as the daily impact model, but every
+  evidence run must carry the WR2012 comparison. Pitman is desirable, not
+  mandatory. Legacy is not acceptable as evidence at all, because it
+  doesn't conserve water (H1). If both models run, declare the primary one
+  before seeing results.
+- **Q2: WR2012.** Always report it; never make it a hard constraint. Keep
+  the soft MAR penalty off by default and record its weight when it's on.
+  Flag a simulated MAR that differs from WR2012 by more than 10 %, 25 % (or
+  15 % wetter) or 50 %. Those bands are persona judgement for a CMA official
+  to confirm. Phase 8 is being built to these criteria.
+- **Q3: other upstream use.** Probably yes. The models keep much more low
+  flow than the gauge records, and gauge runoff per mm of rain drops around
+  2009, before the instrument split. Do WP-1.33 (other water users) and
+  WP-1.21 (dam evaporation) before the final calibration.
+  - [ ] **Gap:** development (dams, abstraction) can't vary over time within
+        a run.
+- **Q4: pan and lake factors.** These are two separate settings. PET uses a
+  monthly A-pan coefficient (FAO-56 range 0.35–0.85). Dams use WR90 lake
+  factors, which are **S-pan** based; the roadmap WP-1.21 spec is now
+  corrected. The actual WR90 values for the evaporation zone haven't been
+  read yet.
+- **Q5: split-sample periods.** Split-sample, dry→wet, and an independent
+  instrument. Cross-record validation has landed. Stored exclusions (whole
+  water years, each with a reason) are in progress with fit provenance.
+- **Q6: uncertainty.** SA Reserve practice uses confidence ratings and
+  assurance rules, not a numeric band. Show monthly compliance against the
+  EWR assurance rules, not a raw count of days below the EWR. Phase 9
+  criteria are below.
+
+**Open items (not yet started):**
+- [ ] **Phase 9: uncertainty bands.** Build to these criteria (assessor):
+      - The ensemble comes from a seeded sample across the parameter bounds
+        (Latin hypercube or DDS-AU), **not** the optimiser's search path.
+      - The ensemble also varies the pan coefficient, the rain source and the
+        observed record (hydrologist).
+      - A parameter set is kept only if it passes stored, diffed thresholds:
+        a skill score, the Phase 8 WR2012 bounds, and a low-flow check.
+      - Report how many held-out observations fall inside the band, with a
+        warning below 70 %.
+      - Show no percentiles with fewer than 30 accepted members.
+      - 5–95 % bands on EWR days not met (monthly and total), shortfall
+        volume, curtailment per farm, annual volumes and MAR.
+      - Paired bands on the difference between a run and its baseline (the
+        application's extra impact).
+      - Monthly flow-duration curves against the EWR line.
+      - A band per runoff model, never pooled.
+      - Seed, method, thresholds, the kept parameter sets and the
+        percentiles are stored and reproducible.
+      - The decision rule is printed next to the band.
+- [ ] **EWR compliance by the Reserve's assurance rules**, monthly, as the
+      headline instead of raw days-not-met (hydrologist Q6).
+- [ ] **Nominated evidence run.** Record which run and which model an
+      applicant nominated as evidence, so they can't pick whichever model is
+      kindest after the fact. The assessor rated this Medium.
+- [ ] **Hydrologist plausibility checks** (as run warnings or a report):
+      - natural flow ≥ impacted observed flow + modelled abstraction in every
+        water year;
+      - EWR days reported separately for good-rain and fallback-rain years;
+      - a double-mass curve of gauge flow against rain, to tell new upstream
+        use from a failing gauge;
+      - dry-season low-flow duration curves overlaid for gauge, logger and
+        each model.
+- [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
+      hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
+- [ ] **Persona tooling:** `pnpm -C packages/engine exec tsx` fails because
+      the engine workspace has no `tsx`. The persona agents are told to use
+      it (`.claude/agents/persona-*.md`); either add `tsx` as an engine dev
+      dependency or point the agents at the backend's copy.
 
 ## Verification
 
