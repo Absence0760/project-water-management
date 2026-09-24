@@ -463,7 +463,9 @@ export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: num
  * migration 006 brings the database: a node without `irrigationEfficiency`
  * gets it from its `returnFlowPct` (irrigationFromReturnFlow), which is
  * dropped; a node without the dam evaporation fields gets their defaults
- * (area unknown, exponent 0.7, no seepage). Fields already present are kept.
+ * (area unknown, exponent 0.7, no seepage); a transfer without a priority
+ * gets its position in the list (the order it ran in). Fields already
+ * present are kept.
  * Pure; returns a copy.
  */
 export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unknown }>(model: M): M {
@@ -483,7 +485,11 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				return n;
 			})
 		: model.nodes;
-	return { ...model, nodes };
+	// Transfer priority (Q18): the order the rules ran in before, as migration 006 sets it.
+	const transfers = Array.isArray(model.transfers)
+		? model.transfers.map((raw, i) => (raw && typeof raw === 'object' && (raw as { priority?: unknown }).priority === undefined ? { ...(raw as object), priority: i } : raw))
+		: model.transfers;
+	return { ...model, nodes, transfers };
 }
 
 export interface CropDef {
@@ -511,6 +517,12 @@ export interface Transfer {
 	dailyCapM3: number | null;
 	minStoragePct: number;
 	enabled: boolean;
+	/**
+	 * Integer, lower moves first (engine ≥ 0.16.0, audit Q18). Rules of equal
+	 * priority from one source dam share its water pro rata to their limits,
+	 * so the list order never matters.
+	 */
+	priority: number;
 }
 
 export interface ProjectModel {

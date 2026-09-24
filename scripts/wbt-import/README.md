@@ -63,7 +63,9 @@ rows and columns don't break it.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
-  from the rate. Month lists keep the months they name; the workbook's
+  from the rate. `priority` is the rule's position (0, 1, …), so rules from
+  one dam are served in the workbook's column order (docs/engine-audit.md
+  Q18). Month lists keep the months they name; the workbook's
   substring matching (which makes "11" also mean January) is a bug, and the
   script prints a `note:` when a list relied on it (quirk 2 in
   `packages/engine/src/network/README.md`, docs/engine-audit.md M1).

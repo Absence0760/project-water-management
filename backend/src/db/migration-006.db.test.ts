@@ -41,6 +41,12 @@ beforeAll(async () => {
 			($3, $4, 'All returns', 'farm', 0, 0, 1)`,
 		[node(1), node(2), node(3), PROJECT]
 	);
+	// Three transfer rules from one dam; the engine served them in id order.
+	await db.query(
+		`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s) VALUES
+			($1, $4, $5, $6, '{1}', 1), ($2, $4, $5, $6, '{1}', 1), ($3, $4, $5, $6, '{1}', 1)`,
+		['00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000202', PROJECT, node(1), node(2)]
+	);
 	await apply('006_farm_dam_ops.sql');
 }, 60_000);
 
@@ -71,6 +77,14 @@ describe('migration 006: farm and dam operating rules', () => {
 		await expect(db.query(`UPDATE node SET dam_area_exponent = 0 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
 		await expect(db.query(`UPDATE node SET dam_seepage_per_day = 1.5 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
 		await expect(db.query(`UPDATE node SET dam_area_full_m2 = -1 WHERE id = $1`, [node(1)])).rejects.toThrow(/check constraint/);
+	});
+
+	it('Q18: gives each transfer rule its old position (id order) as its priority', async () => {
+		const { rows } = await db.query<{ id: string; priority: number }>('SELECT id, priority FROM transfer ORDER BY id');
+		expect(rows.map((r) => r.priority)).toEqual([0, 1, 2]);
+		await db.query(`INSERT INTO transfer (project_id, from_node_id, to_node_id) VALUES ($1, $2, $3)`, [PROJECT, node(2), node(1)]);
+		const fresh = (await db.query(`SELECT priority FROM transfer WHERE from_node_id = $1`, [node(2)])).rows[0];
+		expect(fresh).toEqual({ priority: 0 });
 	});
 
 	it('N1: a new farm defaults to 80 % efficiency with half its losses returning, and e must be above 0', async () => {

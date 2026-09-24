@@ -26,7 +26,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
 const TRANSFER: Record<keyof Transfer, true> = {
-	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true
+	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true,
+	priority: true
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,

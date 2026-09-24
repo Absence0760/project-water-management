@@ -379,7 +379,7 @@ describe('diffInputs', () => {
 	});
 
 	it('describes transfers matched by route across a copy', () => {
-		const t = { id: 't1', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 11, 12, 1, 2, 3], maxRateM3s: 0.05, dailyCapM3: null, minStoragePct: 0.2, enabled: true };
+		const t = { id: 't1', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 11, 12, 1, 2, 3], maxRateM3s: 0.05, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 };
 		const a = snapshot();
 		const b = copyWithFreshIds(snapshot({ model: { ...a.model, transfers: [t] } }));
 		expect(texts(a, b)).toEqual(['Transfer Rooikloof → Bergwater added (0.05 m³/s, Oct–Mar)']);
@@ -594,7 +594,7 @@ describe('diffInputs', () => {
 
 	it('treats month lists as sets: order and repeats are not a change', () => {
 		const a = snapshot();
-		a.model.transfers = [{ id: 't', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 2, 1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.3, enabled: true }];
+		a.model.transfers = [{ id: 't', fromNodeId: 'f1', toNodeId: 'f2', months: [10, 2, 1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0.3, enabled: true, priority: 0 }];
 		a.settings.calibration!.summerMonths = [12, 1, 11];
 		const b = structuredClone(a);
 		b.model.transfers[0]!.months = [1, 2, 10, 10];

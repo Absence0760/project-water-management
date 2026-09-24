@@ -50,7 +50,9 @@ export function newTransfer(fromNodeId: string, toNodeId: string): Transfer {
 		maxRateM3s: 0,
 		dailyCapM3: null,
 		minStoragePct: 0,
-		enabled: true
+		enabled: true,
+		// Equal priorities share a source dam pro rata (audit Q18); raise it to serve a rule later.
+		priority: 0
 	};
 }
 
@@ -146,6 +148,8 @@ export class ModelEditor {
 	addTransfer() {
 		const [a, b] = this.model.nodes;
 		const t = newTransfer(a?.id ?? '', b?.id ?? a?.id ?? '');
+		// Served after the rules already there, as a new rule was before priorities (Q18).
+		if (this.model.transfers.length) t.priority = Math.max(...this.model.transfers.map((x) => x.priority)) + 1;
 		this.model.transfers.push(t);
 		return t;
 	}

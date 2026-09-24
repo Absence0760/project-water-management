@@ -812,6 +812,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.maxRateM3s !== y.maxRateM3s) parts.push(`max rate ${fmtValue(x.maxRateM3s)} → ${fmtValue(y.maxRateM3s)} m³/s`);
 		if (x.dailyCapM3 !== y.dailyCapM3) parts.push(`daily cap ${withUnit('m³', 0)(x.dailyCapM3)} → ${withUnit('m³', 0)(y.dailyCapM3)}`);
 		if (x.minStoragePct !== y.minStoragePct) parts.push(`minimum source storage ${pct(x.minStoragePct)} → ${pct(y.minStoragePct)}`);
+		if (x.priority !== y.priority) parts.push(`priority ${fmtValue(x.priority)} → ${fmtValue(y.priority)}`);
 		for (const p of parts) out.push({ area: 'transfers', kind: 'changed', subject: r, text: `Transfer ${r}: ${p}` });
 	}
 	return out;

@@ -129,6 +129,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (t.months.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) {
 			issues.push({ area: 'transfers', message: `${label}: months must be 1–12.` });
 		}
+		if (!Number.isInteger(t.priority)) {
+			issues.push({ area: 'transfers', message: `${label}: priority must be a whole number.` });
+		}
 		if (!inRange(t.minStoragePct, 0, 1)) {
 			issues.push({ area: 'transfers', message: `${label}: minimum storage must be between 0% and 100%.` });
 		}

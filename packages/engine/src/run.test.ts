@@ -589,6 +589,7 @@ describe('runModel — transfers', () => {
 		dailyCapM3: null,
 		minStoragePct: 0.3,
 		enabled: true,
+		priority: 0,
 		...over
 	});
 	// S and R (and R2 below) drain into the outflow gauge G.
@@ -630,13 +631,14 @@ describe('runModel — transfers', () => {
 		expect(get(off, 'R', 'transfer')).toEqual([0]);
 	});
 
-	it('shares one dam between several transfers on the same day (never overdraws)', () => {
+	it('shares one dam between several transfers on the same day (never overdraws), lower priority first (Q18)', () => {
 		// S: start 4000, keep 3000 → 1000 available. Two 864 m³/day rules from S:
-		// the first (document order) takes 864, the second only the remaining 136.
-		// Previously each rule saw yesterday's full storage and 1728 left the dam.
+		// priority 0 takes 864, priority 1 only the remaining 136. Before engine
+		// 0.9 each rule saw yesterday's full storage and 1728 left the dam.
 		const out = run({
 			nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2, downstreamNodeId: 'G' })],
-			transfers: [transfer(), transfer({ id: 't2', toNodeId: 'R2' })],
+			// Listed second but served first would change nothing: the priority decides, not the list.
+			transfers: [transfer({ id: 't2', toNodeId: 'R2', priority: 1 }), transfer({ priority: 0 })],
 			natural: [0],
 			startDate: '2021-01-01'
 		});
@@ -656,6 +658,69 @@ describe('runModel — transfers', () => {
 		});
 		expect(get(out, 'R', 'transfer')).toEqual([500]);
 		expect(get(out, 'S', 'dam_storage')).toEqual([3500]);
+	});
+
+	it('shares a dam pro rata to each rule\'s limit when the rules have the same priority, whatever the list order (Q18)', () => {
+		// 1000 available; limits 864 and 432 (a 0.005 m³/s rule): 1000 × 864/1296 and 1000 × 432/1296.
+		const both = (order: 1 | -1) =>
+			run({
+				nodes: [...nodes(), node('R2', { areaKm2: 0, damCapacityM3: 10_000, sortOrder: 2, downstreamNodeId: 'G' })],
+				transfers: [transfer({ priority: 3 }), transfer({ id: 't2', toNodeId: 'R2', maxRateM3s: 0.005, priority: 3 })].sort(() => order),
+				natural: [0],
+				startDate: '2021-01-01'
+			});
+		for (const out of [both(1), both(-1)]) {
+			expect(get(out, 'R', 'transfer')[0]).toBeCloseTo(2000 / 3, 9);
+			expect(get(out, 'R2', 'transfer')[0]).toBeCloseTo(1000 / 3, 9);
+			expect(get(out, 'S', 'dam_storage')[0]).toBeCloseTo(3000, 9);
+		}
+	});
+
+	it('caps a transfer at the destination\'s room: free space in its dam plus its demand that day (N4)', () => {
+		// R's dam is 99 % full (9900 of 10 000) with no demand: only 100 m³ fits, none spills.
+		const full = run({
+			nodes: nodes().map((n) => (n.id === 'R' ? { ...n, damInitialPct: 0.99 } : n)),
+			transfers: [transfer()],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(full, 'R', 'transfer')).toEqual([100]);
+		expect(get(full, 'R', 'spill')).toEqual([0]);
+		expect(get(full, 'S', 'dam_storage')).toEqual([3900]);
+	});
+
+	it('still serves the demand of a destination without a dam (N4)', () => {
+		// R has no dam and needs 100 m³/day (1000 m² × 3100 mm ÷ 1000 ÷ 31 in January): the transfer brings exactly that.
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const out = run({
+			nodes: nodes().map((n) => (n.id === 'R' ? { ...n, damCapacityM3: 0 } : n)),
+			crops,
+			cropAreas: [{ nodeId: 'R', cropId: 'c', areaM2: 1000 }],
+			transfers: [transfer()],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(out, 'R', 'transfer')).toEqual([100]);
+		expect(get(out, 'R', 'supplied')).toEqual([100]);
+		expect(get(out, 'R', 'deficit')).toEqual([0]);
+	});
+
+	it('shares a destination\'s room pro rata between two sources of the same priority (N4)', () => {
+		// S and S2 both 1000 above their reserve; R has room for 300; limits 864 and 432 → 200 and 100.
+		const out = run({
+			nodes: [
+				...nodes().map((n) => (n.id === 'R' ? { ...n, damCapacityM3: 1000, damInitialPct: 0.7 } : n)),
+				node('S2', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 0.4, sortOrder: 3, downstreamNodeId: 'G' })
+			],
+			transfers: [transfer(), transfer({ id: 't2', fromNodeId: 'S2', maxRateM3s: 0.005 })],
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		expect(get(out, 'S', 'transfer')[0]).toBeCloseTo(-200, 9);
+		expect(get(out, 'S2', 'transfer')[0]).toBeCloseTo(-100, 9);
+		expect(get(out, 'R', 'dam_storage')[0]).toBeCloseTo(1000, 9);
+		expect(get(out, 'R', 'spill')).toEqual([0]);
 	});
 
 	it('skips transfers involving a gauge, with a warning', () => {

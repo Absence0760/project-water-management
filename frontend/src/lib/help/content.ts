@@ -582,12 +582,24 @@ export const HELP: HelpEntry[] = [
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
 		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',
-		long: 'Checked against yesterday’s end-of-day storage. The reserve kept is the higher of this value and the source dam’s minimum operating level. The receiving dam’s free space is not checked: water that doesn’t fit spills (open question Q3).',
+		long: 'Checked against yesterday’s end-of-day storage. The reserve kept is the higher of this value and the source dam’s minimum operating level.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'transfers',
 		fields: ['transfer.minStoragePct'],
 		related: ['dam-min', 'transfer'],
 		source: 'b023 Transfers configuration; docs/model.md §3 Q3'
+	},
+	{
+		id: 'transfer-priority',
+		term: 'Transfer priority and the receiver’s room',
+		short: 'Rules with a lower priority move first; rules of equal priority from one dam share it in proportion to their limits.',
+		long: 'Each day, before any farm irrigates, each rule moves the smallest of: what its source dam holds above its minimum (yesterday’s storage, less what earlier rules took), the room at its destination (free space in the destination’s dam plus that day’s irrigation demand, less what other rules already sent it), and its rate or daily cap. A transfer to a farm with no dam still serves the farm’s demand; water is never pumped into a full dam only to spill.\n\nRules run by priority, lowest first. Rules with the same priority share: two rules from one dam split its water in proportion to their own limits, and two rules into one farm split its room the same way, so the order of the list never changes a result. New rules start after the existing ones. The source’s own irrigation comes after the day’s transfers (the source doesn’t irrigate first).\n\nDecided on the recommendation of simulated hydrologist and licensing reviews (engine 0.16.0), pending confirmation by the project hydrologist.',
+		units: 'whole number',
+		category: 'transfers',
+		aliases: ['priority', 'order', 'pro rata', 'free space', 'receiving dam'],
+		fields: ['transfer.priority'],
+		related: ['transfer', 'transfer-min-storage', 'transfer-rate'],
+		source: 'docs/engine-audit.md N4, Q18; docs/model.md §2.6'
 	},
 
 	// ---- Natural flow and calibration -----------------------------------------

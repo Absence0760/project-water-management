@@ -44,6 +44,17 @@ describe('ModelBody (PUT /model, project documents)', () => {
 		expect(ModelBody.safeParse(body([out, { ...farm, lossReturnFraction: -0.1 }])).success).toBe(false);
 	});
 
+	it('needs a whole-number transfer priority, and gives a transfer from an older document its list position (Q18)', () => {
+		const out = node('Gauge', null);
+		const a = node('A', out.id);
+		const b = node('B', out.id);
+		const t = { id: crypto.randomUUID(), fromNodeId: a.id, toNodeId: b.id, months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true };
+		const m = (transfers: Record<string, unknown>[]) => ({ nodes: [out, a, b], crops: [], cropAreas: [], transfers });
+		expect(ModelBody.safeParse(m([{ ...t, priority: 1.5 }])).success).toBe(false);
+		const parsed = ModelBody.parse(m([t, { ...t, id: crypto.randomUUID() }]));
+		expect(parsed.transfers.map((x) => x.priority)).toEqual([0, 1]);
+	});
+
 	it('reads a model from before engine 0.16.0 as migration 006 stored it: return flow % → efficiency', () => {
 		const out = node('Gauge', null);
 		const { irrigationEfficiency: _e, lossReturnFraction: _b, ...legacy } = node('A', out.id);

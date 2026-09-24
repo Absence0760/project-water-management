@@ -767,6 +767,8 @@ def extract(
                     "dailyCapM3": None,
                     "minStoragePct": t["minStoragePct"],
                     "enabled": True,
+                    # The workbook's columns ran in order; equal priorities would share a dam (Q18).
+                    "priority": len(model_transfers),
                 }
             )
 

@@ -1000,6 +1000,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** implement the hydrologist's answers on the small operating-rule
   questions.
+- **Status:** Q5, N4/Q3 and Q18 **landed (engine 0.15.0 → 0.16.0 on this
+  branch)** on persona recommendation, pending the hydrologist: the room cap
+  includes the destination's demand, `transfer.priority` with pro rata ties,
+  and the source still doesn't irrigate first.
 - **Changes:** each item is only if the answer asks for it.
   - **N4/Q3:** in `network/simulate.ts`, cap a transfer at the receiver's
     free space at the start of the day (`cap − Q[t−1]`).

@@ -268,6 +268,11 @@ Ids are client-generated UUIDs; rows missing from a `PUT` are deleted.
 | GET | `/projects/:id/model` | – | `ProjectModel` | viewer |
 | PUT | `/projects/:id/model` | `ProjectModel` | `ProjectModel` | editor |
 
+Transfers carry `priority` (integer, lower moves first, engine ≥ 0.16.0);
+nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
+(nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
+(an older document or tab) is read as migration 006 stored the database.
+
 Validation on `PUT`: node names unique; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a
 tree (no cycles) with exactly one node whose `downstreamNodeId` is `null`

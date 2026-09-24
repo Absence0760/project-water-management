@@ -502,7 +502,9 @@ export function buildNetworkPlan(
 			activeMonth,
 			// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
 			reserveM3: nodes[from]!.damCapacityM3 * Math.max(tr.minStoragePct, nodes[from]!.damMinPct),
-			maxDailyM3: Math.max(0, maxDaily)
+			maxDailyM3: Math.max(0, maxDaily),
+			// Lower moves first; a rule without one (an older model) runs in list order, as before (Q18).
+			priority: Number.isFinite(tr.priority) ? tr.priority : 0
 		});
 	}
 

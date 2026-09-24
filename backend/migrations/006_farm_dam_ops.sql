@@ -70,3 +70,22 @@ COMMENT ON COLUMN node.dam_area_exponent IS
 	'Exponent b of A = A_full x (S / capacity)^b (0 < b <= 3; Liebe et al. 2005: 0.7). Engine >= 0.16.0.';
 COMMENT ON COLUMN node.dam_seepage_per_day IS
 	'Seepage per day as a fraction of storage; it joins the outflow. Engine >= 0.16.0.';
+
+-- ---------------------------------------------------------------------------
+-- N4 / Q3 / Q18: transfer rules. Each rule moves MAX(0, MIN(source free,
+-- destination room, max daily)), with destination room = capacity − storage
+-- yesterday + the destination's demand today − what is already scheduled into
+-- it, so water isn't pumped into a full dam only to spill. Rules run by
+-- priority, lower first; rules of equal priority from one source dam share it
+-- pro rata to their limits. The engine used to serve rules in the order the
+-- model listed them, which was id order (loadModel ORDER BY id), so each
+-- project's rules get priority = their position in id order: a dam with one
+-- rule, or several rules at distinct priorities, runs as before apart from
+-- the room cap. Table-level grants cover the new column.
+-- ---------------------------------------------------------------------------
+ALTER TABLE transfer ADD COLUMN priority integer NOT NULL DEFAULT 0;
+UPDATE transfer t SET priority = o.rank
+FROM (SELECT id, (row_number() OVER (PARTITION BY project_id ORDER BY id) - 1)::integer AS rank FROM transfer) o
+WHERE o.id = t.id;
+COMMENT ON COLUMN transfer.priority IS
+	'Lower moves first; equal priorities from one source dam share it pro rata to their limits. Engine >= 0.16.0.';

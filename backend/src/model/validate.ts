@@ -9,7 +9,8 @@ const nonNeg = z.number().finite().min(0);
  * A project model as PUT /model and a project document carry it. A model from
  * an older engine (a document exported before 0.16.0, a stale browser tab) is
  * read as migration 006 stored the database: `returnFlowPct` becomes irrigation
- * efficiency and loss return (upgradeLegacyModel).
+ * efficiency and loss return, missing dam fields get their defaults and a
+ * transfer without a priority gets its list position (upgradeLegacyModel).
  */
 export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgradeLegacyModel(v as { nodes?: unknown }) : v), z.object({
 	nodes: z
@@ -61,7 +62,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				maxRateM3s: nonNeg,
 				dailyCapM3: nonNeg.nullable(),
 				minStoragePct: frac,
-				enabled: z.boolean()
+				enabled: z.boolean(),
+				// Lower moves first; equal priorities share a source dam pro rata (audit Q18).
+				priority: z.number().int().min(-1_000_000).max(1_000_000)
 			})
 		)
 		.max(500)

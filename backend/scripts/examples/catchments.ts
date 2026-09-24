@@ -131,7 +131,8 @@ function build(spec: CatchmentSpec): ExampleProject {
 		maxRateM3s: t.maxRateM3s,
 		dailyCapM3: null,
 		minStoragePct: t.minStoragePct,
-		enabled: true
+		enabled: true,
+		priority: i
 	}));
 	const model: ProjectModel = { nodes, crops, cropAreas, transfers };
 

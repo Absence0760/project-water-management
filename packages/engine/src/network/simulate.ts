@@ -75,10 +75,15 @@ export interface PlanTransfer {
 	to: number;
 	/** activeMonth[m] for calendar month m (1–12). */
 	activeMonth: Uint8Array;
-	/** Source storage kept back: dam capacity × min storage %. */
+	/** Source storage kept back: dam capacity × MAX(min storage %, the dam's minimum operating level). */
 	reserveM3: number;
 	/** Most that can move in one day (m³). */
 	maxDailyM3: number;
+	/**
+	 * Lower moves first (engine ≥ 0.16.0, audit Q18). Rules of equal priority
+	 * share the water pro rata, so the list order never matters.
+	 */
+	priority: number;
 }
 
 export interface NetworkPlan {
@@ -212,28 +217,78 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
-	// Volume already committed today by earlier transfers from each source dam.
+	// Volume already committed today by earlier transfers from each source dam,
+	// and already scheduled into each destination.
 	const drawnToday = new Float64Array(nodes.length);
+	const intoToday = new Float64Array(nodes.length);
+	// Transfer rules by priority, lowest first (audit Q18).
+	const levels = [...new Set(transfers.map((tr) => tr.priority))].sort((a, b) => a - b).map((p) => transfers.flatMap((tr, k) => (tr.priority === p ? [k] : [])));
+	const want = new Float64Array(transfers.length);
+	const sumBy = new Float64Array(nodes.length);
+	const freeBy = new Float64Array(nodes.length);
 
 	for (let t = 0; t < days; t++) {
-		// [Transfers] "Draw from dam": uses the source dam's storage at the end of
-		// the previous day (Q, row N-1), so all transfers can be settled first.
+		// [Transfers] "Draw from dam": uses the storage at the end of the
+		// previous day (Q, row N-1), so all transfers are settled before any farm
+		// irrigates, the source's own irrigation included (quirk Q3: the source
+		// doesn't irrigate first). Each rule moves
+		//   v = MAX(0, MIN(source free, destination room, max daily))
+		// with source free = Q_src[t−1] − drawn today − reserve and destination
+		// room = cap_dst − Q_dst[t−1] + D_dst[t] − scheduled into it today, so a
+		// transfer never pumps into a full dam only to spill, and one to a farm
+		// with no dam still serves its demand (audit N4). Rules run by priority,
+		// lowest first (Q18); within a priority, rules into one destination share
+		// its room and rules from one source share its free water, each pro rata
+		// to its own limit, so the result never depends on the list order.
 		jToday.fill(0);
 		drawnToday.fill(0);
-		for (let k = 0; k < transfers.length; k++) {
-			const tr = transfers[k]!;
-			if (!tr.activeMonth[month[t]!]) continue;
-			const prev = t === 0 ? nodes[tr.from]!.initialStorageM3 : res[tr.from]!.storage[t - 1]!;
-			// fGetTrfVolCapped: MIN(MAX(Qprev − cap × min%, 0), capMax), with Qprev
-			// reduced by what earlier rules already took from this dam today. The
-			// workbook caps each rule against the full Qprev, so two rules from one
-			// dam could overdraw it (docs/engine-review.md F1, quirk Q18); rules
-			// are served in document order. Identical for a single rule per dam.
-			const v = Math.min(Math.max(prev - drawnToday[tr.from]! - tr.reserveM3, 0), tr.maxDailyM3);
-			drawnToday[tr.from]! += v;
-			trOut[k]![t] = v;
-			jToday[tr.to]! += v;
-			jToday[tr.from]! -= v;
+		intoToday.fill(0);
+		const prevQ = (n: number) => (t === 0 ? nodes[n]!.initialStorageM3 : res[n]!.storage[t - 1]!);
+		for (const level of levels) {
+			// 1. Each active rule's own limit: its daily cap and its source's free water.
+			for (const k of level) {
+				const tr = transfers[k]!;
+				if (!tr.activeMonth[month[t]!]) {
+					want[k] = 0;
+					continue;
+				}
+				const free = prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3;
+				want[k] = Math.max(0, Math.min(free, tr.maxDailyM3));
+			}
+			// 2. Rules into one destination share its room, pro rata to their limits.
+			sumBy.fill(0);
+			for (const k of level) sumBy[transfers[k]!.to]! += want[k]!;
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const total = sumBy[tr.to]!;
+				const dst = nodes[tr.to]!;
+				const room = Math.max(0, dst.damCapacityM3 - prevQ(tr.to) + dst.demand[t]! / dst.irrigationEfficiency - intoToday[tr.to]!);
+				if (total > room) want[k] = (want[k]! * room) / total;
+			}
+			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
+			sumBy.fill(0);
+			freeBy.fill(0);
+			for (const k of level) {
+				const tr = transfers[k]!;
+				sumBy[tr.from]! += want[k]!;
+				if (tr.activeMonth[month[t]!]) freeBy[tr.from] = Math.max(freeBy[tr.from]!, prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3);
+			}
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const total = sumBy[tr.from]!;
+				const free = freeBy[tr.from]!;
+				if (total > free) want[k] = (want[k]! * free) / total;
+			}
+			// 4. Move the water.
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const v = want[k]!;
+				trOut[k]![t] = v;
+				drawnToday[tr.from]! += v;
+				intoToday[tr.to]! += v;
+				jToday[tr.to]! += v;
+				jToday[tr.from]! -= v;
+			}
 		}
 
 		const nat = naturalFlow[t]!;

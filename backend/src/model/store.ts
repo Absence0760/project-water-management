@@ -26,8 +26,8 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 		);
 	const transfers = await db.query(
 			`SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
-				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled
-			 FROM transfer WHERE project_id = $1 ORDER BY id`,
+				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled, priority
+			 FROM transfer WHERE project_id = $1 ORDER BY priority, id`,
 			[projectId]
 		);
 	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows };
@@ -112,13 +112,13 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	for (const t of m.transfers) {
 		await upserted(
 			`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3,
-				min_storage_pct, enabled)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				min_storage_pct, enabled, priority)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			 ON CONFLICT (id) DO UPDATE SET from_node_id = EXCLUDED.from_node_id, to_node_id = EXCLUDED.to_node_id,
 				months = EXCLUDED.months, max_rate_m3s = EXCLUDED.max_rate_m3s, daily_cap_m3 = EXCLUDED.daily_cap_m3,
-				min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled
+				min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled, priority = EXCLUDED.priority
 			 WHERE transfer.project_id = EXCLUDED.project_id`,
-			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled],
+			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority],
 			'transfer'
 		);
 	}

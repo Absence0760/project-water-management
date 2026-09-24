@@ -101,6 +101,13 @@ pending invitations, the confirm-email banner) render through
   order is `node.sortOrder`, which is display only: runs always use the
   topological order. Every list of nodes uses it (`lib/model/order.ts`).
 
+## Transfers
+
+Each rule has a **Priority** column (whole number, lower moves first; equal
+priorities share a source dam pro rata to their limits, [engine-audit
+Q18](./engine-audit.md)). A new rule starts after the existing ones (the
+highest priority + 1). The help explains the destination's room cap (N4).
+
 ## Crops & demand
 
 Crop factors run October to September and are reorderable. Planted areas

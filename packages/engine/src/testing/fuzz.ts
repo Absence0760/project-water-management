@@ -80,8 +80,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Irrigation efficiency and loss return (engine ≥ 0.16.0) come from their own
 	// generator, so the rest of a seed's network is what it was before them.
 	const ops = new Rng(seed ^ 0x2c1b3c6d);
-	// Dam evaporation and seepage (N2) likewise.
+	// Dam evaporation and seepage (N2) likewise, and transfer priorities (Q18).
 	const dl = new Rng(seed ^ 0x6a09e667);
+	const pr = new Rng(seed ^ 0x3c6ef372);
 	const maxNodes = opts.maxNodes ?? 25;
 	const maxDays = opts.maxDays ?? 1200;
 
@@ -172,7 +173,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			maxRateM3s: rng.bool(0.1) ? 0 : rng.bool(0.1) ? 1e4 : rng.logFloat(1e-4, 2),
 			dailyCapM3: rng.bool(0.6) ? null : rng.bool(0.1) ? 0 : rng.logFloat(1, 1e5),
 			minStoragePct: rng.frac(0.3, 0.2),
-			enabled: rng.bool(0.9)
+			enabled: rng.bool(0.9),
+			// Ties are common on purpose: equal priorities share a dam pro rata.
+			priority: pr.pick([0, 0, 1, 2, k])
 		});
 	}
 

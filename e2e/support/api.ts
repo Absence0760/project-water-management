@@ -153,7 +153,8 @@ export function sampleModel(): Model {
 				maxRateM3s: 0.01,
 				dailyCapM3: null,
 				minStoragePct: 0.2,
-				enabled: true
+				enabled: true,
+				priority: 0
 			}
 		]
 	};

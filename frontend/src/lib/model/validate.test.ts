@@ -80,7 +80,7 @@ describe('validateModel', () => {
 			crops: [{ id: 'c', name: 'Citrus', cropFactor: [1] }],
 			cropAreas: [{ nodeId: 'x', cropId: 'c', areaM2: 1 }],
 			transfers: [
-				{ id: 't', fromNodeId: 'g', toNodeId: 'g', months: [13], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true }
+				{ id: 't', fromNodeId: 'g', toNodeId: 'g', months: [13], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }
 			]
 		});
 		expect(validateModel(m).map((i) => i.area)).toEqual(['crops', 'crops', 'transfers', 'transfers']);
@@ -100,6 +100,14 @@ describe('validateModel', () => {
 		const a = node('a', 'A', null);
 		a.irrigationEfficiency = 0;
 		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
+	});
+
+	it('needs a whole-number transfer priority (Q18)', () => {
+		const g = node('g', 'G', null);
+		const f = node('f', 'F', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'g', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0.5 };
+		expect(messages(model([g, f], { transfers: [t] }))).toContain('Transfer 1: priority must be a whole number.');
+		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
 	});
 
 	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {

@@ -126,6 +126,7 @@ interface Rule {
 	months: Set<number>;
 	maxDaily: number;
 	reserve: number;
+	priority: number;
 }
 
 /**
@@ -138,9 +139,12 @@ interface Rule {
  * - minimum storage: −J ≤ yesterday's storage − the lowest reserve among
  *   today's outgoing rules (never below 0); a rule's reserve is the source
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
+ * - room at the destination (audit N4): a farm that sends nothing receives
+ *   at most MAX(0, capacity − yesterday's storage + today's demand D);
  * - no water left on the table: for a source whose rules all go to farms fed
- *   only by it, the volume that left is at least MIN(Σ limits, yesterday's
- *   storage − the highest reserve), and exactly that when the reserves agree.
+ *   only by it, the volume that left is at least MIN(Σ over its destinations
+ *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
+ *   reserve).
  */
 export function checkTransferLimits(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
@@ -153,7 +157,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		let maxDaily = tr.maxRateM3s * SEC_PER_DAY;
 		if (tr.dailyCapM3 !== null) maxDaily = Math.min(maxDaily, tr.dailyCapM3);
 		// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
-		rules.push({ from: a.id, to: b.id, months: new Set(tr.months), maxDaily: Math.max(0, maxDaily), reserve: a.damCapacityM3 * Math.max(tr.minStoragePct, a.damMinPct) });
+		rules.push({ from: a.id, to: b.id, months: new Set(tr.months), maxDaily: Math.max(0, maxDaily), reserve: a.damCapacityM3 * Math.max(tr.minStoragePct, a.damMinPct), priority: tr.priority ?? 0 });
 	}
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
@@ -169,6 +173,10 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		return { active, ins: farms.map((f) => active.filter((r) => r.to === f.id)), outs: farms.map((f) => active.filter((r) => r.from === f.id)) };
 	});
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
+	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
+	const farmD = farms.map((f) => get.get(`${f.id}|demand`)!);
+	/** A destination's room that day (audit N4): capacity − yesterday's storage + today's demand D. */
+	const roomOf = (fi: number, t: number) => farms[fi]!.damCapacityM3 - storage(farms[fi]!.id, t) + farmD[fi]![t]!;
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
 		const { active, ins: insOf, outs: outsOf } = byMonth[month]!;
@@ -188,6 +196,10 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const avail = outs.length ? Math.max(prev - Math.min(...outs.map((r) => r.reserve)), 0) : 0;
 			const outCap = Math.min(outMax, avail);
 			if (-J > outCap + tol(outCap)) return `${where}: sent ${-J} > MIN(limit ${outMax}, storage ${prev} − reserve) = ${outCap}`;
+			if (outs.length === 0 && J > 0) {
+				const room = roomOf(fi, t);
+				if (J > Math.max(0, room) + tol(Math.max(Math.abs(room), J))) return `${where}: received ${J} > its room ${room} (capacity − storage + demand)`;
+			}
 		}
 		// Identifiable sources: every destination is fed by this source alone and sends nothing.
 		for (const [fi, f] of farms.entries()) {
@@ -200,9 +212,17 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const where = `${f.id} day ${t}`;
 			if (Math.abs(sent - got) > tol(sent)) return `${where}: sent ${sent} but its destinations got ${got}`;
 			const prev = storage(f.id, t);
-			const limit = outs.reduce((s, r) => s + r.maxDaily, 0);
+			// What the destinations could take: per destination MIN(Σ limits into it, its room).
+			let limit = 0;
+			for (const d of dests) {
+				const di = farmIndex.get(d)!;
+				limit += Math.min(
+					outs.filter((r) => r.to === d).reduce((s, r) => s + r.maxDaily, 0),
+					Math.max(0, roomOf(di, t))
+				);
+			}
 			const floor = Math.min(limit, Math.max(prev - Math.max(...outs.map((r) => r.reserve)), 0));
-			if (sent < floor - tol(floor)) return `${where}: sent only ${sent}; the rules allowed ${floor} (storage ${prev})`;
+			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
 		}
 	}
 	return null;

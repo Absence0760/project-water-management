@@ -73,6 +73,20 @@ describe('engine invariants on random networks', () => {
 		expect(checkDoubledCropAreas(input)).toBeNull();
 	});
 
+	it('Q18: transfer rules sharing a dam give the same results in any list order (no exemption)', () => {
+		// Seeds whose enabled rules share a source dam, with tied priorities among them.
+		let tested = 0;
+		for (let seed = 1; seed < 400 && tested < 10; seed++) {
+			const input = randomInput(seed, { maxDays: 200 });
+			const on = input.model.transfers.filter((t) => t.enabled);
+			const shared = on.some((a, i) => on.some((b, j) => i !== j && a.fromNodeId === b.fromNodeId && a.priority === b.priority));
+			if (!shared) continue;
+			tested++;
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
+		expect(tested).toBeGreaterThan(0);
+	});
+
 	it('F8 regression: the seeds where display order changed EWR "days not met" are order-invariant', () => {
 		// Found by the order-invariance check: rounded engine (0.3.x) on 70 … 18130,
 		// unrounded (0.4.0) on 103 … 395. Fixed in network/simulate.ts (review F8).
@@ -123,7 +137,7 @@ function smallCase(): ModelInput {
 				{ nodeId: 'B', cropId: 'c', areaM2: 300_000 },
 				{ nodeId: 'C', cropId: 'c', areaM2: 200_000 }
 			],
-			transfers: [{ id: 't', fromNodeId: 'A', toNodeId: 'C', months: [1, 2], maxRateM3s: 0.005, dailyCapM3: null, minStoragePct: 0.25, enabled: true }]
+			transfers: [{ id: 't', fromNodeId: 'A', toNodeId: 'C', months: [1, 2], maxRateM3s: 0.005, dailyCapM3: null, minStoragePct: 0.25, enabled: true, priority: 0 }]
 		},
 		series: { rain_catchment_mm: { startDate: '2021-01-01', values: Array.from({ length: days }, (_, i) => (i % 9 === 0 ? 25 : 0)) } }
 	};
@@ -194,11 +208,13 @@ describe('the invariants reject broken results', () => {
 		over.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[0] = -500;
 		over.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[0] = 500;
 		expect(checkTransferLimits(input, over)).toMatch(/sent 500 > MIN\(limit 432/);
-		// Held back: the rule could move 432 but only 100 moved.
+		// Held back: on a day the rule moved its full 432 (C's room, its demand, was larger) only 100 moved.
+		const full = out.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values.findIndex((v) => Math.abs(v - 432) < 1e-9);
+		expect(full).toBeGreaterThanOrEqual(0);
 		const held = structuredClone(out);
-		held.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[0] = -100;
-		held.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[0] = 100;
-		expect(checkTransferLimits(input, held)).toMatch(/sent only 100; the rules allowed 432/);
+		held.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[full] = -100;
+		held.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[full] = 100;
+		expect(checkTransferLimits(input, held)).toMatch(/sent only 100; the rules and the destinations' room allowed 432/);
 		// Below the reserve: an almost empty source may not send anything.
 		const low = structuredClone(input);
 		low.model.nodes.find((n) => n.id === 'A')!.damInitialPct = 0.2; // 10 000 m³ < reserve 12 500
