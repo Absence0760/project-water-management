@@ -282,6 +282,13 @@ the reports):
 - [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
       formulas, which the engine no longer follows. Decide whether to delete it
       or rebuild it against the audited model. Operator call.
+- [ ] **e2e runs from parallel worktrees share one `water_e2e` database and
+      fixed ports** (:3101 and :7801). When two sessions run `pnpm test:e2e` at
+      once, unrelated specs fail (seen 2026-09-24: `sharing.spec.ts` and
+      `teams.spec.ts` failed, then passed on re-run). The durable fix is a
+      per-checkout e2e database name and ports, derived from the worktree
+      path or an env override, set up in the e2e global setup. Until then,
+      don't run e2e in two worktrees at the same time.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
 
