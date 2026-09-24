@@ -1,3 +1,5 @@
+import { GR4J_PARAMS, type Gr4jParams, type ParamSpec, type RunoffModelId } from '@water-management/engine';
+
 // Generic rendering helpers for ProjectSettings.calibration, whose field set
 // grows as the engine port proceeds: numbers become number inputs, number
 // arrays become comma lists, anything else is shown read-only.
@@ -99,3 +101,39 @@ export const KNOWN_CAL_KEYS = new Set([
 	'summerMonths',
 	'catchmentAreaKm2'
 ]);
+
+// ---------------------------------------------------------------------------
+// Runoff model picker and GR4J parameters (settings.runoffModel, settings.gr4j).
+
+export const RUNOFF_MODEL_OPTIONS: { value: RunoffModelId; label: string; help: string }[] = [
+	{
+		value: 'legacy',
+		label: 'Legacy (b023 recession model)',
+		help: 'The workbook’s own rain-to-flow model, ported unchanged. It does not conserve water at the event scale (engine audit H1); it stays the default until the hydrologist signs off GR4J.'
+	},
+	{
+		value: 'gr4j',
+		label: 'GR4J (Perrin et al. 2003)',
+		help: 'A published daily model with four parameters that conserves water: rain leaves as evaporation or flow, or stays in a store. Needs A-pan evaporation.'
+	}
+];
+
+export interface Gr4jField extends ParamSpec<Gr4jParams> {
+	help: string;
+	step: number;
+}
+
+const GR4J_HELP: Record<keyof Gr4jParams, string> = {
+	x1: 'Soil-moisture store. A larger store absorbs more rain before the river responds and evaporates more in dry spells.',
+	x2: 'Water gained (+) from or lost (−) to groundwater outside the catchment. Normally 0 (a closed catchment).',
+	x3: 'Routing store. A larger store gives a slower, more sustained recession and higher base flow.',
+	x4: 'How many days a rain pulse takes to pass the outlet. Small catchments are near 1 day; larger or flatter ones take longer.'
+};
+
+/** GR4J parameters for the Settings form: engine bounds plus help. */
+export const GR4J_FIELDS: Gr4jField[] = GR4J_PARAMS.map((p) => ({ ...p, help: GR4J_HELP[p.key], step: p.key === 'x4' ? 0.05 : p.key === 'x2' ? 0.01 : 1 }));
+
+/** "Typical 100–1200 mm" for a parameter hint. */
+export function typicalRange(p: ParamSpec<Gr4jParams>): string {
+	return `Typical ${p.typical[0]}–${p.typical[1]} ${p.unit}; allowed ${p.min}–${p.max}.`;
+}

@@ -94,11 +94,15 @@ export interface RunComparison {
 		meanSimulatedOutflowM3Day: MetricDelta;
 		ewrDaysNotMet: MetricDelta;
 		ewrFractionDaysNotMet: MetricDelta;
+		/** Natural flow ÷ rain over the run (absent on runs saved before engine 0.4.0). */
+		runoffCoefficient: MetricDelta;
 	};
 	/** null when neither run has calibration statistics. */
 	calibration: {
 		days: MetricDelta;
 		nse: MetricDelta;
+		/** Kling–Gupta efficiency (absent on runs saved before engine 0.3.0). */
+		kge: MetricDelta;
 		pbias: MetricDelta;
 		rmseM3s: MetricDelta;
 		meanObservedM3s: MetricDelta;
@@ -243,13 +247,15 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 			meanNaturalFlowM3Day: metricDelta(ca?.meanNaturalFlowM3Day, cb?.meanNaturalFlowM3Day),
 			meanSimulatedOutflowM3Day: metricDelta(ca?.meanSimulatedOutflowM3Day, cb?.meanSimulatedOutflowM3Day),
 			ewrDaysNotMet: metricDelta(ca?.ewrDaysNotMet, cb?.ewrDaysNotMet),
-			ewrFractionDaysNotMet: metricDelta(ca?.ewrFractionDaysNotMet, cb?.ewrFractionDaysNotMet)
+			ewrFractionDaysNotMet: metricDelta(ca?.ewrFractionDaysNotMet, cb?.ewrFractionDaysNotMet),
+			runoffCoefficient: metricDelta(ca?.runoffCoefficient, cb?.runoffCoefficient)
 		},
 		calibration:
 			ka || kb
 				? {
 						days: metricDelta(ka?.days, kb?.days),
 						nse: metricDelta(ka?.nse, kb?.nse),
+						kge: metricDelta(ka?.kge, kb?.kge),
 						pbias: metricDelta(ka?.pbias, kb?.pbias),
 						rmseM3s: metricDelta(ka?.rmseM3s, kb?.rmseM3s),
 						meanObservedM3s: metricDelta(ka?.meanObservedM3s, kb?.meanObservedM3s),

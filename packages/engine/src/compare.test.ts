@@ -196,6 +196,18 @@ describe('compareRuns', () => {
 		expect(c.engineVersionChanged).toBe(true);
 	});
 
+	it('compares the runoff coefficient and KGE, e.g. legacy against GR4J', () => {
+		const cal = { days: 3000, nse: 0.4, pbias: 12, rmseM3s: 0.5, meanObservedM3s: 1, meanSimulatedM3s: 1.1 };
+		const catchment = summary([]).catchment;
+		const legacy = run(summary([], { catchment: { ...catchment, runoffCoefficient: 1.8 }, calibration: { ...cal, kge: 0.3 } }));
+		const gr4j = run(summary([], { catchment: { ...catchment, runoffCoefficient: 0.35 }, calibration: { ...cal, kge: 0.62 } }));
+		const c = compareRuns(legacy, gr4j);
+		expect(c.catchment.runoffCoefficient).toEqual({ a: 1.8, b: 0.35, delta: 0.35 - 1.8 });
+		expect(c.calibration!.kge.delta).toBeCloseTo(0.32, 12);
+		// Runs saved before either figure existed compare as missing, not as 0.
+		expect(compareRuns(run(summary([], { calibration: cal })), gr4j).calibration!.kge).toEqual({ a: null, b: 0.62, delta: null });
+	});
+
 	it('calibration is null when neither run has usable statistics, one-sided otherwise', () => {
 		expect(compareRuns(run(summary([])), run(summary([]))).calibration).toBeNull();
 		const empty = { days: 0, nse: null, pbias: null, rmseM3s: null, meanObservedM3s: null, meanSimulatedM3s: null };

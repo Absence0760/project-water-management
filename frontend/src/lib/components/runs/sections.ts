@@ -7,12 +7,14 @@ export interface ResultSection {
 	label: string;
 }
 
-export function resultSections(summary: Pick<RunSummary, 'farms'>): ResultSection[] {
+export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff'>): ResultSection[] {
 	const out: ResultSection[] = [
 		{ id: 'res-summary', label: 'Summary' },
 		{ id: 'res-curtailment', label: 'Curtailment' },
 		{ id: 'res-hydrograph', label: 'Hydrograph' },
 		{ id: 'res-calibration', label: 'Calibration' },
+		// Runoff model balance: conceptual models (GR4J) only.
+		...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 		{ id: 'res-fdc', label: 'Flow duration' },
 		{ id: 'res-ewr', label: 'EWR vs outflow' },
 		{ id: 'res-ewr-grid', label: 'EWR by month' }

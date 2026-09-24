@@ -122,11 +122,20 @@ CSV.
 The settings are grouped by what they drive:
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, and days in February.
-- **Flow calibration**: a, b, rain threshold, summer and winter factors,
-  summer months as toggles, catchment area (blank = the sum of the farm
-  areas, which is shown), and the calibration window and flow series.
-  **Advanced** holds the winter switch, the recession parameters and the
-  80-value recession tables.
+- **Flow calibration**: the **runoff model** picker (Legacy or GR4J,
+  `settings.runoffModel`), the catchment area (blank = the sum of the farm
+  areas, which is shown), and the calibration window and flow series. The
+  rest depends on the model:
+  - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
+    months as toggles. **Advanced** holds the winter switch, the recession
+    parameters and the 80-value recession tables.
+  - **GR4J**: X1, X3 and X4, each with its typical and allowed range
+    (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
+    input refuses values outside those bounds. The GR4J view also has the
+    warm-up in days and the rain threshold, which under GR4J only affects
+    demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
+    unticking it sets X2 back to 0. Then comes the monthly **pan
+    coefficient** row. A notice appears when A-pan is 0 in every month.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
   curtailment reporting window.
@@ -139,8 +148,9 @@ The settings are grouped by what they drive:
 ## Runs & results
 
 - A **Result sections** menu under the run's title links to each panel
-  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`; Farm
-  detail only when the run has farms). The page's `scroll-padding-top` keeps
+  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`). Farm
+  detail appears only when the run has farms, and Runoff model only for a
+  GR4J run. The page's `scroll-padding-top` keeps
   a jumped-to section, or a focused control, clear of the sticky header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall (or Pitman) series. While a run is going it shows progress.
@@ -154,7 +164,11 @@ The settings are grouped by what they drive:
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
   the full period), the calibration panel (plus the gauge vs logger table when
-  years disagree), the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
+  years disagree), the **runoff model** panel for GR4J runs (`RunoffPanel`:
+  the parameters, a table of where the rain went (rain, evaporation, flow,
+  exchange, change in storage, in mm and as a share of rain;
+  `runs/runoff.ts`), and the production and routing stores through time),
+  the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, the monthly EWR compliance grid, farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node.

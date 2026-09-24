@@ -5,7 +5,7 @@
 // source, never by disabling a rule here.
 import { AxeBuilder } from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail } from '../support/api.ts';
+import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail, updateSettings } from '../support/api.ts';
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -143,6 +143,21 @@ for (const colorScheme of ['light', 'dark'] as const) {
 					await expect(viewer.page.getByText('View only', { exact: false }).first()).toBeVisible();
 					await expectNoViolations(viewer.page);
 				}
+			});
+
+			test('GR4J settings and a GR4J run have no violations', async ({ page, owner }) => {
+				void owner;
+				const project = await seedRunnableProject(page.request, 'A11y GR4J');
+				await updateSettings(page.request, project.id, { runoffModel: 'gr4j', gr4j: { x1: 350, x2: -0.5, x3: 90, x4: 1.7, warmupDays: 365 } });
+				await page.goto(`/projects/${project.id}?tab=settings`);
+				await expect(page.getByLabel(/^Groundwater exchange X2/)).toHaveValue('-0.5');
+				await expectNoViolations(page);
+				await createRun(page.request, project.id, 'GR4J');
+				await page.goto(`/projects/${project.id}?tab=runs`);
+				const runoff = page.getByRole('region', { name: /^Runoff model: GR4J/ });
+				await expect(runoff.getByRole('rowheader', { name: /Groundwater exchange/ })).toBeVisible();
+				await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
+				await expectNoViolations(page);
 			});
 
 			test('comparing two runs has no violations', async ({ page, owner }) => {

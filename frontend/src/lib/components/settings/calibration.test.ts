@@ -33,3 +33,15 @@ describe('known calibration parameters', () => {
 		for (const p of [...FLOW_PARAMS, ...ADVANCED_PARAMS, ...TABLE_PARAMS]) expect(p.help.length).toBeGreaterThan(20);
 	});
 });
+
+describe('GR4J fields', () => {
+	it('cover every engine GR4J parameter, with its bounds and help', async () => {
+		const { GR4J_PARAMS } = await import('@water-management/engine');
+		const { GR4J_FIELDS, RUNOFF_MODEL_OPTIONS, typicalRange } = await import('./calibration');
+		expect(GR4J_FIELDS.map((f) => f.key)).toEqual(GR4J_PARAMS.map((p) => p.key));
+		for (const f of GR4J_FIELDS) expect(f.help.length, f.key).toBeGreaterThan(20);
+		expect(typicalRange(GR4J_FIELDS[0]!)).toBe('Typical 100–1200 mm; allowed 10–3000.');
+		const { RUNOFF_MODELS } = await import('@water-management/engine');
+		expect(RUNOFF_MODEL_OPTIONS.map((o) => o.value)).toEqual([...RUNOFF_MODELS]);
+	});
+});

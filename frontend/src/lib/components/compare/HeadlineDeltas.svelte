@@ -22,12 +22,14 @@
 		{ label: 'Days EWR not met', unit: 'days', m: comparison.catchment.ewrDaysNotMet, spec: { format: 'days', better: 'lower' } },
 		{ label: 'Share of days EWR not met', unit: '', m: comparison.catchment.ewrFractionDaysNotMet, spec: { format: 'fraction', better: 'lower' } },
 		{ label: 'Mean simulated outflow', unit: 'm³/day', m: comparison.catchment.meanSimulatedOutflowM3Day, spec: { format: 'volume', better: 'neutral' } },
-		{ label: 'Mean natural flow', unit: 'm³/day', m: comparison.catchment.meanNaturalFlowM3Day, spec: { format: 'volume', better: 'neutral' } }
+		{ label: 'Mean natural flow', unit: 'm³/day', m: comparison.catchment.meanNaturalFlowM3Day, spec: { format: 'volume', better: 'neutral' } },
+		{ label: 'Runoff coefficient (flow ÷ rain)', unit: '', m: comparison.catchment.runoffCoefficient, spec: { format: 'ratio', better: 'neutral' } }
 	]);
 
 	const calibration = $derived<Row[]>(
 		comparison.calibration
 			? [
+					{ label: 'Kling–Gupta (KGE)', unit: '', m: comparison.calibration.kge, spec: { format: 'ratio', better: 'higher' } },
 					{ label: 'Nash–Sutcliffe (NSE)', unit: '', m: comparison.calibration.nse, spec: { format: 'ratio', better: 'higher' } },
 					{ label: 'Percent bias', unit: '', m: comparison.calibration.pbias, spec: { format: 'percent', better: 'zero' } },
 					{ label: 'RMSE', unit: 'm³/s', m: comparison.calibration.rmseM3s, spec: { format: 'ratio', better: 'lower' } },

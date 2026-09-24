@@ -17,6 +17,7 @@
 	import { detailCache, forgetRun } from './cache';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
+	import RunoffPanel from './RunoffPanel.svelte';
 	import { resultSections } from './sections';
 
 	let {
@@ -308,6 +309,8 @@
 				<CurtailmentTable summary={detail.run.summary} {farmNames} />
 			</section>
 			{@const summary = detail.run.summary}
+			{@const runSeries = detail.series}
+			{@const shownRunId = detail.run.id}
 			<RunCharts
 				{projectId}
 				runId={detail.run.id}
@@ -328,6 +331,11 @@
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
 					</div>
+					{#if summary.runoff}
+						<div class="panel" id="res-runoff">
+							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} />
+						</div>
+					{/if}
 				{/snippet}
 				{#snippet afterFlowViews()}
 					<div class="panel" id="res-ewr-grid">

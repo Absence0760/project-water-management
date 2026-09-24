@@ -84,9 +84,16 @@ export async function putSeries(
 	await json(res, 200);
 }
 
-export async function createRun(request: APIRequestContext, projectId: string, label: string): Promise<void> {
+/** Runs the model; returns the new run's id. */
+export async function createRun(request: APIRequestContext, projectId: string, label: string): Promise<string> {
 	const res = await request.post(`${API_URL}/projects/${projectId}/runs`, { data: { label } });
-	await json(res, 201);
+	return (await json<{ run: { id: string } }>(res, 201)).run.id;
+}
+
+/** Copies a project (model, settings, series); returns the copy's id. */
+export async function copyProject(request: APIRequestContext, projectId: string, name: string): Promise<string> {
+	const res = await request.post(`${API_URL}/projects/${projectId}/copy`, { data: { name } });
+	return (await json<{ project: { id: string } }>(res, 201)).project.id;
 }
 
 // --- a small synthetic catchment (no client data: names and numbers are made up) ---

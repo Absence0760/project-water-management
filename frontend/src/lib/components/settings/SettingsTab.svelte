@@ -14,9 +14,12 @@
 		ADVANCED_PARAMS,
 		calibrationFields,
 		FLOW_PARAMS,
+		GR4J_FIELDS,
 		KNOWN_CAL_KEYS,
 		parseNumberList,
-		TABLE_PARAMS
+		RUNOFF_MODEL_OPTIONS,
+		TABLE_PARAMS,
+		typicalRange
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
 	import MonthlyBars from './MonthlyBars.svelte';
@@ -37,9 +40,10 @@
 	} = $props();
 
 	// Mutable view of the settings (the engine's Monthly type is a readonly tuple).
-	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'calibration'> & {
+	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration'> & {
 		apanMm: number[];
 		ewrPragmaticM3PerDay: number[];
+		panCoefficient: number[];
 		calibration: CalibrationParams & Record<string, unknown>;
 	};
 	const clone = (v: ProjectSettings): Editable => JSON.parse(JSON.stringify(v));
@@ -51,6 +55,8 @@
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let justSaved = $state(false);
+	// X2 (groundwater exchange) is fixed at 0 unless the user opts in.
+	let x2Open = $state(untrack(() => project.settings.gr4j?.x2 !== 0));
 
 	const dirty = $derived(JSON.stringify(s) !== saved);
 	const cal = $derived(s.calibration);
@@ -92,8 +98,14 @@
 		if (parsed) s.calibration[key] = parsed;
 	}
 
+	function setX2Open(open: boolean) {
+		x2Open = open;
+		if (!open) s.gr4j.x2 = 0;
+	}
+
 	function discard() {
 		s = clone(JSON.parse(saved));
+		x2Open = s.gr4j.x2 !== 0;
 		resetListText();
 		error = null;
 	}
@@ -109,6 +121,7 @@
 			onProjectChange(p);
 			s = clone(p.settings);
 			saved = JSON.stringify(p.settings);
+			x2Open = s.gr4j.x2 !== 0;
 			resetListText();
 			justSaved = true;
 		} catch (err) {
@@ -128,6 +141,9 @@
 		{ value: 'manual', label: 'Manual share per farm', help: 'Shares typed per farm on the Network tab ("Manual flow share").' }
 	];
 	const method = $derived(METHODS.find((m) => m.value === s.flowShareMethod));
+	const runoffOption = $derived(RUNOFF_MODEL_OPTIONS.find((o) => o.value === s.runoffModel));
+	const isGr4j = $derived(s.runoffModel === 'gr4j');
+	const apanMissing = $derived(s.apanMm.every((v) => !v));
 	const num = (k: string) => cal[k] as number;
 </script>
 
@@ -190,22 +206,13 @@
 			<span class="muted small">Tune against observed flow; check NSE and PBIAS on Runs & results</span>
 		</div>
 		<div class="fields">
-			{#each FLOW_PARAMS as p (p.key)}
-				<div class="field">
-					<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
-					<NumberInput
-						id="cal-{p.key}"
-						step={p.step ?? 'any'}
-						disabled={readonly}
-						value={num(p.key)}
-						aria-describedby="cal-{p.key}-h"
-						onchange={(v) => {
-							if (v !== null) s.calibration[p.key] = v;
-						}}
-					/>
-					<span class="hint" id="cal-{p.key}-h">{p.help}</span>
-				</div>
-			{/each}
+			<div class="field">
+				<span class="lbl"><label for="st-runoff">Runoff model</label><HelpTip key="settings.runoffModel" /></span>
+				<select id="st-runoff" disabled={readonly} bind:value={s.runoffModel} aria-describedby="st-runoff-h">
+					{#each RUNOFF_MODEL_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+				<span class="hint" id="st-runoff-h">{runoffOption?.help}</span>
+			</div>
 			<div class="field">
 				<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>
 				<NumberInput
@@ -224,30 +231,66 @@
 				</span>
 			</div>
 		</div>
-		<fieldset class="plain summer">
-			<legend>Summer months <span class="muted">({describeMonths(cal.summerMonths ?? [])})</span> <HelpTip key="calibration.summerMonths" /></legend>
-			<MonthPicker label="Summer months" disabled={readonly} bind:months={s.calibration.summerMonths} />
-			<span class="hint">
-				Months always treated as summer (the summer factor applies). In other months a big rain day switches to winter behaviour
-				— see Advanced.
-			</span>
-		</fieldset>
-
-		<div class="cal-window">
-			<CalibrationWindowFields
-				bind:start={s.calibrationStart}
-				bind:end={s.calibrationEnd}
-				bind:flowKind={s.calibrationFlowKind}
-				bind:error={calWindowError}
-				{readonly}
-				availableKinds={seriesKinds}
-			/>
-		</div>
-
-		<details class="advanced">
-			<summary>Advanced: winter switch, recession and base flow</summary>
+		{#if isGr4j}
+			{#if apanMissing}
+				<p class="alert alert-warning" role="status">GR4J needs A-pan evaporation (Demand, above): with none, the catchment never dries out.</p>
+			{/if}
 			<div class="fields">
-				{#each ADVANCED_PARAMS as p (p.key)}
+				{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
+					<div class="field">
+						<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" /></span>
+						<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
+						<span class="hint" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
+					</div>
+				{/each}
+				<div class="field">
+					<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label></span>
+					<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
+					<span class="hint" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
+				</div>
+				<div class="field">
+					<span class="lbl"><label for="cal-rainThresholdMm">Rain threshold for demand <span class="u">(mm)</span></label><HelpTip key="calibration.rainThresholdMm" /></span>
+					<NumberInput id="cal-rainThresholdMm" min={0} step={0.1} disabled={readonly} value={num('rainThresholdMm')} aria-describedby="cal-thr-h" onchange={(v) => { if (v !== null) s.calibration.rainThresholdMm = v; }} />
+					<span class="hint" id="cal-thr-h">Under GR4J this only decides which rain days reduce irrigation demand; the runoff model uses all rain.</span>
+				</div>
+			</div>
+			{@const x2 = GR4J_FIELDS.find((f) => f.key === 'x2')!}
+			<fieldset class="plain x2">
+				<legend>Groundwater exchange (X2)</legend>
+				<label class="check">
+					<input type="checkbox" disabled={readonly} checked={x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
+					Let the catchment gain or lose groundwater
+				</label>
+				{#if x2Open}
+					<div class="field">
+						<label for="gr4j-x2">{x2.label} <span class="u">({x2.unit})</span></label>
+						<NumberInput id="gr4j-x2" min={x2.min} max={x2.max} step={x2.step} disabled={readonly} bind:value={s.gr4j.x2} aria-describedby="gr4j-x2-h" />
+					</div>
+				{/if}
+				<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
+			</fieldset>
+			<div class="table-wrap">
+				<table class="data compact monthly">
+					<thead>
+						<tr>
+							<th scope="col" class="sticky">Month</th>
+							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" /></th>
+							{#each WATER_YEAR_MONTHS as m, i (m)}
+								<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
+							{/each}
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
+		{:else}
+			<div class="fields">
+				{#each FLOW_PARAMS as p (p.key)}
 					<div class="field">
 						<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
 						<NumberInput
@@ -264,72 +307,114 @@
 					</div>
 				{/each}
 			</div>
-			{#each TABLE_PARAMS as p (p.key)}
-				{@const arr = (cal[p.key] as number[] | undefined) ?? []}
-				<h3 class="tbl-h">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if} <span class="muted small">· {arr.length} values</span></h3>
-				<p class="hint muted">{p.help}</p>
-				<div class="table-wrap">
-					<table class="data compact curve">
-						<thead>
-							<tr>
-								<th scope="col">Index</th>
-								{#each Array(10) as _, c (c)}<th scope="col" class="num">+{c}</th>{/each}
-							</tr>
-						</thead>
-						<tbody>
-							{#each Array(Math.ceil(arr.length / 10)) as _, r (r)}
-								<tr>
-									<th scope="row" class="num">{r * 10 + 1}</th>
-									{#each Array(10) as _, c (c)}
-										{@const i = r * 10 + c}
-										<td>
-											{#if i < arr.length}
-												<NumberInput
-													label="{p.label}, index {i + 1}"
-													disabled={readonly}
-													value={arr[i] ?? 0}
-													onchange={(v) => {
-														if (v !== null) (s.calibration[p.key] as number[])[i] = v;
-													}}
-												/>
-											{/if}
-										</td>
-									{/each}
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/each}
-			{#if otherFields.length}
-				<h3 class="tbl-h">Other parameters</h3>
+			<fieldset class="plain summer">
+				<legend>Summer months <span class="muted">({describeMonths(cal.summerMonths ?? [])})</span> <HelpTip key="calibration.summerMonths" /></legend>
+				<MonthPicker label="Summer months" disabled={readonly} bind:months={s.calibration.summerMonths} />
+				<span class="hint">
+					Months always treated as summer (the summer factor applies). In other months a big rain day switches to winter behaviour
+					— see Advanced.
+				</span>
+			</fieldset>
+		{/if}
+		<div class="cal-window">
+			<CalibrationWindowFields
+				bind:start={s.calibrationStart}
+				bind:end={s.calibrationEnd}
+				bind:flowKind={s.calibrationFlowKind}
+				bind:error={calWindowError}
+				{readonly}
+				availableKinds={seriesKinds}
+			/>
+		</div>
+
+		{#if !isGr4j}
+			<details class="advanced">
+				<summary>Advanced: winter switch, recession and base flow</summary>
 				<div class="fields">
-					{#each otherFields as f (f.key)}
+					{#each ADVANCED_PARAMS as p (p.key)}
 						<div class="field">
-							<label for="cal-{f.key}">{f.label}</label>
-							{#if f.kind === 'number'}
-								<NumberInput id="cal-{f.key}" disabled={readonly} value={f.value} onchange={(v) => { if (v !== null) s.calibration[f.key] = v; }} />
-							{:else if f.kind === 'list'}
-								<input
-									id="cal-{f.key}"
-									readonly={readonly}
-									value={listText[f.key] ?? ''}
-									aria-invalid={listInvalid[f.key] || undefined}
-									class:invalid={listInvalid[f.key]}
-									oninput={(e) => setList(f.key, e.currentTarget.value)}
-								/>
-								{#if listInvalid[f.key]}<span class="err">Enter numbers separated by commas.</span>{/if}
-							{:else if f.kind === 'boolean'}
-								<input id="cal-{f.key}" type="checkbox" disabled={readonly} checked={f.value} onchange={(e) => (s.calibration[f.key] = e.currentTarget.checked)} />
-							{:else}
-								<input id="cal-{f.key}" readonly value={JSON.stringify(f.value)} class="mono" />
-								<span class="hint">Structured value — edit via the API.</span>
-							{/if}
+							<span class="lbl"><label for="cal-{p.key}">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if}</label><HelpTip key={`calibration.${p.key}`} /></span>
+							<NumberInput
+								id="cal-{p.key}"
+								step={p.step ?? 'any'}
+								disabled={readonly}
+								value={num(p.key)}
+								aria-describedby="cal-{p.key}-h"
+								onchange={(v) => {
+									if (v !== null) s.calibration[p.key] = v;
+								}}
+							/>
+							<span class="hint" id="cal-{p.key}-h">{p.help}</span>
 						</div>
 					{/each}
 				</div>
-			{/if}
-		</details>
+				{#each TABLE_PARAMS as p (p.key)}
+					{@const arr = (cal[p.key] as number[] | undefined) ?? []}
+					<h3 class="tbl-h">{p.label}{#if p.unit}{" "}<span class="u">({p.unit})</span>{/if} <span class="muted small">· {arr.length} values</span></h3>
+					<p class="hint muted">{p.help}</p>
+					<div class="table-wrap">
+						<table class="data compact curve">
+							<thead>
+								<tr>
+									<th scope="col">Index</th>
+									{#each Array(10) as _, c (c)}<th scope="col" class="num">+{c}</th>{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each Array(Math.ceil(arr.length / 10)) as _, r (r)}
+									<tr>
+										<th scope="row" class="num">{r * 10 + 1}</th>
+										{#each Array(10) as _, c (c)}
+											{@const i = r * 10 + c}
+											<td>
+												{#if i < arr.length}
+													<NumberInput
+														label="{p.label}, index {i + 1}"
+														disabled={readonly}
+														value={arr[i] ?? 0}
+														onchange={(v) => {
+															if (v !== null) (s.calibration[p.key] as number[])[i] = v;
+														}}
+													/>
+												{/if}
+											</td>
+										{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/each}
+				{#if otherFields.length}
+					<h3 class="tbl-h">Other parameters</h3>
+					<div class="fields">
+						{#each otherFields as f (f.key)}
+							<div class="field">
+								<label for="cal-{f.key}">{f.label}</label>
+								{#if f.kind === 'number'}
+									<NumberInput id="cal-{f.key}" disabled={readonly} value={f.value} onchange={(v) => { if (v !== null) s.calibration[f.key] = v; }} />
+								{:else if f.kind === 'list'}
+									<input
+										id="cal-{f.key}"
+										readonly={readonly}
+										value={listText[f.key] ?? ''}
+										aria-invalid={listInvalid[f.key] || undefined}
+										class:invalid={listInvalid[f.key]}
+										oninput={(e) => setList(f.key, e.currentTarget.value)}
+									/>
+									{#if listInvalid[f.key]}<span class="err">Enter numbers separated by commas.</span>{/if}
+								{:else if f.kind === 'boolean'}
+									<input id="cal-{f.key}" type="checkbox" disabled={readonly} checked={f.value} onchange={(e) => (s.calibration[f.key] = e.currentTarget.checked)} />
+								{:else}
+									<input id="cal-{f.key}" readonly value={JSON.stringify(f.value)} class="mono" />
+									<span class="hint">Structured value — edit via the API.</span>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</details>
+		{/if}
 	</section>
 
 	<!-- Flow share ----------------------------------------------------------------->
@@ -619,6 +704,21 @@
 		margin-top: 1rem;
 		display: grid;
 		gap: 0.25rem;
+	}
+	.x2 {
+		display: grid;
+		gap: 0.35rem;
+		margin: 0.25rem 0 0.75rem;
+		max-width: 75ch;
+	}
+	.x2 .field {
+		max-width: 240px;
+	}
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
 	}
 	.cal-window {
 		margin: 0.25rem 0 0.75rem;

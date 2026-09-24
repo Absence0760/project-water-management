@@ -32,8 +32,13 @@ The page has these sections, top to bottom:
    *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*.
 3. **Headline results.** Total irrigation supplied and deficit, share of demand
    supplied, farms below 95 % supplied, EWR days not met, mean outflow and
-   natural flow, and the calibration statistics (NSE, percent bias, RMSE) for A
-   and B side by side, with the change.
+   natural flow, the runoff coefficient (natural flow ÷ rain), and the
+   calibration statistics (KGE, NSE, percent bias, RMSE) for A and B side by
+   side, with the change. To judge the runoff models against each other, copy
+   the project, set the copy to GR4J (Settings → Flow calibration), run both
+   and compare them. The input diff then reads *"Runoff model: legacy (b023
+   recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
+   changes.
 4. **Farms.** One row per farm with run B's value and the change from A for
    demand, supplied, deficit, % supplied, EWR shortfall and days EWR not met.
    Click a column heading to sort by that change. Farms that exist in only one
