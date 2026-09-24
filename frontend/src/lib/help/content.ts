@@ -624,12 +624,12 @@ export const HELP: HelpEntry[] = [
 		id: 'pan-coefficient',
 		term: 'Pan coefficient',
 		short: 'Potential evaporation = pan coefficient × A-pan evaporation, per month. Drives GR4J; default 0.7.',
-		long: 'A Class-A pan evaporates more than a catchment’s soils and plants could, so conceptual runoff models scale it down. 0.7 is a common flat value. Monthly values (for example the WR90 or Midgley factors) can be entered instead. The coefficient does not affect irrigation demand, which uses crop factors on the A-pan directly.',
+		long: 'A Class-A pan evaporates more than a catchment’s soils and plants could, so conceptual runoff models scale it down. 0.7 is a common flat value. Monthly values (for example the WR90 or Midgley factors) can be entered instead. The coefficient does not affect irrigation demand, which uses crop factors on the A-pan directly.\n\nThree presets fill the row as a starting point (still editable, and nothing records which one, or whether one, was picked): Generic (flat 0.70), Winter rainfall (e.g. Western Cape) and Summer rainfall. They are indicative, from FAO-56 Table 5 climate classes (Allen et al. 1998) — confirm against local humidity and wind. A run warns, and Settings hints, when a month sits outside FAO-56’s usual 0.6–0.85 range for a Class A pan; that is a plausibility check, not a hard limit, so a value further out still saves and runs.\n\nBecause GR4J’s parameters trade off against evaporation, the coefficient is held fixed and never calibrated: a fit records the coefficient it ran under, and changing it afterwards is fit provenance’s forcingChanged.',
 		category: 'flow',
-		aliases: ['PET', 'potential evaporation', 'k pan'],
+		aliases: ['PET', 'potential evaporation', 'k pan', 'pan coefficient preset', 'FAO-56'],
 		fields: ['settings.panCoefficient', 'run.pet'],
-		related: ['gr4j', 'apan'],
-		source: 'Issue #4 §1 (forcing); docs/model.md § Rain to flow: GR4J'
+		related: ['gr4j', 'apan', 'auto-calibration'],
+		source: 'Issue #4 §1 (forcing); FAO-56 Table 5 (Allen et al. 1998); docs/model.md §2.4a'
 	},
 	{
 		id: 'actual-evaporation',

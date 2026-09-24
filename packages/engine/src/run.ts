@@ -47,6 +47,9 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
+	panCoefficientOutOfRange,
+	PAN_COEFFICIENT_TYPICAL_MAX,
+	PAN_COEFFICIENT_TYPICAL_MIN,
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
@@ -699,6 +702,8 @@ function alignSeries(s: DailySeries | undefined, start: number, days: number): (
 	return out;
 }
 
+const WATER_YEAR_MONTH_NAMES = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+
 function monthly(v: unknown, name: string, warnings: string[]): Monthly {
 	const arr = Array.isArray(v) ? v : [];
 	if (arr.length !== 12) warnings.push(`${name} should have 12 monthly values, has ${arr.length}; missing months are 0`);
@@ -749,6 +754,15 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (!(RUNOFF_MODELS as readonly string[]).includes(s.runoffModel)) {
 		warnings.push(`unknown runoff model "${String(s.runoffModel)}"; using ${d.runoffModel}`);
 		s.runoffModel = d.runoffModel;
+	}
+	if (s.runoffModel === 'gr4j') {
+		const months = panCoefficientOutOfRange(s.panCoefficient);
+		if (months.length) {
+			const names = months.map((i) => WATER_YEAR_MONTH_NAMES[i]).join(', ');
+			warnings.push(
+				`pan coefficient is outside FAO-56's typical Class A pan range (${PAN_COEFFICIENT_TYPICAL_MIN}–${PAN_COEFFICIENT_TYPICAL_MAX}) in ${names}: confirm against local humidity and wind`
+			);
+		}
 	}
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);

@@ -117,7 +117,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   model).
   `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
   (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
-  `panCoefficient` is 12 monthly values, each 0–2, in water-year order.
+  `panCoefficient` is 12 monthly values, each 0–2, in water-year order. That
+  0–2 bound is validation only; the engine separately warns (and Settings
+  hints, with a preset picker: `PAN_COEFFICIENT_PRESETS`) when a month sits
+  outside FAO-56's usual 0.6–0.85 range for a Class A pan (model.md §2.4a).
   `wr2012` (engine ≥ 0.6.0; model.md §2.10c) is the optional WR2012 check:
   `reference` (`null`, the default, or the whole object `{ quaternary` 1–16
   chars, `areaKm2` > 0, `marMm3` ≥ 0 (Mm³ a year), `monthlyMm3` 12 values ≥ 0
@@ -167,11 +170,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
   marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
   off, the default), `editedParams` and `forcing`, and no others. `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
-  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm }`, each
-  12 monthly numbers, same bounds as the settings fields) is the pan
-  coefficient and A-pan evaporation the fit ran under: GR4J's parameters
-  trade off against it, so it is never calibrated and a fit is only valid for
-  the forcing it recorded — absent on a record made before this was tracked.
+  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
+  chirpsBiasCorrection }`, `panCoefficient`/`apanMm` each 12 monthly numbers
+  with the same bounds as the settings fields, `chirpsBiasCorrection` optional
+  — `monthly | none`) is the pan coefficient, A-pan evaporation and CHIRPS
+  bias correction mode the fit ran under: GR4J's parameters trade off against
+  evaporation, so the pan coefficient is never calibrated, and CHIRPS bias
+  correction changes the rain fed to the model on the days CHIRPS fills a gap,
+  so a fit is only valid for the forcing it recorded — `forcing` absent on a
+  record made before it was tracked, `chirpsBiasCorrection` absent on a
+  `forcing` made before it was added to it.
   `fitRecordStatus`'s `forcingChanged` compares it against the current
   settings, tolerant of float noise, and is `false` when there is nothing
   recorded to compare.

@@ -289,8 +289,40 @@ predates the setting, so run comparison reads it as legacy.
   irrigation demand. **It is held fixed, never calibrated**: it trades off
   against X1/X3 (a higher coefficient and a smaller store fit the same
   record), so automatic calibration (§2.10b) never searches it, and each fit
-  records the coefficient and A-pan it ran under — a later change to either
+  records the coefficient (and, from the same forcing snapshot, the A-pan and
+  CHIRPS bias correction mode) it ran under — a later change to any of them
   is fit provenance's `forcingChanged` (§2.10b).
+  - **Presets** (`PAN_COEFFICIENT_PRESETS`, `packages/engine/src/project.ts`;
+    a simulated hydrologist recommendation, pending the real one). Three
+    water-year (Oct–Sep) starting points a Settings picker can fill the row
+    with — the row stays monthly and editable after, and nothing records
+    which preset (or whether one at all) was used:
+    | Preset | Oct–Mar | Apr–Sep |
+    | --- | --- | --- |
+    | Generic | 0.70 every month | 0.70 every month |
+    | Winter rainfall (e.g. Western Cape) | 0.70, 0.65, 0.65, 0.65, 0.65, 0.70 | 0.75, 0.80, 0.80, 0.80, 0.80, 0.75 |
+    | Summer rainfall | 0.65, 0.70, 0.75, 0.75, 0.75, 0.75 | 0.70, 0.70, 0.70, 0.65, 0.60, 0.60 |
+
+    They are **indicative, from FAO-56 Table 5 climate classes** (Allen et
+    al. 1998); confirm against local humidity and wind before relying on
+    them.
+  - **Plausibility warning.** A run warns, and Settings hints
+    (`panCoefficientOutOfRange`), when a month sits outside **0.6–0.85**,
+    FAO-56's usual range for a Class A pan. This is a soundness check, not a
+    bound: the API keeps the wider 0–2 it always has, so a stored project with
+    a coefficient further out still loads, saves and runs — the warning just
+    says so. All three presets sit inside 0.6–0.85.
+  - **Testing the effect of a choice.** There is no automated sensitivity
+    harness yet (that is CR-21, [calibration-research.md](./calibration-research.md));
+    until it exists, `pnpm pan-sensitivity <project.json>`
+    (`backend/scripts/pan-sensitivity.ts`) is the manual way to see how much a
+    pan-coefficient choice moves a catchment's results: it runs GR4J at a few
+    values (flat 0.60, 0.70, 0.85, and a preset) and reports MAR, Q95 and EWR
+    compliance, both with GR4J's parameters held fixed and refitted, scored
+    against the logger record. The script takes any project.json and carries
+    no client data; a report run against the client catchment
+    (`data/client-catchment/`, gitignored) stays local, never committed, per
+    the public-repo rule.
 - **No evaporation, no run** (engine ≥ 0.11.1). When A-pan × pan
   coefficient is 0 in every month, GR4J is refused (`GR4J_NO_PET`), as a run
   with no rainfall is. Without evaporation the production store only fills,
@@ -978,11 +1010,12 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   record fitted to, the calibration window and exclusions, whether validation
   was asked for and against which independent record, every scored period
   (the in-sample fit, the split-sample and dry → wet tests, the independent
-  record), the evaporation forcing it ran under (`forcing`: `panCoefficient`
-  and `apanMm`, water-year months — absent on records made before it was
-  tracked), the WR2012 MAR penalty when it was on (§2.10c: its weight, the MAR
-  band when one was used, the simulated MAR ratio and the fit without it) and
-  the notes.
+  record), the forcing it ran under (`forcing`: `panCoefficient` and `apanMm`,
+  water-year months, and `chirpsBiasCorrection` — absent on records made
+  before `forcing` was tracked; `chirpsBiasCorrection` absent on a `forcing`
+  made before it was added to it), the WR2012 MAR penalty when it was on
+  (§2.10c: its weight, the MAR band when one was used, the simulated MAR ratio
+  and the fit without it) and the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
   `editedParams` lists fitted parameters whose value in the settings no
   longer matches the fit; the backend recomputes it on every save
@@ -991,11 +1024,13 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   the mark. Each run snapshots the record in effect in `model_run.inputs`.
   `fitRecordStatus` also says when the runoff model, window, exclusions or
   flow record have changed since the fit — and, from `forcing`, when the pan
-  coefficient or A-pan evaporation has (`forcingChanged`): the pan coefficient
-  is fixed, never calibrated (§2.4a), because it trades off against X1/X3, so
-  a fit is only valid for the forcing it was fitted under and a later change
-  to either array marks the record stale, with a caveat naming the trade-off.
-  The record never changes a result.
+  coefficient, A-pan evaporation or CHIRPS bias correction has
+  (`forcingChanged`): the pan coefficient is fixed, never calibrated (§2.4a),
+  because it trades off against X1/X3, and CHIRPS bias correction changes the
+  rain GR4J sees on the days CHIRPS fills a gap (§2.4b), so a fit is only
+  valid for the forcing it was fitted under and a later change to any of them
+  marks the record stale, with a caveat naming the trade-off. The record never
+  changes a result.
 - **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
   elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
   about 70 s in Node. `onProgress` reports every run and returns true to cancel, which
