@@ -106,9 +106,9 @@
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
 		saveBlockers([
-			{ id: 'set-flow', message: calWindowError },
-			{ id: 'set-flow', message: exclusionsError },
-			{ id: 'set-flow', message: zeroRainError },
+			{ id: 'set-record', message: calWindowError },
+			{ id: 'set-record', message: exclusionsError },
+			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
@@ -352,13 +352,6 @@
 				<span class="hint" id="st-runoff-h">{runoffOption?.help}</span>
 			</div>
 			<div class="field">
-				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
-				<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
-					{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-				</select>
-				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
-			</div>
-			<div class="field">
 				<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>
 				<NumberInput
 					id="cal-catchmentAreaKm2"
@@ -478,37 +471,6 @@
 				</span>
 			</fieldset>
 		{/if}
-		<div class="cal-window">
-			<CalibrationWindowFields
-				bind:start={s.calibrationStart}
-				bind:end={s.calibrationEnd}
-				bind:flowKind={s.calibrationFlowKind}
-				bind:error={calWindowError}
-				{readonly}
-				availableKinds={seriesKinds}
-			/>
-			<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
-		</div>
-		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
-
-		<div id="set-fit">
-			<FitPanel
-				projectId={project.id}
-				runoffModel={s.runoffModel}
-				{x2Open}
-				settings={() => $state.snapshot(s) as unknown as ProjectSettings}
-				model={() => (editor?.dirty ? editor.snapshot() : undefined)}
-				hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
-				{seriesKinds}
-				calibrationFlowKind={s.calibrationFlowKind}
-				{readonly}
-				onApply={applyFit}
-			/>
-		</div>
-		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" />
-		{/if}
-
 		{#if !isGr4j}
 			<details class="advanced">
 				<summary>Advanced: winter switch, recession and base flow</summary>
@@ -598,6 +560,60 @@
 			</details>
 		{/if}
 	</section>
+
+	<!-- How missing catchment rain is filled: CHIRPS, bias-corrected or raw, on
+	     blank days and on the zero-rain runs treated as missing. -->
+	<section class="panel" id="set-rain" aria-labelledby="rain-h">
+		<div class="panel-head">
+			<h2 id="rain-h">Rain gaps and CHIRPS</h2>
+			<span class="muted small">Which days CHIRPS fills in the catchment rain, and how</span>
+		</div>
+		<div class="fields">
+			<div class="field">
+				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
+				<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
+					{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
+			</div>
+		</div>
+		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
+	</section>
+
+	<section class="panel" id="set-record" aria-labelledby="rec-h">
+		<div class="panel-head">
+			<h2 id="rec-h">Calibration record</h2>
+			<span class="muted small">The observed flow the parameters are scored against, and what is left out</span>
+		</div>
+		<CalibrationWindowFields
+			bind:start={s.calibrationStart}
+			bind:end={s.calibrationEnd}
+			bind:flowKind={s.calibrationFlowKind}
+			bind:error={calWindowError}
+			{readonly}
+			availableKinds={seriesKinds}
+		/>
+		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
+	</section>
+
+	<div class="panel" id="set-fit">
+		<FitPanel
+			projectId={project.id}
+			runoffModel={s.runoffModel}
+			{x2Open}
+			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
+			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+			hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+			{seriesKinds}
+			calibrationFlowKind={s.calibrationFlowKind}
+			{readonly}
+			onApply={applyFit}
+		/>
+		{#if s.fitRecord}
+			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" />
+		{/if}
+	</div>
+
 
 	<div id="set-wr2012">
 		<Wr2012Section
@@ -746,12 +762,12 @@
 		<div class="fields">
 			<div class="field">
 				<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-min" min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
-				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 67 %.</span>
+				<NumberInput id="dq-min" decimals={1} min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
+				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 66.7 % (two thirds).</span>
 			</div>
 			<div class="field">
 				<label for="dq-max">Highest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-max" min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
+				<NumberInput id="dq-max" decimals={1} min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
 				<span class="hint" id="dq-max-h">… or more than this share. Default 150 %.</span>
 			</div>
 			<div class="field">
@@ -804,6 +820,12 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 	}
+	/* Fit automatically opens its own panel: no separator above its heading. */
+	#set-fit > :global(.fit:first-child) {
+		border-top: 0;
+		padding-top: 0;
+		margin-top: 0;
+	}
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;
 	}
@@ -828,8 +850,12 @@
 		background: var(--surface-2);
 		z-index: 3;
 	}
+	/* Twelve months plus the row label fit a 1280px screen: 78px holds a
+	   six-digit value (108700) with the input's own padding. */
 	.monthly td {
-		min-width: 92px;
+		min-width: 78px;
+		padding-left: 0.3rem;
+		padding-right: 0.3rem;
 	}
 	.derived td,
 	.derived th {
@@ -919,11 +945,6 @@
 		align-items: center;
 		gap: 0.4rem;
 		min-height: 36px;
-	}
-	.cal-window {
-		margin: 0.25rem 0 0.75rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	.lbl {
 		display: inline-flex;

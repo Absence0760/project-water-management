@@ -76,6 +76,8 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 	await expect(menu.getByRole('link')).toHaveText([
 		'Demand',
 		'Flow calibration',
+		'Rain gaps',
+		'Calibration record',
 		'Fit automatically',
 		'WR2012 check',
 		'Flow share',
@@ -106,4 +108,56 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 	await expect(page.getByRole('heading', { name: /^Data quality/ })).toBeInViewport();
 	await expect(menu.getByRole('link', { name: 'Data quality' })).toBeInViewport();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('the data-quality ratios read as a short percentage, not the stored two thirds to nine places', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings ratio display');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByLabel('Lowest gauge/logger ratio (%)')).toHaveValue('66.7');
+	await expect(page.getByLabel('Highest gauge/logger ratio (%)')).toHaveValue('150');
+	// Showing it rounded doesn't change the stored value: nothing to save.
+	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+});
+
+test('the monthly rows fit a 1280px screen without sideways scrolling, six-digit values included', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 900 });
+	const project = await createProject(page.request, 'Settings monthly fit');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const jun = page.getByLabel('Pragmatic EWR, Jun, m³/day');
+	await jun.fill('108700');
+	const tables = page.locator('table.monthly');
+	await expect(tables.first()).toBeVisible();
+	for (const t of await tables.all()) {
+		expect(await t.evaluate((el) => el.parentElement!.scrollWidth - el.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
+	}
+	// The value shows in full, not clipped by its box.
+	expect(await jun.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
+	await expect(page.getByLabel('Pragmatic EWR, Sep, m³/day')).toBeInViewport();
+});
+
+test('flow calibration is split into its own groups, and a bad exclusion points Save at the calibration record', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings groups');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+
+	// Each part of calibration is its own panel with its own heading.
+	const rain = page.getByRole('region', { name: 'Rain gaps and CHIRPS' });
+	await expect(rain.getByLabel('CHIRPS bias correction', { exact: true })).toBeVisible();
+	await expect(rain.getByLabel('Flagged zero runs', { exact: true })).toBeVisible();
+	const record = page.getByRole('region', { name: 'Calibration record' });
+	await expect(record.getByRole('group', { name: /^Calibration exclusions/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Fit automatically/ })).toBeVisible();
+	const flow = page.getByRole('region', { name: 'Flow calibration (rain → natural flow)' });
+	await expect(flow.getByLabel('Runoff model', { exact: true })).toBeVisible();
+	await expect(flow.getByLabel('CHIRPS bias correction', { exact: true })).toHaveCount(0);
+
+	// An exclusion with no reason blocks Save, and the save bar sends you to the calibration record.
+	await record.getByRole('button', { name: 'Exclude a water year' }).click();
+	const blockers = page.getByRole('status').filter({ hasText: 'to fix before saving' });
+	await expect(blockers.getByRole('link', { name: /^Calibration record: / })).toBeVisible();
+	await blockers.getByRole('link', { name: /^Calibration record: / }).click();
+	await expect(page).toHaveURL(/#set-record$/);
+	await expect(page.getByRole('heading', { name: 'Calibration record' })).toBeInViewport();
 });

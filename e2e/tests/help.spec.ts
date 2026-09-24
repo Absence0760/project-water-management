@@ -66,6 +66,33 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await expect(page.getByRole('article', { name: 'Farm element' })).toBeInViewport();
 });
 
+test('neighbouring help tips show their own close-up, with their feature ringed', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Help tip pictures');
+	await putModel(page.request, project.id, sampleModel());
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto(`/projects/${project.id}?tab=network`);
+
+	const seen: { src: string; ring: { left: string; top: string } }[] = [];
+	for (const name of ['About capacity', 'About runoff to dam', 'About upstream inflow to dam']) {
+		await page.getByRole('button', { name, exact: true }).first().click();
+		const bubble = page.locator('.bubble');
+		const ring = bubble.locator('.ring');
+		await expect(ring).toBeVisible();
+		seen.push({
+			src: (await bubble.locator('img').getAttribute('src'))!,
+			ring: await ring.evaluate((r) => ({ left: (r as HTMLElement).style.left, top: (r as HTMLElement).style.top }))
+		});
+		await page.keyboard.press('Escape');
+		await expect(bubble).toHaveCount(0);
+	}
+	// Capacity shows the dam; the two inflow tips share the inflow close-up but ring different features.
+	expect(seen[0]!.src).toContain('/help/dam-');
+	expect(seen[1]!.src).toContain('/help/inflow-');
+	expect(seen[2]!.src).toBe(seen[1]!.src);
+	expect(seen[2]!.ring).not.toEqual(seen[1]!.ring);
+});
+
 test('the help sidebar stays beside the glossary and follows the section being read', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });

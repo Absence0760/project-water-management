@@ -98,11 +98,20 @@ pending invitations, the confirm-email banner) render through
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
 - **Table layout**: the whole table, through the **In use** share and the ✕
-  column, fits a 1440px screen without sideways scrolling. Field headers wrap
+  column, fits a 1440px screen without sideways scrolling (the dam physics
+  fields live in the one-node form only, see above). Field headers wrap
   (e.g. "Upstream inflow to dam" over three lines) instead of setting the
-  column width, cells are tighter, and the 0–100 % columns are narrower than
-  the area and volume columns. Narrower screens still scroll the table
-  sideways with the Name column pinned.
+  column width, cells are tighter, the short area and 0–100 % columns are
+  narrow, and the volume columns (m³, m³/day; `isVolume`) keep room for a
+  seven-digit value such as 1430000, so a dam capacity is never clipped.
+  Every cell of a column carries its width class, not-used and footer cells
+  included. Every field header is the label (hyphens don't break,
+  so "High-MAP" stays whole) over one line with the unit and its ⓘ, all
+  bottom- and right-aligned, so the icons form one row. Numbers are
+  right-aligned in even-width digits with no spin buttons, and each total
+  lines up with the digits above it. Narrower screens scroll the table sideways inside its own
+  box, with the **Name** column pinned on the left and the **✕** remove
+  column pinned on the right, so every row stays named and removable.
 - **One node layout**: the node picker (‹ select ›) is sticky under the app
   header, so the node being edited stays named and ‹ › stay in reach while
   scrolling a long farm form; **+ Add node** sits just below it and scrolls
@@ -257,8 +266,9 @@ formula ([api.md § Export](./api.md)).
 ## Settings & calibration
 
 - **On this page.** Under the intro, a **Settings sections** menu links to
-  each group (`#set-demand`, `#set-flow`, `#set-fit`, `#set-wr2012`,
-  `#set-share`, `#set-ewr`, `#set-period`, `#set-quality`; listed by
+  each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-period`,
+  `#set-quality`; listed by
   `settings/sections.ts`). It sticks under the app header down the long form
   and marks the group being read with `aria-current="location"`, using the
   Runs rail's scroll spy (`activeSectionId` from `runs/sections.ts`). It is a
@@ -274,7 +284,11 @@ formula ([api.md § Export](./api.md)).
   the message), and that group's menu link gets a red dot ("has a problem").
   Each problem is also shown next to its field.
 
-The settings are grouped by what they drive:
+The settings are grouped by what they drive. Every 12-month row (A-pan, pan
+coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
+sideways scrolling: each month cell is at least 78px, room for a six-digit
+value such as 108700.
+
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
@@ -283,6 +297,15 @@ The settings are grouped by what they drive:
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
   and days in February.
+- **Calibration is four panels**, each its own menu entry, rather than one
+  long one: **Flow calibration (rain → natural flow)** (runoff model,
+  catchment area, the model's parameters and pan coefficient, and Legacy's
+  Advanced), **Rain gaps and CHIRPS** (the CHIRPS bias correction picker and
+  Zero-rain runs: which days CHIRPS fills, and how), **Calibration record**
+  (the calibration window and flow series, and the calibration exclusions;
+  their errors point the save bar here), and **Fit automatically** (the fit
+  panel and the fit record of the parameters). The items below are described
+  in their old order; the panels hold them as listed here.
 - **Flow calibration**: the **runoff model** picker (GR4J, the default, or
   "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
   doesn't conserve water at the event scale (audit H1), so it's kept for
@@ -419,7 +442,8 @@ The settings are grouped by what they drive:
   curtailment reporting window.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
-  in %, minimum shared days; defaults 67 %, 150 %, 90 days). Out-of-range
+  in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
+  thirds), 150 %, 90 days). Out-of-range
   values block Save with a message. They only change which water years are
   flagged, never the results.
 
@@ -542,7 +566,9 @@ page, and closes again when you pick a page.
 - **Pictures.** One Blender scene of an invented catchment, rendered as several
   shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
   outlet weir, the soil layers on the block's cut face, the transfer pipeline
-  and a reach of river. `pnpm gen:help-art` (`bin/gen-help-art.sh`, scene in
+  and a reach of river, plus help-tip close-ups of the dam's stored water, the
+  stream and slopes flowing into it, the wall and the stream below it, the
+  irrigation line, the orchard and the gauging hut. `pnpm gen:help-art` (`bin/gen-help-art.sh`, scene in
   `scripts/help-art/catchment.py`) renders every shot at its full and half
   width to `static/help/<shot>-<w>.webp`, and projects each labelled feature
   through that shot's camera into `lib/help/pictures.json`, so a marker always
@@ -578,9 +604,12 @@ page, and closes again when you pick a page.
   `data-scroll-region`). A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
   `guides.test.ts`).
-- **Help tips** (ⓘ) for terms that map to a part of the scene (a farm's dam and
-  crops, the outlet, the soil, the pipeline, the river; `TIP_PICTURES` in
-  `lib/help/pictures.ts`) show that close-up above the text. It is decorative
+- **Help tips** (ⓘ) for terms that map to a part of the scene (`TIP_PICTURES`
+  in `lib/help/pictures.ts`: a shot and the spot of the term's own feature)
+  show that close-up above the text with a white ring on the feature, so
+  neighbouring tips (capacity, inflow, spill, irrigation…) don't repeat one
+  picture. No two tips share a shot *and* ring, and no shot serves more than
+  eight tips (`tour.test.ts`). The picture is decorative
   (`alt=""`), since the bubble is a live region and its text says what the
   picture shows, and it has a fixed size so the bubble is placed correctly
   before it loads.

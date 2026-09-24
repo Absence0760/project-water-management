@@ -5,6 +5,8 @@
 export const SETTINGS_SECTIONS = [
 	{ id: 'set-demand', label: 'Demand' },
 	{ id: 'set-flow', label: 'Flow calibration' },
+	{ id: 'set-rain', label: 'Rain gaps' },
+	{ id: 'set-record', label: 'Calibration record' },
 	{ id: 'set-fit', label: 'Fit automatically' },
 	{ id: 'set-wr2012', label: 'WR2012 check' },
 	{ id: 'set-share', label: 'Flow share' },

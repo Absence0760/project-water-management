@@ -205,6 +205,56 @@ test.describe('network layout', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
 		await expect(table.getByRole('button', { name: 'Remove Lower farm' })).toBeInViewport();
+		// The header row reads as one even band: every field's ⓘ sits on the same line (with its unit).
+		const tipTops = await table.locator('thead th.fh button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+		expect(tipTops.length).toBeGreaterThan(10);
+		expect(new Set(tipTops).size).toBe(1);
+		// Numbers are right-aligned, and each total's digits line up with the digits above it.
+		const aligned = await table.evaluate((t) => {
+			const foot = t.querySelector('tfoot tr')!;
+			const row = [...t.querySelectorAll('tbody tr')].find((r) => r.querySelectorAll('td input').length > 5)!;
+			return [...foot.children].flatMap((cell, i) => {
+				const input = row.children[i]?.querySelector('input');
+				if (!input || !cell.matches('td.num') || !cell.textContent!.trim()) return [];
+				const range = document.createRange();
+				range.selectNodeContents(cell);
+				const cs = getComputedStyle(input);
+				const digits = input.getBoundingClientRect().right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+				return [{ align: cs.textAlign, gap: Math.abs(range.getBoundingClientRect().right - digits) }];
+			});
+		});
+		// Area and dam capacity carry totals.
+		expect(aligned.length).toBe(2);
+		for (const a of aligned) {
+			expect(a.align).toBe('right');
+			expect(a.gap).toBeLessThanOrEqual(1);
+		}
+		// A seven-digit dam capacity shows in full, not clipped by its box.
+		const capacity = table.getByLabel('Dam capacity of Upper farm, m³');
+		await capacity.fill('1430000');
+		expect(await capacity.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
+		expect(await table.evaluate((t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
+	});
+
+	test('narrower, the node table scrolls in its box with each row named and removable at either end', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1100, height: 900 });
+		const project = await createProject(page.request, 'Network narrow');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+
+		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
+		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
+		const box = table.locator('xpath=..');
+		expect(await box.evaluate((b) => b.scrollWidth > b.clientWidth)).toBe(true);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1100);
+		const name = table.getByRole('textbox', { name: 'Name' }).last();
+		const remove = table.getByRole('button', { name: 'Remove Lower farm' });
+		for (const end of ['right', 'left'] as const) {
+			await box.evaluate((b, e) => (b.scrollLeft = e === 'right' ? b.scrollWidth : 0), end);
+			await expect(name).toBeInViewport({ ratio: 1 });
+			await expect(remove).toBeInViewport({ ratio: 1 });
+		}
 	});
 
 	test.describe('phone', () => {

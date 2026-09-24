@@ -7,7 +7,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GROUPS, isPct, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
+	import { GROUPS, isPct, isVolume, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
@@ -180,13 +180,21 @@
 						{#each groupSpans as g (g.group)}
 							<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
 						{/each}
-						{#if !readonly}<th scope="col" rowspan="2"><span class="visually-hidden">Remove</span></th>{/if}
+						{#if !readonly}<th scope="col" rowspan="2" class="rm"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
 					<tr>
 						{#each TABLE_FIELDS as f (f.key)}
-							<th scope="col" class="num">{f.label} <HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /><br /><span class="u">{f.unit}</span></th>
+							<!-- Label on top (non-breaking hyphens: "High-MAP" stays whole), then the
+							     unit and its ⓘ on one bottom line, the same in every column. -->
+							<th scope="col" class="num fh">
+								<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
+								<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
+							</th>
 						{/each}
-						<th scope="col" class="num" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">In use<br /><span class="u">%</span></th>
+						<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">
+							<span class="fh-l">In use</span>
+							<span class="fh-u"><span class="u">%</span></span>
+						</th>
 					</tr>
 				</thead>
 				<tbody bind:this={reorder.body}>
@@ -238,9 +246,9 @@
 							</td>
 							{#each TABLE_FIELDS as f (f.key)}
 								{#if f.farmOnly && node.kind !== 'farm'}
-									<td class="num na" class:pct={isPct(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
+									<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
 								{:else}
-								<td class:pct={isPct(f)}>
+								<td class:pct={isPct(f)} class:vol={isVolume(f)}>
 									<NumberInput
 										label={f.aria(label)}
 										min={0}
@@ -270,7 +278,7 @@
 						<td></td>
 						<td></td>
 						{#each TABLE_FIELDS as f (f.key)}
-							<td class="num" class:pct={isPct(f)}>
+							<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)}>
 								{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
 							</td>
 						{/each}
@@ -357,9 +365,9 @@
 		border-color: var(--accent);
 		color: var(--accent);
 	}
-	/* Fit the whole table (through "In use" and ✕) on a 1440px screen: field
-	   headers wrap instead of setting the column width, cells are tighter,
-	   and 0–100 % columns are narrower than the volume columns. */
+	/* Keep the table as narrow as it can readably be: field headers wrap
+	   instead of setting the column width, cells are tighter, and 0–100 %
+	   columns are narrower than the volume columns. */
 	.net thead th {
 		white-space: normal;
 	}
@@ -368,13 +376,18 @@
 		padding-left: 0.35rem;
 		padding-right: 0.35rem;
 	}
+	/* Area columns (km²) hold short values; % and volume columns set their own below. */
 	.net td {
-		min-width: 76px;
+		min-width: 68px;
 	}
 	/* Every cell in a column carries pct / rm (not-used and footer cells too):
 	   a column is as wide as its widest cell's minimum. */
 	.net td.pct {
 		min-width: 56px;
+	}
+	/* Room for a seven-digit volume (1430000) in the input, so it is never clipped. */
+	.net td.vol {
+		min-width: 92px;
 	}
 	.net td.rm {
 		min-width: 0;
@@ -387,6 +400,51 @@
 		border-left: 1px solid var(--border);
 		font-weight: 600;
 		color: var(--text);
+	}
+	/* Field headers: every one bottom-aligned and right-aligned over its numbers,
+	   the label wrapping with its ⓘ kept at the end of the last line, and the
+	   unit on its own line below, so the header row reads as one even band. */
+	.net thead tr:last-child th,
+	.net thead th[rowspan] {
+		vertical-align: bottom;
+	}
+	.net th.fh {
+		text-align: right;
+	}
+	.fh-l {
+		display: block;
+		line-height: 1.25;
+	}
+	.fh-u {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 0.2rem;
+		margin-top: 0.2rem;
+		min-height: 1.25rem;
+	}
+	/* Numbers right-aligned in even-width digits, like the totals under them. */
+	.net td :global(input) {
+		width: 100%;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	/* No spin buttons in the dense table: Chrome keeps room for them even when
+	   hidden, which pushed right-aligned digits off the edge (arrow keys still step). */
+	.net td :global(input[type='number']) {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+	.net td :global(input[type='number']::-webkit-inner-spin-button),
+	.net td :global(input[type='number']::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.net tfoot td.num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		/* Line the total's digits up with the input text above: cell padding + input border + input padding. */
+		padding-right: calc(0.35rem + 1px + 0.35rem);
 	}
 	.net thead th :global(.helptip) {
 		margin-left: 0.1rem;
@@ -415,6 +473,21 @@
 	.net tr.sel {
 		background: var(--accent-soft);
 	}
+	/* Remove stays pinned on the right as the name is on the left: below about
+	   1440px the table scrolls sideways inside its box, and each row's action
+	   must stay in reach. */
+	.net .rm {
+		position: sticky;
+		right: 0;
+		z-index: 1;
+		background: var(--surface);
+		box-shadow: inset 1px 0 0 var(--border);
+	}
+	.net thead th.rm,
+	.net tfoot td.rm {
+		background: var(--surface-2);
+	}
+	.net tr.sel td.rm,
 	.net tr.sel th.sticky {
 		background: var(--accent-soft);
 	}

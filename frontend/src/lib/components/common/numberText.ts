@@ -10,3 +10,15 @@ export function groupedText(v: number | null | undefined, scale = 1): string {
 	if (v == null || !Number.isFinite(v)) return '';
 	return fmtNum(round(v * scale), 9, true);
 }
+
+/**
+ * Text form of a plain numeric field: float noise trimmed (9 decimals), or
+ * rounded to `decimals` when set, for a stored value whose exact form isn't
+ * worth showing (2/3 as a percentage reads 66.7, not 66.666666667). Display
+ * only: the stored value is untouched until the user edits the field.
+ */
+export function plainText(v: number | null | undefined, scale = 1, decimals?: number): string {
+	if (v == null || !Number.isFinite(v)) return '';
+	const f = 10 ** (decimals ?? 9);
+	return String(Math.round(v * scale * f) / f);
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseNum } from '$lib/format/number';
-import { groupedText } from './numberText';
+import { groupedText, plainText } from './numberText';
 
 describe('groupedText', () => {
 	it('groups thousands and keeps the decimals that are there', () => {
@@ -29,5 +29,19 @@ describe('reading grouped text back (parseNum)', () => {
 	it('rejects text that is not a number', () => {
 		expect(parseNum('')).toBeNull();
 		expect(parseNum('12a')).toBeNull();
+	});
+});
+
+describe('plainText', () => {
+	it('trims float noise and applies the display scale', () => {
+		expect(plainText(0.07, 100)).toBe('7');
+		expect(plainText(0.1 + 0.2)).toBe('0.3');
+		expect(plainText(null)).toBe('');
+	});
+	it('rounds to the decimals asked for, so two thirds as a percentage reads 66.7', () => {
+		expect(plainText(2 / 3, 100)).toBe('66.666666667');
+		expect(plainText(2 / 3, 100, 1)).toBe('66.7');
+		expect(plainText(1.5, 100, 1)).toBe('150');
+		expect(plainText(0.676, 100, 0)).toBe('68');
 	});
 });

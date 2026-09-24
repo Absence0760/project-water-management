@@ -29,7 +29,7 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	// Tighten the lowest ratio to 90 % in Settings.
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const min = page.getByLabel('Lowest gauge/logger ratio (%)');
-	await expect(min).toHaveValue('66.666666667');
+	await expect(min).toHaveValue('66.7');
 	const save = page.getByRole('button', { name: 'Save settings' });
 	// Out of the input's range: marked invalid and not taken.
 	await min.fill('0');
