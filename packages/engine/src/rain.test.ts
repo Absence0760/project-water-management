@@ -262,7 +262,8 @@ describe('runModel with the CHIRPS correction', () => {
 	});
 
 	it('outputs CHIRPS as uploaded and, beside it, CHIRPS × the monthly factor on every day', () => {
-		const input = runInput();
+		// Legacy, so rain used shows the rain threshold that final rainfall is before.
+		const input = runInput({ runoffModel: 'legacy' });
 		const h = input.series.rain_chirps_mm!.values;
 		h[5] = null; // a missing CHIRPS day is a gap in both columns
 		const out = runModel(input);
@@ -295,12 +296,17 @@ describe('runModel with the CHIRPS correction', () => {
 		}
 		expect(final.some((v, i) => v > 0 && v <= 2 && rain[i] === 0)).toBe(true);
 		expect(corrected.some((v, i) => h[i] !== null && h[i]! > 0 && v !== raw[i])).toBe(true);
+		// The day's monthly factor sits in the next column: 12 values, one per calendar month.
+		expect(keys.indexOf('chirps_factor')).toBe(keys.indexOf('rain_chirps_corrected') + 1);
+		const factor = get(out, null, 'chirps_factor');
+		for (let i = 0; i < DAYS; i++) expect(factor[i]).toBe(factors[monthAt(i) - 1]);
+		expect(new Set(factor).size).toBe(12);
 	});
 
 	it("outputs only the uploaded CHIRPS column in mode 'none', and neither without CHIRPS", () => {
 		const off = runModel(runInput({ chirpsBiasCorrection: 'none' }));
 		expect(off.series.some((x) => x.key === 'rain_chirps')).toBe(true);
-		expect(off.series.some((x) => x.key === 'rain_chirps_corrected')).toBe(false);
+		expect(off.series.some((x) => x.key === 'rain_chirps_corrected' || x.key === 'chirps_factor')).toBe(false);
 		const input = runInput();
 		delete input.series.rain_chirps_mm;
 		expect(runModel(input).series.some((x) => x.key.startsWith('rain_chirps'))).toBe(false);

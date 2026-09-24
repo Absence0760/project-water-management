@@ -1,6 +1,6 @@
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { seriesKeyOrder, summaryCsvLines } from './run-tables.js';
+import { chirpsFactorLines, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
 
 const meta = {
 	projectName: 'Demo',
@@ -51,8 +51,8 @@ describe('summary sheet', () => {
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
-		// blocks are separated by empty records
-		expect(lines.filter((l) => l === '').length).toBe(4);
+		// blocks are separated by empty records (run, farms, catchment, CHIRPS factors, calibration, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(5);
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -79,5 +79,40 @@ describe('summary sheet', () => {
 		expect(lines).toContain('kge,0.4');
 		expect(lines.some((l) => l.includes('calibration not computed'))).toBe(true);
 		expect(lines).not.toContain('Warnings');
+	});
+});
+
+describe('CHIRPS bias factors block', () => {
+	const month = (m: number, factor: number | null, source: 'month' | 'pooled' | null) => ({
+		month: m, days: 100, catchmentMm: 200, chirpsMm: 100, ownFactor: factor, factor, source, clamped: false, fallbackDays: m === 7 ? 31 : 0
+	});
+	const corr = {
+		mode: 'monthly' as const, minDays: 90, minMm: 50, clampMin: 0.25, clampMax: 4,
+		pooled: { days: 1200, catchmentMm: 2400, chirpsMm: 1200, ownFactor: 2, factor: 2, clamped: false },
+		excludedWaterYears: [1999],
+		months: Array.from({ length: 12 }, (_, i) => (i === 0 ? month(1, 2, 'pooled') : month(i + 1, 1 + (i + 1) / 10, 'month'))),
+		fallbackDays: 31, correctedDays: 31, fallbackRawMm: 10, fallbackCorrectedMm: 17
+	};
+
+	it('lists the 12 factors in water-year order with their source, then the pooled factor', () => {
+		const lines = [...chirpsFactorLines(corr)];
+		expect(lines[0]).toBe('CHIRPS bias correction');
+		expect(lines[1]!.startsWith('Month,Factor applied,Source')).toBe(true);
+		expect(lines.slice(2, 14).map((l) => l.split(',')[0])).toEqual(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+		expect(lines[2]).toBe('Oct,2,own month,2,no,100,200,100,0');
+		expect(lines[5]).toBe('Jan,2,pooled (all months),2,no,100,200,100,0');
+		expect(lines[11]!.split(',')[8]).toBe('31'); // Jul: days CHIRPS filled in
+		expect(lines[14]!.startsWith('Pooled,2,all months together')).toBe(true);
+		expect(lines[15]).toBe('Water years left out of the fit,1999');
+	});
+
+	it('says why there are no factors', () => {
+		expect([...chirpsFactorLines({ ...corr, mode: 'none' })][1]).toMatch(/used as uploaded/);
+		expect([...chirpsFactorLines(null)][1]).toMatch(/No CHIRPS series/);
+		expect([...chirpsFactorLines(undefined)][1]).toMatch(/before engine 0\.7\.0/);
+	});
+
+	it('is part of the summary sheet', () => {
+		expect([...summaryCsvLines(meta, { ...summary, chirpsCorrection: corr })]).toContain('CHIRPS bias correction');
 	});
 });

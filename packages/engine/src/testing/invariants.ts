@@ -6,7 +6,7 @@
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import type { CurtailmentFarm, EwrComplianceGrid, ModelInput, ModelOutput } from '../project';
+import { defaultProjectSettings, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 import { runModel } from '../run';
 import { cloneInput, scrambleOrder } from './fuzz';
 
@@ -27,7 +27,7 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * - the catchment balance closes over the run: opening storage + runoff =
  *   outflow + consumptive use + closing storage.
  */
-const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected']);
+const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor']);
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
@@ -323,7 +323,8 @@ function waterYearOfDay(day: number): number {
  */
 export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string | null {
 	const b = out.summary.runoff;
-	const legacy = (input.settings.runoffModel ?? 'legacy') === 'legacy';
+	// An absent setting runs the engine's default model, as runModel does.
+	const legacy = (input.settings.runoffModel ?? defaultProjectSettings().runoffModel) === 'legacy';
 	if (!b) return legacy ? null : `runoff model ${String(input.settings.runoffModel)} reported no water balance`;
 	if (legacy) return 'a legacy run reported a runoff balance';
 	const get = seriesMap(out);

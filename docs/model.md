@@ -364,7 +364,7 @@ factors (Oct–Sep) and the day count. GR4J's `rain_used` series shows the
 corrected rain day by day.
 
 **Rain columns in every run (engine ≥ 0.10.1).** Beside the model's own
-`rain_used`, a run outputs three catchment series (`chirpsColumns` and
+`rain_used`, a run outputs up to four catchment series (`chirpsColumns` and
 `runRain` in `run.ts`), which sit next to each other in the daily CSV export
 and the series explorer:
 
@@ -373,6 +373,14 @@ and the series explorer:
 | `rain_final` | Final catchment rainfall: catchment rain, else corrected CHIRPS, else forecast. Before any rain threshold, so the legacy `rain_used` can read 0 where this reads ≤ the threshold | NaN when no source has a value (the model treats the day as dry) |
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
+| `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
+
+The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
+calendar month (Oct … Sep) with the factor applied, its source (own month,
+pooled, or none), the unclamped own factor, whether it was clamped, the shared
+days and the catchment and CHIRPS rain on them, and the days CHIRPS filled in;
+then the pooled factor and the water years left out of the fit
+(`chirpsFactorLines` in `backend/src/export/run-tables.ts`).
 
 Runs saved before 0.10.1 don't have these series; re-run to see them.
 

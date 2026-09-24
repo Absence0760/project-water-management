@@ -289,8 +289,10 @@ The settings are grouped by what they drive:
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
-  (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1),
-  which the catchment daily CSV puts in adjacent columns after rain used.
+  (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
+  and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
+  puts in adjacent columns after rain used. The summary CSV lists the 12
+  monthly factors.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores about 170 series of about 16 000 values.
   Large arrays live in `$state.raw` and are replaced, never mutated.

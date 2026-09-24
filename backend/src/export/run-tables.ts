@@ -20,6 +20,7 @@ const CATCHMENT_ORDER = [
 	'rain_final',
 	'rain_chirps',
 	'rain_chirps_corrected',
+	'chirps_factor',
 	'is_summer',
 	'rain_flow',
 	'base_flow',
@@ -115,9 +116,49 @@ function labelledRows(obj: Record<string, unknown>, labels: Record<string, strin
 	return out;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Water-year order (Oct … Sep), as the app's monthly settings and the run warning list them. */
+const WY_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const SOURCE_TEXT = { month: 'own month', pooled: 'pooled (all months)' } as const;
+
+/** The 12 CHIRPS bias factors the run applied (model.md §2.4b), one row per calendar month. */
+export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator<string> {
+	yield csvRow(['CHIRPS bias correction']);
+	if (c === undefined) {
+		yield csvRow(['Run made before engine 0.7.0: CHIRPS used as uploaded']);
+		return;
+	}
+	if (c === null) {
+		yield csvRow(['No CHIRPS series — nothing to correct']);
+		return;
+	}
+	if (c.mode === 'none') {
+		yield csvRow(["Setting 'none': CHIRPS used as uploaded"]);
+		return;
+	}
+	yield csvRow(['Month', 'Factor applied', 'Source', 'Own factor', 'Clamped', 'Shared days', 'Catchment rain on them (mm)', 'CHIRPS on them (mm)', 'Days CHIRPS filled in']);
+	for (const m of WY_MONTHS) {
+		const f = c.months[m - 1]!;
+		yield csvRow([
+			MONTH_NAMES[m - 1]!,
+			f.factor,
+			f.source ? SOURCE_TEXT[f.source] : 'none (CHIRPS used as uploaded)',
+			f.ownFactor,
+			f.clamped ? 'yes' : 'no',
+			f.days,
+			f.catchmentMm,
+			f.chirpsMm,
+			f.fallbackDays
+		]);
+	}
+	yield csvRow(['Pooled', c.pooled.factor, 'all months together', c.pooled.ownFactor, c.pooled.clamped ? 'yes' : 'no', c.pooled.days, c.pooled.catchmentMm, c.pooled.chirpsMm, c.fallbackDays]);
+	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
+}
+
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
- * details, the per-farm table, the catchment figures, calibration, warnings.
+ * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
+ * calibration, warnings.
  * Fields the engine adds to the summary later still appear (under their key).
  */
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
@@ -147,6 +188,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield csvRow(['Catchment']);
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
+	yield '';
+
+	yield* chirpsFactorLines(summary.chirpsCorrection);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);

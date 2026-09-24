@@ -44,7 +44,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.10.1';
+export const ENGINE_VERSION = '0.10.2';
 
 const SEC_PER_DAY = 86_400;
 
@@ -131,7 +131,7 @@ export function runModelWith(
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
 	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
-	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, 'mm', s.values);
+	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
 		['demand', 'demand', 'Irrigation demand (net)'],
@@ -577,9 +577,11 @@ export function pickObservedKind(
  * CHIRPS as uploaded and, beside it, CHIRPS × its calendar month's bias factor
  * (§2.4b) on every day it has a value, not only the fallback days, so the two
  * columns can be read side by side. Rain used still only takes the corrected
- * value where the catchment rain is blank. The corrected column is left out
- * when the setting is 'none' or no month has a factor; a month without one
- * keeps its raw value. Missing days are NaN, so charts show gaps.
+ * value where the catchment rain is blank. The corrected column, and the
+ * factor column beside it (the day's calendar-month factor, NaN for a month
+ * without one), are left out when the setting is 'none' or no month has a
+ * factor; a month without a factor keeps its raw value. Missing CHIRPS days
+ * are NaN, so charts show gaps.
  */
 export function chirpsColumns(
 	chirps: DailySeries | undefined,
@@ -587,16 +589,15 @@ export function chirpsColumns(
 	start: number,
 	days: number,
 	month: Uint8Array
-): { key: string; label: string; values: number[] }[] {
+): { key: string; label: string; unit: string; values: number[] }[] {
 	if (!chirps) return [];
 	const raw = alignSeries(chirps, start, days).map((v) => (v === null ? NaN : v));
-	const out = [{ key: 'rain_chirps', label: 'CHIRPS rain as uploaded', values: raw }];
+	const out = [{ key: 'rain_chirps', label: 'CHIRPS rain as uploaded', unit: 'mm', values: raw }];
 	if (corr?.mode === 'monthly' && corr.months.some((m) => m.factor !== null)) {
-		const corrected = raw.map((v, t) => {
-			const f = corr.months[month[t]! - 1]!.factor;
-			return f === null ? v : v * f;
-		});
-		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', values: corrected });
+		const factor = Array.from(month, (m) => corr.months[m - 1]!.factor ?? NaN);
+		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
+		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
+		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
 	}
 	return out;
 }
