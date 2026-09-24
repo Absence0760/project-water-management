@@ -40,6 +40,8 @@
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
+	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
+	import { activeSectionId } from '$lib/components/runs/sections';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
@@ -101,6 +103,19 @@
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	let wr2012Error = $state<string | null>(null);
 	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!reportError || !!dqError || !!wr2012Error);
+	// What blocks Save, by group, so the save bar can link to each one.
+	const blockers = $derived(
+		saveBlockers([
+			{ id: 'set-flow', message: calWindowError },
+			{ id: 'set-flow', message: exclusionsError },
+			{ id: 'set-flow', message: zeroRainError },
+			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
+			{ id: 'set-wr2012', message: wr2012Error },
+			{ id: 'set-ewr', message: reportError },
+			{ id: 'set-period', message: dateError },
+			{ id: 'set-quality', message: dqError }
+		])
+	);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -186,6 +201,62 @@
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
 	const petMissing = $derived(!hasPotentialEvaporation(s));
 	const num = (k: string) => cal[k] as number;
+
+	// The sticky in-page menu, and which group is being read (scroll spy, as on
+	// Runs & results). The menu and the save bar both stick, so in-page jumps and
+	// focus scrolling keep clear of them (WCAG 2.4.11) while this tab is shown.
+	let navHeight = $state(0);
+	let actionsHeight = $state(0);
+	let activeSection = $state<string | null>(null);
+	let navList = $state<HTMLUListElement>();
+	// On a phone the menu is one sideways strip: keep the marked link in it in view.
+	$effect(() => {
+		const link = activeSection ? navList?.querySelector<HTMLElement>(`a[href="#${activeSection}"]`) : null;
+		if (!navList || !link || navList.scrollWidth <= navList.clientWidth) return;
+		const left = link.offsetLeft - navList.offsetLeft;
+		if (left < navList.scrollLeft || left + link.offsetWidth > navList.scrollLeft + navList.clientWidth) {
+			navList.scrollLeft = left - 16;
+		}
+	});
+	$effect(() => {
+		const root = document.documentElement;
+		const header = parseFloat(getComputedStyle(root).getPropertyValue('--header-h')) || 0;
+		root.style.scrollPaddingTop = `${header + navHeight + 12}px`;
+		root.style.scrollPaddingBottom = actionsHeight ? `${actionsHeight + 12}px` : '';
+		return () => {
+			root.style.scrollPaddingTop = '';
+			root.style.scrollPaddingBottom = '';
+		};
+	});
+	$effect(() => {
+		let frame = 0;
+		const update = () => {
+			frame = 0;
+			const root = document.documentElement;
+			// A group counts as reached once its top passes under the sticky menu.
+			const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
+			const tops = SETTINGS_SECTIONS.flatMap(({ id }) => {
+				const el = document.getElementById(id);
+				return el ? [{ id, top: el.getBoundingClientRect().top }] : [];
+			});
+			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2);
+		};
+		const schedule = () => {
+			if (!frame) frame = requestAnimationFrame(update);
+		};
+		update();
+		window.addEventListener('scroll', schedule, { passive: true });
+		window.addEventListener('resize', schedule);
+		// Groups open and close (Advanced, the WR2012 fields, a fit's result), which moves every later one.
+		const grow = new ResizeObserver(schedule);
+		grow.observe(document.body);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener('scroll', schedule);
+			window.removeEventListener('resize', schedule);
+			grow.disconnect();
+		};
+	});
 </script>
 
 <form onsubmit={save} novalidate>
@@ -197,8 +268,24 @@
 		year, October → September.
 	</p>
 
+	<!-- In-page menu: sticks under the app header down this long form and marks
+	     the group being read. A wrapping row on wide screens, one scrolling strip
+	     on phones. -->
+	<nav class="sections" aria-label="Settings sections" bind:clientHeight={navHeight}>
+		<span class="nav-h" aria-hidden="true">On this page</span>
+		<ul bind:this={navList}>
+			{#each SETTINGS_SECTIONS as sec (sec.id)}
+				<li>
+					<a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>
+						{sec.label}{#if blockers.some((b) => b.id === sec.id)}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
+					</a>
+				</li>
+			{/each}
+		</ul>
+	</nav>
+
 	<!-- Demand ------------------------------------------------------------------>
-	<section class="panel" aria-labelledby="dem-h">
+	<section class="panel" id="set-demand" aria-labelledby="dem-h">
 		<div class="panel-head">
 			<h2 id="dem-h">Demand</h2>
 			<span class="muted small">Gross irrigation need = A-pan × crop factor × area</span>
@@ -246,7 +333,7 @@
 	</section>
 
 	<!-- Flow generation ------------------------------------------------------------>
-	<section class="panel" aria-labelledby="cal-h">
+	<section class="panel" id="set-flow" aria-labelledby="cal-h">
 		<div class="panel-head">
 			<h2 id="cal-h">Flow calibration (rain → natural flow)</h2>
 			<span class="muted small">Tune against observed flow; check NSE and PBIAS on Runs & results</span>
@@ -399,18 +486,20 @@
 		</div>
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 
-		<FitPanel
-			projectId={project.id}
-			runoffModel={s.runoffModel}
-			{x2Open}
-			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
-			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
-			hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
-			{seriesKinds}
-			calibrationFlowKind={s.calibrationFlowKind}
-			{readonly}
-			onApply={applyFit}
-		/>
+		<div id="set-fit">
+			<FitPanel
+				projectId={project.id}
+				runoffModel={s.runoffModel}
+				{x2Open}
+				settings={() => $state.snapshot(s) as unknown as ProjectSettings}
+				model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+				hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+				{seriesKinds}
+				calibrationFlowKind={s.calibrationFlowKind}
+				{readonly}
+				onApply={applyFit}
+			/>
+		</div>
 		{#if s.fitRecord}
 			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" />
 		{/if}
@@ -505,15 +594,17 @@
 		{/if}
 	</section>
 
-	<Wr2012Section
-		bind:value={s.wr2012}
-		bind:error={wr2012Error}
-		{readonly}
-		modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
-	/>
+	<div id="set-wr2012">
+		<Wr2012Section
+			bind:value={s.wr2012}
+			bind:error={wr2012Error}
+			{readonly}
+			modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
+		/>
+	</div>
 
 	<!-- Flow share ----------------------------------------------------------------->
-	<section class="panel" aria-labelledby="share-h">
+	<section class="panel" id="set-share" aria-labelledby="share-h">
 		<div class="panel-head">
 			<h2 id="share-h">Flow share between farms</h2>
 			<span class="muted small">Splits catchment natural flow and the EWR into per-farm parts</span>
@@ -550,7 +641,7 @@
 	</section>
 
 	<!-- EWR -------------------------------------------------------------------------->
-	<section class="panel" aria-labelledby="ewr-h">
+	<section class="panel" id="set-ewr" aria-labelledby="ewr-h">
 		<div class="panel-head">
 			<h2 id="ewr-h">Environmental water requirement (EWR)</h2>
 			<span class="muted small">Pragmatic EWR at the outflow gauge</span>
@@ -610,7 +701,7 @@
 	</section>
 
 	<!-- Period ------------------------------------------------------------------------>
-	<section class="panel" aria-labelledby="per-h">
+	<section class="panel" id="set-period" aria-labelledby="per-h">
 		<div class="panel-head"><h2 id="per-h">Simulation period <HelpTip key="settings.simulationStart" /></h2></div>
 		<div class="form-row">
 			<div class="field">
@@ -642,7 +733,7 @@
 	</section>
 
 	<!-- Data quality ------------------------------------------------------------------>
-	<section class="panel" aria-labelledby="dq-h">
+	<section class="panel" id="set-quality" aria-labelledby="dq-h">
 		<div class="panel-head">
 			<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
 			<span class="muted small">Gauge vs logger check on the Time series tab and in run warnings</span>
@@ -669,10 +760,20 @@
 	</section>
 
 	{#if !readonly}
-		<div class="actions">
+		<div class="actions" bind:clientHeight={actionsHeight}>
+			<!-- What blocks Save, each linking to the group where it is fixed. -->
+			<div class="blockers" role="status">
+				{#if dirty && blockers.length}
+					<span class="err">{blockers.length} {blockers.length === 1 ? 'group has a problem' : 'groups have problems'} to fix before saving:</span>
+					<ul>
+						{#each blockers as b (b.id)}
+							<li><a href="#{b.id}">{b.label}<span class="visually-hidden">: {b.message}</span></a></li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
 			{#if justSaved && !dirty}<span class="muted" role="status">Settings saved.</span>{/if}
 			{#if dirty}<span class="unsaved">Unsaved settings</span>{/if}
-			{#if dirty && wr2012Error}<span class="err" role="status">{wr2012Error}</span>{/if}
 			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
 				{saving ? 'Saving…' : 'Save settings'}
@@ -782,16 +883,14 @@
 		color: var(--text-muted);
 		font-weight: 400;
 	}
+	/* The monthly row gets the full width (beside it, the chart squeezed the
+	   row into a sideways scroll even at 1600px); the chart sits under it. */
 	.ewr {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
-		gap: 1rem;
-		align-items: start;
+		gap: 0.75rem;
 	}
-	@media (max-width: 1000px) {
-		.ewr {
-			grid-template-columns: minmax(0, 1fr);
-		}
+	.ewr-side {
+		max-width: 420px;
 	}
 	.ewr-side p {
 		margin: 0.3rem 0 0;
@@ -856,6 +955,103 @@
 		padding: 0.75rem 0;
 		background: var(--bg);
 		border-top: 1px solid var(--border);
+	}
+	/* In-page menu (as on Runs & results, but a bar: the monthly input rows need the full width). */
+	.sections {
+		position: sticky;
+		top: var(--header-h);
+		z-index: 15;
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin: 0 0 1rem;
+		padding: 0.45rem 0;
+		background: var(--bg);
+		border-bottom: 1px solid var(--border);
+	}
+	.nav-h {
+		flex: none;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+	.sections ul {
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	.sections a {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 30px;
+		padding: 0 0.65rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		font-size: 0.8rem;
+		color: var(--text-2);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	.sections a:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.sections a[aria-current='location'] {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 50%;
+		background: var(--danger);
+	}
+	/* Phones: one row that scrolls sideways inside the bar, never the page. */
+	@media (max-width: 640px) {
+		.nav-h {
+			display: none;
+		}
+		.sections ul {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			scrollbar-width: none;
+		}
+		.sections a {
+			min-height: 36px;
+		}
+	}
+	.blockers {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.2rem 0.6rem;
+		margin-right: auto;
+		min-width: 0;
+	}
+	.blockers ul {
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.2rem 0.6rem;
+		margin: 0;
+		padding: 0;
+	}
+	.blockers a {
+		font-size: 0.85rem;
+		font-weight: 500;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
 	}
 	.unsaved {
 		color: var(--warning);
