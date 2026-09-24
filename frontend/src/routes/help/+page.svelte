@@ -1,14 +1,21 @@
 <script lang="ts">
-	// Glossary and model help: every entry in $lib/help/content, grouped by
-	// topic, searchable, with a stable anchor per term (/help#<id>) that the
-	// HelpTips link to.
+	// Help: the guides ($lib/help/guides, each on /help/guides/<id>) and the
+	// glossary (every entry in $lib/help/content, grouped by topic, with a
+	// stable anchor per term, /help#<id>, that the HelpTips link to). One
+	// search box covers both.
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { CATEGORY_TITLES, HELP, helpFor, searchHelp, type HelpCategory, type HelpEntry } from '$lib/help/content';
+	import { GUIDE_KIND_TITLES, GUIDES, searchGuides, type Guide, type GuideKind } from '$lib/help/guides';
 
 	let query = $state('');
 	const results = $derived(searchHelp(query));
+	const guideResults = $derived(searchGuides(query));
+	const guideGroups = (Object.keys(GUIDE_KIND_TITLES) as GuideKind[]).map((kind) => ({
+		kind,
+		guides: GUIDES.filter((g) => g.kind === kind)
+	}));
 	const searching = $derived(query.trim().length > 0);
 	const groups = $derived.by(() => {
 		const out: { category: HelpCategory; entries: HelpEntry[] }[] = [];
@@ -101,25 +108,34 @@
 	<header class="head">
 		<h1>Help and glossary</h1>
 		<p class="muted">
-			What each input and result means, in hydrologists’ terms. Concepts follow the WBT b023 workbook (its Help,
-			Models and configuration sheets) and the project’s model reference
-			(<span class="mono">docs/model.md</span>); the wording is ours. Look for the <span aria-hidden="true">ⓘ</span> buttons next to fields for the short version.
+			Guides to setting up, calibrating and reading a catchment model, and what each input and result means, in
+			hydrologists’ terms. Concepts follow the WBT b023 workbook (its Help, Models and configuration sheets) and the
+			project’s model reference (<span class="mono">docs/model.md</span>); the wording is ours. Look for the
+			<span aria-hidden="true">ⓘ</span> buttons next to fields for the short version.
 		</p>
 		<div class="search">
-			<label for="help-q" class="visually-hidden">Search the glossary</label>
-			<input id="help-q" type="search" placeholder="Search terms, e.g. EWR, crop factor, NSE" bind:value={query} autocomplete="off" />
+			<label for="help-q" class="visually-hidden">Search guides and the glossary</label>
+			<input id="help-q" type="search" placeholder="Search, e.g. calibrate, EWR, crop factor, NSE" bind:value={query} autocomplete="off" />
 			<p class="muted count" role="status" aria-live="polite">
-				{#if searching}{results.length} {results.length === 1 ? 'match' : 'matches'}{/if}
+				{#if searching}{guideResults.length} {guideResults.length === 1 ? 'guide' : 'guides'},
+					{results.length} {results.length === 1 ? 'term' : 'terms'}{/if}
 			</p>
 		</div>
 	</header>
 
+	{#snippet guideCard(g: Guide)}
+		<li class="guide panel">
+			<a href="{base}/help/guides/{g.id}">{g.title}</a>
+			<p class="muted">{g.summary}</p>
+		</li>
+	{/snippet}
+
 	{#snippet entryCard(e: HelpEntry)}
 		<article class="entry panel" id={e.id} tabindex="-1" aria-labelledby="{e.id}-t">
-			<h3>
+			<h4>
 				<span id="{e.id}-t">{e.term}</span>
 				<a class="anchor" href="#{e.id}" aria-label="Link to {e.term}">#</a>
-			</h3>
+			</h4>
 			<p class="short">{e.short}</p>
 			{#each paragraphs(e.long) as para, i (i)}
 				<p class="long">{para}</p>
@@ -145,15 +161,36 @@
 
 	{#if searching}
 		<section aria-label="Search results">
-			{#each results as e (e.id)}
-				{@render entryCard(e)}
-			{:else}
+			{#if guideResults.length}
+				<h2>Guides</h2>
+				<ul class="guides">
+					{#each guideResults as g (g.id)}{@render guideCard(g)}{/each}
+				</ul>
+			{/if}
+			{#if results.length}
+				<h2>Glossary</h2>
+				{#each results as e (e.id)}
+					{@render entryCard(e)}
+				{/each}
+			{/if}
+			{#if !guideResults.length && !results.length}
 				<p class="muted">Nothing matches “{query}”. Try a shorter word or an abbreviation (EWR, MAP, NSE).</p>
-			{/each}
+			{/if}
 		</section>
 	{:else}
+		<section class="guides-all" aria-labelledby="guides-h">
+			<h2 id="guides-h">Guides</h2>
+			{#each guideGroups as grp (grp.kind)}
+				<h3 class="kind">{GUIDE_KIND_TITLES[grp.kind]}</h3>
+				<ul class="guides" class:start={grp.kind === 'start'}>
+					{#each grp.guides as g (g.id)}{@render guideCard(g)}{/each}
+				</ul>
+			{/each}
+		</section>
+
+		<h2 id="glossary-h" class="glossary-h">Glossary</h2>
 		<div class="layout">
-			<nav class="toc" aria-label="Topics" bind:this={tocEl}>
+			<nav class="toc" aria-label="Glossary topics" bind:this={tocEl}>
 				<ul class="topics">
 					{#each groups as g (g.category)}
 						{@const here = current.topic === g.category}
@@ -173,7 +210,7 @@
 			<div class="content">
 				{#each groups as g (g.category)}
 					<section aria-labelledby="topic-{g.category}">
-						<h2 id="topic-{g.category}">{CATEGORY_TITLES[g.category]}</h2>
+						<h3 id="topic-{g.category}" class="topic">{CATEGORY_TITLES[g.category]}</h3>
 						{#each g.entries as e (e.id)}
 							{@render entryCard(e)}
 						{/each}
@@ -225,7 +262,7 @@
 		color: var(--text);
 		font-weight: 600;
 	}
-	.content > section:first-child > h2 {
+	.content > section:first-child > .topic {
 		margin-top: 0;
 	}
 	/* Wide screens: a sidebar that stays on screen, below the app header. */
@@ -283,9 +320,44 @@
 			font-weight: 600;
 		}
 	}
-	section > h2 {
+	.topic {
 		margin: 1.5rem 0 0.75rem;
+		font-size: 1.15rem;
 		scroll-margin-top: 60px;
+	}
+	.glossary-h {
+		margin: 2rem 0 1rem;
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--border);
+	}
+	.kind {
+		margin: 1.25rem 0 0.5rem;
+		font-size: 1rem;
+		color: var(--text-2);
+	}
+	.guides {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+		gap: 0.75rem;
+		margin: 0 0 1rem;
+		padding: 0;
+		list-style: none;
+	}
+	.guides.start {
+		grid-template-columns: 1fr;
+	}
+	.guide {
+		margin: 0;
+	}
+	.guide a {
+		font-weight: 600;
+	}
+	.guide p {
+		margin: 0.35rem 0 0;
+		font-size: 0.9rem;
+	}
+	.guides.start .guide {
+		border-left: 3px solid var(--accent);
 	}
 	.entry {
 		scroll-margin-top: 60px;
@@ -295,7 +367,7 @@
 		outline: 2px solid var(--focus);
 		outline-offset: 2px;
 	}
-	.entry h3 {
+	.entry h4 {
 		display: flex;
 		align-items: baseline;
 		gap: 0.4rem;

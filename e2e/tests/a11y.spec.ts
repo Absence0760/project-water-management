@@ -183,7 +183,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 			});
 
-			test('teams, a team page and help have no violations', async ({ page, owner }) => {
+			test('teams, a team page, help and a help guide have no violations', async ({ page, owner }) => {
 				void owner;
 				await page.goto('/teams');
 				await expect(page.getByRole('heading', { level: 1, name: 'Teams' })).toBeVisible();
@@ -199,6 +199,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
 				await page.goto('/help');
 				await expect(page.getByRole('heading', { level: 1, name: 'Help and glossary' })).toBeVisible();
+				await expectNoViolations(page);
+
+				// A guide with every block type and two diagrams.
+				await page.goto('/help/guides/how-calibration-works');
+				await expect(page.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible();
 				await expectNoViolations(page);
 			});
 

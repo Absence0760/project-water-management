@@ -60,8 +60,8 @@ test('the help contents stay on screen beside the text and follow the section be
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto('/help');
-	const toc = page.getByRole('navigation', { name: 'Topics' });
-	const topics = page.getByRole('heading', { level: 2 });
+	const toc = page.getByRole('navigation', { name: 'Glossary topics' });
+	const topics = page.locator('.content').getByRole('heading', { level: 3 });
 	const first = (await topics.first().textContent())!.trim();
 	const last = (await topics.last().textContent())!.trim();
 	expect(first).not.toBe(last);
@@ -87,11 +87,48 @@ test('on a phone the help topics sit above the text, without a sidebar', async (
 	void owner;
 	await page.setViewportSize({ width: 390, height: 800 });
 	await page.goto('/help');
-	const toc = page.getByRole('navigation', { name: 'Topics' });
-	const firstTopic = page.getByRole('heading', { level: 2 }).first();
+	const toc = page.getByRole('navigation', { name: 'Glossary topics' });
+	const firstTopic = page.locator('.content').getByRole('heading', { level: 3 }).first();
 	const tocBox = (await toc.boundingBox())!;
 	const headBox = (await firstTopic.boundingBox())!;
 	expect(tocBox.y + tocBox.height).toBeLessThanOrEqual(headBox.y);
 	await page.keyboard.press('End');
 	await expect(toc).not.toBeInViewport();
+});
+
+test('a guide opens from the help page, shows its diagram, and links into the glossary', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help');
+	const guides = page.getByRole('region', { name: 'Guides' });
+	await guides.getByRole('link', { name: 'How calibration works' }).click();
+
+	await expect(page).toHaveURL(/\/help\/guides\/how-calibration-works$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible();
+	await expect(page.getByRole('img', { name: /DDS perturbs fewer parameters/ })).toBeVisible();
+	await expect(page.getByRole('img', { name: /dry to wet test fits on the four driest years/ })).toBeVisible();
+
+	// "On this page" jumps to a section.
+	await page.getByRole('navigation', { name: 'On this page' }).getByRole('link', { name: 'Validation: the honest measure' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Validation: the honest measure' })).toBeInViewport();
+
+	// A term link lands on its glossary entry.
+	await page.getByRole('region', { name: 'Terms in this guide' }).getByRole('link', { name: 'Fit record' }).click();
+	await expect(page).toHaveURL(/\/help#fit-record$/);
+	await expect(page.getByRole('article', { name: 'Fit record' })).toBeInViewport();
+});
+
+test('help search finds guides and glossary terms together', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help');
+	await page.getByRole('searchbox', { name: 'Search guides and the glossary' }).fill('transfer');
+	const results = page.getByRole('region', { name: 'Search results' });
+	await expect(results.getByRole('link', { name: 'Add a transfer' })).toBeVisible();
+	await expect(results.getByRole('article', { name: 'Transfer', exact: true })).toBeVisible();
+});
+
+test('an unknown guide says so and links back to help', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/guides/no-such-guide');
+	await expect(page.getByRole('heading', { level: 1, name: 'Guide not found' })).toBeVisible();
+	await expect(page.getByRole('main').getByRole('link', { name: 'See all guides and the glossary' })).toBeVisible();
 });

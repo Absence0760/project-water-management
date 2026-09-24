@@ -1,0 +1,1051 @@
+// Guides for the /help page: how-tos and "how it works" explainers, beside
+// the glossary in ./content.ts. Each guide has its own page
+// (/help/guides/<id>); diagrams are inline SVG components
+// ($lib/components/help/diagrams), keyed by DiagramId.
+//
+// Inline text markup, parsed by `inline()` (no HTML, so nothing is {@html}):
+//   **Save**                 a UI label, shown in bold
+//   [[ewr]]                  link to a glossary entry, labelled with its term
+//   [[ewr|the Reserve]]      the same, with its own label
+//   [[guide:add-data|label]] link to another guide
+// Every reference must resolve (guarded by guides.test.ts).
+
+import { helpFor } from './content';
+
+export type GuideKind = 'start' | 'howto' | 'concept';
+
+export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
+	start: 'Start here',
+	howto: 'How to',
+	concept: 'How it works'
+};
+
+/** Project workspace tabs a guide can point at (`?tab=`). */
+export type TabId = 'overview' | 'network' | 'crops' | 'transfers' | 'series' | 'settings' | 'runs';
+
+export const TAB_TITLES: Record<TabId, string> = {
+	overview: 'Overview',
+	network: 'Network',
+	crops: 'Crops & demand',
+	transfers: 'Transfers',
+	series: 'Data',
+	settings: 'Settings & calibration',
+	runs: 'Runs & results'
+};
+
+export const DIAGRAM_IDS = [
+	'workflow',
+	'network',
+	'pipeline',
+	'farm-day',
+	'gr4j',
+	'calibration-loop',
+	'validation',
+	'rain-sources'
+] as const;
+export type DiagramId = (typeof DIAGRAM_IDS)[number];
+
+export type GuideBlock =
+	| { type: 'p'; text: string }
+	/** Numbered steps: things to do, in order. */
+	| { type: 'steps'; items: string[] }
+	| { type: 'list'; items: string[] }
+	| { type: 'note'; tone: 'tip' | 'caution'; text: string }
+	| { type: 'formula'; text: string }
+	| { type: 'diagram'; id: DiagramId; caption: string };
+
+export interface GuideSection {
+	heading: string;
+	blocks: GuideBlock[];
+}
+
+export interface Guide {
+	/** Stable slug: /help/guides/<id>. Lowercase, hyphenated. */
+	id: string;
+	title: string;
+	/** One or two sentences for the guide list and search. */
+	summary: string;
+	kind: GuideKind;
+	/** The workspace tab where the work happens, if there is one. */
+	tab?: TabId;
+	sections: GuideSection[];
+	/** Glossary ids worth reading next. */
+	terms?: string[];
+	/** Other guide ids. */
+	related?: string[];
+}
+
+export const GUIDES: Guide[] = [
+	// ---- Start here ---------------------------------------------------------
+	{
+		id: 'the-whole-process',
+		title: 'The whole process, from catchment to results',
+		summary:
+			'The order to set a catchment up in, what each step needs, and how calibration and what-if runs fit in.',
+		kind: 'start',
+		tab: 'overview',
+		sections: [
+			{
+				heading: 'What the app answers',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A project models one river catchment day by day. Rain becomes natural flow, the flow is shared between the farms, each farm fills its dam and irrigates, and whatever is left reaches the outlet. Every run answers three questions: how much water is there, can each farm’s irrigation be met, and does enough stay in the river for the [[ewr]]?'
+					},
+					{
+						type: 'diagram',
+						id: 'workflow',
+						caption:
+							'The setup order follows the workspace tabs. Calibrate and run again until the fit is good enough, then use runs and copies of the project for what-ifs.'
+					}
+				]
+			},
+			{
+				heading: 'The steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'**Create the project** on the Projects page. See [[guide:create-a-project|Create a project]].',
+							'**Network**: add the farms and gauges, say what each drains into, and end at one outflow gauge. Give the farms their areas. See [[guide:build-the-network|Build the river network]].',
+							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each farm plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
+							'**Transfers** (optional): pipelines or canals from one farm’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
+							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
+							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
+							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
+							'**Iterate**: improve the calibration, run again, and compare runs. Copy the project to try a what-if without touching the original. See [[guide:compare-runs|Compare runs and try what-ifs]].'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run.'
+					}
+				]
+			},
+			{
+				heading: 'What “good enough” means',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A run is only as trustworthy as its calibration. Judge the parameters by the **validation** scores (days the fit never saw), not by the in-sample fit, and check the simulated natural flow against [[wr2012-check|WR2012]] where you can. The guides under “How it works” explain why.'
+					}
+				]
+			}
+		],
+		terms: ['water-balance', 'project', 'run'],
+		related: ['how-the-model-works', 'how-calibration-works']
+	},
+
+	// ---- How to -------------------------------------------------------------
+	{
+		id: 'create-a-project',
+		title: 'Create a project',
+		summary: 'Start a new catchment, put it in a team, and copy an existing one to try a what-if.',
+		kind: 'howto',
+		tab: 'overview',
+		sections: [
+			{
+				heading: 'A new project',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open **Projects** in the header and press **New project**.',
+							'Give it a name, usually the catchment or river, and pick a team if others will work on it.',
+							'The project opens on its **Overview** tab. Work through the setup checklist from the top.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'One project holds one catchment: its network, crops, settings, input series and runs. A b023 workbook becomes one project; an administrator can import one with the workbook importer.'
+					}
+				]
+			},
+			{
+				heading: 'A copy for a what-if',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On the Projects page, choose **Copy** on the project’s row, and name the copy.',
+							'Name it after the change you plan, for example “Raise dam 3 by 20 %”.',
+							'Make the change in the copy and run it. The original and its runs are untouched.',
+							'Compare the copy’s run with the original’s. See [[guide:compare-runs|Compare runs and try what-ifs]].'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Who can do what',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Editors change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”.'
+					}
+				]
+			}
+		],
+		terms: ['project', 'run'],
+		related: ['the-whole-process', 'build-the-network']
+	},
+	{
+		id: 'build-the-network',
+		title: 'Build the river network',
+		summary: 'Add farms and gauges, connect each one to the element it drains into, and end at one outflow gauge.',
+		kind: 'howto',
+		tab: 'network',
+		sections: [
+			{
+				heading: 'The shape of a network',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The network is a tree. Each element drains into exactly one element downstream, and exactly one element, the [[outflow-gauge]], drains nowhere. An element can have several upstream neighbours. The model works out the calculation order itself, upstream first.'
+					},
+					{
+						type: 'diagram',
+						id: 'network',
+						caption:
+							'A small network. Farms are circles, farms with a dam are filled squares, gauges are triangles, and the outflow gauge is filled. The dashed arrow is a transfer between two dams.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
+							'Press **+ Add node** for each farm, set its **Kind**, and set **Drains into** to the element directly below it on the river.',
+							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
+							'Give every farm its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
+							'For a farm with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], and how much of the upstream inflow and of its own runoff enter the dam.',
+							'Set the [[return-flow]] and any [[diversion|diversion back to the dam]].',
+							'Press **Save changes** on the save bar.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down.'
+					}
+				]
+			},
+			{
+				heading: 'Dams and natural areas',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A farm element also covers two other cases, set by its parameters:'
+					},
+					{
+						type: 'list',
+						items: [
+							'**Stand-alone dam**: no crop areas, 100 % of its runoff (and of upstream inflow, if it sits on the main stem) into the dam, no return flow or diversion.',
+							'**Natural area**: no crops, no dam capture, no diversion and no return flow. It simply passes its runoff on.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'A river that splits in two (a bifurcation) can’t be drawn. Use a transfer for the side channel, or merge the farms.'
+					}
+				]
+			}
+		],
+		terms: ['network', 'element-farm', 'element-gauge', 'outflow-gauge', 'upstream-to-dam', 'runoff-to-dam'],
+		related: ['a-day-on-a-farm', 'add-a-transfer']
+	},
+	{
+		id: 'set-up-crops-and-demand',
+		title: 'Set up crops and irrigation demand',
+		summary: 'Crops with monthly crop factors, the hectares on each farm, A-pan evaporation and effective rain.',
+		kind: 'howto',
+		tab: 'crops',
+		sections: [
+			{
+				heading: 'How demand is worked out',
+				blocks: [
+					{
+						type: 'formula',
+						text: 'gross demand (m³/day) = Σ crops [ area × A-pan (mm/month) × crop factor ] ÷ days in the month'
+					},
+					{
+						type: 'formula',
+						text: 'net demand = max(0, gross − cropped area × rain above the threshold × effective-rain fraction)'
+					},
+					{
+						type: 'p',
+						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] then reduces the day’s demand, so wet days need less irrigation.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On **Crops & demand**, add each crop with its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
+							'Enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
+							'Check the **demand preview**: m³/day per month, the mean, and Mm³ per year per farm and for the catchment.',
+							'On **Settings & calibration**, enter the 12 monthly [[apan|A-pan evaporation]] values and the [[effective-rainfall|effective-rain fraction]].',
+							'Save both tabs.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'With A-pan at 0 in every month the crops need no water, and every farm looks fully supplied. The Overview checklist warns about this.'
+					}
+				]
+			}
+		],
+		terms: ['irrigation-demand', 'crop-area', 'water-year', 'february-days'],
+		related: ['build-the-network', 'curtailment-targets']
+	},
+	{
+		id: 'add-data',
+		title: 'Upload rainfall and flow data',
+		summary: 'CSV format, updating a series with new days, and the checks to read before you trust a record.',
+		kind: 'howto',
+		tab: 'series',
+		sections: [
+			{
+				heading: 'What the model needs',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'[[rain-catchment|Catchment rainfall]] (mm/day): required. It drives natural flow and effective rain.',
+							'[[chirps|CHIRPS rainfall]] (mm/day): optional. It fills the days catchment rain is blank.',
+							'[[rain-forecast|Forecast rainfall]] (mm/day): optional. It extends the record a few days ahead.',
+							'[[observed-flow|Observed flow]] at the outlet (m³/s), from a gauge, a logger or both: needed to calibrate.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0.',
+							'Press **Add data** in the project header, or drop the file anywhere on the page.',
+							'Check the series the form guessed from the file name and header, and the preview chart.',
+							'For an existing series keep **append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
+							'Upload, then press **Re-run model** on the banner when you are ready.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'A missing rain day written as 0 looks like a dry day, and it stops CHIRPS filling the gap. The **Data checks** panel flags long runs of zero rain in the wet season and years that read far below CHIRPS.'
+					}
+				]
+			},
+			{
+				heading: 'Checks to read on the Data tab',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Coverage per year, % missing and the last date of each series.',
+							'**Data checks**: negative values, outliers, flat stretches and suspect zero rain.',
+							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series.',
+							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['units', 'rain-final', 'chirps-bias'],
+		related: ['rain-gap-filling', 'how-calibration-works']
+	},
+	{
+		id: 'add-a-transfer',
+		title: 'Add a transfer',
+		summary: 'Move water from one farm’s dam to another in chosen months, up to a pipe or canal capacity.',
+		kind: 'howto',
+		tab: 'transfers',
+		sections: [
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On **Transfers**, add a transfer and pick its source and destination farms.',
+							'Tick the [[transfer-months|months]] it runs in (1 = January).',
+							'Enter the [[transfer-rate|maximum rate]] in m³/s, and a daily cap in m³ if there is one.',
+							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
+							'Save, then run.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'What moves each day',
+				blocks: [
+					{
+						type: 'formula',
+						text: 'transfer = min( yesterday’s storage − capacity × min storage, rate × 86 400, daily cap )   in an active month, else 0'
+					},
+					{
+						type: 'p',
+						text: 'The same volume leaves the source dam and enters the destination, so a transfer never creates or loses water. Water that doesn’t fit in the destination dam spills downstream.'
+					}
+				]
+			}
+		],
+		terms: ['transfer'],
+		related: ['build-the-network', 'a-day-on-a-farm']
+	},
+	{
+		id: 'set-the-ewr',
+		title: 'Set the EWR and the reporting window',
+		summary:
+			'Enter the monthly pragmatic EWR, then choose the period the curtailment report averages over.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
+							'Pick one value per month (often a percentile) and convert it to m³/day.',
+							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent, a bar chart and the annual volume help catch a unit slip.',
+							'Optionally set the [[report-window|reporting window]] to a drought or dry season. The curtailment table then averages over that period only.',
+							'Save and run.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Where the EWR is checked',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The full [[pragmatic-ewr]] is checked every day at the outflow gauge. Each farm also gets a share of it (EWR × the farm’s flow share), so the results can say which farm causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
+					}
+				]
+			}
+		],
+		terms: ['ewr', 'ewr-shortfall', 'ewr-share'],
+		related: ['curtailment-targets', 'run-and-read-results']
+	},
+	{
+		id: 'calibrate-by-hand',
+		title: 'Calibrate by hand',
+		summary: 'Change a runoff parameter, run, and read the hydrograph and statistics until the fit is right.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'Before you start',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Choose the **calibration flow series** (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
+							'Add [[calibration-exclusions]] for periods you can’t trust, each with its reason.',
+							'Pick the [[runoff-model]]. GR4J is the default; legacy is the workbook’s model.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'The loop',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
+							'Save and run.',
+							'On the run, read the **hydrograph** (observed flow as dots) and the **calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
+							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',
+							'Compare the run with the previous one to see what the change did.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'Hand calibration is scored only on days the parameters were tuned on (in-sample). Before relying on the parameters, run **Fit automatically** with validation to see how they score on days they never saw.'
+					}
+				]
+			}
+		],
+		terms: ['calibration', 'gr4j', 'peak-coefficient', 'recession-curve'],
+		related: ['fit-automatically', 'how-calibration-works', 'how-gr4j-works']
+	},
+	{
+		id: 'fit-automatically',
+		title: 'Fit the runoff model automatically',
+		summary:
+			'Let the optimiser search the parameters, read the validation scores, then apply and save the fit.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On **Settings & calibration**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
+							'Open **Fit automatically** and choose the objective. KGE′ is the default; year-balanced KGE′ stops a few wet years dominating; NSE on log Q favours low flows.',
+							'Choose **Bounds**: Wide, or Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down.',
+							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
+							'Press **Fit automatically**. A progress bar shows the stage and the best score so far; **Cancel** stops it.',
+							'Read the result: the notes, current vs fitted parameters, and the scores table. The shaded validation columns are the honest measure.',
+							'Press **Apply to form**, then save the settings. Nothing is stored until you save.',
+							'Run the model with the new parameters.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Expect validation to score below the fit. When it is much lower, or the notes say wet-year behaviour is weakly constrained, the record can’t pin the parameters down. Report that; don’t hide it.'
+					}
+				]
+			},
+			{
+				heading: 'Afterwards',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The saved parameters carry a [[fit-record]]: objective, seed, window, exclusions, engine version and every score. Each run keeps the record it was made with. Editing a fitted parameter by hand marks the record “parameters edited since fit”. The same inputs, engine version and seed reproduce the fit exactly.'
+					}
+				]
+			}
+		],
+		terms: ['auto-calibration', 'calibration-bounds', 'kge', 'wr2012-penalty'],
+		related: ['how-calibration-works', 'calibrate-by-hand', 'check-against-wr2012']
+	},
+	{
+		id: 'check-against-wr2012',
+		title: 'Check natural flow against WR2012',
+		summary:
+			'Enter the quaternary’s published naturalised flow, and every run compares its natural flow with it.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Find the [[quaternary]] the catchment lies in, and its WR2012 naturalised MAR and 12 monthly mean flows. The app doesn’t ship WR2012 data.',
+							'On **Settings & calibration → WR2012 check**, tick **Compare runs with WR2012 naturalised flow**.',
+							'Enter the quaternary code, its area, MAP (optional), MAR in Mm³/a, the period and the source.',
+							'Enter the monthly means in **Mm³ per month**. Their sum should match the MAR within 5 %; the m³/s row shows a unit slip.',
+							'Choose the scaling (area, or area and rainfall) and save. Every run from now on has a **WR2012 check** panel.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Reading the check',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The run compares simulated **natural** flow (never the outflow) with the scaled reference: the MAR ratio, the 12 monthly ratios with dry-season months marked, and the correlation of the monthly pattern. A MAR off by 10 % is noted, by 25 % queried, and by 50 % makes the run unusable for EWR findings until explained. The thresholds are editable.'
+					},
+					{
+						type: 'p',
+						text: 'The optional [[wr2012-penalty|MAR penalty]] makes Fit automatically pull the natural MAR towards WR2012, and shows the fit with and without it.'
+					}
+				]
+			}
+		],
+		terms: ['wr2012-check', 'map', 'wr90'],
+		related: ['fit-automatically', 'how-calibration-works']
+	},
+	{
+		id: 'run-and-read-results',
+		title: 'Run the model and read the results',
+		summary: 'What each results section shows, in order, and what to look at first.',
+		kind: 'howto',
+		tab: 'runs',
+		sections: [
+			{
+				heading: 'Run',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Save any unsaved changes.',
+							'On **Runs & results**, optionally give the run a label, and press **Run model**. It needs a network and a rainfall series; until then the page says what is missing.',
+							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Read, top to bottom',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'**Summary**: mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged.',
+							'**Curtailment**: how much each farm would reduce or may gain for irrigation to balance and the EWR to be met. See [[guide:curtailment-targets|Curtailment targets]].',
+							'**Hydrograph**: natural and simulated flow, with observed flow as dots. Try the log scale for low flows.',
+							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
+							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
+							'**WR2012 check**, when set up.',
+							'**Flow duration**, **EWR vs outflow**, **EWR by month** and **EWR vs observed**.',
+							'**Farm detail**: dam storage and supply against demand, per farm.',
+							'**Explore outputs**: any stored daily series, by node.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report.'
+					}
+				]
+			}
+		],
+		terms: ['run', 'fraction-supplied', 'ewr-days-not-met', 'natural-flow'],
+		related: ['compare-runs', 'how-the-model-works']
+	},
+	{
+		id: 'compare-runs',
+		title: 'Compare runs and try what-ifs',
+		summary: 'See exactly which inputs changed between two runs and what that did to the results.',
+		kind: 'howto',
+		tab: 'runs',
+		sections: [
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Run a baseline.',
+							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again.',
+							'On **Runs & results**, open **Compare runs**. It starts on the previous run (A) against the latest (B); either side can pick any run from any project you can see.',
+							'Read **What changed** (every input difference) before **Headline results** (A, B and the change).'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Results are daily averages over each run’s own period. When the two runs cover different periods the page warns you: part of the change then comes from the dates, not from your edit.'
+					},
+					{
+						type: 'p',
+						text: 'The comparison’s address holds both runs, so a comparison can be bookmarked or shared with anyone who can see both projects.'
+					}
+				]
+			}
+		],
+		terms: ['run', 'project'],
+		related: ['create-a-project', 'run-and-read-results']
+	},
+
+	// ---- How it works -------------------------------------------------------
+	{
+		id: 'how-the-model-works',
+		title: 'How the model works',
+		summary: 'The chain from daily rain to farm supply, dam storage, outflow and the EWR check.',
+		kind: 'concept',
+		sections: [
+			{
+				heading: 'The daily chain',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'pipeline',
+						caption:
+							'One run, every day of the simulation window. The runoff model makes the catchment’s natural flow; the network then routes it through farms and dams to the outflow gauge, where the EWR and the calibration are checked.'
+					},
+					{
+						type: 'steps',
+						items: [
+							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
+							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no farms.',
+							'**Shares.** Natural flow and the EWR are split between the farms by fixed [[flow-share|flow shares]].',
+							'**Demand.** Crops, A-pan and effective rain give each farm’s net irrigation demand.',
+							'**Farm balance.** Upstream first, each farm fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one farm]].',
+							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Properties you can rely on',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
+							'Every farm’s daily balance closes: inflow − irrigation use − change in storage = outflow. Invariant tests check this on random networks.',
+							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
+							'Where the engine departs from the b023 workbook, the engine audit records why.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['water-balance', 'natural-flow', 'farm-runoff', 'farm-outflow'],
+		related: ['a-day-on-a-farm', 'how-gr4j-works', 'rain-gap-filling']
+	},
+	{
+		id: 'a-day-on-a-farm',
+		title: 'A day on one farm',
+		summary: 'How a farm element splits its inflows around the dam, irrigates, spills and passes water downstream.',
+		kind: 'concept',
+		tab: 'network',
+		sections: [
+			{
+				heading: 'Around the dam',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'farm-day',
+						caption:
+							'Water arriving from upstream and the farm’s own runoff each split into a part that enters the dam and a part that passes below it. A diversion can take some of the bypass back into the dam. Irrigation draws from the dam; spill, bypass and return flow leave downstream.'
+					},
+					{
+						type: 'steps',
+						items: [
+							'Upstream inflow × [[upstream-to-dam|upstream share]] enters the dam; the rest passes below it.',
+							'Farm runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
+							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
+							'A [[transfer]] adds to or takes from the dam.',
+							'Irrigation takes the smaller of the demand and what the dam holds (yesterday’s storage plus today’s inflows).',
+							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is a share of the irrigation, back to the river the same day.',
+							'Outflow = spill + water passing below the dam not diverted + return flow. It is the next element’s upstream inflow.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'The balance',
+				blocks: [
+					{
+						type: 'formula',
+						text: 'upstream inflow + runoff + transfer − irrigation × (1 − return share) − Δ storage = outflow'
+					},
+					{
+						type: 'p',
+						text: 'It closes to the cubic metre every day. Dam evaporation and seepage are not modelled, and the [[dam-min|minimum dam storage]] does not yet limit irrigation.'
+					}
+				]
+			}
+		],
+		terms: ['dam-storage', 'irrigation-supplied', 'irrigation-deficit', 'ewr-share'],
+		related: ['how-the-model-works', 'build-the-network']
+	},
+	{
+		id: 'how-gr4j-works',
+		title: 'How GR4J turns rain into flow',
+		summary: 'Two stores and two unit hydrographs, four parameters, and a water balance that always closes.',
+		kind: 'concept',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'The structure',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'gr4j',
+						caption:
+							'GR4J (Perrin et al. 2003). Rain first meets evaporation. What is left partly fills the soil (production) store; the rest, with what percolates out of it, is spread in time by two unit hydrographs. 90 % passes through the routing store, 10 % goes directly to the outlet.'
+					},
+					{
+						type: 'list',
+						items: [
+							'**X1** (mm): capacity of the soil-moisture store. Larger means more rain is held and evaporated, so less flow. Typical 100–1 200.',
+							'**X2** (mm/day): exchange with groundwater outside the catchment. Fixed at 0 by default, so the catchment is closed.',
+							'**X3** (mm): capacity of the routing store. Larger means slower, longer recessions. Typical 20–300.',
+							'**X4** (days): time base of the unit hydrographs, the timing of the peak. Typical 1.1–2.9.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Forcing and warm-up',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Rain is the same gap-filled rain as for legacy, with no rain threshold. Potential evaporation is the monthly [[pan-coefficient]] × A-pan, spread over the days of the month. A warm-up (a year by default) runs over the start of the record first, so the stores begin at a realistic level; warm-up days are never shown or scored.'
+					},
+					{
+						type: 'formula',
+						text: 'rain − actual evaporation − flow − groundwater exchange = change in storage   (every day)'
+					},
+					{
+						type: 'p',
+						text: 'The **Runoff model** panel on a GR4J run shows this balance in mm and as a share of rain. It is the first thing to check when a fit looks too wet or too dry.'
+					}
+				]
+			}
+		],
+		terms: ['gr4j', 'actual-evaporation', 'pan-coefficient', 'runoff-model'],
+		related: ['how-calibration-works', 'calibrate-by-hand']
+	},
+	{
+		id: 'how-calibration-works',
+		title: 'How calibration works',
+		summary:
+			'What is scored, how the optimiser searches, and why validation on unseen days matters more than the fit.',
+		kind: 'concept',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'What is scored',
+				blocks: [
+					{
+						type: 'p',
+						text: 'An observed gauge or logger measures the river as it is, with its farms and dams. So every candidate parameter set runs the **whole model** (runoff model, then the network) and scores the simulated outflow against the observed record. The fitted parameters describe the natural catchment; the network adds the impacts.'
+					},
+					{
+						type: 'p',
+						text: 'Scored days are days with an observation, inside the [[calibration-window]], and outside every [[calibration-exclusions|exclusion]]. At least 30 are needed.'
+					}
+				]
+			},
+			{
+				heading: 'The search',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'calibration-loop',
+						caption:
+							'Fit automatically. DDS starts from the current parameters, perturbs them within their bounds, runs the whole model and keeps a candidate only when it scores better. By default it tries 1 500 candidates per fit.'
+					},
+					{
+						type: 'p',
+						text: 'The optimiser is DDS (Tolson & Shoemaker 2007). Early on it perturbs every parameter; later it changes fewer, homing in on the best set found. Candidates are always kept within the [[calibration-bounds|bounds]]. The search is deterministic for a seed: the same data, engine version and seed give the same fit.'
+					},
+					{
+						type: 'list',
+						items: [
+							'**KGE′** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
+							'**Year-balanced KGE′**: each water year counts once, so a few wet years can’t dominate a drought-heavy record.',
+							'**Non-parametric KGE**, **NSE on √Q** (medium flows) and **NSE on log Q** (low flows).'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Validation: the honest measure',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'validation',
+						caption:
+							'Each test fits on one part of the record and scores another part it never saw. The dry → wet test fits on the driest water years and scores the wettest, which is the hardest test for a catchment used in drought.'
+					},
+					{
+						type: 'list',
+						items: [
+							'**Split-sample** (Klemeš 1986): fit on the first half of the scored days, score the second half.',
+							'**Dry → wet**: with at least 4 water years of 180 or more observed days, fit on the driest half and score the wettest half.',
+							'**Independent record** (optional): score the fitted parameters against the second instrument, for example the logger when the fit used the gauge.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'The result adds plain-language notes on its limits: too few years to test wet years, wet years barely wetter than dry ones, or a validation score more than 0.2 below its calibration score. A short record that is mostly drought gets these notes rather than a clean bill of health.'
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'A fit that scores well in-sample but poorly in validation usually means the record can’t pin the parameters down, not that the optimiser failed. More model runs won’t help; more varied data, typical bounds or a WR2012 check will.'
+					}
+				]
+			}
+		],
+		terms: ['auto-calibration', 'fit-record', 'kge', 'nse', 'log-nse', 'pbias'],
+		related: ['fit-automatically', 'calibrate-by-hand', 'check-against-wr2012']
+	},
+	{
+		id: 'rain-gap-filling',
+		title: 'How rain gaps are filled',
+		summary: 'Which rain series a day uses, and how CHIRPS is bias-corrected to the catchment before it fills a gap.',
+		kind: 'concept',
+		tab: 'series',
+		sections: [
+			{
+				heading: 'One value per day',
+				blocks: [
+					{
+						type: 'diagram',
+						id: 'rain-sources',
+						caption:
+							'Each day takes the first series that has a value. CHIRPS is scaled by its calendar month’s catchment ÷ CHIRPS factor before it is used. A day with no value anywhere is treated as dry, and the run counts those days.'
+					},
+					{
+						type: 'p',
+						text: 'The result is the [[rain-final|final catchment rainfall]], which both runoff models and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
+					}
+				]
+			},
+			{
+				heading: 'The CHIRPS factors',
+				blocks: [
+					{
+						type: 'formula',
+						text: 'factor(month) = Σ catchment rain ÷ Σ CHIRPS   over the days of that calendar month that have both'
+					},
+					{
+						type: 'list',
+						items: [
+							'Water years the rain checks flag (long zero runs, far below CHIRPS) are left out, because their catchment rain is suspect.',
+							'A month with fewer than 90 shared days, or under 50 mm of CHIRPS on them, uses the factor pooled over all months.',
+							'Factors are kept between 0.25 and 4. Each run lists them in its warnings and the summary CSV.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Choose **Raw CHIRPS** only when the series you loaded is already corrected to the catchment; otherwise it is corrected twice.'
+					}
+				]
+			}
+		],
+		terms: ['rain-catchment', 'chirps', 'chirps-bias', 'rain-forecast'],
+		related: ['add-data', 'how-the-model-works']
+	},
+	{
+		id: 'curtailment-targets',
+		title: 'Curtailment targets',
+		summary: 'How the app works out how much each farm should reduce, or may gain, to share water fairly and meet the EWR.',
+		kind: 'concept',
+		tab: 'runs',
+		sections: [
+			{
+				heading: 'The idea',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Over the [[report-window|reporting window]], add up what every farm asked for and what it received. Their ratio is the catchment’s **equitable supply fraction**: had the supplied water been shared in proportion to demand, every farm would have received that fraction.'
+					},
+					{
+						type: 'formula',
+						text: 'target = demand × Σ supplied ÷ Σ demand          reduce (−) or gain (+) = target − supplied'
+					},
+					{
+						type: 'p',
+						text: 'Reductions and gains cancel across the farms, so this step only redistributes water. Each farm’s average [[ewr-shortfall|EWR shortfall]] is then added on top: the **total change** both balances irrigation and meets the EWR. Negative means reduce.'
+					}
+				]
+			}
+		],
+		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr'],
+		related: ['set-the-ewr', 'run-and-read-results']
+	}
+];
+
+// ---------------------------------------------------------------------------
+// Lookup, inline markup and search
+// ---------------------------------------------------------------------------
+
+const byId = new Map(GUIDES.map((g) => [g.id, g]));
+
+const norm = (s: string) =>
+	s
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase();
+
+export function guideFor(id: string): Guide | undefined {
+	return byId.get(id);
+}
+
+/** In-page anchor for a guide section, from its heading. */
+export function sectionId(heading: string): string {
+	return norm(heading)
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-|-$/g, '');
+}
+
+export type InlinePart =
+	| { kind: 'text'; text: string }
+	| { kind: 'strong'; text: string }
+	/** A glossary entry (`id`) or a guide (`guide`), with its label. */
+	| { kind: 'term'; id: string; text: string }
+	| { kind: 'guide'; id: string; text: string }
+	/** A reference that doesn't resolve: shown as plain text (and failed by the tests). */
+	| { kind: 'broken'; ref: string; text: string };
+
+const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+
+/** Splits guide text into plain text, bold UI labels and links. */
+export function inline(text: string): InlinePart[] {
+	const out: InlinePart[] = [];
+	let last = 0;
+	for (const m of text.matchAll(INLINE)) {
+		if (m.index > last) out.push({ kind: 'text', text: text.slice(last, m.index) });
+		last = m.index + m[0].length;
+		if (m[1] !== undefined) {
+			out.push({ kind: 'strong', text: m[1] });
+			continue;
+		}
+		const ref = m[2]!.trim();
+		const label = m[3]?.trim();
+		if (ref.startsWith('guide:')) {
+			const g = guideFor(ref.slice(6));
+			out.push(g ? { kind: 'guide', id: g.id, text: label ?? g.title } : { kind: 'broken', ref, text: label ?? ref });
+		} else {
+			const e = helpFor(ref);
+			out.push(e ? { kind: 'term', id: e.id, text: label ?? e.term } : { kind: 'broken', ref, text: label ?? ref });
+		}
+	}
+	if (last < text.length) out.push({ kind: 'text', text: text.slice(last) });
+	return out;
+}
+
+/** Guide text with the markup removed (for search). */
+export function plainText(text: string): string {
+	return inline(text)
+		.map((p) => p.text)
+		.join('');
+}
+
+function blockText(b: GuideBlock): string {
+	switch (b.type) {
+		case 'steps':
+		case 'list':
+			return b.items.map(plainText).join(' ');
+		case 'diagram':
+			return b.caption;
+		default:
+			return plainText(b.text);
+	}
+}
+
+/**
+ * Guides matching every word of `query`, best first: title matches before
+ * summary matches before body matches. Empty query → no guides (the page
+ * lists them itself).
+ */
+export function searchGuides(query: string, guides: readonly Guide[] = GUIDES): Guide[] {
+	const words = norm(query).split(/\s+/).filter(Boolean);
+	if (!words.length) return [];
+	const scored: { g: Guide; score: number; i: number }[] = [];
+	guides.forEach((g, i) => {
+		const title = norm(g.title);
+		const summary = norm(g.summary);
+		const body = norm(g.sections.flatMap((s) => [s.heading, ...s.blocks.map(blockText)]).join(' '));
+		let score = 0;
+		for (const w of words) {
+			if (title.includes(w)) score += 3;
+			else if (summary.includes(w)) score += 2;
+			else if (body.includes(w)) score += 1;
+			else return;
+		}
+		scored.push({ g, score, i });
+	});
+	return scored.sort((a, b) => b.score - a.score || a.i - b.i).map((s) => s.g);
+}
