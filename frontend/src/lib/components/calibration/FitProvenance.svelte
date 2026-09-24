@@ -11,7 +11,7 @@
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { monthsText, paramLabel } from './provenance';
+	import { fitModelLabel, monthsText, paramLabel } from './provenance';
 
 	let {
 		record,
@@ -49,7 +49,7 @@
 		</p>
 	{:else}
 		<p class="small">
-			<strong>{record.model === 'gr4j' ? 'GR4J' : 'Legacy'} fit of {fittedAtText(record.fittedAt)}</strong>
+			<strong>{fitModelLabel(record.model)} fit of {fittedAtText(record.fittedAt)}</strong>
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
 			{#if status && status.forcingChanged}<span class="badge badge-warn">Evaporation changed since fit</span>{/if}
 		</p>

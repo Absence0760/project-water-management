@@ -37,7 +37,8 @@ const run = (createdAt: string): RunMeta => ({
 	startDate: '2000-01-01',
 	endDate: '2009-12-31',
 	createdAt,
-	createdBy: null
+	createdBy: null,
+	legacy: false
 });
 const settled = () => {
 	const s = defaultProjectSettings();

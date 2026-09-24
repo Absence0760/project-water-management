@@ -23,7 +23,10 @@ The page has these sections, top to bottom:
 1. **Runs compared.** Label, project, period and time of each run. There is a
    warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
-   from the dates. There is a note when the **engine version** differs.
+   from the dates. There is a note when the **engine version** differs, and a
+   warning when **either run used the legacy runoff model** (audit H1): it
+   doesn't conserve water at the event scale, so the comparison is a workbook
+   comparison only, not evidence.
 2. **What changed.** Every difference in the inputs, grouped by network, crops,
    transfers, settings and time series. Examples:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,

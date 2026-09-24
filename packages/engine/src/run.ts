@@ -98,6 +98,7 @@ export function runModelWith(
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
+	if (settings.runoffModel === 'legacy') warnings.push(LEGACY_NOT_EVIDENCE_WARNING);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
 	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
@@ -590,6 +591,17 @@ const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Observed flow (logger)'
 };
+
+/**
+ * Every legacy run carries this (audit H1, operator decision 2026-09-24): the
+ * b023 recession model doesn't conserve water at the event scale (a storm can
+ * return several times its own rain as flow — docs/engine-audit.md H1), so it
+ * stays unchanged for workbook comparison only. The "LEGACY_NOT_EVIDENCE:"
+ * prefix is a stable code a caller can match on even if the wording changes.
+ */
+export const LEGACY_NOT_EVIDENCE_WARNING =
+	'LEGACY_NOT_EVIDENCE: Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1); ' +
+	'workbook comparison only, not evidence for a licence, Reserve or compliance assessment.';
 
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =

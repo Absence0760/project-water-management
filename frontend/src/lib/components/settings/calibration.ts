@@ -108,8 +108,8 @@ export const KNOWN_CAL_KEYS = new Set([
 export const RUNOFF_MODEL_OPTIONS: { value: RunoffModelId; label: string; help: string }[] = [
 	{
 		value: 'legacy',
-		label: 'Legacy (b023 recession model)',
-		help: 'The workbook’s own rain-to-flow model, ported unchanged. It does not conserve water at the event scale (engine audit H1). Kept to compare with the workbook.'
+		label: 'Legacy (b023 workbook, comparison only)',
+		help: 'The workbook’s own rain-to-flow model, ported unchanged. It does not conserve water at the event scale (engine audit H1), so it stays workbook comparison only — not evidence for a licence, Reserve or compliance assessment.'
 	},
 	{
 		value: 'gr4j',

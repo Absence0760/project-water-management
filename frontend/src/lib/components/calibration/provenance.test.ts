@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthsText, paramLabel } from './provenance';
+import { fitModelLabel, monthsText, paramLabel } from './provenance';
 
 describe('paramLabel', () => {
 	it('names each model’s parameters, and falls back to the key', () => {
@@ -16,5 +16,12 @@ describe('monthsText', () => {
 		const varied = [0.65, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
 		expect(monthsText(varied)).toBe('Oct 0.65, Nov 0.70, Dec 0.70, Jan 0.70, Feb 0.70, Mar 0.70, Apr 0.70, May 0.70, Jun 0.70, Jul 0.70, Aug 0.70, Sep 0.70');
 		expect(monthsText([150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], 0)).toMatch(/^Oct 150, Nov 180, .*Sep 100$/);
+	});
+});
+
+describe('fitModelLabel', () => {
+	it('marks a legacy fit as workbook comparison only (audit H1)', () => {
+		expect(fitModelLabel('gr4j')).toBe('GR4J');
+		expect(fitModelLabel('legacy')).toBe('Legacy (workbook comparison)');
 	});
 });

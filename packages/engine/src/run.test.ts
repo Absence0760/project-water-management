@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
@@ -1477,6 +1477,14 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		const out = runModel(i);
 		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([0, 0]);
 		expect(warns(out, /Pitman/)).toHaveLength(0);
+	});
+
+	it('H1: every legacy run carries LEGACY_NOT_EVIDENCE; a GR4J run never does', () => {
+		const legacy = runModel(rainInput([0, 0, 20], '2021-07-01', { runoffModel: 'legacy', calibration: { ...defaultCal(), baseFlowInitial: 0 } }));
+		expect(legacy.summary.warnings).toContain(LEGACY_NOT_EVIDENCE_WARNING);
+		const gr4j = runModel(rainInput([0, 0, 20], '2021-07-01'));
+		expect(gr4j.summary.warnings).not.toContain(LEGACY_NOT_EVIDENCE_WARNING);
+		expect(gr4j.summary.warnings.some((w) => w.startsWith('LEGACY_NOT_EVIDENCE'))).toBe(false);
 	});
 });
 

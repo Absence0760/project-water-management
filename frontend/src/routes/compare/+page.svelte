@@ -249,6 +249,15 @@
 								change may come from the model itself.
 							</div>
 						{/if}
+						{#if data.a.run.legacy || data.b.run.legacy}
+							<div class="alert alert-warning" role="status">
+								{#if data.a.run.legacy && data.b.run.legacy}Both runs use
+								{:else if data.a.run.legacy}Run A uses
+								{:else}Run B uses{/if}
+								the legacy runoff model (b023 workbook) — it doesn’t conserve water at the event scale (audit H1), so this
+								comparison is workbook comparison only, not evidence for a licence, Reserve or compliance assessment.
+							</div>
+						{/if}
 					</section>
 
 					<section class="panel" aria-labelledby="changes-h">
