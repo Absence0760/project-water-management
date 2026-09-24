@@ -195,32 +195,3 @@ export function waterYearOf(epochDay: number): number {
 	const year = new Date(epochDay * 86_400_000).getUTCFullYear();
 	return monthOfEpochDay(epochDay) >= 10 ? year : year - 1;
 }
-
-export type MoriasiRating = 'veryGood' | 'good' | 'satisfactory' | 'unsatisfactory';
-
-/**
- * Qualitative rating of a streamflow fit after Moriasi et al. (2007), Table 4.
- * The thresholds were set for a *monthly* time step; daily fits normally score
- * lower, so treat a daily "unsatisfactory" as a prompt to look, not a verdict.
- *
- * | Rating         | NSE              | PBIAS (%)      |
- * | -------------- | ---------------- | -------------- |
- * | veryGood       | 0.75 < NSE ≤ 1   | |PBIAS| < 10   |
- * | good           | 0.65 < NSE ≤ 0.75| 10 ≤ |PBIAS| < 15 |
- * | satisfactory   | 0.50 < NSE ≤ 0.65| 15 ≤ |PBIAS| < 25 |
- * | unsatisfactory | NSE ≤ 0.50       | |PBIAS| ≥ 25   |
- */
-export function moriasiRating(metric: 'nse' | 'pbias', value: number | null | undefined): MoriasiRating | null {
-	if (value === null || value === undefined || !Number.isFinite(value)) return null;
-	if (metric === 'nse') {
-		if (value > 0.75) return 'veryGood';
-		if (value > 0.65) return 'good';
-		if (value > 0.5) return 'satisfactory';
-		return 'unsatisfactory';
-	}
-	const a = Math.abs(value);
-	if (a < 10) return 'veryGood';
-	if (a < 15) return 'good';
-	if (a < 25) return 'satisfactory';
-	return 'unsatisfactory';
-}

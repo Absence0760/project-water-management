@@ -17,7 +17,7 @@ export * from './quality';
 export * from './rain';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
-export { calibrationStats, moriasiRating, waterYearOf, type CalibrationWindow, type MoriasiRating } from './network/stats';
+export { calibrationStats, waterYearOf, type CalibrationWindow } from './network/stats';
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';
 export { computeCurtailment, M3_PER_DAY_PER_LS, type CurtailmentInput, type ReportWindow } from './network/curtailment';

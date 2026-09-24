@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calibrationStats, moriasiRating, waterYearOf } from './stats';
+import { calibrationStats, waterYearOf } from './stats';
 import { toEpochDay } from '../calendar';
 
 const D = 86_400;
@@ -145,34 +145,6 @@ describe('waterYearOf', () => {
 		expect(waterYearOf(toEpochDay('2020-09-30'))).toBe(2019);
 		expect(waterYearOf(toEpochDay('2020-10-01'))).toBe(2020);
 		expect(waterYearOf(toEpochDay('2021-01-15'))).toBe(2020);
-	});
-});
-
-describe('moriasiRating (Moriasi et al. 2007)', () => {
-	it('rates NSE with exclusive lower bounds', () => {
-		expect(moriasiRating('nse', 0.9)).toBe('veryGood');
-		expect(moriasiRating('nse', 0.75)).toBe('good');
-		expect(moriasiRating('nse', 0.7)).toBe('good');
-		expect(moriasiRating('nse', 0.65)).toBe('satisfactory');
-		expect(moriasiRating('nse', 0.51)).toBe('satisfactory');
-		expect(moriasiRating('nse', 0.5)).toBe('unsatisfactory');
-		expect(moriasiRating('nse', -0.7)).toBe('unsatisfactory');
-	});
-
-	it('rates |PBIAS| in either direction', () => {
-		expect(moriasiRating('pbias', 0)).toBe('veryGood');
-		expect(moriasiRating('pbias', -9.9)).toBe('veryGood');
-		expect(moriasiRating('pbias', 10)).toBe('good');
-		expect(moriasiRating('pbias', -14.9)).toBe('good');
-		expect(moriasiRating('pbias', 15)).toBe('satisfactory');
-		expect(moriasiRating('pbias', 24.9)).toBe('satisfactory');
-		expect(moriasiRating('pbias', -25)).toBe('unsatisfactory');
-	});
-
-	it('returns null for a missing value', () => {
-		expect(moriasiRating('nse', null)).toBeNull();
-		expect(moriasiRating('pbias', undefined)).toBeNull();
-		expect(moriasiRating('nse', NaN)).toBeNull();
 	});
 });
 

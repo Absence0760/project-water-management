@@ -677,10 +677,11 @@ have an observation and are not excluded, in m³/s:
 | Volume error | 100 × (Σs − Σo) / Σo | %; positive = model too wet (= −PBIAS) |
 | Annual volumes | Σ per water year of paired days, Mm³, and % difference | the annual water balance |
 
-`moriasiRating` rates NSE and PBIAS after Moriasi et al. (2007): NSE > 0.75
-very good, > 0.65 good, > 0.50 satisfactory; |PBIAS| < 10 very good, < 15
-good, < 25 satisfactory; otherwise unsatisfactory. Those thresholds were set
-for monthly flows; daily fits usually score lower.
+No score is rated. Moriasi et al.'s (2007, 2015) "very good … unsatisfactory"
+thresholds were set for mostly monthly, SWAT-type work and don't carry over to
+daily fits, so the app no longer labels daily NSE or PBIAS with them
+(calibration research CR-6). The benchmark that does carry over is the mean
+flow, which scores NSE 0 and KGE −0.41 (Knoben et al. 2019).
 
 The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow

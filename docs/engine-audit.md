@@ -99,7 +99,8 @@ engine 0.4.0.
   ([Knoben et al. 2019]), log-NSE with ε = ō/100 ([Pushpalatha et al. 2012]),
   and the Moriasi thresholds ([Moriasi et al. 2007]; note that the 2015 update
   suggests NSE > 0.50 and |PBIAS| < 15 % as "satisfactory" for daily/monthly
-  flow). Blank observations are skipped, and a constant observation series
+  flow; the app no longer shows rating words, calibration research CR-6).
+  Blank observations are skipped, and a constant observation series
   gives null.
 - **EWR compliance grid:** the daily count is the right definition of "% days
   not met". The workbook macro's running-total count is kept only for the

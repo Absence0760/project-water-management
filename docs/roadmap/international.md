@@ -1073,8 +1073,8 @@ incumbent weakness × our operational reach.
 4. **Validation protocol.** It is recorded in the `model_acceptance` record,
    WP-I.14.
    - Natural flow against the gauge: NSE, KGE, log-NSE and PBIAS over a stated
-     window, with Moriasi ratings as a prompt, not a pass mark (model.md
-     §2.10).
+     window, judged against the mean-flow benchmark rather than Moriasi's
+     monthly pass marks (model.md §2.10, calibration research CR-6).
    - Annual volumes within the partner's tolerance.
    - Irrigation demand against WRA permit volumes and metered or estimated
      use.

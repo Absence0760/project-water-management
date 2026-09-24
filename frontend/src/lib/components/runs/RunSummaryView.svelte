@@ -3,7 +3,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { describePbias, NSE_HELP, PBIAS_HELP, rateNse, ratePbias, type Rating } from './rating';
+	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, type FarmSortKey } from './results';
 
 	let {
@@ -28,8 +28,6 @@
 	});
 	const cal = $derived(summary.calibration);
 	const c = $derived(summary.catchment);
-	const nse = $derived(rateNse(cal?.nse));
-	const pbias = $derived(ratePbias(cal?.pbias));
 
 	let sortKey = $state<FarmSortKey>('network');
 	let sortDir = $state<'asc' | 'desc'>('asc');
@@ -53,12 +51,6 @@
 		{ key: 'avgEwrShortfallM3Day', label: 'EWR shortfall', unit: 'm³/day', title: "Mean shortfall against the farm's share of the EWR that this farm adds." },
 		{ key: 'daysEwrNotMet', label: 'EWR not met', unit: 'days', title: 'Days on which this farm added to an EWR shortfall.' }
 	];
-	const RATING_CLASS: Record<Rating, string> = {
-		'very good': 'good',
-		good: 'good',
-		satisfactory: 'ok',
-		unsatisfactory: 'bad'
-	};
 </script>
 
 {#if summary.warnings?.length}
@@ -99,13 +91,13 @@
 		<div class="stat">
 			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
-			{#if nse}<dd class="sub"><span class="rating {RATING_CLASS[nse]}">{nse}</span> · {fmtNum(cal.days)} days observed</dd>{/if}
+			<dd class="sub">{fmtNum(cal.days)} days observed</dd>
 			<dd class="sub">calibration period (in-sample)</dd>
 		</div>
 		<div class="stat">
 			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
 			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
-			{#if pbias}<dd class="sub"><span class="rating {RATING_CLASS[pbias]}">{pbias}</span> {describePbias(cal.pbias)}</dd>{/if}
+			{#if cal.pbias != null}<dd class="sub">{describePbias(cal.pbias)}</dd>{/if}
 			<dd class="sub">calibration period (in-sample)</dd>
 		</div>
 	{:else}
@@ -228,25 +220,6 @@
 	}
 	.stat dd.none {
 		color: var(--text-muted);
-	}
-	.rating {
-		display: inline-block;
-		padding: 0 0.4rem;
-		border-radius: 999px;
-		font-weight: 600;
-		text-transform: capitalize;
-	}
-	.rating.good {
-		background: var(--success-soft);
-		color: var(--success);
-	}
-	.rating.ok {
-		background: var(--warning-soft);
-		color: var(--warning);
-	}
-	.rating.bad {
-		background: var(--danger-soft);
-		color: var(--danger);
 	}
 	.farm-head {
 		display: flex;

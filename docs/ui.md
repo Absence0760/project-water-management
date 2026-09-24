@@ -248,8 +248,8 @@ The settings are grouped by what they drive:
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Summary** (the "Run summary" region): headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met, irrigation
-  supplied, and NSE and PBIAS with Moriasi (2007) ratings
-  (`runs/rating.ts`), labelled **calibration period (in-sample)**: they are
+  supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
+  in plain words by `runs/rating.ts`), labelled **calibration period (in-sample)**: they are
   scored on the days the parameters were tuned on. When the parameters came
   from Fit automatically, the fit's validation scores sit beside the in-sample
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network

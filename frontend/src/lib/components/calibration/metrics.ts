@@ -1,21 +1,6 @@
 // Pure helpers for the calibration panel and the calibration-window fields.
-import { moriasiRating, type AnnualVolume, type CalibrationStats, type MoriasiRating } from '@water-management/engine';
+import type { AnnualVolume, CalibrationStats } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
-
-export const RATING_LABEL: Record<MoriasiRating, string> = {
-	veryGood: 'Very good',
-	good: 'Good',
-	satisfactory: 'Satisfactory',
-	unsatisfactory: 'Unsatisfactory'
-};
-
-/** Badge tone per rating: reuses the app's status tokens (success / accent / warning / danger). */
-export const RATING_TONE: Record<MoriasiRating, 'good' | 'ok' | 'warn' | 'bad'> = {
-	veryGood: 'good',
-	good: 'ok',
-	satisfactory: 'warn',
-	unsatisfactory: 'bad'
-};
 
 export interface MetricRow {
 	key: string;
@@ -24,7 +9,6 @@ export interface MetricRow {
 	unit?: string;
 	/** One-line plain-language explanation. */
 	help: string;
-	rating: MoriasiRating | null;
 }
 
 const pct = (v: number | null | undefined, digits = 1) => (v == null || !Number.isFinite(v) ? '–' : `${fmtNum(v, digits)}%`);
@@ -36,51 +20,44 @@ export function metricRows(c: CalibrationStats): MetricRow[] {
 			key: 'nse',
 			label: 'Nash–Sutcliffe (NSE)',
 			value: fmtNum(c.nse, 2),
-			help: '1 is a perfect fit; 0 or below is no better than always predicting the observed mean.',
-			rating: moriasiRating('nse', c.nse)
+			help: '1 is a perfect fit; 0 or below is no better than always predicting the observed mean.'
 		},
 		{
 			key: 'kge',
 			label: 'Kling–Gupta (KGE)',
 			value: fmtNum(c.kge, 2),
-			help: 'Combines timing, variability and volume; 1 is perfect, above −0.41 beats the mean flow.',
-			rating: null
+			help: 'Combines timing, variability and volume; 1 is perfect, above −0.41 beats the mean flow.'
 		},
 		{
 			key: 'pbias',
 			label: 'Percent bias (PBIAS)',
 			value: pct(c.pbias),
-			help: 'Share of observed volume the model misses; positive = model too dry, negative = too wet.',
-			rating: moriasiRating('pbias', c.pbias)
+			help: 'Share of observed volume the model misses; positive = model too dry, negative = too wet.'
 		},
 		{
 			key: 'logNse',
 			label: 'Log NSE (low flows)',
 			value: fmtNum(c.logNse, 2),
-			help: 'NSE on the logarithm of flow, so dry-season flows count as much as floods.',
-			rating: null
+			help: 'NSE on the logarithm of flow, so dry-season flows count as much as floods.'
 		},
 		{
 			key: 'r2',
 			label: 'R²',
 			value: fmtNum(c.r2, 2),
-			help: 'Share of the day-to-day variation in observed flow that the model follows.',
-			rating: null
+			help: 'Share of the day-to-day variation in observed flow that the model follows.'
 		},
 		{
 			key: 'volumeErrorPct',
 			label: 'Volume error',
 			value: pct(c.volumeErrorPct),
-			help: 'Simulated minus observed volume over the window, as a share of observed.',
-			rating: null
+			help: 'Simulated minus observed volume over the window, as a share of observed.'
 		},
 		{
 			key: 'rmseM3s',
 			label: 'RMSE',
 			value: fmtNum(c.rmseM3s, 3),
 			unit: 'm³/s',
-			help: 'Typical size of a daily error, in flow units.',
-			rating: null
+			help: 'Typical size of a daily error, in flow units.'
 		}
 	];
 }

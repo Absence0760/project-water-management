@@ -1,6 +1,6 @@
 <!--
-	Calibration panel for a run: the scored window, fit metrics with Moriasi
-	(2007) rating badges and one-line explanations, and the annual water
+	Calibration panel for a run: the scored window, fit metrics with one-line
+	explanations (no pass marks: calibration research CR-6), and the annual water
 	balance (observed vs simulated volume per water year).
 	Input: RunSummary.calibration; optional settings to show the requested window.
 -->
@@ -9,8 +9,6 @@
 	import { fmtNum } from '$lib/format/number';
 	import {
 		FLOW_KIND_LABEL,
-		RATING_LABEL,
-		RATING_TONE,
 		SIMULATED_LABEL,
 		describeWindow,
 		isLegacyStats,
@@ -107,9 +105,6 @@
 				<li class="metric">
 					<div class="top">
 						<span class="label" id="{uid}-{r.key}">{r.label}</span>
-						{#if r.rating}
-							<span class="badge tone-{RATING_TONE[r.rating]}">{RATING_LABEL[r.rating]}</span>
-						{/if}
 					</div>
 					<div class="value">{r.value}{#if r.unit}<small>{r.unit}</small>{/if}</div>
 					<p class="help">{r.help}</p>
@@ -120,8 +115,8 @@
 			{/each}
 		</ul>
 		<p class="note muted">
-			Ratings follow Moriasi et al. (2007) for NSE and PBIAS. They were set for monthly flows; daily fits usually score
-			lower.
+			No pass marks: the published ones (Moriasi et al. 2007) were set for monthly flows and don't carry over to daily
+			fits. Compare with the mean flow instead: it scores NSE 0 and KGE −0.41.
 		</p>
 
 		{#if years.length}
@@ -229,26 +224,6 @@
 	.badge {
 		text-transform: none;
 		white-space: nowrap;
-	}
-	.tone-good {
-		background: var(--success-soft);
-		color: var(--success);
-		border-color: transparent;
-	}
-	.tone-ok {
-		background: var(--accent-soft);
-		color: var(--accent);
-		border-color: transparent;
-	}
-	.tone-warn {
-		background: var(--warning-soft);
-		color: var(--warning);
-		border-color: transparent;
-	}
-	.tone-bad {
-		background: var(--danger-soft);
-		color: var(--danger);
-		border-color: transparent;
 	}
 	h4 {
 		margin-top: 1rem;

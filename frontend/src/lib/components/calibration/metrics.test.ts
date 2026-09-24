@@ -20,15 +20,17 @@ const base: CalibrationStats = {
 };
 
 describe('metricRows', () => {
-	it('formats values and attaches Moriasi ratings to NSE and PBIAS only', () => {
+	it('formats values with a plain explanation and no pass mark (calibration research CR-6)', () => {
 		const rows = Object.fromEntries(metricRows(base).map((r) => [r.key, r]));
 		expect(rows.nse!.value).toBe('0.70');
-		expect(rows.nse!.rating).toBe('good');
 		expect(rows.pbias!.value).toBe('-12.3%');
-		expect(rows.pbias!.rating).toBe('good');
-		expect(rows.kge!.rating).toBeNull();
 		expect(rows.rmseM3s!.unit).toBe('m³/s');
 		expect(metricRows(base).every((r) => r.help.length > 10)).toBe(true);
+		// Moriasi's thresholds were set for monthly flows: no daily score is rated.
+		for (const r of metricRows(base)) {
+			expect(Object.keys(r)).not.toContain('rating');
+			expect(r.help).not.toMatch(/very good|satisfactory/i);
+		}
 	});
 
 	it('shows dashes for metrics an old run does not have', () => {
@@ -38,7 +40,6 @@ describe('metricRows', () => {
 		const rows = Object.fromEntries(metricRows(old).map((r) => [r.key, r]));
 		expect(rows.kge!.value).toBe('–');
 		expect(rows.volumeErrorPct!.value).toBe('–');
-		expect(rows.pbias!.rating).toBe('unsatisfactory');
 		expect(kgeComponents(old)).toBeNull();
 	});
 });

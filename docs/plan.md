@@ -453,7 +453,9 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 10. **Zero observed flows.** The workbook skips days where observed flow is
     zero when scoring the fit; the app keeps them. Real readings or gaps?
 11. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
-    fits against them, or also score monthly totals?
+    fits against them, or also score monthly totals? *Decided (calibration
+    research CR-6): daily fits carry no rating words; monthly scoring is the
+    WR2012 five-statistic table, CR-28.*
 12. **EWR "days not met".** Count days that were actually short (app default)
     or the workbook macro's running monthly total? The workbook's EWR pivot is
     also stale on ~23 % of farm-months (macro not re-run). (model.md §2.9)
