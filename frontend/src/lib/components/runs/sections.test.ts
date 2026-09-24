@@ -26,6 +26,12 @@ describe('resultSections', () => {
 		expect(ids.slice(ids.indexOf('res-calibration'), ids.indexOf('res-calibration') + 3)).toEqual(['res-calibration', 'res-runoff', 'res-fdc']);
 	});
 
+	it('adds the WR2012 check after the runoff model when the run has one', () => {
+		const ids = resultSections({ farms: [], runoff: { model: 'gr4j' } as RunSummary['runoff'], wr2012: {} as RunSummary['wr2012'] }).map((s) => s.id);
+		expect(ids.slice(ids.indexOf('res-runoff'), ids.indexOf('res-runoff') + 3)).toEqual(['res-runoff', 'res-wr2012', 'res-fdc']);
+		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-wr2012');
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);

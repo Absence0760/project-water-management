@@ -26,6 +26,18 @@
 		{ label: 'Runoff coefficient (flow ÷ rain)', unit: '', m: comparison.catchment.runoffCoefficient, spec: { format: 'ratio', better: 'neutral' } }
 	]);
 
+	// WR2012 check: simulated natural ÷ scaled WR2012 (closer to 1 is better).
+	const wr2012 = $derived<Row[]>(
+		comparison.wr2012
+			? [
+					{ label: 'MAR ratio, overlapping years', unit: '', m: comparison.wr2012.marRatioOverlap, spec: { format: 'ratio', better: 'one', digits: 2 } },
+					{ label: 'MAR ratio, whole run', unit: '', m: comparison.wr2012.marRatioWhole, spec: { format: 'ratio', better: 'one', digits: 2 } },
+					{ label: 'Dry-season ratio', unit: '', m: comparison.wr2012.lowFlowRatio, spec: { format: 'ratio', better: 'one', digits: 2 } },
+					{ label: 'Monthly pattern correlation', unit: '', m: comparison.wr2012.patternCorrelation, spec: { format: 'ratio', better: 'higher', digits: 2 } }
+				]
+			: []
+	);
+
 	const calibration = $derived<Row[]>(
 		comparison.calibration
 			? [
@@ -81,6 +93,10 @@
 			{@render table(calibration, 'Calibration statistics for both runs, calibration period (in-sample)')}
 		{:else}
 			<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
+		{/if}
+		{#if wr2012.length}
+			<h3>WR2012 check <span class="u">· simulated natural ÷ scaled WR2012</span></h3>
+			{@render table(wr2012, 'WR2012 check for both runs')}
 		{/if}
 	</div>
 </div>

@@ -19,6 +19,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
+	import Wr2012Panel from './Wr2012Panel.svelte';
 	import { resultSections } from './sections';
 
 	let {
@@ -335,6 +336,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
 							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} />
+						</div>
+					{/if}
+					{#if summary.wr2012}
+						<div class="panel" id="res-wr2012">
+							<Wr2012Panel report={summary.wr2012} />
 						</div>
 					{/if}
 				{/snippet}

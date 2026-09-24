@@ -606,6 +606,28 @@ export const HELP: HelpEntry[] = [
 		source: 'Tolson & Shoemaker (2007); Klemeš (1986); Kling et al. (2012); docs/model.md §2.10b'
 	},
 	{
+		id: 'wr2012-check',
+		term: 'WR2012 check',
+		short: 'Compares simulated natural flow with the naturalised flow WR2012 publishes for the quaternary, scaled to the modelled catchment.',
+		long: 'WR2012 (Water Resources of South Africa 2012) gives each quaternary catchment a naturalised mean annual runoff (MAR) and mean monthly flows: the river as it would be with no farms, dams or abstraction. Enter them from the study for the quaternary this project lies in, with the period they cover and where they come from. The app doesn’t ship WR2012 data.\n\nEach run then compares its simulated natural flow, never the outflow, with the reference. The reference is scaled to the modelled catchment by the area ratio, or by the area and the rainfall ratio (the run’s mean annual rain ÷ the quaternary MAP) when both are known. Runoff doesn’t scale in proportion to rain, so treat the rainfall scaling as a first estimate.\n\nThe report gives the MAR ratio over the complete water years both cover and over the whole run, the 12 monthly ratios with the dry-season months marked, and the correlation of the monthly pattern. A MAR that differs by 10 % is noted, by 25 % (or 15 % wetter) is queried, and by 50 % makes the run unusable for EWR findings until it is explained. The thresholds are editable.\n\nMonthly means are in million m³ per month (not m³/s) and should add up to the MAR within 5 %. A MAR larger than the rain on the quaternary (MAP × area) is rejected.',
+		units: 'MAR Mm³/a; monthly means Mm³ per month; area km²; MAP mm',
+		category: 'flow',
+		aliases: ['WR2012', 'naturalised flow', 'naturalized flow', 'MAR', 'quaternary', 'Water Resources of South Africa'],
+		fields: ['settings.wr2012'],
+		related: ['natural-flow', 'wr2012-penalty', 'gr4j'],
+		source: 'Bailey & Pitman, Water Resources of South Africa 2012 Study (WRC); docs/model.md § WR2012 check'
+	},
+	{
+		id: 'wr2012-penalty',
+		term: 'WR2012 MAR penalty (calibration)',
+		short: 'Optional: automatic calibration also pulls the simulated natural MAR towards the scaled WR2012 MAR. Off by default.',
+		long: 'When it is on, Fit automatically adds weight × |ln(simulated natural MAR ÷ scaled WR2012 MAR)| to the loss it minimises, so a wetter and a drier MAR by the same factor cost the same. It only touches the annual volume, not the daily pattern.\n\nThe result shows the fit with the penalty and the same fit without it, with the weight, so you can see what matching WR2012 costs the fit to the observed record. A short or impacted observed record can disagree with WR2012 for good reasons; the penalty is a nudge, not a constraint.',
+		category: 'fit',
+		aliases: ['soft penalty', 'MAR penalty', 'regularisation'],
+		related: ['wr2012-check', 'auto-calibration'],
+		source: 'docs/model.md § WR2012 check; issue #4 phase 8'
+	},
+	{
 		id: 'catchment-area',
 		term: 'Catchment area (rain)',
 		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the farm areas.',

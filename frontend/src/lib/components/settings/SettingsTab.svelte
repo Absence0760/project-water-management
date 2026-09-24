@@ -25,6 +25,7 @@
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
 	import MonthlyBars from './MonthlyBars.svelte';
+	import Wr2012Section from './Wr2012Section.svelte';
 
 	let {
 		project,
@@ -77,7 +78,8 @@
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
-	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError || !!dqError);
+	let wr2012Error = $state<string | null>(null);
+	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!reportError || !!dqError || !!wr2012Error);
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -438,6 +440,13 @@
 		{/if}
 	</section>
 
+	<Wr2012Section
+		bind:value={s.wr2012}
+		bind:error={wr2012Error}
+		{readonly}
+		modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
+	/>
+
 	<!-- Flow share ----------------------------------------------------------------->
 	<section class="panel" aria-labelledby="share-h">
 		<div class="panel-head">
@@ -598,6 +607,7 @@
 		<div class="actions">
 			{#if justSaved && !dirty}<span class="muted" role="status">Settings saved.</span>{/if}
 			{#if dirty}<span class="unsaved">Unsaved settings</span>{/if}
+			{#if dirty && wr2012Error}<span class="err" role="status">{wr2012Error}</span>{/if}
 			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
 				{saving ? 'Saving…' : 'Save settings'}
