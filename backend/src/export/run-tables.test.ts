@@ -1,4 +1,4 @@
-import { FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
@@ -149,7 +149,7 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(at('Supply cut for the EWR (m³/day)')).toBe('-16');
 		expect(Number(at('Supply cut for the EWR (l/s)'))).toBeCloseTo(-16 / 86.4, 12);
 		expect(at('EWR site setting the charge')).toBe('Weir');
-		expect(lines.at(-1)!.split(',')).toHaveLength(header.length);
+		expect(lines.find((l) => l.startsWith('Total,'))!.split(',')).toHaveLength(header.length);
 	});
 
 	it('Q13: keeps demand left unrounded and adds demand_pct_note and the cut beyond the equitable share', () => {
@@ -164,6 +164,17 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
 		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
+	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
+		const lines = [...curtailmentLines(c)];
+		expect(lines.some((l) => l.startsWith('Equitable share of supply (fairness benchmark) [K total] (%),'))).toBe(true);
+		const header = lines.find((l) => l.startsWith('Farm,'))!;
+		expect(header).toContain('Equitable share volume [M] (m³/day)');
+		expect(header).toContain('Above (−) / below (+) equitable share [N] (m³/day)');
+		expect(lines.join('\n')).not.toMatch(/gain/i);
+		expect(lines.at(-1)).toBe(`"${EQUITABLE_SHARE_FOOTNOTE}"`);
+		expect(EQUITABLE_SHARE_FOOTNOTE.endsWith('Not an allocation or licence condition.')).toBe(true);
 	});
 
 	it('lists every EWR site; charged + natural = shortfall', () => {

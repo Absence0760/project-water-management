@@ -56,7 +56,7 @@ engine 0.4.0.
 | Q7 Pitman fallback | **Removed (P1, engine 0.10.0).** Natural flow comes only from the runoff model. Days without rain data are still warned about (W2). |
 | Q8 hi/lo over listed farms | Sound (the shares are normalised); W3 catches area drift. |
 | Q9, Q10 | Settings; no engine change. |
-| Q11 equitable target ignores the network | **Needs hydrologist** (policy). Recommendation: present "gain" as a fairness target only, and later compute a feasible, network-aware redistribution (licences, planned-work). |
+| Q11 equitable target ignores the network | **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0, labels only.** The equitable fraction is labelled *Equitable share of supply (fairness benchmark)*, the target *Equitable share volume*, the reduce/gain column *Above (−) / below (+) equitable share* (no word "gain" anywhere); the curtailment table in the UI and the summary CSV end with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE` ("… Not an allocation or licence condition."). No computation changes. Under the NWA, sharing in a shortage runs through authorisations (s43; Schedule 3 item 6 restrictions, gazetted as % of authorised use per sector), and model demand is gameable (raising crop factors or areas raises a farm's share), so a benchmark must not read as an allocation. **Future work:** a network-aware allocation based on authorised volumes (licence or WARMS), with Schedule 3 item 6 restrictions as % cuts of them and feasibility checked by re-running the network, as a new, separately labelled table. Tests: frontend `curtailment.test.ts` (no verdict says "gain"), backend `run-tables.test.ts` › "Q11: …". |
 | Q12 label | UI wording only; the engine field is `fractionOfDemandLeft`. |
 | Q13 EWR cut on a farm with no demand | **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0.** A licence condition must be something the user can comply with, so the farm's EWR charge (Q17) splits by channel: irrigation part `A·c/(c + MAX(o, 0))` (c = G − T consumptive irrigation, o = e − c storage gain and net export) and a *store less / pass inflow* part. Only the irrigation part is a supply cut, `ΔG = R_irr / (1 − β(1 − e))` (consumptive use = G(1 − β(1 − e)), N1), so a farm with no demand gets a supply cut of 0 and its charge reads as a release / bypass condition. Curtailment S = N − ΔG, U = `MAX(M − ΔG, 0)`, `fractionOfDemandLeft` in 0–1, and `ewrCutBeyondShareM3Day = MAX(ΔG − M, 0)` flags "EWR cut exceeds this farm's equitable share". "Demand left %" shows "no demand" (H = 0), "—" below `DEMAND_PCT_FLOOR_M3_DAY` = 1 m³/day, else a whole % with "<1%" / ">99%" at the ends; the CSV keeps the unrounded value plus `demand_pct_note`. Tests: `curtailment.test.ts` › "Q13: …", `run.test.ts` › "charges a short outlet …" (a damless farm with no irrigation: all storage), frontend `curtailment.test.ts` › "demand left % (Q13)", `run-tables.test.ts` › "Q13: …"; `checkReportTotals` asserts the identities on every run. |
 | Q14 K_tot from rounded averages | **Fixed (R1).** |
@@ -292,7 +292,11 @@ the bound.
    a farm with no demand is never asked to irrigate less; the volume left is
    never below 0 and a cut beyond the equitable share is flagged. Is the
    storage part to be written as a release or bypass condition?
-8. **Q11:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
+8. **Q11 (confirm the decision):** engine 0.17.0 labels the equitable share
+   a fairness benchmark, never a gain, with the footnote "Not an allocation or
+   licence condition." Is a network-aware allocation on authorised volumes
+   (NWA Schedule 3 item 6) wanted, and from which data (licences, WARMS)?
+   (Q1 is resolved: engine 0.9.0.)
 9. **B2:** are the two flagged zero-rain runs on the client catchment missing
    data (engine 0.15.0 fills them from CHIRPS by default) or real dry spells
    (list them as keep-dry)? Are there other bad stretches to list as missing

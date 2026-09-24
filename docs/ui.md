@@ -486,8 +486,12 @@ The settings are grouped by what they drive:
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
-  demand, supply, the fair-share target and reduce / gain, then the EWR
-  columns. From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
+  demand, supply, the *equitable share volume* and *above (−) / below (+)
+  equitable share* under "Equitable share (fairness benchmark, ex EWR)", then
+  the EWR columns. No label or badge says "gain" (audit Q11): a farm below its
+  share reads "below its equitable share by X m³/day", and the table ends with
+  the fixed footnote "Fairness benchmark only: … Not an allocation or licence
+  condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
   pass inflow*, the *Supply cut* (m³/day and l/s) and the *EWR site* setting
   the charge, with a note on the rule; older runs show the single "EWR

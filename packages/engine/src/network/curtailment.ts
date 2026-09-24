@@ -17,6 +17,15 @@ import type { CurtailmentFarm, CurtailmentSummary, EwrSiteSummary } from '../pro
 export const M3_PER_DAY_PER_LS = 86.4;
 
 /**
+ * The fixed footnote of the curtailment table, in the UI and the summary CSV
+ * (audit Q11, engine ≥ 0.17.0): the equitable share is a fairness benchmark,
+ * never an allocation. A network-aware allocation based on authorisations is
+ * future work (docs/model.md §2.11).
+ */
+export const EQUITABLE_SHARE_FOOTNOTE =
+	'Fairness benchmark only: assumes water can move freely between farms, and ignores network position, storage, licensed or registered volumes and existing lawful use. Not an allocation or licence condition.';
+
+/**
  * Below this average demand (m³/day, ≈ 0.012 l/s, under any meter's
  * resolution) "demand left %" is not meaningful: the UI shows "—" and the CSV
  * notes it (audit Q13, engine ≥ 0.17.0). One constant for the UI and the CSV.

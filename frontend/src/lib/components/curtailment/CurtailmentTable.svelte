@@ -2,10 +2,11 @@
 	Curtailment targets per farm: the b023 [Shortfalls] report over the run's
 	reporting window (RunSummary.curtailment, engine ≥ 0.3.0). Formulas and
 	workbook quirks: docs/model.md §2.11. Sign convention: negative = reduce,
-	positive = may gain.
+	positive = below the equitable share. The equitable share is a fairness
+	benchmark, never an allocation (audit Q11): no label says "gain".
 -->
 <script lang="ts">
-	import type { RunSummary } from '@water-management/engine';
+	import { EQUITABLE_SHARE_FOOTNOTE, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtSigned, fmtVol } from './curtailment';
 
@@ -40,13 +41,15 @@
 			{#if c.equitableFraction === null}
 				No farm had irrigation demand in this window, so there is no supply to share.
 			{:else}
-				The catchment supplied {fmtPct(c.equitableFraction)} of total demand. Each farm's
-				<strong>target</strong> is that same share of its own demand.
+				The catchment supplied {fmtPct(c.equitableFraction)} of total demand: the
+				<strong>equitable share of supply (fairness benchmark)</strong>. Each farm's equitable share volume is that same
+				share of its own demand.
 			{/if}
 		</p>
 		<p class="muted small">
-			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = may gain.
-			<em>Reduce/gain</em> shares irrigation fairly (target − supplied). <em>Total change</em> also removes the
+			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = below the equitable share.
+			<em>Above (−) / below (+) equitable share</em> compares the supply with the fairness benchmark (equitable
+			share volume − supplied). <em>Total change</em> also removes the
 			farm's {attributed ? 'EWR charge' : 'EWR shortfall'}. 1 l/s = 86.4 m³/day.
 			{#if cuts}
 				<span class="flag-key" aria-hidden="true"></span>
@@ -59,22 +62,22 @@
 			<table class="data">
 				<caption class="visually-hidden">
 					Curtailment targets per farm, {c.reportStart} to {c.reportEnd}. Negative values are
-					reductions, positive values are gains.
+					reductions, positive values are below the equitable share.
 				</caption>
 				<thead>
 					<tr class="group">
 						<th scope="col" rowspan="2">Farm</th>
 						<th scope="colgroup" colspan="3">Irrigation used</th>
-						<th scope="colgroup" colspan="3">Fair share (ex EWR)</th>
+						<th scope="colgroup" colspan="3">Equitable share (fairness benchmark, ex EWR)</th>
 						<th scope="colgroup" colspan={attributed ? 10 : 5}>To balance and meet the EWR</th>
 					</tr>
 					<tr>
 						<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Supplied<br /><span class="u">% of demand</span></th>
-						<th scope="col" class="num">Target<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Reduce / gain<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Reduce / gain<br /><span class="u">l/s</span></th>
+						<th scope="col" class="num">Equitable share volume<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">l/s</span></th>
 						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'}<br /><span class="u">m³/day</span></th>
 						{#if attributed}
 							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less<br /><span class="u">m³/day</span></th>
@@ -152,8 +155,8 @@
 			</table>
 		</div>
 		<p class="muted small note">
-			The fair share assumes water can move between any two farms. It ignores where a farm sits in the network, so a
-			“gain” may not be physically reachable. <em>Demand left</em> is volume left ÷ demand (the workbook labels
+			<strong>{EQUITABLE_SHARE_FOOTNOTE}</strong> A positive value is not water the farm can get: a surplus downstream
+			can't reach a farm upstream. <em>Demand left</em> is volume left ÷ demand (the workbook labels
 			this column “reduction of demand required”), as a whole %; “—” means demand under 1 m³/day, where a % is
 			not meaningful. {#if attributed}<em>Total change</em> and <em>volume left</em> count only the supply cut; the
 			volume left never goes below 0, and a farm whose EWR cut is larger than its equitable share is flagged.{/if}

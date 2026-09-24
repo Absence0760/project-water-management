@@ -154,7 +154,7 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'report-window',
 		term: 'Reporting window',
-		short: 'The period the curtailment report (targets and reduce/gain per farm) averages over. Empty = the whole run.',
+		short: 'The period the curtailment report (equitable shares and EWR cuts per farm) averages over. Empty = the whole run.',
 		long: 'Pick a critical period — a dry season or a drought year — to see how much each farm would need to reduce for irrigation to balance and the EWR to be met in that period. A window partly outside the run is clipped to it.',
 		category: 'basics',
 		aliases: ['reporting period', 'shortfall period'],
@@ -941,6 +941,17 @@ export const HELP: HelpEntry[] = [
 		fields: ['run.ewr_charge_irrigation'],
 		related: ['ewr-charge', 'irrigation-efficiency'],
 		source: 'docs/model.md §2.7b and §2.11; docs/engine-audit.md Q13, Q17'
+	},
+	{
+		id: 'equitable-share',
+		term: 'Equitable share of supply (fairness benchmark)',
+		short: 'Σ supplied ÷ Σ demand: the share of its demand each farm would get if supply were shared in proportion. Not an allocation.',
+		long: 'Over the reporting window, the catchment supplied this share of the total demand. A farm’s equitable share volume is that same share of its own demand, and “above (−) / below (+) equitable share” is that volume minus what it was supplied. The differences cancel across the farms.\n\nIt is a fairness benchmark only: it assumes water can move freely between farms, and ignores where a farm sits in the network, its storage, licensed or registered volumes and existing lawful use. A positive value is not water the farm can get: a surplus downstream can’t reach a farm upstream. Not an allocation or licence condition.\n\nUnder the National Water Act, sharing in a shortage runs through authorisations (s43 compulsory licensing; Schedule 3 item 6 restrictions, which DWS gazettes as % limits on authorised use per sector). A network-aware allocation based on licensed or registered volumes is future work; model demand is not an entitlement, and raising crop factors or areas raises a farm’s benchmark.',
+		units: '% of demand; m³/day',
+		category: 'results',
+		aliases: ['equitable supply fraction', 'target volume', 'fair share', 'reduce / gain'],
+		related: ['demand-left', 'ewr-charge', 'report-window'],
+		source: 'b023 Shortfalls columns K total, M, N; docs/model.md §2.11; docs/engine-audit.md Q11'
 	},
 	{
 		id: 'demand-left',

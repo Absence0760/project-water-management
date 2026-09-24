@@ -1,6 +1,6 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
-import { demandPctNote, FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
+import { demandPctNote, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
 import { csvRow } from './csv.js';
 
 /**
@@ -265,10 +265,11 @@ const CURTAILMENT_COLUMNS: [header: string, value: (f: CurtailmentRow, siteName:
 	['Average supplied [I] (m³/day)', (f) => f.suppliedM3Day],
 	['Deficit [J] (m³/day)', (f) => f.deficitM3Day],
 	['Supplied [K] (% of demand)', (f) => pct(f.fractionSupplied) as Cell],
-	['Target volume [M] (m³/day)', (f) => f.targetM3Day],
-	['Reduce (−) / gain (+) [N] (m³/day)', (f) => f.reduceGainM3Day],
-	['Reduce (−) / gain (+) [O] (l/s)', (f) => f.reduceGainLs],
-	['Target [P] (% of demand)', (f) => pct(f.targetFraction) as Cell],
+	// Q11 (engine ≥ 0.17.0 labels): the equitable share is a fairness benchmark, never water a farm may "gain".
+	['Equitable share volume [M] (m³/day)', (f) => f.targetM3Day],
+	['Above (−) / below (+) equitable share [N] (m³/day)', (f) => f.reduceGainM3Day],
+	['Above (−) / below (+) equitable share [O] (l/s)', (f) => f.reduceGainLs],
+	['Equitable share [P] (% of demand)', (f) => pct(f.targetFraction) as Cell],
 	['EWR charge [R] (m³/day)', (f) => f.ewrShortfallM3Day],
 	['EWR charge met by irrigating less (m³/day)', (f) => f.ewrChargeIrrigationM3Day ?? null],
 	['EWR charge met by storing less / passing inflow (m³/day)', (f) => f.ewrChargeStorageM3Day ?? null],
@@ -287,8 +288,8 @@ const CURTAILMENT_COLUMNS: [header: string, value: (f: CurtailmentRow, siteName:
 /**
  * The curtailment report over its reporting window (model.md §2.11), one row
  * per farm plus the totals, every number unrounded. From engine 0.17.0 the
- * EWR column is the farm's charge at the EWR sites (audit Q17), and a header
- * row names the rule.
+ * EWR column is the farm's charge at the EWR sites (audit Q17), a header
+ * row names the rule, and the fixed footnote closes the table (Q11).
  */
 export function* curtailmentLines(c: RunSummary['curtailment']): Generator<string> {
 	yield csvRow(['Curtailment targets']);
@@ -297,7 +298,7 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 		return;
 	}
 	yield csvRow(['Reporting window', c.reportStart, c.reportEnd, `${c.days} days`]);
-	yield csvRow(['Equitable supply fraction [K total] (%)', pct(c.equitableFraction) as Cell]);
+	yield csvRow(['Equitable share of supply (fairness benchmark) [K total] (%)', pct(c.equitableFraction) as Cell]);
 	yield csvRow([
 		'EWR attribution',
 		c.ewrAttribution === 'netImpactProRata'
@@ -333,6 +334,7 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 		'',
 		t.ewrCutBeyondShareM3Day ?? null
 	]);
+	yield csvRow([EQUITABLE_SHARE_FOOTNOTE]);
 }
 
 /** Each EWR site over the reporting window (engine ≥ 0.17.0, audit Q17): charged + natural = shortfall. */

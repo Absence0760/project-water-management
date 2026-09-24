@@ -633,7 +633,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Summary**: mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged.',
-							'**Curtailment**: how much each farm would reduce or may gain for irrigation to balance and the EWR to be met. See [[guide:curtailment-targets|Curtailment targets]].',
+							'**Curtailment**: each farm’s supply against a fairness benchmark, and the cut that meets the EWR. See [[guide:curtailment-targets|Curtailment targets]].',
 							'**Hydrograph**: natural and simulated flow, with observed flow as dots. Try the log scale for low flows.',
 							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
 							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
@@ -1005,7 +1005,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'curtailment-targets',
 		title: 'Curtailment targets',
-		summary: 'How the app works out how much each farm should reduce, or may gain, to share water fairly and meet the EWR.',
+		summary: 'How the app compares each farm’s supply with a fairness benchmark and works out the cut that meets the EWR.',
 		kind: 'concept',
 		tab: 'runs',
 		sections: [
@@ -1014,20 +1014,25 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Over the [[report-window|reporting window]], add up what every farm asked for and what it received. Their ratio is the catchment’s **equitable supply fraction**: had the supplied water been shared in proportion to demand, every farm would have received that fraction.'
+						text: 'Over the [[report-window|reporting window]], add up what every farm asked for and what it received. Their ratio is the catchment’s [[equitable-share|equitable share of supply]] (a **fairness benchmark**): had the supplied water been shared in proportion to demand, every farm would have received that fraction.'
 					},
 					{
 						type: 'formula',
-						text: 'target = demand × Σ supplied ÷ Σ demand          reduce (−) or gain (+) = target − supplied'
+						text: 'equitable share volume = demand × Σ supplied ÷ Σ demand          above (−) / below (+) equitable share = equitable share volume − supplied'
 					},
 					{
 						type: 'p',
-						text: 'Reductions and gains cancel across the farms, so this step only redistributes water. Each farm’s average [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then added on top: the **total change** both balances irrigation and meets the EWR. Negative means reduce.'
+						text: 'The differences cancel across the farms, so this only compares; a positive value is not water the farm can get. Each farm’s [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then split into [[ewr-charge-split|irrigating less and storing less]], and the supply cut for the irrigation part is added: the **total change** in supply. Negative means reduce. The volume left never goes below 0.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'The equitable share is a fairness benchmark only: it assumes water can move freely between farms, and ignores network position, storage, licences and existing lawful use. Not an allocation or licence condition.'
 					}
 				]
 			}
 		],
-		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr', 'ewr-charge', 'ewr-charge-split'],
+		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr', 'equitable-share', 'ewr-charge', 'ewr-charge-split', 'demand-left'],
 		related: ['set-the-ewr', 'run-and-read-results']
 	}
 ];

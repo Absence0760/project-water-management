@@ -111,7 +111,9 @@ describe('curtailmentRows', () => {
 			demandLeftPct: '62%',
 			verdict: 'cut 38.3 m³/day'
 		});
-		expect(b).toMatchObject({ name: 'B', action: 'gain', suppliedPct: '–', demandLeftPct: 'no demand', verdict: 'may gain 12.5 m³/day' });
+		expect(b).toMatchObject({ name: 'B', action: 'gain', suppliedPct: '–', demandLeftPct: 'no demand', verdict: 'below its equitable share by 12.5 m³/day' });
+		// Q11: the fair share is a benchmark, so no row ever says a farm may "gain" water.
+		for (const r of curtailmentRows(c)) expect(r.verdict).not.toMatch(/gain/i);
 		expect(cc).toMatchObject({ action: 'none', totalChange: '0', verdict: 'no change' });
 	});
 

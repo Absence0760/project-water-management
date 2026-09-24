@@ -1,11 +1,14 @@
 // View model for CurtailmentTable: turns RunSummary.curtailment (engine,
 // b023 [Shortfalls]) into display rows. Kept free of Svelte so it can be
-// unit-tested. Sign convention throughout: negative = reduce, positive = gain.
+// unit-tested. Sign convention throughout: negative = reduce, positive = below
+// the equitable share. The equitable share is a fairness benchmark, not an
+// allocation (audit Q11), so no displayed text calls a positive value a gain.
 import { DEMAND_PCT_FLOOR_M3_DAY, type CurtailmentFarm, type CurtailmentSummary, type EwrSiteSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 
 /**
- * What a farm has to do overall: cut or gain supply (total change = reduce/gain
+ * What a farm has to do overall: cut supply, sit below its equitable share
+ * ('gain', an internal name only; total change = above/below the share
  * − EWR supply cut), or, with no change in supply, store less / pass inflow
  * for the storage part of its EWR charge (audit Q13, engine ≥ 0.17.0).
  */
@@ -18,8 +21,8 @@ export function actionOf(totalChange: number): Action {
 }
 
 /**
- * Signed volume: "+12.5", "-33.3", "0". The explicit "+" makes a gain read
- * as a gain. Values are shown to at most one decimal (the workbook's 1-dp
+ * Signed volume: "+12.5", "-33.3", "0". The explicit "+" makes a positive
+ * value (below the equitable share) read as positive. Values are shown to at most one decimal (the workbook's 1-dp
  * target) and the trailing ".0" is trimmed.
  */
 export function fmtSigned(n: number | null | undefined, digits = 1): string {
@@ -85,7 +88,7 @@ export interface CurtailmentRow {
 
 function verdict(f: CurtailmentFarm, action: Action): string {
 	if (action === 'cut') return `cut ${fmtVol(-f.totalChangeM3Day)} m³/day`;
-	if (action === 'gain') return `may gain ${fmtVol(f.totalChangeM3Day)} m³/day`;
+	if (action === 'gain') return `below its equitable share by ${fmtVol(f.totalChangeM3Day)} m³/day`;
 	if (action === 'store') return `store less / pass inflow ${fmtVol(-(f.ewrChargeStorageM3Day ?? 0))} m³/day`;
 	return 'no change';
 }

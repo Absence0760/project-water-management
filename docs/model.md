@@ -1509,10 +1509,10 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | I | `suppliedM3Day` | Average supply (m³/day) | `AVERAGE(G over W)` [sheet: `ROUND(…, 0)`], where G is irrigation supplied |
 | J | `deficitM3Day` | Average deficit (m³/day) | `I − H` (≤ 0) |
 | K | `fractionSupplied` | %Supply | `IF(H = 0, "-", I / H)` (not rounded) |
-| K<sub>tot</sub> | `equitableFraction` | (totals row) | `ΣI / ΣH` [sheet: over the rounded averages] |
-| M | `targetM3Day` | Target volume (m³/day) | `H × K_tot` [sheet: `ROUND(…, 1)`] |
-| N | `reduceGainM3Day` | − = Reduce, + = Gain (m³/day) | `M − I` |
-| O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `N / 86.4` [sheet: `ROUNDDOWN(…, 1)`, truncated toward zero] |
+| K<sub>tot</sub> | `equitableFraction` | (totals row) | `ΣI / ΣH` [sheet: over the rounded averages]. App label: **Equitable share of supply (fairness benchmark)** (Q11) |
+| M | `targetM3Day` | Target volume (m³/day) | `H × K_tot` [sheet: `ROUND(…, 1)`]. App label: **Equitable share volume** |
+| N | `reduceGainM3Day` | − = Reduce, + = Gain (m³/day) | `M − I`. App label: **Above (−) / below (+) equitable share**, never "gain" (Q11) |
+| O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `N / 86.4` [sheet: `ROUNDDOWN(…, 1)`, truncated toward zero]. App label as N |
 | P | `targetFraction` | %Supply (of target) | `IF(H = 0, "-", M / H)` [sheet: `ROUND(…, 3)`]. This is K_tot for every farm with demand |
 | R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | Engine ≥ 0.17.0: `AVERAGE(−R_f over W)`, the EWR charge (§2.7b, Q17). The sheet: `AVERAGE(incremental EWR shortfall over W)` [`ROUND(…, 0)`] (≤ 0), read from `[EWR shortfalls]`, which copies Element sheet AB |
 | – | `ewrChargeIrrigationM3Day` | – | `AVERAGE(−A_irr over W)`: the part of R met by irrigating less (§2.7b; engine ≥ 0.17.0) |
@@ -1537,6 +1537,23 @@ irrigation to cut (`A_irr = 0`, §2.7b), so its supply cut, total change and
 volume left are 0, and any EWR charge it carries is *store less / pass
 inflow* (a release or bypass condition), which the table shows as its own
 column and badge.
+
+**A fairness benchmark, not an allocation (engine ≥ 0.17.0 labels, Q11).**
+The equitable share gives every farm the same fraction of its demand, as if
+water could move freely between any two farms. So the app labels K_tot
+*Equitable share of supply (fairness benchmark)*, M *Equitable share volume*
+and N *Above (−) / below (+) equitable share*; no label calls a positive N
+water a farm may "gain". The table in the UI and the summary CSV carry a fixed
+footnote (`EQUITABLE_SHARE_FOOTNOTE`): *Fairness benchmark only: assumes
+water can move freely between farms, and ignores network position, storage,
+licensed or registered volumes and existing lawful use. Not an allocation or
+licence condition.* The computation is unchanged. A network-aware allocation
+based on authorisations is future work: its base would be MIN(demand,
+authorised volume) from the licence or the WARMS-registered volume, a
+restriction under NWA Schedule 3 item 6 would be a % cut of the authorised
+volume per user category (the way DWS gazettes restrictions), and a re-run of
+the network would check it is feasible; it would ship as a new, separately
+labelled table, not a silent redefinition of M.
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
 N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store and −ΔG).
@@ -1579,7 +1596,7 @@ from the workbook.
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and the client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |
-| Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. | Decides whether "gain" may be shown as water a farm can actually get. A network-aware redistribution (or licences, see planned-work) would change every target. |
+| Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0 — labels only:** K_tot is the *equitable share of supply (fairness benchmark)*, M the *equitable share volume*, N *above (−) / below (+) equitable share*; no label says "gain", and the UI and summary CSV carry the footnote "… Not an allocation or licence condition." (§2.11). The computation is unchanged. | A network-aware, authorisation-based allocation (licensed / WARMS volumes, NWA Schedule 3 item 6 restrictions as % of authorised use) is future work and would change every target. |
 | Q12 | Shortfalls V | The column is labelled **"Reduction of demand required (%)"**, but the formula is `U / H`, the share of demand that is *left*: 1.000 means no reduction, and 0.600 means a 40 % cut. **Mirrored**: `fractionOfDemandLeft` holds `U / H`, and the UI labels it "demand left", not "reduction". | The label invites exactly the wrong reading. We should ask which one the client reports. |
 | Q13 | Shortfalls R/S/U | The EWR shortfall is the farm's **incremental** shortfall (Element AB). With quirk Q4 in play, that is the whole outflow compared with the farm's own fragment. A farm with no irrigation demand can still carry an EWR "reduction" (S < 0, U < 0) that it has no irrigation to cut. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR charge (Q17) splits into an irrigation part and a *store less / pass inflow* part (§2.7b); only the irrigation part becomes a supply cut ΔG = R_irr / (1 − β(1 − e)). A farm with no demand gets a supply cut of 0. S = N − ΔG, U = MAX(M − ΔG, 0), V in 0–1, and a cut beyond the equitable share is flagged (§2.11). | Confirm the split and that the storage part is to be written as a release / bypass condition. |
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
