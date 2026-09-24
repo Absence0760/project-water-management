@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
@@ -83,6 +84,57 @@ export const runRoutes = new Hono<AuthEnv>()
 			return c.json(rows[0]);
 		});
 	})
+	// One node's every column on one day, with the day before's storage and the
+	// node's parameters from the run's own input snapshot: what the day trace
+	// needs to redo the day's arithmetic (docs/ui.md § Self-checks).
+	.get('/:id/runs/:runId/day', async (c) => {
+		const { id, runId } = c.req.param();
+		const q = z
+			.object({
+				nodeId: z.string().uuid(),
+				// A real calendar date (2024-02-31 would roll over, or reach Postgres as an error).
+				date: z
+					.string()
+					.regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
+					.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date')
+			})
+			.parse(c.req.query());
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			const { rows: run } = await db.query<{ index: number | null; days: number; node: Record<string, unknown> | null }>(
+				`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days,
+					(SELECT n FROM jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $4) AS node
+				 FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+				[id, runId, q.date, q.nodeId]
+			);
+			const r = run[0];
+			if (!r) throw new ApiError(404, 'not found');
+			if (r.index === null || r.index < 0 || r.index >= r.days) throw new ApiError(400, 'the date is outside the run');
+			// Postgres arrays are 1-based: day t is values[t + 1], the day before values[t].
+			const { rows } = await db.query<{ key: string; label: string | null; unit: string | null; value: number | null; previous: number | null }>(
+				`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit, "values"[$3::int + 1] AS value,
+					CASE WHEN $3::int > 0 THEN "values"[$3::int] END AS previous
+				 FROM run_series WHERE run_id = $1 AND node_id = $2::uuid`,
+				[runId, q.nodeId, r.index]
+			);
+			if (!rows.length || !r.node) throw new ApiError(404, 'not found');
+			const node = r.node as { name: string; kind: 'farm' | 'gauge'; damCapacityM3?: number; damInitialPct?: number };
+			const storage = rows.find((x) => x.key === 'dam_storage');
+			// Storage at the end of the day before: the run's initial storage on its first day.
+			const previousStorageM3 =
+				node.kind !== 'farm' ? null : r.index === 0 ? (node.damInitialPct ?? 0) * (node.damCapacityM3 ?? 0) : (storage?.previous ?? null);
+			return c.json({
+				date: q.date,
+				nodeId: q.nodeId,
+				name: node.name,
+				kind: node.kind,
+				previousStorageM3,
+				params: pick(node, ['pctUpstreamToDam', 'pctRunoffToDam', 'divertCapacityM3Day', 'damCapacityM3', 'damInitialPct', 'returnFlowPct']),
+				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
+			});
+		});
+	})
 	.delete('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
@@ -93,3 +145,6 @@ export const runRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		});
 	});
+
+const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]): Record<K, unknown> =>
+	Object.fromEntries(keys.map((k) => [k, o[k] ?? null])) as Record<K, unknown>;

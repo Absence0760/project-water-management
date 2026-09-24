@@ -1,7 +1,7 @@
 // Run storage cap (RUNS_KEPT_PER_PROJECT, runs/execute.ts trimRuns) and the
 // model-input read that in-browser calibration runs on.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runModel } from '@water-management/engine';
+import { runModelChecked } from '@water-management/engine';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -90,10 +90,10 @@ describe('GET /projects/:id/model-input', () => {
 		expect(input.model.nodes).toHaveLength(2);
 		expect(Object.keys(input.series)).toEqual(['rain_catchment_mm']);
 		expect(input.series.rain_catchment_mm.values[0]).toBe(10);
-		// Running it in-process gives the stored run's summary.
+		// Running it in-process (as a saved run: with its self-checks) gives the stored run's summary.
 		const run = (await u.call('POST', `/projects/${projectId}/runs`, {})).body.run;
 		// (Compared through JSON, as stored: NaN and undefined don't survive the database.)
-		expect(JSON.parse(JSON.stringify(runModel(input).summary))).toEqual(run.summary);
+		expect(JSON.parse(JSON.stringify(runModelChecked(input).summary))).toEqual(run.summary);
 	});
 
 	it('is readable by a viewer, and hidden (404) from anyone without access', async () => {

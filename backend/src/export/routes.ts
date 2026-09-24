@@ -20,7 +20,7 @@ import {
 	seriesHeader,
 	type DailyColumn
 } from './csv.js';
-import { seriesKeyOrder, summaryCsvLines } from './run-tables.js';
+import { nodeColumnHeader, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
 
 /** A real calendar date: 2024-02-31 is rejected (Date.parse would roll it over). */
 const isoDate = z
@@ -89,17 +89,24 @@ export const exportRoutes = new Hono<AuthEnv>()
 			if (!rows.length) throw new ApiError(404, 'not found');
 			const order = seriesKeyOrder(q.nodeId ? 'node' : 'catchment');
 			rows.sort((a, b) => order(a.key, b.key));
-			const columns: DailyColumn[] = rows.map((r) => ({ header: seriesHeader(r.label ?? r.key, r.unit), values: r.values }));
+
+			let scope = 'catchment';
+			let kind: 'farm' | 'gauge' = 'farm';
+			if (q.nodeId) {
+				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
+				const fromSummary = run.summary.farms.find((f) => f.nodeId === q.nodeId)?.name;
+				scope = n[0]?.name ?? fromSummary ?? 'node';
+				// A deleted node: a farm has a demand series, a gauge doesn't.
+				kind = n[0]?.kind ?? (rows.some((r) => r.key === 'demand') ? 'farm' : 'gauge');
+			}
+			const columns: DailyColumn[] = rows.map((r) => ({
+				header: q.nodeId ? nodeColumnHeader(r.key, r.label ?? r.key, r.unit, kind) : seriesHeader(r.label ?? r.key, r.unit),
+				values: r.values
+			}));
 			const length = Math.max(...rows.map((r) => r.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
-			let scope = 'catchment';
-			if (q.nodeId) {
-				const { rows: n } = await db.query<{ name: string }>('SELECT name FROM node WHERE id = $1', [q.nodeId]);
-				const fromSummary = run.summary.farms.find((f) => f.nodeId === q.nodeId)?.name;
-				scope = n[0]?.name ?? fromSummary ?? 'node';
-			}
 			const body = collectCsv(dailyCsvLines(run.startDate, columns, range));
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];

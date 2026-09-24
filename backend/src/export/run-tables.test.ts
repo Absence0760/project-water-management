@@ -1,6 +1,14 @@
-import type { RunSummary } from '@water-management/engine';
+import { FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { chirpsFactorLines, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
+import {
+	chirpsFactorLines,
+	columnGuideLines,
+	nodeColumnHeader,
+	seriesKeyOrder,
+	summaryCsvLines,
+	verificationLines,
+	waterBalanceLines
+} from './run-tables.js';
 
 const meta = {
 	projectName: 'Demo',
@@ -33,6 +41,9 @@ describe('series column order', () => {
 	it('follows the engine order and puts unknown keys last, alphabetically', () => {
 		const keys = ['zeta', 'ewr', 'outflow', 'demand', 'alpha', 'dam_storage', 'supplied'];
 		expect(keys.sort(seriesKeyOrder('node'))).toEqual(['demand', 'supplied', 'dam_storage', 'outflow', 'ewr', 'alpha', 'zeta']);
+		// Farm columns follow the FarmTemplate letters, intermediate columns in between.
+		const farm = ['deficit', 'balance_residual', 'return_flow', 'outflow', 'interim_storage', 'upstream_to_dam', 'demand', 'gross_demand'];
+		expect(farm.sort(seriesKeyOrder('node'))).toEqual(['gross_demand', 'demand', 'upstream_to_dam', 'interim_storage', 'return_flow', 'outflow', 'balance_residual', 'deficit']);
 		const cat = ['rain_chirps_corrected', 'is_summer', 'rain_used', 'ewr', 'rain_chirps', 'rain_final', 'natural_flow'];
 		// Final rainfall, then CHIRPS as uploaded and corrected, right after rain used.
 		expect(cat.sort(seriesKeyOrder('catchment'))).toEqual(['natural_flow', 'ewr', 'rain_used', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'is_summer']);
@@ -51,8 +62,9 @@ describe('summary sheet', () => {
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
-		// blocks are separated by empty records (run, farms, catchment, CHIRPS factors, calibration, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(5);
+		// blocks are separated by empty records (run, self-checks, farms, catchment, water balance,
+		// CHIRPS factors, calibration, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(8);
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -114,5 +126,87 @@ describe('CHIRPS bias factors block', () => {
 
 	it('is part of the summary sheet', () => {
 		expect([...summaryCsvLines(meta, { ...summary, chirpsCorrection: corr })]).toContain('CHIRPS bias correction');
+	});
+});
+
+describe('node daily column headers', () => {
+	it('put the FarmTemplate letter between the label and the unit', () => {
+		expect(nodeColumnHeader('supplied', 'Irrigation supplied', 'm³/day', 'farm')).toBe('Irrigation supplied [G] (m³/day)');
+		expect(nodeColumnHeader('ewr_shortfall_incremental', 'EWR shortfall caused here', 'm³/day', 'farm')).toBe('EWR shortfall caused here [AB] (m³/day)');
+		// Gauges have their own letters; columns without one keep the plain header.
+		expect(nodeColumnHeader('inflow_upstream', 'Inflow from upstream', 'm³/day', 'gauge')).toBe('Inflow from upstream [G] (m³/day)');
+		expect(nodeColumnHeader('gross_demand', 'Gross demand', 'm³/day', 'farm')).toBe('Gross demand (m³/day)');
+		expect(nodeColumnHeader('something_new', 'Something', null, 'farm')).toBe('Something');
+	});
+});
+
+describe('self-checks block', () => {
+	const v: RunVerification = {
+		passed: false,
+		checks: [
+			{ id: 'balance', label: 'Every farm balances', passed: true, detail: null },
+			{ id: 'transfers', label: 'Transfers within limits', passed: false, detail: '"Farm, upper" on 2001-01-02: sent 5 > limit 4' }
+		],
+		maxResidual: { valueM3Day: 1.5e-10, nodeId: 'n1', name: 'Farm, upper', date: '2001-03-04' }
+	};
+
+	it('lists every check with its result and the first problem', () => {
+		const lines = [...verificationLines(v)];
+		expect(lines[0]).toBe('Self-checks');
+		expect(lines).toContain('All passed,NO');
+		expect(lines).toContain('Every farm balances,passed,');
+		expect(lines).toContain('Transfers within limits,FAILED,"""Farm, upper"" on 2001-01-02: sent 5 > limit 4"');
+		expect(lines.at(-1)).toBe('Largest daily balance check [V] (m³/day),1.5e-10,"Farm, upper on 2001-03-04"');
+	});
+
+	it('says an old run has none', () => {
+		expect([...verificationLines(undefined)][1]).toMatch(/before engine 0\.11\.0/);
+	});
+});
+
+describe('water balance block', () => {
+	const row = (waterYear: number | null, over: Partial<WaterBalanceRow> = {}): WaterBalanceRow => ({
+		waterYear,
+		days: 365,
+		rainMm: 500,
+		naturalFlowMm: 50,
+		runoffCoefficient: 0.1,
+		runoff: null,
+		naturalFlowM3: 1e6,
+		farmRunoffM3: 1e6,
+		openingStorageM3: 10,
+		demandM3: 300,
+		suppliedM3: 200,
+		returnFlowM3: 20,
+		consumptiveUseM3: 180,
+		transfersM3: 0,
+		spillM3: 5,
+		outflowM3: 999_830,
+		closingStorageM3: 0,
+		residualM3: 0,
+		...over
+	});
+	const wb: WaterBalance = { areaKm2: 20, years: [row(1999), row(2000)], total: row(null, { days: 730 }) };
+
+	it('writes one row per water year and one for the run, labelled 1999/00', () => {
+		const lines = [...waterBalanceLines(wb)];
+		const header = lines.findIndex((l) => l.startsWith('Water year,'));
+		expect(lines[header]).toContain('Residual (m³)');
+		expect(lines.slice(header + 1).map((l) => l.split(',')[0])).toEqual(['1999/00', '2000/01', 'Whole run']);
+		// Legacy runs have no runoff-model stores: those cells are empty.
+		expect(lines[header + 1]!.split(',').slice(1, 9)).toEqual(['365', '500', '50', '0.1', '', '', '', '']);
+	});
+
+	it('says an old run has none', () => {
+		expect([...waterBalanceLines(undefined)][1]).toMatch(/before engine 0\.11\.0/);
+	});
+});
+
+describe('farm column guide', () => {
+	it('gives every farm daily column its letter and formula', () => {
+		const lines = [...columnGuideLines()];
+		expect(lines[1]).toBe('Column,Series,Formula');
+		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
+		expect(lines).toContain('V,balance_residual,(H + I + J) − (G − T) − (Q[t] − Q[t−1]) − U; 0 up to float noise');
 	});
 });

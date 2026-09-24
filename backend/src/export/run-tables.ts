@@ -1,6 +1,6 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
-import type { RunSummary } from '@water-management/engine';
+import { FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
 import { csvRow } from './csv.js';
 
 /**
@@ -27,21 +27,9 @@ const CATCHMENT_ORDER = [
 	'response_flow',
 	'resultant_flow'
 ];
-const NODE_ORDER = [
-	'demand',
-	'supplied',
-	'deficit',
-	'inflow_upstream',
-	'runoff',
-	'transfer',
-	'dam_storage',
-	'spill',
-	'outflow',
-	'ewr',
-	'ewr_cumulative',
-	'ewr_shortfall',
-	'ewr_shortfall_incremental'
-];
+// A farm's columns in FarmTemplate order (F … AB), intermediate ones included
+// (engine ≥ 0.11.0), so the file reads left to right like the formulas.
+const NODE_ORDER = FARM_DAILY_COLUMNS.map((c) => c.key);
 const rank = (keys: string[]) => new Map(keys.map((k, i) => [k, i]));
 const RANK = { catchment: rank(CATCHMENT_ORDER), node: rank(NODE_ORDER) };
 
@@ -53,6 +41,18 @@ export function seriesKeyOrder(scope: 'catchment' | 'node') {
 		const rb = r.get(b) ?? Infinity;
 		return ra !== rb ? ra - rb : a.localeCompare(b);
 	};
+}
+
+/**
+ * Header of one node daily column: the label, the FarmTemplate (or
+ * GaugeTemplate) column letter in brackets, then the unit, e.g.
+ * "Irrigation supplied [G] (m³/day)". The summary CSV's column guide gives
+ * each letter's formula.
+ */
+export function nodeColumnHeader(key: string, label: string, unit: string | null | undefined, kind: 'farm' | 'gauge'): string {
+	const letter = (kind === 'gauge' ? GAUGE_COLUMNS : FARM_DAILY_COLUMNS).find((c) => c.key === key)?.letter;
+	const withLetter = letter ? `${label} [${letter}]` : label;
+	return unit ? `${withLetter} (${unit})` : withLetter;
 }
 
 export interface SummaryMeta {
@@ -170,6 +170,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield csvRow(['Period end', meta.endDate]);
 	yield '';
 
+	yield* verificationLines(summary.verification);
+	yield '';
+
 	yield csvRow(['Farm summary']);
 	const farms = summary.farms as unknown as Record<string, unknown>[];
 	const known = new Set(['nodeId', 'name', ...FARM_COLUMNS.map(([k]) => k)]);
@@ -190,6 +193,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
 	yield '';
 
+	yield* waterBalanceLines(summary.waterBalance);
+	yield '';
+
 	yield* chirpsFactorLines(summary.chirpsCorrection);
 	yield '';
 
@@ -202,9 +208,76 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield csvRow(['No observed flow series — calibration not computed']);
 	}
 
+	yield '';
+	yield* columnGuideLines();
+
 	if (summary.warnings.length) {
 		yield '';
 		yield csvRow(['Warnings']);
 		for (const w of summary.warnings) yield csvRow([w]);
 	}
+}
+
+/** The engine's self-checks on the run (engine ≥ 0.11.0, model.md §6 "Verification"). */
+export function* verificationLines(v: RunSummary['verification']): Generator<string> {
+	yield csvRow(['Self-checks']);
+	if (!v) {
+		yield csvRow(['Run made before engine 0.11.0: no self-checks recorded. Run it again to check it.']);
+		return;
+	}
+	yield csvRow(['All passed', v.passed ? 'yes' : 'NO']);
+	yield csvRow(['Check', 'Result', 'First problem found']);
+	for (const c of v.checks) yield csvRow([c.label, c.passed ? 'passed' : 'FAILED', c.detail ?? '']);
+	if (v.maxResidual) {
+		yield csvRow(['Largest daily balance check [V] (m³/day)', v.maxResidual.valueM3Day, `${v.maxResidual.name} on ${v.maxResidual.date}`]);
+	}
+}
+
+const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | null][] = [
+	['Days', (r) => r.days],
+	['Rain (mm)', (r) => r.rainMm],
+	['Natural flow (mm)', (r) => r.naturalFlowMm],
+	['Runoff coefficient', (r) => r.runoffCoefficient],
+	['Actual evaporation (mm)', (r) => r.runoff?.aetMm ?? null],
+	['Groundwater exchange (mm)', (r) => r.runoff?.exchangeMm ?? null],
+	['Change in runoff-model storage (mm)', (r) => r.runoff?.storageChangeMm ?? null],
+	['Runoff-model residual (mm)', (r) => r.runoff?.residualMm ?? null],
+	['Natural flow (m³)', (r) => r.naturalFlowM3],
+	['Farm runoff (m³)', (r) => r.farmRunoffM3],
+	['Dam storage at start (m³)', (r) => r.openingStorageM3],
+	['Irrigation demand (m³)', (r) => r.demandM3],
+	['Irrigation supplied (m³)', (r) => r.suppliedM3],
+	['Return flow (m³)', (r) => r.returnFlowM3],
+	['Consumptive use (m³)', (r) => r.consumptiveUseM3],
+	['Transfers, net (m³)', (r) => r.transfersM3],
+	['Spill (m³)', (r) => r.spillM3],
+	['Outflow (m³)', (r) => r.outflowM3],
+	['Dam storage at end (m³)', (r) => r.closingStorageM3],
+	['Residual (m³)', (r) => r.residualM3]
+];
+
+/**
+ * Where the water went, one row per water year and one for the run (engine ≥
+ * 0.11.0). The network closes: start storage + farm runoff + transfers =
+ * consumptive use + outflow + end storage + residual.
+ */
+export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<string> {
+	yield csvRow(['Water balance by water year (Oct–Sep)']);
+	if (!wb) {
+		yield csvRow(['Run made before engine 0.11.0: no water balance recorded. Run it again to see it.']);
+		return;
+	}
+	yield csvRow(['Start storage + farm runoff + transfers = consumptive use + outflow + end storage + residual; the residual should be 0']);
+	yield csvRow(['Water year', ...BALANCE_COLUMNS.map(([h]) => h)]);
+	for (const r of [...wb.years, wb.total]) {
+		const year = r.waterYear === null ? 'Whole run' : `${r.waterYear}/${String((r.waterYear + 1) % 100).padStart(2, '0')}`;
+		yield csvRow([year, ...BALANCE_COLUMNS.map(([, f]) => f(r))]);
+	}
+}
+
+/** What each farm daily column means: its FarmTemplate letter and formula (verify/columns.ts). */
+export function* columnGuideLines(): Generator<string> {
+	yield csvRow(['Farm daily columns (the daily CSV of a farm)']);
+	yield csvRow(['Column', 'Series', 'Formula']);
+	for (const c of FARM_DAILY_COLUMNS) yield csvRow([c.letter ?? '', c.key, c.formula]);
 }

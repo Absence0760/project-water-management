@@ -280,7 +280,7 @@ The same list applies to the `series` of a project file imported with
 ## Runs
 
 Running the model is synchronous: the backend loads the project, calls the
-engine's `runModel`, stores the outputs, and returns the summary.
+engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verification](./model.md#verification)), stores the outputs, and returns the summary.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -289,6 +289,7 @@ engine's `runModel`, stores the outputs, and returns the summary.
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
+| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `returnFlowPct`) come from the run's input snapshot; `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -351,6 +352,20 @@ engine's `runModel`, stores the outputs, and returns the summary.
   whose area is more than 1 % off high + low MAP area). The last two are absent
   on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
+- `summary.verification` (engine ≥ 0.11.0) is the engine's self-checks on the
+  run ([model.md § Verification](./model.md#verification)):
+  `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
+  with `id` one of `balance`, `workings`, `runoff`, `transfers`, `reports`, and
+  `detail` the first broken property (farm names and dates) or `null`.
+- `summary.waterBalance` (engine ≥ 0.11.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
+  one row per water year (Oct–Sep, `waterYear` = its start year) and one for
+  the run (`waterYear: null`): `rainMm`, `naturalFlowMm`, `runoffCoefficient`,
+  `runoff` (GR4J store balance: `aetMm`, `exchangeMm`, `storageChangeMm`,
+  `residualMm`; `null` for legacy), and in m³ `naturalFlowM3`, `farmRunoffM3`,
+  `openingStorageM3`, `demandM3`, `suppliedM3`, `returnFlowM3`,
+  `consumptiveUseM3`, `transfersM3`, `spillM3`, `outflowM3`,
+  `closingStorageM3`, `residualM3` (opening + runoff + transfers − consumptive
+  use − outflow − closing; float noise).
 - `summary.chirpsCorrection` (engine ≥ 0.7.0) is the CHIRPS fallback bias
   correction, `null` when the project has no CHIRPS series: `{ mode, minDays,
   minMm, clampMin, clampMax, pooled: { days, catchmentMm, chirpsMm, ownFactor,
@@ -407,15 +422,15 @@ routes (`401` signed out, `404` not a member). Responses carry
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, per-farm summary table, catchment figures, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, warnings — blocks separated by a blank record. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain, F, G, H, I, J, K … P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.11.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.11.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 
 CSV format: RFC 4180 (CRLF, fields with `,` `"` or line breaks quoted, `"`
 doubled), a **UTF-8 BOM** so Excel reads `m³` correctly, ISO `YYYY-MM-DD`
 dates, full-precision numbers, and **empty cells for missing days**. Column
-headers are `label (unit)`, in the engine's output order. Text cells that start
+headers are `label (unit)` (a node's: `label [letter] (unit)`), in the engine's output order. Text cells that start
 with `= + - @` get a leading `'` so a spreadsheet never runs them as formulas.
 `from`/`to` are inclusive ISO dates, clamped to the series; `400` if they are
 not real dates, `from > to`, or the window misses the series entirely.

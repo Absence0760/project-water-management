@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { resolveFitRecord, runModel, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
+import { resolveFitRecord, runModelChecked, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
@@ -54,7 +54,8 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 /** Run the engine and persist outputs. Returns the new run id. */
 export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
 	const input = await loadModelInput(db, projectId);
-	const output = runModel(input);
+	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.11.0).
+	const output = runModelChecked(input);
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
 		// fit marked), so the run shows which fit and validation produced them.
