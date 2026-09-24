@@ -60,7 +60,7 @@ pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB)
 pnpm test:engine | test:frontend | test:backend
 pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
-pnpm test:e2e               # Playwright, 48 specs incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
+pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
