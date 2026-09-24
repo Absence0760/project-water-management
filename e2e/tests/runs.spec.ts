@@ -88,6 +88,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
+		'Where the water went',
 		'Self-checks',
 		'Curtailment',
 		'Hydrograph',
@@ -129,4 +130,23 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
 	await expect(list.getByRole('button', { name: /^Old 01/ })).toHaveCount(0);
 	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
+});
+
+test('a run tells where its water went on the catchment picture', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Where the water went');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Where the water went' }).click();
+	const panel = page.getByRole('region', { name: 'Where the water went' });
+	await expect(panel).toBeInViewport();
+	await expect(panel.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
+
+	// Eight stops, rain to outlet, each with this run's figure or why there is none.
+	const stops = panel.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3 }) });
+	await expect(stops).toHaveCount(8);
+	await expect(stops.nth(0)).toContainText(/Rain on the catchment\s*[\d.,]+ Mm³ a year\./);
+	await expect(stops.nth(2)).toContainText(/Natural flow\s*[\d.,]+ Mm³ a year\./);
+	await expect(stops.nth(5)).toContainText('add up to nothing');
+	await expect(stops.nth(7)).toContainText(/Outflow at the outlet\s*[\d.,]+ Mm³ a year\.\s*\d+% of the natural flow reached the outlet/);
 });

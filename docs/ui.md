@@ -269,6 +269,16 @@ The settings are grouped by what they drive:
   from Fit automatically, the fit's validation scores sit beside the in-sample
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text.
+- **Where the water went** (`#res-water`, `runs/WaterStoryPanel.svelte`, figures
+  from `runs/waterStory.ts`): the run's whole-period water balance
+  (`summary.waterBalance.total`, engine ≥ 0.11.0) as yearly averages on the help
+  illustration's eight stops: rain on the catchment, evaporation (GR4J runs;
+  legacy says why not), natural flow with the share of rain, farm dams (spill,
+  and storage at the start and end), irrigation supplied against demand with
+  return flow, transfers (they net to nothing), the share of days below the EWR,
+  and outflow with the share of natural flow that reached the outlet. The panel
+  says the picture is a generic catchment, not a drawing of the project's
+  network. A run saved before the water balance existed says to run again.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)) comes next. It has three
@@ -340,30 +350,37 @@ you're on (`aria-current`). On wide screens (≥ 64rem) it stays beside the text
 as you scroll; on phones it folds behind a **Help contents** button above the
 page, and closes again when you pick a page.
 
-- **Overview** (`/help`): the illustrated catchment tour
-  (`help/CatchmentTour.svelte`, stops in `lib/help/tour.ts`), the setup path
-  (one step per workspace tab, `SETUP_STEPS` in `lib/help/guides.ts`) and the
-  model guides. The tour's picture is a Blender render of an invented
-  catchment, with eight numbered stops that follow the water from rain to the
-  outlet. The numbered list under it is the full text; the markers on the
-  picture are a pointer shortcut (out of the tab order and hidden from screen
-  readers, since the list says the same). Clicking a marker lights its stop,
-  and hovering or focusing a stop lights its marker. The picture and the
-  marker positions are generated together by `pnpm gen:help-art`
-  (`bin/gen-help-art.sh`, scene in `scripts/help-art/catchment.py`): the
-  script projects each feature through the render camera and writes
-  `lib/help/catchment-hotspots.json`, so a marker always sits on its feature.
-  The output is committed; re-run it (needs Blender 5 and ImageMagick 7) only
-  after changing the scene. An old `/help#<term>` link goes on to
-  `/help/glossary#<term>`.
+- **Pictures.** One Blender scene of an invented catchment, rendered as several
+  shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
+  outlet weir, the soil layers on the block's cut face, the transfer pipeline
+  and a reach of river. `pnpm gen:help-art` (`bin/gen-help-art.sh`, scene in
+  `scripts/help-art/catchment.py`) renders every shot at its full and half
+  width to `static/help/<shot>-<w>.webp`, and projects each labelled feature
+  through that shot's camera into `lib/help/pictures.json`, so a marker always
+  sits on its feature. The output is committed; re-run it (needs Blender 5,
+  ImageMagick 7 and python3) only after changing the scene, or pass
+  `HELP_ART_ONLY=farm,soil` to re-render some shots.
+- **Picture tours** (`help/PictureTour.svelte`): a shot with numbered markers
+  and, under it, the numbered list of stops, which is the full text. The
+  markers are a pointer shortcut (out of the tab order and hidden from screen
+  readers, since the list says the same); clicking one lights its stop, and
+  hovering or focusing a stop lights its marker. A stop with more to say has
+  **Show more** (`aria-expanded`), which opens it in place across the full
+  width: key points beside a close-up shot, or a diagram.
+- **Overview** (`/help`): the catchment tour (eight stops from rain to the
+  outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
+  workspace tab, `SETUP_STEPS` in `lib/help/guides.ts`) and the model guides.
+  An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
   or one idea each, with an "On this page" list, numbered steps, tip and
-  caution notes, formulas, diagrams, the glossary terms it uses, related
-  guides and previous / next. Guide text is plain strings with a small markup
-  (`**UI label**`, `[[glossary-id]]`, `[[guide:id|label]]`) parsed by
-  `inline()`, so nothing is rendered as HTML; a term link reads in lower case
-  mid-sentence unless it is an acronym or name (`inSentence`), and
-  `guides.test.ts` fails on a reference that doesn't resolve.
+  caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
+  stores under the ground, the outlet gauge, the transfer, the EWR reach), the
+  glossary terms it uses, related guides and previous / next. Guide text is
+  plain strings with a small markup (`**UI label**`, `[[glossary-id]]`,
+  `[[guide:id|label]]`) rendered by `help/RichText.svelte` via `inline()`, so
+  nothing is rendered as HTML; a term link reads in lower case mid-sentence
+  unless it is an acronym or name (`inSentence`), and `guides.test.ts` fails
+  on a reference that doesn't resolve or a picture stop its shot doesn't have.
 - **Diagrams** are inline SVG components in `lib/components/help/diagrams/`,
   wrapped by `help/Diagram.svelte`, which holds the only styles they use (the
   app's colour tokens, so they follow the light and dark themes). Each SVG is
@@ -372,6 +389,12 @@ page, and closes again when you pick a page.
   `data-scroll-region`). A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
   `guides.test.ts`).
+- **Help tips** (ⓘ) for terms that map to a part of the scene (a farm's dam and
+  crops, the outlet, the soil, the pipeline, the river; `TIP_PICTURES` in
+  `lib/help/pictures.ts`) show that close-up above the text. It is decorative
+  (`alt=""`), since the bubble is a live region and its text says what the
+  picture shows, and it has a fixed size so the bubble is placed correctly
+  before it loads.
 - **Glossary** (`/help/glossary`): every entry in `lib/help/content.ts`,
   grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
   the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the

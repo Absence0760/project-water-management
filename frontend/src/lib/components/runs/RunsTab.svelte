@@ -12,6 +12,7 @@
 import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
+	import WaterStoryPanel from './WaterStoryPanel.svelte';
 	import { downloads, runDownloadItems } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
@@ -314,6 +315,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
+			</section>
+			<section class="panel" id="res-water" aria-labelledby="res-water-h">
+				<WaterStoryPanel summary={detail.run.summary} />
 			</section>
 			<section class="panel" id="res-checks">
 				<SelfChecksPanel
