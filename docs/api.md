@@ -171,15 +171,17 @@ alongside teams, e.g. to give an outside client `viewer` access.
   off, the default), `editedParams` and `forcing`, and no others. `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
   (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
-  chirpsBiasCorrection }`, `panCoefficient`/`apanMm` each 12 monthly numbers
-  with the same bounds as the settings fields, `chirpsBiasCorrection` optional
-  — `monthly | none`) is the pan coefficient, A-pan evaporation and CHIRPS
-  bias correction mode the fit ran under: GR4J's parameters trade off against
-  evaporation, so the pan coefficient is never calibrated, and CHIRPS bias
-  correction changes the rain fed to the model on the days CHIRPS fills a gap,
-  so a fit is only valid for the forcing it recorded — `forcing` absent on a
-  record made before it was tracked, `chirpsBiasCorrection` absent on a
-  `forcing` made before it was added to it.
+  chirpsBiasCorrection, zeroRainRuns }`, `panCoefficient`/`apanMm` each 12
+  monthly numbers with the same bounds as the settings fields,
+  `chirpsBiasCorrection` optional — `monthly | none`, `zeroRainRuns` optional
+  and whole — `{ mode, keepDry, missing }` validated like the setting) is the
+  pan coefficient, A-pan evaporation, CHIRPS bias correction mode and
+  zero-rain run handling the fit ran under. GR4J's parameters trade off against
+  evaporation, so the pan coefficient is never calibrated. The two CHIRPS
+  settings change the rain fed to the model on the days CHIRPS fills a gap.
+  So a fit is only valid for the forcing it recorded. `forcing` is absent on a
+  record made before it was tracked, and `chirpsBiasCorrection` or
+  `zeroRainRuns` is absent on a `forcing` made before it was added.
   `fitRecordStatus`'s `forcingChanged` compares it against the current
   settings, tolerant of float noise, and is `false` when there is nothing
   recorded to compare.

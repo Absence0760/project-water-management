@@ -40,7 +40,7 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted areas' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('Source of transfer 1')).toBeVisible() },
 	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
-	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View' })).toHaveCount(2) },
+	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },
 	{
 		id: 'runs',
 		ready: async (p) => {

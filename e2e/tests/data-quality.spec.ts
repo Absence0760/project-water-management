@@ -100,7 +100,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	const shaded = page.getByText('Shaded: 1 period, 76 days, that a run treats as missing, so CHIRPS fills them (Settings → Zero-rain runs).');
 
 	await page.goto(`/projects/${projectId}?tab=series`);
-	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View' }).click();
+	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
 	await expect(shaded).toBeVisible();
 	await expect(chart).toHaveAttribute('data-shaded', '1');
@@ -123,7 +123,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 
 	// The Data tab follows the saved settings (in-app navigation, as a user moves between tabs).
 	await tab('Data').click();
-	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View' }).click();
+	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
 	await expect(shaded).toHaveCount(0);
 	await expect(chart).not.toHaveAttribute('data-shaded');

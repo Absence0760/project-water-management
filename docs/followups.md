@@ -7,6 +7,12 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Blocking releases (operator)
 
+- [ ] **Client flow volumes in git history.** Until 2026-09-24,
+      `docs/plan.md` quoted the client catchment's per-water-year gauge and
+      logger volumes (commit 4f931bb onward). The tree no longer has them,
+      but history does. Scrub them (`git filter-repo --replace-text`, as for
+      WP-1.7) before the repo is made public.
+
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
@@ -111,13 +117,13 @@ Tick items off (or move them into an issue) as they are done.
       Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
       catchment with the correction on (condition 1), and record the result
       in the issue.
-- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
+- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
-      shading and the help entry (ui.md). Still to do: record
-      `zeroRainRuns` in a fit record's `forcing` (fit provenance), like
-      `chirpsBiasCorrection`, because it changes the rain a fit saw; and the
-      hydrologist's answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
+      shading and the help entry (ui.md), then `zeroRainRuns` in a fit
+      record's `forcing` (fit provenance), so a change flags "Forcing changed
+      since fit". Still open: the hydrologist's answer on the two flagged
+      runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season
@@ -279,9 +285,30 @@ conditions come before any client numbers:
 
       The hydrologist still signs off the logger as the target (#1). This
       plan doesn't need them to settle a conflict.
-- [ ] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
-      It trades off against X1 and X3, so it must never be calibrated. The
-      EWR result is sensitive to it: re-run at 0.6 and 0.85.
+- [x] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
+      Done 2026-09-24 (model.md §2.4a, §2.10b): it is never a calibrated
+      parameter (guard test); a fit records the forcing it ran under (pan
+      coefficient, A-pan, CHIRPS bias correction) and shows "Forcing changed
+      since fit" when any differs; Settings offers generic / winter-rainfall /
+      summer-rainfall presets (indicative, FAO-56 Table 5 classes) and a run
+      warns outside 0.6–0.85. `pnpm pan-sensitivity <project.json>` runs GR4J
+      at 0.60 / 0.70 / 0.85 and the winter preset, fixed and refitted. On the
+      client catchment (table in gitignored
+      `data/client-catchment/pan-sensitivity.md`):
+      - with parameters fixed, 0.60 → 0.85 lowers MAR by roughly 10–15 % and
+        raises EWR days not met by roughly a tenth;
+      - refitting does **not** absorb it: EWR days not met is, if anything,
+        more sensitive after refitting;
+      - refits score better at flat 0.70 and the winter preset than at the
+        extremes, a mild hint that the true forcing sits mid-range.
+      Still open: the hydrologist picks the monthly values (plan.md Q4).
+- [ ] **The stored GR4J parameters don't fit the logger.** The same
+      sensitivity run found the client catchment's current GR4J parameters
+      score a negative NSE against the logger at every pan coefficient;
+      refitting gives positive NSE/KGE and cuts simulated MAR by roughly a
+      third to a half. Refit (typical bounds + the WR2012 MAR band, the fit
+      recommended above) once the pan coefficient is chosen, and before any
+      client numbers are shown.
 
 **Answers to put to the hydrologist and the CMA** (the full reasoning is in
 the reports):
@@ -374,20 +401,71 @@ The review in [calibration-research.md](./calibration-research.md) turned into
 34 recommendations (CR-1 … CR-34), with priorities and effort. Open items, in
 the suggested order (the IDs carry the detail):
 
-- [ ] **Cheap first:** CR-2 multi-start DDS, CR-3 KGE(Q)+KGE(1/Q) objective,
-      CR-6 drop Moriasi words on daily scores, CR-34 record-representativeness
-      note.
+- [ ] **Cheap first:** CR-3 KGE(Q)+KGE(1/Q) objective, CR-34
+      record-representativeness note. CR-2 multi-start DDS (engine 0.13.0,
+      model.md §2.10b) and CR-6 drop Moriasi words on daily scores
+      (model.md §2.10) are done.
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
-      panel. CR-20 went first (2026-09-24, in progress; plan under
+      panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
       the rain slice that CR-18 then generalises.
+- [ ] **Fit-settings sweep (headless).** The free / typical-bounds / band /
+      both comparison (above, under "Make the logger fit identifiable") was
+      built by hand, and every further "what if we fit it this way" repeats
+      that. Generalise `backend/scripts/pan-sensitivity.ts` into a script
+      that takes a `project.json` and a grid of fit settings (pan preset ×
+      bounds × objective × named exclusion sets × WR2012 band on/off),
+      runs `calibrate()` with validation for each cell, and writes one
+      Markdown table: fitted parameters, in-sample and validation scores,
+      MAR and EWR days not met, with seed and engine version in the header.
+      It fits every cell and ranks nothing, so the choice stays the
+      hydrologist's and is recorded with a reason, as exclusions are. No DB
+      or UI; client output stays in the gitignored `data/`. This is not
+      CR-21, which perturbs the inputs of one fit rather than comparing fits.
+      CR-1 below can then reuse its batch and report code. Do it
+      before CR-1, or as soon as the hydrologist asks for another
+      side-by-side of fits.
 - [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
       → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
       thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
       FDC overlays and %nMAR.
+- [ ] **Automated calibration with pre-declared rules.** Today every pass
+      of the calibrate → review → adjust → refit loop needs a person, because
+      the choices (exclusions, forcing, which fit to keep) are made after the
+      scores are seen. Automating those choices by chasing the score would
+      overfit and be easy to game. The durable fix is a **rule set** stored
+      with the project and fixed before any result is seen, so the whole
+      loop can run unattended:
+      1. Exclusions come from the per-day quality flags (CR-18/19) by rule
+         (e.g. a water year with more than 20 % flagged days), each with a
+         machine reason naming the rule.
+      2. Forcing comes from the rule set, or each option becomes a sweep
+         case (the fit-settings sweep above).
+      3. The sweep fits every case; the rule set picks one by a **validation**
+         score (e.g. best dry → wet KGE′), never in-sample, among the fits
+         that pass stated filters (MAR inside the WR2012 band, parameters in
+         Perrin's typical range).
+      4. CR-1 builds the ensemble around the kept fit and reports the EWR
+         range.
+      5. New observed or rain data triggers a rerun (needs the Background
+         jobs item in [planned-work.md](./planned-work.md)); the fit record's
+         stale checks already say when one is due.
+
+      The rule set, seed and engine version go in the fit record, so a run
+      is reproducible and an assessor can challenge the rules rather than
+      the result. A rule-set change is versioned and shows in run
+      comparison, like any other settings change. Facts that aren't in the
+      data (which gauge is on the modelled river, the highest trusted
+      gauging, known gauge breaks) stay per-catchment metadata that a
+      person enters once. **Depends on:** the sweep → CR-18/19 → CR-1 →
+      Background jobs. **Needs the hydrologist to sign off** the default
+      rules (flag thresholds, selection score, filters) before any automated
+      fit is used as evidence; add that to [plan.md](./plan.md) with the
+      other hydrologist questions. Trigger: once the sweep and CR-18 have
+      landed.
 - [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q against the imported
       table), then CR-14 mass-conserving store once the hydrologist decides
       (question 1 below).
@@ -525,6 +603,12 @@ the suggested order (the IDs carry the detail):
       Run `persona-hydrologist` on the panel, the farm daily CSV and the
       summary CSV: do they answer what a hydrologist checks first? Log gaps
       here. Cheap; decides whether the Excel audit workbook is worth a day.
+- [x] **See every input series and how the model used it** (2026-09-24):
+      the Data tab's Preview dialog joins every input series by day with
+      rain used and its source, CHIRPS factor and corrected value, flow in
+      m³/day, per-series flags and calibration exclusions (ui.md). Its e2e
+      spec `e2e/tests/series-preview.spec.ts` has not been run yet (the e2e
+      ports were busy); run it.
 - [ ] **More columns in the Data tab downloads** (the original request that
       led to the self-checks). `GET /series/:id/export.csv` still writes only
       `date` + the uploaded value. Add how the model used each series: for
@@ -545,6 +629,62 @@ the suggested order (the IDs carry the detail):
       but the header has no account menu for it yet.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
+
+## Roles and what each member sees
+
+Today the workspace shows the same seven tabs to everyone. Owners and team
+admins see and change everything, which is right. Everyone else sees every
+modeller tab too: a viewer gets Network, Crops, Transfers, Data and Settings
+& calibration read-only, under a "View only" note (`routes/projects/[id]/+page.svelte`).
+Roles are `viewer` / `editor` / `owner` per project, and team `member`
+(→ editor) / `admin` (→ owner) (data-model.md § Roles, § Teams).
+
+Already planned, so not repeated here: the **`farmer`** role, with its own
+phone view at `/farm/:id` and farm-scoped RLS, which redirects a farmer away
+from the workspace entirely (roadmap step 2, WP-2.1 onward). Also planned:
+read-only **share links** for regulators, viewers opening on the published
+run, and help entries tagged by `audience`, all in step 2.
+
+Open gaps:
+
+- [ ] **No read-only team role.** Every team member becomes an editor on
+      every team project, so a WUA office clerk or a client reviewer added
+      to the team can change settings and run the model. Add a team role
+      `viewer` (→ project `viewer`). This needs a migration adding the enum
+      value, the `app_project_role()` mapping, team invites taking it, and
+      the team page. Tests: DB tests that a team viewer reads but can't
+      write, with a positive control that a team member can write.
+- [ ] **Tabs by role.** Viewers are shown tabs they can't act on and mostly
+      don't need. Build one pure function, `visibleTabs(role, prefs)`, that
+      the tab strip and the Overview checklist (whose steps link to tabs) both use:
+      - owner and editor: every tab, as now;
+      - viewer: Overview and Runs & results, plus Data (charts and
+        downloads); the model tabs (Network, Crops, Transfers, Settings &
+        calibration) sit behind a "Show model inputs" toggle.
+
+      **This is presentation, not access control.** RLS still lets a viewer
+      read every input, so a deep link (`?tab=settings`) keeps working, and
+      nothing gets hidden "for privacy" this way. Data a role must not see
+      needs RLS, as the farmer role has.
+- [ ] **Members choose their own tabs.** Let each user hide tabs they don't
+      use (within what their role can see), with a "Reset to default" option.
+      Store the choice in `app_user.preferences`, the jsonb column that
+      WP-1.26 (unit preferences) introduces and that isn't built yet. Build
+      that column first, or with this. Overview can't be hidden. A hidden tab
+      still opens from a deep link, and a "Hidden tabs (2)" menu brings it
+      back.
+
+Tests for the last two: unit tests for `visibleTabs` across role ×
+preference, including an owner who can't lose Overview. An e2e test that a
+viewer sees the short tab set, turns on "Show model inputs", and opens a
+deep link to a hidden tab. Route-auth is unchanged. Docs: ui.md (the tabs
+table), data-model.md § Teams, api.md (team roles, `preferences`).
+
+**Ask the client:** which people at the WUA and the client need which role,
+and whether viewers should see model inputs by default. **Trigger:** before
+the first non-modeller user is invited (WUA staff, a client reviewer), and
+with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
+role and not before it.
 
 ## Features left half-way
 

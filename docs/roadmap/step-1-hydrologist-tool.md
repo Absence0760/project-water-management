@@ -351,10 +351,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
   The importer prints the zero-run note; the low-vs-CHIRPS check is
   engine-only. The fix itself stays with the data (issue #2 item 1).
-  **Superseded in part (2026-09-24):** CR-20, in progress, treats flagged
-  runs as missing in the run so that bias-corrected CHIRPS fills them, with
-  per-project overrides. The stored data still isn't changed. Plan in
-  [followups.md](../followups.md).
+  **Superseded in part (2026-09-24):** CR-20 (engine 0.15.0,
+  [model.md §2.4c](../model.md#24c-zero-rain-runs-treated-as-missing))
+  treats flagged runs as missing in the run so that bias-corrected CHIRPS
+  fills them, with per-project keep-dry and missing periods. The stored data
+  still isn't changed.
 - **Changes (as planned):**
   - **engine:** `quality.ts` `checkSeries` gains two checks:
     - `zerorun`: ≥ N consecutive zero days, default 60, counted only when
@@ -1548,8 +1549,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
     It returns the filled values plus a per-day `filled` mask. This is the
     first per-value flag; Step 4 WP-4.10 generalises it into DWS quality
-    codes. (CR-20, in progress, adds a per-day infilled-rain flag for zero
-    runs filled from CHIRPS first; reuse its shape here.) New invariant: filled days never change observed days, and a
+    codes. (CR-20, engine 0.15.0, already outputs a per-day flag for rain
+    filled from CHIRPS, `rain_catchment_missing`; reuse its shape here.) New invariant: filled days never change observed days, and a
     series with no gaps is returned unchanged.
   - **backend + migration:** store the fill choice per series (method, max
     gap, donor series id) in `time_series`. The filled values are derived at

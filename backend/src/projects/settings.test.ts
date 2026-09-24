@@ -386,6 +386,15 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, chirpsBiasCorrection: 'yearly' } })).toBe(false); // not a known mode
 	});
 
+	it('accepts an optional, whole zeroRainRuns inside forcing (CR-20)', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
+		const zr = { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real drought' }], missing: [] };
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: zr } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing' } } })).toBe(false); // recorded whole
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, mode: 'sometimes' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: ' ' }] } } })).toBe(false);
+	});
+
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {
 		const startResults = [
 			{ seed: 7, params: { x1: 512, x2: 0, x3: 61, x4: 2.2 }, score: 0.8, best: true },

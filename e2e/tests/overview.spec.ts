@@ -38,8 +38,66 @@ test('a project with data and a run: setup complete, counts shown', async ({ pag
 	await expect(stat(page, 'Outflow gauge')).toHaveText('Outflow gauge');
 });
 
+test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Overview fact links');
+	await page.goto(`/projects/${project.id}`);
+	const tabs: [string, string][] = [
+		['Farms', 'Network'],
+		['Irrigated area', 'Crops & demand'],
+		['Active transfers', 'Transfers'],
+		['Time series', 'Data'],
+		['Model runs', 'Runs & results']
+	];
+	for (const [term, tab] of tabs) {
+		await page.goto(`/projects/${project.id}`);
+		// Click the tile's bottom-right corner, away from the label: the link covers the whole tile.
+		const tile = page.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
+		const box = await tile.boundingBox();
+		if (!box) throw new Error(`no ${term} tile`);
+		await tile.click({ position: { x: box.width - 6, y: box.height - 6 } });
+		await expect(page.getByRole('link', { name: tab, exact: true })).toHaveAttribute('aria-current', 'page');
+	}
+});
+
+test('who has access sits together: Team above Members, in one column beside Project details', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	const project = await createProject(page.request, 'Overview access column');
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByRole('region', { name: 'Members', exact: true }).getByRole('rowheader').first()).toBeVisible();
+	const details = await page.getByRole('region', { name: 'Project details', exact: true }).boundingBox();
+	const team = await page.getByRole('region', { name: 'Team', exact: true }).boundingBox();
+	const members = await page.getByRole('region', { name: 'Members', exact: true }).boundingBox();
+	if (!details || !team || !members) throw new Error('an Overview panel is missing');
+	expect(Math.round(team.x)).toBe(Math.round(members.x));
+	expect(team.x).toBeGreaterThan(details.x + details.width);
+	expect(team.y + team.height).toBeLessThanOrEqual(members.y);
+	expect(Math.round(team.y)).toBe(Math.round(details.y));
+});
+
 test.describe('on a phone', () => {
 	test.use({ viewport: { width: 360, height: 740 } });
+
+	test('the page stacks details, team, members, and a long description shows in full', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Overview phone stack');
+		await page.goto(`/projects/${project.id}`);
+		const desc = page.getByLabel('Description');
+		await desc.fill(Array.from({ length: 12 }, (_, i) => `Line ${i + 1} of a long catchment description.`).join('\n'));
+		// It grows to fit rather than hiding the text behind an inner scrollbar.
+		const fits = await desc.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
+		expect(fits).toBe(true);
+
+		const ys: number[] = [];
+		for (const name of ['Project details', 'Team', 'Members']) {
+			const box = await page.getByRole('region', { name, exact: true }).boundingBox();
+			if (!box) throw new Error(`${name} missing`);
+			ys.push(box.y);
+		}
+		expect(ys).toEqual([...ys].sort((a, b) => a - b));
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+	});
 
 	test('a long email in a member row wraps at its dots and @, never mid-word', async ({ page }) => {
 		// Realistic parts (a short unique tag): one part longer than the column may still break anywhere.

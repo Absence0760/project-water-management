@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type { CalibrationFlowKind, ChirpsBiasMode, ProjectSettings } from '../project';
+import type { CalibrationFlowKind, ChirpsBiasMode, ProjectSettings, ZeroRainSettings } from '../project';
 import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
@@ -179,8 +179,11 @@ export interface FitRecord {
 	 * record, so a fit's parameters are comparable only under the mode it ran
 	 * under too. Absent on records made before `forcing` existed;
 	 * `chirpsBiasCorrection` absent on a `forcing` made before it was tracked.
+	 * `settings.zeroRainRuns` (engine ≥ 0.15.0) is recorded too: it decides
+	 * which zero-rain days CHIRPS fills, so it changes the rain the fit saw;
+	 * absent on a `forcing` made before it.
 	 */
-	forcing?: { panCoefficient: number[]; apanMm: number[]; chirpsBiasCorrection?: ChirpsBiasMode };
+	forcing?: { panCoefficient: number[]; apanMm: number[]; chirpsBiasCorrection?: ChirpsBiasMode; zeroRainRuns?: ZeroRainSettings };
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
@@ -203,6 +206,7 @@ export interface FitContext {
 	/** The Settings form the fit ran on. */
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
 		calibrationExclusions?: CalibrationExclusion[] | null;
+		zeroRainRuns?: ZeroRainSettings;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -236,7 +240,12 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		validationRecord: ctx.validationRecord,
 		fit: r.fit,
 		before: r.before,
-		forcing: { panCoefficient: [...ctx.settings.panCoefficient], apanMm: [...ctx.settings.apanMm], chirpsBiasCorrection: ctx.settings.chirpsBiasCorrection },
+		forcing: {
+			panCoefficient: [...ctx.settings.panCoefficient],
+			apanMm: [...ctx.settings.apanMm],
+			chirpsBiasCorrection: ctx.settings.chirpsBiasCorrection,
+			...(ctx.settings.zeroRainRuns ? { zeroRainRuns: structuredClone(ctx.settings.zeroRainRuns) } : {})
+		},
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
@@ -289,10 +298,11 @@ export interface FitRecordStatus {
 	exclusionsChanged: boolean;
 	flowKindChanged: boolean;
 	/**
-	 * The pan coefficient, A-pan evaporation or CHIRPS bias correction (the
-	 * forcing GR4J runs under) has changed since the fit. False for records
-	 * made before `forcing` was recorded, or for a `forcing` made before
-	 * `chirpsBiasCorrection` was added to it — there is nothing to compare
+	 * The pan coefficient, A-pan evaporation, CHIRPS bias correction or
+	 * zero-rain run settings (the forcing GR4J runs under) have changed since
+	 * the fit. False for records made before `forcing` was recorded, and a
+	 * field added to `forcing` later (`chirpsBiasCorrection`, `zeroRainRuns`)
+	 * never flags a record made before it: there is nothing to compare
 	 * against.
 	 */
 	forcingChanged: boolean;
@@ -304,14 +314,21 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 const closeArray = (a: readonly number[] | null | undefined, b: readonly number[] | null | undefined): boolean =>
 	!!a && !!b && a.length === b.length && a.every((v, i) => close(v, b[i]));
 
+/** Settings without zeroRainRuns predate it (engine < 0.15.0): flagged zero runs ran as recorded. */
+const zeroRainOf = (s: Partial<ProjectSettings>): ZeroRainSettings => ({ mode: 'asRecorded', keepDry: [], missing: [], ...(s.zeroRainRuns ?? {}) });
+
 /** Which of a fit's recorded forcing fields differ from the settings, or null when there is nothing recorded to compare. */
-function forcingDiff(settings: Partial<ProjectSettings>, record: FitRecord): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean } | null {
+function forcingDiff(
+	settings: Partial<ProjectSettings>,
+	record: FitRecord
+): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean } | null {
 	if (!record.forcing) return null;
 	return {
 		panCoefficient: !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
 		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm),
 		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
-		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection
+		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection,
+		zeroRainRuns: record.forcing.zeroRainRuns !== undefined && !sameJson(zeroRainOf(settings), zeroRainOf({ zeroRainRuns: record.forcing.zeroRainRuns }))
 	};
 }
 
@@ -326,7 +343,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
-		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection)
+		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns)
 	};
 }
 
@@ -342,7 +359,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.forcingChanged) {
 		out.push(
-			'The pan coefficient, A-pan evaporation or CHIRPS bias correction has changed since the fit. GR4J’s parameters trade off against evaporation, and CHIRPS bias correction changes the rain fed to it on days CHIRPS fills a gap, so refit before relying on them.'
+			'The pan coefficient, A-pan evaporation, CHIRPS bias correction or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS settings change the rain fed to it on days CHIRPS fills a gap, so refit before relying on them.'
 		);
 	}
 	return out;

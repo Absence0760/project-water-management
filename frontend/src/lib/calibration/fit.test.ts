@@ -280,7 +280,7 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly' });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});
@@ -289,6 +289,14 @@ describe('fitRecordFor', () => {
 		const form = { ...defaultProjectSettings(), chirpsBiasCorrection: 'none' as const };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
 		expect(rec.forcing!.chirpsBiasCorrection).toBe('none');
+	});
+
+	it('records the zero-rain run settings the fit ran under, copied, not shared with the form (CR-20)', () => {
+		const form = { ...defaultProjectSettings(), zeroRainRuns: { mode: 'missing' as const, keepDry: [{ waterYear: 2003, reason: 'real' }], missing: [] } };
+		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
+		expect(rec.forcing!.zeroRainRuns).toEqual(form.zeroRainRuns);
+		form.zeroRainRuns.keepDry[0]!.reason = 'changed';
+		expect(rec.forcing!.zeroRainRuns!.keepDry[0]!.reason).toBe('real');
 	});
 
 	it('shows the fit time in UTC to the minute', () => {

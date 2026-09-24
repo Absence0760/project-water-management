@@ -11,11 +11,10 @@
 		resolveZeroRain,
 		SERIES_KINDS,
 		toEpochDay,
-		type DataQualitySettings,
+		type ProjectSettings,
 		type SeriesCheckKind,
 		type SeriesKind,
-		type SeriesMeta,
-		type ZeroRainSettings
+		type SeriesMeta
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -29,6 +28,7 @@
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
+	import SeriesPreviewDialog from './SeriesPreviewDialog.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
 	import { KIND_ROLES, seriesInUse } from './roles';
@@ -40,8 +40,7 @@
 		readonly,
 		initial = null,
 		runs = null,
-		dataQuality = null,
-		zeroRainRuns = null,
+		settings = null,
 		onSeriesChange
 	}: {
 		projectId: string;
@@ -49,12 +48,14 @@
 		/** Already-loaded list (the page's), so the first frame has the final layout. */
 		initial?: SeriesMeta[] | null;
 		runs?: RunMeta[] | null;
-		/** The project's settings.dataQuality (gauge-vs-logger thresholds); null = the engine defaults. */
-		dataQuality?: Partial<DataQualitySettings> | null;
-		/** The project's settings.zeroRainRuns: which catchment-rain days a run treats as missing; null = the engine defaults. */
-		zeroRainRuns?: ZeroRainSettings | null;
+		/** The project's settings, the same object the Settings tab gets; null only before the page's own load finishes. */
+		settings?: ProjectSettings | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();
+
+	/** Gauge-vs-logger thresholds; null = the engine defaults. */
+	const dataQuality = $derived(settings?.dataQuality ?? null);
+	const zeroRainRuns = $derived(settings?.zeroRainRuns ?? null);
 
 	let list = $state<SeriesMeta[]>(untrack(() => initial ?? []));
 	let loading = $state(untrack(() => initial === null));
@@ -71,6 +72,19 @@
 
 	let selectedId = $state<string | null>(null);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+
+	let previewOpen = $state(false);
+	let previewFocusSeriesId = $state<string | null>(null);
+	/** The card header's "Preview data": every column, nothing highlighted. */
+	function openPreviewAll() {
+		previewFocusSeriesId = null;
+		previewOpen = true;
+	}
+	/** A row's own "Preview": that series' column un-hidden, scrolled to and highlighted. */
+	function openPreviewSeries(id: string) {
+		previewFocusSeriesId = id;
+		previewOpen = true;
+	}
 
 	// Clicking anywhere on a row shows that series in the chart; clicks on the
 	// row's own controls (View, CSV menu, Delete) keep their meaning. The View
@@ -237,6 +251,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small">Daily values · {list.length} series{newestDate ? ` · data up to ${newestDate} (${describeAge(daysBetween(newestDate, today))})` : ''}</span>
+			<button type="button" class="btn btn-sm" onclick={openPreviewAll}>Preview data</button>
 		{/if}
 	</div>
 	<LoadState
@@ -244,22 +259,29 @@
 		error={loadError}
 		retry={load}
 		empty={list.length === 0}
-		emptyText="No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files."
+		emptyText={readonly
+			? 'No time series yet. An editor can upload daily rainfall and observed flow as CSV files.'
+			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with the Upload CSV form below.'}
 	>
+		<!-- Below 640px each row is a card (CSS grid), so the row's numbers, coverage and
+		     buttons all fit a phone without scrolling the table sideways. The explicit
+		     table roles keep the table semantics that some browsers (Safari) drop once
+		     rows and cells stop being display: table-*. -->
 		<div class="table-wrap">
-			<table class="data series">
-				<thead>
-					<tr>
-						<th scope="col">Series</th>
-						<th scope="col">Period</th>
-						<th scope="col">Data up to</th>
-						<th scope="col" class="num">Missing<br /><span class="u">% of days</span></th>
-						<th scope="col" class="num">Typical<br /><span class="u">mean</span></th>
-						<th scope="col" class="cov">Coverage by year</th>
-						<th scope="col"><span class="visually-hidden">Actions</span></th>
+			<!-- svelte-ignore a11y_no_redundant_roles -->
+			<table class="data series" role="table">
+				<thead role="rowgroup">
+					<tr role="row">
+						<th scope="col" role="columnheader">Series</th>
+						<th scope="col" role="columnheader">Period</th>
+						<th scope="col" role="columnheader">Data up to</th>
+						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
+						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
+						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
+						<th scope="col" role="columnheader"><span class="visually-hidden">Actions</span></th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody role="rowgroup">
 					{#each list as s (s.id)}
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
@@ -267,8 +289,8 @@
 						{@const role = KIND_ROLES[s.kind]}
 						<!-- Pointer shortcut only; the View button is the accessible control. -->
 						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-						<tr class="pick" class:selected={s.id === selectedId} onclick={(e) => rowClick(e, s.id)}>
-							<th scope="row">
+						<tr role="row" class="pick" class:selected={s.id === selectedId} onclick={(e) => rowClick(e, s.id)}>
+							<th scope="row" role="rowheader">
 								<span class="kind">{kindLabel(s.kind)}</span>
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
 								{#if role}
@@ -281,14 +303,14 @@
 									</span>
 								{/if}
 							</th>
-							<td class="num period">{s.startDate} →<br />{end}</td>
-							<td class="upto">
+							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
+							<td role="cell" class="upto" data-label="Data up to">
 								<span class="num">{st?.lastValueDate ?? end}</span>
 								<span class="age" class:stale={age > 31}>{describeAge(age)}</span>
 							</td>
-							<td class="num" class:warn={st && st.missingPct >= 5}>{st ? fmtNum(st.missingPct, 1) : '…'}</td>
-							<td class="num">{typical(s)}</td>
-							<td class="cov">
+							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
+							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
+							<td role="cell" class="cov" data-label="Coverage by year">
 								{#if values[s.id]}
 									<CoverageStrip bins={bins[s.id] ?? []} byMonth={s.length < 3 * 365} label="Coverage of {s.name || kindLabel(s.kind)}" />
 									<span class="range"><span>{s.startDate.slice(0, 4)}</span><span>{end.slice(0, 4)}</span></span>
@@ -296,9 +318,10 @@
 									<span class="strip-ph" aria-hidden="true"></span>
 								{/if}
 							</td>
-							<td class="act">
+							<td role="cell" class="act">
 								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => (selectedId = s.id)}>View</button>
+								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)}>Preview</button>
 								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
@@ -367,8 +390,17 @@
 	</section>
 {/if}
 
-<div class="lower">
-	<section class="panel" aria-labelledby="use-h">
+<div class="lower" class:with-upload={!readonly}>
+	<!-- Upload comes first in reading order so on a phone it sits right under the
+	     series table, not below the whole reference list; wide screens still show it
+	     on the right (grid areas). -->
+	{#if !readonly}
+		<section class="panel upload" id="upload-csv" aria-labelledby="up-h">
+			<div class="panel-head"><h2 id="up-h">Upload CSV</h2></div>
+			<UploadForm {projectId} {list} onuploaded={uploaded} />
+		</section>
+	{/if}
+	<section class="panel uses" aria-labelledby="use-h">
 		<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
 		<dl class="roles">
 			{#each KIND_OPTIONS as o (o.value)}
@@ -385,14 +417,9 @@
 			With several series of one kind, the first by name is used.
 		</p>
 	</section>
-
-	{#if !readonly}
-		<section class="panel" aria-labelledby="up-h">
-			<div class="panel-head"><h2 id="up-h">Upload CSV</h2></div>
-			<UploadForm {projectId} {list} onuploaded={uploaded} />
-		</section>
-	{/if}
 </div>
+
+<SeriesPreviewDialog bind:open={previewOpen} {list} {values} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
 
 <style>
 	.small {
@@ -532,13 +559,74 @@
 	}
 	.lower {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
-	@media (max-width: 1000px) {
-		.lower {
-			grid-template-columns: minmax(0, 1fr);
+	@media (min-width: 1001px) {
+		.lower.with-upload {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+			grid-template-areas: 'uses upload';
+		}
+		.lower.with-upload .uses {
+			grid-area: uses;
+		}
+		.lower.with-upload .upload {
+			grid-area: upload;
+		}
+	}
+	/* Phone: each series row becomes a card, so nothing hides behind a sideways scroll. */
+	@media (max-width: 640px) {
+		.series,
+		.series tbody {
+			display: block;
+		}
+		.series thead {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+		}
+		.series tr.pick {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			gap: 0.5rem 0.75rem;
+			padding: 0.75rem;
+			border-bottom: 1px solid var(--border);
+		}
+		.series tr.pick:last-child {
+			border-bottom: 0;
+		}
+		.series tr.pick > th,
+		.series tr.pick > td {
+			display: block;
+			padding: 0;
+			border: 0;
+			min-width: 0;
+			width: auto;
+			text-align: left;
+		}
+		.series th[scope='row'],
+		.series td.cov,
+		.series td.act {
+			grid-column: 1 / -1;
+		}
+		/* The column header, as a visible label; silent to screen readers, which get the real header. */
+		.series td[data-label]::before {
+			content: attr(data-label) / '';
+			display: block;
+			font-size: 0.7rem;
+			font-weight: 600;
+			color: var(--text-muted);
+		}
+		.series td.act {
+			white-space: normal;
+		}
+		.series .acts {
+			flex-wrap: wrap;
+			justify-content: flex-start;
 		}
 	}
 	.roles {

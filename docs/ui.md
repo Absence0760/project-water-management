@@ -54,7 +54,22 @@ button), so a scrolling table or a sticky header can't clip or cover them.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), eight headline facts, project
-details, team and members. Email addresses (member rows here and on team pages,
+details, team and members.
+
+- **Headline facts** each link to the tab where they are edited or looked at
+  (farms, area, dams and the outflow gauge to Network, irrigated area to
+  Crops, transfers to Transfers, time series to Data, runs to Runs). The
+  whole tile is the click target (the label's link is stretched over it), and
+  a focused tile gets an outline.
+- **Layout**: Project details on the left; on the right, "who has access":
+  Team above Members (or "Shared directly with" for a team project), so the
+  two panels that refer to each other sit together. Below 900 px it is one
+  column in the order details, team, members.
+- The **description** box grows with its text (up to about 24rem) instead of
+  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
+  without it keep four rows).
+
+Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
@@ -128,7 +143,15 @@ Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Uploads read year-last dates (DD/MM/YYYY or
+that series in the chart below. Below 640px wide each row becomes a card
+(series and role on top, then labelled Period / Data up to / Missing /
+Typical, the coverage strip, and the buttons wrapping underneath), so a phone
+never has to scroll the table sideways; explicit table roles keep it a table
+to screen readers, and the card labels are silent to them. For editors the
+**Upload CSV** form follows the series panels in reading order, so on a phone
+it sits right below them rather than after the whole *What the model uses*
+reference (wide screens still show it on the right); the empty state points at
+it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
 summary says so). In number fields, a comma is a thousands separator only in a
@@ -155,6 +178,32 @@ catchment)** series (`flow_reference_m3s`, e.g. imported with
 regional wet/dry index, but runs never read it, it is not in the gauge-vs-logger
 table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
+
+**Preview** (`series/SeriesPreviewDialog.svelte`, in a modal `Dialog.svelte`)
+opens a wide, searchable table of every loaded series' daily values side by
+side, one row per day across the union of their periods, plus columns for how
+the model actually used that day's data — not only what checkSeries flags.
+The card header's **Preview data** button opens it with every column shown; a
+row's own **Preview** button opens the same dialog with that series' column
+un-hidden, scrolled into view and highlighted. Alongside each series' own
+column (same label, unit and order as the table above, with its
+`checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
+picker** grouped into *Series* and *How the model used it*: a m³/day column
+for every flow series; **Rain used** and its source (catchment / CHIRPS /
+forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
+month and the **corrected CHIRPS** value (respecting Settings → *CHIRPS bias
+correction*); and **Excluded from calibration**, with its reason, for any day
+inside a Settings → *Calibration exclusions* period. The derived columns are
+computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
+(the same functions a run uses), not recomputed separately, so they are blank
+for any day outside the model's own run window. The search box takes a date
+prefix (`2015`, `2015-03-14`) or a value comparison (`> 20`, `= 0`); *Missing
+only* and *Flagged only* look only at the currently visible series columns.
+Rows are virtualised (fixed row height, only the rows near the scrollport are
+real `<tr>`s) so a multi-year daily record doesn't put thousands of rows in
+the DOM at once. This is a read-only view of what's already loaded; a CSV
+export of the same model-used columns is tracked separately
+([followups.md](./followups.md)).
 
 The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
 below their button or above it when there's no room
@@ -268,15 +317,16 @@ The settings are grouped by what they drive:
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
     month, or "not recorded" for a fit made before this was tracked) and the
-    CHIRPS bias correction mode it ran under (or "not recorded" for a `forcing`
-    made before that field was added to it), the exclusions, the fitted
+    CHIRPS bias correction mode and zero-rain run handling it ran under (each
+    "not recorded" for a `forcing` made before that field was added to it),
+    the exclusions, the fitted
     values, and a table with the in-sample score ("Calibration period
     (in-sample)") next to each validation score, plus the notes. Editing a
     fitted parameter by hand shows a **Parameters edited since fit** badge and
     names the parameters at once; the server records the same on save. A
     change of runoff model, window, exclusions or flow series since the fit
-    is called out too, and a change to the pan coefficient, A-pan or CHIRPS
-    bias correction since the fit shows a **Forcing changed since fit** badge
+    is called out too, and a change to the pan coefficient, A-pan, CHIRPS
+    bias correction or zero-rain runs since the fit shows a **Forcing changed since fit** badge
     and a caveat explaining why (evaporation trades off against X1/X3, and
     CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
     fit needs redoing).
@@ -320,11 +370,21 @@ The settings are grouped by what they drive:
 
 ## Runs & results
 
-- A **Result sections** menu under the run's title links to each panel
-  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`). Farm
-  detail appears only when the run has farms, and Runoff model only for a
-  GR4J run. The page's `scroll-padding-top` keeps
-  a jumped-to section, or a focused control, clear of the sticky header.
+- **The rail.** On wide screens (over 900px) a left rail holds the runs
+  list and, below it, an **On this page** menu (the "Result sections"
+  navigation) linking to each panel (`#res-summary` … `#res-explore`, listed
+  by `runs/sections.ts`). The rail is sticky, so the menu stays in view down
+  the long results page, and it marks the section being read with
+  `aria-current="location"` (scroll spy: `activeSectionId`, the last section
+  whose top has passed under the sticky header, or the last one at the
+  bottom of the page). A long runs list scrolls inside its panel so the menu
+  stays in reach: its height is capped at `min(16rem, 25vh)`, so with 20
+  runs the rail still fits a 768px-tall window without clipping (below about
+  720px the rail scrolls on its own). Narrower, the rail stacks above the results and the menu
+  becomes wrapping chips. Farm detail appears only when the run has farms,
+  and Runoff model only for a GR4J run. The page's `scroll-padding-top`
+  keeps a jumped-to section, or a focused control, clear of the sticky
+  header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall series. While a run is going it shows progress.
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
@@ -377,8 +437,8 @@ The settings are grouped by what they drive:
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
   "Parameters edited since fit" badge when they were edited, and a
-  "Forcing changed since fit" badge when this run's pan coefficient, A-pan or
-  CHIRPS bias correction differs from what the fit was made under), or "No fit
+  "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
+  CHIRPS bias correction or zero-rain runs differ from what the fit was made under), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that
