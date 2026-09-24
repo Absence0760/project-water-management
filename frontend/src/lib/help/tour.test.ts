@@ -28,12 +28,21 @@ describe('help pictures', () => {
 		}
 	});
 
-	it('give help-tip pictures only to glossary entries that exist', () => {
+	it('give help-tip pictures only to glossary entries that exist, ringing a feature their shot has', () => {
 		const ids = new Set(HELP.map((e) => e.id));
-		for (const [id, shot] of Object.entries(TIP_PICTURES)) {
+		for (const [id, { shot, spot }] of Object.entries(TIP_PICTURES)) {
 			expect(ids.has(id), id).toBe(true);
 			expect(shots, id).toContain(shot);
+			if (spot) expect(Object.keys(SHOTS[shot].spots), id).toContain(spot);
 		}
+	});
+
+	it("don't repeat one picture across tips: each shows its own feature, and no shot serves many", () => {
+		const pairs = Object.entries(TIP_PICTURES).map(([id, { shot, spot }]) => ({ id, key: `${shot}#${spot ?? ''}`, shot }));
+		const byKey = Map.groupBy(pairs, (p) => p.key);
+		for (const [key, list] of byKey) expect(list.map((p) => p.id), key).toHaveLength(1);
+		const byShot = Map.groupBy(pairs, (p) => p.shot);
+		for (const [shot, list] of byShot) expect(list.length, shot).toBeLessThanOrEqual(8);
 	});
 });
 

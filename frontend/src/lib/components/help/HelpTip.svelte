@@ -20,9 +20,11 @@
 
 	const entry = $derived(helpFor(key));
 	// A close-up of that part of the help illustration, for terms that have
-	// one. Decorative (alt=""): the bubble is a live region, and its text
-	// already says what the picture shows.
-	const shot = $derived(entry ? TIP_PICTURES[entry.id] : undefined);
+	// one, with a ring on the term's own feature. Decorative (alt=""): the
+	// bubble is a live region, and its text already says what the picture shows.
+	const picture = $derived(entry ? TIP_PICTURES[entry.id] : undefined);
+	const shot = $derived(picture?.shot);
+	const ring = $derived(picture?.spot && shot ? SHOTS[shot].spots[picture.spot] : undefined);
 	let open = $state(false);
 	let pos = $state({ top: 0, left: 0 });
 	let root: HTMLSpanElement | undefined = $state();
@@ -114,13 +116,15 @@
 			{#if open}
 				<span class="bubble" class:pictured={shot} popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
 					{#if shot}
-						<img
-							class="pic"
-							src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
-							width={SHOTS[shot].width / 2}
-							height={SHOTS[shot].height / 2}
-							alt=""
-						/>
+						<span class="pic">
+							<img
+								src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
+								width={SHOTS[shot].width / 2}
+								height={SHOTS[shot].height / 2}
+								alt=""
+							/>
+							{#if ring}<span class="ring" aria-hidden="true" style:left="{ring.x}%" style:top="{ring.y}%"></span>{/if}
+						</span>
 					{/if}
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
@@ -184,13 +188,44 @@
 		width: min(20rem, calc(100vw - 2 * var(--gutter)));
 	}
 	.pic {
+		position: relative;
 		display: block;
 		width: calc(100% + 1.5rem);
-		max-width: none;
-		height: auto;
 		margin: -0.6rem -0.75rem 0.2rem;
 		border-radius: var(--radius) var(--radius) 0 0;
 		border-bottom: 1px solid var(--border);
+		overflow: hidden;
+	}
+	.pic img {
+		display: block;
+		width: 100%;
+		max-width: none;
+		height: auto;
+	}
+	/* The term's own feature on the picture: a ring that reads on light and dark
+	   scenery (white stroke over a dark halo). */
+	.ring {
+		position: absolute;
+		width: 2rem;
+		height: 2rem;
+		transform: translate(-50%, -50%);
+		border: 3px solid #fff;
+		border-radius: 50%;
+		box-shadow:
+			0 0 0 2px rgb(0 0 0 / 0.55),
+			inset 0 0 0 2px rgb(0 0 0 / 0.35);
+		animation: ring-in 0.5s ease-out;
+	}
+	@keyframes ring-in {
+		from {
+			transform: translate(-50%, -50%) scale(1.8);
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ring {
+			animation: none;
+		}
 	}
 	/* Author styles beat the UA's popover hiding rule, so restate it. */
 	.bubble:not(:popover-open) {

@@ -566,7 +566,9 @@ page, and closes again when you pick a page.
 - **Pictures.** One Blender scene of an invented catchment, rendered as several
   shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
   outlet weir, the soil layers on the block's cut face, the transfer pipeline
-  and a reach of river. `pnpm gen:help-art` (`bin/gen-help-art.sh`, scene in
+  and a reach of river, plus help-tip close-ups of the dam's stored water, the
+  stream and slopes flowing into it, the wall and the stream below it, the
+  irrigation line, the orchard and the gauging hut. `pnpm gen:help-art` (`bin/gen-help-art.sh`, scene in
   `scripts/help-art/catchment.py`) renders every shot at its full and half
   width to `static/help/<shot>-<w>.webp`, and projects each labelled feature
   through that shot's camera into `lib/help/pictures.json`, so a marker always
@@ -602,9 +604,12 @@ page, and closes again when you pick a page.
   `data-scroll-region`). A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
   `guides.test.ts`).
-- **Help tips** (ⓘ) for terms that map to a part of the scene (a farm's dam and
-  crops, the outlet, the soil, the pipeline, the river; `TIP_PICTURES` in
-  `lib/help/pictures.ts`) show that close-up above the text. It is decorative
+- **Help tips** (ⓘ) for terms that map to a part of the scene (`TIP_PICTURES`
+  in `lib/help/pictures.ts`: a shot and the spot of the term's own feature)
+  show that close-up above the text with a white ring on the feature, so
+  neighbouring tips (capacity, inflow, spill, irrigation…) don't repeat one
+  picture. No two tips share a shot *and* ring, and no shot serves more than
+  eight tips (`tour.test.ts`). The picture is decorative
   (`alt=""`), since the bubble is a live region and its text says what the
   picture shows, and it has a fixed size so the bubble is placed correctly
   before it loads.

@@ -9,7 +9,9 @@ a run is reproducible and the scene can be changed in code.
 One scene, several camera shots (SHOTS, at the end): the whole catchment for
 the /help landing page, and close-ups for the guides and help tips (one farm
 and its dam, the outlet weir, the soil layers on the block's cut face, the
-transfer pipeline, a reach of river). For each shot it also writes the 2D
+transfer pipeline, a reach of river, and per-feature tip shots: the dam's
+water, its inflow, the wall and stream below, the irrigation line, the
+orchard, the gauging hut). For each shot it also writes the 2D
 position (as % of the image) of each labelled feature, projected through that
 shot's camera, so the page's numbered markers always sit on what they
 describe.
@@ -18,7 +20,7 @@ Run through bin/gen-help-art.sh (pnpm gen:help-art), or directly:
 
     blender -b --factory-startup --python-exit-code 1 \
         --python scripts/help-art/catchment.py -- --outdir /tmp/help-art \
-        [--only catchment,farm] [--samples 96] [--device OPTIX|CUDA|CPU]
+        [--only catchment,farm] [--samples 96] [--device OPTIX|CUDA|METAL|CPU]
 
 Writes <outdir>/<shot>.png and <outdir>/shots.json.
 """
@@ -600,6 +602,10 @@ def trib_point(y, lift=0.02):
     return ground(trib(y), y, lift)
 
 
+# Between the dam wall and the stream below it, for the spillway close-up.
+spill_mid = (l_wall + trib_point(1.2)) / 2
+
+
 # name: camera location, look-at target, lens (mm), output width, crop (True:
 # trim to the scene with a transparent background; False: fill the frame at
 # `aspect`), and the labelled features.
@@ -654,7 +660,58 @@ SHOTS = {
             "river": ground(river_x(Y0 + 0.15), Y0 + 0.15, 0.03),
         },
     ),
-    # Help-tip close-ups.
+    # Help-tip close-ups: each frames the part of the scene its tips are about,
+    # so a tip's picture shows its own feature, not the same wide farm view.
+    # The dam's stored water, from beside the wall.
+    "dam": dict(
+        loc=(l_cx + 0.95, l_cy - 1.35, l_lvl + 2.3), target=(l_cx - 0.1, l_cy + 0.15, l_lvl), lens=36, width=800,
+        crop=False, aspect=0.62,
+        anchors={
+            "storage": Vector((l_cx - 0.1, l_cy + 0.1, l_lvl)),
+            "wall": l_wall,
+            "shore": Vector((l_cx - l_rx * 0.75, l_cy + 0.25, l_lvl)),
+        },
+    ),
+    # Water arriving: the stream from upstream and the slope draining into the dam.
+    "inflow": dict(
+        loc=(l_cx + 2.4, l_cy + 0.35, l_lvl + 1.7), target=(trib(2.7), 2.7, height(trib(2.7), 2.7)), lens=36, width=800,
+        crop=False, aspect=0.62,
+        anchors={
+            "upstream": trib_point(3.1),
+            "runoff": ground(l_cx + 1.15, l_cy + 1.0, 0.04),
+        },
+    ),
+    # Water leaving: the wall where the dam spills, and the stream below it.
+    "spillway": dict(
+        loc=(spill_mid.x + 0.7, spill_mid.y - 1.9, spill_mid.z + 0.95), target=tuple(spill_mid), lens=38, width=800,
+        crop=False, aspect=0.62,
+        anchors={
+            "spill": l_wall,
+            "outflow": trib_point(1.2),
+        },
+    ),
+    # The irrigation line from the dam down to the orchard.
+    "irrigation": dict(
+        loc=(l_cx + 1.2, l_cy - 2.55, l_lvl + 1.2), target=(l_cx - 0.6, l_cy - 1.0, l_lvl - 0.35), lens=40, width=800,
+        crop=False, aspect=0.62,
+        anchors={
+            "offtake": ground(l_cx - 0.5, l_cy - 0.5, 0.03),
+            "pipe": ground(l_cx - 0.62, l_cy - 1.0, 0.03),
+            "field": ground((ORCHARD[0] + ORCHARD[1]) / 2, ORCHARD[3] - 0.15, 0.15),
+        },
+    ),
+    # The irrigated orchard.
+    "orchard": dict(
+        loc=(-3.3 + 1.7, -0.4 - 2.1, height(-3.3, -0.4) + 1.35), target=(-3.3, -0.4, height(-3.3, -0.4)), lens=40, width=800,
+        crop=False, aspect=0.62,
+        anchors={"crops": ground(-3.3, -0.4, 0.2)},
+    ),
+    # The gauging hut beside the weir, where the observed record is measured.
+    "gauge": dict(
+        loc=(gx0 + 1.1, gy0 - 1.35, height(gx0, gy0) + 0.75), target=(gx0 - 0.1, gy0 + 0.1, height(gx0, gy0) + 0.1), lens=42, width=800,
+        crop=False, aspect=0.62,
+        anchors={"gauge": ground(gx0, gy0, 0.24), "weir": ground(wx, wy, 0.1)},
+    ),
     "transfer": dict(
         loc=(mid_pipe.x + 1.6, mid_pipe.y - 2.4, mid_pipe.z + 1.3), target=tuple(mid_pipe), lens=40, width=800,
         crop=False, aspect=0.62, anchors={"pipe": mid_pipe},
