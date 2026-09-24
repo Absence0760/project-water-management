@@ -1088,6 +1088,10 @@ fallback. They are warnings only: the fallback is unchanged and zero stays a
 value. From engine 0.7.0 the water years they flag are also left out of the
 CHIRPS bias-correction fit (§2.4b). The fix is in the data (re-export the stretch as blank, or fill it from
 a trusted source), once the hydrologist or client confirms it is missing.
+**Planned (CR-20, in progress):** a run will treat a flagged zero run as
+blank by default, so bias-corrected CHIRPS fills it, with per-project
+overrides and a per-day infill flag. The plan is in
+[followups.md](./followups.md); this section changes when it lands.
 
 - *Zero runs: why the wet season, from the series itself.* A South African
   catchment may get its rain in winter (the south-western Cape) or summer

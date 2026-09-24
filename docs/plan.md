@@ -472,6 +472,13 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 14. **Comparing runs.** Is a higher simulated outflow good or neutral, and a
     PBIAS closer to 0 better? Do you need per-farm series (e.g. the same
     farm's dam storage) overlaid across runs?
+15. **Zero-rain runs (issue #3).** The catchment rain has two long runs of
+    zeros in the wet season: 1991-05-25 → 1991-07-26 and 1999-12-28 →
+    2000-12-31. CHIRPS recorded rain on both. From CR-20 the app fills them
+    with bias-corrected CHIRPS by default. Are they missing data, or real
+    dry spells? Are there other stretches (e.g. partial records in 1996,
+    2021 and 2022, which read far below CHIRPS) that should be treated as
+    missing?
 
 ### Product
 

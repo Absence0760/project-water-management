@@ -94,7 +94,9 @@ Tick items off (or move them into an issue) as they are done.
 
       Test the semi-arid defaults on a Karoo gauge record with a known
       drought (e.g. 2015–19) before changing them. Do this after the CHIRPS
-      fallback bias correction lands, because it uses these flags.
+      fallback bias correction lands, because it uses these flags. Once
+      CR-20 lands (below) a flagged zero run changes results, not just
+      warnings, so a false alarm is no longer free: item 2 matters more.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
@@ -109,6 +111,44 @@ Tick items off (or move them into an issue) as they are done.
       Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
       catchment with the correction on (condition 1), and record the result
       in the issue.
+- [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
+      (2026-09-24).** The issue #2 checks find runs of zero catchment rain
+      that look like missing data, but they only warn. A 0 is a reading, so
+      those days still run dry and CHIRPS never fills them. On the client
+      catchment the check flags exactly two runs, one in the 1991 wet season
+      and one covering all of 2000, and none of the long dry summers. Both
+      runs sit in the wet season, and CHIRPS recorded substantial rain on
+      each. The plan:
+      1. **Engine:** when picking rain used (model.md §2.4, column R), a day
+         inside a flagged zero run counts as blank. Bias-corrected CHIRPS
+         (§2.4b) then fills it, then forecast rain. Stored catchment rain is
+         never changed. Minor `ENGINE_VERSION` bump.
+      2. **Setting** `settings.zeroRainRuns`: `mode` `'missing'` (default)
+         or `'asRecorded'`, plus two date-range lists. `keepDry` holds
+         flagged runs the hydrologist confirms as real dry spells. `missing`
+         holds extra ranges to treat as missing, e.g. the bad days inside a
+         low-vs-CHIRPS year. They're saved in project settings, so each run's
+         snapshot reproduces them.
+      3. **Visible:** a run warning lists the filled ranges, their days and
+         mm (raw → corrected). Results carry a per-day infilled-rain flag,
+         the first slice of CR-18 in the same shape as WP-1.32's `filled`
+         mask. Filled days are shaded on the daily rain chart. Settings →
+         Data quality edits the mode and the lists.
+      4. **Audit trail:** a finding in engine-audit.md; the affected columns
+         go on the client catchment regression suite's deviation list;
+         model.md §2.4/§2.4b/§2.10a, ui.md, api.md and the help text are
+         updated with the code.
+
+      Why default on: a false positive costs little, because in a real
+      drought CHIRPS is dry too and filling it adds little rain. A missed
+      gap runs a whole wet season dry. Rejected: fixing it in the importer
+      (hides the change, and CSV uploads bypass it) and filling from
+      climatology (smears rain over every day and loses storm timing).
+      Still ask the hydrologist to confirm the two runs
+      ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)). Out of
+      scope: low-vs-CHIRPS years are never blanked whole; the `missing`
+      list covers them once the hydrologist names the bad days. CR-20's
+      double-mass check against CHIRPS follows as a separate step.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny
@@ -335,7 +375,9 @@ the suggested order (the IDs carry the detail):
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
-      panel.
+      panel. CR-20 went first (2026-09-24, in progress; plan under
+      "Zero-rain runs treated as missing" above). Its per-day infill flag is
+      the rain slice that CR-18 then generalises.
 - [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
       → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
