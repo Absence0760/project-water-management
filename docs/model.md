@@ -127,6 +127,45 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      Rain at or below the threshold counts as 0, so light rain does not reduce
      demand.
 
+   The crop factors multiply **A-pan** evaporation (`grossCropMm` in
+   `packages/engine/src/demand.ts`), not FAO reference evapotranspiration ET₀.
+   ET₀ is about 0.7–0.85 × pan, so an FAO-56 Kc entered as it is overstates
+   demand by roughly a quarter. The Crops tab says so and points out any factor
+   above 1.0 (a hint, not an error).
+
+4. **Soil-water carry-over (engine ≥ 0.15.0, [audit N3](./engine-audit.md)).**
+   The workbook's rule above lets rain offset only the day it falls on: a 60 mm
+   day cancels one day of demand and the rest is lost. The engine carries
+   effective rain over through one soil-water store per farm, a one-bucket form
+   of the FAO-56 root-zone balance (Allen et al. 1998, ch. 8), sized by
+   `settings.effectiveRainStoreMm` (mm over the cropped area, default **25 mm**:
+   0.5 × 100 mm/m × 0.5 m, the readily available water of 0.5 m of roots in a
+   soil holding 100 mm/m, FAO-56 Tables 19 and 22). Each day, in this order:
+
+   ```
+   Pe        = croppedArea × effRain / 1000 × rainUsed[t]          (m³)
+   available = W[t−1] + Pe                   (not capped yet)
+   used      = MIN(available, MAX(0, grossFarm))
+   netDemand = MAX(0, grossFarm) − used
+   W[t]      = MIN(Smax, available − used)   Smax = croppedArea × effectiveRainStoreMm / 1000
+   ```
+
+   The store starts empty. Adding the day's rain *before* capping means a big
+   rain still covers that day's demand first, however small the store, as the
+   workbook's rule does; only what is left after that is capped. Rain above the
+   store's size is lost to drainage and runoff (the catchment runoff model
+   already counts that water, so nothing is double-counted). With
+   `effectiveRainStoreMm = 0`, W is 0 every day and net demand is **bit for
+   bit** the workbook's `MAX(0, gross − Pe)` (tested). Demand stays
+   precomputed, independent of supply, so the network simulation is
+   unchanged. The farm's `effective_rain` working column is now the effective
+   rain *used* that day (from the day's rain or the store), and `soil_water`
+   is W at the end of the day, in mm.
+
+   This was decided on a simulated hydrologist's recommendation (2026-09-24)
+   and is **pending the real hydrologist's review**; the size is a per-project
+   setting so they can change it, or set 0 to reproduce the workbook.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 This is the calibrated rain→runoff routine, the engine's `legacy` runoff model
@@ -497,7 +536,9 @@ compared with the full pragmatic EWR and the observed flow.
 **Every column is a run series (engine ≥ 0.12.0).** Besides F, G, H, I, J, Q,
 R, U, W and Y–AB, each farm stores its working columns, so any day can be
 redone by hand from the farm's daily CSV: `gross_demand` and `effective_rain`
-(the two sides of F, §2.3), `upstream_to_dam` (K), `upstream_below_dam` (L),
+(the two sides of F, §2.3; `effective_rain` is the rain *used* that day, and
+`soil_water` beside it the soil-water store at the end of the day in mm,
+engine ≥ 0.15.0), `upstream_to_dam` (K), `upstream_below_dam` (L),
 `runoff_to_dam` (M), `runoff_below_dam` (N), `diverted_to_dam` (O),
 `interim_storage` (P), `below_dam_not_diverted` (S), `return_flow` (T) and
 `balance_residual` (V, signed, float noise). The letters and formulas live in
@@ -1169,7 +1210,7 @@ from the workbook.
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. | It is unclear whether the order (transfer vs irrigation) and the spill of transferred water are intended. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
-| Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
+| Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.15.0 carries it over through a soil-water store (§2.3 step 4). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and the client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
@@ -1311,7 +1352,8 @@ text:
 | Check | What must hold |
 | --- | --- |
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand − effective rain); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = G × return %; U = R + S + T; V is the recomputed residual and float noise. |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = G × return %; U = R + S + T; V is the recomputed residual and float noise. |
+| `checkSoilWater` | Engine ≥ 0.15.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
@@ -1428,8 +1470,9 @@ step when a definition changes.
 | --- | --- |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the A-pan, MAP and naturalised flow data per quaternary catchment. |
-| **Crop factor (Kc)** | A monthly multiplier from A-pan evaporation to crop water use. |
+| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (65% here). |
+| **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.15.0). |
 | **MAP** | Mean Annual Precipitation (mm/yr). "Hi/Lo MAP" splits a catchment into high- and low-rainfall parts. |
 | **MAR** | Mean Annual Runoff (M.m³/yr). |
 | **M.m³** | Million cubic metres (10⁶ m³). 1 m³/s = 86 400 m³/day. |

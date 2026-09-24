@@ -80,6 +80,15 @@ export interface ProjectSettings {
 	februaryDays: number;
 	/** Fraction of rainfall on cropped land that offsets irrigation demand. */
 	effectiveRainFraction: number;
+	/**
+	 * Size of each farm's soil-water store, mm over the cropped area (engine ≥
+	 * 0.15.0, docs/engine-audit.md N3): effective rain the crop can't use on
+	 * the day it falls is kept for the following days, up to this depth
+	 * (./demand.ts farmDailyDemand). Default 25 mm, the readily available water
+	 * of 0.5 m of roots in a soil holding 100 mm/m with p = 0.5 (FAO-56 Tables
+	 * 19 and 22). 0 = no carry-over, the b023 workbook's rule.
+	 */
+	effectiveRainStoreMm: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -176,6 +185,7 @@ export function defaultProjectSettings(): ProjectSettings {
 	return {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
+		effectiveRainStoreMm: 25,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -668,7 +678,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'runoff' | 'transfers' | 'reports';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

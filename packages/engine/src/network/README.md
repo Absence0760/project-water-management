@@ -35,8 +35,8 @@ workbook cells.
 
 FarmTemplate columns, per day *t*, with `Qprev` = yesterday's storage (the
 initial storage on day 0). Since engine 0.12.0 every column is a run series:
-the working ones (K–P, S, T, V, plus `gross_demand` and `effective_rain`
-behind F) are recorded when `simulateNetwork` is called with
+the working ones (K–P, S, T, V, plus `gross_demand`, `effective_rain` and
+`soil_water` behind F) are recorded when `simulateNetwork` is called with
 `{ workings: true }`, as `runModel` does and calibration doesn't. The same
 letters and formulas are in `../verify/columns.ts`, which the exports and the
 day trace read.
@@ -86,8 +86,14 @@ node's `outflow` is the catchment `simulated_outflow`.
 - Gross crop mm per water-year month = A-pan × crop factor.
 - Farm gross m³/day = Σ(crop area × gross mm) / 1000 / days in month,
   with February = `settings.februaryDays` (28.25).
-- Daily net = MAX(0, gross − cropped area × effectiveRainFraction/1000 × rain).
-  (The workbook rounds these to 2 dp, 0.1 m³/day and whole m³.)
+- Daily net = MAX(0, gross − cropped area × effectiveRainFraction/1000 × rain)
+  in the workbook. (The workbook rounds these to 2 dp, 0.1 m³/day and whole m³.)
+  Engine ≥ 0.15.0 carries effective rain over through a per-farm soil-water
+  store (`../demand.ts` `farmDailyDemand`, audit N3): used = MIN(store + Pe,
+  gross), net = gross − used, store = MIN(size, store + Pe − used), size =
+  `settings.effectiveRainStoreMm` (25 mm; 0 is the workbook's rule bit for
+  bit). Demand stays precomputed, so the simulation here only carries the
+  `rainOffset` (effective rain used) and `soilWater` working columns.
   Rain is [Flow data] R "Use rain": catchment rain if present, else CHIRPS,
   else forecast, zeroed at or below `calibration.rainThresholdMm`.
 

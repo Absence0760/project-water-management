@@ -391,3 +391,20 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(replaced.fitRecord!.seed).toBe(7);
 	});
 });
+
+describe('SettingsPatch.effectiveRainStoreMm (engine N3)', () => {
+	const ok = (effectiveRainStoreMm: unknown) => SettingsPatch.safeParse({ effectiveRainStoreMm }).success;
+
+	it('accepts 0 (no carry-over) up to 500 mm', () => {
+		for (const v of [0, 12.5, 25, 500]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects a negative, oversized or non-numeric store', () => {
+		for (const v of [-1, 501, Infinity, '25', null]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to 25 mm for a project that never set it', () => {
+		expect(mergeSettings({}).effectiveRainStoreMm).toBe(25);
+		expect(defaultProjectSettings().effectiveRainStoreMm).toBe(25);
+	});
+});

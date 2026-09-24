@@ -124,12 +124,16 @@ export const runRoutes = new Hono<AuthEnv>()
 			// Storage at the end of the day before: the run's initial storage on its first day.
 			const previousStorageM3 =
 				node.kind !== 'farm' ? null : r.index === 0 ? (node.damInitialPct ?? 0) * (node.damCapacityM3 ?? 0) : (storage?.previous ?? null);
+			// Soil-water store at the end of the day before (engine ≥ 0.15.0): empty on the first day; null without the column.
+			const soil = rows.find((x) => x.key === 'soil_water');
+			const previousSoilWaterMm = node.kind !== 'farm' || !soil ? null : r.index === 0 ? 0 : soil.previous;
 			return c.json({
 				date: q.date,
 				nodeId: q.nodeId,
 				name: node.name,
 				kind: node.kind,
 				previousStorageM3,
+				previousSoilWaterMm,
 				params: pick(node, ['pctUpstreamToDam', 'pctRunoffToDam', 'divertCapacityM3Day', 'damCapacityM3', 'damInitialPct', 'returnFlowPct']),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});

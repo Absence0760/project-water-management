@@ -280,8 +280,10 @@ describe('diffInputs', () => {
 	it('does not flag settings stored sparsely vs merged over the defaults', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
+		// Likewise the soil-water store: none stored means none used (engine < 0.15.0).
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
+		b.settings.effectiveRainStoreMm = 0;
 		expect(diffInputs(a, b)).toEqual([]);
 	});
 
@@ -380,6 +382,21 @@ describe('diffInputs', () => {
 			'Setting "futureKnob" changed'
 		]);
 		expect(diffInputs(a, b).every((c) => c.area === 'settings' && c.kind === 'changed')).toBe(true);
+	});
+
+	it('names the soil-water store size, and reads a snapshot from before it as no store (0 mm)', () => {
+		const a = snapshot();
+		(a.settings as Record<string, unknown>).effectiveRainStoreMm = 25;
+		const b = structuredClone(a);
+		(b.settings as Record<string, unknown>).effectiveRainStoreMm = 10;
+		expect(texts(a, b)).toEqual(['Soil-water store (effective rain carry-over): 25 mm → 10 mm']);
+		// Runs store merged settings, so no size means engine < 0.15.0, which carried nothing over.
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).effectiveRainStoreMm;
+		expect(texts(old, a)).toEqual(['Soil-water store (effective rain carry-over): 0 mm → 25 mm']);
+		const none = structuredClone(a);
+		(none.settings as Record<string, unknown>).effectiveRainStoreMm = 0;
+		expect(diffInputs(old, none)).toEqual([]);
 	});
 
 	it('describes calibration exclusions added, removed and re-reasoned', () => {

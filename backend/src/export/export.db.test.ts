@@ -105,10 +105,12 @@ describe('run daily export', () => {
 		expect(res.headers.get('content-disposition')).toContain('_baseline_farm-upper_daily_');
 		const header = lines(res.text)[0]!;
 		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.12.0).
-		expect(header.split(',').slice(0, 6)).toEqual([
+		// The soil-water store (engine 0.15.0) sits with the demand columns.
+		expect(header.split(',').slice(0, 7)).toEqual([
 			'date',
 			'Gross irrigation demand (before effective rain) (m³/day)',
-			'Effective rain on the cropped area (m³/day)',
+			"Effective rain used against demand (from the day's rain or the soil store) (m³/day)",
+			'Soil-water store at the end of the day (mm)',
 			'Irrigation demand (net) [F] (m³/day)',
 			'Irrigation supplied [G] (m³/day)',
 			'Inflow from upstream [H] (m³/day)'
@@ -148,7 +150,7 @@ describe('run summary export', () => {
 		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
-		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(5);
+		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(6); // incl. the soil-water store (engine 0.15.0)
 		expect(rows).toContain('Water balance by water year (Oct–Sep)');
 		expect(rows.some((r) => r.startsWith('Whole run,'))).toBe(true);
 		expect(rows).toContain('Farm daily columns (the daily CSV of a farm)');

@@ -8,7 +8,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { farmDemands } from './demand';
+	import { farmDemands, highCropFactors } from './demand';
 
 	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
 
@@ -25,6 +25,8 @@
 			.filter((a) => a.cropId === cropId && farms.some((f) => f.id === a.nodeId))
 			.reduce((s, a) => s + a.areaM2, 0);
 	const grandTotal = $derived(crops.reduce((s, c) => s + colTotal(c.id), 0));
+	// Factors multiply A-pan, not ET₀: above 1.0 is worth a second look (a hint, never blocking).
+	const highFactors = $derived(highCropFactors(crops, WATER_YEAR_MONTHS));
 
 	// Demand preview: saved A-pan × current (possibly unsaved) crops and areas.
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
@@ -85,8 +87,9 @@
 		<span class="muted small">Water year, October → September</span>
 	</div>
 	<p class="muted small intro">
-		A crop factor (Kc) scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
-		factor. Use 0 for months the crop isn't irrigated.
+		A crop factor scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
+		factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply reference ET₀, about 0.7–0.85 × pan, so
+		multiply a published Kc by the pan coefficient before entering it. Use 0 for months the crop isn't irrigated.
 	</p>
 	{#if crops.length === 0}
 		<div class="empty">
@@ -137,6 +140,13 @@
 				</tbody>
 			</table>
 		</div>
+		{#if highFactors.length}
+			<p class="alert alert-warning small" role="status">
+				A crop factor above 1.0 means the crop uses more water than an open A-pan loses. That can happen, but check it isn't an
+				FAO Kc entered as it is:
+				{#each highFactors as h, i (h.id)}{i ? '; ' : ' '}<strong>{h.name || 'unnamed crop'}</strong> ({h.months.join(', ')}){/each}.
+			</p>
+		{/if}
 		{#if !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add crop</button></div>{/if}
 	{/if}
 </section>
@@ -209,7 +219,8 @@
 	<p class="muted small intro">
 		Gross demand = Σ area × A-pan × crop factor, spread over the days in each month (February {fmtNum(settings.februaryDays, 2)}
 		days). On each simulated day the model then subtracts effective rainfall ({fmtPct(settings.effectiveRainFraction, 0)} of rain on the
-		cropped area) to get the net demand the farm's dam and river must supply. Uses saved A-pan values and the crops and areas above,
+		cropped area{#if settings.effectiveRainStoreMm > 0}, with what the crop can't use that day carried over in a
+			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net demand the farm's dam and river must supply. Uses saved A-pan values and the crops and areas above,
 		including unsaved edits.
 	</p>
 	{#if !apanSet}

@@ -52,3 +52,20 @@ export function farmDemands(
 		return { nodeId, monthlyM3Day: monthly, meanM3Day: (annual * 1e6) / yearDays, annualMm3: annual, areaHa: areaM2 / 10_000 };
 	});
 }
+
+/**
+ * Crops with a factor above 1.0 in any month, with those months (water-year
+ * labels). The engine multiplies the factor by A-pan evaporation, not by FAO
+ * reference ET₀ (about 0.7–0.85 × pan), so a factor above 1 means the crop
+ * uses more water than an open pan loses: possible, but more likely an FAO-56
+ * Kc entered as it is. A hint for the Crops tab, never an error.
+ */
+export function highCropFactors(
+	crops: readonly { id: string; name: string; cropFactor: readonly number[] }[],
+	monthLabels: readonly string[]
+): { id: string; name: string; months: string[] }[] {
+	return crops.flatMap((c) => {
+		const months = c.cropFactor.flatMap((f, i) => (f > 1 ? [monthLabels[i] ?? String(i + 1)] : []));
+		return months.length ? [{ id: c.id, name: c.name, months }] : [];
+	});
+}
