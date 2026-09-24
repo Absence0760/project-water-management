@@ -236,7 +236,11 @@ predates the setting, so run comparison reads it as legacy.
   in that calendar month`, so each month's PET totals exactly coefficient ×
   A-pan. `settings.panCoefficient` is 0.7 in every month by default and is
   edited per month (question 4 for the hydrologist). It doesn't touch
-  irrigation demand.
+  irrigation demand. **It is held fixed, never calibrated**: it trades off
+  against X1/X3 (a higher coefficient and a smaller store fit the same
+  record), so automatic calibration (§2.10b) never searches it, and each fit
+  records the coefficient and A-pan it ran under — a later change to either
+  is fit provenance's `forcingChanged` (§2.10b).
 - **No evaporation, no run** (engine ≥ 0.11.1). When A-pan × pan
   coefficient is 0 in every month, GR4J is refused (`GR4J_NO_PET`), as a run
   with no rainfall is. Without evaporation the production store only fills,
@@ -851,7 +855,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   record fitted to, the calibration window and exclusions, whether validation
   was asked for and against which independent record, every scored period
   (the in-sample fit, the split-sample and dry → wet tests, the independent
-  record), the WR2012 MAR penalty when it was on (§2.10c: its weight, the MAR
+  record), the evaporation forcing it ran under (`forcing`: `panCoefficient`
+  and `apanMm`, water-year months — absent on records made before it was
+  tracked), the WR2012 MAR penalty when it was on (§2.10c: its weight, the MAR
   band when one was used, the simulated MAR ratio and the fit without it) and
   the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
@@ -861,7 +867,12 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   since fit") rather than silently keeping it valid, and a client can't clear
   the mark. Each run snapshots the record in effect in `model_run.inputs`.
   `fitRecordStatus` also says when the runoff model, window, exclusions or
-  flow record have changed since the fit. The record never changes a result.
+  flow record have changed since the fit — and, from `forcing`, when the pan
+  coefficient or A-pan evaporation has (`forcingChanged`): the pan coefficient
+  is fixed, never calibrated (§2.4a), because it trades off against X1/X3, so
+  a fit is only valid for the forcing it was fitted under and a later change
+  to either array marks the record stale, with a caveat naming the trade-off.
+  The record never changes a result.
 - **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
   elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
   about 70 s in Node. `onProgress` reports every run and returns true to cancel, which

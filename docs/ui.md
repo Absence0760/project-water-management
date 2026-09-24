@@ -206,12 +206,17 @@ The settings are grouped by what they drive:
     Below the panel, **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`) shows the record: model and time,
     objective, seed, model runs, engine version, the record and window fitted
-    to, the exclusions, the fitted values, and a table with the in-sample
+    to, the pan coefficient and A-pan evaporation it ran under (month by
+    month, or "not recorded" for a fit made before this was tracked), the
+    exclusions, the fitted values, and a table with the in-sample
     score ("Calibration period (in-sample)") next to each validation score,
     plus the notes. Editing a fitted parameter by hand shows a **Parameters
     edited since fit** badge and names the parameters at once; the server
     records the same on save. A change of runoff model, window, exclusions or
-    flow series since the fit is called out too.
+    flow series since the fit is called out too, and a change to the pan
+    coefficient or A-pan since the fit shows an **Evaporation changed since
+    fit** badge and a caveat explaining why (it trades off against X1/X3, so
+    the fit needs redoing).
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -305,8 +310,10 @@ The settings are grouped by what they drive:
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
-  Settings, with the in-sample score beside its validation scores and the
-  "Parameters edited since fit" badge when they were edited), or "No fit
+  Settings, with the in-sample score beside its validation scores, the
+  "Parameters edited since fit" badge when they were edited, and an
+  "Evaporation changed since fit" badge when this run's pan coefficient or
+  A-pan differs from what the fit was made under), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that
