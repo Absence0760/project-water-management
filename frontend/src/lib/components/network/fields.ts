@@ -187,6 +187,8 @@ export const NODE_FIELDS: NodeField[] = [
 export const TABLE_FIELDS: NodeField[] = NODE_FIELDS.filter((f) => !f.detailOnly);
 
 export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
+/** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */
+export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/day';
 
 /**
  * Hints (not errors) about a node's dam settings, shown under its fields.

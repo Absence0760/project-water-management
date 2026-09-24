@@ -101,9 +101,11 @@ pending invitations, the confirm-email banner) render through
   column, fits a 1440px screen without sideways scrolling (the dam physics
   fields live in the one-node form only, see above). Field headers wrap
   (e.g. "Upstream inflow to dam" over three lines) instead of setting the
-  column width, cells are tighter, and the 0–100 % columns (every cell of
-  them, not-used and footer cells included) are narrower than the area and
-  volume columns. Narrower screens scroll the table sideways inside its own
+  column width, cells are tighter, the short area and 0–100 % columns are
+  narrow, and the volume columns (m³, m³/day; `isVolume`) keep room for a
+  seven-digit value such as 1430000, so a dam capacity is never clipped.
+  Every cell of a column carries its width class, not-used and footer cells
+  included. Narrower screens scroll the table sideways inside its own
   box, with the **Name** column pinned on the left and the **✕** remove
   column pinned on the right, so every row stays named and removable.
 - **One node layout**: the node picker (‹ select ›) is sticky under the app

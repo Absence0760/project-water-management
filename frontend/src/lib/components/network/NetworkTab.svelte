@@ -7,7 +7,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GROUPS, isPct, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
+	import { GROUPS, isPct, isVolume, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
@@ -238,9 +238,9 @@
 							</td>
 							{#each TABLE_FIELDS as f (f.key)}
 								{#if f.farmOnly && node.kind !== 'farm'}
-									<td class="num na" class:pct={isPct(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
+									<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
 								{:else}
-								<td class:pct={isPct(f)}>
+								<td class:pct={isPct(f)} class:vol={isVolume(f)}>
 									<NumberInput
 										label={f.aria(label)}
 										min={0}
@@ -270,7 +270,7 @@
 						<td></td>
 						<td></td>
 						{#each TABLE_FIELDS as f (f.key)}
-							<td class="num" class:pct={isPct(f)}>
+							<td class="num" class:pct={isPct(f)} class:vol={isVolume(f)}>
 								{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
 							</td>
 						{/each}
@@ -368,13 +368,18 @@
 		padding-left: 0.35rem;
 		padding-right: 0.35rem;
 	}
+	/* Area columns (km²) hold short values; % and volume columns set their own below. */
 	.net td {
-		min-width: 76px;
+		min-width: 68px;
 	}
 	/* Every cell in a column carries pct / rm (not-used and footer cells too):
 	   a column is as wide as its widest cell's minimum. */
 	.net td.pct {
 		min-width: 56px;
+	}
+	/* Room for a seven-digit volume (1430000) in the input, so it is never clipped. */
+	.net td.vol {
+		min-width: 92px;
 	}
 	.net td.rm {
 		min-width: 0;

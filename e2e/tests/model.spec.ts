@@ -205,6 +205,11 @@ test.describe('network layout', () => {
 		expect(overflow).toBeLessThanOrEqual(0);
 		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
 		await expect(table.getByRole('button', { name: 'Remove Lower farm' })).toBeInViewport();
+		// A seven-digit dam capacity shows in full, not clipped by its box.
+		const capacity = table.getByLabel('Dam capacity of Upper farm, m³');
+		await capacity.fill('1430000');
+		expect(await capacity.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
+		expect(await table.evaluate((t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
 	});
 
 	test('narrower, the node table scrolls in its box with each row named and removable at either end', async ({ page, owner }) => {
