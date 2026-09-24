@@ -67,7 +67,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.17.0';
+export const ENGINE_VERSION = '0.18.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -365,7 +365,7 @@ export function runModelWith(
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
 	const checks = seriesChecks(series);
-	// The double-mass check (engine ≥ 0.17.0) follows the catchment rain's own checks.
+	// The double-mass check (engine ≥ 0.18.0) follows the catchment rain's own checks.
 	const dmCheck = doubleMassCheck(doubleMass);
 	if (dmCheck) {
 		let at = 0;
@@ -443,7 +443,7 @@ export interface PreparedRun {
 	chirpsCorrection: ChirpsCorrection | null;
 	/** Catchment rain days set aside as missing (CR-20; null without a catchment rain series). */
 	zeroRain: ZeroRainMask | null;
-	/** The double-mass check of catchment rain against CHIRPS (engine ≥ 0.17.0; null without both or too few years). */
+	/** The double-mass check of catchment rain against CHIRPS (engine ≥ 0.18.0; null without both or too few years). */
 	doubleMass: DoubleMass | null;
 }
 

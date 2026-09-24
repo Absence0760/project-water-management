@@ -1,4 +1,4 @@
-// Double-mass check of the catchment rain against CHIRPS (engine ≥ 0.17.0,
+// Double-mass check of the catchment rain against CHIRPS (engine ≥ 0.18.0,
 // CR-20, docs/model.md §2.10a).
 //
 // Two records of the same rain should keep a steady ratio. Plot cumulative

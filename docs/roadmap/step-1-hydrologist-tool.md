@@ -355,7 +355,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   [model.md §2.4c](../model.md#24c-zero-rain-runs-treated-as-missing))
   treats flagged runs as missing in the run so that bias-corrected CHIRPS
   fills them, with per-project keep-dry and missing periods. The stored data
-  still isn't changed. Engine 0.17.0 makes the CHIRPS factor fit follow the
+  still isn't changed. Engine 0.18.0 makes the CHIRPS factor fit follow the
   same decisions (flagged runs left out day by day, kept-dry days kept, a
   keep-dry guard; model.md §2.4b) and adds CR-20's double-mass check
   against CHIRPS, a warning plus a Data-tab chart (model.md §2.10a).

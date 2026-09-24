@@ -28,7 +28,7 @@ The page has these sections, top to bottom:
    any month's applied factor, or the water years left out of the fit, with
    the pooled factor and left-out years of each side; `chirpsFit.ts`). The
    factors can move with no settings line at all: new rain data, a keep-dry
-   or missing period (which since engine 0.17.0 also decides which days the
+   or missing period (which since engine 0.18.0 also decides which days the
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
    or the engine version. And there is a
    warning when **either run used the legacy runoff model** (audit H1): it

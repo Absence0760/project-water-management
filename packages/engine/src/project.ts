@@ -929,7 +929,7 @@ export interface RunSummary {
 		/**
 		 * Negative values, outliers and flat-lines in the input series; from
 		 * engine 0.5.2 also catchment-rain zero runs and water years far below
-		 * CHIRPS (issue #2); from 0.17.0 also double-mass breaks against CHIRPS
+		 * CHIRPS (issue #2); from 0.18.0 also double-mass breaks against CHIRPS
 		 * ('doublemass').
 		 */
 		seriesChecks?: SeriesCheck[];
@@ -937,7 +937,7 @@ export interface RunSummary {
 		areaMismatches?: AreaMismatch[];
 		/**
 		 * The double-mass curve of catchment rain against CHIRPS (engine ≥
-		 * 0.17.0, ./doublemass.ts); null without both series or with too few
+		 * 0.18.0, ./doublemass.ts); null without both series or with too few
 		 * judged water years, absent on older runs.
 		 */
 		doubleMass?: DoubleMass | null;

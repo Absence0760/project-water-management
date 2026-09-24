@@ -407,12 +407,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
   'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
   runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
-  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.17.0, lists
+  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.18.0, lists
   double-mass breaks against CHIRPS, one example per break: the next
   segment's first and last day, its slope ÷ the one before, its shared days),
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
   whose area is more than 1 % off high + low MAP area) and `doubleMass`
-  (engine ≥ 0.17.0; `null` without both rain series or with fewer than 10
+  (engine ≥ 0.18.0; `null` without both rain series or with fewer than 10
   judged water years): `{ years: [{ waterYear, days, catchmentMm, chirpsMm,
   ratio, cumChirpsMm, cumCatchmentMm, residualPct }], skippedYears,
   wholeSlope, segments: [{ fromWaterYear, toWaterYear, years, days, slope }],
@@ -439,7 +439,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,
   chirpsMm, ownFactor, factor, source: 'month' | 'pooled' | null, clamped,
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
-  fallbackRawMm, fallbackCorrectedMm }`. Engine ≥ 0.17.0 adds why years and
+  fallbackRawMm, fallbackCorrectedMm }`. Engine ≥ 0.18.0 adds why years and
   days were left out of the fit: `lowVsChirpsYears`, `doubtfulKeepDry: [{
   start, end, days, chirpsMm, limitMm, waterYears }]` (kept-dry runs CHIRPS
   contradicts; their years are in `excludedWaterYears`), `flaggedDaysLeftOut`,

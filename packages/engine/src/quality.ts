@@ -14,7 +14,7 @@
 // missing data recorded as 0 (issue #2): long zero runs in the wet season
 // (zeroRainRuns) and water years far below CHIRPS (rainVsChirps). A zero is a
 // reading, so it blocks the CHIRPS fallback that a blank day gets. The
-// double-mass check against CHIRPS ('doublemass', engine ≥ 0.17.0) lives in
+// double-mass check against CHIRPS ('doublemass', engine ≥ 0.18.0) lives in
 // ./doublemass.ts, because it needs the zero-rain settings (./rain.ts).
 // areaMismatches: farms whose area is not
 // the sum of their high- and low-MAP areas (engine-review F7).

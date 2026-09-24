@@ -195,7 +195,7 @@
 		return check ? { id: `${c!.id}-${check.check}`, series: c!, check } : null;
 	});
 
-	// Double mass of catchment rain against CHIRPS (engine ≥ 0.17.0), on the days a run would use: the zero-rain settings decide which are suspect.
+	// Double mass of catchment rain against CHIRPS (engine ≥ 0.18.0), on the days a run would use: the zero-rain settings decide which are suspect.
 	const dm = $derived.by(() => {
 		const c = first('rain_catchment_mm');
 		const h = first('rain_chirps_mm');

@@ -229,7 +229,7 @@ describe('catchment rain treated as missing block (CR-20)', () => {
 	});
 });
 
-describe('double-mass block (engine ≥ 0.17.0)', () => {
+describe('double-mass block (engine ≥ 0.18.0)', () => {
 	const year = (wy: number, ratio: number, cum: number) => ({
 		waterYear: wy, days: 365, catchmentMm: 100 * ratio, chirpsMm: 100, ratio, cumChirpsMm: cum * 100, cumCatchmentMm: cum * 150, residualPct: -2.5
 	});
@@ -263,11 +263,11 @@ describe('double-mass block (engine ≥ 0.17.0)', () => {
 	it('says why there is no check, and is part of the summary sheet', () => {
 		expect([...doubleMassLines({ ...dm, breaks: [] })]).toContain('No break found');
 		expect([...doubleMassLines(null)][1]).toMatch(/^Not checked: needs catchment rain and CHIRPS with at least 10 water years of 300\+ shared days/);
-		expect([...doubleMassLines(undefined)][1]).toMatch(/before engine 0\.17\.0/);
+		expect([...doubleMassLines(undefined)][1]).toMatch(/before engine 0\.18\.0/);
 		const lines = [...summaryCsvLines(meta, { ...summary, dataQuality: { observedAgreement: null, doubleMass: dm } })];
 		expect(lines).toContain('Double-mass check: catchment rain vs CHIRPS');
 		expect(lines).toContain('2010,1.5,2.1,40,0.01,9');
-		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.17.0: no double-mass check');
+		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.18.0: no double-mass check');
 	});
 });
 
@@ -293,10 +293,10 @@ describe('CHIRPS bias factors block', () => {
 		expect(lines[11]!.split(',')[8]).toBe('31'); // Jul: days CHIRPS filled in
 		expect(lines[14]!.startsWith('Pooled,2,all months together')).toBe(true);
 		expect(lines[15]).toBe('Water years left out of the fit,1999');
-		expect(lines).toHaveLength(16); // a run before engine 0.17.0 says no more
+		expect(lines).toHaveLength(16); // a run before engine 0.18.0 says no more
 	});
 
-	it('says why years and days were left out of the fit (engine ≥ 0.17.0)', () => {
+	it('says why years and days were left out of the fit (engine ≥ 0.18.0)', () => {
 		const lines = [
 			...chirpsFactorLines({
 				...corr,

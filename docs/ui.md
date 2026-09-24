@@ -220,7 +220,7 @@ naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-tre
 When both catchment rain and CHIRPS are loaded, a **Double mass: catchment
 rain vs CHIRPS** panel (`series/DoubleMassPanel.svelte`, data from
 `series/doubleMass.ts` over the engine's `doubleMass`, with the project's
-zero-rain settings deciding which days are suspect; engine ≥ 0.17.0, CR-20)
+zero-rain settings deciding which days are suspect; engine ≥ 0.18.0, CR-20)
 says in a sentence whether the ratio breaks, then draws cumulative catchment
 rain against cumulative CHIRPS (water-year points, the whole-record line
 dashed, the segments between breaks solid, each slope in the caption), a
@@ -346,7 +346,7 @@ value such as 108700.
   same checks that block Save. The Keep dry hint says that kept-dry days
   count in the CHIRPS factor fit, filled runs are left out of it, and a run
   warns and leaves the year out when CHIRPS reads a lot of rain over a
-  kept-dry run (engine ≥ 0.17.0, model.md §2.4b). The rest
+  kept-dry run (engine ≥ 0.18.0, model.md §2.4b). The rest
   depends on the model:
   - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
     months as toggles. **Advanced** holds the winter switch, the recession

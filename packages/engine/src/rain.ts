@@ -12,7 +12,7 @@
 // over the days of month m where both have a reading, leaving out suspect
 // catchment data: low-vs-CHIRPS water years whole, and the days of flagged
 // zero runs not kept dry and of listed missing periods one by one (engine ≥
-// 0.17.0; before, every year a flagged run touched). Kept-dry days stay in,
+// 0.18.0; before, every year a flagged run touched). Kept-dry days stay in,
 // unless CHIRPS contradicts them (the keep-dry guard, chirpsBiasFactors).
 // A month with too small a sample takes the factor pooled over all
 // months; without even that, CHIRPS stays raw and the run warns. Factors are
@@ -61,7 +61,7 @@ export interface ChirpsMonthFactor {
 	fallbackDays: number;
 }
 
-/** A kept-dry stretch the fit doubts: bias-corrected CHIRPS reads too much rain over it (engine ≥ 0.17.0). */
+/** A kept-dry stretch the fit doubts: bias-corrected CHIRPS reads too much rain over it (engine ≥ 0.18.0). */
 export interface ChirpsKeepDryDoubt {
 	/** The flagged zero run (as flagged, not clipped to the keep-dry period). */
 	start: string;
@@ -85,23 +85,23 @@ export interface ChirpsCorrection {
 	/** All months together: the factor a thin month falls back to. */
 	pooled: { days: number; catchmentMm: number; chirpsMm: number; ownFactor: number | null; factor: number | null; clamped: boolean };
 	/**
-	 * Water years left out of the fit whole. From engine 0.17.0: the
-	 * low-vs-CHIRPS years and the years of a doubted keep-dry. Before 0.17.0
+	 * Water years left out of the fit whole. From engine 0.18.0: the
+	 * low-vs-CHIRPS years and the years of a doubted keep-dry. Before 0.18.0
 	 * also every year a flagged zero run touched, kept dry or not.
 	 */
 	excludedWaterYears: number[];
-	/** Of those, the years the low-vs-CHIRPS check flags (engine ≥ 0.17.0; absent before). */
+	/** Of those, the years the low-vs-CHIRPS check flags (engine ≥ 0.18.0; absent before). */
 	lowVsChirpsYears?: number[];
-	/** Kept-dry stretches CHIRPS contradicts; their years are in excludedWaterYears (engine ≥ 0.17.0). */
+	/** Kept-dry stretches CHIRPS contradicts; their years are in excludedWaterYears (engine ≥ 0.18.0). */
 	doubtfulKeepDry?: ChirpsKeepDryDoubt[];
 	/**
 	 * Days left out of the fit one by one, outside the excluded years, where
-	 * both series have a reading (engine ≥ 0.17.0): days of flagged zero runs
+	 * both series have a reading (engine ≥ 0.18.0): days of flagged zero runs
 	 * not kept dry, and days of periods listed as missing.
 	 */
 	flaggedDaysLeftOut?: number;
 	missingDaysLeftOut?: number;
-	/** Days of flagged zero runs kept dry that stay in the fit as confirmed readings (engine ≥ 0.17.0). */
+	/** Days of flagged zero runs kept dry that stay in the fit as confirmed readings (engine ≥ 0.18.0). */
 	keptDryDaysInFit?: number;
 	/** Calendar months 1–12, in order. */
 	months: ChirpsMonthFactor[];
@@ -119,7 +119,7 @@ const clamp = (f: number) => Math.min(CHIRPS_FACTOR_MAX, Math.max(CHIRPS_FACTOR_
 const enough = (days: number, chirpsMm: number) => days >= CHIRPS_FACTOR_MIN_DAYS && chirpsMm >= CHIRPS_FACTOR_MIN_MM && chirpsMm > 0;
 
 /**
- * Keep-dry guard (engine ≥ 0.17.0). A kept-dry stretch of a flagged zero run
+ * Keep-dry guard (engine ≥ 0.18.0). A kept-dry stretch of a flagged zero run
  * is doubted, and its water years stay out of the fit, when bias-corrected
  * CHIRPS over its kept days is above the larger of KEEP_DRY_DOUBT_MIN_MM and
  * KEEP_DRY_DOUBT_ANNUAL_SHARE × the catchment's usual annual rain
@@ -207,7 +207,7 @@ function factorsFrom(t: MonthSums): { pooled: ChirpsCorrection['pooled']; months
  * project has no CHIRPS series. The run counts (fallbackDays, …) are 0 here;
  * applyChirpsCorrection fills them.
  *
- * What is left out (engine ≥ 0.17.0, docs/model.md §2.4b): low-vs-CHIRPS
+ * What is left out (engine ≥ 0.18.0, docs/model.md §2.4b): low-vs-CHIRPS
  * water years, whole; the days of periods listed as missing and of flagged
  * zero runs not kept dry, one by one (suspectRainDays); and the water years
  * of a kept-dry stretch that bias-corrected CHIRPS contradicts (the keep-dry

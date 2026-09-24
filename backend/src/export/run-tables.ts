@@ -166,7 +166,7 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	}
 	yield csvRow(['Pooled', c.pooled.factor, 'all months together', c.pooled.ownFactor, c.pooled.clamped ? 'yes' : 'no', c.pooled.days, c.pooled.catchmentMm, c.pooled.chirpsMm, c.fallbackDays]);
 	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
-	// Engine ≥ 0.17.0: why, and the days left out one by one (absent on older runs).
+	// Engine ≥ 0.18.0: why, and the days left out one by one (absent on older runs).
 	if (c.lowVsChirpsYears?.length) yield csvRow(['of which far below CHIRPS', c.lowVsChirpsYears.join(' ')]);
 	for (const d of c.doubtfulKeepDry ?? []) {
 		yield csvRow(['of which a kept-dry run CHIRPS contradicts', d.waterYears.join(' '), `${d.start} to ${d.end}`, d.days, 'CHIRPS on the kept-dry days (mm)', d.chirpsMm, 'limit (mm)', d.limitMm]);
@@ -177,14 +177,14 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 }
 
 /**
- * The double-mass check of catchment rain against CHIRPS (engine ≥ 0.17.0,
+ * The double-mass check of catchment rain against CHIRPS (engine ≥ 0.18.0,
  * model.md §2.10a): whole-record slope, the segments between reported
  * breaks, the breaks, then one row per judged water year.
  */
 export function* doubleMassLines(dm: NonNullable<RunSummary['dataQuality']>['doubleMass']): Generator<string> {
 	yield csvRow(['Double-mass check: catchment rain vs CHIRPS']);
 	if (dm === undefined) {
-		yield csvRow(['Run made before engine 0.17.0: no double-mass check']);
+		yield csvRow(['Run made before engine 0.18.0: no double-mass check']);
 		return;
 	}
 	if (dm === null) {

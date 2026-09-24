@@ -130,7 +130,7 @@ export interface RunComparison {
 	 * neither run fitted any (no CHIRPS, mode 'none', or saved before engine
 	 * 0.7.0). `changed` when a month's applied factor or the water years left
 	 * out of the fit differ, or only one run has factors: a keep-dry or
-	 * missing-period edit, new rain data or an engine change (0.17.0 fits
+	 * missing-period edit, new rain data or an engine change (0.18.0 fits
 	 * around flagged zero runs day by day) all move them, so rain on the days
 	 * CHIRPS fills in differs even with the setting unchanged.
 	 */

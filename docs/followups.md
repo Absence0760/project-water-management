@@ -135,7 +135,7 @@ Tick items off (or move them into an issue) as they are done.
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
       issue #2 checks flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
-      **Done (engine 0.17.0): the fit follows the zero-rain decisions.** A
+      **Done (engine 0.18.0): the fit follows the zero-rain decisions.** A
       flagged run treated as missing is left out day by day (the rest of its
       water year stays in), kept-dry days stay in as confirmed readings, and
       a keep-dry that bias-corrected CHIRPS contradicts (more than max(50 mm,
@@ -158,7 +158,7 @@ Tick items off (or move them into an issue) as they are done.
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
       record's `forcing` (fit provenance), so a change flags "Forcing changed
-      since fit". Engine 0.17.0 added the double-mass check and made the
+      since fit". Engine 0.18.0 added the double-mass check and made the
       CHIRPS fit respect keep-dry (end of this item). Still open: the hydrologist's
       answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
@@ -196,7 +196,7 @@ Tick items off (or move them into an issue) as they are done.
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)). Out of
       scope: low-vs-CHIRPS years are never blanked whole; the `missing`
       list covers them once the hydrologist names the bad days.
-      **Double-mass check against CHIRPS: done (engine 0.17.0, audit B3,
+      **Double-mass check against CHIRPS: done (engine 0.18.0, audit B3,
       model.md §2.10a).** Water-year totals, up to two breaks, a data check,
       a Data-tab chart, a summary-CSV block and a run warning when CHIRPS
       fills an era whose ratio differs from the fit. It only warns; the

@@ -1,4 +1,4 @@
-// Double-mass check against CHIRPS (engine ≥ 0.17.0, CR-20). All fixtures are synthetic.
+// Double-mass check against CHIRPS (engine ≥ 0.18.0, CR-20). All fixtures are synthetic.
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import {

@@ -143,7 +143,7 @@ describe('chirpsBiasFactors', () => {
 		expect(chirpsBiasFactors(series(c0, h), 'monthly')!.months[9]!.factor).toBeCloseTo(K[10]!, 12);
 	});
 
-	it('leaves a flagged zero run out day by day, keeping the rest of its water year (engine ≥ 0.17.0)', () => {
+	it('leaves a flagged zero run out day by day, keeping the rest of its water year (engine ≥ 0.18.0)', () => {
 		const run = zeroRun('2003-04-01', '2003-06-05');
 		const s = seriesWithRun(run);
 		expect(zeroRainRuns(s.rain_catchment_mm!).runs).toHaveLength(1);
