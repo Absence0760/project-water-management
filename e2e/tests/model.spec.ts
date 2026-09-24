@@ -228,7 +228,7 @@ test.describe('network layout', () => {
 			await expect(picker).toBeInViewport();
 
 			// Deep in the farm form, the picker and ‹ › are still on screen, just below the app header.
-			await page.getByLabel('Return flow (%)').scrollIntoViewIfNeeded();
+			await page.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
 			await expect(picker).toBeInViewport();
 			await expect(page.getByRole('button', { name: 'Next node' })).toBeInViewport();
 			const headerBottom = await page.getByRole('banner').evaluate((h) => h.getBoundingClientRect().bottom);

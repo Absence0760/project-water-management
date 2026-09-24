@@ -7,7 +7,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GROUPS, isPct, NODE_FIELDS, type NodeField } from './fields';
+	import { GROUPS, isPct, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
@@ -112,7 +112,7 @@
 
 	const groupSpans = $derived.by(() => {
 		const spans: { group: NodeField['group']; count: number }[] = [];
-		for (const f of NODE_FIELDS) {
+		for (const f of TABLE_FIELDS) {
 			const last = spans[spans.length - 1];
 			if (last && last.group === f.group) last.count++;
 			else spans.push({ group: f.group, count: 1 });
@@ -183,7 +183,7 @@
 						{#if !readonly}<th scope="col" rowspan="2"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
 					<tr>
-						{#each NODE_FIELDS as f (f.key)}
+						{#each TABLE_FIELDS as f (f.key)}
 							<th scope="col" class="num">{f.label} <HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /><br /><span class="u">{f.unit}</span></th>
 						{/each}
 						<th scope="col" class="num" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">In use<br /><span class="u">%</span></th>
@@ -236,7 +236,7 @@
 									{/each}
 								</select>
 							</td>
-							{#each NODE_FIELDS as f (f.key)}
+							{#each TABLE_FIELDS as f (f.key)}
 								{#if f.farmOnly && node.kind !== 'farm'}
 									<td class="num na" class:pct={isPct(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
 								{:else}
@@ -269,7 +269,7 @@
 						<th scope="row" class="sticky">Total</th>
 						<td></td>
 						<td></td>
-						{#each NODE_FIELDS as f (f.key)}
+						{#each TABLE_FIELDS as f (f.key)}
 							<td class="num" class:pct={isPct(f)}>
 								{#if f.key === 'areaKm2'}{fmtNum(totalArea, 2)}{:else if f.key === 'damCapacityM3'}{fmtNum(farms.reduce((s, n) => s + n.damCapacityM3, 0))}{/if}
 							</td>
@@ -369,12 +369,12 @@
 		padding-right: 0.35rem;
 	}
 	.net td {
-		min-width: 84px;
+		min-width: 76px;
 	}
 	/* Every cell in a column carries pct / rm (not-used and footer cells too):
 	   a column is as wide as its widest cell's minimum. */
 	.net td.pct {
-		min-width: 60px;
+		min-width: 56px;
 	}
 	.net td.rm {
 		min-width: 0;

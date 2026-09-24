@@ -118,7 +118,9 @@ pending invitations, the confirm-email banner) render through
   value as typed. New farms start at 80 % and 50 %.
 - **Dam** fields also hold the area when full (m², empty = unknown), the area
   exponent (default 0.7) and seepage (% of storage per day) for dam
-  evaporation and seepage ([engine-audit N2](./engine-audit.md)).
+  evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
+  are in the one-node form and the field guide only, not the table
+  (`detailOnly` in `fields.ts`), so the table still fits a 1440px screen.
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with

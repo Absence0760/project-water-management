@@ -31,6 +31,8 @@ export interface NodeField {
 	/** Farm-only: gauges only pass upstream flow through. */
 	farmOnly?: boolean;
 	nullable?: boolean;
+	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
+	detailOnly?: boolean;
 }
 
 export const GROUPS: Record<NodeField['group'], string> = {
@@ -95,6 +97,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damAreaFullM2',
+		detailOnly: true,
 		label: 'Area when full',
 		unit: 'm²',
 		group: 'dam',
@@ -105,6 +108,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damAreaExponent',
+		detailOnly: true,
 		label: 'Area exponent',
 		unit: '×',
 		group: 'dam',
@@ -114,6 +118,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damSeepagePerDay',
+		detailOnly: true,
 		label: 'Seepage',
 		unit: '%/day',
 		group: 'dam',
@@ -177,6 +182,9 @@ export const NODE_FIELDS: NodeField[] = [
 		help: "This farm's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; farm shares should add up to 100 %."
 	}
 ];
+
+/** The fields the node table shows as columns; the one-node form shows every field. */
+export const TABLE_FIELDS: NodeField[] = NODE_FIELDS.filter((f) => !f.detailOnly);
 
 export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
 
