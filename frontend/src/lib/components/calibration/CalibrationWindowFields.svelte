@@ -26,7 +26,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const KINDS: CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'];
+	const KINDS: CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
 	const options = $derived(KINDS.filter((k) => !availableKinds || availableKinds.includes(k) || k === flowKind));
 
 	$effect(() => {

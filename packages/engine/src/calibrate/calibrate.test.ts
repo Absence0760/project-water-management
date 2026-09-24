@@ -67,7 +67,7 @@ function synthetic(truth: Gr4jParams, years = 8, start = '2010-10-01'): ModelInp
 }
 
 describe('prepareCalibration scores what runModel produces', () => {
-	it('on random GR4J networks, gauge/logger records against simulated outflow, Pitman against natural flow', () => {
+	it('on random GR4J networks, gauge/logger records against simulated outflow', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 150 && checked < 30; seed++) {
 			const input = randomInput(seed, { runoffModel: 'gr4j' });
@@ -78,17 +78,15 @@ describe('prepareCalibration scores what runModel produces', () => {
 				continue; // no observed record, or too few observed days
 			}
 			const out = runModel(input);
-			const key = pb.scoreNatural ? 'natural_flow' : 'simulated_outflow';
-			const want = out.series.find((s) => s.nodeId === null && s.key === key)!.values;
+			const want = out.series.find((s) => s.nodeId === null && s.key === 'simulated_outflow')!.values;
 			const got = pb.simulate(pb.startParams);
 			for (const t of pb.scoredDays) expect(got[t], `seed ${seed} day ${t}`).toBe(want[t]);
 			// A validation record is simulated over its own days (beyond the calibration window) just as exactly.
-			for (const kind of ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const) {
+			for (const kind of ['flow_observed_m3s', 'flow_logger_m3s'] as const) {
 				const rec = pb.record(kind);
 				if (!rec) continue;
-				const w = out.series.find((s) => s.nodeId === null && s.key === (rec.scoreNatural ? 'natural_flow' : 'simulated_outflow'))!.values;
 				const g = rec.simulate(pb.startParams);
-				for (const t of rec.scoredDays) expect(g[t], `seed ${seed} ${kind} day ${t}`).toBe(w[t]);
+				for (const t of rec.scoredDays) expect(g[t], `seed ${seed} ${kind} day ${t}`).toBe(want[t]);
 			}
 			checked++;
 		}
@@ -108,8 +106,7 @@ describe('prepareCalibration for the legacy model', () => {
 				continue;
 			}
 			expect(pb.model).toBe('legacy');
-			const key = pb.scoreNatural ? 'natural_flow' : 'simulated_outflow';
-			const want = runModel(input).series.find((s) => s.nodeId === null && s.key === key)!.values;
+			const want = runModel(input).series.find((s) => s.nodeId === null && s.key === 'simulated_outflow')!.values;
 			const got = pb.simulate(pb.startParams);
 			for (const t of pb.scoredDays) expect(got[t], `seed ${seed} day ${t}`).toBe(want[t]);
 			checked++;
@@ -412,12 +409,12 @@ describe('calibrate with an independent validation record', () => {
 		expect(calibrate(short, { budget: 60, seed: 2 })).toEqual(plain);
 	}, 60_000);
 
-	it('scores a Pitman record against natural flow', () => {
+	it('scores an independent logger record against the simulated outflow', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
-		input.series.flow_pitman_m3s = structuredClone(input.series.flow_observed_m3s!);
-		const r = calibrate(input, { budget: 40, validate: false, validationRecord: 'flow_pitman_m3s' });
-		expect(r.independentRecord!.simulatedKey).toBe('natural_flow');
-		// One farm draining to the gauge: natural flow = outflow, so the scores agree.
+		input.series.flow_logger_m3s = structuredClone(input.series.flow_observed_m3s!);
+		const r = calibrate(input, { budget: 40, validate: false, validationRecord: 'flow_logger_m3s' });
+		expect(r.independentRecord!.simulatedKey).toBe('simulated_outflow');
+		// The same record under another name scores exactly as the fit.
 		expect(r.independentRecord!.validation.scores.kgePrime).toBeCloseTo(r.fit.scores.kgePrime!, 12);
 	}, 60_000);
 });

@@ -31,7 +31,7 @@ import {
 	type SeriesKind
 } from './project';
 
-/** Observed-flow kinds compared with each other (Pitman is modelled, not observed). */
+/** Observed-flow kinds compared with each other. */
 export const OBSERVED_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] as const satisfies readonly SeriesKind[];
 export type ObservedFlowKind = (typeof OBSERVED_FLOW_KINDS)[number];
 
@@ -218,8 +218,6 @@ export const OUTLIER_MIN_POSITIVE = 100;
 /**
  * Flat-line rule: at least this many consecutive days with the same non-zero
  * value. Zero stretches are normal (dry spells, a river that stops flowing).
- * Pitman flow is modelled (often a monthly value repeated daily), so it is
- * not checked.
  */
 export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_catchment_mm: 5,
@@ -235,7 +233,6 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',
 	rain_chirps_mm: 'Rainfall (CHIRPS)',
 	rain_forecast_mm: 'Rainfall (forecast)',
-	flow_pitman_m3s: 'Pitman flow',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
 	flow_reference_m3s: 'Reference gauge (other catchment)'

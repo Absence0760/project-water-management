@@ -5,7 +5,7 @@
 // Two layers:
 // - NaturalFlowGenerator: a whole run, rain in → natural flow (m³/day) out.
 //   The legacy b023 recession model lives at this level (./legacy.ts), because
-//   its day depends on the calendar (seasons) and it falls back to Pitman flow.
+//   its day depends on the calendar (seasons).
 // - RunoffModel: one conceptual model stepped a day at a time in mm over the
 //   catchment (./gr4j.ts), wrapped into a generator by ./simulate.ts. Its
 //   stores are explicit, so the water balance can be checked every day.

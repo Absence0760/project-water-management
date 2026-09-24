@@ -166,7 +166,7 @@ export interface DataQualitySettings {
 }
 
 /** Series that calibration statistics can compare simulated outflow with. */
-export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const;
+export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] as const;
 export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -253,7 +253,6 @@ export const SERIES_KINDS = [
 	'rain_catchment_mm',
 	'rain_chirps_mm',
 	'rain_forecast_mm',
-	'flow_pitman_m3s',
 	'flow_observed_m3s',
 	'flow_logger_m3s',
 	'flow_reference_m3s'
@@ -428,9 +427,9 @@ export interface CalibrationStats {
 	/** The series simulated outflow was compared with (set by runModel). */
 	flowKind?: CalibrationFlowKind;
 	/**
-	 * The simulated series that was scored (engine ≥ 0.4.0): `natural_flow` when
-	 * flowKind is naturalised Pitman flow, else `simulated_outflow` (gauge and
-	 * logger records measure impacted flow). Older runs always scored the outflow.
+	 * The simulated series that was scored: always `simulated_outflow`, since
+	 * gauge and logger records measure impacted flow. Engines 0.4.0–0.9.0 scored
+	 * `natural_flow` against a Pitman record, which engine 0.10.0 removed (audit P1).
 	 */
 	simulatedKey?: 'natural_flow' | 'simulated_outflow';
 	/**

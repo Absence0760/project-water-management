@@ -475,12 +475,12 @@ describe('diffInputs', () => {
 		const b = snapshot({
 			series: {
 				rain_catchment_mm: { startDate: '1999-12-31', length: 368 },
-				flow_pitman_m3s: { startDate: '2000-01-01', length: 31 }
+				flow_logger_m3s: { startDate: '2000-01-01', length: 31 }
 			}
 		});
 		expect(texts(a, b)).toEqual([
+			'Logger flow series added (2000-01-01 to 2000-01-31)',
 			'Observed flow series removed',
-			'Pitman flow series added (2000-01-01 to 2000-01-31)',
 			'Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)',
 			'Rainfall (catchment) series extended back to 1999-12-31 (was 2000-01-01)'
 		]);

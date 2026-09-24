@@ -238,8 +238,9 @@ conditions come before any client numbers:
 **Answers to put to the hydrologist and the CMA** (the full reasoning is in
 the reports):
 - **Q1: model on record.** GR4J is fine as the daily impact model, but every
-  evidence run must carry the WR2012 comparison. Pitman is desirable, not
-  mandatory. Legacy is not acceptable as evidence at all, because it
+  evidence run must carry the WR2012 comparison. (The persona called Pitman
+  desirable, not mandatory; the app removed it as an input in engine 0.10.0,
+  audit P1.) Legacy is not acceptable as evidence at all, because it
   doesn't conserve water (H1). If both models run, declare the primary one
   before seeing results.
 - **Q2: WR2012.** Always report it; never make it a hard constraint. Keep
@@ -325,7 +326,8 @@ the reports):
   - E1/E2: base flow on day 1, and negative recession.
   - R1: the model no longer rounds.
   - G1: gauge EWR shortfall.
-  - C1: Pitman calibrates against natural flow.
+  - C1: Pitman calibrates against natural flow (superseded: P1 removed Pitman
+    in engine 0.10.0).
   - M1: importer month lists.
   - W1–W5: new warnings.
   - F8: order-dependent float noise in EWR shortfalls.

@@ -74,9 +74,12 @@ rows and columns don't break it.
 - **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
   month, farm, summed shortfall, days not met). A macro writes that table, so
   it can be stale; see `docs/model.md` §2.9.
-- **Series** are [Flow data] columns F–K: Pitman flow, observed flow (G1),
-  logger, catchment rain, CHIRPS rain and forecast rain. A column with no
-  values is skipped. Blank cells become `null`.
+- **Series** are [Flow data] columns G–K: observed flow (G1), logger,
+  catchment rain, CHIRPS rain and forecast rain. A column with no values is
+  skipped. Blank cells become `null`. Column F (Pitman flow) is never
+  imported, because the app has no Pitman input (`docs/engine-audit.md` P1): a
+  note gives how many days it held, and a workbook whose `rUseFlow` calibrates
+  against it gets a `WARNING` and no `calibrationFlowKind`.
 
 ## The gauge column on another river (`--gauge-as-reference`)
 
@@ -130,4 +133,4 @@ re-importing a workbook gives the same ids.
   importer assumes the standard pattern: add to the destination, subtract from
   the source.
 - The blank template holds one day of data and no rainfall, so the engine
-  refuses to run it ("no rainfall or Pitman flow series").
+  refuses to run it ("no rainfall series").

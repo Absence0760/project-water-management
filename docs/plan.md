@@ -65,7 +65,8 @@ a second and third project (empty, or copied) side by side.
 ### 1a. Engine: port b023 ([model.md §2](./model.md#2-the-b023-model-what-v1-ports))
 
 - ✅ Natural flow from rain (§2.4): season state, base flow, recession index,
-  pulse index, response flow, Pitman fallback. This needs the extra calibration
+  pulse index, response flow (the Pitman fallback was dropped in engine
+  0.10.0, [audit P1](./engine-audit.md)). This needs the extra calibration
   settings: recession curve and factors, shift-peak indices, reset ratio, winter
   thresholds, amplitude, max days.
 - ✅ Net irrigation demand per day (§2.3), with the workbook's rounding.
@@ -75,8 +76,7 @@ a second and third project (empty, or copied) side by side.
 - ✅ Transfers from structured rules (§2.6).
 - ✅ EWR check at the outflow gauge, per-farm summaries, and calibration stats
   (NSE, PBIAS, RMSE) against the observed series.
-- ✅ A `warnings[]` list: shares not summing to 1, missing series, gaps in rain,
-  days that fell back to Pitman flow.
+- ✅ A `warnings[]` list: shares not summing to 1, missing series, gaps in rain.
 
 **Acceptance:** regression tests driven by fixtures extracted from the client catchment
 (under `data/`, gitignored, skipped when absent) match the workbook's columns
@@ -439,8 +439,9 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    Should it add up the upstream fragments?
 5. **Dam reserve (Q5).** Should irrigation also stop at the minimum dam level,
    or only transfers?
-6. **Pitman fallback (Q7).** When the rain model gives zero, natural flow falls
-   back to Pitman flow. Is that intended, or only for days with no rain data?
+6. ~~**Pitman fallback (Q7).**~~ **Settled (2026-09-24):** the app has no
+   Pitman input, so natural flow comes only from the rain model
+   ([audit P1](./engine-audit.md)). Worth telling the hydrologist.
 7. **Shortfalls report (Q11).** What do "target volume", "reduce/gain" and
    "volume left after irrigation balanced & EWR met" mean exactly? Which of
    these numbers do farmers actually see?

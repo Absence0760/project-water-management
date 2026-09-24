@@ -122,7 +122,7 @@ consultant or an Australian irrigator. It also recommends where to go first:
 | A-pan is the only evaporation input | `demand.ts` · `grossCropMm()` ("WR90 A-pan × crop factor"); `project.ts` · `ProjectSettings.apanMm`; `run.ts:610` warning | `settings.evaporation` union (WP-I.5) |
 | Rain → flow is the b023 recession | `flow.ts` · `computeFlowColumns()`, `CalibrationParams` | Generator interface (WP-I.6) |
 | Rain priority is catchment → CHIRPS → forecast | `flow.ts` · `rainUsed()`; `run.ts:575-580`; `project.ts` · `SERIES_KINDS` (`rain_chirps_mm`) | `settings.rainPriority` plus series provenance (WP-I.10) |
-| Pitman is the modelled-flow fallback | `flow.ts` (`flowPitmanM3s`), `run.ts:75,126`, `CALIBRATION_FLOW_KINDS` | Treat `flow_pitman_m3s` as "modelled natural flow", with a source (GloFAS, WRSM, …) (WP-I.10) |
+| ~~Pitman is the modelled-flow fallback~~ | Removed in engine 0.10.0 (engine-audit P1): no fallback, no `flow_pitman_m3s` | A "modelled natural flow" kind with a source (GloFAS, WRSM, …) would be a new, comparison-only kind (WP-I.10) |
 | EWR is 12 pragmatic m³/day values | `project.ts` · `ewrPragmaticM3PerDay`; `run.ts:156-158` | EWR rule sets (WP-I.7) |
 | Allocation is proportional sharing | `network/curtailment.ts` · `computeCurtailment()` (equitable fraction ΣI/ΣH) | Allocation rule sets (WP-I.8) |
 | Units fixed to m³/day, l/s, Mm³ | `curtailment.ts` · `M3_PER_DAY_PER_LS`; run series `unit` strings; UI | Display-unit layer (WP-I.9). The engine stays SI. |
@@ -297,7 +297,7 @@ rather than add a dependency:
 - **Goal:** the engine returns codes plus parameters, not English sentences, so
   the UI can translate them. Stored runs stay readable.
 - **Changes (engine):**
-  - `warnings.ts` defines `type WarningCode = 'pitmanFallbackDays' | 'noRainfall' | 'runoffCoefficientAbove1' | …`
+  - `warnings.ts` defines `type WarningCode = 'noRainfall' | 'runoffCoefficientAbove1' | …`
     and `renderWarningEn(code, params)`.
   - `RunSummary` gains `warningDetails?: { code; params }[]` alongside
     `warnings: string[]`, which is still produced in English for older
@@ -667,8 +667,9 @@ rather than add a dependency:
       `['rain_catchment_mm','rain_chirps_mm','rain_forecast_mm']`, used by
       `flow.ts` · `rainUsed()` and `run.ts:575`;
     - new kinds `et0_mm` and `rain_gridded_mm`;
-    - `flow_pitman_m3s` is relabelled "modelled natural flow" in the UI, and
-      its key stays (expand/contract).
+    - a new comparison-only `flow_modelled_m3s` ("modelled natural flow",
+      with its source), never a driver or a fallback (`flow_pitman_m3s` was
+      removed in engine 0.10.0, engine-audit P1).
   - **scripts:** `dev:fetch:<source>` per source, runnable against fixtures.
     It joins the root `//-- data --` group.
 - **Data model:**

@@ -490,14 +490,8 @@ describe('runModel — EWR agreement with the observed record (issue #4)', () =>
 		expect(out.summary.catchment.ewrAgreement!.days).toBe(4);
 	});
 
-	it('is null without an observed record, and for naturalised Pitman flow', () => {
+	it('is null without an observed record', () => {
 		expect(run({ nodes, natural, settings }).summary.catchment.ewrAgreement).toBeNull();
-		const i = input({ nodes, natural, settings });
-		i.series.flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 1, 1, 1] };
-		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
-		const pitman = runModelWith(i, () => ({ naturalFlowM3Day: natural }));
-		expect(pitman.summary.calibration!.flowKind).toBe('flow_pitman_m3s');
-		expect(pitman.summary.catchment.ewrAgreement).toBeNull();
 	});
 
 	it('uses the chosen logger record', () => {
@@ -625,10 +619,13 @@ describe('runModel — validation and window', () => {
 		expect(() => run({ nodes: [node('A', { downstreamNodeId: 'nope' })], natural: [0] })).toThrow(/unknown node/);
 	});
 
-	it('needs a rainfall or Pitman series to define the period', () => {
+	it('needs a rainfall series to define the period', () => {
 		const i = input({ nodes: [node('A')], natural: [0] });
 		i.series = {};
-		expect(() => runModelWith(i, () => ({ naturalFlowM3Day: [] }))).toThrow(/no rainfall or Pitman/);
+		expect(() => runModelWith(i, () => ({ naturalFlowM3Day: [] }))).toThrow(/no rainfall series/);
+		// A Pitman series left over from engine ≤ 0.9.0 no longer sets the period (audit P1).
+		(i.series as Record<string, unknown>).flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 1] };
+		expect(() => runModelWith(i, () => ({ naturalFlowM3Day: [] }))).toThrow(/no rainfall series/);
 	});
 
 	it('honours simulationStart/End', () => {
@@ -726,10 +723,17 @@ describe('runModel — calibration statistics', () => {
 		expect(logger.summary.calibration!.days).toBe(1);
 		expect(logger.series.find((s) => s.key === 'observed_flow')!.label).toBe('Observed flow (logger)');
 
-		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
+		delete i.series.flow_logger_m3s;
 		const missing = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
 		expect(missing.summary.calibration!.flowKind).toBe('flow_observed_m3s');
-		expect(missing.summary.warnings.some((w) => /flow_pitman_m3s.*missing/.test(w))).toBe(true);
+		expect(missing.summary.warnings.some((w) => /flow_logger_m3s.*missing/.test(w))).toBe(true);
+
+		// A Pitman record chosen under engine ≤ 0.9.0 is no longer a calibration record (audit P1).
+		(i.settings as Record<string, unknown>).calibrationFlowKind = 'flow_pitman_m3s';
+		(i.series as Record<string, unknown>).flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 1] };
+		const stale = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
+		expect(stale.summary.calibration!.flowKind).toBe('flow_observed_m3s');
+		expect(stale.summary.warnings).toContain('unknown calibration flow series "flow_pitman_m3s"; using the default');
 	});
 
 	it('warns once when it picks the gauge by default over a logger (issue #1)', () => {
@@ -768,22 +772,16 @@ describe('runModel — calibration statistics', () => {
 		expect(none).toEqual([]);
 	});
 
-	it('scores natural flow, not the impacted outflow, against naturalised Pitman flow (audit C1)', () => {
-		// A's dam keeps every drop, so the outflow is 0 while natural flow equals Pitman.
+	it('scores a gauge or logger record against the impacted outflow, not natural flow', () => {
+		// A's dam keeps every drop, so the outflow is 0 while natural flow matches the record.
 		const i = input({
 			nodes: [node('A', { pctRunoffToDam: 1, damCapacityM3: 1e9 })],
-			natural: [86_400, 2 * 86_400, 3 * 86_400]
+			natural: [86_400, 2 * 86_400, 3 * 86_400],
+			observed: [1, 2, 3]
 		});
-		i.series.flow_pitman_m3s = { startDate: '2020-01-01', values: [1, 2, 3] };
-		i.settings.calibrationFlowKind = 'flow_pitman_m3s';
-		const out = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 2 * 86_400, 3 * 86_400] }));
-		const c = out.summary.calibration!;
-		expect(c.flowKind).toBe('flow_pitman_m3s');
-		expect(c.simulatedKey).toBe('natural_flow');
-		expect(c.nse).toBeCloseTo(1, 12);
-		expect(c.pbias).toBeCloseTo(0, 12);
-		// A gauge or logger record is impacted flow: it is scored against the outflow.
-		expect(run({ nodes: [node('A')], natural: [86_400], observed: [1] }).summary.calibration!.simulatedKey).toBe('simulated_outflow');
+		const c = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 2 * 86_400, 3 * 86_400] })).summary.calibration!;
+		expect(c.simulatedKey).toBe('simulated_outflow');
+		expect(c.pbias).toBeCloseTo(100, 12);
 	});
 
 	it('returns null NSE when observations are constant', () => {
@@ -1392,12 +1390,12 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		expect(warns(runModel(rainInput([0, 0], '2021-01-01')), /recession/)).toHaveLength(0);
 	});
 
-	it('W5: warns on days natural flow came from Pitman flow instead of the rain model', () => {
+	it('P1: natural flow never falls back to a Pitman series, so there is no W5 warning', () => {
 		const i = rainInput([0, 0, 20], '2021-07-01', { calibration: { ...defaultCal(), baseFlowInitial: 0 } });
-		i.series.flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
+		(i.series as Record<string, unknown>).flow_pitman_m3s = { startDate: '2021-07-01', values: [0.5, 0.5, 0.5] };
 		const out = runModel(i);
-		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([43_200, 43_200]);
-		expect(warns(out, /2 days of natural flow are Pitman flow/)).toHaveLength(1);
+		expect(get(out, null, 'natural_flow').slice(0, 2)).toEqual([0, 0]);
+		expect(warns(out, /Pitman/)).toHaveLength(0);
 	});
 });
 

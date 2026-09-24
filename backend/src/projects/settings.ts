@@ -168,7 +168,7 @@ export const FitRecord = z
 		params,
 		startParams: params,
 		flowKind,
-		simulatedKey: z.enum(['natural_flow', 'simulated_outflow']),
+		simulatedKey: z.literal('simulated_outflow'),
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		exclusions: ExclusionList,
@@ -186,7 +186,7 @@ export const FitRecord = z
 			.nullable(),
 		independentRecord: ValidationTest.extend({
 			flowKind,
-			simulatedKey: z.enum(['natural_flow', 'simulated_outflow']),
+			simulatedKey: z.literal('simulated_outflow'),
 			overlapDays: z.number().int().min(0)
 		})
 			.strict()

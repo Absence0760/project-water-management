@@ -24,8 +24,7 @@ const inputs = (rain: (number | null)[], startDate = '2021-01-01'): NaturalFlowI
 	days: rain.length,
 	rainCatchmentMm: rain,
 	rainChirpsMm: rain.map(() => null),
-	rainForecastMm: rain.map(() => null),
-	flowPitmanM3s: rain.map(() => null)
+	rainForecastMm: rain.map(() => null)
 });
 
 describe('excelRound (test helper for replaying workbook cells)', () => {
@@ -187,13 +186,10 @@ describe('computeNaturalFlow', () => {
 		expect(c.naturalFlowM3Day[3]).toBeLessThan(c.naturalFlowM3Day[2]!);
 	});
 
-	it('falls back to Pitman flow (m³/s → m³/day) when the rain model gives 0', () => {
-		const c = computeFlowColumns(cal({ baseFlowInitial: 0 }), {
-			...inputs([0]),
-			flowPitmanM3s: [0.5]
-		});
-		expect(c.resultantFlow[0]).toBe(0);
-		expect(c.naturalFlowM3Day[0]).toBe(43200);
+	it('natural flow is the rain model alone: 0 when it gives 0, with no Pitman fallback (quirk Q7, audit P1)', () => {
+		const c = computeFlowColumns(cal({ baseFlowInitial: 0 }), inputs([0, 0]));
+		expect(c.resultantFlow).toEqual([0, 0]);
+		expect(c.naturalFlowM3Day).toEqual([0, 0]);
 	});
 });
 
@@ -245,6 +241,9 @@ if (!fixture) {
 //   naturalFlowM3Day (AB)       per water year, |Δ volume| ≤ 2 % + days × (the
 //                               workbook's rounding floor 0.5 / (1 − f_max) + 1):
 //                               the floor is what R1 stops adding on dry days.
+//                               P1: no Pitman fallback, so AB also differs on
+//                               any day the workbook took its Pitman column;
+//                               the client catchment's column is empty.
 const EXACT: (keyof FlowColumns)[] = ['isSummer', 'rainUsedMm'];
 
 describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {

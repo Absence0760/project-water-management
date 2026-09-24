@@ -183,13 +183,12 @@ describe('checkSeries', () => {
 		expect(checkSeries('flow_observed_m3s', { startDate: '2020-01-01', values: [...flow, 40] })[0]).toMatchObject({ check: 'outlier', days: 1 });
 	});
 
-	it('flags long stretches of one non-zero value, ignores zeros and missing days, and skips Pitman flow', () => {
+	it('flags long stretches of one non-zero value, and ignores zeros and missing days', () => {
 		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
 		const v: (number | null)[] = [1, 2, ...new Array(n).fill(0.35), 3, ...new Array(n - 1).fill(0.5), ...new Array(200).fill(0), null, null];
 		const [c] = checkSeries('flow_logger_m3s', { startDate: '2021-01-01', values: v });
 		expect(c).toMatchObject({ check: 'flatline', days: n, examples: [{ date: '2021-01-03', value: 0.35, runDays: n }] });
 		expect(c!.text).toMatch(/1 flat stretch of 14 or more days/);
-		expect(checkSeries('flow_pitman_m3s', { startDate: '2021-01-01', values: v })).toEqual([]);
 		// Rain: five identical wet days in a row.
 		expect(checkSeries('rain_chirps_mm', { startDate: '2021-01-01', values: [0, 4.2, 4.2, 4.2, 4.2, 4.2, 0] })[0]).toMatchObject({
 			check: 'flatline',

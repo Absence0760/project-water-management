@@ -366,7 +366,7 @@
 			{/each}
 		</dl>
 		<p class="muted small">
-			A run needs at least one rainfall series (or Pitman flow); its period is the span of those series unless Settings sets one.
+			A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
 			With several series of one kind, the first by name is used.
 		</p>
 	</section>

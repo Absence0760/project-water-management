@@ -138,7 +138,8 @@ def extract_calibration(wb) -> dict[str, Any]:
     }
 
 
-# [Flow data] rUseFlow picks Flow A/B/C = columns F/G/H.
+# [Flow data] rUseFlow picks Flow A/B/C = columns F/G/H. 1 (Pitman) is kept so
+# extract_project.py can warn that the app doesn't calibrate against it.
 _USE_FLOW_KINDS = {1: "flow_pitman_m3s", 2: "flow_observed_m3s", 3: "flow_logger_m3s"}
 
 

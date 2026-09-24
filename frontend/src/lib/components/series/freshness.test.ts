@@ -27,7 +27,8 @@ describe('newDataSinceRun', () => {
 		const list = [
 			meta('longer', 'rain_catchment_mm', '', '2025-01-01', 91), // ends 2025-04-01
 			meta('same', 'rain_chirps_mm', '', '2025-01-01', 90),
-			meta('fixed', 'flow_pitman_m3s', '', '2025-01-01', 90, '2025-04-02T08:00:00.000Z'),
+			meta('fixed', 'rain_forecast_mm', '', '2025-01-01', 90, '2025-04-02T08:00:00.000Z'),
+			meta('pitman', 'flow_pitman_m3s', '', '2025-01-01', 200), // engine ≤ 0.9.0 only: no longer drives a run
 			meta('obs', 'flow_observed_m3s', '', '2025-01-01', 200) // scores runs, doesn't drive them
 		];
 		expect(newDataSinceRun(list, run).map((s) => s.id)).toEqual(['longer', 'fixed']);

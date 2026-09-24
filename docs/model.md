@@ -57,7 +57,6 @@ Source workbooks (kept locally outside the repo in `../project-water-management-
 ```mermaid
 flowchart LR
   R[Daily rain<br/>catchment / CHIRPS / forecast] --> NF[Natural flow<br/>Flow data sheet]
-  O[Observed / Pitman flow] -.fallback.-> NF
   NF --> FR[Fragmentation<br/>share per farm]
   R --> ID[Net irrigation demand<br/>per farm]
   C[Crops × A-pan × areas] --> ID
@@ -97,7 +96,7 @@ exports round for display.
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
 | `[Flow Calibration Cfg]` | The rain→flow parameters and the recession curve | `settings.calibration` |
 | `[EWR Cfg]` | Desktop Reserve Model tables, and the percentile pick with overrides that produce the **pragmatic EWR** (m³/day per month) | `settings.ewrPragmaticM3PerDay` (V1 stores the final table) |
-| `[Flow data]` (left block) | Daily inputs: Pitman natural flow, observed gauge flow, logger flow (all m³/s), catchment-average rain, CHIRPS rain, forecast rain (mm) | `time_series` rows by `kind` |
+| `[Flow data]` (left block) | Daily inputs: Pitman natural flow, observed gauge flow, logger flow (all m³/s), catchment-average rain, CHIRPS rain, forecast rain (mm) | `time_series` rows by `kind`; the Pitman column is not imported (engine ≥ 0.10.0, [audit P1](./engine-audit.md)) |
 
 Element types: a **Farm** element can also stand for a stand-alone dam or a
 natural (unused) area, depending on its parameters (see the `[Models]` sheet). A
@@ -164,7 +163,7 @@ Per day *t*, with the workbook column letters:
 | W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1. Capped at `DaysMax` (workbook: 4 dp). The workbook used the base index when yesterday's was blank, which only happens on day 1, so a first-day storm lost its pulse index; the engine seeds the day before the run (E1). |
 | X | **Response + added** | If V > 0: `U + V`. Else if yesterday's X = 0: `U`. Else yesterday's X receded by yesterday's W. |
 | Y / Z | **Resultant response / index** | `max(X, S)` and the index of whichever one won |
-| AB | **Natural flow (m³/day)** | `Y` if > 0, else the Pitman natural flow (m³/day) if > 0, else 0 |
+| AB | **Natural flow (m³/day)** | `Y` if > 0, else 0. The workbook fell back to its Pitman column when `Y` was 0 (quirk Q7); from engine 0.10.0 the engine doesn't ([audit P1](./engine-audit.md)) |
 
 `recede(flow, index) = flow × lerp(factor[floor(index)], factor[floor(index)+1], frac(index))` (workbook: `ROUND(…, 0)`)
 
@@ -182,7 +181,6 @@ The interpolated factor is clamped at 0, so an index below 1 (a pulse starting a
   part of the curve (audit H1, a question for the hydrologist).
 - **Days with no rainfall value** from any source are counted: the model treats
   them as dry (0 mm), for runoff and for demand.
-- **Days of Pitman fallback** (quirk Q7) are counted.
 - **Recession table**: a factor outside 0–1, a curve that rises, or tables of
   different length.
 
@@ -190,6 +188,7 @@ The same sheet also:
 
 - Picks the **observed** flow series used for calibration: Pitman (1), gauge
   (2) or logger (3) via `rUseFlow`. It converts it to m³/day (the workbook rounds).
+  The app offers only the gauge and the logger (engine ≥ 0.10.0, audit P1).
 - Carries the **pragmatic EWR** for the day's month (AF), the **simulated
   outflow** at the outflow gauge (AG), an "EWR not met" flag (AJ = 1 when
   AG < AF) and the shortfall volume (AK = AG − AF when not met).
@@ -539,9 +538,8 @@ wrong in the dry season shows up.
   in `excludedDays`, not scored. From engine 0.8.0 `runModel` passes the
   project's stored calibration exclusions (§2.10), so a period whose record
   isn't trusted is left out of this test too.
-- **Which record.** The one `pickObservedKind` chooses (§2.10). Pitman flow is
-  naturalised, so it can't take the outlet test and the agreement is `null`,
-  as it is when the project has no observed record.
+- **Which record.** The one `pickObservedKind` chooses (§2.10): a gauge or
+  logger record. The agreement is `null` when the project has none.
 - **Where it lives.** `RunSummary.catchment.ewrAgreement`, next to
   `ewrDaysNotMet`; absent on runs saved before 0.5.3. Run comparison carries
   the overall scores of both runs (`RunComparison.ewrAgreement`).
@@ -611,11 +609,11 @@ extraction, which the regression tests read, keeps the column as
 
 **What is scored against what.** Gauge and logger records measure the river as
 it is, with farms, dams and abstraction, so they are compared with the
-**simulated outflow**. Pitman flow is *naturalised* (WR90/WR2012 model flow with
-no development), so from engine 0.4.0 it is compared with the **natural flow**
-from the rain model; the workbook compared the outflow with whichever record
-`rUseFlow` picked, which scores the rain model against a record of a different
-quantity ([audit C1](./engine-audit.md)). `CalibrationStats.simulatedKey` says
+**simulated outflow**. Engines 0.4.0–0.9.0 also accepted a naturalised Pitman
+record and scored it against the **natural flow** ([audit C1](./engine-audit.md));
+engine 0.10.0 removed Pitman as a calibration record ([audit P1](./engine-audit.md)).
+A stored `calibrationFlowKind` of `flow_pitman_m3s` is treated as unset, with a
+run warning. `CalibrationStats.simulatedKey` says
 which series was scored.
 
 **Calibration exclusions (engine ≥ 0.8.0).** `settings.calibrationExclusions`
@@ -701,8 +699,8 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   Recorded on the report and the fit record, so a run's provenance says which
   box was searched.
 - **What is scored.** The whole run, exactly as `runModel` scores it:
-  runoff model → natural flow → network → simulated outflow for a gauge or
-  logger record, or natural flow for Pitman (C1). So the fitted parameters
+  runoff model → natural flow → network → simulated outflow, which is what a
+  gauge or logger record measures. So the fitted parameters
   describe the natural catchment, and the network adds the impacts. A test
   checks this, day for day, on random networks for both models.
   `prepareCalibration` builds everything but natural flow once
@@ -756,7 +754,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     record, for example the logger when the fit used the DWS gauge. It is
     scored over that record's own observed days outside the exclusions,
     whatever the calibration window, with the same objectives and FDC
-    signatures, against simulated outflow (natural flow for Pitman). It
+    signatures, against simulated outflow. It
     costs one model run, not a fit, so it runs with or without the other
     tests. It tests the fit against a second instrument rather than a
     second period, which catches a gauge that measures another reach.
@@ -837,8 +835,8 @@ run with it (`RunSummary.wr2012`). It never changes model results.
   with a run warning.
 - **What is compared: simulated natural flow, never the outflow.** WR2012 flows
   are naturalised (no farms, dams or abstraction), so they compare with the
-  rain → flow model's output before the network takes water out, as Pitman
-  flow does in calibration (C1). A test fails if the outflow were used.
+  rain → flow model's output before the network takes water out. A test
+  fails if the outflow were used.
 - **Scaling** (`settings.wr2012.scaling`) to the modelled catchment
   (`resolveCatchmentAreaKm2`):
   - `area` (default): × modelled area ÷ quaternary area;
@@ -937,7 +935,7 @@ reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
 | --- | --- | --- |
 | Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
-| Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal; Pitman flow (modelled, often monthly values repeated daily) is not checked | a stuck logger or a filled-in gap |
+| Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
 | Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
@@ -1093,7 +1091,7 @@ from the workbook.
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
-| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. From engine 0.4.0 the run warns with the number of fallback days and of days without rain data (audit W2, W5). |
+| Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
 | Q9 | Several | The blank and the client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |

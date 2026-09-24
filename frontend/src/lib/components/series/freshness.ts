@@ -11,8 +11,8 @@ type Meta = SeriesMeta & { updatedAt?: string };
 export const seriesEnd = (s: Pick<SeriesMeta, 'startDate' | 'length'>) =>
 	fromEpochDay(toEpochDay(s.startDate) + Math.max(s.length, 1) - 1);
 
-/** Kinds that drive a run (rainfall, Pitman flow); observed flow only scores it. */
-export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'flow_pitman_m3s';
+/** Kinds that drive a run (rainfall); observed flow only scores it. */
+export const isDriver = (kind: string) => kind.startsWith('rain_');
 
 export interface Freshness {
 	/** Latest end date across the series. */
@@ -49,7 +49,6 @@ export function newDataSinceRun(list: readonly Meta[], run: Pick<RunMeta, 'creat
 const KEYWORDS: [RegExp, string][] = [
 	[/chirps/, 'rain_chirps_mm'],
 	[/forecast|gfs|ecmwf/, 'rain_forecast_mm'],
-	[/pitman|wr2012|wr90|natural/, 'flow_pitman_m3s'],
 	[/logger/, 'flow_logger_m3s'],
 	[/reference|regional|neighbou?r/, 'flow_reference_m3s'],
 	[/rain|precip|\bmm\b/, 'rain_catchment_mm'],

@@ -44,8 +44,6 @@ describe('EWR agreement display', () => {
 		expect(agreementGap(summary({ ewrAgreement: table }))).toBeNull();
 		expect(agreementGap(summary({}))).toMatch(/before the EWR agreement existed/);
 		expect(agreementGap(summary({ ewrAgreement: null }))).toMatch(/no observed gauge or logger flow/);
-		const pitman = { days: 10, nse: 0.5, pbias: 0, rmseM3s: 1, meanObservedM3s: 1, meanSimulatedM3s: 1, simulatedKey: 'natural_flow' as const };
-		expect(agreementGap(summary({ ewrAgreement: null }, pitman))).toMatch(/Pitman flow/);
 		const empty = ewrAgreement([1], [null], [1], { startDate: '2021-01-01' });
 		expect(agreementGap(summary({ ewrAgreement: empty }))).toMatch(/no day inside the run/);
 	});

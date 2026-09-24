@@ -104,8 +104,8 @@ describe('checklist', () => {
 		const step = checklist({ model: full, settings: settled(), series: [series('rain_chirps_mm', 400)], runs: [] })[2]!;
 		expect(step.status).toBe('partial');
 		expect(step.detail).toMatch(/^Rainfall \(1 year\) loaded\. No observed flow/);
-		const pitman = checklist({ model: full, settings: settled(), series: [series('flow_pitman_m3s')], runs: [] })[2]!;
-		expect(pitman.detail).toMatch(/^Pitman flow loaded/);
+		// A Pitman series (engine ≤ 0.9.0) no longer counts as run input.
+		expect(checklist({ model: full, settings: settled(), series: [series('flow_pitman_m3s')], runs: [] })[2]!.status).toBe('todo');
 		const onlyObserved = checklist({ model: full, settings: settled(), series: [series('flow_observed_m3s')], runs: [] })[2]!;
 		expect(onlyObserved.status).toBe('todo');
 	});

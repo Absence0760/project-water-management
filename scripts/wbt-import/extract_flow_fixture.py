@@ -1,6 +1,6 @@
 """Write the rain -> natural-flow regression fixture from a b023 workbook.
 
-Reads the [Flow data] inputs (rain, Pitman) and the workbook's own computed
+Reads the [Flow data] rain inputs and the workbook's own computed
 columns (season, rain used, base / response / resultant flow, natural flow)
 plus the calibration, and writes them as JSON for
 packages/engine/src/flow.test.ts. The output is client data: it goes under
@@ -24,7 +24,6 @@ from calibration import _resolve, extract_calibration  # noqa: E402
 # Flow data column -> (fixture key, header text prefix it must carry).
 COLUMNS = {
     "E": ("date", "Date"),
-    "F": ("flowPitmanM3s", "Pitman"),
     "I": ("rainCatchmentMm", "Average Catchment Rainfall"),
     "J": ("rainChirpsMm", "Rainfall CHIRPS"),
     "K": ("rainForecastMm", "Forecast"),
@@ -94,8 +93,8 @@ def extract(path: str) -> dict:
         "startDate": dates[0],
         "days": len(dates),
         "calibration": calibration,
-        "inputs": {k: out[k] for k in ("rainCatchmentMm", "rainChirpsMm", "rainForecastMm", "flowPitmanM3s")},
-        "expected": {k: v for k, v in out.items() if k not in ("rainCatchmentMm", "rainChirpsMm", "rainForecastMm", "flowPitmanM3s")},
+        "inputs": {k: out[k] for k in ("rainCatchmentMm", "rainChirpsMm", "rainForecastMm")},
+        "expected": {k: v for k, v in out.items() if k not in ("rainCatchmentMm", "rainChirpsMm", "rainForecastMm")},
     }
 
 

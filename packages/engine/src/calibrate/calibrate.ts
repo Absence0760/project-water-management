@@ -3,8 +3,8 @@
 //
 // What is scored is the *whole run*: runoff model → natural flow → the network (farms,
 // dams, abstraction, transfers) → the series that matches the observed
-// record, exactly as runModel scores it (simulated outflow for a gauge or
-// logger record, natural flow for naturalised Pitman flow; audit C1). So the
+// record, exactly as runModel scores it (simulated outflow: a gauge or logger
+// measures the impacted river). So the
 // fitted parameters describe the catchment's *natural* response and the
 // network adds the human impacts on top.
 //
@@ -144,8 +144,8 @@ export interface DifferentialTest extends ValidationTest {
 export interface IndependentRecordTest extends ValidationTest {
 	/** The record validated against. */
 	flowKind: CalibrationFlowKind;
-	/** What it was compared with: natural flow for Pitman, simulated outflow for a gauge or logger. */
-	simulatedKey: 'natural_flow' | 'simulated_outflow';
+	/** What it was compared with: always the simulated outflow. */
+	simulatedKey: 'simulated_outflow';
 	/** Validation days that were also fitted to: when > 0 that part tests the instrument, not unseen days. */
 	overlapDays: number;
 }
@@ -164,7 +164,7 @@ export interface CalibrationReport {
 	startParams: ParamSet;
 	/** The flow record fitted to, and what it was compared with. */
 	flowKind: string;
-	simulatedKey: 'natural_flow' | 'simulated_outflow';
+	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
 	before: ScoredPeriod;
@@ -209,7 +209,6 @@ export interface CalibrationProblem {
 	area: number;
 	startParams: ParamSet;
 	flowKind: string;
-	scoreNatural: boolean;
 	/** Observed flow (m³/day), NaN where missing. */
 	observed: Float64Array;
 	/** Day indices scored: observed, inside the calibration window, outside every exclusion. */
@@ -233,7 +232,6 @@ export interface CalibrationProblem {
 /** A second observed record to score a parameter set against. */
 export interface RecordProblem {
 	kind: CalibrationFlowKind;
-	scoreNatural: boolean;
 	/** Observed flow (m³/day), NaN where missing. */
 	observed: Float64Array;
 	scoredDays: Int32Array;
@@ -255,7 +253,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 
 	const kind = pickObservedKind(settings.calibrationFlowKind, input.series ?? {}, warnings);
 	if (!kind) throw new Error('no observed flow series to calibrate against: upload a gauge or logger record');
-	const scoreNatural = kind === 'flow_pitman_m3s';
 	const observedOf = (k: CalibrationFlowKind) => Float64Array.from(aligned(k), (v) => (v === null ? NaN : v * SEC_PER_DAY));
 	const observed = observedOf(kind);
 
@@ -289,8 +286,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			startDate,
 			rainCatchmentMm: aligned('rain_catchment_mm'),
 			rainChirpsMm: aligned('rain_chirps_mm'),
-			rainForecastMm: aligned('rain_forecast_mm'),
-			flowPitmanM3s: aligned('flow_pitman_m3s')
+			rainForecastMm: aligned('rain_forecast_mm')
 		};
 		runoff = (p, n) => {
 			const nf = computeNaturalFlow({ ...settings.calibration, ...p, catchmentAreaKm2: area }, { ...base, days: n }).naturalFlowM3Day;
@@ -298,11 +294,10 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		};
 	}
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
-	const simulator = (n: number, toNatural: boolean) => {
+	const simulator = (n: number) => {
 		const shortPlan = { ...plan, days: n };
 		return (p: ParamSet): Float64Array => {
 			runoff(p, n);
-			if (toNatural) return natural;
 			if (topo.outflow < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[topo.outflow]!.outflow;
 		};
@@ -314,7 +309,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		area,
 		startParams,
 		flowKind: kind,
-		scoreNatural,
 		observed,
 		scoredDays: Int32Array.from(idx),
 		natural,
@@ -327,15 +321,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1)
 		),
 		exclusions: allExclusions,
-		simulate: simulator(idx[idx.length - 1]! + 1, scoreNatural),
+		simulate: simulator(idx[idx.length - 1]! + 1),
 		record(k) {
 			if (!input.series?.[k]) return null;
 			const obs = k === kind ? observed : observedOf(k);
 			const on: number[] = [];
 			for (let t = 0; t < days; t++) if (Number.isFinite(obs[t]!) && !excluded[t]) on.push(t);
-			const toNatural = k === 'flow_pitman_m3s';
 			const n = on.length ? on[on.length - 1]! + 1 : 0;
-			return { kind: k, scoreNatural: toNatural, observed: obs, scoredDays: Int32Array.from(on), simulate: simulator(n, toNatural) };
+			return { kind: k, observed: obs, scoredDays: Int32Array.from(on), simulate: simulator(n) };
 		}
 	};
 }
@@ -434,8 +427,7 @@ function waterYears(pb: CalibrationProblem, minDays: number): { year: number; id
 /** How a record is named in the notes. */
 const RECORD_NAME: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'gauge record',
-	flow_logger_m3s: 'logger record',
-	flow_pitman_m3s: 'Pitman record'
+	flow_logger_m3s: 'logger record'
 };
 
 /** Fewest observed days an independent record is scored on (as for the calibration record). */
@@ -585,7 +577,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			for (const t of rec.scoredDays) if (fitted.has(t)) overlapDays++;
 			independentRecord = {
 				flowKind: want,
-				simulatedKey: rec.scoreNatural ? 'natural_flow' : 'simulated_outflow',
+				simulatedKey: 'simulated_outflow',
 				params,
 				calibration: scored(pb, params, all),
 				validation: scored(pb, params, rec.scoredDays, rec),
@@ -628,7 +620,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		params,
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
-		simulatedKey: pb.scoreNatural ? 'natural_flow' : 'simulated_outflow',
+		simulatedKey: 'simulated_outflow',
 		fit: scored(pb, params, all),
 		before: scored(pb, pb.startParams, all),
 		splitSample,

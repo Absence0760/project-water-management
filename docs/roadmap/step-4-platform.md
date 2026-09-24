@@ -690,10 +690,11 @@ run in parallel after WP-4.1.
     ([DWS verified data], [DWS station data example]).
 - **Changes**
   - *scripts / backend:* `backend/src/onboarding/wr2012.ts` parses the
-    quaternary spreadsheet and naturalised-flow file. Monthly Mm³ becomes a
-    daily `pitman` series in m³/s, the monthly mean repeated daily. That is
-    how the workbook's Pitman column is used today (model.md §2.4, Q7; the
-    flat-line check already exempts it). MAP, area and A-pan feed
+    quaternary spreadsheet and naturalised-flow file. The naturalised flow
+    feeds the WR2012 check (model.md §2.10c) as a comparison, not a daily
+    series: engine 0.10.0 removed the Pitman series kind and fallback
+    (engine-audit P1), so a daily `pitman` input would have to be argued for
+    again. MAP, area and A-pan feed
     `ProjectSettings`. Several quaternaries are summed by area.
     `backend/src/onboarding/dws.ts` is a job on Step 2's fetcher framework:
     it takes a station code, fetches in 20-year chunks, maps DWS quality codes
@@ -744,7 +745,7 @@ run in parallel after WP-4.1.
   *e2e:* the guided wizard end to end on synthetic fixtures ends with a run.
   *axe:* every wizard step and the tour. A timed usability test with the
   hydrologist (see Validation).
-- **Docs.** New `docs/onboarding.md`, model.md (Pitman input), ui.md,
+- **Docs.** New `docs/onboarding.md`, model.md (WR2012 onboarding), ui.md,
   api.md.
 - **Acceptance.** The synthetic fixture catchment goes from the wizard to a
   calibrated run in the e2e spec. A hydrologist hits the 4-hour target on a
@@ -769,8 +770,6 @@ run in parallel after WP-4.1.
   - `ensembleStats(outputs[])`: reliability (% of member-years with demand
     met per farm), probability the EWR is met per month, storage exceedance
     curves, and p5/p50/p95 bands for chosen keys.
-  - Pitman fallback (Q7) is **off** in synthetic years (there is no Pitman
-    for them), and the run says so.
 - **Backend.** `POST /projects/:id/ensembles { baseRunId?, transforms,
   members ≤ plan limit, seed }` puts a job on Step 2's queue. The worker runs
   members in chunks of 50. The engine takes ~20 ms per 44-year run

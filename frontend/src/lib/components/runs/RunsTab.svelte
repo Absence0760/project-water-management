@@ -196,7 +196,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const missing = $derived.by(() => {
 		const out: string[] = [];
 		if (!editor.model.nodes.length) out.push('a network');
-		if (series && !series.some((x) => x.kind.startsWith('rain_') || x.kind === 'flow_pitman_m3s')) out.push('a rainfall (or Pitman flow) series');
+		if (series && !series.some((x) => x.kind.startsWith('rain_'))) out.push('a rainfall series');
 		return out;
 	});
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);

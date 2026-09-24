@@ -26,11 +26,6 @@ export const KIND_ROLES: Record<string, KindRole> = {
 		help: 'Forecast rainfall (mm). Used only on days both catchment and CHIRPS rainfall are missing, e.g. to run into the coming days.',
 		driver: true
 	},
-	flow_pitman_m3s: {
-		role: 'Fallback flow',
-		help: 'Pitman naturalised flow (m³/s, WR2012). Used as natural flow on days the rainfall model gives none, and sets the run period when there is no rainfall.',
-		driver: true
-	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
 		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS).',

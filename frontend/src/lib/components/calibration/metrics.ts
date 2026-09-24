@@ -108,13 +108,12 @@ export function isPartYear(y: AnnualVolume): boolean {
 
 export const FLOW_KIND_LABEL: Record<string, string> = {
 	flow_observed_m3s: 'Observed gauge flow',
-	flow_logger_m3s: 'Logger flow',
-	flow_pitman_m3s: 'Pitman (natural) flow'
+	flow_logger_m3s: 'Logger flow'
 };
 
-/** The simulated series a calibration was scored against. Pitman is a natural
- *  flow, so it is compared with the simulated natural flow; gauges and loggers
- *  with the simulated outflow (docs/engine-audit.md C1). */
+/** The simulated series a calibration was scored against: the outflow for a
+ *  gauge or logger. `natural_flow` only appears on runs from engine ≤ 0.9.0,
+ *  which could score a Pitman record (docs/engine-audit.md C1, P1). */
 export const SIMULATED_LABEL: Record<NonNullable<CalibrationStats['simulatedKey']>, string> = {
 	natural_flow: 'Simulated natural flow (before farms and dams)',
 	simulated_outflow: 'Simulated outflow at the outlet'

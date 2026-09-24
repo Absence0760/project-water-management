@@ -252,7 +252,7 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		for (const k of ['days', 'bothBelow', 'falseAlarm', 'miss', 'bothAbove'] as const) {
 			if (sum(ag.byMonth.map((m) => m[k])) !== o[k] || sum(ag.byWaterYear.map((y) => y[k])) !== o[k]) return `EWR agreement: ${k} by month / water year ≠ overall`;
 		}
-	} else if (obsSeries && out.summary.calibration?.simulatedKey !== 'natural_flow') {
+	} else if (obsSeries) {
 		return 'EWR agreement missing although the run has a gauge or logger record';
 	}
 

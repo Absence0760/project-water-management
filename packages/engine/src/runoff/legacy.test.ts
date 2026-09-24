@@ -14,25 +14,18 @@ describe('runoff model seam', () => {
 
 	it('legacy natural flow is computeNaturalFlow, bit for bit', () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i < 30 ? 0 : i % 13 === 0 ? 5 + (i % 7) * 9 : i % 5 === 0 ? 1.5 : 0));
-		const pitman = Array.from({ length: 400 }, (_, i) => 0.02 + (i % 11) / 1000);
 		const input = randomInput(5);
 		input.settings = { calibration: { ...defaultProjectSettings().calibration, baseFlowInitial: 0 } };
-		input.series = {
-			rain_catchment_mm: { startDate: '2020-03-01', values: rain },
-			flow_pitman_m3s: { startDate: '2020-03-01', values: pitman }
-		};
+		input.series = { rain_catchment_mm: { startDate: '2020-03-01', values: rain } };
 		const out = runModel(input);
 		const area = input.model.nodes.filter((n) => n.kind === 'farm').reduce((t, n) => t + n.areaKm2, 0);
 		const direct = computeNaturalFlow(
 			{ ...defaultProjectSettings().calibration, baseFlowInitial: 0, catchmentAreaKm2: area },
-			{ startDate: '2020-03-01', days: 400, rainCatchmentMm: rain, rainChirpsMm: [], rainForecastMm: [], flowPitmanM3s: pitman }
+			{ startDate: '2020-03-01', days: 400, rainCatchmentMm: rain, rainChirpsMm: [], rainForecastMm: [] }
 		);
 		expect(out.series.find((s) => s.nodeId === null && s.key === 'natural_flow')!.values).toEqual(direct.naturalFlowM3Day);
-		// baseFlowInitial 0 makes the first dry days fall back to Pitman, which the run reports.
-		expect(direct.pitmanDays).toBeGreaterThan(0);
-		expect(out.summary.warnings).toContain(
-			`${direct.pitmanDays} days of natural flow are Pitman flow: the rain model gave 0 on those days, so the series mixes two sources`
-		);
+		// baseFlowInitial 0: the first dry days have no flow at all (no Pitman fallback, audit P1).
+		expect(direct.naturalFlowM3Day.slice(0, 30)).toEqual(new Array(30).fill(0));
 	});
 
 	it('an explicit "legacy" gives the same run as the default', () => {

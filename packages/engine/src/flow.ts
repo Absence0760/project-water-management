@@ -5,7 +5,7 @@
 // Each day carries two recession curves: an underlying *base flow* that
 // recedes slowly and is reset by big rain, and a *response flow* that jumps on
 // rain and then recedes from a shifted (steeper) point on the same curve. The
-// natural flow is the larger of the two, falling back to Pitman when zero.
+// natural flow is the larger of the two.
 //
 // The workbook rounds every column (INT on the rain flow, ROUND to whole m³ and
 // to 4 dp on the indices). The engine does not (docs/engine-audit.md R1):
@@ -24,8 +24,6 @@ export interface NaturalFlowInputs {
 	rainChirpsMm: (number | null)[];
 	/** Forecast rain (mm/day); used where both of the above are missing. */
 	rainForecastMm: (number | null)[];
-	/** Pitman natural flow (m³/s); fallback when the rain model gives 0. */
-	flowPitmanM3s: (number | null)[];
 }
 
 export interface FlowSeries {
@@ -38,8 +36,6 @@ export interface FlowSeries {
 export interface NaturalFlowResult {
 	naturalFlowM3Day: number[];
 	series: FlowSeries[];
-	/** Days where the rain model gave 0 and natural flow fell back to Pitman flow. */
-	pitmanDays: number;
 }
 
 /** Every intermediate column of [Flow data], one array per column, one entry per day. */
@@ -64,13 +60,9 @@ export interface FlowColumns {
 	resultantFlow: number[];
 	/** Z — recession index belonging to Y. */
 	resultantIndex: number[];
-	/** O — Pitman flow converted to m³/day. */
-	pitmanM3Day: number[];
 	/** AB — resultant natural flow (m³/day). */
 	naturalFlowM3Day: number[];
 }
-
-const SECONDS_PER_DAY = 86_400;
 
 /** 1-based INDEX into a range; cells past the end read as blank (0). */
 function at(range: readonly number[], i: number): number {
@@ -193,7 +185,6 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		responseAdded: new Array(n),
 		resultantFlow: new Array(n),
 		resultantIndex: new Array(n),
-		pitmanM3Day: new Array(n),
 		naturalFlowM3Day: new Array(n)
 	};
 	const day0 = toEpochDay(inputs.startDate);
@@ -245,8 +236,9 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		const resultant = responseWins ? responseAdded : base;
 		const resultantIndex = responseWins ? addedIndex : baseIndex;
 
-		const pitman = (inputs.flowPitmanM3s[i] ?? 0) * SECONDS_PER_DAY;
-		const natural = resultant > 0 ? resultant : pitman > 0 ? pitman : 0;
+		// [Flow data] AB fell back to a Pitman flow column when the rain model gave 0
+		// (quirk Q7), mixing two sources in one series. The engine has no Pitman input.
+		const natural = resultant > 0 ? resultant : 0;
 
 		cols.isSummer[i] = summer;
 		cols.rainUsedMm[i] = rain;
@@ -258,7 +250,6 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 		cols.responseAdded[i] = responseAdded;
 		cols.resultantFlow[i] = resultant;
 		cols.resultantIndex[i] = resultantIndex;
-		cols.pitmanM3Day[i] = pitman;
 		cols.naturalFlowM3Day[i] = natural;
 
 		prevSummer = summer;
@@ -276,11 +267,8 @@ export function computeFlowColumns(cal: CalibrationParams, inputs: NaturalFlowIn
 /** Catchment natural flow (m³/day) from rain, plus the useful intermediates. */
 export function computeNaturalFlow(cal: CalibrationParams, inputs: NaturalFlowInputs): NaturalFlowResult {
 	const c = computeFlowColumns(cal, inputs);
-	let pitmanDays = 0;
-	for (let i = 0; i < c.naturalFlowM3Day.length; i++) if (!(c.resultantFlow[i]! > 0) && c.pitmanM3Day[i]! > 0) pitmanDays++;
 	return {
 		naturalFlowM3Day: c.naturalFlowM3Day,
-		pitmanDays,
 		series: [
 			{ key: 'rain_used', label: 'Rain used', unit: 'mm', values: c.rainUsedMm },
 			{ key: 'is_summer', label: 'Summer (1) / winter (0)', unit: 'flag', values: c.isSummer },

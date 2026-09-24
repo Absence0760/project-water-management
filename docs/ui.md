@@ -48,7 +48,7 @@ button), so a scrolling table or a sticky header can't clip or cover them.
   keep their stored value. The preview counts new, changed and unchanged
   days before anything is sent. **Replace** overwrites the whole series.
 - After an upload a banner offers **Re-run model**. Every tab notes new data
-  since the last run: a rainfall or Pitman series that reaches past the
+  since the last run: a rainfall series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
 
 ## Overview
@@ -243,7 +243,7 @@ The settings are grouped by what they drive:
   GR4J run. The page's `scroll-padding-top` keeps
   a jumped-to section, or a focused control, clear of the sticky header.
 - The run button is disabled, with links, until the project has a network
-  and a rainfall (or Pitman) series. While a run is going it shows progress.
+  and a rainfall series. While a run is going it shows progress.
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Summary** (the "Run summary" region): headline cards give mean natural
@@ -284,8 +284,8 @@ The settings are grouped by what they drive:
   days (model below / at or above the EWR × observed below / at or above, with
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
-  without a gauge or logger record, calibrated against Pitman flow, or saved
-  before engine 0.5.3 says why there is no table. Then farm detail (dam
+  without a gauge or logger record, or saved before engine 0.5.3, says why
+  there is no table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node.
 - Series are fetched one at a time when a chart needs them, and cached

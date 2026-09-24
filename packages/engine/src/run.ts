@@ -44,7 +44,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.9.0';
+export const ENGINE_VERSION = '0.10.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -197,21 +197,18 @@ export function runModelWith(
 		window
 	);
 
-	// Pitman flow is *naturalised* (no farms, dams or abstraction): compare it
-	// with natural flow. Gauge and logger records measure the impacted river, so
-	// they are compared with the simulated outflow (audit C1; the workbook
-	// scored the outflow against whichever record rUseFlow picked).
-	const scoreNatural = observedKind === 'flow_pitman_m3s';
+	// Gauge and logger records measure the impacted river (farms, dams,
+	// abstraction), so they are compared with the simulated outflow.
 	const calibration = observedKind
 		? {
-				...calibrationStats(scoreNatural ? natural : simOutflow, observedM3s, {
+				...calibrationStats(simOutflow, observedM3s, {
 					startDate,
 					windowStart: settings.calibrationStart,
 					windowEnd: settings.calibrationEnd,
 					exclusions: exclusionRanges(settings.calibrationExclusions)
 				}),
 				flowKind: observedKind,
-				simulatedKey: scoreNatural ? ('natural_flow' as const) : ('simulated_outflow' as const)
+				simulatedKey: 'simulated_outflow' as const
 			}
 		: null;
 	if (!observedKind) warnings.push('no observed flow series: calibration statistics not computed');
@@ -230,10 +227,10 @@ export function runModelWith(
 	// model's "below the EWR" with the river's. Every observed day in the run
 	// counts, not just the calibration window: the parameters were fitted to
 	// flows, and days outside the window are the out-of-sample evidence.
-	// Pitman flow is naturalised and can't take this test. The calibration
-	// exclusions apply: a period whose record isn't trusted isn't evidence here either.
+	// The calibration exclusions apply: a period whose record isn't trusted
+	// isn't evidence here either.
 	const ewrObserved =
-		observedKind && !scoreNatural
+		observedKind
 			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
 			: null;
 
@@ -318,7 +315,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	const series = input.series ?? {};
 
 	// --- run window ---------------------------------------------------------
-	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'flow_pitman_m3s'];
+	const drivers: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
 	let first = Infinity;
 	let last = -Infinity;
 	for (const k of drivers) {
@@ -331,7 +328,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	const start = settings.simulationStart ? toEpochDay(settings.simulationStart) : first;
 	const end = settings.simulationEnd ? toEpochDay(settings.simulationEnd) : last;
 	if (!Number.isFinite(start) || !Number.isFinite(end)) {
-		throw new Error('no rainfall or Pitman flow series: cannot work out the simulation period');
+		throw new Error('no rainfall series: cannot work out the simulation period');
 	}
 	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
 	const days = end - start + 1;
@@ -354,7 +351,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
 		warnings.push(
 			settings.runoffModel === 'legacy'
-				? 'no rainfall series: natural flow falls back to Pitman flow and demand is not reduced by rain'
+				? 'no rainfall series: natural flow is only the receding initial base flow, and demand is not reduced by rain'
 				: 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'
 		);
 	}
@@ -542,8 +539,7 @@ export function resolveReportWindow(
 
 const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'Observed flow',
-	flow_logger_m3s: 'Observed flow (logger)',
-	flow_pitman_m3s: 'Pitman flow'
+	flow_logger_m3s: 'Observed flow (logger)'
 };
 
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */

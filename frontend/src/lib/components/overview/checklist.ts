@@ -74,14 +74,11 @@ function seriesStep(series: SeriesMeta[] | null): ChecklistStep {
 	const base = { id: 'series', tab: 'series', title: 'Rainfall & flow data' } as const;
 	if (series === null) return { ...base, status: 'unknown', detail: 'Checking time series…' };
 	const rain = series.filter((x) => RAIN.includes(x.kind));
-	const pitman = series.some((x) => x.kind === 'flow_pitman_m3s');
 	const observed = series.some((x) => OBSERVED.includes(x.kind));
-	if (!rain.length && !pitman)
+	if (!rain.length)
 		return { ...base, status: 'todo', detail: 'Upload daily catchment rainfall (mm). Add observed flow (m³/s) to calibrate against.' };
 	const years = Math.max(0, ...rain.map((x) => x.length)) / 365.25;
-	const what = rain.length
-		? `Rainfall${years >= 1 ? ` (${plural(Math.floor(years), 'year')})` : ''}`
-		: 'Pitman flow';
+	const what = `Rainfall${years >= 1 ? ` (${plural(Math.floor(years), 'year')})` : ''}`;
 	if (!observed)
 		return { ...base, status: 'partial', detail: `${what} loaded. No observed flow yet, so calibration fit (NSE, PBIAS) can't be checked.` };
 	return { ...base, status: 'done', detail: `${what} and observed flow loaded.` };

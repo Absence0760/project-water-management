@@ -149,7 +149,7 @@
 		{ value: 'area', label: 'By catchment area', help: "Each farm's share = its area ÷ the total farm area." },
 		{
 			value: 'hiLo',
-			label: 'Pitman high/low MAP split',
+			label: 'High/low MAP split',
 			help: 'High-MAP areas share the high part of the split and low-MAP areas the low part (WR90/WR2012 practice).'
 		},
 		{ value: 'manual', label: 'Manual share per farm', help: 'Shares typed per farm on the Network tab ("Manual flow share").' }
@@ -586,7 +586,7 @@
 			</div>
 		</div>
 		<p class="hint muted">
-			Leave blank to simulate the full length of the rainfall (or Pitman flow) series. Set a window to focus a run on a drought or
+			Leave blank to simulate the full length of the rainfall series. Set a window to focus a run on a drought or
 			a calibration period.
 		</p>
 		{#if dateError}<p class="err" role="alert">{dateError}</p>{/if}

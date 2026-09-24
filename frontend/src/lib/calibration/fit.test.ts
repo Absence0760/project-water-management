@@ -168,11 +168,8 @@ describe('validationRecordOptions', () => {
 		expect(validationRecordOptions(both, null)).toEqual(['flow_logger_m3s']);
 		expect(validationRecordOptions(both, 'flow_observed_m3s')).toEqual(['flow_logger_m3s']);
 		expect(validationRecordOptions(both, 'flow_logger_m3s')).toEqual(['flow_observed_m3s']);
-		expect(validationRecordOptions([...both, 'flow_pitman_m3s'], 'flow_pitman_m3s')).toEqual(['flow_observed_m3s', 'flow_logger_m3s']);
-		// A chosen record the project lacks falls back to the gauge, as the engine does.
-		expect(validationRecordOptions(both, 'flow_pitman_m3s')).toEqual(['flow_logger_m3s']);
 		expect(validationRecordOptions(['flow_observed_m3s'], null)).toEqual([]);
-		expect(validationRecordOptions(['flow_logger_m3s', 'flow_pitman_m3s'], 'flow_pitman_m3s')).toEqual([]);
+		expect(validationRecordOptions(['flow_logger_m3s'], 'flow_logger_m3s')).toEqual([]);
 		expect(validationRecordOptions(null, null)).toEqual([]);
 	});
 

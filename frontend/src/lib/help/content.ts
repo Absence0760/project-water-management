@@ -101,7 +101,7 @@ export const HELP: HelpEntry[] = [
 		id: 'units',
 		term: 'Units: m³/day, m³/s, M.m³',
 		short: 'Flows and volumes are m³/day inside the model. 1 m³/s = 86 400 m³/day; 1 M.m³ = one million m³.',
-		long: 'Gauge and Pitman flow series are usually supplied in m³/s and converted to m³/day on the way in. Dam capacities and storage are in m³. Mean annual runoff is often quoted in M.m³ per year.\n\nA quick check: 1 l/s ≈ 86 m³/day, and 1 000 m³/day ≈ 11.6 l/s.',
+		long: 'Gauge and logger flow series are usually supplied in m³/s and converted to m³/day on the way in. Dam capacities and storage are in m³. Mean annual runoff is often quoted in M.m³ per year.\n\nA quick check: 1 l/s ≈ 86 m³/day, and 1 000 m³/day ≈ 11.6 l/s.',
 		units: 'm³/day, m³/s, m³, M.m³',
 		category: 'basics',
 		aliases: ['m3/day', 'm3/s', 'cumecs', 'l/s', 'million cubic metres', 'Mm3'],
@@ -133,7 +133,7 @@ export const HELP: HelpEntry[] = [
 		id: 'calibration-window',
 		term: 'Calibration window',
 		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
-		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record — the client catchment workbook uses Oct 2010 to Sep 2018 against the A1 logger. Choose which observed series to compare against (gauge, logger or Pitman). The fit statistics and the annual volume table only count days inside this window.',
+		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record — the client catchment workbook uses Oct 2010 to Sep 2018 against the A1 logger. Choose which observed series to compare against (gauge or logger). The fit statistics and the annual volume table only count days inside this window.',
 		category: 'fit',
 		aliases: ['calibration period', 'observed flow record'],
 		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind'],
@@ -254,7 +254,7 @@ export const HELP: HelpEntry[] = [
 		category: 'farm',
 		aliases: ['Pitman split', 'hi MAP flow %', 'lo MAP flow %'],
 		fields: ['settings.hiLoSplit'],
-		related: ['flow-share', 'pitman'],
+		related: ['flow-share'],
 		source: 'b023 Farm spec'
 	},
 	{
@@ -499,12 +499,12 @@ export const HELP: HelpEntry[] = [
 		id: 'natural-flow',
 		term: 'Natural flow',
 		short: 'The flow the catchment would produce with no farms, dams or abstraction, in m³/day. Generated from rain.',
-		long: 'b023 turns daily rain into flow with a calibrated rain → peak → recession routine and a slowly receding base flow. On days the rain model gives nothing, it falls back to the Pitman series if one is loaded (quirk Q7).\n\nNatural flow is then split into farm runoff by the flow shares.',
+		long: 'b023 turns daily rain into flow with a calibrated rain → peak → recession routine and a slowly receding base flow. The workbook fell back to a Pitman flow column on days the rain model gave nothing (quirk Q7); the app does not, so natural flow always comes from the runoff model.\n\nNatural flow is then split into farm runoff by the flow shares.',
 		units: 'm³/day',
 		category: 'flow',
 		aliases: ['naturalised flow', 'virgin flow'],
 		fields: ['run.natural_flow', 'catchment.meanNaturalFlowM3Day', 'run.resultant_flow'],
-		related: ['calibration', 'flow-share', 'pitman', 'base-flow'],
+		related: ['calibration', 'flow-share', 'base-flow'],
 		source: 'b023 Flow data sheet; docs/model.md §2.4'
 	},
 	{
@@ -902,18 +902,6 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Flow data'
 	},
 	{
-		id: 'pitman',
-		term: 'Pitman flow',
-		short: 'Naturalised flow from the Pitman monthly rainfall-runoff model (WR90/WR2012), in m³/s. A fallback natural-flow source.',
-		long: 'On days where the rain model produces no flow, b023 uses the Pitman flow instead (quirk Q7), so one natural-flow series can mix two sources.',
-		units: 'm³/s',
-		category: 'data',
-		aliases: ['WR2012 flow', 'naturalised flow'],
-		fields: ['series.flow_pitman_m3s'],
-		related: ['natural-flow', 'wr90'],
-		source: 'b023 Flow data; docs/model.md §3 Q7'
-	},
-	{
 		id: 'observed-flow',
 		term: 'Observed flow',
 		short: 'Measured flow at the outlet (gauge record, or a logger), in m³/s. Used only to score the calibration.',
@@ -944,7 +932,7 @@ export const HELP: HelpEntry[] = [
 		long: 'The standard national source for the monthly evaporation and naturalised-flow inputs.',
 		category: 'data',
 		aliases: ['WR2012', 'Water Resources of South Africa'],
-		related: ['apan', 'pitman', 'quaternary'],
+		related: ['apan', 'quaternary'],
 		source: 'docs/model.md §7'
 	},
 	{

@@ -63,9 +63,10 @@ DEFAULT_CALIBRATION = {
 # b023 rounding precisions the engine hard-codes (packages/engine/src/network/round.ts).
 MONTHS_WY = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"]
 
-# [Flow data] hydrology columns F..K, in order.
-FLOW_DATA_KINDS = [
-    ("flow_pitman_m3s", "m3/s"),
+# [Flow data] hydrology columns F..K, in order. Column F (Pitman flow) is not
+# imported: the app has no Pitman input (docs/engine-audit.md P1).
+FLOW_DATA_KINDS: list[tuple[str | None, str]] = [
+    (None, "m3/s"),
     ("flow_observed_m3s", "m3/s"),
     ("flow_logger_m3s", "m3/s"),
     ("rain_catchment_mm", "mm"),
@@ -383,14 +384,18 @@ def read_flow_data(wb: Workbook) -> dict[str, Any]:
         if (dt.date.fromisoformat(b) - dt.date.fromisoformat(a)).days != 1:
             raise ValueError(f"[Flow data] dates are not consecutive at {a} -> {b}")
     series = []
+    pitman_days = 0
     for i, (kind, unit) in enumerate(FLOW_DATA_KINDS):
         values = raw[i]
+        if kind is None:
+            pitman_days = sum(v is not None for v in values)
+            continue
         if all(v is None for v in values):
             continue
         series.append(
             {"kind": kind, "name": clean(header[1 + i]) or kind, "unit": unit, "startDate": dates[0], "values": values}
         )
-    return {"dates": dates, "series": series, "calc": calc}
+    return {"dates": dates, "series": series, "calc": calc, "pitman_days": pitman_days}
 
 
 def gauge_as_reference(
@@ -762,8 +767,19 @@ def extract(
             wb.notes.append(zero_note)
         if gauge_reference:
             wb.notes.extend(gauge_as_reference(flow["series"], settings, scaling_from, scale_factor))
+        if flow["pitman_days"]:
+            wb.notes.append(
+                f"[Flow data] Pitman flow column has {flow['pitman_days']} days of values; not imported "
+                "(the app has no Pitman input, so natural flow comes only from the rain model)"
+            )
         kind = settings["calibrationFlowKind"]
-        if kind and kind not in {s["kind"] for s in flow["series"]}:
+        if kind == "flow_pitman_m3s":
+            wb.notes.append(
+                "WARNING: [Flow data] rUseFlow calibrates against Pitman flow, which the app doesn't support; "
+                "calibrationFlowKind left unset (runs use the gauge, else the logger)"
+            )
+            settings["calibrationFlowKind"] = None
+        elif kind and kind not in {s["kind"] for s in flow["series"]}:
             wb.notes.append(f"[Flow data] rUseFlow picks {kind}, which has no values; calibrationFlowKind left unset")
             settings["calibrationFlowKind"] = None
         project = {

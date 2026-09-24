@@ -794,7 +794,6 @@ const SERIES_LABELS: Record<string, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',
 	rain_chirps_mm: 'Rainfall (CHIRPS)',
 	rain_forecast_mm: 'Rainfall (forecast)',
-	flow_pitman_m3s: 'Pitman flow',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
 	flow_reference_m3s: 'Reference gauge (other catchment)'

@@ -85,7 +85,7 @@ marked):
 | --- | --- |
 | Pinned runs | [WP-1.11](./step-1-hydrologist-tool.md#wp-111-pinned-runs). WP-3.1 only adds "cited" runs that can't be trimmed or unpinned. |
 | Per-node series overlay; copies that remember source nodes; per-water-year series hashes | [WP-1.27](./step-1-hydrologist-tool.md#wp-127-run-comparison-per-node-overlay-and-leftovers) |
-| Transfer free space (N4/Q3), transfer priority (Q18), irrigation reserve (Q5), Pitman fallback (Q7), Q1 rename | [WP-1.19](./step-1-hydrologist-tool.md#wp-119-operating-rules-n4q3-q18-q5-q7-q1) |
+| Transfer free space (N4/Q3), transfer priority (Q18), irrigation reserve (Q5), ~~Pitman fallback (Q7)~~ (removed, engine 0.10.0), Q1 rename | [WP-1.19](./step-1-hydrologist-tool.md#wp-119-operating-rules-n4q3-q18-q5-q7-q1) |
 | Irrigation efficiency (N1), which redefines consumptive use | [WP-1.20](./step-1-hydrologist-tool.md#wp-120-n1-irrigation-application-efficiency) |
 | Power-law dam area, evaporation, seepage (N2) | [WP-1.21](./step-1-hydrologist-tool.md#wp-121-n2-dam-areavolume-evaporation-seepage) |
 | EWR shortfall attribution to farms (Q17) | [WP-1.23](./step-1-hydrologist-tool.md#wp-123-q17-ewr-shortfall-attribution-q11q13-curtailment-policy). WP-3.7 applies the chosen rule per EWR site. |

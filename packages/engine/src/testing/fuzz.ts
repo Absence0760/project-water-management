@@ -180,7 +180,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		const off = rng.bool(0.7) ? 0 : rng.int(-30, 30);
 		return { startDate: fromEpochDay(start + off), len: Math.max(1, len + (rng.bool(0.5) ? 0 : rng.int(-30, 30))) };
 	};
-	const rainSource = rng.pick(['catchment', 'catchment', 'catchment', 'chirps', 'several', 'pitmanOnly'] as const);
+	const rainSource = rng.pick(['catchment', 'catchment', 'catchment', 'chirps', 'several'] as const);
 	if (rainSource === 'catchment' || rainSource === 'several') series.rain_catchment_mm = { startDate, values: rainSeries(rng, days) };
 	if (rainSource === 'chirps' || rainSource === 'several') {
 		const s = shifted(days);
@@ -189,10 +189,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	if (rainSource === 'several' && rng.bool(0.5)) {
 		const s = shifted(days);
 		series.rain_forecast_mm = { startDate: s.startDate, values: rainSeries(rng, s.len) };
-	}
-	if (rainSource === 'pitmanOnly' || rng.bool(0.2)) {
-		const s = rainSource === 'pitmanOnly' ? { startDate, len: days } : shifted(days);
-		series.flow_pitman_m3s = { startDate: s.startDate, values: flowSeries(rng, s.len, 0.5) };
 	}
 	if (rng.bool(0.5)) {
 		const s = shifted(days);
@@ -229,7 +225,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		settings.calibrationStart = iso(rng.int(-50, days));
 		settings.calibrationEnd = iso(rng.int(-50, days + 50));
 	}
-	if (rng.bool(0.2)) settings.calibrationFlowKind = rng.pick(['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const);
+	if (rng.bool(0.2)) settings.calibrationFlowKind = rng.pick(['flow_observed_m3s', 'flow_logger_m3s'] as const);
 	if (opts.runoffModel === 'gr4j') {
 		const g = new Rng(seed ^ 0x5bd1e995);
 		const p = Object.fromEntries(

@@ -1004,8 +1004,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     shuffle exemption in `checkOrderInvariance`.
   - **Q5:** irrigation stops at `node.damMinPct` (today only transfers
     respect it); the help text in `lib/help/content.ts` changes too.
-  - **Q7:** Pitman fallback only on days with **no rain value**, not "model
-    gave 0"; label the source per day (W5).
+  - ~~**Q7:** Pitman fallback only on days with **no rain value**.~~ Done
+    differently: engine 0.10.0 removed the fallback and the Pitman input
+    ([audit P1](../engine-audit.md)).
   - ~~**Q1:** rename `pct_upstream_to_dam` → `pct_upstream_bypass`.~~ Not
     needed: the client confirmed the label's meaning (share into the dam), so
     engine 0.9.0 fixed the formula instead and the column name is right.

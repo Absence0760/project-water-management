@@ -28,16 +28,7 @@ export const legacyNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 		days: ctx.days,
 		rainCatchmentMm: ctx.aligned('rain_catchment_mm'),
 		rainChirpsMm: ctx.aligned('rain_chirps_mm'),
-		rainForecastMm: ctx.aligned('rain_forecast_mm'),
-		flowPitmanM3s: ctx.aligned('flow_pitman_m3s')
+		rainForecastMm: ctx.aligned('rain_forecast_mm')
 	});
-	const warnings = recessionTableWarnings(ctx.settings.calibration);
-	// [Flow data] AB falls back to Pitman whenever the rain model gives 0, so
-	// one series can mix two sources (quirk Q7, audit W5).
-	if (nf.pitmanDays > 0) {
-		warnings.push(
-			`${nf.pitmanDays} days of natural flow are Pitman flow: the rain model gave 0 on those days, so the series mixes two sources`
-		);
-	}
-	return { ...nf, warnings };
+	return { ...nf, warnings: recessionTableWarnings(ctx.settings.calibration) };
 };

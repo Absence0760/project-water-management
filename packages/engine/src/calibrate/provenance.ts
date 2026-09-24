@@ -149,7 +149,7 @@ export interface FitRecord {
 	startParams: ParamSet;
 	/** The record fitted to, and the series it was compared with. */
 	flowKind: string;
-	simulatedKey: 'natural_flow' | 'simulated_outflow';
+	simulatedKey: 'simulated_outflow';
 	/** The calibration window and exclusions the fit used (the form's, at the time). */
 	calibrationStart: string | null;
 	calibrationEnd: string | null;

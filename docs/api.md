@@ -108,8 +108,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   returned merged over the defaults, so the client always sees every field.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
-  `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s |
-  flow_pitman_m3s | null`. `dataQuality` (gauge-vs-logger thresholds) takes
+  `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
+  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366); any subset may be sent.
   `runoffModel` picks the rain → natural-flow model: `legacy` (the b023
@@ -268,8 +268,8 @@ between the old and new ranges become `null`. `413` if the merged series would
 exceed 60 000 days.
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
-`rain_chirps_mm`, `rain_forecast_mm`, `flow_pitman_m3s`, `flow_observed_m3s`,
-`flow_logger_m3s` and `flow_reference_m3s`. The last is a gauge on a different
+`rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
+and `flow_reference_m3s` (`flow_pitman_m3s` was removed in engine 0.10.0). The last is a gauge on a different
 river (a regional wet/dry index): runs store it in their input snapshot but
 never read it, and it can't be a `calibrationFlowKind`
 ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)).

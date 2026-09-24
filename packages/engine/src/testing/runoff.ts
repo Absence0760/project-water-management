@@ -120,8 +120,7 @@ export const legacyRunner: EventRunner = (rain) => {
 		days: rain.length,
 		rainCatchmentMm: Array.from(rain),
 		rainChirpsMm: [],
-		rainForecastMm: [],
-		flowPitmanM3s: []
+		rainForecastMm: []
 	});
 	return Float64Array.from(nf.naturalFlowM3Day, (v) => v / 1000);
 };

@@ -124,14 +124,12 @@ describe('runModel with GR4J', () => {
 		expect(out.summary.runoff!.params.x4).toBe(1.7);
 	});
 
-	it('has no Pitman fallback and explains a short run whose flow exceeds its rain', () => {
+	it('explains a short run whose flow exceeds its rain', () => {
 		const input = catchment(new Array(20).fill(0));
-		input.series.flow_pitman_m3s = { startDate: '2020-10-01', values: new Array(20).fill(5) };
 		input.series.rain_catchment_mm!.values[19] = 0.1; // some rain, so a coefficient exists
 		input.settings.gr4j = { ...defaultProjectSettings().gr4j, warmupDays: 0 };
 		const out = runModel(input);
-		// Flow comes only from the half-full stores draining; no day is Pitman flow.
-		expect(out.summary.warnings.some((w) => /Pitman/.test(w))).toBe(false);
+		// Flow comes only from the half-full stores draining.
 		expect(out.summary.catchment.runoffCoefficient!).toBeGreaterThan(1);
 		expect(out.summary.warnings.find((w) => w.startsWith('natural flow is'))).toMatch(/GR4J stores held 220 mm after the warm-up/);
 	});
