@@ -246,7 +246,10 @@ the reports):
   (an applied fit's record keeps the weight and the MAR ratio with and without it).
   Flag a simulated MAR that differs from WR2012 by more than 10 %, 25 % (or
   15 % wetter) or 50 %. Those bands are persona judgement for a CMA official
-  to confirm. Phase 8 is being built to these criteria.
+  to confirm. Phase 8 has landed to these criteria (engine 0.6.0; the MAR
+  band followed in 0.8.0, model.md §2.10c). Three pieces are deferred: a
+  written explanation stored with each run, the WR2012 block in the CSV
+  export, and tagging the help entries as South Africa-only.
 - **Q3: other upstream use.** The persona's "probably yes" was withdrawn:
   it rested on the neighbouring gauge (see above). The question stays open
   for the hydrologist, but no evidence now points to unmodelled use upstream
