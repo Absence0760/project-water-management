@@ -5,10 +5,13 @@
 		checkSeries,
 		fromEpochDay,
 		observedAgreement,
+		rainVsChirps,
+		rainVsChirpsCheck,
 		resolveDataQuality,
 		SERIES_KINDS,
 		toEpochDay,
 		type DataQualitySettings,
+		type SeriesCheckKind,
 		type SeriesKind,
 		type SeriesMeta
 	} from '@water-management/engine';
@@ -137,10 +140,11 @@
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
 
-	// Gauge vs logger, when both records exist (first of each kind by name, as a run reads them).
+	// The series a run reads for a kind: the first of that kind by name.
+	const first = (k: string) => [...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
+
+	// Gauge vs logger, when both records exist.
 	const agreement = $derived.by(() => {
-		const first = (k: string) =>
-			[...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
 		const o = first('flow_observed_m3s');
 		const l = first('flow_logger_m3s');
 		const vo = o && values[o.id];
@@ -151,15 +155,32 @@
 			: null;
 	});
 
-	// Negative values, outliers and flat-lines per series (the checks a run reports as warnings).
-	const checks = $derived(
-		list.flatMap((s) => {
+	// Catchment rain vs CHIRPS, when both exist: water years far below CHIRPS (zeros that are really missing data?).
+	const lowVsChirps = $derived.by(() => {
+		const c = first('rain_catchment_mm');
+		const h = first('rain_chirps_mm');
+		const vc = c && values[c.id];
+		const vh = h && values[h.id];
+		const check = vc && vh ? rainVsChirpsCheck(rainVsChirps({ rain_catchment_mm: vc, rain_chirps_mm: vh })) : null;
+		return check ? { id: `${c!.id}-${check.check}`, series: c!, check } : null;
+	});
+
+	// Negative values, outliers, flat-lines and zero runs per series (the checks a run reports as warnings).
+	const checks = $derived([
+		...list.flatMap((s) => {
 			const v = values[s.id];
 			if (!v || !(SERIES_KINDS as readonly string[]).includes(s.kind)) return [];
 			return checkSeries(s.kind as SeriesKind, v).map((c) => ({ id: `${s.id}-${c.check}`, series: s, check: c }));
-		})
-	);
-	const CHECK_LABEL = { negative: 'Negative values', outlier: 'Outliers', flatline: 'Flat stretch' } as const;
+		}),
+		...(lowVsChirps ? [lowVsChirps] : [])
+	]);
+	const CHECK_LABEL: Record<SeriesCheckKind, string> = {
+		negative: 'Negative values',
+		outlier: 'Outliers',
+		flatline: 'Flat stretch',
+		zerorun: 'Zero rain run',
+		lowvschirps: 'Low vs CHIRPS'
+	};
 
 	async function remove(s: SeriesMeta) {
 		if (!confirm(`Delete the series "${s.name || kindLabel(s.kind)}"? Runs already stored are not affected.`)) return;
@@ -312,7 +333,7 @@
 	<section class="panel" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
 			<h2 id="chk-h">Data checks</h2>
-			<span class="muted small">Negative values, outliers and flat stretches. Runs list the same checks as warnings.</span>
+			<span class="muted small">Negative values, outliers, flat stretches, and catchment rain that looks missing but reads 0. Runs list the same checks as warnings.</span>
 		</div>
 		{#if checks.length}
 			<ul class="checks">
@@ -326,7 +347,7 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="muted small">No negative values, outliers or flat stretches found in the loaded series.</p>
+			<p class="muted small">No negative values, outliers, flat stretches or suspicious zero rain found in the loaded series.</p>
 		{/if}
 	</section>
 {/if}

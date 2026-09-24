@@ -112,8 +112,13 @@ a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
 where they disagree, using the project's thresholds from Settings → *Data
 quality*. A **Data checks** panel lists negative values, outliers and flat
-stretches found in each loaded series (engine `checkSeries`; the same checks a
-run reports as warnings, rules in [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+stretches found in each loaded series (engine `checkSeries`), plus the
+catchment-rain checks for missing data recorded as 0 (issue #2): a **Zero rain
+run** badge for long zero stretches in the wet season, and a **Low vs CHIRPS**
+badge for water years far below the usual catchment / CHIRPS share (engine
+`rainVsChirps`, on the first catchment and first CHIRPS series by name, as a
+run reads them). These are the same checks a run reports as warnings; rules in
+[model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
 "What the model uses" explains every kind. Each series can be downloaded as
 CSV.
 

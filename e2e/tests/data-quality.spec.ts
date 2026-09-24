@@ -50,3 +50,36 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	await expect(agreement.getByText(/below 90% or above 150%/)).toBeVisible();
 	await expect(agreement.getByRole('row', { name: /2020\/21/ })).toContainText('disagree');
 });
+
+// Issue #2: catchment rain recorded as 0 when it is really missing. Synthetic
+// winter rain (4 mm every third day April–September, 1 mm every ninth day
+// otherwise) as CHIRPS over water years 2010/11–2015/16; the catchment reads
+// twice that, except in 2013/14 (two thirds of CHIRPS), and has 76 zero days in
+// the 2012 wet season.
+test('the Time series tab flags zero-rain runs and water years far below CHIRPS', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Zero rain');
+	const start = Date.UTC(2010, 9, 1);
+	const days = (Date.UTC(2016, 9, 1) - start) / 86_400_000;
+	const monthOf = (i: number) => new Date(start + i * 86_400_000).getUTCMonth() + 1;
+	const index = (iso: string) => (Date.parse(iso) - start) / 86_400_000;
+	const chirps = Array.from({ length: days }, (_, i) => (monthOf(i) >= 4 && monthOf(i) <= 9 ? (i % 3 === 0 ? 4 : 0) : i % 9 === 0 ? 1 : 0));
+	const low = [index('2013-10-01'), index('2014-10-01')] as const;
+	const catchment = chirps.map((v, i) => (i >= low[0] && i < low[1] ? (v * 2) / 3 : v * 2));
+	for (let i = index('2012-06-01'); i <= index('2012-08-15'); i++) catchment[i] = 0;
+	catchment[index('2012-05-31')] = 5;
+	catchment[index('2012-08-16')] = 5;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2010-10-01', values: catchment });
+	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS', unit: 'mm', startDate: '2010-10-01', values: chirps });
+
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const items = page.getByTestId('series-checks').getByRole('listitem');
+	await expect(items).toHaveCount(2);
+	await expect(items.nth(0)).toContainText('Zero rain run');
+	await expect(items.nth(0)).toContainText('2012-06-01 to 2012-08-15 (76 days, 76 in the wet season');
+	await expect(items.nth(0)).toContainText('blocks the fallback to CHIRPS');
+	await expect(items.nth(1)).toContainText('Low vs CHIRPS');
+	await expect(items.nth(1)).toContainText('usual catchment / CHIRPS rain ratio (200 %)');
+	await expect(items.nth(1)).toContainText('2013/14:');
+	await expect(items.nth(1)).toContainText('67 % (365 days)');
+});
