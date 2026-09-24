@@ -109,7 +109,7 @@ engine 0.4.0.
 
 ## Effect on results
 
-client catchment can't be run in this environment (the `data/` fixtures are client
+The client catchment can't be run in this environment (the `data/` fixtures are client
 data). On the three invented example catchments, comparing engine 0.3.1 (which
 reproduced the workbook exactly) with 0.4.0:
 
@@ -150,8 +150,8 @@ workbook column by column, under a rule that names the finding:
 The suite was run locally against stand-in fixtures that engine 0.3.1
 generated on the example catchments (Kleinberg and Droëvlei pass in full;
 Sandspruit is fully supplied over its whole run, so it fails only the
-client catchment-specific "the whole run has deficits" check). **To confirm on
-client catchment**, re-extract (`scripts/wbt-import/README.md`) and run
+client-catchment-specific "the whole run has deficits" check). **To confirm on
+the client catchment**, re-extract (`scripts/wbt-import/README.md`) and run
 `pnpm test:engine`. A failure message prints the actual difference against
 the bound.
 

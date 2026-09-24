@@ -9,7 +9,7 @@ Decisions already made (the reasoning is in [architecture.md](./architecture.md)
 and [data-model.md](./data-model.md)):
 
 - **Hybrid model.** The data model is node-based and general. The first engine
-  is a **faithful port of b023** that has to match the client catchment workbook
+  is a **faithful port of b023** that has to match the client workbook
   number for number. The AI runoff module comes later as an *alternative flow
   generator*.
 - **Multi-project, multi-user.** A user can have any number of projects
@@ -59,7 +59,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ not started.
 ## Phase 1: V1 local demo 🚧
 
 **Goal:** after `git clone`, `pnpm setup`, `pnpm dev`, a person can register,
-import client catchment, run the model and look at the results. They can also create
+import the client catchment, run the model and look at the results. They can also create
 a second and third project (empty, or copied) side by side.
 
 ### 1a. Engine: port b023 ([model.md §2](./model.md#2-the-b023-model-what-v1-ports))
@@ -78,7 +78,7 @@ a second and third project (empty, or copied) side by side.
 - ✅ A `warnings[]` list: shares not summing to 1, missing series, gaps in rain,
   days that fell back to Pitman flow.
 
-**Acceptance:** regression tests driven by fixtures extracted from client catchment
+**Acceptance:** regression tests driven by fixtures extracted from the client catchment
 (under `data/`, gitignored, skipped when absent) match the workbook's columns
 **exactly** for all 16 161 days: natural flow, net demand per farm, storage,
 spill, outflow, deficit, EWR shortfall and simulated outflow. Committed
@@ -96,7 +96,7 @@ synthetic fixtures cover the same code paths on CI.
 - ⬜ The importer reports whatever it could not map: hand-written transfer
   formulas that don't fit the rule shape, or a Specific method with no values.
 
-**Acceptance:** importing client catchment gives a project whose run reproduces the
+**Acceptance:** importing the client catchment gives a project whose run reproduces the
 workbook (as in 1a) with **no manual edits**.
 
 ### 1c. Backend API ([api.md](./api.md))
@@ -161,7 +161,7 @@ workbook (as in 1a) with **no manual edits**.
 
 - [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
       ([run-locally.md](./run-locally.md)).
-- [ ] client catchment imported: its results match the workbook, the charts and
+- [ ] Client catchment imported: its results match the workbook, the charts and
       Shortfalls table appear, and a run finishes in under 2 s including storage.
 - [ ] Projects A, B, C exist side by side. Creating D and copying C both work.
 - [ ] A second user sees nothing until they are invited. As a viewer they can't
@@ -392,7 +392,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 > **Ask this first — it decides what the model is calibrated to.**
 >
-> **Which measured flow should Client Catchment be calibrated against?** The two
+> **Which measured flow should the client catchment be calibrated against?** The two
 > observed records agree until 2013/14, then the G1 gauge reads a fraction
 > of the A1 logger for four years (volume per water year, Oct–Sep; ratio on
 > days where both have a reading):
@@ -426,10 +426,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    alternative flow generator? Or is one of the AI workbooks meant to *replace*
    b023?
 2. **"Upstream inflow above dam %" (Q1).** The formula sends `inflow × pct`
-   *below* the dam. client catchment has 100% for 10 farms, which means that no
+   *below* the dam. The client catchment has 100% for 10 farms, which means that no
    upstream water reaches those dams except through the diversion capacity. The
    `[Models]` sheet says a stand-alone dam should be 100%. Which is intended? If
-   the formula is wrong, client catchment's results change.
+   the formula is wrong, the client catchment's results change.
 3. **Transfers (Q2, Q3).** The blank template draws one transfer from the
    *Spill* column instead of *Storage*. Could this be in other catchment
    workbooks? Should a transfer be limited by the receiver's free space, and
@@ -508,7 +508,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 | **Scope creep**: three model families, pump scenarios, AI runoff | Nothing gets finished | The phases gate on client sign-off. The node-based and runoff features wait until the b023 port is accepted. |
 | **VPC Lambda cold starts / DB connection limits** | Slow first request; too many connections from concurrent Lambdas | RDS stays warm. Small `pg` pool per Lambda (1–2). Reserved concurrency is capped. RDS Proxy only if connection counts become a problem. |
 | **Run output volume** (up to ~25 MB/run) | DB growth and cost | Trim keys, cap the number of runs, float4. Runs can be recomputed deterministically. |
-| **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports are ~2 MB for client catchment. Use S3 presigned upload if a project goes over. |
+| **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports are ~2 MB for the client catchment. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
 | **Single developer / bus factor** | Stalls | Docs (this folder), tests as the spec, conventional commits. |
 | **Stale SheetJS on npm** | Security advisories | Use the official CDN tarball when the in-browser importer lands. The Python importer covers V1. |

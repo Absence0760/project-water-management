@@ -260,7 +260,7 @@ describe('quality checks do not depend on the local time zone', () => {
 	});
 });
 
-// client catchment: the gauge (G1) reads a fraction of the logger (A1) from
+// The client catchment: the gauge (G1) reads a fraction of the logger (A1) from
 // 2014/15 — the case this check exists for (docs/plan.md, first hydrologist
 // question). Skipped when the gitignored client data is absent.
 type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
@@ -271,7 +271,7 @@ const dataDir = ['data/client-catchment', '../data/client-catchment', '../../dat
 	.map((p) => `${cwd}/${p}`)
 	.find((p) => fs.existsSync(`${p}/project.json`));
 
-describe.skipIf(!dataDir)('observedAgreement on client catchment (needs data/client-catchment)', () => {
+describe.skipIf(!dataDir)('observedAgreement on the client catchment (needs data/client-catchment)', () => {
 	it('flags the gauge-vs-logger divergence from 2014/15', () => {
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as {
 			series: { kind: string; startDate: string; values: (number | null)[] }[];

@@ -33,7 +33,7 @@ const team = (id: string, name: string): Team => ({
 	projectCount: 0
 });
 
-const mine = proj({ name: 'Client Catchment', updatedAt: '2026-09-01T00:00:00Z' });
+const mine = proj({ name: 'Witklip', updatedAt: '2026-09-01T00:00:00Z' });
 const sharedDirect = proj({ name: 'Sandspruit', role: 'viewer' });
 const teamA = proj({ name: 'Droëvlei', team: { id: 'a', name: 'Alpha Hydro' }, description: 'Citrus and lucerne' });
 const teamB = proj({ name: 'Kleinberg', team: { id: 'b', name: 'Beta' }, role: 'editor', updatedAt: '2026-10-01T00:00:00Z' });
@@ -67,7 +67,7 @@ describe('filterProjects', () => {
 		expect(filterProjects(all, { owner: 'personal' })).toEqual([mine]);
 		expect(filterProjects(all, { owner: 'shared' })).toEqual([sharedDirect, otherTeam]);
 		expect(filterProjects(all, { owner: 'team:b' })).toEqual([teamB]);
-		expect(filterProjects(all, { query: 'rivier' })).toEqual([mine]);
+		expect(filterProjects(all, { query: 'witk' })).toEqual([mine]);
 		expect(filterProjects(all, { owner: 'personal', query: 'klein' })).toEqual([]);
 	});
 });
@@ -76,7 +76,7 @@ describe('sortProjects', () => {
 	it('sorts by most recently updated, then name', () => {
 		expect(sortProjects(all, 'updated').map((p) => p.name)).toEqual([
 			'Kleinberg',
-			'Client Catchment',
+			'Witklip',
 			'Droëvlei',
 			'Outside',
 			'Sandspruit'
@@ -89,7 +89,7 @@ describe('sortProjects', () => {
 			'Kleinberg',
 			'Outside',
 			'Sandspruit',
-			'Client Catchment'
+			'Witklip'
 		]);
 		expect(all.map((p) => p.name)).toEqual(before);
 	});

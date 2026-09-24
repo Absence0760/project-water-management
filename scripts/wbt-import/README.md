@@ -28,7 +28,7 @@ python3 -m venv .venv && .venv/bin/pip install openpyxl
 ## Run
 
 ```sh
-.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
+.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/<client workbook>.xlsm" data/client-catchment
 .venv/bin/python scripts/wbt-import/extract_project.py ../project-water-management-source/Original/Blank_WBT_b023_v001.xlsm data/blank
 ```
 

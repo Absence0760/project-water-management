@@ -6,7 +6,7 @@
 // The difference is how much it must reduce (−) or may gain (+). Adding the
 // farm's average incremental EWR shortfall gives the total change needed so
 // irrigation is balanced *and* the EWR is met. Column letters are the
-// client catchment/blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
+// client-catchment and blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
 // formulas and the quirks this mirrors. Unlike the sheet nothing is rounded
 // or truncated (docs/engine-audit.md R1, Q14, Q15): the UI rounds for display.
 import type { CurtailmentFarm, CurtailmentSummary } from '../project';

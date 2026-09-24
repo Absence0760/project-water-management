@@ -1,6 +1,6 @@
 // Physical invariants of a model run, shared by the random-network fuzz tests
 // (../run.invariants.test.ts), the example catchments (backend) and
-// client catchment (when data/ is present). Each check returns the first broken
+// the client catchment (when data/ is present). Each check returns the first broken
 // property as text, or null. They state what must hold for *any* sound water
 // balance (mass conservation, bounds, limits honoured, totals that add up),
 // not what the workbook happens to produce, so they stay valid when the

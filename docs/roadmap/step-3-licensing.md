@@ -287,7 +287,7 @@ must build WP-2.15 Phase B.
   - Reproduction of a run on the same engine is `identical: true`.
   - No editor action removes a cited run.
   - DB growth per new series version is at most one compressed array
-    (~128 KB raw for client catchment).
+    (~128 KB raw for the client catchment).
 - **Size.** M. **Depends on:** WP-1.11, WP-2.3.
 
 ---
@@ -730,7 +730,7 @@ must build WP-2.15 Phase B.
     - each probe replaces the node's demand with `draft × pattern` and
       calls the internal `runModelWith`, with natural flow computed
       **once** and reused;
-    - ~25 probes × ~160 ms (client catchment) ≈ 4 s per yield;
+    - ~25 probes × ~160 ms (the client catchment) ≈ 4 s per yield;
     - `storageYieldCurve` = 10 yields ≈ 40 s.
   - *Backend:* a new job kind `yield` on
     [WP-2.8](./step-2-shared-catchment.md#wp-28-background-jobs)'s queue

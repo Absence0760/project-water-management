@@ -82,7 +82,7 @@ elements mean "no reading".
 
 Why arrays and not one row per day:
 
-- **Size and speed.** client catchment has 16 161 days. One row per day would be
+- **Size and speed.** The client catchment has 16 161 days. One row per day would be
   16k rows per input series and, for outputs, 16k × (nodes × keys) rows per run
   (millions of rows per run, each with ~24 bytes of tuple overhead). An array is
   one TOASTed value (~128 KB raw, compressed on disk). It loads with one index

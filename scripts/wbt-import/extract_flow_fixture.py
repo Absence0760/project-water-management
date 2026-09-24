@@ -7,7 +7,7 @@ packages/engine/src/flow.test.ts. The output is client data: it goes under
 data/ (gitignored) and is never committed.
 
     python scripts/wbt-import/extract_flow_fixture.py \
-        "../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" \
+        "../project-water-management-source/Original/<client workbook>.xlsm" \
         data/fixtures/client-catchment-flow.json
 """
 

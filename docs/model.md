@@ -44,7 +44,7 @@ Source workbooks (kept locally outside the repo in `../project-water-management-
 | Workbook | What it is | Status |
 | --- | --- | --- |
 | `Blank_WBT_b023_v001.xlsm` | The b023 template with sample data | Reference for formulas |
-| `Client_WBT_b023_v001_…WORKING 007.xlsm` | Real catchment: 1981-01-01 … 2025-03-31 (16 161 days), 12 farms + 1 outflow gauge, 9 crops, 1 transfer | **Regression target** for V1 |
+| the client workbook (`<client>_WBT_b023_v001_…WORKING 007.xlsm`) | Real catchment: 1981-01-01 … 2025-03-31 (16 161 days), 12 farms + 1 outflow gauge, 9 crops, 1 transfer | **Regression target** for V1 |
 | `AI/WBT_NodeBased_v004_DEV.xlsm` | An experimental 16-node daily ledger with pump scenarios and stress classes | Unfinished; later phase |
 | `AI/WBT_Runoff_Module_DEV_003.xlsm` | An experimental bucket rainfall-runoff model with 12 hydrological units | Unfinished; later, as an alternative flow generator |
 
@@ -233,7 +233,7 @@ The workbook has two blocks of columns:
   entering (+) or leaving (−) that farm. Each is a **hand-written formula**, for
   example `<source farm> = −draw₁`, `<receiving farm> = +draw₁`.
 
-client catchment has one transfer: one farm dam to another, in six months of the
+The client catchment has one transfer: one farm dam to another, in six months of the
 year, capped by a maximum rate and a minimum level kept in the source dam.
 
 The app replaces the free-form formulas with structured rules
@@ -313,14 +313,14 @@ a month has one short day, every later day of that month counts, even days
 when the EWR was met. The engine counts a day only when **that day** is short
 (`countMethod: 'daily'`), which is what "% of days EWR not met" means; the
 summary uses this. `countMethod: 'runningTotal'` reproduces the macro, and the
-client catchment regression test checks it against the extracted pivot. Volumes are
+client-catchment regression test checks it against the extracted pivot. Volumes are
 the same either way. The percentage the UI shows is days not met / days
 simulated in that month, so a leap February is out of 29 and a part month at
 either end of the run is out of the days actually simulated.
 
 **The workbook's pivot is stale.** It is written by a macro, not by formulas,
 so it reflects the model as it was when someone last ran the macro. In the
-client catchment workbook about 23% of farm-months hold volumes that no longer match
+client workbook about 23% of farm-months hold volumes that no longer match
 the Element sheets or `[EWR shortfalls]` (for example a farm whose daily AB is
 constant through a February shows a monthly sum that is not 28 × that value).
 Where the volumes are current, the running-total counts match exactly.
@@ -328,7 +328,7 @@ Where the volumes are current, the running-total counts match exactly.
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:
-`zCalibration_Date1`…`zCalibration_DateN` (client catchment: 2010-10-01 to
+`zCalibration_Date1`…`zCalibration_DateN` (the client catchment: 2010-10-01 to
 2018-09-30), against the flow record `rUseFlow` picks in `[Flow data]`
 (1 = Pitman, 2 = the G1 gauge, 3 = the A1 logger; client catchment uses the
 logger, which only has data from 2013-04-15). The importer copies both into
@@ -369,7 +369,7 @@ The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow
 > 0. The engine skips blank days and keeps observed zeros.
 
-**client catchment (engine 0.3.0, end to end from rain).** Whole record against the
+**The client catchment (engine 0.3.0, end to end from rain).** Whole record against the
 G1 gauge (V1's behaviour): NSE −0.70, PBIAS −23%. The workbook's window
 against the G1 gauge: NSE −0.34, PBIAS −116%, KGE −0.28. The workbook's
 window against the logger it actually calibrates to (1 803 days, 2013-04-15 to
@@ -381,7 +381,7 @@ a tenth of the logger's volume): a question for the hydrologist.
 
 ### 2.10a Data quality: do the observed flow records agree?
 
-Not in the workbook — added after comparing client catchment's two observed records.
+Not in the workbook — added after comparing the client catchment's two observed records.
 When a project has both an observed gauge series (`flow_observed_m3s`, e.g.
 G1) and a logger series (`flow_logger_m3s`, e.g. A1), every run compares
 them per water year on the days **both** have a reading
@@ -420,7 +420,7 @@ Two instruments on the same reach should roughly agree; a sustained gap
 usually means something physical at one of them (a damaged or silted weir, a
 changed rating curve, flow bypassing the structure, zero-filled gaps) — and
 calibrating to the wrong record skews every farm's supply and EWR result.
-client catchment: 95 % (2012/13), 83 % (2013/14), then **13 %, 33 %, 8 %** for
+The client catchment: 95 % (2012/13), 83 % (2013/14), then **13 %, 33 %, 8 %** for
 2014/15–2016/17 → flagged. See the first hydrologist question in
 [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist).
 
@@ -500,31 +500,31 @@ from the workbook.
 
 | # | Where | What we see | Why it matters |
 | --- | --- | --- | --- |
-| Q1 | Farm sheet K/L | **Naming mismatch on "Upstream inflow above dam %"**. The column's label says "above dam", but the formula puts `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). client catchment sets it to 100% for most farms, so under the formula no upstream water enters those dams (except through the diversion capacity). The `[Models]` sheet says "set to 100%" for a stand-alone dam, which contradicts the formula. The DB column is named `pct_upstream_to_dam` after the label. | This may change every downstream number. We must ask which meaning is intended. |
-| Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
+| Q1 | Farm sheet K/L | **Naming mismatch on "Upstream inflow above dam %"**. The column's label says "above dam", but the formula puts `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). The client catchment sets it to 100% for most farms, so under the formula no upstream water enters those dams (except through the diversion capacity). The `[Models]` sheet says "set to 100%" for a stand-alone dam, which contradicts the formula. The DB column is named `pct_upstream_to_dam` after the label. | This may change every downstream number. We must ask which meaning is intended. |
+| Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). The client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. | It is unclear whether the order (transfer vs irrigation) and the spill of transferred water are intended. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. | Confirm whether farmers keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. From engine 0.4.0 the run warns with the number of fallback days and of days without rain data (audit W2, W5). |
-| Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
-| Q9 | Several | The blank and client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
+| Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
+| Q9 | Several | The blank and the client catchment differ in summer months (1–5, 11, 12 vs other sets) and in crop factors. | Settings are per project, so this is fine. It shows that defaults must not be trusted blindly. |
 | Q10 | EWR Cfg | Pragmatic EWR = one percentile of the Desktop Reserve "without high flows" table, scaled and converted to m³/day, with manual overrides. The source table and scale factor are catchment-specific. | V1 stores only the final 12 numbers. Ask whether the app must derive them. |
 | Q11 | Shortfalls M/N | **The target ignores the network.** The equitable share gives every farm the same fraction of its demand (ΣI/ΣH), as if water could be moved freely between any two farms. In practice, a downstream farm's surplus can't reach an upstream farm, and a farm without a dam can't store a "gain". The reduce/gain column is a *fairness* target, not a feasible schedule. It also sets no farm-specific priorities or licensed volumes. | Decides whether "gain" may be shown as water a farm can actually get. A network-aware redistribution (or licences, see planned-work) would change every target. |
 | Q12 | Shortfalls V | The column is labelled **"Reduction of demand required (%)"**, but the formula is `U / H`, the share of demand that is *left*: 1.000 means no reduction, and 0.600 means a 40 % cut. **Mirrored**: `fractionOfDemandLeft` holds `U / H`, and the UI labels it "demand left", not "reduction". | The label invites exactly the wrong reading. We should ask which one the client reports. |
 | Q13 | Shortfalls R/S/U | The EWR shortfall is the farm's **incremental** shortfall (Element AB). With quirk Q4 in play, that is the whole outflow compared with the farm's own fragment. A farm with no irrigation demand can still carry an EWR "reduction" (S < 0, U < 0) that it has no irrigation to cut. | We need to confirm how a cut is meant to be applied to a natural or stand-alone-dam element. |
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
-| Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
+| Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) is still **mirrored**. | Decides whether the EWR has to be met reach by reach (current maths) or only at the outlet or other gauges. It changes every farm's curtailment. |
-| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. client catchment has only one transfer, so no result is affected. **Mirrored for now.** The engine should split the available volume in rule order, which makes no difference when the draws fit. That is an engine change for a later round (see docs/engine-review.md F1). | Negative storage and negative "supplied" are physically impossible. We need the hydrologist to choose a priority rule (rule order, or pro rata). |
+| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment has only one transfer, so no result is affected. **Mirrored for now.** The engine should split the available volume in rule order, which makes no difference when the draws fit. That is an engine change for a later round (see docs/engine-review.md F1). | Negative storage and negative "supplied" are physically impossible. We need the hydrologist to choose a priority rule (rule order, or pro rata). |
 
 ---
 
 ## 4. The AI node-based model (v004 DEV)
 
 This is an experimental rewrite of the ledger as a **16-node daily table**
-(`Daily_Node_Ledger`) for client catchment, running 2013-04-24 … 2018-12-31. It is not
+(`Daily_Node_Ledger`) for the client catchment, running 2013-04-24 … 2018-12-31. It is not
 ported in V1. It shapes the later data model: the app's `node` table is already
 general enough to hold these nodes.
 
@@ -662,7 +662,7 @@ They run on:
   while the same property still fails).
 - **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
   15 years each, through the full rain model.
-- **client catchment** when `data/client-catchment` is present (skipped otherwise).
+- **The client catchment** when `data/client-catchment` is present (skipped otherwise).
 
 The suite also checks itself: `run.invariants.test.ts` feeds each check a
 deliberately broken result (an unbalanced day, a transfer outside its months
@@ -730,7 +730,7 @@ step when a definition changes.
 | **PBIAS** | Percent bias = 100 × Σ(obs−sim) / Σobs (the engine's sign). Positive means the model under-predicts volume. |
 | **KGE** | Kling–Gupta Efficiency (Gupta et al. 2009): 1 − distance from perfect correlation, variability ratio and bias ratio. |
 | **Log-NSE** | NSE on the logarithm of flow, which weights low flows. |
-| **Calibration window** | The period the fit is scored over (the workbook's 2010–2018 for client catchment). |
+| **Calibration window** | The period the fit is scored over (the workbook's 2010–2018 for the client catchment). |
 | **Water year** label | The app labels a water year by the year its October falls in: 2010 = Oct 2010 – Sep 2011, shown as 2010/11. |
 | **RMSE** | Root-mean-square error. |
 | **Hydrological unit (HU)** | A sub-catchment with its own area, MAP and rain gauge (runoff module). |

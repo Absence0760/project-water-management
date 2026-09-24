@@ -988,7 +988,7 @@ describe.skipIf(!dataDir)(
 		});
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only
-		// as fresh as the last time someone ran it. In the client catchment workbook
+		// as fresh as the last time someone ran it. In the client workbook
 		// about a quarter of the farm-months hold volumes from an earlier model
 		// state (e.g. one farm's Feb 1981 is 28 × its daily AB value in the Element
 		// sheet *and* the [EWR shortfalls] sheet, but the pivot has a different
@@ -1109,7 +1109,7 @@ describe.skipIf(!dataDir)(
 
 		it('reproduces the [Shortfalls] formulas, unrounded, over the whole run from the workbook\'s own daily columns', () => {
 			// The saved reporting period is fully supplied, so it never exercises a non-trivial
-			// target. Over the whole run client catchment has deficits: replay the sheet's cell
+			// target. Over the whole run the client catchment has deficits: replay the sheet's cell
 			// formulas, written out independently here without the sheet's rounding (R1).
 			const c = wbCurtailment({ from: 0, to: expected.days - 1, reportStart: expected.startDate, reportEnd: out.endDate });
 			const mean = (v: (number | null)[]) => v.reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;

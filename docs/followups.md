@@ -14,9 +14,13 @@ Tick items off (or move them into an issue) as they are done.
 
       Make the repo public (after the scrub below) or upgrade the plan. Then
       make `CI gate` a required check.
-- [ ] **Client names in docs.** The docs, and issue #2, still name the client
-      catchment catchment and some of its farms. Scrub them before making the repo
-      public.
+- [ ] **Client names (WP-1.7).** The tree and the local history are scrubbed
+      (2026-09: `git filter-repo --replace-text`; `check_client_terms.mjs
+      --history` is clean). Left for the operator: force-push `main`; delete
+      the stale Dependabot branches and re-file issues #2 and #3 without the
+      names (GitHub keeps edit history); and clear the old commits GitHub
+      still holds under `refs/pull/*` (GitHub Support, or recreate the repo)
+      before making it public.
 - [ ] **`production` environment:** run
       `templates/scripts/backfill-prod-environment.sh --apply`, with the
       operator as required reviewer.
@@ -30,7 +34,7 @@ Tick items off (or move them into an issue) as they are done.
 
 - [ ] **Calibration record:** gauge G1 vs logger A1 from 2014/15, tracked in
       [#2](https://github.com/Absence0760/project-water-management/issues/2).
-      The runoff-ratio check needs the client catchment workbook back in
+      The runoff-ratio check needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):
       - H1: a storm resets base flow, so one storm returns about 4.9× its rain.
@@ -63,11 +67,11 @@ Tick items off (or move them into an issue) as they are done.
   - W1–W5: new warnings.
   - F8: order-dependent float noise in EWR shortfalls.
 - ✅ **Invariant suite** (`packages/engine/src/testing/invariants.ts`) runs on
-  random networks, the three example catchments and client catchment (when `data/`
+  random networks, the three example catchments and the client catchment (when `data/`
   is present). Soaked over seeds 1–20000. Described in model.md §6
   Verification.
 - ✅ The engine rejects networks with more than one outflow node.
-- [ ] **client catchment regression on real data:** the suite has a commented
+- [ ] **Client catchment regression on real data:** the suite has a commented
       deviation list but has never run against the real workbook. Re-extract
       it and run `pnpm test:engine`; a failure prints the actual difference
       next to its bound.

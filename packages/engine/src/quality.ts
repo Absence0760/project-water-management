@@ -6,7 +6,7 @@
 // should agree roughly; a year where one reads a small fraction of the other
 // usually means something physical at one of them (weir damage, siltation, a
 // rating change, bypass, zero-filled gaps) — and calibrating to the wrong one
-// skews every result. Client Catchment: the gauge reads 8–33 % of the logger from
+// skews every result. The client catchment: the gauge reads 8–33 % of the logger from
 // 2014/15 (docs/plan.md, first hydrologist question).
 //
 // seriesChecks: negative values, outliers and flat-lines (a stuck logger, a

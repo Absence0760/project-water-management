@@ -151,7 +151,7 @@ track B fills the gap.
 | 1.2 | Close issue #2 in code | A | S | – |
 | 1.3 | Calibration exclusion ranges | A | S | – |
 | 1.4 | Rainfall zero-run check (#3) | A | S | – |
-| 1.5 | client catchment regression on real data | A | S | workbook |
+| 1.5 | Client catchment regression on real data | A | S | workbook |
 | 1.6 | `verify/` decision | A | S | 1.5 |
 | 1.7 | Client-name scrub, repo public | C | M | term list |
 | 1.8 | Project import through the API | C | S | – |
@@ -240,7 +240,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - These are warnings only, with no numeric change, but bump the patch
       `ENGINE_VERSION` (0.4.1) because run warnings change.
   - **frontend:** none (warnings render already).
-- **Data model / API:** none. The client's Client Catchment data and settings
+- **Data model / API:** none. The client catchment's data and settings
   stay as given.
 - **UI:** the new warning shows in the Runs tab warnings.
 - **Local-first equivalent:** n/a.
@@ -346,7 +346,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Size:** S.
 - **Depends on:** –
 
-### WP-1.5 client catchment regression on real data
+### WP-1.5 Client-catchment regression on real data
 
 - **Goal:** run the commented deviation-list suite against the real workbook
   for the first time.
@@ -396,6 +396,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Depends on:** WP-1.5; the operator decides (D4).
 
 ### WP-1.7 Client-name scrub, repo public, GitHub unblocked
+
+> **Status (2026-09):** the scrub, the terms guard and the local history rewrite
+> are done (the term list is in `infra-secrets/water-management/`). The GitHub
+> side (force-push, issues, `refs/pull/*`, going public) is in followups.md §
+> Blocking releases.
 
 - **Goal:** make the release gates possible. On GitHub Free, Pro or Team,
   **required reviewers work only on public repositories**
@@ -839,7 +844,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.17 Instant in-browser preview
 
 - **Goal:** change a parameter and see its effect before saving. The engine
-  already runs in the browser (about 18 ms in Node for client catchment).
+  already runs in the browser (about 18 ms in Node for the client catchment).
 - **Changes:**
   - **engine:** move input assembly into a pure
     `buildModelInput(settings, model, seriesByKind)` in
@@ -1160,7 +1165,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - **engine:** consolidate the version (e.g. `1.0.0` when signed off);
     remove the temporary `flowGenerator` switch if D3 chose it.
   - Re-run the client catchment regression and record the final deviation list.
-  - With the hydrologist: recalibrate client catchment against A1 with auto-fit
+  - With the hydrologist: recalibrate the client catchment against A1 with auto-fit
     plus a manual review, using the exclusions for unmeasured peaks.
   - Pin the baseline run (WP-1.11); compare it with the 0.4.0 baseline and
     export the comparison for the sign-off record.
@@ -1303,7 +1308,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Docs to update:** api.md § Export, ui.md, STACK.md (the library and how
   it's pinned), security.md (the dependency), followups.md.
 - **Acceptance criteria:**
-  - the client catchment-size run downloads as `.xlsx` in under 30 s;
+  - the client-catchment-size run downloads as `.xlsx` in under 30 s;
   - values equal the CSV export;
   - Excel opens it without repair prompts.
 - **Size:** M.

@@ -35,13 +35,13 @@ project.
 (gitignored). With a Python venv that has openpyxl installed,
 `PYTHON=.venv/bin/python pnpm seed:demo` extracts it into `data/` (also
 gitignored) and imports it for a local demo user. Step by step:
-[docs/run-locally.md § Import client catchment](./docs/run-locally.md#import-client-catchment-demo-data).
+[docs/run-locally.md § Import the client catchment](./docs/run-locally.md#import-the-client-catchment-demo-data).
 
 ## How it's built
 
 - **packages/engine**: the model, in pure TypeScript. The same code runs in the
   browser (instant what-ifs) and on the server (stored runs). It is
-  regression-tested against the client catchment workbook.
+  regression-tested against the client workbook.
 - **backend**: Hono API (Node locally, AWS Lambda in production) on
   **Postgres**. Per-project access is enforced with row-level security.
 - **frontend**: SvelteKit static site with uPlot charts.

@@ -133,7 +133,7 @@ export const HELP: HelpEntry[] = [
 		id: 'calibration-window',
 		term: 'Calibration window',
 		short: 'The period, and the observed flow record, used to score the model fit. Leave empty to score every day with an observation.',
-		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record — the Client Catchment workbook uses Oct 2010 to Sep 2018 against the A1 logger. Choose which observed series to compare against (gauge, logger or Pitman). The fit statistics and the annual volume table only count days inside this window.',
+		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record — the client catchment workbook uses Oct 2010 to Sep 2018 against the A1 logger. Choose which observed series to compare against (gauge, logger or Pitman). The fit statistics and the annual volume table only count days inside this window.',
 		category: 'fit',
 		aliases: ['calibration period', 'observed flow record'],
 		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind'],

@@ -15,7 +15,7 @@ Done:
 - `dumpwb.py`: dumps cell formulas, including array formulas, from a workbook.
   Usage: `python dumpwb.py <xlsm> <maxRows> [Sheet1,Sheet2]`. It needs openpyxl
   and opens the file read-only.
-- The formulas below were read from `../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm`.
+- The formulas below were read from `../project-water-management-source/Original/<client workbook>.xlsm`.
   They are the spec the Python implementation will follow.
 
 Not done: the Python model (`model.py`), the TS runner, `diff.py`, the random

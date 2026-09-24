@@ -172,7 +172,7 @@ describe('the invariants reject broken results', () => {
 });
 
 // ---------------------------------------------------------------------------
-// client catchment (client data, local only): the same invariants on the real
+// The client catchment (client data, local only): the same invariants on the real
 // catchment, through the full rain model. Skips only when data/ is absent.
 // ---------------------------------------------------------------------------
 
@@ -184,7 +184,7 @@ const dataDir = ['data/client-catchment', '../data/client-catchment', '../../dat
 	.map((p) => `${cwd}/${p}`)
 	.find((p) => fs.existsSync(`${p}/project.json`));
 
-describe.skipIf(!dataDir)('engine invariants on client catchment (needs data/client-catchment)', () => {
+describe.skipIf(!dataDir)('engine invariants on the client catchment (needs data/client-catchment)', () => {
 	it('holds every invariant, including order invariance and the crop-area property', () => {
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as {
 			settings: ModelInput['settings'];

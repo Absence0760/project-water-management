@@ -237,7 +237,7 @@ if (!fixture) {
 //   isSummer, rainUsedMm        exact: unchanged, and no rounding. (isSummer
 //                               relies on the summer-month list naming every
 //                               summer month: M1 no longer expands "11" to
-//                               January; client catchment's list needs no expansion.)
+//                               January; the client catchment's list needs no expansion.)
 //   rainFlow (V)                0 ≤ engine − workbook < 1 m³/day: R1 drops INT.
 //   baseFlow … resultantIndex   not compared day by day: E1 (day-1 state) and
 //                               R1 (no ROUND, no 4-dp indices) change the state,

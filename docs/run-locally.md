@@ -81,10 +81,10 @@ still succeeds. If you'd rather not run it at all, put `MAIL_TRANSPORT=log` in
 to the backend console instead. The DB tests use an in-memory transport and
 the e2e stack uses `log`, so neither needs Mailpit.
 
-## Import client catchment (demo data)
+## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
-quickest route is the demo seed. It extracts client catchment and the blank b023
+quickest route is the demo seed. It extracts the client workbook and the blank b023
 sample into `data/` (also gitignored), then imports both as projects for a local
 demo user (details in `scripts/wbt-import/README.md`):
 
@@ -93,13 +93,17 @@ python3 -m venv .venv && .venv/bin/pip install openpyxl
 PYTHON=.venv/bin/python pnpm seed:demo
 ```
 
+The seed picks the one b023 workbook in `Original/` that isn't `Blank_*`. If
+there are several, set `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm`. The
+workbook's file name names the client, so it never appears in the repo.
+
 Then sign in at http://localhost:7777 as `demo@example.com` / `demo-password`.
 These are local-only values: the user exists only in your docker Postgres.
 
 To do the steps by hand, or to import another workbook for your own account:
 
 ```bash
-.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/Client_WBT_b023_v001_20260407_WORKING 007.xlsm" data/client-catchment
+.venv/bin/python scripts/wbt-import/extract_project.py "../project-water-management-source/Original/<client workbook>.xlsm" data/client-catchment
 pnpm import:project "$PWD/data/client-catchment/project.json" --email you@example.com --name "Client Catchment"
 ```
 

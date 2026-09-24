@@ -338,7 +338,7 @@ gives every row a fresh id.
 response mode, which fails any response over **6 MB**. Every export body is
 built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
 once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
-a full Client Catchment node (16 161 days × 13 series) is ≈ 1.5–2 MB and the
+a full client catchment node (16 161 days × 13 series) is ≈ 1.5–2 MB and the
 catchment table (11 series) is similar, so real catchments fit; a 60 000-day
 series is ≈ 1 MB. The durable fix if exports grow (many long series, multi-node
 workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or

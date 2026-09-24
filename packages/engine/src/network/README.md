@@ -10,7 +10,7 @@ Element sheets of the client catchment b023 workbook (1981-01-01 to 2025-03-31,
 16 161 days) exactly. From 0.4.0 the engine deliberately differs where the
 workbook's algorithm is unsound ([docs/engine-audit.md](../../../../docs/engine-audit.md)):
 the regression test keeps an explicit, commented deviation list per column,
-each entry naming the audit finding. A full `runModel` for client catchment takes
+each entry naming the audit finding. A full `runModel` for the client catchment takes
 about 160 ms.
 
 **No rounding.** The workbook rounds fragmented flows, dam splits, return flow,
@@ -135,7 +135,7 @@ What we mirror, and what we don't:
    column is labelled "Upstream Inflow Above Dam (%)", but the Element sheet
    uses it for L = ROUND(H × %), and L is labelled "Upstream inflow *below*
    dam". So 100% sends all upstream water below the dam, where only the
-   diversion capacity (O) can bring it back. In client catchment every farm has 100%.
+   diversion capacity (O) can bring it back. In the client catchment every farm has 100%.
    The [Models] help sheet says a stand-alone dam should use 100%, which only
    works if diversion capacity is large. **Mirrored.** `NetworkNode.pctUpstreamToDam`
    holds the workbook value unchanged. Its doc comment ("Fraction of upstream
@@ -145,18 +145,18 @@ What we mirror, and what we don't:
    February. **Not mirrored** (audit M1): the importer keeps the months a list
    names and prints a note when the workbook would have added others; the
    engine does a plain membership test. It makes no difference to either
-   sample workbook: client catchment's transfer is "5,6,7,8,9,10", and lists with 11
+   sample workbook: the client catchment's transfer is "5,6,7,8,9,10", and lists with 11
    or 12 there already include 1 and 2.
 3. **Blank template's sample transfer reads spill, not storage.** In
    `Blank_WBT_b023_v001.xlsm` [Transfers] P7 is
    `fGetTrfVolCapped(FarmB!R6, …)`: column R (spill) where every other
    From column reads Q (storage). The help text says From columns read Q.
-   **Not mirrored**: the engine always draws from storage. client catchment reads Q
+   **Not mirrored**: the engine always draws from storage. The client catchment reads Q
    correctly, so the regression is unaffected.
 4. **Transfer InOut columns are hand-written formulas** in each workbook
    (`J = O − P` …). The engine assumes the standard "add to destination,
    subtract from source". An import of a workbook with custom InOut formulas
-   would not be reproduced. client catchment's are standard.
+   would not be reproduced. The client catchment's are standard.
 5. **The workbook rounds almost every column** (demand to 0.01 mm / 0.1 m³/day
    / 1 m³, fragments, splits, return flow, storage, capacity, the rain flow
    `INT`, recession indices to 4 dp). **Not mirrored** from engine 0.4.0
