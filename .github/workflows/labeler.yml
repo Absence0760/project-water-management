@@ -18,7 +18,10 @@ jobs:
     name: apply path-based labels
     runs-on: ubuntu-latest
     permissions:
-      # `pull-requests: write` needed to attach labels to the PR.
+      # A job-level block replaces the workflow's `read-all`, so name every
+      # scope: the action fetches .github/labeler.yml through the API
+      # (`contents: read`) and attaches labels (`pull-requests: write`).
+      contents: read
       pull-requests: write
     steps:
       - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9 # v5.0.0
