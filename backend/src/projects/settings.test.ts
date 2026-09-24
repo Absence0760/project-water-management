@@ -1,6 +1,6 @@
 import { defaultProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -92,5 +92,105 @@ describe('SettingsPatch.gr4j and panCoefficient', () => {
 		expect(mergeSettings({ gr4j: { x1: 500 } }).gr4j.x1).toBe(500);
 		expect(mergeSettings({ gr4j: { x1: 500 } }).gr4j.x3).toBe(90);
 		expect(mergeSettings({}).panCoefficient).toEqual(new Array(12).fill(0.7));
+	});
+});
+
+describe('SettingsPatch.wr2012', () => {
+	const ok = (wr2012: unknown) => SettingsPatch.safeParse({ wr2012 }).success;
+	const issues = (wr2012: unknown) => {
+		const r = SettingsPatch.safeParse({ wr2012 });
+		return r.success ? [] : r.error.issues.map((i) => i.path.join('.'));
+	};
+	// Synthetic: an invented quaternary and round numbers.
+	const monthly = (mar: number) => [31, 30, 31, 31, 28.25, 31, 30, 31, 30, 31, 31, 30].map((d) => (mar * d) / 365.25);
+	const reference = {
+		quaternary: 'Z99A',
+		areaKm2: 100,
+		marMm3: 10,
+		monthlyMm3: monthly(10),
+		periodStart: 1990,
+		periodEnd: 2009,
+		mapMm: 600,
+		source: 'Synthetic table'
+	};
+
+	it('accepts the defaults, a full reference, any subset of the groups, and clearing the reference', () => {
+		expect(ok(defaultProjectSettings().wr2012)).toBe(true);
+		expect(ok({ ...defaultProjectSettings().wr2012, reference })).toBe(true);
+		expect(ok({ reference: { ...reference, mapMm: null } })).toBe(true);
+		expect(ok({ reference: null })).toBe(true);
+		expect(ok({ scaling: 'areaRain', lowFlowMonths: [12, 1, 2] })).toBe(true);
+		expect(ok({ calibrationPenalty: { enabled: true, weight: 10 } })).toBe(true);
+		expect(ok({})).toBe(true);
+	});
+
+	it('rejects a MAR larger than the rain volume over the quaternary (MAP × area)', () => {
+		// 600 mm × 100 km² = 60 Mm³ a year of rain.
+		expect(ok({ reference: { ...reference, marMm3: 60, monthlyMm3: monthly(60) } })).toBe(true);
+		expect(issues({ reference: { ...reference, marMm3: 61, monthlyMm3: monthly(61) } })).toEqual(['wr2012.reference.marMm3']);
+	});
+
+	it('rejects monthly means (Mm³ per month) whose sum is more than 5 % off the MAR, e.g. values typed in m³/s', () => {
+		expect(ok({ reference: { ...reference, monthlyMm3: monthly(10.4) } })).toBe(true);
+		expect(issues({ reference: { ...reference, monthlyMm3: monthly(10.6) } })).toEqual(['wr2012.reference.monthlyMm3']);
+		// 10 Mm³/a is ~0.317 m³/s; typed per month in m³/s the sum is ~3.8, not 10.
+		expect(issues({ reference: { ...reference, monthlyMm3: new Array(12).fill(0.317) } })).toEqual(['wr2012.reference.monthlyMm3']);
+	});
+
+	it('rejects incomplete or malformed references, bad thresholds, months and weights', () => {
+		const { source: _source, ...noSource } = reference;
+		for (const bad of [
+			{ reference: { ...reference, quaternary: '' } },
+			{ reference: { ...reference, source: ' ' } },
+			{ reference: { ...reference, areaKm2: 0 } },
+			{ reference: { ...reference, monthlyMm3: [1, 2] } },
+			{ reference: { ...reference, periodStart: 2010, periodEnd: 2000 } },
+			{ reference: { ...reference, periodStart: 1990.5 } },
+			{ reference: { ...reference, mapMm: 0 } },
+			{ reference: { ...reference, extra: 1 } },
+			{ reference: noSource },
+			{ scaling: 'rain' },
+			{ lowFlowMonths: [0] },
+			{ lowFlowMonths: [] },
+			{ flags: { notePct: 10, queryPct: 25, queryWetterPct: 15 } },
+			{ flags: { notePct: 30, queryPct: 25, queryWetterPct: 15, unusablePct: 50 } },
+			{ flags: { notePct: 10, queryPct: 25, queryWetterPct: 30, unusablePct: 50 } },
+			{ flags: { notePct: 0, queryPct: 25, queryWetterPct: 15, unusablePct: 50 } },
+			{ calibrationPenalty: { enabled: true, weight: 11 } },
+			{ calibrationPenalty: { enabled: 'yes', weight: 1 } },
+			{ penalty: true }
+		]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('defaults to no reference, area scaling, 10/25/15/50 % thresholds and the penalty off', () => {
+		expect(mergeSettings({}).wr2012).toEqual({
+			reference: null,
+			scaling: 'area',
+			lowFlowMonths: null,
+			flags: { notePct: 10, queryPct: 25, queryWetterPct: 15, unusablePct: 50 },
+			calibrationPenalty: { enabled: false, weight: 0.5 }
+		});
+	});
+});
+
+describe('patchSettings', () => {
+	it('merges nested groups one level deep, so a partial patch keeps the other stored fields', () => {
+		const stored = { gr4j: { x1: 500, x3: 40 }, dataQuality: { agreementMinDays: 30 } };
+		const s = patchSettings(stored, { gr4j: { x4: 2 }, dataQuality: { agreementMinRatio: 0.9 } });
+		expect(s.gr4j).toMatchObject({ x1: 500, x3: 40, x4: 2 });
+		expect(s.dataQuality).toEqual({ agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
+	});
+
+	it('replaces top-level values and whole WR2012 groups (the reference is never half-merged)', () => {
+		const ref = { quaternary: 'Z99A', areaKm2: 1, marMm3: 1, monthlyMm3: new Array(12).fill(1 / 12), periodStart: 1990, periodEnd: 2000, mapMm: null, source: 's' };
+		const stored = { effectiveRainFraction: 0.5, wr2012: { reference: ref, scaling: 'areaRain' } };
+		const s = patchSettings(stored, { effectiveRainFraction: 0.7, wr2012: { calibrationPenalty: { enabled: true, weight: 1 } } });
+		expect(s.effectiveRainFraction).toBe(0.7);
+		expect(s.wr2012.reference).toEqual(ref);
+		expect(s.wr2012.scaling).toBe('areaRain');
+		expect(s.wr2012.calibrationPenalty).toEqual({ enabled: true, weight: 1 });
+		expect(patchSettings(stored, { wr2012: { reference: null } }).wr2012.reference).toBeNull();
 	});
 });

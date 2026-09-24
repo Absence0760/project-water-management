@@ -1,4 +1,14 @@
-import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, GR4J_PARAMS, RUNOFF_MODELS, type ProjectSettings } from '@water-management/engine';
+import {
+	CALIBRATION_FLOW_KINDS,
+	defaultProjectSettings,
+	GR4J_PARAMS,
+	RUNOFF_MODELS,
+	WR2012_MAX_PENALTY_WEIGHT,
+	WR2012_SCALINGS,
+	wr2012FlagIssues,
+	wr2012ReferenceIssues,
+	type ProjectSettings
+} from '@water-management/engine';
 import { z } from 'zod';
 
 type Json = Record<string, unknown>;
@@ -19,7 +29,50 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 	return out as unknown as ProjectSettings;
 }
 
+/**
+ * A settings patch applied over the stored settings: top-level keys replace,
+ * and nested objects (gr4j, dataQuality, wr2012, …) merge one level deep, so
+ * patching one field of a group never resets the group's other stored fields.
+ */
+export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
+	const current = mergeSettings(stored) as unknown as Json;
+	const out: Json = { ...current, ...patch };
+	for (const [k, v] of Object.entries(patch)) {
+		if (isObj(v) && isObj(current[k])) out[k] = { ...(current[k] as Json), ...v };
+	}
+	return out as unknown as ProjectSettings;
+}
+
 const monthly = z.array(z.number().finite()).length(12);
+
+/**
+ * WR2012 reference data (engine reference/wr2012.ts), entered by the user:
+ * every field required (the MAP may be null), plus the engine's plausibility
+ * checks — the MAR within the rain on the quaternary when its MAP is given,
+ * and the 12 monthly means (Mm³ per month) adding up to the MAR within 5 %.
+ */
+const Wr2012Reference = z
+	.object({
+		quaternary: z.string().trim().min(1).max(16),
+		areaKm2: z.number().positive().max(1e6),
+		marMm3: z.number().min(0).max(1e6),
+		monthlyMm3: z.array(z.number().min(0).max(1e6)).length(12),
+		periodStart: z.number().int().min(1800).max(2200),
+		periodEnd: z.number().int().min(1800).max(2200),
+		mapMm: z.number().positive().max(20_000).nullable(),
+		source: z.string().trim().min(1).max(500)
+	})
+	.strict()
+	.superRefine((r, ctx) => {
+		for (const i of wr2012ReferenceIssues(r)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
+	});
+const pct = z.number().gt(0).max(1000);
+const Wr2012Flags = z
+	.object({ notePct: pct, queryPct: pct, queryWetterPct: pct, unusablePct: pct })
+	.strict()
+	.superRefine((f, ctx) => {
+		for (const i of wr2012FlagIssues(f)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
+	});
 const bounded = (key: string) => {
 	const p = GR4J_PARAMS.find((x) => x.key === key)!;
 	return z.number().min(p.min).max(p.max);
@@ -67,6 +120,17 @@ export const SettingsPatch = z
 				agreementMinRatio: z.number().gt(0).max(1),
 				agreementMaxRatio: z.number().min(1).max(100),
 				agreementMinDays: z.number().int().min(1).max(366)
+			})
+			.partial()
+			.strict(),
+		// The WR2012 check: any subset of its groups may be patched; each group is whole.
+		wr2012: z
+			.object({
+				reference: Wr2012Reference.nullable(),
+				scaling: z.enum(WR2012_SCALINGS),
+				lowFlowMonths: z.array(z.number().int().min(1).max(12)).min(1).max(12).nullable(),
+				flags: Wr2012Flags,
+				calibrationPenalty: z.object({ enabled: z.boolean(), weight: z.number().min(0).max(WR2012_MAX_PENALTY_WEIGHT) }).strict()
 			})
 			.partial()
 			.strict()

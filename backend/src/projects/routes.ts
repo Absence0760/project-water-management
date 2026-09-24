@@ -7,7 +7,7 @@ import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { mergeSettings, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
 
 type ProjectRow = {
 	id: string;
@@ -110,7 +110,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				);
 			}
 			const current = await getProject(db, id);
-			const settings = body.settings ? { ...mergeSettings(current.settings), ...body.settings } : undefined;
+			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			await db.query(
 				`UPDATE project SET
 					name = COALESCE($2, name),

@@ -77,6 +77,48 @@ describe('GET /compare/runs', () => {
 		expect((await u.call('GET', `/projects/${projectId}/runs/${base}`)).body.run.inputs).toBeUndefined();
 	});
 
+	it('keeps the WR2012 reference in the run snapshot and summary, lists every change to it, and rejects implausible data', async () => {
+		const u = await signUp('Reference');
+		const { projectId } = await runnableProject(u);
+		// Synthetic reference: 12 Mm³/a over an invented 40 km² quaternary; the farm is 10 km².
+		const monthlyMm3 = [31, 30, 31, 31, 28.25, 31, 30, 31, 30, 31, 31, 30].map((d) => (12 * d) / 365.25);
+		const reference = { quaternary: 'Z99A', areaKm2: 40, marMm3: 12, monthlyMm3, periodStart: 1990, periodEnd: 2009, mapMm: null, source: 'Synthetic table' };
+		const set = (wr2012: unknown) => u.call('PATCH', `/projects/${projectId}`, { settings: { wr2012 } });
+		const saved = await set({ reference });
+		expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+		expect(saved.body.project.settings.wr2012).toMatchObject({ reference, scaling: 'area', calibrationPenalty: { enabled: false } });
+		const first = await run(u, projectId, 'With WR2012');
+
+		// Patching another WR2012 group keeps the stored reference.
+		expect((await set({ scaling: 'areaRain', calibrationPenalty: { enabled: true, weight: 1 } })).status).toBe(200);
+		expect((await set({ reference: { ...reference, marMm3: 13, monthlyMm3: monthlyMm3.map((v) => (v * 13) / 12) } })).status).toBe(200);
+		const second = await run(u, projectId, 'Changed WR2012');
+
+		const res = await compare(u, `${projectId}:${first}`, `${projectId}:${second}`);
+		expect(res.status).toBe(200);
+		expect(res.body.a.run.inputs.settings.wr2012.reference).toEqual(reference);
+		expect(res.body.b.run.inputs.settings.wr2012).toMatchObject({ scaling: 'areaRain', calibrationPenalty: { enabled: true, weight: 1 } });
+		expect(res.body.changes.map((c: { text: string }) => c.text)).toEqual([
+			'WR2012 naturalised MAR: 12 Mm³/a → 13 Mm³/a',
+			'WR2012 monthly means: changed in 12 months',
+			'WR2012 scaling: area ratio → area and rainfall ratio',
+			'WR2012 calibration penalty: off → on',
+			'WR2012 calibration penalty weight: 0.5 → 1'
+		]);
+		// The report compares natural flow, scaled by area (10 km² of a 40 km² quaternary).
+		const report = res.body.a.run.summary.wr2012;
+		expect(report).toMatchObject({ quaternary: 'Z99A', compared: 'natural_flow', scaling: { rule: 'area', factor: 0.25 } });
+		expect(report.scaledMarMm3).toBeCloseTo(3, 10);
+		expect(res.body.comparison.wr2012.marRatioWhole.a).toBeCloseTo(report.whole.ratio, 12);
+
+		// Plausibility: a MAR above the rain on the quaternary, or monthly means that don't add up.
+		const tooWet = await set({ reference: { ...reference, mapMm: 250 } }); // 250 mm × 40 km² = 10 Mm³ < 12
+		expect(tooWet.status).toBe(400);
+		expect(JSON.stringify(tooWet.body)).not.toMatch(/postgres|pg_|SQL/i);
+		expect((await set({ reference: { ...reference, monthlyMm3: new Array(12).fill(0.38) } })).status).toBe(400);
+		expect((await set({ reference: null })).status).toBe(200);
+	});
+
 	it('lists a series whose values were corrected within the same dates', async () => {
 		const u = await signUp('Corrector');
 		const { projectId } = await runnableProject(u);
