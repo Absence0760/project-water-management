@@ -36,11 +36,18 @@ if [ -f "$WBT_SOURCE_DIR/wbt-import.env" ]; then
 	. "$WBT_SOURCE_DIR/wbt-import.env"
 fi
 
+# The importer's own code: an extraction made by an older importer has an
+# older project.json shape (e.g. returnFlowPct before engine 0.16.0), so a
+# change here re-extracts too.
+importer_hash() {
+	cat scripts/wbt-import/extract_project.py scripts/wbt-import/calibration.py | sha256sum | cut -c1-16
+}
+
 extract() { # <workbook> <outdir> [extract_project.py options…]
 	local wb="$1" out="$2"
 	shift 2
-	# Re-extract when the options changed since the last extraction.
-	local stamp="$out/.import-args" args="$*"
+	# Re-extract when the options or the importer changed since the last extraction.
+	local stamp="$out/.import-args" args="$* importer=$(importer_hash)"
 	if [ -f "$out/project.json" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$args" ]; then
 		echo "✓ $out/project.json already extracted"
 	elif [ -f "$wb" ]; then

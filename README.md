@@ -31,6 +31,12 @@ No env setup is needed: the local defaults are committed, and they are
 non-sensitive. Register an account at http://localhost:7777 and create a
 project.
 
+**Demo data (invented):** `pnpm seed:examples` loads three invented example
+catchments, each with a run, for two demo users (`demo@example.com` /
+`analyst@example.com`, password `demo-password`, local only). They are
+synthetic and committed, so this works on any clone
+([docs/run-locally.md § Example catchments](./docs/run-locally.md#example-catchments)).
+
 **Demo data (client catchment):** the client workbook stays local in `../project-water-management-source/Original/` (a sibling folder outside the repo; override with `WBT_SOURCE_DIR`)
 (gitignored). With a Python venv that has openpyxl installed,
 `PYTHON=.venv/bin/python pnpm seed:demo` extracts it into `data/` (also

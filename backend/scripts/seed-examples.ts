@@ -8,7 +8,10 @@
 //   team "Demo Catchment Consultants" (demo = admin, analyst = member) owns
 //     Kleinberg + Droëvlei → analyst gets editor on both through the team
 //   analyst@example.com personally owns Sandspruit and shares it with demo as viewer
-// Each project gets one model run so results show immediately.
+// Each project gets one model run so results show immediately. Building the
+// examples runs Kleinberg's automatic GR4J calibration for its stored fit
+// (several seconds). What each example shows: docs/run-locally.md
+// § Example catchments; catchments.test.ts keeps them current.
 import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { withoutUser, withUser } from '../src/db/tx.js';
