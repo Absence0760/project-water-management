@@ -185,14 +185,21 @@ conditions come before any client numbers:
          - It needs the neighbour's rain record and development data, and it
            depends on WP-1.21 (dam evaporation) and WP-1.33 (other water
            users).
-      4. **Importer fix.** `scripts/wbt-import` always maps the workbook's
-         gauge column to `flow_observed_m3s`, so for this client the app
-         treats a neighbouring river as this catchment's observed flow (the
-         default calibration record, the EWR comparison). For other clients
-         that column may really be the catchment's own gauge, so don't change
-         it for everyone. Add an importer option to import it as a labelled
-         regional-reference series, with any known scaling undone, and use it
-         for this client.
+      4. ~~**Importer fix.**~~ **Done (2026-09-24).** `scripts/wbt-import`
+         always mapped the workbook's gauge column to `flow_observed_m3s`, so
+         for this client the app treated a neighbouring river as this
+         catchment's observed flow. The default is unchanged (for other
+         clients the column may really be the catchment's own gauge), but
+         `extract_project.py --gauge-as-reference [--gauge-scaling-from
+         YYYY-MM-DD --gauge-scale-factor F]` now imports it as a new
+         `flow_reference_m3s` series ("Reference gauge (other catchment)")
+         with the scaling undone. The engine never reads that kind
+         ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)).
+         `pnpm seed:demo` uses it for this client, taking the scaling from
+         `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR` outside the repo.
+         Checked on the client workbook: the scaled stretch starts on 1 January
+         2010, and after unscaling every value is back to whole thousandths
+         of m³/s, as published.
       5. **Confirm the modelled area.** The project's catchment area differs
          by about 5 % from the source report's area at the logger. Ask the
          hydrologist which is right.

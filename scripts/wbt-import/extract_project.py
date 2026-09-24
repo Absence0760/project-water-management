@@ -1,6 +1,13 @@
 """Convert a b023 WBT workbook into a project for this app.
 
     python scripts/wbt-import/extract_project.py WORKBOOK.xlsm OUTDIR
+        [--gauge-as-reference [--gauge-scaling-from YYYY-MM-DD --gauge-scale-factor F]]
+
+--gauge-as-reference imports the [Flow data] gauge column as a
+flow_reference_m3s series (a gauge on another river: a regional wet/dry index
+the engine never reads) instead of flow_observed_m3s. The scaling options undo
+a known scaling of that column: values on or after the date are divided by F.
+See scripts/wbt-import/README.md and docs/model.md section 2.10.
 
 Writes
   OUTDIR/project.json   { name, description, settings, model, series }
@@ -20,8 +27,10 @@ element names, so re-importing the same workbook yields the same ids.
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
+import math
 import re
 import sys
 import uuid
@@ -81,6 +90,11 @@ FARM_COLS = {
     "AB": "ewr_shortfall_incremental",
 }
 GAUGE_COLS = {"F": "observed", "G": "outflow", "H": "ewr_cumulative", "I": "ewr_shortfall"}
+
+# --gauge-as-reference: the workbook's gauge column (column G) becomes this kind.
+GAUGE_KIND = "flow_observed_m3s"
+REFERENCE_KIND = "flow_reference_m3s"
+LOGGER_KIND = "flow_logger_m3s"
 
 
 class Workbook:
@@ -379,6 +393,67 @@ def read_flow_data(wb: Workbook) -> dict[str, Any]:
     return {"dates": dates, "series": series, "calc": calc}
 
 
+def gauge_as_reference(
+    series: list[dict[str, Any]],
+    settings: dict[str, Any],
+    scaling_from: str | None = None,
+    scale_factor: float | None = None,
+) -> list[str]:
+    """Re-label the workbook's gauge column as a reference gauge, in place. Returns notes.
+
+    For a workbook whose "gauge" column is measured on a different river (a
+    neighbouring sub-catchment), that record is not observed flow for the
+    modelled catchment. It becomes a flow_reference_m3s series, which the engine
+    never uses as a calibration or validation record or in the EWR comparison.
+    With scaling_from and scale_factor, values on or after scaling_from are
+    divided by scale_factor, undoing a scaling the workbook applied to part of
+    the record (e.g. by a catchment-area ratio). If rUseFlow pointed
+    calibration at the gauge, calibrationFlowKind is left unset (null) and a
+    WARNING note says so: the run then falls back to the logger when there is
+    one, with no default-pick warning because there is nothing to choose.
+    """
+    if (scaling_from is None) != (scale_factor is None):
+        raise ValueError("--gauge-scaling-from and --gauge-scale-factor go together")
+    if scale_factor is not None and not (math.isfinite(scale_factor) and scale_factor > 0):
+        raise ValueError(f"--gauge-scale-factor must be a positive number, got {scale_factor}")
+    cutoff = dt.date.fromisoformat(scaling_from) if scaling_from is not None else None
+
+    notes: list[str] = []
+    gauge = next((s for s in series if s["kind"] == GAUGE_KIND), None)
+    if gauge is None:
+        notes.append("--gauge-as-reference: the workbook has no gauge values; nothing to re-label")
+    else:
+        gauge["kind"] = REFERENCE_KIND
+        msg = (
+            f"[Flow data] gauge column imported as {REFERENCE_KIND} (a reference gauge on another river), "
+            f"not {GAUGE_KIND}: runs never calibrate against it"
+        )
+        if cutoff is not None:
+            d0 = dt.date.fromisoformat(gauge["startDate"])
+            first = max(0, (cutoff - d0).days)
+            changed = 0
+            for i in range(first, len(gauge["values"])):
+                v = gauge["values"][i]
+                if v is not None:
+                    gauge["values"][i] = v / scale_factor
+                    changed += 1
+            msg += f"; values from {cutoff.isoformat()} divided by {scale_factor:g} ({changed} days)"
+        notes.append(msg)
+    if settings.get("calibrationFlowKind") == GAUGE_KIND:
+        settings["calibrationFlowKind"] = None
+        has_logger = any(s["kind"] == LOGGER_KIND for s in series)
+        notes.append(
+            "WARNING: [Flow data] rUseFlow calibrates against the gauge column, which --gauge-as-reference says is "
+            "another river. calibrationFlowKind is left unset"
+            + (
+                ", so runs use the logger record. Check that choice in Settings -> calibration flow series"
+                if has_logger
+                else " and the project has no observed flow record to calibrate against"
+            )
+        )
+    return notes
+
+
 # Zero-rain runs (issue #2): the engine's zeroRainRuns rule in
 # packages/engine/src/quality.ts (docs/model.md section 2.10a). Keep in step.
 ZERO_RUN_MIN_WET_DAYS = 60
@@ -556,8 +631,17 @@ def project_name(path: Path) -> str:
     return stem.split("_WBT")[0] or stem
 
 
-def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+def extract(
+    path: Path,
+    gauge_reference: bool = False,
+    scaling_from: str | None = None,
+    scale_factor: float | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """(project, expected, notes). gauge_reference and the scaling: see gauge_as_reference()."""
     import openpyxl
+
+    if not gauge_reference and (scaling_from is not None or scale_factor is not None):
+        raise ValueError("the gauge scaling options need --gauge-as-reference")
 
     wb = Workbook(openpyxl.load_workbook(path, read_only=True, data_only=True, keep_vba=False))
     try:
@@ -676,6 +760,8 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
         zero_note = zero_rain_note(flow["series"])
         if zero_note:
             wb.notes.append(zero_note)
+        if gauge_reference:
+            wb.notes.extend(gauge_as_reference(flow["series"], settings, scaling_from, scale_factor))
         kind = settings["calibrationFlowKind"]
         if kind and kind not in {s["kind"] for s in flow["series"]}:
             wb.notes.append(f"[Flow data] rUseFlow picks {kind}, which has no values; calibrationFlowKind left unset")
@@ -715,12 +801,36 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
         wb.wb.close()
 
 
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog=Path(argv[0]).name, description="Convert a b023 WBT workbook into a project.")
+    p.add_argument("workbook", type=Path)
+    p.add_argument("outdir", type=Path)
+    p.add_argument(
+        "--gauge-as-reference",
+        action="store_true",
+        help="import the gauge column as flow_reference_m3s (a gauge on another river), not flow_observed_m3s",
+    )
+    p.add_argument("--gauge-scaling-from", metavar="YYYY-MM-DD", help="first day the workbook scaled the gauge column")
+    p.add_argument("--gauge-scale-factor", metavar="F", type=float, help="divide gauge values from that day by F")
+    a = p.parse_args(argv[1:])
+    if (a.gauge_scaling_from is None) != (a.gauge_scale_factor is None):
+        p.error("--gauge-scaling-from and --gauge-scale-factor go together")
+    if a.gauge_scaling_from is not None and not a.gauge_as_reference:
+        p.error("--gauge-scaling-from/--gauge-scale-factor need --gauge-as-reference")
+    if a.gauge_scaling_from is not None:
+        try:
+            dt.date.fromisoformat(a.gauge_scaling_from)
+        except ValueError:
+            p.error(f"--gauge-scaling-from is not a YYYY-MM-DD date: {a.gauge_scaling_from}")
+    if a.gauge_scale_factor is not None and not (math.isfinite(a.gauge_scale_factor) and a.gauge_scale_factor > 0):
+        p.error(f"--gauge-scale-factor must be a positive number, got {a.gauge_scale_factor}")
+    return a
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        print(f"usage: {argv[0]} WORKBOOK.xlsm OUTDIR", file=sys.stderr)
-        return 2
-    src, out = Path(argv[1]), Path(argv[2])
-    project, expected, notes = extract(src)
+    a = parse_args(argv)
+    src, out = a.workbook, a.outdir
+    project, expected, notes = extract(src, a.gauge_as_reference, a.gauge_scaling_from, a.gauge_scale_factor)
     out.mkdir(parents=True, exist_ok=True)
     (out / "project.json").write_text(json.dumps(project, separators=(",", ":")))
     (out / "expected.json").write_text(json.dumps(expected, separators=(",", ":")))
@@ -731,7 +841,10 @@ def main(argv: list[str]) -> int:
         f"from {expected['startDate']} -> {out}"
     )
     for n in notes:
-        print(f"  note: {n}")
+        if n.startswith("WARNING: "):
+            print(f"  {n}", file=sys.stderr)
+        else:
+            print(f"  note: {n}")
     return 0
 
 

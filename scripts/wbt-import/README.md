@@ -7,7 +7,7 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 
 | Script | Output |
 | --- | --- |
-| `extract_project.py WORKBOOK OUTDIR` | `OUTDIR/project.json` holds a project: `{ name, description, settings, model, series }`, with `settings` = `ProjectSettings`, `model` = `ProjectModel` and `series` = `[{ kind, name, unit, startDate, values }]` (see `packages/engine/src/project.ts`). `OUTDIR/expected.json` holds the workbook's own daily results per Element sheet plus the catchment columns, for the engine regression test. |
+| `extract_project.py WORKBOOK OUTDIR [--gauge-as-reference …]` | `OUTDIR/project.json` holds a project: `{ name, description, settings, model, series }`, with `settings` = `ProjectSettings`, `model` = `ProjectModel` and `series` = `[{ kind, name, unit, startDate, values }]` (see `packages/engine/src/project.ts`). `OUTDIR/expected.json` holds the workbook's own daily results per Element sheet plus the catchment columns, for the engine regression test. |
 | `calibration.py WORKBOOK` | Prints the [Flow Calibration Cfg] parameters. `extract_project.py` uses it for `settings.calibration`. |
 | `extract_flow_fixture.py` | The rain-model fixture for `packages/engine/src/flow.test.ts`. |
 
@@ -77,6 +77,42 @@ rows and columns don't break it.
 - **Series** are [Flow data] columns F–K: Pitman flow, observed flow (G1),
   logger, catchment rain, CHIRPS rain and forecast rain. A column with no
   values is skipped. Blank cells become `null`.
+
+## The gauge column on another river (`--gauge-as-reference`)
+
+By default the gauge column becomes `flow_observed_m3s`, the catchment's own
+observed flow. Some workbooks hold a gauge on a *neighbouring* river there,
+sometimes scaled by a catchment-area ratio for part of the record. Such a
+record is not observed flow for the modelled river, so import it as a
+reference gauge instead:
+
+```sh
+.venv/bin/python scripts/wbt-import/extract_project.py WORKBOOK.xlsm OUTDIR \
+  --gauge-as-reference --gauge-scaling-from YYYY-MM-DD --gauge-scale-factor F
+```
+
+- `--gauge-as-reference` writes the column as `flow_reference_m3s`
+  ("Reference gauge (other catchment)"). The engine never reads that kind: it
+  is never the calibration or validation record, never in the gauge-vs-logger
+  check and never in the EWR results (docs/model.md §2.10). It can be charted
+  on the Time series tab as a regional wet/dry index.
+- `--gauge-scaling-from` and `--gauge-scale-factor` (together, and only with
+  `--gauge-as-reference`) undo a known scaling: values on or after the date
+  are divided by F (> 0). Blanks stay blank. A `note:` gives the day count. To
+  find the date, look for where the column's values stop being whole
+  thousandths of m³/s (DWS publishes three decimals; a scaled value has many).
+- If `rUseFlow` picks the gauge (2), `calibrationFlowKind` is left unset and a
+  `WARNING:` goes to stderr. Runs then calibrate on the logger if there is one.
+  Check the choice in Settings → calibration flow series.
+- `expected.json` is unchanged: it is the workbook's own results.
+
+`pnpm seed:demo` uses this for the client workbook, extracting into
+`data/client-catchment-app/`, while `data/client-catchment/` stays the
+workbook-faithful extraction for the regression tests. The scaling is client
+data, so it's read from `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR`,
+set in the environment or in `$WBT_SOURCE_DIR/wbt-import.env` beside the
+workbooks, never in the repo. Set `WBT_GAUGE_AS_REFERENCE=0` to import the
+column as observed flow. The seed re-extracts when these options change.
 
 - **Expected results** (`expected.json`): every Element sheet's daily
   columns, the [Flow data] catchment columns, and `shortfalls`: the

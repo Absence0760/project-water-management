@@ -585,6 +585,30 @@ logger: high flows above the highest field gauging come from an extrapolated
 rating curve, so peak days and wet-season volumes are uncertain, and the record
 is short and mostly dry, so wet-year behaviour is weakly constrained.
 
+**Importing such a column as a reference gauge.** By default the importer maps
+the gauge column to `flow_observed_m3s`, because for most workbooks it really is
+the catchment's own gauge. `extract_project.py --gauge-as-reference` imports it
+as **`flow_reference_m3s`** ("Reference gauge (other catchment)") instead, and
+`--gauge-scaling-from YYYY-MM-DD --gauge-scale-factor F` undoes a known
+scaling (values on or after the date are divided by F). The engine never reads
+that kind: it is not in `CALIBRATION_FLOW_KINDS` (so it can't be the
+calibration or validation record, and the API refuses it as
+`calibrationFlowKind`), `pickObservedKind` never falls back to it, it is not
+one of the two records `observedAgreement` compares, and it plays no part in the
+EWR results. A project with a logger and a reference gauge therefore
+calibrates on the logger with no default-pick warning. The only thing a run does
+with it is list data-quality checks (outliers, flat stretches) under its own
+name. It can be charted on the Time series tab, where it serves as a regional
+wet/dry index (for example, to rank water years for the dry → wet test).
+`reference-series.test.ts` pins all of this. If the workbook's `rUseFlow`
+pointed calibration at the gauge (2), the importer leaves `calibrationFlowKind`
+unset and prints a `WARNING`: a run then falls back to the logger, or has no
+calibration record. `pnpm seed:demo` imports the client catchment this way
+(`bin/seed-demo.sh`, with the scaling taken from `WBT_GAUGE_SCALING_FROM` /
+`WBT_GAUGE_SCALE_FACTOR`, kept outside the repo). Its workbook-faithful
+extraction, which the regression tests read, keeps the column as
+`flow_observed_m3s`.
+
 **What is scored against what.** Gauge and logger records measure the river as
 it is, with farms, dams and abstraction, so they are compared with the
 **simulated outflow**. Pitman flow is *naturalised* (WR90/WR2012 model flow with

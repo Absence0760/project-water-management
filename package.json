@@ -25,7 +25,7 @@
 		"dev:mail:status": "docker compose ps mailpit",
 		"dev:mail:logs": "docker compose logs -f mailpit",
 		"dev:mail:open": "xdg-open http://localhost:8026 || open http://localhost:8026",
-		"//-- data --": "Demo data. seed:examples = 3 invented catchments + 2 demo users (demo@ / analyst@example.com, password demo-password), works on any clone. seed:demo = seed:examples + the client workbooks in ../project-water-management-source/Original/ (needs Python + openpyxl, scripts/wbt-import/README.md).",
+		"//-- data --": "Demo data. seed:examples = 3 invented catchments + 2 demo users (demo@ / analyst@example.com, password demo-password), works on any clone. seed:demo = seed:examples + the client workbooks in ../project-water-management-source/Original/ (needs Python + openpyxl, scripts/wbt-import/README.md), its gauge column imported as a reference gauge (WBT_GAUGE_* in bin/seed-demo.sh).",
 		"seed:examples": "pnpm -C backend seed:examples",
 		"import:project": "pnpm -C backend import:project",
 		"seed:demo": "bin/seed-demo.sh",

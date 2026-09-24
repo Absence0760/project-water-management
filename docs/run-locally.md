@@ -97,6 +97,20 @@ The seed picks the one b023 workbook in `Original/` that isn't `Blank_*`. If
 there are several, set `WBT_CLIENT_WORKBOOK=/path/to/workbook.xlsm`. The
 workbook's file name names the client, so it never appears in the repo.
 
+The client workbook's gauge column is a neighbouring river's gauge, so the seed
+imports it as a reference gauge (`--gauge-as-reference`, into
+`data/client-catchment-app/`) rather than as observed flow. To undo the
+column's partial area scaling, put the two values in
+`../project-water-management-source/wbt-import.env` (outside the repo, because
+they are client data):
+
+```bash
+WBT_GAUGE_SCALING_FROM=YYYY-MM-DD
+WBT_GAUGE_SCALE_FACTOR=F
+```
+
+Details are in `scripts/wbt-import/README.md`.
+
 Then sign in at http://localhost:7777 as `demo@example.com` / `demo-password`.
 These are local-only values: the user exists only in your docker Postgres.
 

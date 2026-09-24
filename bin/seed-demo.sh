@@ -9,6 +9,16 @@
 #
 # Local dev only — the demo password is not a secret and the user only exists
 # in your docker Postgres.
+#
+# The client workbook's gauge column is a neighbouring river's gauge, so it is
+# imported with --gauge-as-reference (a flow_reference_m3s series, never a
+# calibration record; docs/model.md §2.10) into data/client-catchment-app/.
+# data/client-catchment/ stays the workbook-faithful extraction the engine's
+# regression tests read. The column is area-scaled for part of the record; to
+# undo that, set WBT_GAUGE_SCALING_FROM (YYYY-MM-DD) and WBT_GAUGE_SCALE_FACTOR,
+# in the environment or in $WBT_SOURCE_DIR/wbt-import.env (outside the repo,
+# because the factor is client data). Set WBT_GAUGE_AS_REFERENCE=0 to import the
+# column as observed flow instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,14 +30,25 @@ PY="${PYTHON:-python3}"
 # sibling folder, ../project-water-management-source/{Original,AI}/.
 WBT_SOURCE_DIR="${WBT_SOURCE_DIR:-../project-water-management-source}"
 
-extract() { # <workbook> <outdir>
-	if [ -f "$2/project.json" ]; then
-		echo "✓ $2/project.json already extracted"
-	elif [ -f "$1" ]; then
-		echo "→ extracting $1 (large workbooks take a minute)…"
-		"$PY" scripts/wbt-import/extract_project.py "$1" "$2"
+# Per-workbook import options (the gauge scaling), kept beside the workbooks.
+if [ -f "$WBT_SOURCE_DIR/wbt-import.env" ]; then
+	# shellcheck disable=SC1091
+	. "$WBT_SOURCE_DIR/wbt-import.env"
+fi
+
+extract() { # <workbook> <outdir> [extract_project.py options…]
+	local wb="$1" out="$2"
+	shift 2
+	# Re-extract when the options changed since the last extraction.
+	local stamp="$out/.import-args" args="$*"
+	if [ -f "$out/project.json" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$args" ]; then
+		echo "✓ $out/project.json already extracted"
+	elif [ -f "$wb" ]; then
+		echo "→ extracting $wb $args (large workbooks take a minute)…"
+		"$PY" scripts/wbt-import/extract_project.py "$wb" "$out" "$@"
+		printf '%s' "$args" >"$stamp"
 	else
-		echo "✗ $1 not found — skipping" >&2
+		echo "✗ $wb not found — skipping" >&2
 		return 1
 	fi
 }
@@ -56,9 +77,19 @@ if [ -z "$WORKBOOK" ]; then
 	WORKBOOK="${candidates[0]:-$WBT_SOURCE_DIR/Original/<client workbook>.xlsm}"
 fi
 
+gauge_args=()
+if [ "${WBT_GAUGE_AS_REFERENCE:-1}" = 1 ]; then
+	gauge_args+=(--gauge-as-reference)
+	if [ -n "${WBT_GAUGE_SCALING_FROM:-}" ] || [ -n "${WBT_GAUGE_SCALE_FACTOR:-}" ]; then
+		gauge_args+=(--gauge-scaling-from "${WBT_GAUGE_SCALING_FROM:-}" --gauge-scale-factor "${WBT_GAUGE_SCALE_FACTOR:-}")
+	else
+		echo "! WBT_GAUGE_SCALING_FROM / WBT_GAUGE_SCALE_FACTOR unset: the reference gauge keeps the workbook's partial area scaling" >&2
+	fi
+fi
+
 imported=0
-if extract "$WORKBOOK" data/client-catchment; then
-	pnpm -s import:project "$PWD/data/client-catchment/project.json" --email "$EMAIL" --password "$PASSWORD" --name "Client Catchment" --run
+if extract "$WORKBOOK" data/client-catchment-app "${gauge_args[@]}"; then
+	pnpm -s import:project "$PWD/data/client-catchment-app/project.json" --email "$EMAIL" --password "$PASSWORD" --name "Client Catchment" --run
 	imported=$((imported + 1))
 fi
 echo
