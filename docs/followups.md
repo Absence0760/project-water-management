@@ -315,6 +315,17 @@ the reports):
       per-checkout e2e database name and ports, derived from the worktree
       path or an env override, set up in the e2e global setup. Until then,
       don't run e2e in two worktrees at the same time.
+- [ ] **Wall-clock test flakes under load.** "a GR4J run of an example
+      catchment takes under 50 ms" failed once (2026-09-24) while all three
+      workspaces' tests ran at once; it normally takes about 21 ms. The
+      durable fix: move the timing check to a separate `bench` / soak target,
+      or take the median of several runs against a budget measured on the
+      machine running it, so the unit suite asserts nothing about wall-clock
+      time.
+- [ ] **Frontend bundle ceilings were raised** to 295 KB total and 105 KB
+      for the project page (2026-09-24, fit provenance). Look for code to
+      split, such as lazy-loading the calibration and WR2012 panels, before
+      the next raise.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
 
