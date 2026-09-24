@@ -430,7 +430,30 @@ The hydrologist calibrates on a window, not the whole record:
 logger, which only has data from 2013-04-15). The importer copies both into
 `settings.calibrationStart/End` and `settings.calibrationFlowKind`. With no
 window the whole overlap is scored; with no flow kind the engine uses the gauge
-series if present, else the logger.
+series if present, else the logger. From engine 0.5.1 that default is never
+silent: when a project has **both** a gauge and a logger series and no flow
+kind is set, the run (and an automatic fit) adds a warning that the gauge was
+picked by default and that the record should be chosen in Settings →
+calibration flow series (`pickObservedKind`, `DEFAULT_GAUGE_PICK_WARNING` in
+`run.ts`; issue #1). A project with only one of the two, or with the kind set,
+gets no such warning. The setting only picks which record the statistics are
+scored against; results change only when the parameters are re-tuned.
+
+**A workbook "gauge" column is not necessarily on the modelled river.** A b023
+workbook's gauge column can hold a neighbouring river's gauge, and it may be
+scaled by catchment area for part of the record and unscaled for the rest. Such
+a record is not a valid calibration target for natural flow on the modelled
+river; at most it is a regional wet/dry indicator. So check where each observed
+record was measured before trusting the default. For the client catchment,
+research on issue #1 found exactly this: its gauge column is a neighbouring
+river's gauge (area-scaled for part of the record), and the logger's magnitude
+is verified against independent field gaugings, so the **logger is the
+calibration target**, which is also what the workbook and the imported settings
+already use. This is **pending the hydrologist's sign-off**
+([plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
+logger: high flows above the highest field gauging come from an extrapolated
+rating curve, so peak days and wet-season volumes are uncertain, and the record
+is short and mostly dry, so wet-year behaviour is weakly constrained.
 
 **What is scored against what.** Gauge and logger records measure the river as
 it is, with farms, dams and abstraction, so they are compared with the
@@ -473,7 +496,9 @@ window against the logger it actually calibrates to (1 803 days, 2013-04-15 to
 0.49, PBIAS −28%**. β = 1.278 equals the workbook's own "Calibration / Logger"
 volume ratio (`[Flow Calibration Cfg]` K27 = 1.2783). The gauge and the logger
 disagree badly from 2014 to 2017 (in one water year the gauge records less than
-a tenth of the logger's volume): a question for the hydrologist.
+a tenth of the logger's volume). As above, the gauge is on a different river,
+so the gap says nothing about either instrument, and the scores against the
+gauge are not a measure of fit (issue #1; sign-off pending).
 
 ### 2.10b Automatic calibration (engine ≥ 0.5.0, issue #4 phase 4)
 
@@ -592,13 +617,22 @@ The outlier and flat-line limits are engine constants (`OUTLIER_FACTOR`,
 `FLATLINE_MIN_DAYS`), not settings; whether they suit these catchments is a
 question for the hydrologist.
 
-Two instruments on the same reach should roughly agree; a sustained gap
-usually means something physical at one of them (a damaged or silted weir, a
-changed rating curve, flow bypassing the structure, zero-filled gaps) — and
-calibrating to the wrong record skews every farm's supply and EWR result.
+The warning is deliberately neutral: it says the two records disagree and
+asks which to calibrate against, without presuming an instrument fault. Two
+instruments on the same reach should roughly agree, and a sustained gap can
+mean something physical at one of them (a damaged or silted weir, a changed
+rating curve, flow bypassing the structure, zero-filled gaps). It can equally
+mean the two records **do not measure the same reach or period**: a workbook
+"gauge" column may be a neighbouring river's gauge, possibly scaled by
+catchment area for part of the record (§2.10). Check where and when each
+record was measured before choosing one; calibrating to the wrong record skews
+every farm's supply and EWR result.
 The client catchment: 95 % (2012/13), 83 % (2013/14), then **13 %, 33 %, 8 %** for
-2014/15–2016/17 → flagged. See the first hydrologist question in
-[plan.md](./plan.md#model-and-hydrology-for-the-hydrologist).
+2014/15–2016/17 → flagged. Here the records are two different rivers, so the
+flag is expected and is not evidence of a fault in either; the logger is the
+calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and the
+first hydrologist question in
+[plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

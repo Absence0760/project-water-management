@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { resolveReportWindow, runModel, runModelWith } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
@@ -667,6 +667,42 @@ describe('runModel — calibration statistics', () => {
 		const missing = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
 		expect(missing.summary.calibration!.flowKind).toBe('flow_observed_m3s');
 		expect(missing.summary.warnings.some((w) => /flow_pitman_m3s.*missing/.test(w))).toBe(true);
+	});
+
+	it('warns once when it picks the gauge by default over a logger (issue #1)', () => {
+		const nat = () => ({ naturalFlowM3Day: [86_400, 86_400] });
+		const i = input({ nodes: [node('A')], natural: [86_400, 86_400], observed: [5, 5] });
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: [1, 1] };
+		const auto = runModelWith(i, nat);
+		expect(auto.summary.calibration!.flowKind).toBe('flow_observed_m3s');
+		expect(auto.summary.warnings.filter((w) => w === DEFAULT_GAUGE_PICK_WARNING)).toHaveLength(1);
+		expect(DEFAULT_GAUGE_PICK_WARNING).toMatch(/Settings → calibration flow series/);
+
+		// Positive controls: a chosen record (either one) gets no default-pick warning.
+		for (const kind of ['flow_observed_m3s', 'flow_logger_m3s'] as const) {
+			i.settings.calibrationFlowKind = kind;
+			const chosen = runModelWith(i, nat);
+			expect(chosen.summary.calibration!.flowKind).toBe(kind);
+			expect(chosen.summary.warnings).not.toContain(DEFAULT_GAUGE_PICK_WARNING);
+		}
+
+		// Only one of the two records: nothing to choose between, so no warning.
+		i.settings.calibrationFlowKind = null;
+		delete i.series.flow_logger_m3s;
+		expect(runModelWith(i, nat).summary.warnings).not.toContain(DEFAULT_GAUGE_PICK_WARNING);
+	});
+
+	it('pickObservedKind: default order and the default-pick warning', () => {
+		const s = (v: number[]) => ({ startDate: '2020-01-01', values: v });
+		const w: string[] = [];
+		expect(pickObservedKind(null, { flow_observed_m3s: s([1]), flow_logger_m3s: s([1]) }, w)).toBe('flow_observed_m3s');
+		expect(w).toEqual([DEFAULT_GAUGE_PICK_WARNING]);
+		const none: string[] = [];
+		expect(pickObservedKind(null, { flow_logger_m3s: s([1]) }, none)).toBe('flow_logger_m3s');
+		expect(pickObservedKind(null, { flow_observed_m3s: s([1]) }, none)).toBe('flow_observed_m3s');
+		expect(pickObservedKind(null, {}, none)).toBeNull();
+		expect(pickObservedKind('flow_logger_m3s', { flow_observed_m3s: s([1]), flow_logger_m3s: s([1]) }, none)).toBe('flow_logger_m3s');
+		expect(none).toEqual([]);
 	});
 
 	it('scores natural flow, not the impacted outflow, against naturalised Pitman flow (audit C1)', () => {

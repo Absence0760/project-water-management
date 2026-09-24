@@ -39,7 +39,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.5.0';
+export const ENGINE_VERSION = '0.5.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -495,10 +495,17 @@ const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_pitman_m3s: 'Pitman flow'
 };
 
+/** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
+export const DEFAULT_GAUGE_PICK_WARNING =
+	'calibrated against the observed gauge flow by default: the project also has a logger flow record and no calibration record is chosen. ' +
+	'The two may not measure the same river; choose the record in Settings → calibration flow series.';
+
 /**
  * The flow record calibration compares against ([Flow data] rUseFlow): the
  * configured kind when that series exists, else observed gauge flow, else the
- * logger.
+ * logger. With no kind configured and both a gauge and a logger record, the
+ * default pick of the gauge is never silent: it adds a run warning, because a
+ * workbook "gauge" column can be a neighbouring river's gauge.
  */
 export function pickObservedKind(
 	wanted: CalibrationFlowKind | null,
@@ -508,6 +515,8 @@ export function pickObservedKind(
 	if (wanted) {
 		if (series[wanted]) return wanted;
 		warnings.push(`calibration flow series "${wanted}" is missing; using the default observed series`);
+	} else if (series.flow_observed_m3s && series.flow_logger_m3s) {
+		warnings.push(DEFAULT_GAUGE_PICK_WARNING);
 	}
 	return series.flow_observed_m3s ? 'flow_observed_m3s' : series.flow_logger_m3s ? 'flow_logger_m3s' : null;
 }
