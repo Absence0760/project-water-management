@@ -179,7 +179,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	}
 
 	// The network is causal: nothing after the last scored day changes a
-	// score, so each evaluation stops there (the full run is ~20 ms on a
+	// score, so each evaluation stops there (a full run is ~20 ms on a
 	// 44-year catchment; a record that ends early saves the rest).
 	const n = idx[idx.length - 1]! + 1;
 	const shortPlan = { ...plan, days: n };

@@ -545,17 +545,15 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   clean bill of health.
 - **In the app:** Settings → Flow calibration → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
-- **Cost.** About 20 ms per model run on the 44-year client catchment, so
-  1 500 runs per fit and three fits (full, split, dry → wet) take about 70 s
-  in Node. `onProgress` reports every run and returns true to cancel, which
+- **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
+  elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
+  about 70 s in Node. `onProgress` reports every run and returns true to cancel, which
   keeps the best found so far.
 
-On the client catchment's logger record (1 803 days, 2013–2018), a GR4J fit
-with the defaults (budget 1 500, seed 1) moved KGE′ from 0.22 (default
-parameters) to 0.78. The split-sample validation half scored 0.36, and the
-dry → wet test, on two dry and two wet years, scored 0.34. That is why the
-hydrologist's decision gate (issue #4 phase 6) weighs validation, not the
-fit.
+On a short logger record, expect the validation columns to score well below
+the fit: a few years mostly of drought constrain the parameters poorly. That is
+why the hydrologist's decision gate (issue #4 phase 6) weighs validation, not
+the fit. (Client results are never recorded here: the repo is public.)
 
 ### 2.10a Data quality: do the observed flow records agree?
 
