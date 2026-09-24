@@ -155,10 +155,35 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
 }
 
+/** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */
+export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<string> {
+	yield csvRow(['Catchment rain treated as missing']);
+	if (z === undefined) {
+		yield csvRow(['Run made before engine 0.15.0: flagged zero-rain runs ran as recorded (dry)']);
+		return;
+	}
+	if (z === null) {
+		yield csvRow(['No catchment rain series']);
+		return;
+	}
+	yield csvRow(['Flagged zero runs', z.mode === 'missing' ? 'treated as missing' : 'run as recorded (dry)']);
+	if (z.asRecordedDays > 0) yield csvRow(['Days of flagged runs run as recorded', z.asRecordedDays]);
+	if (z.periods.length) {
+		yield csvRow(['Start', 'End', 'Source', 'Reason', 'Days set aside', 'Catchment rain recorded (mm)', 'Rain used instead (mm)', 'Days with nothing to fill them']);
+		for (const p of z.periods) {
+			yield csvRow([p.start, p.end, p.source === 'flagged' ? 'flagged zero run' : 'listed in settings', p.reason ?? '', p.days, p.recordedMm, p.filledMm, p.unfilledDays]);
+		}
+		yield csvRow(['Total', '', '', '', z.days, z.recordedMm, z.filledMm, z.unfilledDays]);
+	} else {
+		yield csvRow(['No days set aside']);
+	}
+	for (const k of z.keptDry) yield csvRow(['Kept as recorded (dry)', k.start, k.end, k.reason, k.days]);
+}
+
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
  * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
- * calibration, warnings.
+ * the catchment rain treated as missing, calibration, warnings.
  * Fields the engine adds to the summary later still appear (under their key).
  */
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
@@ -197,6 +222,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* chirpsFactorLines(summary.chirpsCorrection);
+	yield '';
+
+	yield* zeroRainLines(summary.zeroRainInfill);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);

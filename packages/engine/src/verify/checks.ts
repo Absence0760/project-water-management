@@ -388,7 +388,8 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  * A farm's intermediate columns (verify/columns.ts) follow their formulas and
  * add up to the published ones, so the export can be trusted for redoing a
  * day by hand:
- * - F = MAX(0, gross demand − effective rain);
+ * - F = MAX(0, gross demand) − effective rain used, F ≥ 0 (checkSoilWater
+ *   checks where the effective rain used came from);
  * - the splits conserve water: K + L = H, M + N = I, with 0 ≤ K ≤ H × % and
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
  * - P = Q[t−1] + M + O + K + J − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
@@ -412,7 +413,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			if (!near(f, Math.max(0, gr - ef), Math.max(Math.abs(gr), Math.abs(ef)))) return `${where}: demand ${f} ≠ MAX(0, gross ${gr} − effective rain ${ef})`;
+			if (!near(f, Math.max(0, gr) - ef, Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
+				return `${where}: demand ${f} ≠ MAX(0, gross ${gr}) − effective rain used ${ef}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
@@ -430,7 +432,76 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	return null;
 }
 
+/**
+ * Each farm's soil-water store (N3, engine ≥ 0.14.0, ../demand.ts
+ * farmDailyDemand), redone from the run's own rain (rain_final, zeroed at or
+ * below the threshold) and settings, every day:
+ * - 0 ≤ store ≤ its size (effectiveRainStoreMm);
+ * - effective rain used = MIN(store[t−1] + Pe, MAX(0, gross)) ≥ 0, so it
+ *   never takes more than the store held plus the day's effective rain Pe;
+ * - store = MIN(size, store[t−1] + Pe − used): nothing appears from nowhere;
+ * - over the run, Σ used ≤ Σ Pe: the store hands out no more rain than fell.
+ * A run from before engine 0.14.0 has no soil_water column: nothing to check.
+ */
+export function checkSoilWater(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const d = defaultProjectSettings();
+	const s = input.settings ?? {};
+	const fraction = typeof s.effectiveRainFraction === 'number' ? s.effectiveRainFraction : d.effectiveRainFraction;
+	const size = s.effectiveRainStoreMm;
+	// runModel falls back to the default for a size that isn't one (and warns).
+	const sizeMm = typeof size === 'number' && Number.isFinite(size) && size >= 0 ? size : d.effectiveRainStoreMm;
+	const thr = (s.calibration as { rainThresholdMm?: number } | undefined)?.rainThresholdMm ?? d.calibration.rainThresholdMm;
+	const rainFinal = get.get('null|rain_final');
+	const rain = Array.from({ length: out.days }, (_, t) => {
+		const v = rainFinal?.[t];
+		return typeof v === 'number' && Number.isFinite(v) && v > thr ? v : 0;
+	});
+	const cropIds = new Set(input.model.crops.map((c) => c.id));
+	for (const n of input.model.nodes) {
+		if (n.kind !== 'farm') continue;
+		const W = get.get(`${n.id}|soil_water`);
+		if (!W) continue;
+		const used = get.get(`${n.id}|effective_rain`);
+		const gross = get.get(`${n.id}|gross_demand`);
+		if (!used || !gross) return `${n.id}: effective rain or gross demand column missing`;
+		let area = 0;
+		for (const ca of input.model.cropAreas) if (ca.nodeId === n.id && cropIds.has(ca.cropId)) area += ca.areaM2;
+		const toM3 = area / 1000;
+		const sizeM3 = sizeMm * toM3;
+		let prev = 0;
+		let sumUsed = 0;
+		let sumPe = 0;
+		for (let t = 0; t < out.days; t++) {
+			const where = `${n.id} day ${t}`;
+			const w = W[t]!;
+			const u = used[t]!;
+			const pe = area * (fraction / 1000) * rain[t]!;
+			const available = prev + pe;
+			const scale = Math.max(available, Math.abs(gross[t]!), sizeM3);
+			if (w < -tol(sizeMm) || w > sizeMm + tol(sizeMm)) return `${where}: soil-water store ${w} mm outside 0 … ${sizeMm} mm`;
+			if (u < 0 || Math.abs(u - Math.min(available, Math.max(0, gross[t]!))) > tol(scale))
+				return `${where}: effective rain used ${u} ≠ MIN(store ${prev} + effective rain ${pe}, gross ${gross[t]}) m³`;
+			const wM3 = w * toM3;
+			if (Math.abs(wM3 - Math.min(sizeM3, available - u)) > tol(scale))
+				return `${where}: soil-water store ${wM3} m³ ≠ MIN(size ${sizeM3}, ${prev} + ${pe} − ${u})`;
+			sumUsed += u;
+			sumPe += pe;
+			prev = wM3;
+		}
+		if (sumUsed > sumPe + tol(sumPe)) return `${n.id}: effective rain used ${sumUsed} m³ over the run > effective rain ${sumPe} m³`;
+	}
+	return null;
+}
+
 /** Every per-run invariant. */
 export function checkInvariants(input: ModelInput, out: ModelOutput): string | null {
-	return checkBalance(input, out) ?? checkWorkings(input, out) ?? checkRunoffBalance(input, out) ?? checkTransferLimits(input, out) ?? checkReportTotals(input, out);
+	return (
+		checkBalance(input, out) ??
+		checkWorkings(input, out) ??
+		checkSoilWater(input, out) ??
+		checkRunoffBalance(input, out) ??
+		checkTransferLimits(input, out) ??
+		checkReportTotals(input, out)
+	);
 }

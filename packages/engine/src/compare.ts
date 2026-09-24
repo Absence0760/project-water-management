@@ -394,6 +394,7 @@ interface ScalarField {
 const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
+	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
@@ -449,7 +450,10 @@ const CALIBRATION_ARRAYS: Record<string, string> = {
 /**
  * Settings as the engine sees them: stored values merged over the defaults.
  * A run saved without a runoff model predates the setting (engine 0.5.0), so
- * it ran legacy, whatever today's default is.
+ * it ran legacy, whatever today's default is; one without a soil-water store
+ * predates it (engine 0.14.0), so it ran with none (0 mm); one without
+ * zeroRainRuns predates it (engine 0.15.0), so it ran flagged zero runs as
+ * recorded.
  */
 function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Record<string, unknown> {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
@@ -458,6 +462,10 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...d,
 		...r,
 		runoffModel: r.runoffModel ?? 'legacy',
+		// Runs store settings merged over the defaults, so a snapshot without a
+		// store size predates it (engine < 0.14.0) and carried no rain over.
+		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
+		zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [], ...((r.zeroRainRuns as object | undefined) ?? {}) },
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
@@ -511,6 +519,12 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 	}
 	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
 	out.push(...diffExclusions(a.calibrationExclusions, b.calibrationExclusions));
+	const za = a.zeroRainRuns as Record<string, unknown>;
+	const zb = b.zeroRainRuns as Record<string, unknown>;
+	const zeroMode = (v: unknown) => (v === 'missing' ? 'treated as missing (CHIRPS fills them)' : v === 'asRecorded' ? 'run as recorded (dry)' : String(v));
+	if (!same(za.mode, zb.mode)) push('Flagged zero-rain runs', `Flagged zero-rain runs: ${zeroMode(za.mode)} → ${zeroMode(zb.mode)}`);
+	out.push(...diffExclusions(za.keepDry, zb.keepDry, 'Keep-dry period'));
+	out.push(...diffExclusions(za.missing, zb.missing, 'Missing-rain period'));
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([
@@ -522,6 +536,7 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		'gr4j',
 		'wr2012',
 		'calibrationExclusions',
+		'zeroRainRuns',
 		'fitRecord'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
@@ -603,17 +618,17 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 }
 
 /** Calibration exclusions added, removed, or given another reason (matched by their period). */
-function diffExclusions(ra: unknown, rb: unknown): InputChange[] {
+function diffExclusions(ra: unknown, rb: unknown, noun = 'Calibration exclusion'): InputChange[] {
 	const list = (v: unknown) => (Array.isArray(v) ? (v as CalibrationExclusion[]).filter((x) => x && typeof x === 'object') : []);
 	const a = new Map(list(ra).map((x) => [exclusionKey(x), x]));
 	const b = new Map(list(rb).map((x) => [exclusionKey(x), x]));
 	const out: InputChange[] = [];
 	for (const [k, x] of a) {
-		if (!b.has(k)) out.push({ area: 'settings', kind: 'removed', subject: `Calibration exclusion ${exclusionLabel(x)}`, text: `Calibration exclusion ${exclusionLabel(x)} removed (was: “${x.reason}”)` });
+		if (!b.has(k)) out.push({ area: 'settings', kind: 'removed', subject: `${noun} ${exclusionLabel(x)}`, text: `${noun} ${exclusionLabel(x)} removed (was: “${x.reason}”)` });
 	}
 	for (const [k, y] of b) {
 		const x = a.get(k);
-		const subject = `Calibration exclusion ${exclusionLabel(y)}`;
+		const subject = `${noun} ${exclusionLabel(y)}`;
 		if (!x) out.push({ area: 'settings', kind: 'added', subject, text: `${subject} added: “${y.reason}”` });
 		else if (x.reason !== y.reason) out.push({ area: 'settings', kind: 'changed', subject, text: `${subject}: reason “${x.reason}” → “${y.reason}”` });
 	}

@@ -124,6 +124,21 @@ describe('runModel with GR4J', () => {
 		expect(out.summary.runoff!.params.x4).toBe(1.7);
 	});
 
+	it('warns when a month’s pan coefficient sits outside FAO-56’s typical Class A pan range (0.6–0.85), naming the months', () => {
+		const flat = defaultProjectSettings().panCoefficient; // 0.7 every month: inside range, no warning
+		expect(runModel(catchment(rain, { panCoefficient: flat })).summary.warnings.some((w) => w.includes('pan coefficient'))).toBe(false);
+		const mixed = [0.5, ...flat.slice(1, 11), 0.9] as never; // Oct too low, Sep too high
+		const out = runModel(catchment(rain, { panCoefficient: mixed }));
+		expect(out.summary.warnings).toContain(
+			"pan coefficient is outside FAO-56's typical Class A pan range (0.6–0.85) in Oct, Sep: confirm against local humidity and wind"
+		);
+		// Boundaries themselves are fine: 0.6 and 0.85 are inside the range.
+		const boundary = [0.6, ...flat.slice(1, 11), 0.85] as never;
+		expect(runModel(catchment(rain, { panCoefficient: boundary })).summary.warnings.some((w) => w.includes('pan coefficient'))).toBe(false);
+		// Legacy doesn't use the pan coefficient at all: no warning even when it's out of range.
+		expect(runModel(catchment(rain, { runoffModel: 'legacy', panCoefficient: mixed })).summary.warnings.some((w) => w.includes('pan coefficient'))).toBe(false);
+	});
+
 	it('explains a short run whose flow exceeds its rain', () => {
 		const input = catchment(new Array(20).fill(0));
 		input.series.rain_catchment_mm!.values[19] = 0.1; // some rain, so a coefficient exists

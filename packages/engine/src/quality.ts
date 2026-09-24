@@ -410,7 +410,9 @@ export function seriesChecks(series: Partial<Record<SeriesKind, DailySeries>>): 
 // Rain used = the first non-blank of catchment, CHIRPS and forecast rain
 // (model.md §2.4 column R). A blank day falls back to CHIRPS; a 0 does not. So
 // a stretch of missing data exported as zeros runs the catchment artificially
-// dry. These checks only warn; they never change which rain a run uses.
+// dry. The checks themselves only report. From engine 0.15.0 a run sets the
+// flagged zero runs aside as missing (./rain.ts zeroRainMask, CR-20), so they
+// do change the rain a run uses unless settings.zeroRainRuns says otherwise.
 
 /**
  * Zero-run rule: a run of consecutive days with catchment rain exactly 0 is
@@ -507,7 +509,8 @@ export const MAX_LISTED = 12;
 const listed = (parts: string[]) =>
 	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
 const FALLBACK_NOTE =
-	'A zero counts as a reading, so it blocks the fallback to CHIRPS (then forecast) rain that a blank day gets. If these are missing data, re-export them as blank';
+	'A zero counts as a reading, so on its own it blocks the fallback to CHIRPS (then forecast) rain that a blank day gets. ' +
+	'A run treats these runs as missing, so CHIRPS fills them, unless Settings → Zero-rain runs keeps them as recorded; the run says what it filled';
 
 /** The zero-run result as a SeriesCheck, or null when nothing is flagged. */
 export function zeroRainCheck(z: ZeroRainRuns): SeriesCheck | null {

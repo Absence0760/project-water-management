@@ -280,8 +280,12 @@ describe('diffInputs', () => {
 	it('does not flag settings stored sparsely vs merged over the defaults', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
+		// Likewise the soil-water store: none stored means none used (engine < 0.14.0),
+		// and zero-rain runs: none stored means flagged runs ran as recorded (< 0.15.0).
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
+		b.settings.effectiveRainStoreMm = 0;
+		b.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
 		expect(diffInputs(a, b)).toEqual([]);
 	});
 
@@ -382,6 +386,21 @@ describe('diffInputs', () => {
 		expect(diffInputs(a, b).every((c) => c.area === 'settings' && c.kind === 'changed')).toBe(true);
 	});
 
+	it('names the soil-water store size, and reads a snapshot from before it as no store (0 mm)', () => {
+		const a = snapshot();
+		(a.settings as Record<string, unknown>).effectiveRainStoreMm = 25;
+		const b = structuredClone(a);
+		(b.settings as Record<string, unknown>).effectiveRainStoreMm = 10;
+		expect(texts(a, b)).toEqual(['Soil-water store (effective rain carry-over): 25 mm → 10 mm']);
+		// Runs store merged settings, so no size means engine < 0.14.0, which carried nothing over.
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).effectiveRainStoreMm;
+		expect(texts(old, a)).toEqual(['Soil-water store (effective rain carry-over): 0 mm → 25 mm']);
+		const none = structuredClone(a);
+		(none.settings as Record<string, unknown>).effectiveRainStoreMm = 0;
+		expect(diffInputs(old, none)).toEqual([]);
+	});
+
 	it('describes calibration exclusions added, removed and re-reasoned', () => {
 		const a = snapshot();
 		a.settings.calibrationExclusions = [
@@ -417,6 +436,27 @@ describe('diffInputs', () => {
 		const old = snapshot();
 		delete (old.settings as Record<string, unknown>).calibrationExclusions;
 		expect(diffInputs(old, snapshot())).toEqual([]);
+	});
+
+	it('describes the zero-rain run settings (CR-20); a run saved before them ran flagged runs as recorded', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.zeroRainRuns = {
+			mode: 'asRecorded',
+			keepDry: [{ start: '2003-05-01', end: '2003-08-31', reason: 'real drought' }],
+			missing: [{ waterYear: 1999, reason: 'gauge offline' }]
+		};
+		expect(texts(a, b)).toEqual([
+			'Flagged zero-rain runs: treated as missing (CHIRPS fills them) → run as recorded (dry)',
+			'Keep-dry period 2003-05-01 – 2003-08-31 added: “real drought”',
+			'Missing-rain period WY 1999/00 added: “gauge offline”'
+		]);
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).zeroRainRuns;
+		expect(texts(old, a)).toEqual(['Flagged zero-rain runs: run as recorded (dry) → treated as missing (CHIRPS fills them)']);
+		const recorded = structuredClone(a);
+		recorded.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
+		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 
 	it('describes the fit record: set, replaced, edited since, and removed', () => {

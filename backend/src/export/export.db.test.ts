@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, monthly, node, signUp } from '../__tests__/helpers.js';
+import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -105,10 +106,12 @@ describe('run daily export', () => {
 		expect(res.headers.get('content-disposition')).toContain('_baseline_farm-upper_daily_');
 		const header = lines(res.text)[0]!;
 		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.12.0).
-		expect(header.split(',').slice(0, 6)).toEqual([
+		// The soil-water store (engine 0.14.0) sits with the demand columns.
+		expect(header.split(',').slice(0, 7)).toEqual([
 			'date',
 			'Gross irrigation demand (before effective rain) (m³/day)',
-			'Effective rain on the cropped area (m³/day)',
+			"Effective rain used against demand (from the day's rain or the soil store) (m³/day)",
+			'Soil-water store at the end of the day (mm)',
 			'Irrigation demand (net) [F] (m³/day)',
 			'Irrigation supplied [G] (m³/day)',
 			'Inflow from upstream [H] (m³/day)'
@@ -148,7 +151,7 @@ describe('run summary export', () => {
 		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
-		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(5);
+		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(6); // incl. the soil-water store (engine 0.14.0)
 		expect(rows).toContain('Water balance by water year (Oct–Sep)');
 		expect(rows.some((r) => r.startsWith('Whole run,'))).toBe(true);
 		expect(rows).toContain('Farm daily columns (the daily CSV of a farm)');
@@ -158,6 +161,46 @@ describe('run summary export', () => {
 		const other = await owner.call('POST', '/projects', { name: 'Other' });
 		const res = await download(owner, `/projects/${other.body.project.id}/runs/${runId}/export/summary.csv`);
 		expect(res.status).toBe(404);
+	});
+});
+
+describe('legacy run CSV comment (audit H1)', () => {
+	let legacyProjectId: string;
+	let legacyRunId: string;
+
+	beforeAll(async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Legacy export' });
+		legacyProjectId = body.project.id;
+		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		const legacyOutlet = node('Outlet', null);
+		const legacyFarm = node('Farm', legacyOutlet.id);
+		expect((await owner.call('PUT', `/projects/${legacyProjectId}/model`, { nodes: [legacyOutlet, legacyFarm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect(
+			(await owner.call('PUT', `/projects/${legacyProjectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: rain })).status
+		).toBe(200);
+		const run = await owner.call('POST', `/projects/${legacyProjectId}/runs`, { label: 'Legacy' });
+		expect(run.status).toBe(201);
+		legacyRunId = run.body.run.id;
+	});
+
+	it('starts daily.csv and summary.csv with the legacy comment, header still row 1 after it', async () => {
+		const daily = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/daily.csv`);
+		const dailyRows = lines(daily.text);
+		expect(dailyRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(dailyRows[1]).toMatch(/^date,/);
+		expect(daily.text.startsWith(BOM)).toBe(true);
+
+		const summary = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/summary.csv`);
+		const summaryRows = lines(summary.text);
+		expect(summaryRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(summaryRows[1]).toBe('Project,Legacy export');
+	});
+
+	it('does not prefix a GR4J run’s exports (positive control, the Baseline run from the outer suite)', async () => {
+		const daily = await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv`);
+		expect(lines(daily.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
+		const summary = await download(owner, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
+		expect(lines(summary.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
 	});
 });
 

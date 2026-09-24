@@ -37,6 +37,21 @@ describe('POST /projects/:id/runs', () => {
 		await set({ runoffModel: 'legacy' });
 		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).status).toBe(201);
 	});
+
+	it('reports which runs used the legacy runoff model (audit H1), on the list and on each run', async () => {
+		const u = await signUp('Legacyflag');
+		const projectId = await runnable(u);
+		const gr4jRunId = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'gr4j' })).body.run.id as string;
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		const legacyRunId = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).body.run.id as string;
+
+		const list = (await u.call('GET', `/projects/${projectId}/runs`)).body.runs as { id: string; legacy: boolean }[];
+		expect(list.find((r) => r.id === gr4jRunId)?.legacy).toBe(false);
+		expect(list.find((r) => r.id === legacyRunId)?.legacy).toBe(true);
+
+		expect((await u.call('GET', `/projects/${projectId}/runs/${gr4jRunId}`)).body.run.legacy).toBe(false);
+		expect((await u.call('GET', `/projects/${projectId}/runs/${legacyRunId}`)).body.run.legacy).toBe(true);
+	});
 });
 
 describe('run storage cap', () => {

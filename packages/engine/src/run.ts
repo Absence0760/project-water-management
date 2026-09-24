@@ -17,9 +17,21 @@ import {
 	resolveDataQuality,
 	seriesChecks
 } from './quality';
-import { applyChirpsCorrection, chirpsBiasFactors, chirpsCorrectionWarning, type ChirpsCorrection } from './rain';
+import {
+	applyChirpsCorrection,
+	blankMasked,
+	chirpsBiasFactors,
+	chirpsCorrectionWarning,
+	finishZeroRainInfill,
+	resolveZeroRain,
+	ZERO_RAIN_COLUMN,
+	zeroRainMask,
+	zeroRainWarnings,
+	type ChirpsCorrection,
+	type ZeroRainMask
+} from './rain';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
-import { grossFarmDemandM3PerDay, netDailyDemandM3, rainOffsetM3, type Crop } from './demand';
+import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -35,6 +47,9 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
+	panCoefficientOutOfRange,
+	PAN_COEFFICIENT_TYPICAL_MAX,
+	PAN_COEFFICIENT_TYPICAL_MIN,
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
@@ -45,7 +60,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.15.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -89,7 +104,7 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection } = prepareRun(input);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -98,6 +113,7 @@ export function runModelWith(
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
+	if (settings.runoffModel === 'legacy') warnings.push(LEGACY_NOT_EVIDENCE_WARNING);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
 	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
@@ -155,6 +171,7 @@ export function runModelWith(
 	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
+	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
 		['demand', 'demand', 'Irrigation demand (net)'],
@@ -173,7 +190,8 @@ export function runModelWith(
 	];
 	const WORKING_SERIES: [keyof FarmWorkings, string, string, string][] = [
 		['grossDemand', 'gross_demand', 'Gross irrigation demand (before effective rain)', 'm³/day'],
-		['rainOffset', 'effective_rain', 'Effective rain on the cropped area', 'm³/day'],
+		['rainOffset', 'effective_rain', 'Effective rain used against demand (from the day\'s rain or the soil store)', 'm³/day'],
+		['soilWater', 'soil_water', 'Soil-water store at the end of the day', 'mm'],
 		['upstreamToDam', 'upstream_to_dam', 'Upstream inflow into the dam', 'm³/day'],
 		['upstreamBelowDam', 'upstream_below_dam', 'Upstream inflow below the dam', 'm³/day'],
 		['runoffToDam', 'runoff_to_dam', 'Farm runoff into the dam', 'm³/day'],
@@ -325,6 +343,7 @@ export function runModelWith(
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
 			chirpsCorrection,
+			zeroRainInfill: zeroRain?.infill ?? null,
 			warnings
 		}
 	};
@@ -351,6 +370,8 @@ export interface PreparedRun {
 	month: Uint8Array;
 	/** The CHIRPS fallback correction (null without a CHIRPS series). */
 	chirpsCorrection: ChirpsCorrection | null;
+	/** Catchment rain days set aside as missing (CR-20; null without a catchment rain series). */
+	zeroRain: ZeroRainMask | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
@@ -382,16 +403,28 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	for (let t = 0; t < days; t++) month[t] = monthOfEpochDay(start + t);
 
 	// Rain used = catchment ?? CHIRPS ?? forecast; CHIRPS is bias-corrected
-	// where it fills in (audit B1). Every consumer (runoff models, demand,
-	// calibration, the runoff coefficient) reads CHIRPS through `aligned`.
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection);
-	const chirpsUsed = chirpsCorrection
-		? applyChirpsCorrection(chirpsCorrection, alignSeries(series.rain_catchment_mm, start, days), alignSeries(series.rain_chirps_mm, start, days), month)
-		: null;
+	// where it fills in (audit B1). Catchment rain is blanked first on the days
+	// settings.zeroRainRuns sets aside (CR-20), so they fall back too. Every
+	// consumer (runoff models, demand, calibration, the runoff coefficient)
+	// reads the rain through `aligned`.
+	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days);
+	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, exclusionRanges(settings.zeroRainRuns.missing));
+	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month) : null;
 	const aligned = (kind: SeriesKind) =>
-		kind === 'rain_chirps_mm' && chirpsUsed ? chirpsUsed.slice() : alignSeries(series[kind], start, days);
+		kind === 'rain_catchment_mm'
+			? catchment.slice()
+			: kind === 'rain_chirps_mm' && chirpsUsed
+				? chirpsUsed.slice()
+				: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
+	if (zeroRain) {
+		const chirps = aligned('rain_chirps_mm');
+		const forecast = aligned('rain_forecast_mm');
+		finishZeroRainInfill(zeroRain, (t) => chirps[t] ?? forecast[t] ?? null);
+		warnings.push(...zeroRainWarnings(zeroRain.infill));
+	}
 
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
 		warnings.push(
@@ -401,7 +434,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		);
 	}
 
-	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection };
+	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain };
 }
 
 /**
@@ -484,7 +517,8 @@ export function buildNetworkPlan(
 				returnFlowPct: n.returnFlowPct,
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,
-				rainOffset: demand[i]!.rainOffset
+				rainOffset: demand[i]!.rainOffset,
+				soilWater: demand[i]!.soilWater
 			};
 		})
 	};
@@ -589,6 +623,17 @@ const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_logger_m3s: 'Observed flow (logger)'
 };
 
+/**
+ * Every legacy run carries this (audit H1, operator decision 2026-09-24): the
+ * b023 recession model doesn't conserve water at the event scale (a storm can
+ * return several times its own rain as flow — docs/engine-audit.md H1), so it
+ * stays unchanged for workbook comparison only. The "LEGACY_NOT_EVIDENCE:"
+ * prefix is a stable code a caller can match on even if the wording changes.
+ */
+export const LEGACY_NOT_EVIDENCE_WARNING =
+	'LEGACY_NOT_EVIDENCE: Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1); ' +
+	'workbook comparison only, not evidence for a licence, Reserve or compliance assessment.';
+
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =
 	'calibrated against the observed gauge flow by default: the project also has a logger flow record and no calibration record is chosen. ' +
@@ -657,6 +702,8 @@ function alignSeries(s: DailySeries | undefined, start: number, days: number): (
 	return out;
 }
 
+const WATER_YEAR_MONTH_NAMES = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+
 function monthly(v: unknown, name: string, warnings: string[]): Monthly {
 	const arr = Array.isArray(v) ? v : [];
 	if (arr.length !== 12) warnings.push(`${name} should have 12 monthly values, has ${arr.length}; missing months are 0`);
@@ -674,9 +721,14 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
 	s.panCoefficient = monthly(s.panCoefficient, 'pan coefficient', warnings);
 	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
+	s.zeroRainRuns = resolveZeroRain(raw?.zeroRainRuns, warnings);
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
+	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
+		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);
+		s.effectiveRainStoreMm = d.effectiveRainStoreMm;
+	}
 	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {
 		warnings.push(`unknown calibration flow series "${String(s.calibrationFlowKind)}"; using the default`);
 		s.calibrationFlowKind = null;
@@ -703,6 +755,15 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		warnings.push(`unknown runoff model "${String(s.runoffModel)}"; using ${d.runoffModel}`);
 		s.runoffModel = d.runoffModel;
 	}
+	if (s.runoffModel === 'gr4j') {
+		const months = panCoefficientOutOfRange(s.panCoefficient);
+		if (months.length) {
+			const names = months.map((i) => WATER_YEAR_MONTH_NAMES[i]).join(', ');
+			warnings.push(
+				`pan coefficient is outside FAO-56's typical Class A pan range (${PAN_COEFFICIENT_TYPICAL_MIN}–${PAN_COEFFICIENT_TYPICAL_MAX}) in ${names}: confirm against local humidity and wind`
+			);
+		}
+	}
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
@@ -722,7 +783,7 @@ function buildDemand(
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[]
-): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array }[] {
+): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => ({
 		id: c.id,
@@ -748,7 +809,7 @@ function buildDemand(
 
 	let anyArea = false;
 	const out = nodes.map((node) => {
-		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days) };
+		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days) };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
@@ -764,13 +825,10 @@ function buildDemand(
 		if (cropped === 0) return d;
 		anyArea = true;
 		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
-		for (let t = 0; t < days; t++) {
-			const g = gross[wy[t]!]!;
-			d.gross[t] = g;
-			d.rainOffset[t] = rainOffsetM3(cropped, rain[t]!, settings.effectiveRainFraction);
-			d.net[t] = netDailyDemandM3(g, cropped, rain[t]!, settings.effectiveRainFraction);
-		}
-		return d;
+		for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
+		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
+		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
+		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});
 	if (anyArea && settings.apanMm.every((v) => v === 0)) {
 		warnings.push('A-pan evaporation is 0 for every month, so irrigation demand is 0');

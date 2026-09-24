@@ -10,8 +10,11 @@
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { CHIRPS_BIAS_OPTIONS } from '$lib/components/settings/rain';
 	import { fmtNum } from '$lib/format/number';
-	import { monthsText, paramLabel } from './provenance';
+	import { fitModelLabel, monthsText, paramLabel } from './provenance';
+
+	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
 	let {
 		record,
@@ -49,9 +52,9 @@
 		</p>
 	{:else}
 		<p class="small">
-			<strong>{record.model === 'gr4j' ? 'GR4J' : 'Legacy'} fit of {fittedAtText(record.fittedAt)}</strong>
+			<strong>{fitModelLabel(record.model)} fit of {fittedAtText(record.fittedAt)}</strong>
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
-			{#if status && status.forcingChanged}<span class="badge badge-warn">Evaporation changed since fit</span>{/if}
+			{#if status && status.forcingChanged}<span class="badge badge-warn">Forcing changed since fit</span>{/if}
 		</p>
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
@@ -64,8 +67,12 @@
 			{#if record.forcing}
 				<div><dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt><dd>{monthsText(record.forcing.panCoefficient)}</dd></div>
 				<div><dt>A-pan evaporation <HelpTip key="settings.apanMm" /></dt><dd>{monthsText(record.forcing.apanMm, 0)} mm</dd></div>
+				<div>
+					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
+					<dd>{record.forcing.chirpsBiasCorrection ? chirpsBiasLabel(record.forcing.chirpsBiasCorrection) : 'not recorded (fit made before this was tracked)'}</dd>
+				</div>
 			{:else}
-				<div><dt>Evaporation forcing</dt><dd>not recorded (fit made before this was tracked)</dd></div>
+				<div><dt>Forcing</dt><dd>not recorded (fit made before this was tracked)</dd></div>
 			{/if}
 			<div>
 				<dt>Excluded</dt>

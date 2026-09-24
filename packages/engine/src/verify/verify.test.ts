@@ -66,6 +66,7 @@ describe('farm working columns (engine 0.12.0)', () => {
 		const F = 500 / 31; // 10 000 m² × 100 mm × 0.5 / 1000 / 31 days
 		expect(b('gross_demand')).toBeCloseTo(F, 9);
 		expect(b('effective_rain')).toBe(0);
+		expect(b('soil_water')).toBe(0);
 		expect(b('demand')).toBeCloseTo(F, 9);
 		expect(b('inflow_upstream')).toBeCloseTo(250, 9); // H: farm u's quarter of 1000
 		expect(b('runoff')).toBeCloseTo(750, 9); // I
@@ -82,9 +83,11 @@ describe('farm working columns (engine 0.12.0)', () => {
 		expect(b('return_flow')).toBeCloseTo(F / 10, 9); // T
 		expect(b('outflow')).toBeCloseTo(500 - (9 * F) / 10, 9); // U = R + S + T
 		expect(Math.abs(b('balance_residual'))).toBeLessThan(1e-9); // V
-		// Day 2: 3 mm of rain → 10 000 × 0.65 / 1000 × 3 = 19.5 m³ effective, more than the demand.
-		expect(col(out, 'b', 'effective_rain')[1]).toBeCloseTo(19.5, 9);
+		// Day 2: 3 mm of rain → 10 000 × 0.65 / 1000 × 3 = 19.5 m³ effective, more than the demand F:
+		// F is used, and the other 19.5 − F m³ stays in the soil store (N3), 1000 × (19.5 − F) / 10 000 mm.
+		expect(col(out, 'b', 'effective_rain')[1]).toBeCloseTo(F, 9);
 		expect(col(out, 'b', 'demand')[1]).toBe(0);
+		expect(col(out, 'b', 'soil_water')[1]).toBeCloseTo((1000 * (19.5 - F)) / 10_000, 9);
 	});
 
 	it('are emitted for farms only, one per catalogue entry', () => {
@@ -99,7 +102,7 @@ describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
-		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'runoff', 'transfers', 'reports']);
+		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports']);
 		expect(v.checks.filter((c) => !c.passed)).toEqual([]);
 		expect(v.passed).toBe(true);
 		expect(v.maxResidual!.valueM3Day).toBeLessThan(1e-9);
@@ -148,6 +151,27 @@ describe('verification (engine 0.12.0)', () => {
 		expect(balance.detail).not.toMatch(/\bday \d/);
 		// The working columns no longer add up either; the other checks don't look at storage that way.
 		expect(verification.checks.find((c) => c.id === 'workings')!.passed).toBe(false);
+	});
+
+	it('catches a soil-water store that overflows or hands out rain that never fell (N3)', () => {
+		const input = handInput();
+		const out = handRun();
+		const check = (o: ModelOutput) => verifyRun(input, o).verification.checks.find((c) => c.id === 'soilWater')!;
+		expect(check(out).passed).toBe(true);
+		const over: ModelOutput = structuredClone(out);
+		over.series.find((s) => s.nodeId === 'b' && s.key === 'soil_water')!.values[1] = 26; // store size 25 mm
+		expect(check(over).detail).toContain('"Farm b" on 2021-01-02');
+		expect(check(over).detail).toContain('outside 0 … 25 mm');
+		// Rain used on the dry first day, and demand lowered to match: the workings still add up, the store doesn't.
+		const free: ModelOutput = structuredClone(out);
+		free.series.find((s) => s.nodeId === 'b' && s.key === 'effective_rain')!.values[0] = 5;
+		free.series.find((s) => s.nodeId === 'b' && s.key === 'demand')!.values[0]! -= 5;
+		expect(check(free).passed).toBe(false);
+		expect(check(free).detail).toContain('effective rain used 5');
+		// A run from before engine 0.14.0 has no store column: nothing to check.
+		const old: ModelOutput = structuredClone(out);
+		old.series = old.series.filter((s) => s.key !== 'soil_water');
+		expect(check(old).passed).toBe(true);
 	});
 
 	it('reports a check that cannot run as failed, with the reason', () => {

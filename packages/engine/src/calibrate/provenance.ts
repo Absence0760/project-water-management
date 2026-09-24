@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type { CalibrationFlowKind, ProjectSettings } from '../project';
+import type { CalibrationFlowKind, ChirpsBiasMode, ProjectSettings } from '../project';
 import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
@@ -85,17 +85,17 @@ export function exclusionsError(list: readonly unknown[]): string | null {
  * a warning (the backend rejects them on save; this guards older or imported
  * settings).
  */
-export function sanitizeExclusions(raw: unknown, warnings: string[]): CalibrationExclusion[] {
+export function sanitizeExclusions(raw: unknown, warnings: string[], what = 'calibration exclusion'): CalibrationExclusion[] {
 	if (raw == null) return [];
 	if (!Array.isArray(raw)) {
-		warnings.push('calibration exclusions are not a list; ignored');
+		warnings.push(`${what}s are not a list; ignored`);
 		return [];
 	}
 	const out: CalibrationExclusion[] = [];
 	for (const x of raw) {
 		const err = exclusionError(x);
 		if (err) {
-			warnings.push(`calibration exclusion ${JSON.stringify(x).slice(0, 80)} ${err}; ignored`);
+			warnings.push(`${what} ${JSON.stringify(x).slice(0, 80)} ${err}; ignored`);
 			continue;
 		}
 		const o = x as Record<string, unknown>;
@@ -165,13 +165,17 @@ export interface FitRecord {
 	/** The parameters before the fit, on the same days. */
 	before: ScoredPeriod;
 	/**
-	 * The evaporation forcing the fit ran under: `settings.panCoefficient` and
-	 * `settings.apanMm` at the time (water-year months). GR4J's parameters
-	 * trade off against evaporation, so a fit is only valid for the forcing it
-	 * was fitted under — the coefficient must be held fixed, never calibrated.
-	 * Absent on records made before it existed.
+	 * The forcing the fit ran under: `settings.panCoefficient`,
+	 * `settings.apanMm` (water-year months) and `settings.chirpsBiasCorrection`
+	 * at the time. GR4J's parameters trade off against evaporation, so a fit
+	 * is only valid for the forcing it was fitted under — the pan coefficient
+	 * must be held fixed, never calibrated. CHIRPS bias correction changes the
+	 * rain fed to the model on the days CHIRPS fills a gap in the catchment
+	 * record, so a fit's parameters are comparable only under the mode it ran
+	 * under too. Absent on records made before `forcing` existed;
+	 * `chirpsBiasCorrection` absent on a `forcing` made before it was tracked.
 	 */
-	forcing?: { panCoefficient: number[]; apanMm: number[] };
+	forcing?: { panCoefficient: number[]; apanMm: number[]; chirpsBiasCorrection?: ChirpsBiasMode };
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
@@ -192,7 +196,9 @@ export interface FitRecord {
 
 export interface FitContext {
 	/** The Settings form the fit ran on. */
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm'> & { calibrationExclusions?: CalibrationExclusion[] | null };
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
+		calibrationExclusions?: CalibrationExclusion[] | null;
+	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
 	engineVersion: string;
@@ -225,7 +231,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		validationRecord: ctx.validationRecord,
 		fit: r.fit,
 		before: r.before,
-		forcing: { panCoefficient: [...ctx.settings.panCoefficient], apanMm: [...ctx.settings.apanMm] },
+		forcing: { panCoefficient: [...ctx.settings.panCoefficient], apanMm: [...ctx.settings.apanMm], chirpsBiasCorrection: ctx.settings.chirpsBiasCorrection },
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
@@ -278,9 +284,11 @@ export interface FitRecordStatus {
 	exclusionsChanged: boolean;
 	flowKindChanged: boolean;
 	/**
-	 * The pan coefficient or A-pan evaporation (the GR4J/legacy forcing) has
-	 * changed since the fit. False for records made before `forcing` was
-	 * recorded — there is nothing to compare against.
+	 * The pan coefficient, A-pan evaporation or CHIRPS bias correction (the
+	 * forcing GR4J runs under) has changed since the fit. False for records
+	 * made before `forcing` was recorded, or for a `forcing` made before
+	 * `chirpsBiasCorrection` was added to it — there is nothing to compare
+	 * against.
 	 */
 	forcingChanged: boolean;
 }
@@ -291,12 +299,14 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 const closeArray = (a: readonly number[] | null | undefined, b: readonly number[] | null | undefined): boolean =>
 	!!a && !!b && a.length === b.length && a.every((v, i) => close(v, b[i]));
 
-/** Which of a fit's recorded forcing arrays differ from the settings, or null when there is nothing recorded to compare. */
-function forcingDiff(settings: Partial<ProjectSettings>, record: FitRecord): { panCoefficient: boolean; apanMm: boolean } | null {
+/** Which of a fit's recorded forcing fields differ from the settings, or null when there is nothing recorded to compare. */
+function forcingDiff(settings: Partial<ProjectSettings>, record: FitRecord): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean } | null {
 	if (!record.forcing) return null;
 	return {
 		panCoefficient: !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
-		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm)
+		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm),
+		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
+		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection
 	};
 }
 
@@ -311,7 +321,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
-		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm)
+		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection)
 	};
 }
 
@@ -326,7 +336,9 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.forcingChanged) {
-		out.push('The pan coefficient or A-pan evaporation has changed since the fit. GR4J’s parameters trade off against evaporation, so refit before relying on them.');
+		out.push(
+			'The pan coefficient, A-pan evaporation or CHIRPS bias correction has changed since the fit. GR4J’s parameters trade off against evaporation, and CHIRPS bias correction changes the rain fed to it on days CHIRPS fills a gap, so refit before relying on them.'
+		);
 	}
 	return out;
 }

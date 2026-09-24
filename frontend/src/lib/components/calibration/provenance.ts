@@ -12,3 +12,8 @@ export function paramLabel(model: RunoffModelId, key: string): string {
 export function monthsText(values: readonly number[], decimals = 2): string {
 	return values.every((v) => v === values[0]) ? `${fmtNum(values[0], decimals)} every month` : values.map((v, i) => `${WATER_YEAR_MONTHS[i]} ${fmtNum(v, decimals)}`).join(', ');
 }
+
+/** "GR4J" or "Legacy (workbook comparison)" (audit H1): the fit record's model, in the heading of FitProvenance. */
+export function fitModelLabel(model: RunoffModelId): string {
+	return model === 'gr4j' ? 'GR4J' : 'Legacy (workbook comparison)';
+}

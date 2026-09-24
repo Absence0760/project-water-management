@@ -19,11 +19,12 @@ export function asFitRecord(v: unknown): FitRecord | null {
 }
 
 /**
- * Whether a run's own evaporation forcing (`settings`, its snapshot) has
- * moved since its fit: '–' with no record, 'unknown' when the run's settings
- * weren't given (older callers), else 'yes'/'no'.
+ * Whether a run's own forcing (`settings`, its snapshot — pan coefficient,
+ * A-pan evaporation, CHIRPS bias correction) has moved since its fit: '–'
+ * with no record, 'unknown' when the run's settings weren't given (older
+ * callers), else 'yes'/'no'.
  */
-const evapChanged = (r: FitRecord | null, settings: Partial<ProjectSettings> | null | undefined): string => {
+const forcingChangedText = (r: FitRecord | null, settings: Partial<ProjectSettings> | null | undefined): string => {
 	if (!r) return '–';
 	if (!settings) return 'unknown';
 	return fitRecordStatus(settings, r).forcingChanged ? 'yes' : 'no';
@@ -64,6 +65,6 @@ export function fitValidationRows(
 			})
 		},
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) },
-		{ label: 'Evaporation changed since fit', a: evapChanged(ra, settingsA), b: evapChanged(rb, settingsB) }
+		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA), b: forcingChangedText(rb, settingsB) }
 	];
 }

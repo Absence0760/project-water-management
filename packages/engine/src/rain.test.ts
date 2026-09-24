@@ -8,7 +8,10 @@ import {
 	CHIRPS_FACTOR_MIN_DAYS,
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
-	suspectRainYears
+	resolveZeroRain,
+	suspectRainYears,
+	ZERO_RAIN_COLUMN,
+	zeroRainMask
 } from './rain';
 import { prepareRun, runModel } from './run';
 import { checkInvariants } from './testing/invariants';
@@ -231,9 +234,11 @@ describe('runModel with the CHIRPS correction', () => {
 	});
 
 	it('the legacy model and irrigation demand see the corrected rain too; days with catchment rain do not change', () => {
-		const on = runModel(runInput());
-		const off = runModel(runInput({ chirpsBiasCorrection: 'none' }));
-		expect(checkInvariants(runInput(), on)).toBeNull();
+		// No soil-water store (N3), so a fallback day's rain can't carry into the days after it.
+		const on = runModel(runInput({ effectiveRainStoreMm: 0 }));
+		const off = runModel(runInput({ chirpsBiasCorrection: 'none', effectiveRainStoreMm: 0 }));
+		expect(checkInvariants(runInput({ effectiveRainStoreMm: 0 }), on)).toBeNull();
+		expect(checkInvariants(runInput(), runModel(runInput()))).toBeNull();
 		const dOn = get(on, 'A', 'demand');
 		const dOff = get(off, 'A', 'demand');
 		const fallback = new Set(fallbackDays);
@@ -316,5 +321,190 @@ describe('runModel with the CHIRPS correction', () => {
 		const out = runModel(runInput({ chirpsBiasCorrection: 'yearly' as never }));
 		expect(out.summary.warnings).toContain('unknown CHIRPS bias correction "yearly"; using monthly');
 		expect(out.summary.chirpsCorrection!.mode).toBe('monthly');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Zero-rain runs treated as missing (CR-20, audit B2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A zero run in the wet season (the fixture rains most in May–Aug): 120 days
+ * zeroed, which joins the fixture's own dry days on either side (CHIRPS rains
+ * every third day), so the flagged run is a little longer.
+ */
+const runDays = (() => {
+	const c = catchment(chirps());
+	const core = Array.from({ length: DAYS }, (_, i) => i).filter((i) => dateAt(i) >= '2003-05-01' && dateAt(i) <= '2003-08-28');
+	let a = core[0]!;
+	let b = core[core.length - 1]!;
+	while (c[a - 1] === 0) a--;
+	while (c[b + 1] === 0) b++;
+	return Array.from({ length: b - a + 1 }, (_, k) => a + k);
+})();
+const RUN_FROM = dateAt(runDays[0]!);
+const RUN_TO = dateAt(runDays[runDays.length - 1]!);
+const RUN_N = runDays.length;
+
+/** Catchment rain K × CHIRPS everywhere except a zero run; no blank days. */
+function zeroRunInput(over: ModelInput['settings'] = {}, edit?: (c: (number | null)[]) => void): ModelInput {
+	const input = runInput(over);
+	const h = chirps();
+	const c = catchment(h);
+	for (const i of runDays) c[i] = 0;
+	edit?.(c);
+	input.series = series(c, h);
+	return input;
+}
+
+describe('zero-rain runs treated as missing (CR-20, B2)', () => {
+	it('fills a flagged wet-season zero run with corrected CHIRPS and leaves every other day as recorded', () => {
+		const input = zeroRunInput({ runoffModel: 'gr4j' });
+		const out = runModel(input);
+		expect(checkInvariants(input, out)).toBeNull();
+		const rain = get(out, null, 'rain_used');
+		const c = input.series.rain_catchment_mm!.values;
+		const h = input.series.rain_chirps_mm!.values;
+		const inRun = new Set(runDays);
+		for (let i = 0; i < DAYS; i++) {
+			if (inRun.has(i)) expect(rain[i]).toBeCloseTo(h[i]! * K[monthAt(i)]!, 12);
+			else expect(rain[i]).toBe(c[i]); // the fixture's own 2-day dry gaps stay 0: not flagged
+		}
+		const z = out.summary.zeroRainInfill!;
+		expect(z.mode).toBe('missing');
+		expect(z.periods).toEqual([
+			{ start: RUN_FROM, end: RUN_TO, source: 'flagged', reason: null, days: RUN_N, recordedMm: 0, filledMm: expect.any(Number), unfilledDays: 0 }
+		]);
+		const filled = runDays.reduce((a, i) => a + rain[i]!, 0);
+		expect(filled).toBeGreaterThan(100);
+		expect(z.filledMm).toBeCloseTo(filled, 9);
+		expect(z.days).toBe(RUN_N);
+		// The per-day flag marks exactly the run.
+		const col = get(out, null, ZERO_RAIN_COLUMN.key);
+		expect(col.filter((v, i) => (v === 1) !== inRun.has(i))).toEqual([]);
+		// The run's water year stays out of the fit, so the factors are still the true ones.
+		expect(out.summary.chirpsCorrection!.excludedWaterYears).toEqual([2002]);
+		for (const m of out.summary.chirpsCorrection!.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
+		expect(out.summary.warnings.find((w) => w.startsWith('Catchment rain treated as missing'))).toMatch(
+			new RegExp(`^Catchment rain treated as missing on ${RUN_N} days: ${RUN_FROM} to ${RUN_TO} \\(${RUN_N} days, flagged zero run\\)\\. CHIRPS \\(bias-corrected\\) then forecast rain stand in, ${Math.round(filled)} mm in all\\. The stored series is unchanged\\.`)
+		);
+	});
+
+	it('"asRecorded" runs the zero run dry (positive control: the same run makes less flow)', () => {
+		const filled = runModel(zeroRunInput({ runoffModel: 'gr4j' }));
+		const input = zeroRunInput({ runoffModel: 'gr4j', zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] } });
+		const dry = runModel(input);
+		expect(checkInvariants(input, dry)).toBeNull();
+		const rain = get(dry, null, 'rain_used');
+		expect(runDays.every((i) => rain[i] === 0)).toBe(true);
+		expect(dry.series.some((s) => s.key === ZERO_RAIN_COLUMN.key)).toBe(false);
+		expect(dry.summary.zeroRainInfill).toMatchObject({ mode: 'asRecorded', periods: [], days: 0, asRecordedDays: RUN_N });
+		expect(dry.summary.warnings).toContain(
+			`Flagged zero runs run as recorded (dry) on ${RUN_N} days: Settings → Zero-rain runs is "as recorded", so CHIRPS doesn't fill them.`
+		);
+		const flow = (o: typeof dry) => o.series.find((s) => s.key === 'natural_flow')!.values.reduce((a, b) => a + b, 0);
+		expect(flow(filled)).toBeGreaterThan(flow(dry));
+		// Every day outside the run's reach is identical: GR4J stores carry the difference on, so compare the rain only.
+		const rainOn = get(filled, null, 'rain_used');
+		expect(rain.filter((v, i) => !runDays.includes(i) && v !== rainOn[i])).toEqual([]);
+	});
+
+	it('a keep-dry period keeps the flagged days inside it as recorded, and says so', () => {
+		const keepDry = [{ start: '2003-04-01', end: '2003-06-30', reason: 'hydrologist: real drought' }];
+		const out = runModel(zeroRunInput({ zeroRainRuns: { mode: 'missing', keepDry, missing: [] } }));
+		const rain = get(out, null, 'rain_used');
+		const kept = runDays.filter((i) => dateAt(i) <= '2003-06-30');
+		expect(kept.every((i) => rain[i] === 0)).toBe(true);
+		const h = chirps();
+		for (const i of runDays.filter((i) => dateAt(i) > '2003-06-30')) expect(rain[i]).toBeCloseTo(h[i]! * K[monthAt(i)]!, 12);
+		const z = out.summary.zeroRainInfill!;
+		expect(z.keptDry).toEqual([{ ...keepDry[0], days: kept.length }]);
+		expect(z.days).toBe(RUN_N - kept.length);
+		expect(out.summary.warnings.find((w) => w.startsWith('Flagged zero runs kept as recorded'))).toBe(
+			`Flagged zero runs kept as recorded (dry) on ${kept.length} days, as Settings → Zero-rain runs says: 2003-04-01 to 2003-06-30 (${kept.length} days: hydrologist: real drought).`
+		);
+	});
+
+	it('a listed missing period replaces recorded rain, in either mode, and leaves the fit', () => {
+		// Corrupt August 2001 (10× too wet): the fit's August factor is dragged up …
+		const bad = (c: (number | null)[]) => {
+			for (let i = 0; i < DAYS; i++) if (dateAt(i).startsWith('2001-08')) c[i] = c[i]! * 10;
+		};
+		const skewed = runModel(zeroRunInput({}, bad));
+		expect(skewed.summary.chirpsCorrection!.months[7]!.factor).toBeGreaterThan(K[8]! * 1.3); // clamped at 4
+		// … until the period is listed as missing: then corrected CHIRPS stands in and the factor is true again.
+		const missing = [{ start: '2001-08-01', end: '2001-08-31', reason: 'logger fault' }];
+		for (const mode of ['missing', 'asRecorded'] as const) {
+			const out = runModel(zeroRunInput({ zeroRainRuns: { mode, keepDry: [], missing } }, bad));
+			expect(out.summary.chirpsCorrection!.months[7]!.factor).toBeCloseTo(K[8]!, 12);
+			const rain = get(out, null, 'rain_used');
+			const h = chirps();
+			for (let i = 0; i < DAYS; i++) if (dateAt(i).startsWith('2001-08')) expect(rain[i]).toBeCloseTo(h[i]! * K[8]!, 12);
+			const listed = out.summary.zeroRainInfill!.periods.find((p) => p.source === 'listed')!;
+			expect(listed).toMatchObject({ start: '2001-08-01', end: '2001-08-31', reason: 'logger fault', days: 31 });
+			expect(listed.recordedMm).toBeGreaterThan(listed.filledMm * 5);
+		}
+	});
+
+	it('counts days with nothing to fill them and warns; the model runs them as 0 mm', () => {
+		const input = zeroRunInput({}, () => {});
+		const h = input.series.rain_chirps_mm!.values.slice();
+		const gapDays = runDays.slice(0, 10);
+		for (const i of gapDays) h[i] = null;
+		input.series = { ...input.series, rain_chirps_mm: { startDate: S, values: h } };
+		const out = runModel(input);
+		expect(checkInvariants(input, out)).toBeNull();
+		expect(out.summary.zeroRainInfill!.unfilledDays).toBe(10);
+		expect(out.summary.zeroRainInfill!.periods[0]!.unfilledDays).toBe(10);
+		expect(out.summary.warnings.find((w) => w.startsWith('Catchment rain treated as missing'))).toMatch(
+			/ 10 of those days have no CHIRPS or forecast value either and run as 0 mm\./
+		);
+	});
+
+	it('does nothing without catchment rain, or without a flagged run', () => {
+		const noCatchment = runModel({ ...runInput(), series: series(null, chirps()) });
+		expect(noCatchment.summary.zeroRainInfill).toBeNull();
+		const clean = runModel(runInput());
+		expect(clean.summary.zeroRainInfill).toMatchObject({ periods: [], keptDry: [], asRecordedDays: 0, days: 0 });
+		expect(clean.summary.warnings.some((w) => /zero runs|treated as missing/.test(w))).toBe(false);
+	});
+
+	it('only claims days inside the run window, and a day in two periods once', () => {
+		const h = chirps();
+		const c = catchment(h);
+		for (const i of runDays) c[i] = 0;
+		const m = zeroRainMask(
+			{ startDate: S, values: c },
+			{ mode: 'missing', keepDry: [], missing: [{ start: '2003-08-01', end: '2003-09-10', reason: 'overlap' }] },
+			toEpochDay('2003-06-01'),
+			92 // 2003-06-01 … 2003-08-31
+		)!;
+		expect(m.infill.periods.map((p) => [p.source, p.days])).toEqual([
+			['flagged', toEpochDay(RUN_TO) - toEpochDay('2003-06-01') + 1],
+			['listed', toEpochDay('2003-08-31') - toEpochDay(RUN_TO)] // the flagged run already has the rest
+		]);
+		expect(m.mask.reduce((a, b) => a + b, 0)).toBe(92);
+	});
+});
+
+describe('resolveZeroRain', () => {
+	it('defaults to treating flagged runs as missing, and drops what it cannot use with a warning', () => {
+		const w: string[] = [];
+		expect(resolveZeroRain(undefined, w)).toEqual({ mode: 'missing', keepDry: [], missing: [] });
+		expect(resolveZeroRain({ mode: 'sometimes', keepDry: [{ start: '2003-01-01', end: '2002-01-01', reason: 'x' }], missing: 'no' }, w)).toEqual({
+			mode: 'missing',
+			keepDry: [],
+			missing: []
+		});
+		expect(w).toEqual([
+			'unknown zero-rain run mode "sometimes"; using missing',
+			'keep-dry period {"start":"2003-01-01","end":"2002-01-01","reason":"x"} ends before it starts; ignored',
+			'missing-rain periods are not a list; ignored'
+		]);
+		expect(resolveZeroRain({ mode: 'asRecorded', missing: [{ waterYear: 2003, reason: ' gauge moved ' }] }, [])).toEqual({
+			mode: 'asRecorded',
+			keepDry: [],
+			missing: [{ waterYear: 2003, reason: 'gauge moved' }]
+		});
 	});
 });

@@ -23,7 +23,10 @@ The page has these sections, top to bottom:
 1. **Runs compared.** Label, project, period and time of each run. There is a
    warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
-   from the dates. There is a note when the **engine version** differs.
+   from the dates. There is a note when the **engine version** differs, and a
+   warning when **either run used the legacy runoff model** (audit H1): it
+   doesn't conserve water at the event scale, so the comparison is a workbook
+   comparison only, not evidence.
 2. **What changed.** Every difference in the inputs, grouped by network, crops,
    transfers, settings and time series. Examples:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,
@@ -118,7 +121,12 @@ Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
-thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*). Month
+thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*), and the
+soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
+mm"*). Runs store their settings merged over the defaults, so a snapshot
+without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
+is what that run used; the same rule reads a snapshot without a runoff model
+as legacy. Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range.

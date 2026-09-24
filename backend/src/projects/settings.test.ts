@@ -272,6 +272,44 @@ describe('SettingsPatch.calibrationExclusions', () => {
 	});
 });
 
+describe('SettingsPatch.zeroRainRuns (CR-20)', () => {
+	const ok = (zeroRainRuns: unknown) => SettingsPatch.safeParse({ zeroRainRuns }).success;
+
+	it('accepts the defaults, either mode, and dated periods with reasons; any subset may be patched', () => {
+		expect(ok(defaultProjectSettings().zeroRainRuns)).toBe(true);
+		expect(ok({ mode: 'asRecorded' })).toBe(true);
+		expect(ok({ keepDry: [{ start: '2003-05-01', end: '2003-08-31', reason: 'real drought' }] })).toBe(true);
+		expect(ok({ missing: [{ waterYear: 1999, reason: 'gauge offline' }] })).toBe(true);
+	});
+
+	it('rejects an unknown mode, unknown keys, and periods the calibration exclusions would reject', () => {
+		for (const bad of [
+			{ mode: 'sometimes' },
+			{ mode: 'missing', note: 'x' },
+			{ keepDry: [{ start: '2003-05-01', end: '2003-04-01', reason: 'x' }] },
+			{ keepDry: [{ start: '2003-05-01', end: '2003-08-31' }] },
+			{ missing: [{ waterYear: 1999, reason: 'a' }, { waterYear: 1999, reason: 'b' }] },
+			{ missing: new Array(101).fill({ waterYear: 1999, reason: 'x' }) },
+			{ missing: { waterYear: 1999, reason: 'x' } }
+		]) {
+			expect(ok(bad), JSON.stringify(bad).slice(0, 80)).toBe(false);
+		}
+		const r = SettingsPatch.safeParse({ zeroRainRuns: { keepDry: [{ start: '2003-05-01', end: '2003-05-02', reason: '  ' }] } });
+		expect(r.success).toBe(false);
+		expect(JSON.stringify(r.error!.issues)).toContain('a keep-dry period needs a reason');
+	});
+
+	it('merges one level deep: patching the mode keeps the stored lists', () => {
+		const stored = { zeroRainRuns: { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real' }], missing: [] } };
+		expect(patchSettings(stored, { zeroRainRuns: { mode: 'asRecorded' } }).zeroRainRuns).toEqual({
+			mode: 'asRecorded',
+			keepDry: [{ waterYear: 2003, reason: 'real' }],
+			missing: []
+		});
+		expect(mergeSettings({}).zeroRainRuns).toEqual({ mode: 'missing', keepDry: [], missing: [] });
+	});
+});
+
 describe('SettingsPatch.fitRecord', () => {
 	const period = { start: '2012-10-01', end: '2014-09-30', waterYears: [2012, 2013], scores: { days: 730, kgePrime: 0.8, kgeYearly: null } };
 	const record = {
@@ -340,6 +378,14 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
 	});
 
+	it('accepts an optional chirpsBiasCorrection inside forcing, and a forcing from before it without', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		expect(ok({ ...record, forcing })).toBe(true); // no chirpsBiasCorrection: a forcing from before it existed
+		expect(ok({ ...record, forcing: { ...forcing, chirpsBiasCorrection: 'monthly' } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsBiasCorrection: 'none' } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsBiasCorrection: 'yearly' } })).toBe(false); // not a known mode
+	});
+
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {
 		const startResults = [
 			{ seed: 7, params: { x1: 512, x2: 0, x3: 61, x4: 2.2 }, score: 0.8, best: true },
@@ -389,5 +435,22 @@ describe('SettingsPatch.fitRecord', () => {
 		const replaced = patchSettings({ ...stored, fitRecord: { ...record, seed: 1, oldKey: true } }, { fitRecord: record });
 		expect(replaced.fitRecord).not.toHaveProperty('oldKey');
 		expect(replaced.fitRecord!.seed).toBe(7);
+	});
+});
+
+describe('SettingsPatch.effectiveRainStoreMm (engine N3)', () => {
+	const ok = (effectiveRainStoreMm: unknown) => SettingsPatch.safeParse({ effectiveRainStoreMm }).success;
+
+	it('accepts 0 (no carry-over) up to 500 mm', () => {
+		for (const v of [0, 12.5, 25, 500]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects a negative, oversized or non-numeric store', () => {
+		for (const v of [-1, 501, Infinity, '25', null]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to 25 mm for a project that never set it', () => {
+		expect(mergeSettings({}).effectiveRainStoreMm).toBe(25);
+		expect(defaultProjectSettings().effectiveRainStoreMm).toBe(25);
 	});
 });

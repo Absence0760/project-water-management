@@ -4,7 +4,7 @@
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
-import type { ChirpsCorrection } from './rain';
+import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
@@ -20,6 +20,30 @@ export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
  */
 export const CHIRPS_BIAS_MODES = ['monthly', 'none'] as const;
 export type ChirpsBiasMode = (typeof CHIRPS_BIAS_MODES)[number];
+
+/**
+ * What a run does with the zero runs the catchment-rain check flags as
+ * probable missing data (settings.zeroRainRuns, ./rain.ts, CR-20). 'missing'
+ * treats them as blank, so corrected CHIRPS then forecast rain fill them;
+ * 'asRecorded' runs them as the dry days they say they are.
+ */
+export const ZERO_RAIN_MODES = ['missing', 'asRecorded'] as const;
+export type ZeroRainMode = (typeof ZERO_RAIN_MODES)[number];
+
+/**
+ * settings.zeroRainRuns (engine ≥ 0.15.0). Periods use the calibration
+ * exclusions' shape: a water year or a date range, each with a reason.
+ */
+export interface ZeroRainSettings {
+	/** For flagged zero runs. Default 'missing'. */
+	mode: ZeroRainMode;
+	/** Flagged zero runs confirmed as real dry spells: their days stay 0 even in 'missing' mode. */
+	keepDry: CalibrationExclusion[];
+	/** Extra periods whose catchment rain is treated as missing whatever it reads, in either mode. */
+	missing: CalibrationExclusion[];
+}
+
+export const defaultZeroRainSettings = (): ZeroRainSettings => ({ mode: 'missing', keepDry: [], missing: [] });
 
 /**
  * Rain → natural-flow calibration (b023 [Flow Calibration Cfg]); consumed by
@@ -80,6 +104,15 @@ export interface ProjectSettings {
 	februaryDays: number;
 	/** Fraction of rainfall on cropped land that offsets irrigation demand. */
 	effectiveRainFraction: number;
+	/**
+	 * Size of each farm's soil-water store, mm over the cropped area (engine ≥
+	 * 0.14.0, docs/engine-audit.md N3): effective rain the crop can't use on
+	 * the day it falls is kept for the following days, up to this depth
+	 * (./demand.ts farmDailyDemand). Default 25 mm, the readily available water
+	 * of 0.5 m of roots in a soil holding 100 mm/m with p = 0.5 (FAO-56 Tables
+	 * 19 and 22). 0 = no carry-over, the b023 workbook's rule.
+	 */
+	effectiveRainStoreMm: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -96,7 +129,11 @@ export interface ProjectSettings {
 	/**
 	 * Pan coefficient per water-year month (Oct–Sep): potential evaporation =
 	 * coefficient × A-pan. Drives the conceptual runoff models (GR4J), not the
-	 * legacy one or irrigation demand. Default 0.7 every month.
+	 * legacy one or irrigation demand. Default 0.7 every month. Stays editable
+	 * per month; `PAN_COEFFICIENT_PRESETS` are starting points a form can fill
+	 * the row with, not stored settings. A month outside
+	 * `PAN_COEFFICIENT_TYPICAL_MIN`–`PAN_COEFFICIENT_TYPICAL_MAX` is a run
+	 * warning, not a validation error (the API keeps the wider 0–2).
 	 */
 	panCoefficient: Monthly;
 	/**
@@ -104,6 +141,11 @@ export interface ProjectSettings {
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
 	chirpsBiasCorrection: ChirpsBiasMode;
+	/**
+	 * Flagged zero runs in the catchment rain, and other periods the
+	 * hydrologist marks, treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20).
+	 */
+	zeroRainRuns: ZeroRainSettings;
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
@@ -176,6 +218,7 @@ export function defaultProjectSettings(): ProjectSettings {
 	return {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
+		effectiveRainStoreMm: 25,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -183,6 +226,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		chirpsBiasCorrection: 'monthly',
+		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: {
 			a: 0.09,
 			b: 1.2,
@@ -236,6 +280,59 @@ export function defaultProjectSettings(): ProjectSettings {
 		wr2012: defaultWr2012Settings()
 	};
 }
+
+/**
+ * FAO-56's usual range for a Class A pan (Allen et al. 1998, Table 5). Not a
+ * hard bound — the API keeps the wider 0–2 (stored projects must still load
+ * and save) — only a plausibility check: `panCoefficientOutOfRange` names the
+ * months a run and Settings warn about.
+ */
+export const PAN_COEFFICIENT_TYPICAL_MIN = 0.6;
+export const PAN_COEFFICIENT_TYPICAL_MAX = 0.85;
+
+/** Water-year month indices (0 = Oct … 11 = Sep) whose coefficient falls outside the FAO-56 typical range. */
+export function panCoefficientOutOfRange(values: readonly number[]): number[] {
+	const out: number[] = [];
+	for (let i = 0; i < values.length; i++) {
+		const v = values[i]!;
+		if (v < PAN_COEFFICIENT_TYPICAL_MIN || v > PAN_COEFFICIENT_TYPICAL_MAX) out.push(i);
+	}
+	return out;
+}
+
+/** A named set of monthly pan-coefficient values (water-year order, Oct–Sep). */
+export interface PanCoefficientPreset {
+	id: string;
+	label: string;
+	values: Monthly;
+}
+
+/**
+ * Shown next to the preset picker (Settings): these are a starting point, not
+ * a substitute for local judgement.
+ */
+export const PAN_COEFFICIENT_PRESET_SOURCE =
+	'indicative, from FAO-56 Table 5 climate classes (Allen et al. 1998); confirm against local humidity and wind';
+
+/**
+ * Indicative monthly pan-coefficient presets (water-year order, Oct–Sep;
+ * question 4 for the hydrologist). Picking one only fills the editable
+ * `panCoefficient` row — nothing stores which preset (or whether one) was
+ * used, so an edit afterwards leaves no trace of its starting point.
+ */
+export const PAN_COEFFICIENT_PRESETS: PanCoefficientPreset[] = [
+	{ id: 'generic', label: 'Generic (flat 0.70)', values: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7] },
+	{
+		id: 'winter-rainfall',
+		label: 'Winter rainfall (e.g. Western Cape)',
+		values: [0.7, 0.65, 0.65, 0.65, 0.65, 0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.75]
+	},
+	{
+		id: 'summer-rainfall',
+		label: 'Summer rainfall',
+		values: [0.65, 0.7, 0.75, 0.75, 0.75, 0.75, 0.7, 0.7, 0.7, 0.65, 0.6, 0.6]
+	}
+];
 
 /** A b023 network element. A "farm" can also model a stand-alone dam or natural area. */
 export type NodeKind = 'farm' | 'gauge';
@@ -657,6 +754,12 @@ export interface RunSummary {
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
 	/**
+	 * Catchment rain treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20):
+	 * the flagged zero runs and listed periods, and what filled them. null when
+	 * the project has no catchment rain; absent on older runs.
+	 */
+	zeroRainInfill?: ZeroRainInfill | null;
+	/**
 	 * The engine's self-checks on this run's own output (engine ≥ 0.12.0,
 	 * ./verify): the invariants the test suite asserts on random networks,
 	 * run on the real catchment. Absent on older runs.
@@ -668,7 +771,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'runoff' | 'transfers' | 'reports';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;
