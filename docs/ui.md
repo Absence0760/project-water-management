@@ -126,6 +126,11 @@ regional wet/dry index, but runs never read it, it is not in the gauge-vs-logger
 table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
 
+The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
+below their button or above it when there's no room
+(`lib/export/menuPosition.ts`), so a table's scroll box never clips them;
+scrolling or resizing closes an open menu.
+
 The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
 workbook's FarmTemplate order, the letter in each header

@@ -4,6 +4,7 @@
 	// saved under the server's file name; errors (e.g. 413 too large) show inline.
 	// Build `items` with the helpers in $lib/export (runDownloadItems, downloads.*).
 	import { fetchDownload, saveBlob } from '$lib/export/download';
+	import { menuPlacement, placementStyle } from '$lib/export/menuPosition';
 	import type { DownloadItem } from '$lib/export/urls';
 
 	let {
@@ -18,6 +19,9 @@
 	let done = $state<string | null>(null);
 	let root: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
+	let list: HTMLUListElement | undefined = $state();
+	// Fixed to the viewport while open, so a scrolling table can't clip it (./menuPosition.ts).
+	let listStyle = $state('');
 	const listId = `dl-${Math.random().toString(36).slice(2, 9)}`;
 
 	function close(focusTrigger = false) {
@@ -57,9 +61,30 @@
 		const onDoc = (e: PointerEvent) => {
 			if (root && !root.contains(e.target as Node)) open = false;
 		};
+		// A fixed list would drift from its button on scroll or resize: close it, as native menus do.
+		// Scrolling the list itself is fine.
+		const onScroll = (e: Event) => {
+			if (!list?.contains(e.target as Node)) open = false;
+		};
+		const onResize = () => (open = false);
 		document.addEventListener('pointerdown', onDoc);
-		return () => document.removeEventListener('pointerdown', onDoc);
+		window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+		window.addEventListener('resize', onResize);
+		return () => {
+			document.removeEventListener('pointerdown', onDoc);
+			window.removeEventListener('scroll', onScroll, { capture: true });
+			window.removeEventListener('resize', onResize);
+		};
 	});
+
+	function toggle() {
+		if (!open && trigger) {
+			const r = trigger.getBoundingClientRect();
+			listStyle = placementStyle(menuPlacement(r, { width: document.documentElement.clientWidth, height: window.innerHeight }, align));
+		}
+		open = !open;
+		error = null;
+	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -71,10 +96,7 @@
 		aria-expanded={open}
 		aria-controls={listId}
 		disabled={!items.length}
-		onclick={() => {
-			open = !open;
-			error = null;
-		}}
+		onclick={toggle}
 	>
 		<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
 			<path d="M8 2v8m0 0 3.2-3.2M8 10 4.8 6.8M3 13h10" stroke-linecap="round" stroke-linejoin="round" />
@@ -83,7 +105,7 @@
 		<span aria-hidden="true" class="caret">▾</span>
 	</button>
 
-	<ul id={listId} class="list" class:start={align === 'start'} hidden={!open}>
+	<ul id={listId} class="list" hidden={!open} style={listStyle} bind:this={list}>
 		{#each items as item (item.url)}
 			<li>
 				<button type="button" class="item" onclick={() => get(item)} disabled={busy !== null} aria-busy={busy === item.url}>
@@ -109,13 +131,11 @@
 		color: var(--text-muted);
 	}
 	.list {
-		position: absolute;
-		right: 0;
-		top: calc(100% + 4px);
+		/* top/bottom, left/right and max-height come from menuPlacement on open. */
+		position: fixed;
 		z-index: 30;
 		min-width: 16rem;
 		max-width: min(24rem, calc(100vw - 2 * var(--gutter)));
-		max-height: 60vh;
 		overflow-y: auto;
 		margin: 0;
 		padding: 0.25rem;
@@ -124,10 +144,6 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
-	}
-	.list.start {
-		right: auto;
-		left: 0;
 	}
 	.list[hidden] {
 		display: none;

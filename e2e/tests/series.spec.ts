@@ -142,3 +142,27 @@ test('a US month/day CSV is read as month/day, and the summary says how dates we
 	await expect(form.getByText('month/day/year')).toBeVisible();
 	await expect(summary.first()).toHaveText('2021-03-04 → 2021-03-13');
 });
+
+test("a series' CSV menu opens in full, even on the table's last row", async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'CSV menu');
+	const days = Array.from({ length: 30 }, (_, i) => i);
+	for (const kind of ['rain_catchment_mm', 'rain_chirps_mm', 'flow_observed_m3s', 'flow_logger_m3s']) {
+		await putSeries(page.request, project.id, { kind, unit: kind.endsWith('mm') ? 'mm' : 'm³/s', startDate: '2021-10-01', values: days });
+	}
+	// A short window puts the last row near the bottom of the viewport, as in the report.
+	await page.setViewportSize({ width: 1280, height: 620 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const buttons = page.getByRole('button', { name: 'CSV', exact: true });
+	await expect(buttons).toHaveCount(4);
+	await buttons.last().scrollIntoViewIfNeeded();
+	await buttons.last().click();
+	const item = page.getByRole('button', { name: /\(CSV\)/ });
+	await expect(item).toBeVisible();
+	await expect(item).toBeInViewport({ ratio: 1 });
+	// The table's scroll box doesn't grow a vertical scrollbar around the open menu.
+	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
+	expect(await wrap.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+	await page.keyboard.press('Escape');
+	await expect(item).toBeHidden();
+});
