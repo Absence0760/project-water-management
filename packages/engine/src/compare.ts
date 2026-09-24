@@ -342,7 +342,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
-	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : String(v)) },
+	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
@@ -358,7 +358,15 @@ const DATA_QUALITY_FIELDS: Record<string, ScalarField> = {
 };
 const SETTINGS_MONTHLY: Record<string, { label: string; unit: string }> = {
 	apanMm: { label: 'A-pan evaporation', unit: 'mm' },
-	ewrPragmaticM3PerDay: { label: 'Pragmatic EWR', unit: 'm³/day' }
+	ewrPragmaticM3PerDay: { label: 'Pragmatic EWR', unit: 'm³/day' },
+	panCoefficient: { label: 'Pan coefficient', unit: '' }
+};
+const GR4J_FIELDS: Record<string, ScalarField> = {
+	x1: { label: 'production store X1', fmt: withUnit('mm') },
+	x2: { label: 'groundwater exchange X2', fmt: withUnit('mm/day') },
+	x3: { label: 'routing store X3', fmt: withUnit('mm') },
+	x4: { label: 'unit hydrograph time base X4', fmt: withUnit('days') },
+	warmupDays: { label: 'warm-up', fmt: withUnit('days') }
 };
 const CALIBRATION_FIELDS: Record<string, ScalarField> = {
 	a: { label: 'peak flow coefficient a', fmt: plain },
@@ -390,7 +398,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...r,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
-		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) }
+		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
+		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) }
 	};
 }
 
@@ -417,6 +426,12 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		if (!same(qa[k], qb[k])) push(`Data quality ${f.label}`, `Data quality ${f.label}: ${f.fmt(qa[k])} → ${f.fmt(qb[k])}`);
 	}
 
+	const ga = a.gr4j as Record<string, unknown>;
+	const gb = b.gr4j as Record<string, unknown>;
+	for (const [k, f] of Object.entries(GR4J_FIELDS)) {
+		if (!same(ga[k], gb[k])) push(`GR4J ${f.label}`, `GR4J ${f.label}: ${f.fmt(ga[k])} → ${f.fmt(gb[k])}`);
+	}
+
 	const ka = a.calibration as Record<string, unknown>;
 	const kb = b.calibration as Record<string, unknown>;
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) {
@@ -432,7 +447,7 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
-	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality']);
+	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality', 'gr4j']);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
 	}

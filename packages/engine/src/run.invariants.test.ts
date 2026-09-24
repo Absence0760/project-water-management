@@ -36,6 +36,22 @@ describe('engine invariants on random networks', () => {
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
+	it(`${CASES} random cases from seed ${SEED0}, GR4J runoff`, () => {
+		const failures: string[] = [];
+		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
+			const input = randomInput(seed, { runoffModel: 'gr4j' });
+			const bad = checkAll(input, seed);
+			if (!bad) continue;
+			const rule = ruleOf(bad);
+			const small = shrink(input, (x) => {
+				const b = checkAll(x, seed);
+				return b !== null && ruleOf(b) === rule;
+			});
+			failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
+		}
+		expect(failures.join('\n\n')).toBe('');
+	}, TIMEOUT);
+
 	it('doubling crop areas can raise the supply fraction only through return flow (seed 4660)', () => {
 		// Why checkDoubledCropAreas zeroes return flows: with them, extra draw on
 		// stored water partly returns to the river and a starved farm downstream
@@ -161,6 +177,26 @@ describe('the invariants reject broken results', () => {
 		expect(checkInvariants(input, f)).toMatch(/farm summary/);
 	});
 
+	it('catches a GR4J run whose natural flow, stores or summary break the runoff balance', () => {
+		const g = structuredClone(input);
+		g.settings.runoffModel = 'gr4j';
+		const o = runModel(g);
+		expect(checkInvariants(g, o)).toBeNull();
+		expect(o.summary.runoff?.model).toBe('gr4j');
+		const flow = structuredClone(o);
+		flow.series.find((x) => x.nodeId === null && x.key === 'natural_flow')!.values[7]! += 1;
+		expect(checkInvariants(g, flow)).toMatch(/runoff day 7: rain − AET − Q/);
+		const store = structuredClone(o);
+		store.series.find((x) => x.nodeId === null && x.key === 'routing_store')!.values[3]! -= 1e-6;
+		expect(checkInvariants(g, store)).toMatch(/runoff day 3/);
+		const summary = structuredClone(o);
+		summary.summary.runoff!.aetMm += 0.01;
+		expect(checkInvariants(g, summary)).toMatch(/runoff summary/);
+		const missing = structuredClone(o);
+		delete missing.summary.runoff;
+		expect(checkInvariants(g, missing)).toMatch(/reported no water balance/);
+	});
+
 	it('order invariance and the crop-area property hold on the real model', () => {
 		expect(checkOrderInvariance(input, out, 7)).toBeNull();
 		expect(checkDoubledCropAreas(input)).toBeNull();
@@ -197,6 +233,8 @@ describe.skipIf(!dataDir)('engine invariants on the client catchment (needs data
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		for (const seed of [1, 2, 3]) expect(checkAll(input, seed)).toBeNull();
+		const gr4j = { ...input, settings: { ...input.settings, runoffModel: 'gr4j' as const } };
+		expect(checkAll(gr4j, 1)).toBeNull();
 	}, 60_000);
 });
 

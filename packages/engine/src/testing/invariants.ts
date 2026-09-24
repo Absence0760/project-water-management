@@ -285,9 +285,59 @@ function waterYearOfDay(day: number): number {
 	return d.getUTCMonth() + 1 >= 10 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
 }
 
+/**
+ * The runoff model's water balance, from the run's own series (conceptual
+ * models; nothing to check for legacy runs, which have no summary.runoff):
+ * - every day, rain − AET − Q + exchange = Δ(Σ stores), Q = natural flow in
+ *   mm over the catchment, starting from the post-warm-up storage;
+ * - Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1;
+ * - the summary's totals are the sums of the series and close the balance.
+ */
+export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string | null {
+	const b = out.summary.runoff;
+	const legacy = (input.settings.runoffModel ?? 'legacy') === 'legacy';
+	if (!b) return legacy ? null : `runoff model ${String(input.settings.runoffModel)} reported no water balance`;
+	if (legacy) return 'a legacy run reported a runoff balance';
+	const get = seriesMap(out);
+	const s = (k: string) => get.get(`null|${k}`);
+	const rain = s('rain_used')!;
+	const pet = s('pet')!;
+	const aet = s('aet')!;
+	const nat = s('natural_flow')!;
+	const stores = ['production_store', 'routing_store', 'uh_store'].map((k) => s(k)!);
+	const ex = s('exchange');
+	if (!rain || !pet || !aet || stores.some((x) => !x)) return 'runoff series missing';
+	if (!ex && b.params.x2 !== 0) return 'exchange series missing with X2 ≠ 0';
+	const toMm = 1 / (b.areaKm2 * 1000);
+	const t9 = (x: number) => 1e-9 + 1e-12 * Math.abs(x);
+	let before = b.storageStartMm;
+	const tot = { rain: 0, pet: 0, aet: 0, flow: 0, ex: 0 };
+	for (let t = 0; t < out.days; t++) {
+		const q = nat[t]! * toMm;
+		const e = ex ? ex[t]! : 0;
+		const after = stores[0]![t]! + stores[1]![t]! + stores[2]![t]!;
+		const d = rain[t]! - aet[t]! - q + e - (after - before);
+		if (Math.abs(d) > t9(Math.max(before, after, rain[t]!))) return `runoff day ${t}: rain − AET − Q + exchange − Δstorage = ${d}`;
+		if (q < 0 || aet[t]! < 0 || aet[t]! > pet[t]! + t9(pet[t]!)) return `runoff day ${t}: Q ${q}, AET ${aet[t]}, PET ${pet[t]}`;
+		if (stores.some((x) => x[t]! < -t9(0)) || stores[0]![t]! > b.params.x1! + t9(b.params.x1!)) return `runoff day ${t}: a store is outside its bounds`;
+		tot.rain += rain[t]!;
+		tot.pet += pet[t]!;
+		tot.aet += aet[t]!;
+		tot.flow += q;
+		tot.ex += e;
+		before = after;
+	}
+	const scale = Math.max(1, tot.rain + tot.aet + tot.flow + Math.abs(tot.ex) + b.storageStartMm + before);
+	const near = (a: number, c: number) => Math.abs(a - c) <= 1e-9 * scale;
+	if (!near(b.rainMm, tot.rain) || !near(b.petMm, tot.pet) || !near(b.aetMm, tot.aet) || !near(b.flowMm, tot.flow) || !near(b.exchangeMm, tot.ex) || !near(b.storageEndMm, before))
+		return `runoff summary ${JSON.stringify(b)} disagrees with the series`;
+	if (!near(b.rainMm - b.aetMm - b.flowMm + b.exchangeMm, b.storageEndMm - b.storageStartMm)) return 'runoff summary does not close its balance';
+	return null;
+}
+
 /** Every per-run invariant. */
 export function checkInvariants(input: ModelInput, out: ModelOutput): string | null {
-	return checkBalance(input, out) ?? checkTransferLimits(input, out) ?? checkReportTotals(input, out);
+	return checkBalance(input, out) ?? checkRunoffBalance(input, out) ?? checkTransferLimits(input, out) ?? checkReportTotals(input, out);
 }
 
 /**

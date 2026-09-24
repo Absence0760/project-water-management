@@ -202,6 +202,100 @@ The same sheet also:
 > in project settings for a number-for-number match. The importer reads them
 > from the workbook's named ranges (`rCalibration_*`).
 
+### 2.4a Rain to flow: GR4J (engine ≥ 0.5.0, issue #4)
+
+`settings.runoffModel = 'gr4j'` replaces the legacy recession model (§2.4)
+with **GR4J** (Perrin, Michel & Andréassian 2003, *J. Hydrol.* 279), a
+published daily rainfall–runoff model with four parameters. It is written from
+the paper's equations in `packages/engine/src/runoff/gr4j.ts`. The reference
+implementation, the R package airGR, is GPL-2, and no code is taken from it.
+Everything downstream (flow shares, farms, dams, transfers, EWR) is unchanged,
+so the two models compare run against run. Legacy stays the default until the
+hydrologist signs GR4J off (issue #4 phase 6).
+
+**Parameters** (`settings.gr4j`). The typical range is Perrin's 80 % range over
+429 catchments; the bounds are enforced by the API and searched by calibration.
+
+| Param | Meaning | Unit | Default | Typical | Bounds |
+| --- | --- | --- | --- | --- | --- |
+| `x1` | production (soil-moisture) store capacity | mm | 350 | 100–1200 | 10–3000 |
+| `x2` | groundwater exchange coefficient | mm/day | **0** (fixed) | — | −5–3 (opt-in) |
+| `x3` | routing store reference capacity | mm | 90 | 20–300 | 1–1000 |
+| `x4` | unit hydrograph time base | days | 1.7 | 1.1–2.9 | 0.5–10 |
+| `warmupDays` | warm-up before day 1 | days | 365 | — | 0–3650 |
+
+**Forcing** (`runoff/simulate.ts`, `runoffForcing`):
+
+- **Rain P**: catchment rain, else CHIRPS, else forecast, as for legacy, but
+  with **no rain threshold** (that was part of the legacy model). A day with no
+  value is dry, and the run counts those days (W2). Negative values count as 0.
+- **Potential evaporation E** = `panCoefficient[month] × apanMm[month] / days
+  in that calendar month`, so each month's PET totals exactly coefficient ×
+  A-pan. `settings.panCoefficient` is 0.7 in every month by default and is
+  edited per month (question 4 for the hydrologist). It doesn't touch
+  irrigation demand.
+- **No Pitman fallback.** Flow is whatever the model produces.
+
+**One day** (P, E in mm):
+
+1. **Net rain and net evaporation:** if P ≥ E then Pn = P − E and En = 0;
+   otherwise Pn = 0 and En = E − P.
+2. **Production store S:**
+   Ps = X1·(1 − (S/X1)²)·tanh(Pn/X1) / (1 + (S/X1)·tanh(Pn/X1)) and
+   Es = S·(2 − S/X1)·tanh(En/X1) / (1 + (1 − S/X1)·tanh(En/X1)).
+   Then S ← S − Es + Ps.
+3. **Percolation:** Perc = S·{1 − [1 + (4S/(9·X1))⁴]^(−¼)}, and S ← S − Perc.
+4. **Routed water:** Pr = Perc + (Pn − Ps). 90 % goes to UH1 and 10 % to UH2.
+5. **Unit hydrographs:** each ordinate is j = SH(j) − SH(j − 1).
+   - UH1 has SH1(t) = (t/X4)^2.5 for 0 < t < X4, and ⌈X4⌉ ordinates.
+   - UH2 has SH2(t) = ½(t/X4)^2.5 up to X4, then 1 − ½(2 − t/X4)^2.5 up to
+     2·X4, and ⌈2·X4⌉ ordinates.
+   - Both sum to 1. Each keeps a queue of water in transit. Q9 is today's UH1
+     output and Q1 is today's UH2 output.
+6. **Exchange:** F = X2·(R/X3)^3.5. It is 0 when X2 = 0.
+7. **Routing store:**
+   - R ← max(0, R + Q9 + F);
+   - Qr = R·{1 − [1 + (R/X3)⁴]^(−¼)};
+   - R ← R − Qr.
+8. **Direct flow:** Qd = max(0, Q1 + F).
+9. **Flow:** Q = Qr + Qd, in mm over the catchment. Natural flow (m³/day) =
+   Q × area (km²) × 1000, over the same catchment area as legacy
+   (`calibration.catchmentAreaKm2`, else the sum of the farm areas).
+
+**Fluxes recorded:**
+
+- AET = min(P, E) + Es.
+- The applied exchange is the exchange left after the two clips:
+  (R after the max − R before − Q9) + (Qd − Q1).
+
+**The balance closes every day:**
+P − AET − Q + exchange = Δ(S + R + water in the UH queues), to 10⁻⁹ mm. With
+X2 = 0 the model is closed: water leaves only as evaporation or flow, or stays
+stored. So a storm can never return more than fell, which fixes audit H1 by
+construction.
+
+**Warm-up.** The stores start half full (S = ½·X1, R = ½·X3) with empty queues.
+The model then runs `warmupDays` days that cycle the run's own forcing from its
+first day. Day k of the warm-up uses day k mod n, so a warm-up longer than the
+run repeats it. Warm-up days are never output or scored. Day 1 starts from the
+warm-up's end state.
+
+**Outputs.** GR4J adds these catchment series:
+
+- `rain_used` and `pet`;
+- `aet`;
+- the end-of-day stores `production_store`, `routing_store` and `uh_store`
+  (water in transit);
+- `exchange`, only when X2 ≠ 0.
+
+`summary.runoff` holds the parameters used, the area and the whole-run totals
+(rain, PET, AET, flow and exchange), plus the storage at the start (after the
+warm-up) and at the end. Those totals satisfy
+rain − AET − flow + exchange = end − start. When a short run's natural flow
+exceeds its rain, the W1 warning names the starting storage instead of blaming
+the calibration. An out-of-bounds parameter in stored settings (the API rejects
+them) falls back to its default with a warning.
+
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
 Each farm gets a fixed **share** (`frag[f]`, 0–1) of the catchment flow. The
@@ -651,7 +745,25 @@ as text:
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with return flows set to 0, doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
+
+The runoff models have their own checks, stated on the model alone (rain and
+PET in, mm out), in `testing/runoff.ts`. Every model offered must pass them
+(issue #4 §4):
+
+| Check | What must hold |
+| --- | --- |
+| `checkDailyBalance` | P − AET − Q + exchange = Δ storage every day, to 10⁻⁹ mm. Bounds: Q ≥ 0, 0 ≤ AET ≤ PET, 0 ≤ every store ≤ its capacity. Whole run: ΣP = ΣAET + ΣQ + Δstorage − Σexchange, and ΣQ ≤ ΣP + opening storage + imported water. |
+| `checkEventScale` | The H1 regression. After a dry year, a storm of 1–400 mm returns at most its own rain over the next two years, measured against the same run without the storm. The event runoff coefficient never falls as the storm grows. |
+| `checkMonotonicity` | More rain on any day never lowers cumulative flow at any later day. More PET never raises it. This holds for a closed model (X2 = 0). |
+| `checkSteadyState` | Constant P > E converges to Q = P − AET, from empty and from full stores. With P ≤ E the stores empty only algebraically (power-law outflows), so that case has no fixed horizon. |
+| UH ordinates (`gr4j.test.ts`) | Non-negative, summing to 1, of length ⌈X4⌉ and ⌈2·X4⌉ for any X4 in bounds. |
+
+`EVENT_SCALE_EXEMPT` names the legacy model, with the reason. The test
+asserts that an exempt model still *fails* the check, so the exemption can't
+outlive the problem. From a June start, 20 mm returns 1.05× its rain and
+200 mm returns 16.6×.
 
 They run on:
 
@@ -662,8 +774,14 @@ They run on:
   start mid water-year. A failure prints the seed, the broken property and a
   **shrunk** reproduction (greedily dropping transfers, crops, nodes and days
   while the same property still fails).
+- **The same generator with GR4J runoff** (`randomInput(seed, { runoffModel: 'gr4j' })`):
+  the same networks and series, with GR4J parameters drawn from a second
+  generator (sometimes at the bounds, X2 ≠ 0 a quarter of the time). A second
+  400-case loop runs every check above plus `checkRunoffBalance`. The model-only
+  checks run on 400 random parameter sets and forcings (`runoff/gr4j.test.ts`).
 - **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
-  15 years each, through the full rain model.
+  15 years each, through the full rain model, with legacy and with GR4J. A GR4J
+  run of one example must take under 50 ms (median of 7).
 - **The client catchment** when `data/client-catchment` is present (skipped otherwise).
 
 The suite also checks itself: `run.invariants.test.ts` feeds each check a
@@ -677,6 +795,7 @@ roughly 12 minutes):
 ```bash
 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
 FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
+FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/runoff/gr4j.test.ts src/run.invariants.test.ts -t GR4J   # GR4J only
 ```
 
 Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.

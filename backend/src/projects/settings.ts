@@ -1,4 +1,4 @@
-import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, RUNOFF_MODELS, type ProjectSettings } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, GR4J_PARAMS, RUNOFF_MODELS, type ProjectSettings } from '@water-management/engine';
 import { z } from 'zod';
 
 type Json = Record<string, unknown>;
@@ -20,6 +20,10 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 }
 
 const monthly = z.array(z.number().finite()).length(12);
+const bounded = (key: string) => {
+	const p = GR4J_PARAMS.find((x) => x.key === key)!;
+	return z.number().min(p.min).max(p.max);
+};
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /**
@@ -34,6 +38,19 @@ export const SettingsPatch = z
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		runoffModel: z.enum(RUNOFF_MODELS),
+		// GR4J parameters inside the bounds calibration searches (engine
+		// GR4J_PARAMS); any subset may be patched.
+		gr4j: z
+			.object({
+				x1: bounded('x1'),
+				x2: bounded('x2'),
+				x3: bounded('x3'),
+				x4: bounded('x4'),
+				warmupDays: z.number().int().min(0).max(3650)
+			})
+			.partial()
+			.strict(),
+		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
 		simulationStart: isoDate.nullable(),

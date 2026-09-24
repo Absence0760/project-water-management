@@ -45,7 +45,9 @@ const STATS: Record<keyof CalibrationStats, true> = {
 const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
 	'base_flow', 'response_flow', 'resultant_flow', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
-	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental'
+	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
+	// GR4J (packages/engine/src/runoff/simulate.ts)
+	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];
 
 const settings = defaultProjectSettings();

@@ -113,7 +113,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366); any subset may be sent.
   `runoffModel` picks the rain → natural-flow model: `legacy` (the b023
-  recession model, the default). Issue #4 adds `gr4j`.
+  recession model, the default) or `gr4j` (engine ≥ 0.5.0; model.md §2.4a).
+  `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
+  (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
+  `panCoefficient` is 12 monthly values, each 0–2, in water-year order.
 
 ### Members
 
@@ -252,6 +255,12 @@ engine's `runModel`, stores the outputs, and returns the summary.
   own start/end; clipped to the run with a warning). Runs stored by older
   engines have no `curtailment` key. Formulas: [model.md §2.11](./model.md#211-curtailment-targets-shortfalls).
 
+- `summary.runoff` (engine ≥ 0.5.0, GR4J runs only) is the runoff model's water
+  balance in mm over the catchment: `{ model, params, warmupDays, areaKm2,
+  rainMm, petMm, aetMm, flowMm, exchangeMm, storageStartMm, storageEndMm }`,
+  with rain − aet − flow + exchange = storageEnd − storageStart. GR4J runs also
+  carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
+  `uh_store` (mm), and `exchange` when X2 ≠ 0.
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |

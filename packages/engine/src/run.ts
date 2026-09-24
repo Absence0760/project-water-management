@@ -39,7 +39,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.4.0';
+export const ENGINE_VERSION = '0.5.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -88,7 +88,11 @@ export function runModelWith(
 	const aligned = (kind: SeriesKind) => alignSeries(series[kind], start, days);
 
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
-		warnings.push('no rainfall series: natural flow falls back to Pitman flow and demand is not reduced by rain');
+		warnings.push(
+			settings.runoffModel === 'legacy'
+				? 'no rainfall series: natural flow falls back to Pitman flow and demand is not reduced by rain'
+				: 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'
+		);
 	}
 
 	const month = new Uint8Array(days);
@@ -101,7 +105,7 @@ export function runModelWith(
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
-	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings);
+	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
 
 	// --- network ----------------------------------------------------------------
 	const nodes = model.nodes;
@@ -338,6 +342,7 @@ export function runModelWith(
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0
 			},
+			...(nf.balance ? { runoff: nf.balance } : {}),
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
@@ -360,7 +365,8 @@ function catchmentRunoffCoefficient(
 	settings: ProjectSettings,
 	natural: Float64Array,
 	aligned: (k: SeriesKind) => (number | null)[],
-	warnings: string[]
+	warnings: string[],
+	balance: NaturalFlowInput['balance']
 ): number | null {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
 	if (!kinds.some((k) => input.series?.[k])) return null;
@@ -382,7 +388,16 @@ function catchmentRunoffCoefficient(
 	let flow = 0;
 	for (let t = 0; t < natural.length; t++) flow += natural[t]!;
 	const coefficient = flow / (rainMm * area * 1000); // 1 mm on 1 km² = 1000 m³
-	if (coefficient > 1) {
+	if (coefficient > 1 && balance) {
+		// A conceptual model conserves water, so only its stores draining (or
+		// imported groundwater) can make flow exceed rain; say which.
+		warnings.push(
+			`natural flow is ${coefficient.toFixed(2)}× the rain volume over the run: the ${balance.model.toUpperCase()} stores held ` +
+				`${balance.storageStartMm.toFixed(0)} mm after the warm-up and ${balance.storageEndMm.toFixed(0)} mm at the end` +
+				(balance.exchangeMm > 0 ? `, and ${balance.exchangeMm.toFixed(0)} mm came in through groundwater exchange` : '') +
+				'. A run this short is dominated by the starting state'
+		);
+	} else if (coefficient > 1) {
 		warnings.push(
 			`the rain model makes more runoff than rainfall: natural flow is ${coefficient.toFixed(2)}× the rain volume over the run. ` +
 				'Check the calibration (a, b, the season factors, the recession curve) and the catchment area'
@@ -480,6 +495,8 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
 	s.calibration = { ...d.calibration, ...((raw?.calibration as object | undefined) ?? {}) };
 	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
+	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
+	s.panCoefficient = monthly(s.panCoefficient, 'pan coefficient', warnings);
 	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);

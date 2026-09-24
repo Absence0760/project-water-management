@@ -3,6 +3,7 @@
 // field maps onto the b023 workbook.
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
+import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
@@ -53,6 +54,15 @@ export interface CalibrationParams {
 	recessionCurveM3Day: number[];
 }
 
+/** GR4J parameters (./runoff/gr4j.ts) plus the warm-up before day 1. */
+export interface Gr4jSettings extends Gr4jParams {
+	/**
+	 * Days run before the first simulated day to fill the stores, cycling the
+	 * run's own forcing from its first day; never output or scored. Default 365.
+	 */
+	warmupDays: number;
+}
+
 export interface ProjectSettings {
 	/** Days used for February when converting monthly volumes to per-day. */
 	februaryDays: number;
@@ -69,6 +79,14 @@ export interface ProjectSettings {
 	 * (issue #4); then the setting is removed with the legacy model.
 	 */
 	runoffModel: RunoffModelId;
+	/** Parameters of the GR4J runoff model (used when runoffModel = 'gr4j'). */
+	gr4j: Gr4jSettings;
+	/**
+	 * Pan coefficient per water-year month (Oct–Sep): potential evaporation =
+	 * coefficient × A-pan. Drives the conceptual runoff models (GR4J), not the
+	 * legacy one or irrigation demand. Default 0.7 every month.
+	 */
+	panCoefficient: Monthly;
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
@@ -127,6 +145,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
 		runoffModel: 'legacy',
+		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
+		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		calibration: {
 			a: 0.09,
 			b: 1.2,
@@ -455,8 +475,33 @@ export interface CurtailmentSummary {
 	};
 }
 
+/**
+ * The runoff model's water balance over the run (engine ≥ 0.5.0; conceptual
+ * models only, absent for the legacy model), in mm over the catchment:
+ *   rain − aet − flow + exchange = storageEnd − storageStart.
+ * The stores start the run at the level the warm-up left them.
+ */
+export interface RunoffBalance {
+	model: Exclude<RunoffModelId, 'legacy'>;
+	/** The parameters the run used (after validation). */
+	params: Record<string, number>;
+	warmupDays: number;
+	/** Area the mm are spread over (km²). */
+	areaKm2: number;
+	rainMm: number;
+	petMm: number;
+	aetMm: number;
+	flowMm: number;
+	/** Net groundwater exchange (+ = gained); 0 when X2 = 0. */
+	exchangeMm: number;
+	storageStartMm: number;
+	storageEndMm: number;
+}
+
 export interface RunSummary {
 	farms: FarmSummary[];
+	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
+	runoff?: RunoffBalance;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;

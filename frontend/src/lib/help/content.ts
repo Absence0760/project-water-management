@@ -558,8 +558,42 @@ export const HELP: HelpEntry[] = [
 		category: 'flow',
 		aliases: ['rain-runoff model', 'rainfall-runoff', 'legacy model'],
 		fields: ['settings.runoffModel'],
-		related: ['calibration', 'natural-flow'],
+		related: ['calibration', 'natural-flow', 'gr4j'],
 		source: 'docs/model.md §2.4; issue #4'
+	},
+	{
+		id: 'gr4j',
+		term: 'GR4J',
+		short: 'A published daily rain-to-flow model with four parameters. It conserves water: rain leaves as evaporation or flow, or stays stored.',
+		long: 'GR4J (Perrin, Michel & Andréassian 2003) is used worldwide. Rain first meets evaporation; what is left partly fills a soil-moisture (production) store of capacity X1. The rest, plus what percolates out of that store, is spread in time by two unit hydrographs of time base X4 days. 90 % goes through a routing store (reference capacity X3), and 10 % goes straight to the outlet.\n\nX2 exchanges water with groundwater outside the catchment. It is fixed at 0 by default, so the catchment is closed and the balance rain − evaporation − flow = change in storage holds every day. The model first runs a warm-up (a year by default) over the start of the record, so the stores begin at a realistic level; warm-up days are never shown or scored.\n\nTypical values: X1 100–1 200 mm, X3 20–300 mm, X4 1.1–2.9 days.',
+		units: 'X1, X3 mm; X2 mm/day; X4 days',
+		category: 'flow',
+		aliases: ['X1', 'X2', 'X3', 'X4', 'production store', 'routing store', 'unit hydrograph', 'warm-up', 'Perrin'],
+		fields: ['settings.gr4j', 'run.production_store', 'run.routing_store', 'run.uh_store', 'run.exchange'],
+		related: ['runoff-model', 'pan-coefficient', 'actual-evaporation'],
+		source: 'Perrin et al. (2003), J. Hydrol. 279; docs/model.md § Rain to flow: GR4J'
+	},
+	{
+		id: 'pan-coefficient',
+		term: 'Pan coefficient',
+		short: 'Potential evaporation = pan coefficient × A-pan evaporation, per month. Drives GR4J; default 0.7.',
+		long: 'A Class-A pan evaporates more than a catchment’s soils and plants could, so conceptual runoff models scale it down. 0.7 is a common flat value. Monthly values (for example the WR90 or Midgley factors) can be entered instead. The coefficient does not affect irrigation demand, which uses crop factors on the A-pan directly.',
+		category: 'flow',
+		aliases: ['PET', 'potential evaporation', 'k pan'],
+		fields: ['settings.panCoefficient', 'run.pet'],
+		related: ['gr4j', 'apan'],
+		source: 'Issue #4 §1 (forcing); docs/model.md § Rain to flow: GR4J'
+	},
+	{
+		id: 'actual-evaporation',
+		term: 'Actual evaporation (AET)',
+		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',
+		long: 'The part of potential evaporation that rain meets directly, plus what the soil-moisture store can give up. On dry days with a dry store it falls well below PET.',
+		units: 'mm',
+		category: 'flow',
+		fields: ['run.aet'],
+		related: ['gr4j', 'pan-coefficient'],
+		source: 'Perrin et al. (2003)'
 	},
 	{
 		id: 'catchment-area',

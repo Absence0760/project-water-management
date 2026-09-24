@@ -9,6 +9,8 @@
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
 import type { CropArea, CropDef, DailySeries, ModelInput, NetworkNode, ProjectSettings, SeriesKind, Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
+import { GR4J_PARAMS } from '../runoff/gr4j';
+import type { RunoffModelId } from '../runoff/types';
 
 /** mulberry32: small, fast, seedable PRNG (no dependency). */
 export class Rng {
@@ -62,6 +64,12 @@ type Shape = 'chain' | 'fan' | 'random' | 'binary' | 'twoBranches';
 export interface GenOptions {
 	maxNodes?: number;
 	maxDays?: number;
+	/**
+	 * Runoff model of the generated project (default legacy). A conceptual
+	 * model draws its parameters from a second generator, so a seed's network
+	 * and series are the same whichever model runs them.
+	 */
+	runoffModel?: RunoffModelId;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -266,6 +274,15 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		settings.calibrationEnd = iso(rng.int(-50, days + 50));
 	}
 	if (rng.bool(0.2)) settings.calibrationFlowKind = rng.pick(['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s'] as const);
+	if (opts.runoffModel === 'gr4j') {
+		const g = new Rng(seed ^ 0x5bd1e995);
+		const p = Object.fromEntries(
+			GR4J_PARAMS.map((s) => [s.key, s.fixedByDefault ? (g.bool(0.25) ? g.float(s.min, s.max) : s.default) : g.bool(0.1) ? g.pick([s.min, s.max]) : g.logFloat(Math.max(s.min, 1e-3), s.max)])
+		) as Record<string, number>;
+		settings.runoffModel = 'gr4j';
+		settings.gr4j = { x1: p.x1!, x2: p.x2!, x3: p.x3!, x4: p.x4!, warmupDays: g.pick([0, 0, 30, 365, 365, 1000]) };
+		settings.panCoefficient = g.bool(0.5) ? monthly(() => 0.7) : monthly(() => (g.bool(0.1) ? 0 : g.float(0.3, 1.2)));
+	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }

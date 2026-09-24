@@ -6,7 +6,7 @@ export * from './demand';
 export * from './flow';
 export * from './project';
 export * from './run';
-export { RUNOFF_MODELS, type NaturalFlowGenerator, type RunoffModelId } from './runoff';
+export * from './runoff';
 export * from './quality';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';

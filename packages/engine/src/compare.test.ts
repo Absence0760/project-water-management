@@ -315,6 +315,25 @@ describe('diffInputs', () => {
 		expect(diffInputs(a, b).every((c) => c.area === 'settings' && c.kind === 'changed')).toBe(true);
 	});
 
+	it('describes a switch of runoff model and GR4J parameter changes', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.runoffModel = 'gr4j';
+		b.settings.gr4j = { x1: 420, x2: 0, x3: 90, x4: 2.1, warmupDays: 365 };
+		(b.settings as Record<string, unknown>).panCoefficient = [0.8, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
+		expect(texts(a, b)).toEqual([
+			'Runoff model: legacy (b023 recession) → GR4J',
+			'Pan coefficient: Oct 0.7 → 0.8',
+			'GR4J production store X1: 350 mm → 420 mm',
+			'GR4J unit hydrograph time base X4: 1.7 days → 2.1 days'
+		]);
+		// Runs saved before these settings existed compare as the defaults.
+		const old = structuredClone(a);
+		delete (old.settings as Record<string, unknown>).gr4j;
+		delete (old.settings as Record<string, unknown>).runoffModel;
+		expect(diffInputs(old, a)).toEqual([]);
+	});
+
 	it('describes series added, removed, extended and trimmed', () => {
 		const a = snapshot({
 			series: {

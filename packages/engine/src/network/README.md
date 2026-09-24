@@ -2,7 +2,7 @@
 
 Everything downstream of catchment natural flow: fragmentation, irrigation
 demand, transfers, farm dams, routing, EWR shortfalls and calibration
-statistics. Natural flow itself comes from `../flow.ts`. Entry point:
+statistics. Natural flow itself comes from the selected runoff model in `../runoff/` (legacy: `../flow.ts`). Entry point:
 `runModel` in `../run.ts`.
 
 Up to engine 0.3.1 `run.test.ts` reproduced every daily value on all 13
