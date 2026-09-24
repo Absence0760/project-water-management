@@ -82,7 +82,7 @@ export interface ProjectSettings {
 	effectiveRainFraction: number;
 	/**
 	 * Size of each farm's soil-water store, mm over the cropped area (engine ≥
-	 * 0.15.0, docs/engine-audit.md N3): effective rain the crop can't use on
+	 * 0.14.0, docs/engine-audit.md N3): effective rain the crop can't use on
 	 * the day it falls is kept for the following days, up to this depth
 	 * (./demand.ts farmDailyDemand). Default 25 mm, the readily available water
 	 * of 0.5 m of roots in a soil holding 100 mm/m with p = 0.5 (FAO-56 Tables

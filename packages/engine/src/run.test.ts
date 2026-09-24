@@ -308,7 +308,7 @@ describe('runModel — irrigation demand', () => {
 		expect(get(out, 'F', 'demand')).toEqual([35, 100]);
 	});
 
-	describe('soil-water store (N3, engine 0.15.0)', () => {
+	describe('soil-water store (N3, engine 0.14.0)', () => {
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(0.5)] }];
 		const fixture = (rain: number[], settings: Partial<ProjectSettings> = {}): Fixture => ({
 			nodes: [node('F', { damCapacityM3: 1e9, damInitialPct: 1 })],
@@ -988,7 +988,7 @@ describe.skipIf(!dataDir)(
 		// inflow INTO the dam, as the column's label says; the workbook's formula
 		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
 		// comparison below still tests the port, not the corrected meaning.
-		// N3 (engine ≥ 0.15.0): effective rain carries over through a soil-water
+		// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
 		// store; the workbook has none. The replay switches it off (0 mm), which
 		// is bit for bit the workbook's rule; the N3 test below runs it on.
 		const modelInput: ModelInput = {
@@ -1045,7 +1045,7 @@ describe.skipIf(!dataDir)(
 		//          with the correction off, and with it on only years holding
 		//          fallback days may differ. The mean columns fed by demand
 		//          (supplied, deficit, …) stay within their R1 bound.
-		//   N3     (engine ≥ 0.15.0) effective rain carries over through a
+		//   N3     (engine ≥ 0.14.0) effective rain carries over through a
 		//          soil-water store (default 25 mm). Demand, and everything fed
 		//          by it (supplied, deficit, storage, spill, outflow, the EWR
 		//          shortfalls, curtailment), differ on the days after rain. Every

@@ -35,7 +35,7 @@ erDiagram
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
-| `project` | One catchment/place. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.15.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`) |
+| `project` | One catchment/place. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`) |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm` or `gauge`, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, return-flow % | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) | `[Crop demand]` crop table |
@@ -118,7 +118,7 @@ its `inputs` snapshot plus `engine_version`.
   lower cap are the levers.
 - **Working columns (engine ≥ 0.12.0).** Each farm also stores its 11
   intermediate columns (gross demand, effective rain, K–P, S, T and the
-  balance check V; engine ≥ 0.15.0 adds a 12th, `soil_water`; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
+  balance check V; engine ≥ 0.14.0 adds a 12th, `soil_water`; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
   so a day can be checked by hand from the export. On the two-farm e2e
   catchment (120 days) they added 52 % to the run's `run_series` bytes
   (21.6 KB on 41.3 KB); expect roughly that share on a long run, since most of

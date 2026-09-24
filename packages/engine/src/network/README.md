@@ -88,7 +88,7 @@ node's `outflow` is the catchment `simulated_outflow`.
   with February = `settings.februaryDays` (28.25).
 - Daily net = MAX(0, gross − cropped area × effectiveRainFraction/1000 × rain)
   in the workbook. (The workbook rounds these to 2 dp, 0.1 m³/day and whole m³.)
-  Engine ≥ 0.15.0 carries effective rain over through a per-farm soil-water
+  Engine ≥ 0.14.0 carries effective rain over through a per-farm soil-water
   store (`../demand.ts` `farmDailyDemand`, audit N3): used = MIN(store + Pe,
   gross), net = gross − used, store = MIN(size, store + Pe − used), size =
   `settings.effectiveRainStoreMm` (25 mm; 0 is the workbook's rule bit for

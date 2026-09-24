@@ -451,7 +451,7 @@ const CALIBRATION_ARRAYS: Record<string, string> = {
  * Settings as the engine sees them: stored values merged over the defaults.
  * A run saved without a runoff model predates the setting (engine 0.5.0), so
  * it ran legacy, whatever today's default is; one without a soil-water store
- * predates it (engine 0.15.0), so it ran with none (0 mm).
+ * predates it (engine 0.14.0), so it ran with none (0 mm).
  */
 function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Record<string, unknown> {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
@@ -461,7 +461,7 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		...r,
 		runoffModel: r.runoffModel ?? 'legacy',
 		// Runs store settings merged over the defaults, so a snapshot without a
-		// store size predates it (engine < 0.15.0) and carried no rain over.
+		// store size predates it (engine < 0.14.0) and carried no rain over.
 		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },

@@ -75,7 +75,7 @@ export interface FarmDailyDemand {
 /**
  * Net daily demand with effective rain carried over through a soil-water
  * store: a one-bucket form of the FAO-56 root-zone balance ([Allen et al.
- * 1998] ch. 8; docs/engine-audit.md N3, engine ≥ 0.15.0). Each day, in order:
+ * 1998] ch. 8; docs/engine-audit.md N3, engine ≥ 0.14.0). Each day, in order:
  *
  *   1. Pe = cropped area × fraction ÷ 1000 × rain (rainOffsetM3; rain at or
  *      below the threshold is already 0 in `rainMm`);

@@ -45,7 +45,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.15.0';
+export const ENGINE_VERSION = '0.14.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -771,7 +771,7 @@ function buildDemand(
 		anyArea = true;
 		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
 		for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
-		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.15.0).
+		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
 		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
 		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});

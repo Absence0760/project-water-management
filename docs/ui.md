@@ -95,7 +95,7 @@ are entered in **ha** (stored as m²), with farm rows in network order and
 reorderable. A **demand preview** uses the engine's
 `grossFarmDemandM3PerDay`: m³/day per month, the mean, and Mm³/a per farm and
 for the catchment. It is gross demand, before the daily effective-rain
-reduction (and the soil-water store that carries rain over, engine ≥ 0.15.0).
+reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0).
 The crop-factor intro says the factors are **× A-pan, not FAO Kc** (FAO-56 Kc
 multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
 every crop and month with a factor above 1.0: a hint to check for an FAO Kc
@@ -311,7 +311,7 @@ The settings are grouped by what they drive:
   and a date (it opens on the farm-day with the largest residual) and it
   fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
   with its letter, value and formula, starting from the day before's storage
-  (and, engine ≥ 0.15.0, the day before's soil-water store, from which the
+  (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
   day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J) −
   used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
   the run's input snapshot, not today's model. A run saved before 0.12.0 says

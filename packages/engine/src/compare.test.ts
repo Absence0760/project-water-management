@@ -280,7 +280,7 @@ describe('diffInputs', () => {
 	it('does not flag settings stored sparsely vs merged over the defaults', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
-		// Likewise the soil-water store: none stored means none used (engine < 0.15.0).
+		// Likewise the soil-water store: none stored means none used (engine < 0.14.0).
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
 		b.settings.effectiveRainStoreMm = 0;
@@ -390,7 +390,7 @@ describe('diffInputs', () => {
 		const b = structuredClone(a);
 		(b.settings as Record<string, unknown>).effectiveRainStoreMm = 10;
 		expect(texts(a, b)).toEqual(['Soil-water store (effective rain carry-over): 25 mm → 10 mm']);
-		// Runs store merged settings, so no size means engine < 0.15.0, which carried nothing over.
+		// Runs store merged settings, so no size means engine < 0.14.0, which carried nothing over.
 		const old = snapshot();
 		delete (old.settings as Record<string, unknown>).effectiveRainStoreMm;
 		expect(texts(old, a)).toEqual(['Soil-water store (effective rain carry-over): 0 mm → 25 mm']);

@@ -168,7 +168,7 @@ describe('verification (engine 0.12.0)', () => {
 		free.series.find((s) => s.nodeId === 'b' && s.key === 'demand')!.values[0]! -= 5;
 		expect(check(free).passed).toBe(false);
 		expect(check(free).detail).toContain('effective rain used 5');
-		// A run from before engine 0.15.0 has no store column: nothing to check.
+		// A run from before engine 0.14.0 has no store column: nothing to check.
 		const old: ModelOutput = structuredClone(out);
 		old.series = old.series.filter((s) => s.key !== 'soil_water');
 		expect(check(old).passed).toBe(true);

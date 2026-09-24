@@ -433,7 +433,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 }
 
 /**
- * Each farm's soil-water store (N3, engine ≥ 0.15.0, ../demand.ts
+ * Each farm's soil-water store (N3, engine ≥ 0.14.0, ../demand.ts
  * farmDailyDemand), redone from the run's own rain (rain_final, zeroed at or
  * below the threshold) and settings, every day:
  * - 0 ≤ store ≤ its size (effectiveRainStoreMm);
@@ -441,7 +441,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
  *   never takes more than the store held plus the day's effective rain Pe;
  * - store = MIN(size, store[t−1] + Pe − used): nothing appears from nowhere;
  * - over the run, Σ used ≤ Σ Pe: the store hands out no more rain than fell.
- * A run from before engine 0.15.0 has no soil_water column: nothing to check.
+ * A run from before engine 0.14.0 has no soil_water column: nothing to check.
  */
 export function checkSoilWater(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);

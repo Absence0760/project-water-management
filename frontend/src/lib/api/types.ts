@@ -136,7 +136,7 @@ export interface RunDay {
 	previousStorageM3: number | null;
 	/**
 	 * Soil-water store at the end of the day before, mm (0 on the run's first
-	 * day); null for gauges and runs from before engine 0.15.0. Absent from an
+	 * day); null for gauges and runs from before engine 0.14.0. Absent from an
 	 * older API.
 	 */
 	previousSoilWaterMm?: number | null;

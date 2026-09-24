@@ -111,7 +111,7 @@ describe('day trace', () => {
 		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(Q[t−1] + M + O + K + J, F)' });
 	});
 
-	it('adds the day-before soil-water store after the storage when the run has one (engine 0.15.0)', () => {
+	it('adds the day-before soil-water store after the storage when the run has one (engine 0.14.0)', () => {
 		const rows = traceRows(farmDay({ previousSoilWaterMm: 7.5 }));
 		expect(rows.slice(0, 2).map((r) => [r.key, r.value, r.unit])).toEqual([
 			['previous_storage', 500, 'm³'],

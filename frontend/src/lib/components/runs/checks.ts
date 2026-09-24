@@ -73,7 +73,7 @@ export function traceRows(day: RunDay): TraceRow[] {
 			formula: 'the run’s initial storage (initial % × capacity) on its first day',
 			value: day.previousStorageM3
 		});
-		// The store the day's effective rain was added to (engine ≥ 0.15.0).
+		// The store the day's effective rain was added to (engine ≥ 0.14.0).
 		if (day.previousSoilWaterMm != null) {
 			rows.push({
 				key: 'previous_soil_water',
