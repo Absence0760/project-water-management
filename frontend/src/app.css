@@ -238,7 +238,11 @@ p a:not(.btn),
 	border-color: transparent;
 	background: transparent;
 }
+/* Icon-only buttons (✕): at least 24 × 24 CSS px everywhere (WCAG 2.2 target
+   size, 2.5.8); the ✕ glyph alone is narrower than that. */
 .btn-icon {
+	min-width: 24px;
+	min-height: 24px;
 	padding: 0.2rem 0.45rem;
 	border-color: transparent;
 	background: transparent;
