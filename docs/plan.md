@@ -390,34 +390,38 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Model and hydrology (for the hydrologist)
 
-> **Ask this first — it decides what the model is calibrated to.**
+> **Ask this first: confirm the calibration record ([#1](https://github.com/Absence0760/project-water-management/issues/1)).**
 >
-> **Which measured flow should the client catchment be calibrated against?** The two
-> observed records agree until 2013/14, then the G1 gauge reads a fraction
-> of the A1 logger for four years (volume per water year, Oct–Sep; ratio on
-> days where both have a reading):
+> **Proposed decision: calibrate and validate on the logger. The workbook's
+> gauge column is used only as a regional wet/dry index.** This is what the
+> workbook and the imported settings already do. The research behind it
+> ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)):
+> the gauge column is a DWS weir on a neighbouring river, upstream of its
+> confluence with the modelled river, so none of the modelled catchment drains
+> through it; that sub-catchment is far more developed; the column is raw for
+> part of the record and area-scaled for the rest; and the logger's magnitude
+> is checked against independent field gaugings. The two records' disagreement
+> from 2014 is therefore not evidence about either instrument. Since engine
+> 0.7.1 the importer can bring the gauge in as a reference series the engine
+> never scores against.
 >
-> | Water year | Gauge G1 | Logger A1 | Gauge as % of logger |
-> | --- | --- | --- | --- |
-> | 2012/13 | 59.3 Mm³ | 60.0 Mm³ (169 days) | 95 % |
-> | 2013/14 | 46.9 Mm³ | 56.6 Mm³ | 83 % |
-> | 2014/15 | 4.5 Mm³ | 33.9 Mm³ | **13 %** |
-> | 2015/16 | 14.6 Mm³ | 44.0 Mm³ | **33 %** |
-> | 2016/17 | 0.9 Mm³ | 11.3 Mm³ | **8 %** |
-> | 2017/18 | 20.4 Mm³ | 1.8 Mm³ (logger ends Mar 2018) | 1 % |
+> 1. **Confirm:** the logger is the calibration and validation target, and the
+>    neighbouring gauge is a regional wet/dry index only (ranking water years
+>    for the dry→wet test). Yes or no?
+> 2. **Rating (CR-18):** what is the highest field gauging at the logger, and
+>    which rating curve converts its stage to flow? Flows above that gauging
+>    are extrapolated, so peak days and wet-season volumes are uncertain; the
+>    answer decides which days get flagged.
+> 3. **Area:** the project's catchment area differs from the source report's
+>    area at the logger by about 5 %. Which is right?
+> 4. **Accept the limitation:** the logger record is short and mostly dry, so
+>    it can't pin down GR4J's X1 and X3. The fit to present is the one with
+>    Perrin's typical bounds plus the WR2012 MAR band; the durable fix is a
+>    proxy-basin model of the gauged neighbour (CR-9). Is that acceptable for
+>    now, with the uncertainty reported?
 >
-> The workbook calibrates to the logger. Against it the model scores NSE
-> 0.29 / KGE 0.57; against the gauge NSE −0.34 (worse than the mean) —
-> so the choice changes every farm's supply and EWR result.
->
-> 1. Is the A1 logger the trusted record?
-> 2. Is anything known about the gauge from 2014 — weir damage, siltation, a
->    rating-curve change, flow bypassing the structure, gaps filled with zeros?
-> 3. Should the gauge be excluded from 2014 onward, or corrected?
-> 4. Is there a DWS-verified G1 record we should import instead?
->
-> Numbers from the client catchment WORKING 007 workbook; details in
-> [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg).
+> A yes to 1 closes #1. Questions 2–4 don't hold up that sign-off; each opens
+> its own follow-up.
 
 
 1. **Which model should the app be built on?** b023 is complete and in use. The

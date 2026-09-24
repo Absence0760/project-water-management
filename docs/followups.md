@@ -39,8 +39,11 @@ Tick items off (or move them into an issue) as they are done.
       logger (already the project's calibration record) is the verified
       target ([model.md §2.10](./model.md)). The code and doc items (plan 1–3:
       no silent default pick, a neutral agreement warning, the findings in
-      model.md) have landed. Still open: the hydrologist's sign-off on the
-      logger, then replace the question in [plan.md](./plan.md) and close #1.
+      model.md) have landed. The question in [plan.md](./plan.md) is now a
+      confirmation (logger as target, gauge as regional index) plus the
+      rating, area and short-record questions, with the client flow volumes
+      it used to quote removed (2026-09-24). Still open: the hydrologist's
+      yes, then record it (dated) in plan.md and close #1.
       The runoff-ratio check needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):

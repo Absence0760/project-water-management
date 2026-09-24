@@ -622,7 +622,9 @@ research on issue #1 found exactly this: its gauge column is a neighbouring
 river's gauge (area-scaled for part of the record), and the logger's magnitude
 is verified against independent field gaugings, so the **logger is the
 calibration target**, which is also what the workbook and the imported settings
-already use. This is **pending the hydrologist's sign-off**
+already use. This is **pending the hydrologist's sign-off**, now put to them
+as a confirmation with three follow-on questions (rating, area, the short
+record) rather than an open choice between records
 ([plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
 logger: high flows above the highest field gauging come from an extrapolated
 rating curve, so peak days and wet-season volumes are uncertain, and the record
