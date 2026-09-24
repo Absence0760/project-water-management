@@ -90,12 +90,12 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'pctUpstreamToDam',
-		label: 'Upstream bypass',
+		label: 'Upstream inflow to dam',
 		unit: '%',
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `Upstream inflow bypassing the dam at ${n}, %`,
-		help: 'Share of the water arriving from upstream nodes that passes below the dam rather than into it. The b023 workbook labels this column "upstream inflow above dam" but applies it this way; 100 % means upstream water bypasses the dam, and only the divert capacity can take some back.'
+		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
+		help: 'Share of the water arriving from upstream nodes that enters the dam. The rest passes below it, where the divert capacity can take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion. (The b023 workbook\'s formula applied it the other way round; see docs/model.md §3 Q1.)'
 	},
 	{
 		key: 'pctRunoffToDam',

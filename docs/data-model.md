@@ -52,7 +52,7 @@ erDiagram
 | `area_km2` | Total area farms (km²) | Used by the *Area* flow-share method and for `RainToM3` |
 | `area_hi_km2` / `area_lo_km2` | Farm area high / low MAP | *Hi/Lo* method |
 | `flow_share_manual` | External fragmentation (%) | *Specific* method (0–1) |
-| `pct_upstream_to_dam` | "Upstream inflow above dam (%)" | **Naming mismatch.** The workbook formula sends `H × pct` *below* the dam. See [model.md Q1](./model.md#3-workbook-quirks-and-suspected-bugs). The column keeps the label's name. The engine applies the workbook's behaviour until the hydrologist decides. |
+| `pct_upstream_to_dam` | "Upstream inflow above dam (%)" | The share of upstream inflow that enters the dam (engine ≥ 0.9.0). The workbook's formula applied it to the water passing below the dam; the client confirmed the label's meaning ([model.md Q1](./model.md#3-workbook-quirks-and-suspected-bugs)). |
 | `pct_runoff_to_dam` | Farm runoff above (into) dam (%) | |
 | `dam_capacity_m3` | Composite dam capacity (m³) | |
 | `dam_initial_pct` | Initial dam volume (%) | |

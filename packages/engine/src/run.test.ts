@@ -127,9 +127,10 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 
 	it('routes upstream outflow into the next farm and on to the gauge', () => {
 		expect(get(out, 'B', 'inflow_upstream')).toEqual([10, 10, 110.5]);
-		// B: capacity 0. M = I × 0.5 goes to the (zero) dam and spills; N below dam.
-		// U = R + S + T = (K + M) + N + 0 = H + I.
-		expect(get(out, 'B', 'spill')).toEqual([60, 10, 510.75]); // K + M: 10 + 50, 10 + 0, 110.5 + 400.25
+		// B: capacity 0, pctUpstreamToDam 0. M = I × 0.5 goes to the (zero) dam and
+		// spills; the upstream inflow and N pass below the dam (engine ≥ 0.9.0, Q1).
+		// U = R + S + T = M + (L + N) + 0 = H + I.
+		expect(get(out, 'B', 'spill')).toEqual([50, 0, 400.25]); // M only
 		expect(get(out, 'B', 'outflow')).toEqual([110, 10, 911]);
 		expect(get(out, 'G', 'outflow')).toEqual([110, 10, 911]);
 		expect(get(out, null, 'simulated_outflow')).toEqual([110, 10, 911]);
@@ -200,16 +201,16 @@ describe('runModel — no rounding in the balance (audit R1)', () => {
 });
 
 describe('runModel — dam behaviour', () => {
-	it('mirrors the b023 upstream split: pctUpstreamToDam sends inflow *below* the dam (L), capped by the diversion', () => {
-		// Upstream U farm drains 1000 m³/day of runoff into D. D has pctUpstreamToDam = 1,
-		// which in b023 makes L = H (below dam); only the 300 m³/day diversion reaches the dam.
+	it('with pctUpstreamToDam = 0 upstream inflow passes below the dam (L); only the diversion reaches it (Q1, engine 0.9.0)', () => {
+		// Upstream U farm drains 1000 m³/day of runoff into D. D takes none of it
+		// into the dam; the 300 m³/day diversion brings some back.
 		const out = run({
 			nodes: [
 				node('U', { downstreamNodeId: 'D' }),
 				node('D', {
 					areaKm2: 0,
 					sortOrder: 1,
-					pctUpstreamToDam: 1,
+					pctUpstreamToDam: 0,
 					divertCapacityM3Day: 300,
 					damCapacityM3: 10_000
 				})
@@ -221,11 +222,23 @@ describe('runModel — dam behaviour', () => {
 		expect(get(out, 'D', 'outflow')).toEqual([700, 700]);
 	});
 
-	it('with pctUpstreamToDam = 0 all upstream inflow enters the dam (K)', () => {
+	it('splits a fraction: pctUpstreamToDam = 0.25 puts a quarter of the upstream inflow into the dam', () => {
 		const out = run({
 			nodes: [
 				node('U', { downstreamNodeId: 'D' }),
-				node('D', { areaKm2: 0, sortOrder: 1, damCapacityM3: 1500 })
+				node('D', { areaKm2: 0, sortOrder: 1, pctUpstreamToDam: 0.25, damCapacityM3: 10_000 })
+			],
+			natural: [1000]
+		});
+		expect(get(out, 'D', 'dam_storage')).toEqual([250]);
+		expect(get(out, 'D', 'outflow')).toEqual([750]);
+	});
+
+	it('with pctUpstreamToDam = 1 all upstream inflow enters the dam (K), as the label says (Q1, engine 0.9.0)', () => {
+		const out = run({
+			nodes: [
+				node('U', { downstreamNodeId: 'D' }),
+				node('D', { areaKm2: 0, sortOrder: 1, pctUpstreamToDam: 1, damCapacityM3: 1500 })
 			],
 			natural: [1000, 1000]
 		});
@@ -923,9 +936,13 @@ describe.skipIf(!dataDir)(
 		}
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
 		const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
+		// Q1 (engine ≥ 0.9.0): the engine puts pctUpstreamToDam of the upstream
+		// inflow INTO the dam, as the column's label says; the workbook's formula
+		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
+		// comparison below still tests the port, not the corrected meaning.
 		const modelInput: ModelInput = {
 			settings: project.settings,
-			model: project.model,
+			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam })) },
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		// B1: days where CHIRPS stands in for blank catchment rain. The engine

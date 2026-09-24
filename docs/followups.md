@@ -50,7 +50,8 @@ Tick items off (or move them into an issue) as they are done.
       - N3: rain only offsets demand on the day it falls.
       - N4, Q3, Q18: transfer rules.
       - Q17: how the EWR shortfall is attributed to farms.
-      - Q1, Q5, Q11, Q13: field meanings and curtailment policy.
+      - Q5, Q11, Q13: curtailment policy. (Q1 is resolved: the share goes
+        into the dam, engine 0.9.0.)
 - [ ] **Return flow and curtailment:** with return flow on, a farm upstream of
       a starved neighbour can "help" it by drawing more, because part of the
       extra draw returns to the river. Keep this in mind when reading

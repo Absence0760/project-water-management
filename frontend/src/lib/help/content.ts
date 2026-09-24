@@ -260,14 +260,14 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'upstream-to-dam',
 		term: 'Upstream inflow share (dam)',
-		short: 'Fraction of the water arriving from upstream that is routed past the farm dam, per the workbook formula. Awaiting confirmation.',
-		long: 'The b023 column is labelled “upstream inflow above dam”, but its formula sends this fraction of upstream inflow below the dam and only the remainder into it. The app reproduces the formula so results match the workbook.\n\nThis is open question Q1 for the hydrologist: under the label’s meaning, 100 % would put all upstream water into the dam; under the formula, 100 % keeps it all out (except what the diversion capacity brings back).',
+		short: 'Fraction of the water arriving from upstream that enters the farm dam; the rest passes below it.',
+		long: 'The b023 column is labelled “upstream inflow above dam”: the share of the upstream inflow that enters the dam, above the dam wall. The rest passes below the dam, where the diversion capacity can still take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion.\n\nThe workbook’s formula applied the fraction the other way round (to the water passing below), against its own label and its [Models] sheet. The client confirmed the label’s meaning, and the app follows it from engine 0.9.0. This is also the South African convention: the Pitman/WRSM model describes farm dams by the share of the catchment that drains into them.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		aliases: ['upstream inflow above dam', 'upstream to dam'],
 		fields: ['node.pctUpstreamToDam'],
 		related: ['runoff-to-dam', 'diversion'],
-		source: 'b023 Farm spec; docs/model.md §3 Q1'
+		source: 'b023 Farm spec; docs/model.md §3 Q1 (resolved)'
 	},
 	{
 		id: 'runoff-to-dam',

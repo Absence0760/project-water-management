@@ -431,8 +431,8 @@ storage to whole m³; the engine doesn't (R1).
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
 | I | Farm runoff | fragmented natural flow (§2.5) |
 | J | Transfer in (+) / out (−) | from §2.6 |
-| L | Upstream inflow "below dam" | `H × pctUpstream` (see quirk Q1) |
-| K | Upstream inflow "above dam" | `H − L` |
+| K | Upstream inflow "above dam" (into the dam) | `H × pctUpstreamToDam` (engine ≥ 0.9.0; the workbook computed L this way, see quirk Q1) |
+| L | Upstream inflow "below dam" | `H − K` |
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
@@ -1087,7 +1087,7 @@ from the workbook.
 
 | # | Where | What we see | Why it matters |
 | --- | --- | --- | --- |
-| Q1 | Farm sheet K/L | **Naming mismatch on "Upstream inflow above dam %"**. The column's label says "above dam", but the formula puts `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). The client catchment sets it to 100% for most farms, so under the formula no upstream water enters those dams (except through the diversion capacity). The `[Models]` sheet says "set to 100%" for a stand-alone dam, which contradicts the formula. The DB column is named `pct_upstream_to_dam` after the label. | This may change every downstream number. We must ask which meaning is intended. |
+| Q1 | Farm sheet K/L | **"Upstream inflow above dam %" was applied backwards. Resolved (client, 2026-09; engine 0.9.0).** The column's label says "above dam", but the formula put `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). The label, the sibling column "Farm runoff above (into) dam %", the `[Models]` sheet ("100%" for a stand-alone dam, "0%" for a natural area) and the South African convention (the Pitman/WRSM farm-dam parameter is the share of the catchment that drains *into* the dams) all mean the share entering the dam, and the client confirmed that meaning. **Fixed:** `K = H × pctUpstreamToDam`, `L = H − K`; the DB column `pct_upstream_to_dam` already has the right name. The client catchment regression replays the workbook with `1 − pct`. On the client catchment the change moves no result measurably, because each farm's diversion capacity already refills its dam; it matters for a dam with little or no diversion. | Existing projects keep their stored values, which now mean what the label says. A project built on the old behaviour with 0 (all into the dam) needs 1 instead. |
 | Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). The client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. | It is unclear whether the order (transfer vs irrigation) and the spill of transferred water are intended. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |

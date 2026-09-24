@@ -425,11 +425,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    right: b023 first, then node-based features, then the runoff module as an
    alternative flow generator? Or is one of the AI workbooks meant to *replace*
    b023?
-2. **"Upstream inflow above dam %" (Q1).** The formula sends `inflow × pct`
-   *below* the dam. The client catchment has 100% for 10 farms, which means that no
-   upstream water reaches those dams except through the diversion capacity. The
-   `[Models]` sheet says a stand-alone dam should be 100%. Which is intended? If
-   the formula is wrong, the client catchment's results change.
+2. ~~**"Upstream inflow above dam %" (Q1).**~~ **Answered (2026-09):** the
+   percentage is the share of upstream inflow that enters the dam, as the label
+   says; the workbook's formula was backwards. Fixed in engine 0.9.0
+   ([model.md §3 Q1](./model.md#3-workbook-quirks-and-suspected-bugs)).
 3. **Transfers (Q2, Q3).** The blank template draws one transfer from the
    *Spill* column instead of *Storage*. Could this be in other catchment
    workbooks? Should a transfer be limited by the receiver's free space, and

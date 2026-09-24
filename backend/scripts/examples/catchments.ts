@@ -98,7 +98,10 @@ function build(spec: CatchmentSpec): ExampleProject {
 		areaHiKm2: 0,
 		areaLoKm2: 0,
 		flowShareManual: null,
-		pctUpstreamToDam: f.upstreamToDam ?? 0,
+		// Engine ≥ 0.9.0 reads this as the share of upstream inflow INTO the dam
+		// (model.md §3 Q1). The examples were built with all of it entering the
+		// dam, which is now 1 (it was 0 under the workbook's reversed formula).
+		pctUpstreamToDam: f.upstreamToDam ?? 1,
 		pctRunoffToDam: f.runoffToDam ?? 0.6,
 		damCapacityM3: f.damM3 ?? 0,
 		damInitialPct: f.damStart ?? 0.6,

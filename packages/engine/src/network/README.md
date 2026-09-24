@@ -42,8 +42,8 @@ initial storage on day 0):
 | H | `inflow_upstream` | Σ upstream nodes' U |
 | I | `runoff` | natural flow × farm share |
 | J | `transfer` | Σ transfers in − Σ transfers out |
-| L | – | H × `pctUpstreamToDam` — upstream inflow *below* the dam (see quirk 1) |
-| K | – | H − L — upstream inflow into the dam |
+| K | – | H × `pctUpstreamToDam` — upstream inflow into the dam (engine ≥ 0.9.0, see quirk 1) |
+| L | – | H − K — upstream inflow *below* the dam |
 | M | – | I × `pctRunoffToDam` — own runoff into the dam |
 | N | – | I − M — own runoff below the dam |
 | O | – | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
@@ -135,15 +135,15 @@ warning.
 
 What we mirror, and what we don't:
 
-1. **"Upstream inflow above dam (%)" feeds the below-dam split.** The [Farm spec]
-   column is labelled "Upstream Inflow Above Dam (%)", but the Element sheet
-   uses it for L = ROUND(H × %), and L is labelled "Upstream inflow *below*
-   dam". So 100% sends all upstream water below the dam, where only the
-   diversion capacity (O) can bring it back. In the client catchment every farm has 100%.
-   The [Models] help sheet says a stand-alone dam should use 100%, which only
-   works if diversion capacity is large. **Mirrored.** `NetworkNode.pctUpstreamToDam`
-   holds the workbook value unchanged. Its doc comment ("Fraction of upstream
-   inflow entering above the dam") describes the label, not the effect.
+1. **"Upstream inflow above dam (%)" fed the below-dam split.** The [Farm
+   spec] column is labelled "Upstream Inflow Above Dam (%)", but the Element
+   sheet used it for L = ROUND(H × %), the upstream inflow *below* the dam, so
+   100% kept all upstream water out of the dam except what the diversion
+   capacity (O) brought back. The label, the [Models] help sheet (100% for a
+   stand-alone dam) and the Pitman/WRSM farm-dam convention all mean the share
+   *into* the dam, and the client confirmed it. **Not mirrored** from engine
+   0.9.0: K = H × `pctUpstreamToDam`, L = H − K. The client catchment
+   regression replays the workbook by feeding 1 − pct.
 2. **Month lists are matched as substrings.** `fIsMthIn` / `fSorW2` use
    `FIND(m & ",", list & ",")`, so a list "11,12" also switches on January and
    February. **Not mirrored** (audit M1): the importer keeps the months a list

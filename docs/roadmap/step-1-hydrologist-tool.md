@@ -1006,10 +1006,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     respect it); the help text in `lib/help/content.ts` changes too.
   - **Q7:** Pitman fallback only on days with **no rain value**, not "model
     gave 0"; label the source per day (W5).
-  - **Q1:** rename `pct_upstream_to_dam` → `pct_upstream_bypass`
-    (expand/contract: add the column plus a sync trigger, backfill, switch
-    code, drop in a later migration) and `NetworkNode` accordingly;
-    `scripts/wbt-import` maps it too.
+  - ~~**Q1:** rename `pct_upstream_to_dam` → `pct_upstream_bypass`.~~ Not
+    needed: the client confirmed the label's meaning (share into the dam), so
+    engine 0.9.0 fixed the formula instead and the column name is right.
   - Each landed item bumps `ENGINE_VERSION` (minor).
 - **Data model:**
   - `transfer.priority` (if Q18 is "order"), under the existing transfer

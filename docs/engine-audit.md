@@ -45,7 +45,7 @@ engine 0.4.0.
 
 | # | Decision in 0.4.0 |
 | --- | --- |
-| Q1 upstream "above dam" % drives the below-dam split | **Needs hydrologist.** Water is conserved either way; it is a question of what the parameter means. Worth noting: with 100 % (every client catchment farm), a farm can irrigate from upstream flow only through its divert capacity. Recommendation: rename the field after its effect, `pctUpstreamBypass` (the UI already calls it "Upstream bypass"), once confirmed. |
+| Q1 upstream "above dam" % drives the below-dam split | **Fixed (engine 0.9.0, client decision 2026-09).** The percentage is the share of upstream inflow that enters the dam, as the label, the `[Models]` sheet and the Pitman/WRSM farm-dam convention have it; the workbook's formula was backwards. No rename needed: `pct_upstream_to_dam` now means what it says. The UI calls it "Upstream inflow to dam". |
 | Q2 transfer reads spill | Not mirrored (already). |
 | Q3 transfer order / spill at the receiver | **Needs hydrologist**, see N4. |
 | Q4 | Doc only. |
@@ -199,7 +199,7 @@ the bound.
    space? Priority between rules?
 6. **Q17:** how should an EWR shortfall be attributed to farms (pro rata to
    net impact, or assessed at gauges only)?
-7. **Q1, Q5, Q11, Q13:** parameter meaning and curtailment policy, as listed.
+7. **Q5, Q11, Q13:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
 
 ## References
 

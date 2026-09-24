@@ -30,7 +30,7 @@ export interface PlanNode {
 	kind: 'farm' | 'gauge';
 	/** Fraction of natural flow / EWR generated on this farm's land. */
 	share: number;
-	/** b023 "Upstream inflow above dam (%)" — see README: it drives the *below-dam* split (L). */
+	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
 	divertCapacityM3Day: number;
@@ -181,12 +181,14 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			const H = sumU;
 			const I = nat * node.share;
 			const J = jToday[i]!;
-			// A split never exceeds the volume it splits (a fraction above 1 would
-			// otherwise make the bypass K negative). The workbook's ROUND(H·p, 0)
-			// could round above a fractional H; without rounding only an invalid
-			// fraction can.
-			const L = Math.min(H * node.pctUpstreamToDam, H);
-			const K = H - L;
+			// The percentage is the share of upstream inflow that enters the dam
+			// (K); the rest passes below it (L), where the diversion capacity (O)
+			// can still take some back. The b023 formula had it the other way
+			// round (L = H × %), against its own label and [Models] sheet; the
+			// client confirmed the label's meaning (engine 0.9.0, model.md §3 Q1).
+			// A split never exceeds the volume it splits.
+			const K = Math.min(H * node.pctUpstreamToDam, H);
+			const L = H - K;
 			const M = Math.min(I * node.pctRunoffToDam, I);
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
