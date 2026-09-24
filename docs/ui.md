@@ -105,7 +105,11 @@ pending invitations, the confirm-email banner) render through
   narrow, and the volume columns (m³, m³/day; `isVolume`) keep room for a
   seven-digit value such as 1430000, so a dam capacity is never clipped.
   Every cell of a column carries its width class, not-used and footer cells
-  included. Narrower screens scroll the table sideways inside its own
+  included. Every field header is the label (hyphens don't break,
+  so "High-MAP" stays whole) over one line with the unit and its ⓘ, all
+  bottom- and right-aligned, so the icons form one row. Numbers are
+  right-aligned in even-width digits with no spin buttons, and each total
+  lines up with the digits above it. Narrower screens scroll the table sideways inside its own
   box, with the **Name** column pinned on the left and the **✕** remove
   column pinned on the right, so every row stays named and removable.
 - **One node layout**: the node picker (‹ select ›) is sticky under the app

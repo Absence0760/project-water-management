@@ -184,9 +184,17 @@
 					</tr>
 					<tr>
 						{#each TABLE_FIELDS as f (f.key)}
-							<th scope="col" class="num">{f.label} <HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /><br /><span class="u">{f.unit}</span></th>
+							<!-- Label on top (non-breaking hyphens: "High-MAP" stays whole), then the
+							     unit and its ⓘ on one bottom line, the same in every column. -->
+							<th scope="col" class="num fh">
+								<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
+								<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
+							</th>
 						{/each}
-						<th scope="col" class="num" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">In use<br /><span class="u">%</span></th>
+						<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each farm receives with the method in Settings & calibration.">
+							<span class="fh-l">In use</span>
+							<span class="fh-u"><span class="u">%</span></span>
+						</th>
 					</tr>
 				</thead>
 				<tbody bind:this={reorder.body}>
@@ -392,6 +400,51 @@
 		border-left: 1px solid var(--border);
 		font-weight: 600;
 		color: var(--text);
+	}
+	/* Field headers: every one bottom-aligned and right-aligned over its numbers,
+	   the label wrapping with its ⓘ kept at the end of the last line, and the
+	   unit on its own line below, so the header row reads as one even band. */
+	.net thead tr:last-child th,
+	.net thead th[rowspan] {
+		vertical-align: bottom;
+	}
+	.net th.fh {
+		text-align: right;
+	}
+	.fh-l {
+		display: block;
+		line-height: 1.25;
+	}
+	.fh-u {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 0.2rem;
+		margin-top: 0.2rem;
+		min-height: 1.25rem;
+	}
+	/* Numbers right-aligned in even-width digits, like the totals under them. */
+	.net td :global(input) {
+		width: 100%;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	/* No spin buttons in the dense table: Chrome keeps room for them even when
+	   hidden, which pushed right-aligned digits off the edge (arrow keys still step). */
+	.net td :global(input[type='number']) {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+	.net td :global(input[type='number']::-webkit-inner-spin-button),
+	.net td :global(input[type='number']::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.net tfoot td.num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		/* Line the total's digits up with the input text above: cell padding + input border + input padding. */
+		padding-right: calc(0.35rem + 1px + 0.35rem);
 	}
 	.net thead th :global(.helptip) {
 		margin-left: 0.1rem;
