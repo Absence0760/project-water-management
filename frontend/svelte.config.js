@@ -9,7 +9,11 @@ const config = {
 		// SPA mode: routes like /projects/[id] can't be prerendered, so every
 		// unknown path is served index.html and the client router takes over.
 		// CloudFront serves /index.html for unknown paths (infra/s3_cloudfront.tf).
-		adapter: adapter({ fallback: 'index.html' }),
+		// The e2e build (e2e/playwright.config.ts) bakes in the e2e API URL, so
+		// it writes elsewhere (BUILD_DIR, SVELTE_KIT_DIR) and never touches the
+		// production output in build/ or the .svelte-kit/ a running dev server uses.
+		adapter: adapter({ pages: process.env.BUILD_DIR || 'build', fallback: 'index.html' }),
+		outDir: process.env.SVELTE_KIT_DIR || '.svelte-kit',
 		paths: {
 			base: process.env.BASE_PATH || '',
 		},
