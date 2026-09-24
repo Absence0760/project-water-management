@@ -1,6 +1,7 @@
 # Install once with: pre-commit install   (installs the pre-commit and commit-msg hooks)
 # Manual run: pre-commit run --all-files
 default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
