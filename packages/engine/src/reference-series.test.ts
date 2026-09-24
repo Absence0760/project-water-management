@@ -73,6 +73,8 @@ describe('reference gauge (flow_reference_m3s) is never an observed record', () 
 		expect(out.series.some((s) => s.key === 'observed_flow')).toBe(false);
 		expect(out.summary.warnings).toContain('no observed flow series: calibration statistics not computed');
 		expect(out.summary.dataQuality!.observedAgreement).toBeNull();
+		// The outlet EWR test against an observed record doesn't run on it.
+		expect(out.summary.catchment.ewrAgreement ?? null).toBeNull();
 	});
 
 	it('does not change the calibration record, the scores or the gauge-vs-logger agreement', () => {
@@ -83,6 +85,9 @@ describe('reference gauge (flow_reference_m3s) is never an observed record', () 
 		expect(withRef.summary.calibration!.flowKind).toBe('flow_logger_m3s');
 		expect(withRef.summary.warnings).not.toContain(DEFAULT_GAUGE_PICK_WARNING);
 		expect(withRef.summary.dataQuality!.observedAgreement).toBeNull();
+		// The EWR test on the observed record uses the logger, exactly as without the reference.
+		expect(base.summary.catchment.ewrAgreement).toBeTruthy();
+		expect(withRef.summary.catchment.ewrAgreement).toEqual(base.summary.catchment.ewrAgreement);
 	});
 
 	it('does not touch the EWR comparison or any simulated output', () => {
