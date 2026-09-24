@@ -224,6 +224,9 @@ export const SettingsPatch = z
 	.object({
 		februaryDays: z.number().min(28).max(29),
 		effectiveRainFraction: z.number().min(0).max(1),
+		// Soil-water store, mm over the cropped area (engine N3). 500 mm is well
+		// past the readily available water of deep roots in a heavy soil.
+		effectiveRainStoreMm: z.number().finite().min(0).max(500),
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),

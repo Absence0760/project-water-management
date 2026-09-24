@@ -116,7 +116,12 @@ Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
-thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*). Month
+thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*), and the
+soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
+mm"*). Runs store their settings merged over the defaults, so a snapshot
+without a store size predates it (engine < 0.15.0) and compares as 0 mm, which
+is what that run used; the same rule reads a snapshot without a runoff model
+as legacy. Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range.

@@ -238,6 +238,10 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		// Explicit, so a change of the engine's default doesn't change what a seed runs.
 		settings.runoffModel = 'legacy';
 	}
+	// The soil-water store (N3): none, the default, anything, or practically
+	// endless. From its own stream, so a seed still builds the same network.
+	const sw = new Rng(seed ^ 0x2545f491);
+	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }

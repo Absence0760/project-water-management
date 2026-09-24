@@ -41,9 +41,14 @@ export interface PlanNode {
 	returnFlowPct: number;
 	/** Daily net irrigation demand (F); zeros for gauges. */
 	demand: Float64Array;
-	/** Gross demand before effective rain and the rain offset taken off it (m³/day); only needed for workings. */
+	/**
+	 * Gross demand before effective rain, the effective rain used against it
+	 * (m³/day) and the soil-water store at the end of the day (mm); only
+	 * needed for workings (../demand.ts farmDailyDemand).
+	 */
 	grossDemand?: Float64Array;
 	rainOffset?: Float64Array;
+	soilWater?: Float64Array;
 }
 
 export interface PlanTransfer {
@@ -100,7 +105,8 @@ export interface NodeResult {
  */
 export interface FarmWorkings {
 	grossDemand: Float64Array; // before effective rain
-	rainOffset: Float64Array; // cropped area × effective fraction × rain
+	rainOffset: Float64Array; // effective rain used: MIN(soil store + today's effective rain, gross)
+	soilWater: Float64Array; // soil-water store at the end of the day (mm)
 	upstreamToDam: Float64Array; // K
 	upstreamBelowDam: Float64Array; // L
 	runoffToDam: Float64Array; // M
@@ -145,6 +151,7 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 	return {
 		grossDemand: node.grossDemand ?? node.demand,
 		rainOffset: node.rainOffset ?? f(),
+		soilWater: node.soilWater ?? f(),
 		upstreamToDam: f(),
 		upstreamBelowDam: f(),
 		runoffToDam: f(),

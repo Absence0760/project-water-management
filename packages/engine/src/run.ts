@@ -19,7 +19,7 @@ import {
 } from './quality';
 import { applyChirpsCorrection, chirpsBiasFactors, chirpsCorrectionWarning, type ChirpsCorrection } from './rain';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
-import { grossFarmDemandM3PerDay, netDailyDemandM3, rainOffsetM3, type Crop } from './demand';
+import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -45,7 +45,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.15.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -173,7 +173,8 @@ export function runModelWith(
 	];
 	const WORKING_SERIES: [keyof FarmWorkings, string, string, string][] = [
 		['grossDemand', 'gross_demand', 'Gross irrigation demand (before effective rain)', 'm³/day'],
-		['rainOffset', 'effective_rain', 'Effective rain on the cropped area', 'm³/day'],
+		['rainOffset', 'effective_rain', 'Effective rain used against demand (from the day\'s rain or the soil store)', 'm³/day'],
+		['soilWater', 'soil_water', 'Soil-water store at the end of the day', 'mm'],
 		['upstreamToDam', 'upstream_to_dam', 'Upstream inflow into the dam', 'm³/day'],
 		['upstreamBelowDam', 'upstream_below_dam', 'Upstream inflow below the dam', 'm³/day'],
 		['runoffToDam', 'runoff_to_dam', 'Farm runoff into the dam', 'm³/day'],
@@ -484,7 +485,8 @@ export function buildNetworkPlan(
 				returnFlowPct: n.returnFlowPct,
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,
-				rainOffset: demand[i]!.rainOffset
+				rainOffset: demand[i]!.rainOffset,
+				soilWater: demand[i]!.soilWater
 			};
 		})
 	};
@@ -677,6 +679,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
+	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
+		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);
+		s.effectiveRainStoreMm = d.effectiveRainStoreMm;
+	}
 	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {
 		warnings.push(`unknown calibration flow series "${String(s.calibrationFlowKind)}"; using the default`);
 		s.calibrationFlowKind = null;
@@ -722,7 +728,7 @@ function buildDemand(
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[]
-): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array }[] {
+): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => ({
 		id: c.id,
@@ -748,7 +754,7 @@ function buildDemand(
 
 	let anyArea = false;
 	const out = nodes.map((node) => {
-		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days) };
+		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days) };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
@@ -764,13 +770,10 @@ function buildDemand(
 		if (cropped === 0) return d;
 		anyArea = true;
 		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
-		for (let t = 0; t < days; t++) {
-			const g = gross[wy[t]!]!;
-			d.gross[t] = g;
-			d.rainOffset[t] = rainOffsetM3(cropped, rain[t]!, settings.effectiveRainFraction);
-			d.net[t] = netDailyDemandM3(g, cropped, rain[t]!, settings.effectiveRainFraction);
-		}
-		return d;
+		for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
+		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.15.0).
+		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
+		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});
 	if (anyArea && settings.apanMm.every((v) => v === 0)) {
 		warnings.push('A-pan evaporation is 0 for every month, so irrigation demand is 0');
