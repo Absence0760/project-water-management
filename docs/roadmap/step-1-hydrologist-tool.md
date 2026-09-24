@@ -102,7 +102,7 @@ Still needed, with the WP each one blocks:
 ```
 browser (SvelteKit SPA)
  ├─ lib/preview/engine.worker.ts      runModel on the unsaved model        (WP-1.17)
- ├─ lib/calibration/autocal.worker.ts DDS over the runoff model's params   (WP-1.18, issue #4)
+ ├─ lib/calibration/autocal.worker.ts calibrate() off the main thread      (WP-1.18, issue #4)
  ├─ lib/spreadsheet/*.worker.ts       SheetJS CE: .xlsx export, templates,
  │                                    b023 workbook import                  (WP-1.28/1.30/1.31)
  └─ /account, /privacy routes; account menu in AppHeader                    (WP-1.9, 1.13)
@@ -902,6 +902,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > **Engine done (issue #4 phase 4):** `packages/engine/src/calibrate/` (DDS,
 > objectives, split-sample and differential split-sample validation, exclusions,
 > both models, the year-balanced KGE below); [model.md §2.10b](../model.md).
+> **UI done (phase 5):** Settings → Flow calibration → Fit automatically, in a
+> Web Worker (`frontend/src/lib/calibration/`), on `GET /projects/:id/model-input`;
+> Cancel terminates the worker at once. [ui.md § Settings](../ui.md).
 
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the

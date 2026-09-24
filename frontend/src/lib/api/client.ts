@@ -3,6 +3,7 @@
 // ApiError carrying the HTTP status and the server's message.
 import type {
 	DailySeries,
+	ModelInput,
 	ProjectModel,
 	ProjectSettings,
 	SeriesMeta
@@ -218,7 +219,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				if (nodeId) q.set('nodeId', nodeId);
 				return request<DailySeries>('GET', `${p(id)}/runs/${enc(runId)}/series?${q}`);
 			},
-			remove: (id: string, runId: string) => request<void>('DELETE', `${p(id)}/runs/${enc(runId)}`)
+			remove: (id: string, runId: string) => request<void>('DELETE', `${p(id)}/runs/${enc(runId)}`),
+			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
+			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

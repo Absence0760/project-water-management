@@ -543,6 +543,8 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
 
   A short record that is mostly drought gets these notes rather than a
   clean bill of health.
+- **In the app:** Settings → Flow calibration → Fit automatically runs it in a
+  Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Cost.** About 20 ms per model run on the 44-year client catchment, so
   1 500 runs per fit and three fits (full, split, dry → wet) take about 70 s
   in Node. `onProgress` reports every run and returns true to cancel, which

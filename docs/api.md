@@ -231,6 +231,7 @@ engine's `runModel`, stores the outputs, and returns the summary.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
+| GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run, series: { nodeId, key, label, unit }[] }` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |

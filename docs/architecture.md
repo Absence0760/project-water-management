@@ -52,7 +52,12 @@ origin**, so the session cookie is first-party.
 The same `runModel` runs:
 
 - **in the browser**, for instant feedback while editing (a full client catchment run,
-  16k days × 13 elements, takes about 18 ms). Nothing is saved.
+  16k days × 13 elements, takes about 18 ms). Nothing is saved. Automatic
+  calibration (`engine/src/calibrate`) runs there too, in a Web Worker
+  (`frontend/src/lib/calibration/autocal.worker.ts`): about a minute of model
+  runs on the input from `GET /projects/:id/model-input`, with the unsaved
+  Settings form in place of the saved settings. It fills the form and never
+  saves.
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series. Stored runs are what users share and compare.

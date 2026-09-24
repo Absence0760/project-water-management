@@ -544,7 +544,7 @@ export const HELP: HelpEntry[] = [
 		id: 'calibration',
 		term: 'Calibration',
 		short: 'Tuning the rain-to-flow parameters so simulated outflow matches the observed record at the outlet.',
-		long: 'The b023 routine is tuned by hand: change a parameter, run, and compare simulated with observed flow (hydrograph and statistics such as NSE and PBIAS). Calibrate over a period with a good observed record; the workbook uses its own calibration date window, separate from the main run.',
+		long: 'Tune by hand (change a parameter, run, and compare simulated with observed flow: hydrograph and statistics such as NSE and PBIAS), or let Fit automatically search for the parameters. Calibrate over a period with a good observed record; the workbook uses its own calibration date window, separate from the main run.',
 		category: 'flow',
 		aliases: ['flow calibration', 'tuning'],
 		related: ['peak-coefficient', 'nse', 'pbias', 'observed-flow'],
@@ -594,6 +594,16 @@ export const HELP: HelpEntry[] = [
 		fields: ['run.aet'],
 		related: ['gr4j', 'pan-coefficient'],
 		source: 'Perrin et al. (2003)'
+	},
+	{
+		id: 'auto-calibration',
+		term: 'Automatic calibration (Fit automatically)',
+		short: 'Searches the runoff model’s parameters for the best fit to the observed record, then tests the fit on days it never saw.',
+		long: 'The search is DDS (Tolson & Shoemaker 2007): it tries a set number of model runs, perturbing all parameters at first and fewer as it homes in, and never leaves each parameter’s allowed range. Every run scores the whole model, farms and dams included, against the observed record over the calibration window.\n\nPick what to optimise: KGE′ (the default), a year-balanced KGE′ that stops a few wet years dominating, a non-parametric KGE, or NSE on √Q or log Q for medium and low flows.\n\nThe fit alone says little. Validation fits again on the first half of the record and scores the second half, then fits on the driest water years and scores the wettest. Those columns are the honest measure. With a short record that is mostly drought, the result says so: wet-year behaviour is then weakly constrained. Nothing is saved until you apply the result and save the form.',
+		category: 'fit',
+		aliases: ['auto-calibration', 'optimiser', 'DDS', 'split-sample', 'differential split-sample', 'validation', 'KGE′'],
+		related: ['calibration', 'gr4j', 'nse'],
+		source: 'Tolson & Shoemaker (2007); Klemeš (1986); Kling et al. (2012); docs/model.md §2.10b'
 	},
 	{
 		id: 'catchment-area',

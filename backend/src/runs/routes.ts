@@ -4,7 +4,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { executeRun, trimRuns } from './execute.js';
+import { executeRun, loadModelInput, trimRuns } from './execute.js';
 
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy"`;
@@ -25,6 +25,17 @@ export const runRoutes = new Hono<AuthEnv>()
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [runId]);
 			return c.json({ run: rows[0], removedRunIds }, 201);
+		});
+	})
+	// The exact input a run would use (merged settings, the model, the first
+	// series of each kind by name), for running the engine in the browser:
+	// automatic calibration (issue #4 phase 5). Read-only, so viewers may fit
+	// too; only editors can save what they find.
+	.get('/:id/model-input', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json({ input: await loadModelInput(db, id) });
 		});
 	})
 	.get('/:id/runs', async (c) =>

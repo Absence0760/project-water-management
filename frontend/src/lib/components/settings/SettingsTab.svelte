@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import type { CalibrationParams, FlowShareMethod, ProjectSettings } from '@water-management/engine';
+	import { CALIBRATION_FLOW_KINDS, type CalibrationParams, type CalibrationReport, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
+	import { applyReport } from '$lib/calibration/fit';
+	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import { api, type Project } from '$lib/api';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -101,6 +103,12 @@
 	function setX2Open(open: boolean) {
 		x2Open = open;
 		if (!open) s.gr4j.x2 = 0;
+	}
+
+	/** Writes a fit's parameters into the form (unsaved). */
+	function applyFit(report: CalibrationReport) {
+		s = applyReport(s, report);
+		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
 	}
 
 	function discard() {
@@ -326,6 +334,17 @@
 				availableKinds={seriesKinds}
 			/>
 		</div>
+
+		<FitPanel
+			projectId={project.id}
+			runoffModel={s.runoffModel}
+			{x2Open}
+			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
+			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+			hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+			{readonly}
+			onApply={applyFit}
+		/>
 
 		{#if !isGr4j}
 			<details class="advanced">

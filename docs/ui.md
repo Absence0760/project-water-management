@@ -136,6 +136,26 @@ The settings are grouped by what they drive:
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0. Then comes the monthly **pan
     coefficient** row. A notice appears when A-pan is 0 in every month.
+  - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
+    window) fits the selected model's parameters in a Web Worker
+    (`lib/calibration/`). It takes the objective, the model runs per fit
+    (default 1 500), which parameters to fit (GR4J X2 only when exchange is
+    on), and whether to validate. Validation runs the split-sample and dry →
+    wet tests, which means three fits.
+  - While it runs there is a progress bar (`role="progressbar"`) with the
+    stage and the best score so far. **Cancel** stops the worker at once and
+    discards it.
+  - The result shows the engine's plain-language notes (for example "wet-year
+    behaviour is weakly constrained"), current against fitted parameters, and
+    a scores table. Its columns are current parameters, fitted, then each
+    test's fitted part and validation part; the validation columns are
+    shaded. Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
+    variants, volume error and the FDC signatures.
+  - **Apply to form** (editors only) writes the fitted parameters into the
+    form, which then shows "Unsaved settings". Nothing is stored until Save.
+    Viewers can fit but not apply. With no observed record the panel says to
+    upload one. The fit uses the form as it stands, and the network with
+    unsaved edits if there are any.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
   curtailment reporting window.

@@ -160,6 +160,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await expectNoViolations(page);
 			});
 
+			test('an automatic calibration result has no violations', async ({ page, owner }) => {
+				void owner;
+				const project = await seedRunnableProject(page.request, 'A11y fit');
+				await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+				await page.goto(`/projects/${project.id}?tab=settings`);
+				const fit = page.getByRole('region', { name: /^Fit automatically/ });
+				await fit.getByLabel('Model runs per fit').fill('50');
+				await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
+				await expect(fit.getByRole('table', { name: /^Fit, and validation/ })).toBeVisible();
+				await expectNoViolations(page);
+			});
+
 			test('comparing two runs has no violations', async ({ page, owner }) => {
 				void owner;
 				const project = await seedRunnableProject(page.request, 'A11y compare');
