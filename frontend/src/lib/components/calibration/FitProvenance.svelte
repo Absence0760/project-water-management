@@ -11,7 +11,7 @@
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { paramLabel } from './provenance';
+	import { monthsText, paramLabel } from './provenance';
 
 	let {
 		record,
@@ -51,6 +51,7 @@
 		<p class="small">
 			<strong>{record.model === 'gr4j' ? 'GR4J' : 'Legacy'} fit of {fittedAtText(record.fittedAt)}</strong>
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
+			{#if status && status.forcingChanged}<span class="badge badge-warn">Evaporation changed since fit</span>{/if}
 		</p>
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
@@ -60,6 +61,12 @@
 			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit{(record.starts ?? 1) > 1 ? `, ${record.starts} starts` : ''}, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>
 			<div><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}, {windowText(record)}</dd></div>
+			{#if record.forcing}
+				<div><dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt><dd>{monthsText(record.forcing.panCoefficient)}</dd></div>
+				<div><dt>A-pan evaporation <HelpTip key="settings.apanMm" /></dt><dd>{monthsText(record.forcing.apanMm, 0)} mm</dd></div>
+			{:else}
+				<div><dt>Evaporation forcing</dt><dd>not recorded (fit made before this was tracked)</dd></div>
+			{/if}
 			<div>
 				<dt>Excluded</dt>
 				<dd>

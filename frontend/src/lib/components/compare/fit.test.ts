@@ -1,4 +1,4 @@
-import type { FitRecord, FitScores } from '@water-management/engine';
+import type { FitRecord, FitScores, ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { asFitRecord, fitValidationRows } from './fit';
 
@@ -42,6 +42,8 @@ describe('fitValidationRows', () => {
 		expect(row(rows, 'Split-sample: other half')).toMatchObject({ a: '0.46', b: '0.46' });
 		expect(row(rows, 'Dry → wet: wet years')).toMatchObject({ a: 'not run', b: 'not run' });
 		expect(row(rows, 'Parameters edited since fit')).toMatchObject({ a: 'no', b: 'yes (x1)' });
+		// No settings snapshot given (an older caller): can't say, rather than guessing.
+		expect(row(rows, 'Evaporation changed since fit')).toEqual({ label: 'Evaporation changed since fit', a: 'unknown', b: 'unknown' });
 		expect(row(rows, 'WR2012 MAR penalty')).toMatchObject({ a: 'off', b: 'off' });
 		const penalised = record({ marPenalty: { weight: 0.5, targetMarMm3: 10, marLowMm3: null, marHighMm3: null, basis: 'whole', marRatio: 1.1, unpenalised: null } });
 		expect(row(fitValidationRows(penalised, null), 'WR2012 MAR penalty').a).toBe('weight 0.5, MAR 1.10 × WR2012');
@@ -61,6 +63,32 @@ describe('fitValidationRows', () => {
 		expect(row(rows, 'Fit').a).toMatch(/^none/);
 		expect(row(rows, 'Calibration period (in-sample)').a).toBe('–');
 		expect(fitValidationRows(null, null)).toBeNull();
+	});
+
+	it('says when a run’s own evaporation forcing has moved since its fit, given that run’s settings', () => {
+		const mono = (v: number): number[] => Array(12).fill(v);
+		const withForcing = record({
+			free: [],
+			params: {},
+			calibrationStart: null,
+			calibrationEnd: null,
+			exclusions: [],
+			flowKind: 'flow_observed_m3s',
+			forcing: { panCoefficient: mono(0.7), apanMm: mono(100) }
+		});
+		const settings = {
+			runoffModel: 'gr4j',
+			calibrationStart: null,
+			calibrationEnd: null,
+			calibrationExclusions: [],
+			calibrationFlowKind: null,
+			panCoefficient: mono(0.7),
+			apanMm: mono(100)
+		} as unknown as Partial<ProjectSettings>;
+		const same = fitValidationRows(withForcing, null, settings, null);
+		expect(row(same, 'Evaporation changed since fit')).toEqual({ label: 'Evaporation changed since fit', a: 'no', b: '–' });
+		const moved = fitValidationRows(withForcing, null, { ...settings, panCoefficient: mono(0.9) } as unknown as Partial<ProjectSettings>, null);
+		expect(row(moved, 'Evaporation changed since fit').a).toBe('yes');
 	});
 });
 
