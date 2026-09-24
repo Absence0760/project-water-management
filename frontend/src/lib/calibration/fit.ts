@@ -210,7 +210,7 @@ export function seedError(seed: number | null): string | null {
  */
 export function fitRecordFor(
 	r: CalibrationReport,
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions'>,
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm'>,
 	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date }
 ): FitRecord {
 	return fitRecordFromReport(r, {

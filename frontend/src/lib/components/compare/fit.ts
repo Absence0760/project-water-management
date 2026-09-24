@@ -1,7 +1,7 @@
 // The fit behind each compared run's parameters (issue #4): its in-sample
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
-import { describeFitRecord, type FitRecord, type FitScores } from '@water-management/engine';
+import { describeFitRecord, fitRecordStatus, type FitRecord, type FitScores, type ProjectSettings } from '@water-management/engine';
 import { objectiveName } from '$lib/calibration/fit';
 
 export interface FitValidationRow {
@@ -18,8 +18,28 @@ export function asFitRecord(v: unknown): FitRecord | null {
 	return v && typeof v === 'object' && 'fittedAt' in v && 'objective' in v ? (v as FitRecord) : null;
 }
 
-/** Rows for the two runs' fit records; null when neither run has one. */
-export function fitValidationRows(ra: FitRecord | null, rb: FitRecord | null): FitValidationRow[] | null {
+/**
+ * Whether a run's own evaporation forcing (`settings`, its snapshot) has
+ * moved since its fit: '–' with no record, 'unknown' when the run's settings
+ * weren't given (older callers), else 'yes'/'no'.
+ */
+const evapChanged = (r: FitRecord | null, settings: Partial<ProjectSettings> | null | undefined): string => {
+	if (!r) return '–';
+	if (!settings) return 'unknown';
+	return fitRecordStatus(settings, r).forcingChanged ? 'yes' : 'no';
+};
+
+/**
+ * Rows for the two runs' fit records; null when neither run has one. `settingsA`/
+ * `settingsB` are each run's own settings snapshot (`run.inputs.settings`), used only
+ * to say whether the pan coefficient or A-pan has changed since that run's fit.
+ */
+export function fitValidationRows(
+	ra: FitRecord | null,
+	rb: FitRecord | null,
+	settingsA?: Partial<ProjectSettings> | null,
+	settingsB?: Partial<ProjectSettings> | null
+): FitValidationRow[] | null {
 	if (!ra && !rb) return null;
 	const both = (f: (r: FitRecord) => string) => ({ a: ra ? f(ra) : '–', b: rb ? f(rb) : '–' });
 	const at = (r: FitRecord, pick: (r: FitRecord) => { scores: FitScores } | null | undefined) => {
@@ -43,6 +63,7 @@ export function fitValidationRows(ra: FitRecord | null, rb: FitRecord | null): F
 				return `weight ${p.weight}, MAR ${score(p.marRatio)} × ${target}`;
 			})
 		},
-		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) }
+		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) },
+		{ label: 'Evaporation changed since fit', a: evapChanged(ra, settingsA), b: evapChanged(rb, settingsB) }
 	];
 }

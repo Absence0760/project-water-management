@@ -42,9 +42,11 @@ The page has these sections, top to bottom:
    by side: the fit (model, time, objective, seed), the bounds it searched
    (wide or typical, model.md §2.10b), its in-sample score, its split-sample,
    wet-year and independent-record scores ("not run" when that test wasn't),
-   whether (and what) the WR2012 MAR penalty pulled towards, and whether the
-   parameters were edited since the fit. A run whose parameters didn't come
-   from Fit automatically reads "none". To judge the runoff models against each other, copy
+   whether (and what) the WR2012 MAR penalty pulled towards, whether the
+   parameters were edited since the fit, and whether that run's own pan
+   coefficient / A-pan evaporation has changed since its fit ("no" when the
+   fit predates recorded forcing — nothing to compare). A run whose parameters
+   didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
    and compare them. The input diff then reads *"Runoff model: legacy (b023
    recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient

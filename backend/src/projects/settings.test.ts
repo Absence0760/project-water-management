@@ -330,6 +330,16 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
+	it('accepts an optional forcing block (the pan coefficient / A-pan the fit ran under), and a record from before it without', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		expect(ok(record)).toBe(true); // no forcing: a record from before it existed
+		expect(ok({ ...record, forcing })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(11).fill(0.7) } })).toBe(false); // wrong length
+		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(12).fill(2.1) } })).toBe(false); // out of bounds (0–2)
+		expect(ok({ ...record, forcing: { ...forcing, apanMm: forcing.apanMm.map(() => Infinity) } })).toBe(false); // must be finite
+		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
+	});
+
 	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {
 		const startResults = [
 			{ seed: 7, params: { x1: 512, x2: 0, x3: 61, x4: 2.2 }, score: 0.8, best: true },

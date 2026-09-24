@@ -144,8 +144,10 @@ migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
 with a required reason. `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
-in-sample and validation scores, notes, engine version and time
-([model.md §2.10b](./model.md)). The backend recomputes its `editedParams` on
+in-sample and validation scores, notes, engine version and time, and the pan
+coefficient / A-pan evaporation it ran under (`forcing`, since it is held
+fixed and never calibrated — a fit is only valid for the forcing it was
+fitted under) ([model.md §2.10b](./model.md)). The backend recomputes its `editedParams` on
 every settings save (`patchSettings` in `backend/src/projects/settings.ts`) and
 again when a run snapshots the settings (`executeRun`), so each
 `model_run.inputs.settings` carries the fit record as it stood for that run's

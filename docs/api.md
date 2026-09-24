@@ -154,12 +154,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   budget, evaluations, cancelled, free, params, startParams, flowKind,
   simulatedKey, calibrationStart, calibrationEnd, exclusions, validate,
   validationRecord, fit, before, splitSample, differential, independentRecord,
-  marPenalty, notes, editedParams }`, each key required except `marPenalty`
-  (the WR2012 MAR penalty result — `weight, targetMarMm3, marLowMm3,
-  marHighMm3, basis, marRatio, unpenalised`, `null` when it was off, the
-  default) and `editedParams`, and no others. `bounds` is `wide` (the
-  default: each parameter's calibration range) or `typical` (Perrin et al.'s
-  80 % range).
+  marPenalty, notes, editedParams, forcing }`, each key required except
+  `marPenalty` (the WR2012 MAR penalty result — `weight, targetMarMm3,
+  marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
+  off, the default), `editedParams` and `forcing`, and no others. `bounds` is
+  `wide` (the default: each parameter's calibration range) or `typical`
+  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm }`, each
+  12 monthly numbers, same bounds as the settings fields) is the pan
+  coefficient and A-pan evaporation the fit ran under: GR4J's parameters
+  trade off against it, so it is never calibrated and a fit is only valid for
+  the forcing it recorded — absent on a record made before this was tracked.
+  `fitRecordStatus`'s `forcingChanged` compares it against the current
+  settings, tolerant of float noise, and is `false` when there is nothing
+  recorded to compare.
   The fit runs in the browser, so the record is what the client reports; the
   seed and engine version let anyone reproduce it. **The server recomputes
   `editedParams` on every `PATCH`** (fitted parameters whose value in the

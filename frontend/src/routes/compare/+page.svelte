@@ -262,7 +262,12 @@
 					<section class="panel" aria-labelledby="headline-h">
 						<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
 						<HeadlineDeltas comparison={data.comparison} />
-						<FitValidationCompare a={asFitRecord(data.a.run.inputs.settings?.fitRecord)} b={asFitRecord(data.b.run.inputs.settings?.fitRecord)} />
+						<FitValidationCompare
+							a={asFitRecord(data.a.run.inputs.settings?.fitRecord)}
+							b={asFitRecord(data.b.run.inputs.settings?.fitRecord)}
+							settingsA={data.a.run.inputs.settings}
+							settingsB={data.b.run.inputs.settings}
+						/>
 					</section>
 
 					<section class="panel" aria-labelledby="ewr-agreement-h">
