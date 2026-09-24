@@ -895,6 +895,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.18 Automatic calibration
 
+> **Superseded in part by [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> (Phases 4–5): the optimiser is **DDS** (not Nelder–Mead), the objectives add
+> KGE′, non-parametric KGE, NSE on √Q/log Q and FDC signatures, and it fits the
+> GR4J parameters as well as the legacy ones. Follow the issue where they differ.
+
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the
   chosen observed record. Today the workbook is tuned by hand.
@@ -1126,6 +1131,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Depends on:** WP-1.1 answers.
 
 ### WP-1.24 H1 volume-conserving event response
+
+> **Specified in [issue #4](https://github.com/Absence0760/project-water-management/issues/4)**
+> (Phases 1–3, 6–7): the proposed model is **GR4J** (X2 = 0) behind a
+> `RunoffModel` interface, with IHACRES-CMD as the benchmark and the legacy
+> model kept as the baseline until sign-off. The issue has the equations, the
+> invariants and the phase-by-phase acceptance criteria; follow it where it is
+> more specific than this section.
 
 - **Goal:** a storm can never return more water than it brought (today a
   10 mm storm returns 4.9× its rain).
