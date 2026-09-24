@@ -254,7 +254,7 @@
 			<div class="result" aria-live="polite">
 				<h4>Result</h4>
 				<p class="small muted">
-					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the {report.simulatedKey === 'natural_flow' ? 'natural flow' : 'simulated outflow'}
+					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>
 				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
 				{#if stale}<p class="alert alert-info small">This fit is for the other runoff model; switch back to apply it.</p>{/if}
