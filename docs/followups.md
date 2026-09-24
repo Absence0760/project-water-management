@@ -364,15 +364,29 @@ the suggested order (the IDs carry the detail):
   - M1: importer month lists.
   - W1–W5: new warnings.
   - F8: order-dependent float noise in EWR shortfalls.
-- ✅ **Invariant suite** (`packages/engine/src/testing/invariants.ts`) runs on
+- ✅ **Invariant suite** (per-run checks in `packages/engine/src/verify/checks.ts`,
+  re-run checks in `packages/engine/src/testing/invariants.ts`) runs on
   random networks, the three example catchments and the client catchment (when `data/`
-  is present). Soaked over seeds 1–20000. Described in model.md §6
-  Verification.
+  is present). Soaked over seeds 1–20000 before engine 0.12.0 (see the soak item
+  below). Described in model.md §6 Verification.
+- ✅ **Self-checks on every saved run** (engine 0.12.0): `runModelChecked`
+  stores `summary.verification` and `summary.waterBalance`; farms record the
+  working columns K–P, S, T and the balance check V; the farm daily CSV is in
+  FarmTemplate letter order; the results have a Self-checks panel with a
+  water balance per water year and "Trace a day" (model.md § Verification,
+  ui.md § Self-checks).
 - ✅ The engine rejects networks with more than one outflow node.
 - [ ] **Client catchment regression on real data:** the suite has a commented
       deviation list but has never run against the real workbook. Re-extract
       it and run `pnpm test:engine`; a failure prints the actual difference
-      next to its bound.
+      next to its bound. Then load it (`pnpm seed:demo`, under
+      `systemd-run --user --scope -p MemoryMax=4G`: the workbook has crashed
+      the laptop before), make a run, and confirm in the Self-checks panel
+      that every check passes, every residual is float noise, and the yearly
+      water balance is physically sensible (runoff coefficient, consumptive
+      use against demand, storage change). This is the first time the
+      self-checks would see real data; nothing else tells us as much for as
+      little. Record findings here without client numbers (public repo).
 - [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
       formulas, which the engine no longer follows. Decide whether to delete it
       or rebuild it against the audited model. Operator call.
@@ -403,6 +417,49 @@ the suggested order (the IDs carry the detail):
       the next raise.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+      **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
+      0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
+      run it on its own, not beside e2e or another session's tests.
+- [ ] **Excel audit workbook export** (the strongest independent check). The
+      farm daily CSV has every column but the hydrologist still types the
+      formulas. An `.xlsx` for one farm: inputs as values, each working column
+      (F … AB) as a live Excel formula taken from `verify/columns.ts`, and a
+      column comparing Excel's value with the model's. Excel then recomputes
+      the model independently, which a hydrologist or licensing authority will
+      trust. SheetJS from its CDN tarball only (STACK.md: not the npm `xlsx`
+      package); mind the 5 MB export limit (one farm, or a date window).
+      About a day. Also settles the `verify/` Python cross-check question
+      above: this would replace it. Trigger: after the client catchment run
+      (first item) and the hydrologist persona review (below) confirm it's wanted.
+- [ ] **Trace the runoff side.** "Trace a day" covers farms and gauges only.
+      With GR4J the default, most surprises are upstream: how rain becomes
+      natural flow. Add a catchment trace: rain used, PET, AET, production
+      and routing stores before and after, exchange, unit-hydrograph water in
+      transit, natural flow out, and the day's store balance. The series are
+      already stored (`production_store`, `routing_store`, `uh_store`, `aet`,
+      `pet`, `exchange`), so it's the `/day` endpoint accepting the catchment
+      (no `nodeId`) plus a GR4J column catalogue beside `verify/columns.ts`.
+- [ ] **Alert on a failed self-check in production.** A failed check is a
+      model bug, but today it is only a warning on that run. Log a
+      structured line from `executeRun` (`{ event: "self_check_failed",
+      projectId, runId, checks }`, no user data) and add a CloudWatch metric
+      filter + alarm to the budget/alarms stack in `infra/`. `terraform plan`
+      only; apply is the operator's call.
+- [ ] **Hydrologist persona review of the Self-checks panel and exports.**
+      Run `persona-hydrologist` on the panel, the farm daily CSV and the
+      summary CSV: do they answer what a hydrologist checks first? Log gaps
+      here. Cheap; decides whether the Excel audit workbook is worth a day.
+- [ ] **More columns in the Data tab downloads** (the original request that
+      led to the self-checks). `GET /series/:id/export.csv` still writes only
+      `date` + the uploaded value. Add how the model used each series: for
+      rainfall, the rain used that day after gap-filling, which source filled
+      it (catchment / corrected CHIRPS / forecast) and the rain after the
+      threshold; for CHIRPS, the day's bias factor and the corrected value;
+      for flow, m³/day, the data-quality flags (negative, outlier, flat),
+      whether the day is excluded from calibration, and the latest run's
+      simulated outflow. Model-derived columns name the run they came from;
+      without a run, raw values plus quality flags only. Waiting on the
+      operator to confirm this is what they want (2026-09-24).
 
 ## UI
 

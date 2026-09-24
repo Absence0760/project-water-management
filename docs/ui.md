@@ -297,6 +297,8 @@ The settings are grouped by what they drive:
   used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
   the run's input snapshot, not today's model. A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
+  Not yet: a trace of the runoff model's day, an Excel audit workbook, and
+  model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
   the full period), the calibration panel (it opens with the same
