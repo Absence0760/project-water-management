@@ -105,8 +105,16 @@ Tick items off (or move them into an issue) as they are done.
       warnings, so a false alarm is no longer free: item 2 matters more.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
-      Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
-      flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
+      issue #2 checks flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      **Done (engine 0.17.0): the fit follows the zero-rain decisions.** A
+      flagged run treated as missing is left out day by day (the rest of its
+      water year stays in), kept-dry days stay in as confirmed readings, and
+      a keep-dry that bias-corrected CHIRPS contradicts (more than max(50 mm,
+      25 % of the usual annual rain) over its kept days) leaves its year out
+      and warns. Low-vs-CHIRPS years are still left out whole. The run's
+      `chirpsCorrection`, summary CSV and run comparison (`chirpsFit`) say
+      what was left out. Confirm the guard's limits with the hydrologist.
       Confirm with the hydrologist:
       - linear scaling per month, versus quantile mapping (which also fixes
         the wet-day count and intensities that drive GR4J's event response);

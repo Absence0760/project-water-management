@@ -23,6 +23,7 @@ import {
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
 	finishZeroRainInfill,
+	keepDryDoubtWarnings,
 	resolveZeroRain,
 	ZERO_RAIN_COLUMN,
 	zeroRainMask,
@@ -64,7 +65,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.16.0';
+export const ENGINE_VERSION = '0.17.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -420,7 +421,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	// reads the rain through `aligned`.
 	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, exclusionRanges(settings.zeroRainRuns.missing));
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns);
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month) : null;
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
@@ -430,6 +431,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 				: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
+	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
 	if (zeroRain) {
 		const chirps = aligned('rain_chirps_mm');
 		const forecast = aligned('rain_forecast_mm');

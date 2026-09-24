@@ -308,7 +308,10 @@ The settings are grouped by what they drive:
   recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
   treat as missing** period lists. These share the calibration exclusions'
   editor (`common/PeriodList.svelte`), with the same required reason and the
-  same checks that block Save. The rest
+  same checks that block Save. The Keep dry hint says that kept-dry days
+  count in the CHIRPS factor fit, filled runs are left out of it, and a run
+  warns and leaves the year out when CHIRPS reads a lot of rain over a
+  kept-dry run (engine ≥ 0.17.0, model.md §2.4b). The rest
   depends on the model:
   - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
     months as toggles. **Advanced** holds the winter switch, the recession

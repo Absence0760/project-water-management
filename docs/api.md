@@ -405,8 +405,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,
   chirpsMm, ownFactor, factor, source: 'month' | 'pooled' | null, clamped,
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
-  fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
-  lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  fallbackRawMm, fallbackCorrectedMm }`. Engine ≥ 0.17.0 adds why years and
+  days were left out of the fit: `lowVsChirpsYears`, `doubtfulKeepDry: [{
+  start, end, days, chirpsMm, limitMm, waterYears }]` (kept-dry runs CHIRPS
+  contradicts; their years are in `excludedWaterYears`), `flaggedDaysLeftOut`,
+  `missingDaysLeftOut` and `keptDryDaysInFit`; all absent on older runs. A
+  run that corrected any day also lists the factors in `warnings`, and a
+  doubted keep-dry adds its own warning. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 - `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
   treated as missing, `null` when the project has no catchment rain series:
   `{ mode, periods: [{ start, end, source: 'flagged' | 'listed', reason,
@@ -444,6 +449,10 @@ matched.
   every WR2012 input appears in `changes`, and `comparison.wr2012` (`null` when
   neither run has the check) holds the deltas of `marRatioOverlap`,
   `marRatioWhole`, `lowFlowRatio` and `patternCorrelation`.
+  `comparison.chirpsFit` (`null` when neither run fitted CHIRPS factors) is
+  `{ pooledFactor: MetricDelta, excludedWaterYearsA, excludedWaterYearsB,
+  changed }`: `changed` when any month's applied factor or the water years
+  left out of the fit differ ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
   isn't `<projectId>:<runId>`.

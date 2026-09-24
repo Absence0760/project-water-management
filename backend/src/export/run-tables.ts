@@ -154,6 +154,14 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	}
 	yield csvRow(['Pooled', c.pooled.factor, 'all months together', c.pooled.ownFactor, c.pooled.clamped ? 'yes' : 'no', c.pooled.days, c.pooled.catchmentMm, c.pooled.chirpsMm, c.fallbackDays]);
 	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
+	// Engine ≥ 0.17.0: why, and the days left out one by one (absent on older runs).
+	if (c.lowVsChirpsYears?.length) yield csvRow(['of which far below CHIRPS', c.lowVsChirpsYears.join(' ')]);
+	for (const d of c.doubtfulKeepDry ?? []) {
+		yield csvRow(['of which a kept-dry run CHIRPS contradicts', d.waterYears.join(' '), `${d.start} to ${d.end}`, d.days, 'CHIRPS on the kept-dry days (mm)', d.chirpsMm, 'limit (mm)', d.limitMm]);
+	}
+	if (c.flaggedDaysLeftOut) yield csvRow(['Days of flagged zero runs left out (treated as missing)', c.flaggedDaysLeftOut]);
+	if (c.missingDaysLeftOut) yield csvRow(['Days listed as missing left out', c.missingDaysLeftOut]);
+	if (c.keptDryDaysInFit) yield csvRow(['Kept-dry days kept in the fit', c.keptDryDaysInFit]);
 }
 
 /** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */

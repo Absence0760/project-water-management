@@ -155,6 +155,29 @@ describe('CHIRPS bias factors block', () => {
 		expect(lines[11]!.split(',')[8]).toBe('31'); // Jul: days CHIRPS filled in
 		expect(lines[14]!.startsWith('Pooled,2,all months together')).toBe(true);
 		expect(lines[15]).toBe('Water years left out of the fit,1999');
+		expect(lines).toHaveLength(16); // a run before engine 0.17.0 says no more
+	});
+
+	it('says why years and days were left out of the fit (engine ≥ 0.17.0)', () => {
+		const lines = [
+			...chirpsFactorLines({
+				...corr,
+				excludedWaterYears: [1996, 1999],
+				lowVsChirpsYears: [1996],
+				doubtfulKeepDry: [{ start: '1999-12-28', end: '2000-02-10', days: 45, chirpsMm: 120, limitMm: 150, waterYears: [1999] }],
+				flaggedDaysLeftOut: 63,
+				missingDaysLeftOut: 5,
+				keptDryDaysInFit: 20
+			})
+		];
+		expect(lines.slice(15)).toEqual([
+			'Water years left out of the fit,1996 1999',
+			'of which far below CHIRPS,1996',
+			'of which a kept-dry run CHIRPS contradicts,1999,1999-12-28 to 2000-02-10,45,CHIRPS on the kept-dry days (mm),120,limit (mm),150',
+			'Days of flagged zero runs left out (treated as missing),63',
+			'Days listed as missing left out,5',
+			'Kept-dry days kept in the fit,20'
+		]);
 	});
 
 	it('says why there are no factors', () => {

@@ -460,6 +460,20 @@ function monthlyMeans(s: DailySeries): number[] | null {
 	return mean.some((x) => x > 0) ? mean : null;
 }
 
+/** Mean days per calendar month (index 1–12; February averaged over leap years). */
+const MEAN_MONTH_DAYS = [0, 31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * The rain the series' own climatology puts in a year, mm: Σ over the
+ * calendar months of mean daily rain × the month's days. Its means include
+ * any suspect zeros, so it leans low. null when monthlyMeans has no
+ * climatology (a calendar month with too few valid days, or no rain at all).
+ */
+export function usualAnnualRainMm(s: DailySeries): number | null {
+	const mean = monthlyMeans(s);
+	return mean ? mean.reduce((a, x, m) => a + x * MEAN_MONTH_DAYS[m]!, 0) : null;
+}
+
 /**
  * Runs of consecutive zero catchment rain long enough to look like missing
  * data: ZERO_RUN_MIN_WET_DAYS of them in the wet half of the year, or

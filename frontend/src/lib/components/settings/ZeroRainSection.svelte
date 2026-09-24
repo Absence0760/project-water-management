@@ -44,7 +44,7 @@
 			{readonly}
 			legend="Keep dry"
 			helpKey="settings.zeroRainRuns"
-			hint="Flagged zero runs you have confirmed as real dry spells. Days inside these periods stay 0 mm; other flagged runs are still filled."
+			hint="Flagged zero runs you have confirmed as real dry spells. Days inside these periods stay 0 mm and count in the CHIRPS factor fit as readings; other flagged runs are still filled, and their days left out of the fit. If CHIRPS reads a lot of rain over a kept-dry run, each run warns and leaves that water year out of the fit."
 			empty="None: every flagged zero run is treated as missing."
 			addYearLabel="Keep a water year dry"
 			addRangeLabel="Keep a date range dry"

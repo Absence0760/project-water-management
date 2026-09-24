@@ -8,11 +8,15 @@ import {
 	CHIRPS_FACTOR_MIN_DAYS,
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
+	fitExclusionText,
+	KEEP_DRY_DOUBT_ANNUAL_SHARE,
+	KEEP_DRY_DOUBT_MIN_MM,
+	keepDryDoubtWarnings,
 	resolveZeroRain,
-	suspectRainYears,
 	ZERO_RAIN_COLUMN,
 	zeroRainMask
 } from './rain';
+import { rainVsChirps, usualAnnualRainMm, zeroRainRuns } from './quality';
 import { prepareRun, runModel } from './run';
 import { checkInvariants } from './testing/invariants';
 
@@ -40,6 +44,31 @@ const series = (c: (number | null)[] | null, h: (number | null)[] | null, extra:
 	...(h ? { rain_chirps_mm: { startDate: S, values: h } } : {}),
 	...extra
 });
+
+/**
+ * The day indices of a zero run zeroed from `from` to `to` (inclusive), grown
+ * over the fixture's own dry days on either side, as the flagged run will be.
+ */
+function zeroRun(from: string, to: string): number[] {
+	const c = catchment(chirps());
+	const core = Array.from({ length: DAYS }, (_, i) => i).filter((i) => dateAt(i) >= from && dateAt(i) <= to);
+	let a = core[0]!;
+	let b = core[core.length - 1]!;
+	while (c[a - 1] === 0) a--;
+	while (c[b + 1] === 0) b++;
+	return Array.from({ length: b - a + 1 }, (_, k) => a + k);
+}
+/** Catchment K × CHIRPS with `run` zeroed; `dryChirps` zeroes CHIRPS there too (a real dry spell). */
+function seriesWithRun(run: number[], dryChirps = false): Series {
+	const h = chirps();
+	const c = catchment(h);
+	for (const i of run) {
+		c[i] = 0;
+		if (dryChirps) h[i] = 0;
+	}
+	return series(c, h);
+}
+const keep = (run: number[]) => ({ start: dateAt(run[0]!), end: dateAt(run[run.length - 1]!), reason: 'confirmed dry' });
 
 describe('chirpsBiasFactors', () => {
 	it('recovers a known factor for every calendar month', () => {
@@ -96,20 +125,105 @@ describe('chirpsBiasFactors', () => {
 		expect(c.pooled.clamped).toBe(true);
 	});
 
-	it('leaves out water years the issue #2 checks flag', () => {
+	it('leaves out a low-vs-CHIRPS water year whole', () => {
 		const h = chirps();
 		const c0 = catchment(h);
 		// 2003/04: catchment rain recorded as 0 through the wet season (May–Sep),
 		// which would drag those months' factors towards 0.
 		for (let i = 0; i < DAYS; i++) if (inWaterYear(i, 2003) && monthAt(i) >= 5 && monthAt(i) <= 9) c0[i] = 0;
 		const s = series(c0, h);
-		expect(suspectRainYears(s)).toContain(2003);
+		expect(rainVsChirps(s)!.flaggedYears).toEqual([2003]);
 		const c = chirpsBiasFactors(s, 'monthly')!;
-		expect(c.excludedWaterYears).toEqual(suspectRainYears(s));
+		expect(c.excludedWaterYears).toEqual([2003]);
+		expect(c.lowVsChirpsYears).toEqual([2003]);
+		expect(c.flaggedDaysLeftOut).toBe(0); // the run's days are inside the excluded year
 		for (const m of c.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
 		// A negative reading is not a reading either.
 		c0[3] = -5;
 		expect(chirpsBiasFactors(series(c0, h), 'monthly')!.months[9]!.factor).toBeCloseTo(K[10]!, 12);
+	});
+
+	it('leaves a flagged zero run out day by day, keeping the rest of its water year (engine ≥ 0.17.0)', () => {
+		const run = zeroRun('2003-04-01', '2003-06-05');
+		const s = seriesWithRun(run);
+		expect(zeroRainRuns(s.rain_catchment_mm!).runs).toHaveLength(1);
+		expect(rainVsChirps(s)!.flaggedYears).toEqual([]); // the year alone would not be left out
+		const c = chirpsBiasFactors(s, 'monthly')!;
+		expect(c.excludedWaterYears).toEqual([]);
+		expect(c.flaggedDaysLeftOut).toBe(run.length);
+		expect([c.missingDaysLeftOut, c.keptDryDaysInFit, c.doubtfulKeepDry]).toEqual([0, 0, []]);
+		expect(c.pooled.days).toBe(DAYS - run.length);
+		for (const m of c.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
+		// 'asRecorded' runs the zeros dry, but that is no evidence they are real: still left out.
+		const asRec = chirpsBiasFactors(s, 'monthly', { mode: 'asRecorded', keepDry: [keep(run)], missing: [] })!;
+		expect([asRec.flaggedDaysLeftOut, asRec.keptDryDaysInFit]).toEqual([run.length, 0]);
+		expect(fitExclusionText(c)).toBe(` Left out of the fit as suspect catchment rain: ${run.length} days of flagged zero runs treated as missing.`);
+	});
+
+	it('keeps kept-dry days in the fit as confirmed readings, and a listed missing day wins over keep-dry', () => {
+		// A real dry spell: CHIRPS is dry over it too.
+		const run = zeroRun('2003-04-01', '2003-06-05');
+		const s = seriesWithRun(run, true);
+		const zr = { mode: 'missing' as const, keepDry: [keep(run)], missing: [] };
+		const c = chirpsBiasFactors(s, 'monthly', zr)!;
+		expect([c.flaggedDaysLeftOut, c.keptDryDaysInFit, c.excludedWaterYears, c.doubtfulKeepDry]).toEqual([0, run.length, [], []]);
+		expect(c.pooled.days).toBe(DAYS);
+		for (const m of c.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12); // 0 mm on both sides
+		// Positive control: the same run, not kept dry, is left out.
+		expect(chirpsBiasFactors(s, 'monthly')!.flaggedDaysLeftOut).toBe(run.length);
+		// Ten of its days also listed as missing: those are left out, the rest stay in.
+		const listed = { start: dateAt(run[0]!), end: dateAt(run[9]!), reason: 'logger fault' };
+		const m = chirpsBiasFactors(s, 'monthly', { ...zr, missing: [listed] })!;
+		expect([m.missingDaysLeftOut, m.keptDryDaysInFit]).toEqual([10, run.length - 10]);
+		expect(fitExclusionText(m)).toBe(
+			` Left out of the fit as suspect catchment rain: 10 days listed as missing. ${run.length - 10} kept-dry days stay in the fit as confirmed readings.`
+		);
+	});
+
+	it('kept-dry days with some CHIRPS rain pull the factor down: why they belong in the fit only when confirmed', () => {
+		const run = zeroRun('2003-04-01', '2003-06-05');
+		const s = seriesWithRun(run);
+		const kept = chirpsBiasFactors(s, 'monthly', { mode: 'missing', keepDry: [keep(run)], missing: [] })!;
+		expect(kept.doubtfulKeepDry).toEqual([]); // under the limit, so trusted
+		expect(kept.keptDryDaysInFit).toBe(run.length);
+		expect(kept.months[4]!.factor!).toBeLessThan(K[5]!); // May
+	});
+
+	it('doubts a keep-dry that bias-corrected CHIRPS contradicts, and leaves its water year out whole', () => {
+		const run = zeroRun('2003-05-01', '2003-07-15');
+		const s = seriesWithRun(run);
+		expect(rainVsChirps(s)!.flaggedYears).toEqual([]);
+		const c = chirpsBiasFactors(s, 'monthly', { mode: 'missing', keepDry: [keep(run)], missing: [] })!;
+		expect(c.doubtfulKeepDry).toHaveLength(1);
+		const d = c.doubtfulKeepDry![0]!;
+		const usual = usualAnnualRainMm(s.rain_catchment_mm!)!;
+		expect(d.limitMm).toBeCloseTo(Math.max(KEEP_DRY_DOUBT_MIN_MM, KEEP_DRY_DOUBT_ANNUAL_SHARE * usual), 9);
+		// The guard's factors trust no flagged day, so they are the true K: corrected CHIRPS = what the catchment lost.
+		const lost = run.reduce((a, i) => a + chirps()[i]! * K[monthAt(i)]!, 0);
+		expect(d.chirpsMm).toBeCloseTo(lost, 9);
+		expect(d.chirpsMm).toBeGreaterThan(d.limitMm);
+		expect([d.start, d.end, d.days, d.waterYears]).toEqual([dateAt(run[0]!), dateAt(run[run.length - 1]!), run.length, [2002]]);
+		expect([c.excludedWaterYears, c.lowVsChirpsYears, c.keptDryDaysInFit]).toEqual([[2002], [], 0]);
+		for (const m of c.months) expect(m.factor).toBeCloseTo(K[m.month]!, 12);
+		expect(keepDryDoubtWarnings(c)).toEqual([
+			`Kept-dry zero run ${d.start} to ${d.end} looks doubtful: bias-corrected CHIRPS reads ${Math.round(d.chirpsMm)} mm over its ${run.length} kept-dry days, ` +
+				`above the ${Math.round(d.limitMm)} mm limit (the larger of 50 mm and 25 % of the catchment's usual annual rain). ` +
+				'Those days still run dry, but water year 2002/03 stay out of the CHIRPS factor fit. Check the keep-dry in Settings → Zero-rain runs.'
+		]);
+		expect(fitExclusionText(c)).toBe(' Left out of the fit as suspect catchment rain: water years of kept-dry runs that CHIRPS contradicts (2002/03).');
+		// In mode 'none' (CHIRPS already corrected to the catchment) the guard reads it as stored:
+		// here that is under the limit, so the keep-dry is trusted and its days stay in.
+		const rawMm = run.reduce((a, i) => a + chirps()[i]!, 0);
+		expect(rawMm).toBeLessThan(d.limitMm);
+		const raw = chirpsBiasFactors(s, 'none', { mode: 'missing', keepDry: [keep(run)], missing: [] })!;
+		expect([raw.doubtfulKeepDry, raw.keptDryDaysInFit]).toEqual([[], run.length]);
+		// And the run warns through prepareRun.
+		const prepared = prepareRun({
+			settings: { zeroRainRuns: { mode: 'missing', keepDry: [keep(run)], missing: [] } },
+			model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
+			series: s
+		});
+		expect(prepared.warnings).toContain(keepDryDoubtWarnings(c)[0]);
 	});
 
 	it('is null without a CHIRPS series', () => {

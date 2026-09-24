@@ -125,6 +125,21 @@ export interface RunComparison {
 		meanObservedM3s: MetricDelta;
 		meanSimulatedM3s: MetricDelta;
 	} | null;
+	/**
+	 * The CHIRPS fallback factors each run applied (model.md §2.4b); null when
+	 * neither run fitted any (no CHIRPS, mode 'none', or saved before engine
+	 * 0.7.0). `changed` when a month's applied factor or the water years left
+	 * out of the fit differ, or only one run has factors: a keep-dry or
+	 * missing-period edit, new rain data or an engine change (0.17.0 fits
+	 * around flagged zero runs day by day) all move them, so rain on the days
+	 * CHIRPS fills in differs even with the setting unchanged.
+	 */
+	chirpsFit: {
+		pooledFactor: MetricDelta;
+		excludedWaterYearsA: number[] | null;
+		excludedWaterYearsB: number[] | null;
+		changed: boolean;
+	} | null;
 	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
 	wr2012: {
 		marRatioOverlap: MetricDelta;
@@ -257,6 +272,28 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	const kb = cal(b.summary.calibration);
 	const wa = a.summary.wr2012;
 	const wb = b.summary.wr2012;
+	const fitOf = (s: RunSummary) => {
+		const c = s.chirpsCorrection;
+		return c && c.mode === 'monthly' && c.months.some((m) => m.factor !== null) ? c : null;
+	};
+	const xa = fitOf(a.summary);
+	const xb = fitOf(b.summary);
+	const chirpsFit =
+		xa || xb
+			? {
+					pooledFactor: metricDelta(xa?.pooled.factor, xb?.pooled.factor),
+					excludedWaterYearsA: xa?.excludedWaterYears ?? null,
+					excludedWaterYearsB: xb?.excludedWaterYears ?? null,
+					changed:
+						!xa ||
+						!xb ||
+						!same(xa.excludedWaterYears, xb.excludedWaterYears) ||
+						xa.months.some((m, i) => {
+							const f = xb.months[i]?.factor ?? null;
+							return m.factor === null || f === null ? m.factor !== f : Math.abs(m.factor - f) > 1e-9;
+						})
+				}
+			: null;
 
 	return {
 		samePeriod: a.startDate === b.startDate && a.endDate === b.endDate,
@@ -301,6 +338,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 						meanSimulatedM3s: metricDelta(ka?.meanSimulatedM3s, kb?.meanSimulatedM3s)
 					}
 				: null,
+		chirpsFit,
 		wr2012:
 			wa || wb
 				? {
