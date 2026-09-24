@@ -528,7 +528,11 @@ export interface RunSummary {
 	 */
 	dataQuality?: {
 		observedAgreement: ObservedAgreement | null;
-		/** Negative values, outliers and flat-lines in the input series. */
+		/**
+		 * Negative values, outliers and flat-lines in the input series; from
+		 * engine 0.5.2 also catchment-rain zero runs and water years far below
+		 * CHIRPS (issue #2).
+		 */
 		seriesChecks?: SeriesCheck[];
 		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
 		areaMismatches?: AreaMismatch[];

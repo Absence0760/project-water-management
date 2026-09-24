@@ -762,6 +762,30 @@ describe('runModel — input data quality', () => {
 		for (const c of checks) expect(out.summary.warnings).toContain(c.text);
 	});
 
+	it('warns about zero catchment rain that may be missing data (issue #2)', () => {
+		// Three years of synthetic winter rain (6 mm every other day April to
+		// September, 1 mm every sixth day otherwise) with zeros from 1 June to
+		// 15 August 2021. CHIRPS has 2 mm every other day throughout.
+		const days = 3 * 365;
+		const d0 = toEpochDay('2020-01-01');
+		const rain = Array.from({ length: days }, (_, t) => {
+			const m = new Date((d0 + t) * 86_400_000).getUTCMonth() + 1;
+			return m >= 4 && m <= 9 ? (t % 2 ? 0 : 6) : t % 6 ? 0 : 1;
+		});
+		const a = toEpochDay('2021-06-01') - d0;
+		const b = toEpochDay('2021-08-15') - d0;
+		for (let t = a; t <= b; t++) rain[t] = 0;
+		rain[a - 1] = rain[b + 1] = 6;
+		const i = input({ nodes: [node('A')], natural: new Array(days).fill(0), rain });
+		i.series.rain_chirps_mm = { startDate: '2020-01-01', values: Array.from({ length: days }, (_, t) => (t % 2 ? 0 : 2)) };
+		const out = runModelWith(i, () => ({ naturalFlowM3Day: new Array(days).fill(0) }));
+		const checks = out.summary.dataQuality!.seriesChecks!;
+		expect(checks.map((c) => c.check)).toEqual(['zerorun']);
+		expect(checks[0]!.examples[0]).toMatchObject({ date: '2021-06-01', endDate: '2021-08-15', runDays: 76 });
+		expect(out.summary.warnings).toContain(checks[0]!.text);
+		expect(checks[0]!.text).toMatch(/blocks the fallback to CHIRPS/);
+	});
+
 	it('warns when a farm area and its hi + lo areas differ by more than 1 % (F7)', () => {
 		const out = run({
 			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3 }), node('B', { areaKm2: 5, areaHiKm2: 4, areaLoKm2: 1, downstreamNodeId: 'A' })],

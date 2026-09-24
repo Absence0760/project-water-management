@@ -6,11 +6,20 @@ import {
 	areaMismatchWarning,
 	checkSeries,
 	FLATLINE_MIN_DAYS,
+	LOW_VS_CHIRPS_MIN_DAYS,
+	MAX_LISTED,
 	observedAgreement,
+	rainVsChirps,
+	rainVsChirpsCheck,
 	resolveDataQuality,
 	seriesChecks,
-	waterYearLabel
+	waterYearLabel,
+	ZERO_RUN_MIN_WET_DAYS,
+	ZERO_RUN_PLAIN_DAYS,
+	zeroRainCheck,
+	zeroRainRuns
 } from './quality';
+import { fromEpochDay, monthOfEpochDay, toEpochDay } from './calendar';
 import { defaultProjectSettings, type NetworkNode } from './project';
 
 // 1 m³/s for one day = 0.0864 Mm³.
@@ -194,6 +203,229 @@ describe('checkSeries', () => {
 	});
 });
 
+// ---------------------------------------------------------------------------
+// Catchment rain recorded as 0 when it is really missing (issue #2)
+// ---------------------------------------------------------------------------
+
+const WINTER = [4, 5, 6, 7, 8, 9];
+const SUMMER = [1, 2, 3, 10, 11, 12];
+
+/** Synthetic rain: 8 mm every third day in the wet months, 2 mm every ninth day in the others. */
+function seasonal(startDate: string, days: number, wetMonths: number[]): (number | null)[] {
+	const d0 = toEpochDay(startDate);
+	return Array.from({ length: days }, (_, i) =>
+		wetMonths.includes(monthOfEpochDay(d0 + i)) ? (i % 3 === 0 ? 8 : 0) : i % 9 === 0 ? 2 : 0
+	);
+}
+
+/** Zero `from`…`to` (inclusive) and put 5 mm on the day either side, so the run is exactly that long. */
+function gap(v: (number | null)[], startDate: string, from: string, to: string): void {
+	const d0 = toEpochDay(startDate);
+	const a = toEpochDay(from) - d0;
+	const b = toEpochDay(to) - d0;
+	for (let i = a; i <= b; i++) v[i] = 0;
+	if (a > 0) v[a - 1] = 5;
+	if (b + 1 < v.length) v[b + 1] = 5;
+}
+
+describe('zeroRainRuns (issue #2)', () => {
+	const S = '2010-01-01';
+	const DAYS = 6 * 365;
+
+	it('flags a long zero run in the wet season of a winter-rainfall catchment, not a longer one in its dry season', () => {
+		const v = seasonal(S, DAYS, WINTER);
+		gap(v, S, '2012-06-01', '2012-08-15'); // 76 winter days
+		gap(v, S, '2013-11-01', '2014-02-28'); // 120 summer days: a dry spell
+		const z = zeroRainRuns({ startDate: S, values: v });
+		expect(z.wetMonths).toEqual(WINTER);
+		expect(z.runs).toHaveLength(1);
+		expect(z.runs[0]).toMatchObject({ startDate: '2012-06-01', endDate: '2012-08-15', days: 76, wetDays: 76 });
+		// Winter rain is 8/3 mm a day (203 mm over 76 days); the gap's own zeros
+		// pull the June–August means down a little, so the estimate is lower.
+		expect(z.runs[0]!.usualMm).toBeGreaterThan(160);
+		expect(z.runs[0]!.usualMm).toBeLessThan(203);
+	});
+
+	it("uses the series' own climatology: the same June–August gap is a dry spell in a summer-rainfall catchment", () => {
+		const v = seasonal(S, DAYS, SUMMER);
+		gap(v, S, '2012-06-01', '2012-08-15');
+		gap(v, S, '2012-12-01', '2013-02-14'); // 76 summer days
+		const z = zeroRainRuns({ startDate: S, values: v });
+		expect(z.wetMonths).toEqual(SUMMER);
+		expect(z.runs.map((r) => [r.startDate, r.endDate])).toEqual([['2012-12-01', '2013-02-14']]);
+	});
+
+	it(`counts only the wet-season days toward the ${ZERO_RUN_MIN_WET_DAYS}`, () => {
+		// From 1 March: March is dry, then April (30) + May.
+		const at = (end: string) => {
+			const v = seasonal(S, DAYS, WINTER);
+			gap(v, S, '2012-03-01', end);
+			return zeroRainRuns({ startDate: S, values: v }).runs;
+		};
+		expect(at('2012-05-29')).toEqual([]); // 59 wet days out of 90
+		expect(at('2012-05-30')).toMatchObject([{ days: 91, wetDays: 60 }]);
+	});
+
+	it('a blank (or any non-zero) day ends a run', () => {
+		const v = seasonal(S, DAYS, WINTER);
+		gap(v, S, '2012-06-01', '2012-08-15');
+		v[toEpochDay('2012-07-10') - toEpochDay(S)] = null;
+		expect(zeroRainRuns({ startDate: S, values: v }).runs).toEqual([]);
+		v[toEpochDay('2012-07-10') - toEpochDay(S)] = -1;
+		expect(zeroRainRuns({ startDate: S, values: v }).runs).toEqual([]);
+		v[toEpochDay('2012-07-10') - toEpochDay(S)] = 0;
+		expect(zeroRainRuns({ startDate: S, values: v }).runs).toHaveLength(1);
+	});
+
+	it(`without about two years of data, falls back to a plain ${ZERO_RUN_PLAIN_DAYS}-day rule in any season`, () => {
+		const short = (zeros: number) => [3, ...new Array(zeros).fill(0), 3, ...new Array(200).fill(3)];
+		expect(zeroRainRuns({ startDate: S, values: short(ZERO_RUN_PLAIN_DAYS - 1) })).toEqual({ wetMonths: null, runs: [] });
+		const z = zeroRainRuns({ startDate: S, values: short(ZERO_RUN_PLAIN_DAYS) });
+		expect(z.runs).toEqual([{ startDate: '2010-01-02', endDate: '2010-06-30', days: 180, wetDays: 180, usualMm: null }]);
+		expect(zeroRainCheck(z)!.text).toMatch(/180\+ days \(too little data to tell the wet season\)/);
+		// A long series that never rains has no climatology either: the plain rule applies.
+		expect(zeroRainRuns({ startDate: S, values: new Array(DAYS).fill(0) }).runs).toMatchObject([{ days: DAYS }]);
+		expect(zeroRainRuns({ startDate: S, values: [] })).toEqual({ wetMonths: null, runs: [] });
+	});
+
+	it('warns only on the catchment rain, naming the dates and the blocked CHIRPS fallback', () => {
+		const v = seasonal(S, DAYS, WINTER);
+		gap(v, S, '2012-06-01', '2012-08-15');
+		const [c] = checkSeries('rain_catchment_mm', { startDate: S, values: v });
+		expect(c).toMatchObject({
+			seriesKind: 'rain_catchment_mm',
+			check: 'zerorun',
+			days: 76,
+			examples: [{ date: '2012-06-01', endDate: '2012-08-15', value: 0, runDays: 76 }]
+		});
+		expect(c!.text).toMatch(/^Rainfall \(catchment\): 1 run of zero rain covering 60\+ days of the wet season \(Apr, May, Jun, Jul, Aug, Sep: this series' six wettest months\)/);
+		expect(c!.text).toMatch(/2012-06-01 to 2012-08-15 \(76 days, 76 in the wet season, which usually brings about \d+ mm\)/);
+		expect(c!.text).toMatch(/blocks the fallback to CHIRPS \(then forecast\) rain that a blank day gets\. If these are missing data, re-export them as blank/);
+		// CHIRPS and forecast zeros block nothing that matters here: not checked.
+		expect(checkSeries('rain_chirps_mm', { startDate: S, values: v })).toEqual([]);
+		// Negative control: the same series without the gap.
+		expect(checkSeries('rain_catchment_mm', { startDate: S, values: seasonal(S, DAYS, WINTER) })).toEqual([]);
+	});
+
+	it(`lists at most ${MAX_LISTED} runs in the text`, () => {
+		const runs = Array.from({ length: MAX_LISTED + 2 }, (_, k) => ({
+			startDate: `${2000 + k}-06-01`,
+			endDate: `${2000 + k}-08-15`,
+			days: 76,
+			wetDays: 76,
+			usualMm: 200
+		}));
+		const c = zeroRainCheck({ wetMonths: WINTER, runs })!;
+		expect(c.text).toMatch(/^Rainfall \(catchment\): 14 runs/);
+		expect(c.text).toContain('2011-06-01 to 2011-08-15');
+		expect(c.text).not.toContain('2012-06-01');
+		expect(c.text).toMatch(/; and 2 more\./);
+		expect(c.examples).toHaveLength(5);
+		expect(c.days).toBe(76 * 14);
+		expect(zeroRainCheck({ wetMonths: WINTER, runs: [] })).toBeNull();
+	});
+});
+
+describe('rainVsChirps (issue #2)', () => {
+	// Water years 2010/11 … 2017/18. CHIRPS is the seasonal rain; the catchment
+	// reads twice CHIRPS (a systematic bias), except in the years scaled below.
+	const S = '2010-10-01';
+	const DAYS = toEpochDay('2018-10-01') - toEpochDay(S);
+	const build = (scale: Record<number, number> = {}) => {
+		const chirps = seasonal(S, DAYS, WINTER);
+		const d0 = toEpochDay(S);
+		const catchment = chirps.map((v, i): number | null => {
+			const wy = Number(fromEpochDay(d0 + i).slice(0, 4)) - (monthOfEpochDay(d0 + i) >= 10 ? 0 : 1);
+			return v! * 2 * (scale[wy] ?? 1);
+		});
+		return { rain_catchment_mm: { startDate: S, values: catchment }, rain_chirps_mm: { startDate: S, values: chirps } };
+	};
+
+	it("flags a year far below the record's usual catchment / CHIRPS ratio, not one that is merely low", () => {
+		const r = rainVsChirps(build({ 2013: 0.4, 2015: 0.6 }))!;
+		expect(r.usualRatio).toBeCloseTo(2, 12);
+		expect(r.flaggedYears).toEqual([2013]);
+		const y = (wy: number) => r.years.find((x) => x.waterYear === wy)!;
+		// 0.8 in absolute terms, which a plain "catchment < ½ CHIRPS" rule would miss.
+		expect(y(2013)).toMatchObject({ days: 365, flagged: true });
+		expect(y(2013).ratio).toBeCloseTo(0.8, 12);
+		expect(y(2015).ratio).toBeCloseTo(1.2, 12);
+		expect(y(2015).flagged).toBe(false);
+		expect(y(2013).catchmentMm).toBeCloseTo(y(2013).chirpsMm * 0.8, 9);
+	});
+
+	it('flags nothing when every year keeps the usual ratio', () => {
+		const r = rainVsChirps(build())!;
+		expect(r.years).toHaveLength(8);
+		expect(r.flaggedYears).toEqual([]);
+		expect(rainVsChirpsCheck(r)).toBeNull();
+	});
+
+	it('takes the usual ratio as 1 with fewer than five judged years', () => {
+		const three = (factor: number) => {
+			const chirps = seasonal(S, 3 * 365, WINTER);
+			return { rain_catchment_mm: { startDate: S, values: chirps.map((v) => v! * factor) }, rain_chirps_mm: { startDate: S, values: chirps } };
+		};
+		const low = rainVsChirps(three(0.4))!;
+		expect(low.usualRatio).toBe(1);
+		expect(low.flaggedYears).toEqual([2010, 2011, 2012]);
+		expect(rainVsChirps(three(0.6))!.flaggedYears).toEqual([]);
+	});
+
+	it(`judges a year only with ${LOW_VS_CHIRPS_MIN_DAYS}+ shared days and 50+ mm of CHIRPS rain on them`, () => {
+		const s = build({ 2013: 0 });
+		const d0 = toEpochDay(S);
+		const blank = (from: string, to: string) => {
+			for (let i = toEpochDay(from) - d0; i <= toEpochDay(to) - d0; i++) s.rain_catchment_mm.values[i] = null;
+		};
+		const y2013 = () => rainVsChirps(s)!.years.find((y) => y.waterYear === 2013);
+		// 2013/14: blank catchment rain to 3 April leaves 180 shared days: judged …
+		blank('2013-10-01', '2014-04-03');
+		expect(y2013()).toMatchObject({ days: 180, flagged: true });
+		// … one more blank day leaves 179: not judged.
+		blank('2014-04-04', '2014-04-04');
+		expect(y2013()).toMatchObject({ days: 179, flagged: false });
+
+		// A year whose CHIRPS total is under 50 mm (the dry half only here: 2 mm
+		// every ninth day, about 40 mm) is not judged either.
+		const dry = build({ 2013: 0 });
+		for (let i = toEpochDay('2014-04-01') - d0; i < toEpochDay('2014-10-01') - d0; i++) dry.rain_chirps_mm.values[i] = 0;
+		const y = rainVsChirps(dry)!.years.find((x) => x.waterYear === 2013)!;
+		expect(y.chirpsMm).toBeLessThan(50);
+		expect(y.flagged).toBe(false);
+	});
+
+	it('does not flag a year CHIRPS recorded no rain in, and needs both series to overlap', () => {
+		const s = build();
+		const d0 = toEpochDay(S);
+		for (let i = toEpochDay('2013-10-01') - d0; i < toEpochDay('2014-10-01') - d0; i++) {
+			s.rain_chirps_mm.values[i] = 0;
+			s.rain_catchment_mm.values[i] = 0;
+		}
+		expect(rainVsChirps(s)!.years.find((y) => y.waterYear === 2013)).toMatchObject({ ratio: null, flagged: false });
+		expect(rainVsChirps({ rain_catchment_mm: s.rain_catchment_mm })).toBeNull();
+		expect(rainVsChirps({ rain_chirps_mm: s.rain_chirps_mm })).toBeNull();
+		expect(rainVsChirps({ ...s, rain_chirps_mm: { startDate: '2030-01-01', values: [1, 2] } })).toBeNull();
+	});
+
+	it('warns naming the water years and the blocked CHIRPS fallback, right after the catchment rain checks', () => {
+		const s = build({ 2013: 0.4 });
+		const c = rainVsChirpsCheck(rainVsChirps(s))!;
+		expect(c).toMatchObject({ seriesKind: 'rain_catchment_mm', check: 'lowvschirps', days: 365 });
+		expect(c.examples).toEqual([{ date: '2013-10-01', endDate: '2014-09-30', value: expect.closeTo(0.8, 12), runDays: 365 }]);
+		expect(c.text).toMatch(/^Rainfall \(catchment\): 1 water year below 50 % of the usual catchment \/ CHIRPS rain ratio \(200 %\), on the days both have a reading: 2013\/14: \d+ mm vs \d+ mm, 80 % \(365 days\)\./);
+		expect(c.text).toMatch(/blocks the fallback to CHIRPS/);
+		// seriesChecks: catchment rain's own checks, then this one, then CHIRPS's.
+		s.rain_catchment_mm.values[5] = -1;
+		s.rain_chirps_mm.values[5] = -1;
+		expect(seriesChecks(s).map((x) => [x.seriesKind, x.check])).toEqual([
+			['rain_catchment_mm', 'negative'],
+			['rain_catchment_mm', 'lowvschirps'],
+			['rain_chirps_mm', 'negative']
+		]);
+	});
+});
+
 describe('areaMismatches (engine-review F7)', () => {
 	const farm = (id: string, areaKm2: number, hi: number, lo: number, kind: NetworkNode['kind'] = 'farm'): NetworkNode => ({
 		id,
@@ -258,6 +490,29 @@ describe('quality checks do not depend on the local time zone', () => {
 			env.TZ = tz;
 		}
 	});
+
+	it('finds the same zero runs, wet months and low-vs-CHIRPS years at UTC+14 and UTC−11 (issue #2)', () => {
+		const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env;
+		const tz = env.TZ;
+		const S = '2010-10-01';
+		const chirps = seasonal(S, 6 * 365, WINTER);
+		const catchment = [...chirps];
+		gap(catchment, S, '2012-04-01', '2012-06-14'); // on a month and water-year edge
+		const series = { rain_catchment_mm: { startDate: S, values: catchment }, rain_chirps_mm: { startDate: S, values: chirps } };
+		const both = () => JSON.stringify([zeroRainRuns(series.rain_catchment_mm), rainVsChirps(series), seriesChecks(series)]);
+		try {
+			env.TZ = 'Pacific/Kiritimati';
+			const east = both();
+			env.TZ = 'Pacific/Pago_Pago';
+			const west = both();
+			env.TZ = 'UTC';
+			expect(east).toBe(both());
+			expect(west).toBe(both());
+			expect(east).toContain('"startDate":"2012-04-01","endDate":"2012-06-14","days":75,"wetDays":75');
+		} finally {
+			env.TZ = tz;
+		}
+	});
 });
 
 // The client catchment: the gauge (G1) reads a fraction of the logger (A1) from
@@ -281,5 +536,16 @@ describe.skipIf(!dataDir)('observedAgreement on the client catchment (needs data
 		expect(ag.years.find((y) => y.waterYear === 2013)!.flagged).toBe(false); // 83 %
 		expect(ag.flaggedYears).toEqual(expect.arrayContaining([2014, 2015, 2016]));
 		expect(Math.round(ag.years.find((y) => y.waterYear === 2016)!.ratio! * 100)).toBe(8);
+	});
+
+	// Issue #2: the catchment rain has zero-filled stretches that suppress the
+	// CHIRPS fallback. Which ones is client data, so only presence is asserted.
+	it('flags zero-rain runs and water years far below CHIRPS (issue #2)', () => {
+		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as {
+			series: { kind: string; startDate: string; values: (number | null)[] }[];
+		};
+		const series = Object.fromEntries(project.series.map((s) => [s.kind, s]));
+		expect(zeroRainRuns(series.rain_catchment_mm!).runs.length).toBeGreaterThan(0);
+		expect(rainVsChirps(series)!.flaggedYears.length).toBeGreaterThan(0);
 	});
 });

@@ -265,7 +265,9 @@ engine's `runModel`, stores the outputs, and returns the summary.
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
-  'flatline', days, examples: [{ date, value, runDays? }], text }[]`) and
+  'flatline' | 'zerorun' | 'lowvschirps', days, examples: [{ date, value,
+  runDays?, endDate? }], text }[]`; the last two, engine ≥ 0.5.2, are the
+  catchment-rain checks of issue #2) and
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
   whose area is more than 1 % off high + low MAP area). The last two are absent
   on older runs. Each check also appears in `warnings`. Rules:

@@ -10,12 +10,16 @@
 // 2014/15 (docs/plan.md, first hydrologist question).
 //
 // seriesChecks: negative values, outliers and flat-lines (a stuck logger, a
-// filled-in gap) in each input series. areaMismatches: farms whose area is not
+// filled-in gap) in each input series, plus two catchment-rain checks for
+// missing data recorded as 0 (issue #2): long zero runs in the wet season
+// (zeroRainRuns) and water years far below CHIRPS (rainVsChirps). A zero is a
+// reading, so it blocks the CHIRPS fallback that a blank day gets.
+// areaMismatches: farms whose area is not
 // the sum of their high- and low-MAP areas (engine-review F7).
 //
 // None of these change a model result. They become run warnings and
 // RunSummary.dataQuality, and the Time series tab shows them before a run.
-import { fromEpochDay, toEpochDay } from './calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay } from './calendar';
 import { waterYearOf } from './network/stats';
 import {
 	defaultProjectSettings,
@@ -185,15 +189,20 @@ function pctText(r: number): string {
 // Series checks: negative values, outliers, flat-lines
 // ---------------------------------------------------------------------------
 
-export type SeriesCheckKind = 'negative' | 'outlier' | 'flatline';
+export type SeriesCheckKind = 'negative' | 'outlier' | 'flatline' | 'zerorun' | 'lowvschirps';
 
 export interface SeriesCheck {
 	seriesKind: SeriesKind;
 	check: SeriesCheckKind;
 	/** Days affected (for a flat-line: days inside the flat stretches). */
 	days: number;
-	/** Up to MAX_EXAMPLES cases: the day, its value, and for a flat-line the stretch length. */
-	examples: { date: string; value: number; runDays?: number }[];
+	/**
+	 * Up to MAX_EXAMPLES cases: the day, its value, and for a flat-line or zero
+	 * run the stretch length. A zero run also has its last day. A low-vs-CHIRPS
+	 * year has the water year's first and last day, value = catchment / CHIRPS
+	 * and runDays = the days both series have a reading.
+	 */
+	examples: { date: string; value: number; runDays?: number; endDate?: string }[];
 	/** One sentence for the run warnings and the Time series tab. */
 	text: string;
 }
@@ -321,12 +330,266 @@ export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
 			});
 		}
 	}
+
+	// Long zero runs in the catchment rain: missing data recorded as 0?
+	if (kind === 'rain_catchment_mm') {
+		const z = zeroRainCheck(zeroRainRuns(s));
+		if (z) out.push(z);
+	}
 	return out;
 }
 
-/** checkSeries for every series present, in SERIES_KINDS order. */
+/**
+ * checkSeries for every series present, in SERIES_KINDS order. The
+ * catchment-vs-CHIRPS check, which needs both, follows the catchment rain's own.
+ */
 export function seriesChecks(series: Partial<Record<SeriesKind, DailySeries>>): SeriesCheck[] {
-	return SERIES_KINDS.flatMap((k) => (series[k] ? checkSeries(k, series[k]!) : []));
+	return SERIES_KINDS.flatMap((k) => {
+		if (!series[k]) return [];
+		const own = checkSeries(k, series[k]!);
+		const low = k === 'rain_catchment_mm' ? rainVsChirpsCheck(rainVsChirps(series)) : null;
+		return low ? [...own, low] : own;
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Catchment rain recorded as 0 when it is really missing (issue #2)
+// ---------------------------------------------------------------------------
+//
+// Rain used = the first non-blank of catchment, CHIRPS and forecast rain
+// (model.md §2.4 column R). A blank day falls back to CHIRPS; a 0 does not. So
+// a stretch of missing data exported as zeros runs the catchment artificially
+// dry. These checks only warn; they never change which rain a run uses.
+
+/**
+ * Zero-run rule: a run of consecutive days with catchment rain exactly 0 is
+ * flagged when at least this many of its days fall in the catchment's wet half
+ * of the year: the six calendar months with the highest mean daily rain in the
+ * series itself. That works for winter- and summer-rainfall catchments alike,
+ * and a dry-season spell, however long, never counts.
+ */
+export const ZERO_RUN_MIN_WET_DAYS = 60;
+/** Each calendar month needs this many valid days (about two years) before the series' own climatology is trusted. */
+export const CLIMATOLOGY_MIN_DAYS_PER_MONTH = 56;
+/** Without a usable climatology (a short or all-zero series): flag a zero run of this many days in any season. */
+export const ZERO_RUN_PLAIN_DAYS = 180;
+
+export interface ZeroRun {
+	startDate: string;
+	endDate: string;
+	days: number;
+	/** Days of the run in the wet half of the year (all of them without a climatology). */
+	wetDays: number;
+	/** Rain the series' own monthly means would put on these days, mm; null without a climatology. */
+	usualMm: number | null;
+}
+
+export interface ZeroRainRuns {
+	/** The six wettest calendar months (1–12, ascending), or null when the series is too short or never rains. */
+	wetMonths: number[] | null;
+	/** Flagged runs, in date order. */
+	runs: ZeroRun[];
+}
+
+/** Mean daily rain per calendar month (index 1–12), or null when a month has too few valid days or the series never rains. */
+function monthlyMeans(s: DailySeries): number[] | null {
+	const d0 = toEpochDay(s.startDate);
+	const sum = new Array<number>(13).fill(0);
+	const n = new Array<number>(13).fill(0);
+	s.values.forEach((v, i) => {
+		if (!isReading(v)) return;
+		const m = monthOfEpochDay(d0 + i);
+		sum[m] = sum[m]! + v;
+		n[m] = n[m]! + 1;
+	});
+	for (let m = 1; m <= 12; m++) if (n[m]! < CLIMATOLOGY_MIN_DAYS_PER_MONTH) return null;
+	const mean = sum.map((x, m) => (m === 0 ? 0 : x / n[m]!));
+	return mean.some((x) => x > 0) ? mean : null;
+}
+
+/**
+ * Runs of consecutive zero catchment rain long enough to look like missing
+ * data: ZERO_RUN_MIN_WET_DAYS of them in the wet half of the year, or
+ * ZERO_RUN_PLAIN_DAYS in any season without a climatology. A blank, negative
+ * or non-finite day ends a run.
+ */
+export function zeroRainRuns(s: DailySeries): ZeroRainRuns {
+	const d0 = toEpochDay(s.startDate);
+	const mean = monthlyMeans(s);
+	let wetMonths: number[] | null = null;
+	const wet = new Array<boolean>(13).fill(true);
+	if (mean) {
+		// Wettest first; a tie goes to the earlier month so the choice is deterministic.
+		wetMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+			.sort((a, b) => mean[b]! - mean[a]! || a - b)
+			.slice(0, 6)
+			.sort((a, b) => a - b);
+		wet.fill(false);
+		for (const m of wetMonths) wet[m] = true;
+	}
+	const minDays = mean ? ZERO_RUN_MIN_WET_DAYS : ZERO_RUN_PLAIN_DAYS;
+	const runs: ZeroRun[] = [];
+	for (let i = 0; i < s.values.length; ) {
+		if (s.values[i] !== 0) {
+			i++;
+			continue;
+		}
+		let j = i;
+		let wetDays = 0;
+		let usual = 0;
+		for (; j < s.values.length && s.values[j] === 0; j++) {
+			const m = monthOfEpochDay(d0 + j);
+			if (wet[m]) wetDays++;
+			if (mean) usual += mean[m]!;
+		}
+		if (wetDays >= minDays) {
+			runs.push({ startDate: fromEpochDay(d0 + i), endDate: fromEpochDay(d0 + j - 1), days: j - i, wetDays, usualMm: mean ? usual : null });
+		}
+		i = j;
+	}
+	return { wetMonths, runs };
+}
+
+const MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** At most this many runs or years are spelled out in one warning. */
+export const MAX_LISTED = 12;
+const listed = (parts: string[]) =>
+	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
+const FALLBACK_NOTE =
+	'A zero counts as a reading, so it blocks the fallback to CHIRPS (then forecast) rain that a blank day gets. If these are missing data, re-export them as blank';
+
+/** The zero-run result as a SeriesCheck, or null when nothing is flagged. */
+export function zeroRainCheck(z: ZeroRainRuns): SeriesCheck | null {
+	if (z.runs.length === 0) return null;
+	const parts = z.runs.map(
+		(r) =>
+			`${r.startDate} to ${r.endDate} (${r.days} days` +
+			(z.wetMonths ? `, ${r.wetDays} in the wet season, which usually brings about ${Math.round(r.usualMm!)} mm` : '') +
+			')'
+	);
+	const rule = z.wetMonths
+		? `${ZERO_RUN_MIN_WET_DAYS}+ days of the wet season (${z.wetMonths.map((m) => MONTH_ABBR[m]).join(', ')}: this series' six wettest months)`
+		: `${ZERO_RUN_PLAIN_DAYS}+ days (too little data to tell the wet season)`;
+	return {
+		seriesKind: 'rain_catchment_mm',
+		check: 'zerorun',
+		days: z.runs.reduce((a, r) => a + r.days, 0),
+		examples: z.runs.slice(0, MAX_EXAMPLES).map((r) => ({ date: r.startDate, endDate: r.endDate, value: 0, runDays: r.days })),
+		text:
+			`Rainfall (catchment): ${z.runs.length === 1 ? '1 run' : `${z.runs.length} runs`} of zero rain covering ${rule}: ${listed(parts)}. ` +
+			`Real dry spells, or missing data? ${FALLBACK_NOTE}`
+	};
+}
+
+/**
+ * Low-vs-CHIRPS rule: a water year is flagged when its catchment rain, on the
+ * days both series have a reading, is below LOW_VS_CHIRPS_RATIO × the record's
+ * usual catchment / CHIRPS ratio (the median over the judged years; 1 when
+ * fewer than RATIO_BASELINE_MIN_YEARS years can be judged). Measuring against
+ * the record's own median absorbs CHIRPS's systematic bias at catchment scale,
+ * so a year shows only when it has lost about half its rain relative to the
+ * others.
+ */
+export const LOW_VS_CHIRPS_RATIO = 0.5;
+/** A water year is judged only with this many shared days … */
+export const LOW_VS_CHIRPS_MIN_DAYS = 180;
+/** … and at least this much CHIRPS rain on them, mm. */
+export const LOW_VS_CHIRPS_MIN_MM = 50;
+/** Fewer judged years than this: the usual ratio is taken as 1. */
+export const RATIO_BASELINE_MIN_YEARS = 5;
+
+export interface RainVsChirpsYear {
+	/** Water year starting 1 October of this calendar year. */
+	waterYear: number;
+	/** Days both series have a reading. */
+	days: number;
+	catchmentMm: number;
+	chirpsMm: number;
+	/** catchmentMm / chirpsMm; null when CHIRPS recorded no rain. */
+	ratio: number | null;
+	flagged: boolean;
+}
+
+export interface RainVsChirps {
+	/** Median ratio over the judged years, or 1 when there are too few of them. */
+	usualRatio: number;
+	years: RainVsChirpsYear[];
+	/** Water years that were flagged, in order. */
+	flaggedYears: number[];
+}
+
+/** Catchment vs CHIRPS rain per water year on their shared days; null unless both exist and overlap. */
+export function rainVsChirps(series: Partial<Record<SeriesKind, DailySeries>>): RainVsChirps | null {
+	const sa = series.rain_catchment_mm;
+	const sb = series.rain_chirps_mm;
+	if (!sa || !sb) return null;
+	const a0 = toEpochDay(sa.startDate);
+	const b0 = toEpochDay(sb.startDate);
+	const from = Math.max(a0, b0);
+	const to = Math.min(a0 + sa.values.length, b0 + sb.values.length); // exclusive
+	const byYear = new Map<number, { days: number; a: number; b: number }>();
+	for (let day = from; day < to; day++) {
+		const va = sa.values[day - a0];
+		const vb = sb.values[day - b0];
+		if (!isReading(va) || !isReading(vb)) continue;
+		const wy = waterYearOf(day);
+		const y = byYear.get(wy) ?? { days: 0, a: 0, b: 0 };
+		y.days++;
+		y.a += va;
+		y.b += vb;
+		byYear.set(wy, y);
+	}
+	if (byYear.size === 0) return null;
+	const judged = (y: { days: number; b: number }) => y.days >= LOW_VS_CHIRPS_MIN_DAYS && y.b >= LOW_VS_CHIRPS_MIN_MM;
+	const ratios = [...byYear.values()]
+		.filter(judged)
+		.map((y) => y.a / y.b)
+		.sort((x, y) => x - y);
+	const usualRatio = ratios.length >= RATIO_BASELINE_MIN_YEARS ? median(ratios) : 1;
+	const years = [...byYear.entries()]
+		.sort(([x], [y]) => x - y)
+		.map(([waterYear, y]) => {
+			const ratio = y.b > 0 ? y.a / y.b : null;
+			return {
+				waterYear,
+				days: y.days,
+				catchmentMm: y.a,
+				chirpsMm: y.b,
+				ratio,
+				flagged: judged(y) && ratio! < LOW_VS_CHIRPS_RATIO * usualRatio
+			};
+		});
+	return { usualRatio, years, flaggedYears: years.filter((y) => y.flagged).map((y) => y.waterYear) };
+}
+
+/** Median of an ascending, non-empty array. */
+function median(sorted: number[]): number {
+	const h = sorted.length >> 1;
+	return sorted.length % 2 ? sorted[h]! : (sorted[h - 1]! + sorted[h]!) / 2;
+}
+
+/** The low-vs-CHIRPS result as a SeriesCheck, or null when nothing is flagged. */
+export function rainVsChirpsCheck(r: RainVsChirps | null): SeriesCheck | null {
+	if (!r || r.flaggedYears.length === 0) return null;
+	const flagged = r.years.filter((y) => y.flagged);
+	const parts = flagged.map(
+		(y) => `${waterYearLabel(y.waterYear)}: ${Math.round(y.catchmentMm)} mm vs ${Math.round(y.chirpsMm)} mm, ${pctText(y.ratio!)} (${y.days} days)`
+	);
+	return {
+		seriesKind: 'rain_catchment_mm',
+		check: 'lowvschirps',
+		days: flagged.reduce((a, y) => a + y.days, 0),
+		examples: flagged.slice(0, MAX_EXAMPLES).map((y) => ({
+			date: `${y.waterYear}-10-01`,
+			endDate: `${y.waterYear + 1}-09-30`,
+			value: y.ratio!,
+			runDays: y.days
+		})),
+		text:
+			`Rainfall (catchment): ${flagged.length === 1 ? '1 water year' : `${flagged.length} water years`} below ` +
+			`${Math.round(LOW_VS_CHIRPS_RATIO * 100)} % of the usual catchment / CHIRPS rain ratio (${pctText(r.usualRatio)}), ` +
+			`on the days both have a reading: ${listed(parts)}. Zeros that are really missing data? ${FALLBACK_NOTE}`
+	};
 }
 
 // ---------------------------------------------------------------------------

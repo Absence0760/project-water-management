@@ -56,8 +56,13 @@ Tick items off (or move them into an issue) as they are done.
       extra draw returns to the river. Keep this in mind when reading
       curtailment results (it relates to N1).
 - [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
-      10× for flow; flat-lines are 5 days for rain and 14 for flow. Are these
-      right for these catchments? They're fixed in code.
+      10× for flow; flat-lines are 5 days for rain and 14 for flow. The
+      catchment-rain checks (issue #2) flag a zero run with 60+ days in the
+      series' six wettest months (180+ days without two years of data) and a
+      water year below 50 % of the record's usual catchment / CHIRPS share.
+      Are these right for these catchments? They're fixed in code
+      ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree));
+      make them settings if the hydrologist wants to tune them.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny

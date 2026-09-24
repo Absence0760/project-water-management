@@ -324,7 +324,21 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** flag runs of zero rainfall that look like missing data. Stored
   zeros block the CHIRPS fallback.
-- **Changes:**
+- **Landed** (engine 0.5.2), with three deliberate departures from the plan
+  below, reasoned in model.md §2.10a:
+  - the zero-run season is the series' own six wettest months, not "a
+    winter month", so summer-rainfall catchments are judged correctly
+    (60+ wet-season days; a plain 180 days without two years of data);
+  - the CHIRPS check is `lowvschirps`: below 50 % of the record's *usual*
+    catchment / CHIRPS share (the median), not of CHIRPS itself, so a
+    systematic CHIRPS bias doesn't flag every year or hide real gaps;
+  - the thresholds are engine constants like the outlier and flat-line
+    limits, not settings; the hydrologist question on them is in
+    followups.md (*Data-quality limits*).
+
+  The importer prints the zero-run note; the low-vs-CHIRPS check is
+  engine-only. The fix itself stays with the data (issue #2 item 1).
+- **Changes (as planned):**
   - **engine:** `quality.ts` `checkSeries` gains two checks:
     - `zerorun`: ≥ N consecutive zero days, default 60, counted only when
       the run touches a winter month;

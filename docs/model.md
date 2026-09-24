@@ -611,11 +611,60 @@ reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
 | Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
 | Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal; Pitman flow (modelled, often monthly values repeated daily) is not checked | a stuck logger or a filled-in gap |
+| Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
+| Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
 
-The outlier and flat-line limits are engine constants (`OUTLIER_FACTOR`,
-`FLATLINE_MIN_DAYS`), not settings; whether they suit these catchments is a
-question for the hydrologist.
+The outlier, flat-line and rain limits are engine constants
+(`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `ZERO_RUN_MIN_WET_DAYS`,
+`ZERO_RUN_PLAIN_DAYS`, `CLIMATOLOGY_MIN_DAYS_PER_MONTH`, `LOW_VS_CHIRPS_*`,
+`RATIO_BASELINE_MIN_YEARS`), not settings; whether they suit these catchments
+is a question for the hydrologist. Like the other series checks they look at
+the whole stored series, not only the run window.
+
+**Why the two rain checks (engine ≥ 0.5.2, issue #2).** Rain used (§2.4,
+column R) is the first *non-blank* of catchment rain, CHIRPS and forecast. A
+blank day falls back to CHIRPS; a **0 does not**, because a zero is a reading.
+So a stretch of missing data exported as zeros runs the catchment artificially
+dry, and natural flow, farm supply and the EWR results with it. Both warnings
+name the dates or water years and say that the zeros block the CHIRPS
+fallback. They are warnings only: the fallback is unchanged and zero stays a
+value. The fix is in the data (re-export the stretch as blank, or fill it from
+a trusted source), once the hydrologist or client confirms it is missing.
+
+- *Zero runs: why the wet season, from the series itself.* A South African
+  catchment may get its rain in winter (the south-western Cape) or summer
+  (most of the interior), so no fixed set of months fits both. Ranking the
+  calendar months by the series' own mean daily rain and taking the top six
+  finds the wet half in either case; a dry-season spell, however long, never
+  counts, because months-long dry seasons are normal in both regimes. Sixty
+  zero days inside the wet half means two months of the rainy season with not
+  one wet day in a *catchment-average* series (an average over several gauges
+  is zero only when all of them are), which is implausible anywhere with
+  enough rain to farm. The warning also gives the rain the series' monthly
+  means would usually bring over the run. Those means include the suspect
+  zeros, so they lean low: the rule errs towards not flagging. The plain
+  180-day fallback is for records too short to tell the seasons (about two
+  years); half a year of continuous zeros is suspicious in any regime.
+- *Low vs CHIRPS: why 50 % of the usual share.* CHIRPS is a 0.05° blended
+  satellite-and-gauge product; at catchment scale it can carry a systematic
+  bias of tens of percent, in either direction, especially in mountainous
+  terrain. Comparing each year with the record's own **median** share (rather
+  than with CHIRPS directly) cancels that bias, so a record that always reads,
+  say, twice CHIRPS is judged against 2×, not 1×. Below half the usual share
+  means the year lost about half its rain relative to the others. That is well
+  beyond normal year-to-year scatter in the ratio, and it is what zero-filling
+  roughly half a year looks like. Subtler shortfalls can't be told apart from
+  CHIRPS error, so they are not flagged. The median tolerates a minority of
+  bad years; if most years were bad the median would be too, and the zero-run
+  check still fires. The 180-day and 50 mm minimums keep a partial first or
+  last year, or a dry half-year, from producing a noisy ratio. Days where
+  either series is blank are left out, so a blank stretch (which already falls
+  back to CHIRPS) doesn't count against the year.
+
+On the client catchment both checks flag the stretches issue #2 describes;
+which runs and years are client data, so only their presence is tested (the
+skipped-without-`data/` suite in `quality.test.ts`).
 
 The warning is deliberately neutral: it says the two records disagree and
 asks which to calibrate against, without presuming an instrument fault. Two
