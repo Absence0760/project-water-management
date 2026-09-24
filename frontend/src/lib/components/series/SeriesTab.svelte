@@ -10,7 +10,7 @@
 		resolveDataQuality,
 		SERIES_KINDS,
 		toEpochDay,
-		type DataQualitySettings,
+		type ProjectSettings,
 		type SeriesCheckKind,
 		type SeriesKind,
 		type SeriesMeta
@@ -27,6 +27,7 @@
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
+	import SeriesPreviewDialog from './SeriesPreviewDialog.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
 	import { KIND_ROLES, seriesInUse } from './roles';
@@ -37,7 +38,7 @@
 		readonly,
 		initial = null,
 		runs = null,
-		dataQuality = null,
+		settings = null,
 		onSeriesChange
 	}: {
 		projectId: string;
@@ -45,10 +46,13 @@
 		/** Already-loaded list (the page's), so the first frame has the final layout. */
 		initial?: SeriesMeta[] | null;
 		runs?: RunMeta[] | null;
-		/** The project's settings.dataQuality (gauge-vs-logger thresholds); null = the engine defaults. */
-		dataQuality?: Partial<DataQualitySettings> | null;
+		/** The project's settings, the same object the Settings tab gets; null only before the page's own load finishes. */
+		settings?: ProjectSettings | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 	} = $props();
+
+	/** Gauge-vs-logger thresholds; null = the engine defaults. */
+	const dataQuality = $derived(settings?.dataQuality ?? null);
 
 	let list = $state<SeriesMeta[]>(untrack(() => initial ?? []));
 	let loading = $state(untrack(() => initial === null));
@@ -65,6 +69,19 @@
 
 	let selectedId = $state<string | null>(null);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+
+	let previewOpen = $state(false);
+	let previewFocusSeriesId = $state<string | null>(null);
+	/** The card header's "Preview data": every column, nothing highlighted. */
+	function openPreviewAll() {
+		previewFocusSeriesId = null;
+		previewOpen = true;
+	}
+	/** A row's own "Preview": that series' column un-hidden, scrolled to and highlighted. */
+	function openPreviewSeries(id: string) {
+		previewFocusSeriesId = id;
+		previewOpen = true;
+	}
 
 	// Clicking anywhere on a row shows that series in the chart; clicks on the
 	// row's own controls (View, CSV menu, Delete) keep their meaning. The View
@@ -224,6 +241,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small">Daily values · {list.length} series{newestDate ? ` · data up to ${newestDate} (${describeAge(daysBetween(newestDate, today))})` : ''}</span>
+			<button type="button" class="btn btn-sm" onclick={openPreviewAll}>Preview data</button>
 		{/if}
 	</div>
 	<LoadState
@@ -286,6 +304,7 @@
 							<td class="act">
 								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => (selectedId = s.id)}>View</button>
+								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)}>Preview</button>
 								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
@@ -378,6 +397,8 @@
 		</section>
 	{/if}
 </div>
+
+<SeriesPreviewDialog bind:open={previewOpen} {list} {values} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
 
 <style>
 	.small {
