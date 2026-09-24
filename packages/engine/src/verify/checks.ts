@@ -236,7 +236,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
  *   equal −Σ daily shortfall and the count of short days (outlet: the
  *   catchment summary; farm: its FarmSummary);
  * - curtailment: H, I, R are the window means of demand, supplied and
- *   incremental EWR shortfall (unrounded, R1); I ≤ H and R ≤ 0; totals are
+ *   the EWR charge (unrounded, R1; the incremental shortfall AB before engine
+ *   0.17.0); I ≤ H and R ≤ 0; totals are
  *   the column sums; the equitable fraction is ΣI / ΣH; targets redistribute
  *   the supplied water (Σ M = Σ I) and never exceed demand; N = M − I,
  *   S = N + R, U = M + R and the l/s columns are m³/day ÷ 86.4.
@@ -281,9 +282,11 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 	if (c.waterYears[0] !== waterYearOfDay(d0) || c.waterYears.at(-1) !== waterYearOfDay(d0 + out.days - 1)) return 'EWR grid: water years do not span the run';
 	const bad = grid(c.outlet, get.get('null|ewr_shortfall')!, 'outlet', out.summary.catchment.ewrDaysNotMet);
 	if (bad) return bad;
+	// A farm's grid is its EWR charge (engine ≥ 0.17.0, audit Q17); older runs gridded AB.
+	const farmEwr = (id: string) => get.get(`${id}|ewr_charge`) ?? get.get(`${id}|ewr_shortfall_incremental`)!;
 	for (const g of c.farms) {
 		const fs = out.summary.farms.find((f) => f.nodeId === g.nodeId)!;
-		const b = grid(g, get.get(`${g.nodeId}|ewr_shortfall_incremental`)!, g.nodeId ?? '?', fs.daysEwrNotMet);
+		const b = grid(g, farmEwr(g.nodeId!), g.nodeId ?? '?', fs.daysEwrNotMet);
 		if (b) return b;
 	}
 
@@ -332,7 +335,9 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 	for (const row of k.farms) {
 		const w = `curtailment ${row.nodeId}`;
 		const mean = (key: string) => sum(get.get(`${row.nodeId}|${key}`)!, from, to) / n;
-		const [mH, mI, mR] = [mean('demand'), mean('supplied'), mean('ewr_shortfall_incremental')] as [number, number, number];
+		const mH = mean('demand');
+		const mI = mean('supplied');
+		const mR = sum(farmEwr(row.nodeId), from, to) / n;
 		if (!close(row.demandM3Day, mH) || !close(row.suppliedM3Day, mI) || !close(row.ewrShortfallM3Day, mR))
 			return `${w}: H/I/R ${row.demandM3Day}/${row.suppliedM3Day}/${row.ewrShortfallM3Day} ≠ window means ${mH}/${mI}/${mR}`;
 		// Daily supplied ≤ demand and shortfall ≤ 0, so their means are too (float sums are monotone).
@@ -575,6 +580,110 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 	return null;
 }
 
+/**
+ * EWR shortfall attribution (engine ≥ 0.17.0, audit Q17; docs/model.md
+ * §2.7b), from the run's own series. Sites are the outlet (the catchment
+ * series) and every other gauge.
+ * - per site per day: charged + natural = shortfall, both ≤ 0, and a day the
+ *   EWR is met has neither;
+ * - per farm per day: charge ≤ irrigation part ≤ 0, and the irrigation part is
+ *   at most the farm's consumptive irrigation G − T;
+ * - per site per day, where no transfer rule crosses the site's catchment
+ *   boundary (always at the outlet): with e = H + I + J − U for each farm
+ *   upstream, the charged part is MIN(shortfall, Σ MAX(e, 0)), each farm's
+ *   share is charged × MAX(e, 0) / Σ MAX(e, 0), and a farm's charge is at
+ *   least that share (it carries the largest over its sites) and, when every
+ *   site it is upstream of can be recomputed, exactly the largest;
+ * - Σ farm charges upstream of a site ≥ the site's charged part.
+ * Runs saved before 0.17.0 have no attribution series: nothing to check.
+ */
+export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const nodes = input.model.nodes;
+	const farms = nodes.filter((n) => n.kind === 'farm');
+	if (farms.length && !get.has(`${farms[0]!.id}|ewr_charge`)) return null;
+	const outlet = nodes.find((n) => n.downstreamNodeId === null);
+	if (!outlet) return null;
+	const sites = [outlet, ...nodes.filter((n) => n.kind === 'gauge' && n !== outlet)];
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	const ancestors = (site: string) => {
+		const set = new Set([site]);
+		for (let grew = true; grew; ) {
+			grew = false;
+			for (const n of nodes) {
+				if (n.downstreamNodeId !== null && set.has(n.downstreamNodeId) && !set.has(n.id)) {
+					set.add(n.id);
+					grew = true;
+				}
+			}
+		}
+		return set;
+	};
+	const rules = input.model.transfers.filter((tr) => tr.enabled && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm');
+	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
+	const siteInfo = sites.map((s, si) => {
+		const up = ancestors(s.id);
+		const key = si === 0 ? 'null' : s.id;
+		return {
+			name: s.id,
+			farms: farms.filter((f) => up.has(f.id)),
+			// A rule with one end inside: its volume can't be told apart from the farm's other transfers.
+			exact: !rules.some((r) => up.has(r.fromNodeId) !== up.has(r.toNodeId)),
+			D: get.get(`${key}|ewr_shortfall`)!,
+			charged: get.get(`${key}|ewr_charged`),
+			natural: get.get(`${key}|ewr_natural`)
+		};
+	});
+	for (const s of siteInfo) if (!s.charged || !s.natural) return `EWR site ${s.name}: no ewr_charged / ewr_natural series`;
+	const F = new Map(farms.map((f) => [f.id, { H: col(f.id, 'inflow_upstream'), I: col(f.id, 'runoff'), J: col(f.id, 'transfer'), U: col(f.id, 'outflow'), G: col(f.id, 'supplied'), R: col(f.id, 'ewr_charge'), Ri: col(f.id, 'ewr_charge_irrigation'), k: 1 - f.lossReturnFraction * (1 - f.irrigationEfficiency) }]));
+	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
+	const best = new Map<string, number>();
+	for (let t = 0; t < out.days; t++) {
+		best.clear();
+		for (const s of siteInfo) {
+			const D = Math.max(-s.D[t]!, 0);
+			const ch = -s.charged![t]!;
+			const nat = -s.natural![t]!;
+			const where = `EWR site ${s.name} day ${t}`;
+			if (ch < 0 || nat < 0) return `${where}: charged ${-ch} and natural ${-nat} must be ≤ 0`;
+			if (Math.abs(ch + nat - D) > tol(D)) return `${where}: charged ${-ch} + natural ${-nat} ≠ shortfall ${-D}`;
+			if (D === 0 && (ch !== 0 || nat !== 0)) return `${where}: the EWR is met but ${-ch} is charged`;
+			let sumR = 0;
+			for (const f of s.farms) sumR -= F.get(f.id)!.R[t]!;
+			if (sumR < ch - tol(ch)) return `${where}: the farms upstream carry ${sumR} in all, less than the ${ch} charged`;
+			if (!s.exact || D === 0) continue;
+			let E = 0;
+			let scale = D;
+			const e = s.farms.map((f) => {
+				const x = F.get(f.id)!;
+				const v = x.H[t]! + x.I[t]! + x.J[t]! - x.U[t]!;
+				scale = Math.max(scale, Math.abs(x.H[t]!) + Math.abs(x.I[t]!) + Math.abs(x.J[t]!), Math.abs(x.U[t]!));
+				E += Math.max(v, 0);
+				return Math.max(v, 0);
+			});
+			if (Math.abs(ch - Math.min(D, E)) > tol(scale)) return `${where}: charged ${-ch} ≠ MIN(shortfall ${D}, Σ net impact ${E})`;
+			s.farms.forEach((f, k) => {
+				const A = E > 0 ? (ch * e[k]!) / E : 0;
+				best.set(f.id, Math.max(best.get(f.id) ?? 0, A));
+			});
+			for (const [k, f] of s.farms.entries()) {
+				const A = E > 0 ? (ch * e[k]!) / E : 0;
+				if (-F.get(f.id)!.R[t]! < A - tol(scale)) return `${f.id} day ${t}: EWR charge ${-F.get(f.id)!.R[t]!} below its share ${A} at site ${s.name}`;
+			}
+		}
+		for (const f of farms) {
+			const x = F.get(f.id)!;
+			const R = -x.R[t]!;
+			const Ri = -x.Ri[t]!;
+			const where = `${f.id} day ${t}`;
+			if (R < 0 || Ri < 0 || Ri > R + tol(R)) return `${where}: EWR charge ${-R} and its irrigation part ${-Ri} must satisfy charge ≤ irrigation part ≤ 0`;
+			if (Ri > x.G[t]! * x.k + tol(x.G[t]!)) return `${where}: irrigation part ${Ri} of the EWR charge > consumptive irrigation ${x.G[t]! * x.k}`;
+			if (allExact.get(f.id) && Math.abs(R - (best.get(f.id) ?? 0)) > tol(Math.max(R, x.U[t]!, x.H[t]! + x.I[t]!))) return `${where}: EWR charge ${-R} ≠ its largest share ${best.get(f.id) ?? 0} over the sites below it`;
+		}
+	}
+	return null;
+}
+
 /** Every per-run invariant. */
 export function checkInvariants(input: ModelInput, out: ModelOutput): string | null {
 	return (
@@ -583,6 +692,7 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkSoilWater(input, out) ??
 		checkRunoffBalance(input, out) ??
 		checkTransferLimits(input, out) ??
-		checkReportTotals(input, out)
+		checkReportTotals(input, out) ??
+		checkEwrAttribution(input, out)
 	);
 }

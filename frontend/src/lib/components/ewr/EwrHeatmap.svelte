@@ -114,7 +114,7 @@
 					<select id="{uid}-site" bind:value={site}>
 						<option value="outlet">Outlet ({compliance.outlet.name})</option>
 						{#each compliance.farms as f (f.nodeId)}
-							<option value={f.nodeId}>{f.name} (shortfall it adds)</option>
+							<option value={f.nodeId}>{f.name} (EWR charge)</option>
 						{/each}
 					</select>
 				</div>
@@ -208,7 +208,7 @@
 			{#if site === 'outlet'}
 				A day counts when simulated outflow at the outlet is below the pragmatic EWR.
 			{:else}
-				A day counts when this farm adds to the EWR shortfall (its incremental shortfall is below zero).
+				A day counts when this farm is charged part of the shortfall at an EWR site below it (runs before engine 0.17.0: when its reach shortfall was below zero).
 			{/if}
 			Cells show {metric === 'pct' ? '% of the month’s days' : 'shortfall volume (k = thousand m³, M = million m³)'}; blank = met every
 			day. The "All years" row is the share of days not met in that month across all years. Use the arrow keys to move between months.

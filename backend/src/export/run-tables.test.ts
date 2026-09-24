@@ -2,6 +2,8 @@ import { FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance,
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
+	curtailmentLines,
+	ewrSiteLines,
 	zeroRainLines,
 	columnGuideLines,
 	nodeColumnHeader,
@@ -64,9 +66,10 @@ describe('summary sheet', () => {
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
-		// blocks are separated by empty records (run, self-checks, farms, catchment, water balance,
-		// CHIRPS factors, rain treated as missing, calibration, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(9);
+		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
+		// EWR sites, water balance, CHIRPS factors, rain treated as missing, calibration, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(11);
+		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -93,6 +96,72 @@ describe('summary sheet', () => {
 		expect(lines).toContain('kge,0.4');
 		expect(lines.some((l) => l.includes('calibration not computed'))).toBe(true);
 		expect(lines).not.toContain('Warnings');
+	});
+});
+
+describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
+	const farm = {
+		nodeId: 'n1',
+		name: 'Farm, upper',
+		demandM3Day: 100,
+		suppliedM3Day: 80,
+		deficitM3Day: -20,
+		fractionSupplied: 0.8,
+		targetM3Day: 80,
+		reduceGainM3Day: 0,
+		reduceGainLs: 0,
+		targetFraction: 0.8,
+		ewrShortfallM3Day: -30,
+		totalChangeM3Day: -30,
+		totalChangeLs: -30 / 86.4,
+		volumeLeftM3Day: 50,
+		fractionOfDemandLeft: 0.5,
+		ewrChargeIrrigationM3Day: -12,
+		ewrChargeStorageM3Day: -18,
+		ewrSupplyCutM3Day: -16,
+		ewrSupplyCutLs: -16 / 86.4,
+		ewrBindingSiteId: 'g1'
+	};
+	const c: NonNullable<RunSummary['curtailment']> = {
+		reportStart: '2000-01-01',
+		reportEnd: '2000-12-31',
+		days: 366,
+		equitableFraction: 0.8,
+		farms: [farm],
+		ewrAttribution: 'netImpactProRata',
+		ewrSites: [
+			{ nodeId: 'o', name: 'Outlet', isOutlet: true, farmCount: 1, daysNotMet: 10, shortfallM3Day: -40, chargedM3Day: -30, naturalM3Day: -10 },
+			{ nodeId: 'g1', name: 'Weir', isOutlet: false, farmCount: 1, daysNotMet: 4, shortfallM3Day: -30, chargedM3Day: -30, naturalM3Day: 0 }
+		],
+		totals: { demandM3Day: 100, suppliedM3Day: 80, deficitM3Day: -20, targetM3Day: 80, reduceGainM3Day: 0, reduceGainLs: 0, ewrShortfallM3Day: -30, ewrChargeIrrigationM3Day: -12, ewrChargeStorageM3Day: -18, ewrSupplyCutM3Day: -16, totalChangeM3Day: -30, volumeLeftM3Day: 50 }
+	};
+
+	it('names the attribution rule and writes the charge split, supply cut and binding site unrounded', () => {
+		const lines = [...curtailmentLines(c)];
+		expect(lines[0]).toBe('Curtailment targets');
+		expect(lines).toContain('EWR attribution,"net impact pro rata (Q17), sites: outlet + gauges (2)"');
+		const header = lines.find((l) => l.startsWith('Farm,'))!.split(',');
+		const row = lines.find((l) => l.startsWith('"Farm, upper"'))!.replace('"Farm, upper"', 'F').split(',');
+		const at = (h: string) => row[header.indexOf(h)];
+		expect(at('EWR charge [R] (m³/day)')).toBe('-30');
+		expect(at('EWR charge met by irrigating less (m³/day)')).toBe('-12');
+		expect(at('EWR charge met by storing less / passing inflow (m³/day)')).toBe('-18');
+		expect(at('Supply cut for the EWR (m³/day)')).toBe('-16');
+		expect(Number(at('Supply cut for the EWR (l/s)'))).toBeCloseTo(-16 / 86.4, 12);
+		expect(at('EWR site setting the charge')).toBe('Weir');
+		expect(lines.at(-1)!.split(',')).toHaveLength(header.length);
+	});
+
+	it('lists every EWR site; charged + natural = shortfall', () => {
+		const lines = [...ewrSiteLines(c)];
+		expect(lines.slice(2)).toEqual(['Outlet,yes,1,10,-40,-30,-10', 'Weir,no,1,4,-30,-30,0']);
+	});
+
+	it('says what an older run did', () => {
+		const { ewrSites: _s, ewrAttribution: _a, ...old } = c;
+		expect([...ewrSiteLines(old)][1]).toMatch(/before engine 0\.17\.0/);
+		expect([...curtailmentLines(old)]).toContain('EWR attribution,run made before engine 0.17.0: incremental shortfall (workbook AB)');
+		expect([...curtailmentLines(undefined)][1]).toMatch(/before engine 0\.3\.0/);
 	});
 });
 

@@ -103,7 +103,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		ewr: 0,
 		ewr_cumulative: 0,
 		ewr_shortfall: 0,
-		ewr_shortfall_incremental: 0
+		ewr_shortfall_incremental: 0,
+		ewr_charge: 0,
+		ewr_charge_irrigation: 0
 	}).map(([key, value]) => ({ key, label: key, unit: 'm³/day', value })),
 	...over
 });

@@ -7,7 +7,7 @@ import { runModel } from '../run';
 import { checkInvariants } from '../verify/checks';
 import { cloneInput, scrambleOrder } from './fuzz';
 
-export { checkBalance, checkInvariants, checkReportTotals, checkRunoffBalance, checkTransferLimits, checkWorkings } from '../verify/checks';
+export { checkBalance, checkEwrAttribution, checkInvariants, checkReportTotals, checkRunoffBalance, checkTransferLimits, checkWorkings } from '../verify/checks';
 
 /**
  * Deep equality for two runs of the same model. NaN equals NaN; whole numbers

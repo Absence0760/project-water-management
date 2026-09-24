@@ -1,7 +1,7 @@
 // View model for CurtailmentTable: turns RunSummary.curtailment (engine,
 // b023 [Shortfalls]) into display rows. Kept free of Svelte so it can be
 // unit-tested. Sign convention throughout: negative = reduce, positive = gain.
-import type { CurtailmentFarm, CurtailmentSummary } from '@water-management/engine';
+import type { CurtailmentFarm, CurtailmentSummary, EwrSiteSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 
 /** What a farm has to do overall (total change = reduce/gain + EWR shortfall). */
@@ -40,7 +40,16 @@ export interface CurtailmentRow {
 	target: string;
 	reduceGain: string;
 	reduceGainLs: string;
+	/** R: the farm's EWR charge (engine ≥ 0.17.0; AB before). */
 	ewrShortfall: string;
+	/** R_irr and R_store (engine ≥ 0.17.0); "–" on older runs. */
+	ewrIrrigation: string;
+	ewrStorage: string;
+	/** −ΔG, the supply cut that meets R_irr (m³/day and l/s); "–" on older runs. */
+	supplyCut: string;
+	supplyCutLs: string;
+	/** Name of the EWR site that set most of the charge; "" when not charged or on older runs. */
+	bindingSite: string;
 	totalChange: string;
 	totalChangeLs: string;
 	volumeLeft: string;
@@ -61,6 +70,7 @@ function verdict(f: CurtailmentFarm, action: Action): string {
  * keep the name stored with the run.
  */
 export function curtailmentRows(c: CurtailmentSummary, names: Record<string, string> = {}): CurtailmentRow[] {
+	const siteName = new Map((c.ewrSites ?? []).map((s) => [s.nodeId, names[s.nodeId] ?? s.name]));
 	return c.farms.map((f) => {
 		const action = actionOf(f.totalChangeM3Day);
 		return {
@@ -74,6 +84,11 @@ export function curtailmentRows(c: CurtailmentSummary, names: Record<string, str
 			reduceGain: fmtSigned(f.reduceGainM3Day),
 			reduceGainLs: fmtSigned(f.reduceGainLs),
 			ewrShortfall: fmtSigned(f.ewrShortfallM3Day, 0),
+			ewrIrrigation: fmtSigned(f.ewrChargeIrrigationM3Day, 0),
+			ewrStorage: fmtSigned(f.ewrChargeStorageM3Day, 0),
+			supplyCut: fmtSigned(f.ewrSupplyCutM3Day),
+			supplyCutLs: fmtSigned(f.ewrSupplyCutLs),
+			bindingSite: f.ewrBindingSiteId ? (siteName.get(f.ewrBindingSiteId) ?? names[f.ewrBindingSiteId] ?? f.ewrBindingSiteId) : '',
 			totalChange: fmtSigned(f.totalChangeM3Day),
 			totalChangeLs: fmtSigned(f.totalChangeLs),
 			volumeLeft: fmtVol(f.volumeLeftM3Day),
@@ -81,6 +96,32 @@ export function curtailmentRows(c: CurtailmentSummary, names: Record<string, str
 			verdict: verdict(f, action)
 		};
 	});
+}
+
+export interface EwrSiteRow {
+	nodeId: string;
+	name: string;
+	farmCount: number;
+	daysNotMet: string;
+	shortfall: string;
+	charged: string;
+	natural: string;
+}
+
+/**
+ * The EWR sites (engine ≥ 0.17.0, audit Q17): outlet first, then gauges.
+ * Empty for older runs, which assessed the EWR farm by farm (AB).
+ */
+export function ewrSiteRows(c: CurtailmentSummary, names: Record<string, string> = {}): EwrSiteRow[] {
+	return (c.ewrSites ?? []).map((s: EwrSiteSummary) => ({
+		nodeId: s.nodeId,
+		name: `${names[s.nodeId] ?? s.name}${s.isOutlet ? ' (outlet)' : ''}`,
+		farmCount: s.farmCount,
+		daysNotMet: fmtNum(s.daysNotMet),
+		shortfall: fmtSigned(s.shortfallM3Day, 0),
+		charged: fmtSigned(s.chargedM3Day, 0),
+		natural: fmtSigned(s.naturalM3Day, 0)
+	}));
 }
 
 /** How many farms have to cut overall. */

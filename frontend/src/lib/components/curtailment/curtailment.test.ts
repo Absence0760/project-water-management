@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CurtailmentFarm, CurtailmentSummary } from '@water-management/engine';
-import { actionOf, curtailmentRows, cutCount, fmtSigned, fmtVol } from './curtailment';
+import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtSigned, fmtVol } from './curtailment';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -117,5 +117,46 @@ describe('curtailmentRows', () => {
 
 	it('counts the farms that must cut', () => {
 		expect(cutCount(c)).toBe(1);
+	});
+
+	it('shows "–" for the EWR split on a run made before engine 0.17.0', () => {
+		const [a] = curtailmentRows(c);
+		expect(a).toMatchObject({ ewrIrrigation: '–', ewrStorage: '–', supplyCut: '–', supplyCutLs: '–', bindingSite: '' });
+	});
+});
+
+describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
+	const c: CurtailmentSummary = {
+		...summary([
+			farm({
+				nodeId: 'a',
+				ewrShortfallM3Day: -30,
+				ewrChargeIrrigationM3Day: -12,
+				ewrChargeStorageM3Day: -18,
+				ewrSupplyCutM3Day: -16,
+				ewrSupplyCutLs: -16 / 86.4,
+				ewrBindingSiteId: 'g'
+			}),
+			farm({ nodeId: 'b', ewrChargeIrrigationM3Day: 0, ewrChargeStorageM3Day: 0, ewrSupplyCutM3Day: 0, ewrSupplyCutLs: 0, ewrBindingSiteId: null })
+		]),
+		ewrAttribution: 'netImpactProRata',
+		ewrSites: [
+			{ nodeId: 'o', name: 'Outlet gauge', isOutlet: true, farmCount: 2, daysNotMet: 40, shortfallM3Day: -50, chargedM3Day: -30, naturalM3Day: -20 },
+			{ nodeId: 'g', name: 'Weir', isOutlet: false, farmCount: 1, daysNotMet: 3, shortfallM3Day: -30, chargedM3Day: -30, naturalM3Day: 0 }
+		]
+	};
+
+	it('splits the charge into irrigate less and store less, with the supply cut and the binding site', () => {
+		const [a, b] = curtailmentRows(c, { g: 'Weir (renamed)' });
+		expect(a).toMatchObject({ ewrShortfall: '-30', ewrIrrigation: '-12', ewrStorage: '-18', supplyCut: '-16', supplyCutLs: '-0.2', bindingSite: 'Weir (renamed)' });
+		expect(b).toMatchObject({ ewrIrrigation: '0', ewrStorage: '0', supplyCut: '0', bindingSite: '' });
+	});
+
+	it('lists each EWR site with its days not met, shortfall, charged and natural parts', () => {
+		expect(ewrSiteRows(c)).toEqual([
+			{ nodeId: 'o', name: 'Outlet gauge (outlet)', farmCount: 2, daysNotMet: '40', shortfall: '-50', charged: '-30', natural: '-20' },
+			{ nodeId: 'g', name: 'Weir', farmCount: 1, daysNotMet: '3', shortfall: '-30', charged: '-30', natural: '0' }
+		]);
+		expect(ewrSiteRows(summary([]))).toEqual([]);
 	});
 });

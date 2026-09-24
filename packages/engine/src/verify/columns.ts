@@ -47,7 +47,14 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
 	{ key: 'ewr_shortfall', letter: 'AA', formula: 'MIN(U − Z, 0)' },
-	{ key: 'ewr_shortfall_incremental', letter: 'AB', formula: 'MIN(AA − Σ AA of the elements directly upstream, 0)' }
+	{ key: 'ewr_shortfall_incremental', letter: 'AB', formula: 'reach shortfall, a diagnostic only (engine ≥ 0.17.0): MIN(AA − Σ AA of the elements directly upstream, 0)' },
+	{
+		key: 'ewr_charge',
+		letter: null,
+		formula:
+			"−(largest over the EWR sites below it of D × MAX(e, 0) ÷ Σ MAX(e, 0)), with D = MIN(site shortfall, Σ MAX(e, 0)) and e = H + I + J − U counting only transfers with both ends upstream of the site (audit Q17)"
+	},
+	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */
@@ -55,5 +62,7 @@ export const GAUGE_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'inflow_upstream', letter: 'G', formula: 'Σ outflow U of the elements directly upstream' },
 	{ key: 'outflow', letter: null, formula: 'the same as the inflow: a gauge only measures' },
 	{ key: 'ewr_cumulative', letter: 'H', formula: 'Σ Z of the elements directly upstream' },
-	{ key: 'ewr_shortfall', letter: 'I', formula: 'MIN(flow − required EWR, 0)' }
+	{ key: 'ewr_shortfall', letter: 'I', formula: 'MIN(flow − required EWR, 0)' },
+	{ key: 'ewr_charged', letter: null, formula: '−MIN(shortfall, Σ MAX(e, 0)) over the farms upstream, e = H + I + J − U with only the transfers inside the gauge’s catchment (audit Q17)' },
+	{ key: 'ewr_natural', letter: null, formula: 'shortfall − charged: the part natural flow already missed' }
 ];

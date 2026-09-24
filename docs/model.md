@@ -670,7 +670,7 @@ storage to whole m³; the engine doesn't (R1).
 | Y | Fragmented EWR | §2.5 |
 | Z | Cumulative EWR | `Y + Σ Z` of the elements directly upstream (see quirk Q4) |
 | AA | EWR shortfall (−) | `MIN(U − Z, 0)` |
-| AB | Incremental EWR shortfall (−) | `MIN(AA − Σ AA of the elements directly upstream, 0)` |
+| AB | Incremental EWR shortfall (−), the **reach shortfall** | `MIN(AA − Σ AA of the elements directly upstream, 0)`. From engine 0.17.0 a diagnostic only: curtailment uses the EWR charge (§2.7b, Q17) |
 
 Initial storage = `initialPct × damCapacity` (workbook: `ROUND(initialPct × ROUND(damCapacity, 0), 0)`).
 
@@ -781,11 +781,110 @@ simulator records them only for a saved run (`simulateNetwork(plan, {
 workings: true })`), so calibration's thousands of runs don't pay for them.
 Runs saved before 0.12.0 don't have them.
 
+### 2.7b EWR attribution: who is charged for a shortfall (engine ≥ 0.17.0, audit Q17)
+
+**Decided on a simulated CMA-assessor recommendation (2026-09-24), pending
+the real assessor and hydrologist.** The workbook charges each farm its
+incremental shortfall AB (§2.7), which does not add up to the outlet
+shortfall, charges a farm for a reach the next farm makes good, never credits
+a farm that adds water, and can ask a farm to give up more than it took
+(quirk Q17). The engine (`network/attribution.ts`) instead assesses the EWR at
+**EWR sites** and charges each site's shortfall to the farms upstream of it in
+proportion to their net impact. AB stays in the output as the diagnostic
+**reach shortfall**; it no longer drives curtailment.
+
+**EWR sites** are the catchment outlet (simulated outflow against the full
+pragmatic EWR, the catchment `ewr_shortfall`) and every gauge (its flow
+against the EWR of everything upstream, `MIN(ΣU − ΣZ, 0)`, G1). With no gauge
+the outlet is the only site, and the curtailment panel says so: *EWR assessed
+at 1 site (outlet). Add gauges at the Reserve determination's EWR sites to
+protect upstream reaches.* Reserve compliance is judged at EWR sites (DWS
+Reserve determinations and RQOs are set per resource unit / EWR site), not
+per property.
+
+For site *s* on day *t* (shortfalls as positive magnitudes here; the run
+series keep the engine's ≤ 0 sign):
+
+```
+D_s     = MAX(Z_s − U_s, 0)                         the site's shortfall (noise below 1e-12 of the volumes = 0)
+F_s     = the farms whose outflow reaches s (the site's own node when it is a farm)
+e_f,s   = H + I + J_int − U                         net impact of farm f ∈ F_s
+          J_int counts only the transfers with BOTH ends in F_s
+e⁺      = MAX(e, 0)                                 (noise below 1e-12 of the farm's volumes = 0)
+E_s     = Σ_{f ∈ F_s} e⁺_f,s
+D*_s    = MIN(D_s, E_s)                             charged to farms   (series ewr_charged = −D*)
+N_s     = D_s − D*_s                                natural            (series ewr_natural = −N)
+A_f,s   = D*_s × e⁺_f,s / E_s                       (every A = 0, N = D when E_s = 0)
+R_f     = MAX over the sites f is upstream of of A_f,s   (series ewr_charge = −R)
+```
+
+- **Net impact.** By the farm balance, `e = (G − T) + E_dam − Pd + ΔQ +
+  exports − imports`: consumptive irrigation, dam evaporation net of rain on
+  the dam, storage gain, and water sent out of the site's catchment. With the
+  outlet as the only site, `J_int = J` and `e = (H + I + J) − U`. A transfer
+  out of *s*'s catchment really depletes *s*, so its source is charged for it;
+  an import is credited to its receiver; a transfer inside the catchment moves
+  the charge to whoever consumes the water.
+- **A farm that adds water** that day (a dam release, return flow above its
+  take: `e ≤ 0`) is neither charged nor credited; its addition is already in
+  `U_s`.
+- **Natural shortfall.** When natural flow was already below the EWR, the
+  farms' whole impact is smaller than the shortfall. They are charged at most
+  what they took (`A ≤ e⁺`); the rest, `N_s`, is what the EWR sites table
+  reports as natural. No fallback to area or demand shares: that would charge
+  users for a drought they did not cause.
+- **Several sites.** A farm upstream of two or more sites carries the largest
+  of its charges, not the sum: a cut upstream raises the flow at every site
+  below it, so summing counts the same water twice. The site that sets it is
+  the **binding site** (on a tie within 1e-9, the most downstream one); the
+  curtailment table names the site that set most of the charged volume over
+  the reporting window. *Known limitation:* a cut upstream can be recaptured
+  by a dam between two nested sites; only a re-run with the cuts applied can
+  show that.
+- **Order-free.** Pro rata is symmetric, sums run over sets, and ties go by
+  position in the network, so listing the nodes, sites or transfers in another
+  order gives the same charges (the order-invariance check has no exemption).
+
+**Irrigation and storage parts (audit Q13).** A licence condition has to be
+something the user can comply with, so each day's charge `A = R_f` splits by
+the channel of impact, at the binding site's `e`:
+
+```
+c      = G − T = G × (1 − β(1 − e_irr))             consumptive irrigation (T the N1 return flow)
+o      = e − c                                      storage gain and net export
+A_irr  = A × c / (c + MAX(o, 0))   (0 when c + MAX(o, 0) = 0)     series ewr_charge_irrigation = −A_irr
+A_store = A − A_irr                                 "store less / pass inflow"
+```
+
+When `o ≤ 0` all of `A` is irrigation, which is safe because `A ≤ e⁺ ≤ c`;
+in every case `A_irr ≤ c`. A farm with no irrigation (`G = 0`) gets an
+irrigation part of 0, so its whole charge is a storage or release condition.
+**Supply cut.** Supplying ΔG less removes ΔG of abstraction but only
+ΔG × (1 − β(1 − e_irr)) of consumptive use, because the share β of the losses
+`(1 − e_irr)·ΔG` would have returned to the river anyway (N1). The cut that
+removes `A_irr` of consumptive use is therefore
+
+```
+ΔG = A_irr / (1 − β(1 − e_irr))                     (the denominator ≥ e_irr > 0)
+```
+
+and `ΔG ≤ G`, since `A_irr ≤ c = G(1 − β(1 − e_irr))`. §2.11 averages these
+over the reporting window.
+
+**Checks.** `checkEwrAttribution` (per saved run, `verify/checks.ts`) and the
+random-network tests (`network/attribution.test.ts`, the fuzz soak) assert:
+per site per day `Σ A + N = D` and `N ≥ 0`; `0 ≤ A ≤ e⁺`; `A = 0` for a farm
+not upstream of the site or with `e ≤ 0`; `D = 0 ⇒` every `A = 0`;
+`E = 0 ⇒ N = D`; `R = MAX_s A`; `R ≥ A_irr ≥ 0` and `A_irr ≤ c`; and order
+invariance. The per-run check recomputes a site exactly where no transfer
+crosses its catchment boundary (always the outlet), because per-rule transfer
+volumes are not run series.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
 | --- | --- | --- |
-| `[EWR shortfalls]` | Per day: unfragmented EWR, EWR volume not met at the gauge, a not-met flag, Σ incremental farm shortfalls, and per-farm incremental shortfall | Run series (`ewr_*` keys) + chart |
+| `[EWR shortfalls]` | Per day: unfragmented EWR, EWR volume not met at the gauge, a not-met flag, Σ incremental farm shortfalls, and per-farm incremental shortfall | Run series (`ewr_*` keys) + chart. From engine 0.17.0 also each EWR site's charged and natural parts (`ewr_charged`, `ewr_natural`) and each farm's charge (`ewr_charge`, `ewr_charge_irrigation`), §2.7b |
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
@@ -801,7 +900,9 @@ then shows it as farm × month.
 
 The engine's `ewrCompliance` (`network/ewr.ts`) builds the same grid, laid
 out as **water-year rows × Oct…Sep columns**, for the outlet (simulated
-outflow vs the full pragmatic EWR, i.e. `[Flow data]` AK) and for each farm
+outflow vs the full pragmatic EWR, i.e. `[Flow data]` AK) and for each farm:
+from engine 0.17.0 its EWR charge (`ewr_charge`, §2.7b: days charged and the
+volume charged), before that its incremental shortfall
 (`ewr_shortfall_incremental`). Each cell holds the days simulated, the days
 not met and the shortfall volume (m³, positive).
 
@@ -1389,8 +1490,9 @@ share is the farm's **target volume**. A farm that received more than its
 target must **reduce** by the difference; one that received less may
 **gain**. Across all farms these reductions and gains cancel out (up to
 rounding), so this step only *redistributes* water. The farm's average **EWR
-shortfall** (the incremental shortfall it causes, §2.7 AB) is then added on
-top. The result is the **total change** that both balances irrigation and
+charge** is then added on top: from engine 0.17.0 its share of the shortfall
+at the EWR sites below it (§2.7b, Q17), where the workbook uses the
+incremental shortfall it causes (§2.7 AB). The result is the **total change** that both balances irrigation and
 meets the EWR, and **target + EWR shortfall** is the volume the farm has left
 to irrigate once both are done.
 
@@ -1412,14 +1514,22 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | N | `reduceGainM3Day` | − = Reduce, + = Gain (m³/day) | `M − I` |
 | O | `reduceGainLs` | − = Reduce, + = Gain (l/s) | `N / 86.4` [sheet: `ROUNDDOWN(…, 1)`, truncated toward zero] |
 | P | `targetFraction` | %Supply (of target) | `IF(H = 0, "-", M / H)` [sheet: `ROUND(…, 3)`]. This is K_tot for every farm with demand |
-| R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | `AVERAGE(incremental EWR shortfall over W)` [sheet: `ROUND(…, 0)`] (≤ 0). The sheet reads it from `[EWR shortfalls]`, which copies Element sheet AB |
+| R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | Engine ≥ 0.17.0: `AVERAGE(−R_f over W)`, the EWR charge (§2.7b, Q17). The sheet: `AVERAGE(incremental EWR shortfall over W)` [`ROUND(…, 0)`] (≤ 0), read from `[EWR shortfalls]`, which copies Element sheet AB |
+| – | `ewrChargeIrrigationM3Day` | – | `AVERAGE(−A_irr over W)`: the part of R met by irrigating less (§2.7b; engine ≥ 0.17.0) |
+| – | `ewrChargeStorageM3Day` | – | `R − R_irr`: the part met by storing less or passing inflow |
+| – | `ewrSupplyCutM3Day`, `ewrSupplyCutLs` | – | `R_irr / (1 − β(1 − e))` (≤ 0): −ΔG, the cut in supply that removes R_irr of consumptive use (§2.7b); l/s = ÷ 86.4 |
+| – | `ewrBindingSiteId` | – | The EWR site that set most of the farm's charged volume over W; null when not charged |
 | S | `totalChangeM3Day` | Total reductions (m³/day) | `N + R` |
 | T | `totalChangeLs` | Total reductions (l/s) | `S / 86.4` [sheet: `ROUNDDOWN(…, 1)`] |
 | U | `volumeLeftM3Day` | Volume left after irrigation balanced & EWR met (m³/day) | `M + R` |
 | V | `fractionOfDemandLeft` | Reduction of demand required (%) | `IF(H = 0, "-", U / H)` [sheet: `ROUND(…, 3)`] (see quirk Q12) |
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
-N, O, R, S and U. (The sheet's l/s total is the sum of the *truncated* farm
+N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store and −ΔG).
+`CurtailmentSummary.ewrSites` lists each EWR site over the same window (outlet
+first, then gauges by node id): farms upstream, days not met, and the mean
+shortfall, charged and natural parts (≤ 0; charged + natural = shortfall);
+`ewrAttribution` names the rule (`netImpactProRata`). (The sheet's l/s total is the sum of the *truncated* farm
 values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
 86 400 s). With nothing rounded, the reductions and gains (N) sum to 0 up to
 floating-point noise.
@@ -1448,7 +1558,7 @@ from the workbook.
 | Q1 | Farm sheet K/L | **"Upstream inflow above dam %" was applied backwards. Resolved (client, 2026-09; engine 0.9.0).** The column's label says "above dam", but the formula put `H × pct` *below* the dam (L) and only `H × (1 − pct)` into the dam (K). The label, the sibling column "Farm runoff above (into) dam %", the `[Models]` sheet ("100%" for a stand-alone dam, "0%" for a natural area) and the South African convention (the Pitman/WRSM farm-dam parameter is the share of the catchment that drains *into* the dams) all mean the share entering the dam, and the client confirmed that meaning. **Fixed:** `K = H × pctUpstreamToDam`, `L = H − K`; the DB column `pct_upstream_to_dam` already has the right name. The client catchment regression replays the workbook with `1 − pct`. On the client catchment the change moves no result measurably, because each farm's diversion capacity already refills its dam; it matters for a dam with little or no diversion. | Existing projects keep their stored values, which now mean what the label says. A project built on the old behaviour with 0 (all into the dam) needs 1 instead. New farms (the editor, the DB column default and the importer's fallback for a farm missing from `[Farm spec]`) start at 1, a dam on the river. |
 | Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). The client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** a rule is capped at the destination's room, cap − storage[t−1] + its demand that day (§2.6); transfers stay settled before irrigation, so the source doesn't irrigate first. | Confirm both rules. |
-| Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
+| Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. Attribution is Q17 (decided, engine 0.17.0). | Only the doc was wrong; results unchanged. |
 | Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
@@ -1461,7 +1571,7 @@ from the workbook.
 | Q14 | Shortfalls K total | `K_tot = ΣI / ΣH` has no zero guard. With no demand in the window the workbook shows `#DIV/0!` in every target. The engine returns `equitableFraction = null` and targets of 0. The sheet also divides the **rounded** farm averages (H, I). **Fixed (engine 0.4.0, audit R1):** the engine uses the unrounded averages. | Cosmetic. The rounding effect was at most ½ m³/day per farm. |
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
-| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) is still **mirrored**. | Decides whether the EWR has to be met reach by reach (current maths) or only at the outlet or other gauges. It changes every farm's curtailment. |
+| Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. | Confirm the rule and the site list (a per-gauge EWR-site flag and gazetted tables are WP-3.7). It changes every farm's curtailment. |
 | Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment has only one transfer, so no result is affected. **Mirrored for now.** The engine should split the available volume in rule order, which makes no difference when the draws fit. That is an engine change for a later round (see docs/engine-review.md F1). **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
 
 ---
@@ -1595,7 +1705,8 @@ text:
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − storage[t−1] + demand D (N4). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
-| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
+| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
+| `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
@@ -1621,8 +1732,8 @@ outlive the problem. From a June start, 20 mm returns 1.05× its rain and
 **Every saved run checks itself (engine ≥ 0.12.0).** The backend saves runs
 through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
-`checkBalance`, `checkWorkings`, `checkRunoffBalance`, `checkTransferLimits`
-and `checkReportTotals`. Each runs separately, so one failure doesn't hide
+`checkBalance`, `checkWorkings`, `checkSoilWater`, `checkRunoffBalance`, `checkTransferLimits`,
+`checkReportTotals` and (engine ≥ 0.17.0) `checkEwrAttribution`. Each runs separately, so one failure doesn't hide
 another, and a check that throws counts as failed with the reason. The result
 is `RunSummary.verification`: pass/fail per check, the first broken property
 with node ids and day numbers turned into farm names and dates, and the largest

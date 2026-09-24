@@ -9,7 +9,7 @@ const farm = (id: string, demand: number[], supplied: number[], ewr: number[]): 
 	name: id,
 	demand,
 	supplied,
-	ewrShortfallIncremental: ewr
+	ewrCharge: ewr
 });
 const win = (from: number, to: number) => ({ from, to, reportStart: 'S', reportEnd: 'E' });
 
@@ -26,7 +26,7 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 
 	const close = (got: number | null | undefined, want: number) => expect(got).toBeCloseTo(want, 9);
 
-	it('averages demand, supply and incremental EWR shortfall over the window, unrounded [H, I, R]', () => {
+	it('averages demand, supply and the EWR charge over the window, unrounded [H, I, R]', () => {
 		expect([a!.demandM3Day, a!.suppliedM3Day, a!.ewrShortfallM3Day]).toEqual([100, 100, -5]);
 		expect([b!.demandM3Day, b!.suppliedM3Day, b!.ewrShortfallM3Day]).toEqual([200, 100, 0]);
 		// The sheet shows ROUND(-0.75) = -1; the engine keeps the mean (audit R1).
@@ -114,6 +114,33 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		const lone = computeCurtailment([farm('L', [8 / 7], [5 / 7], [0])], win(0, 0));
 		expect(lone.farms[0]!.reduceGainM3Day).toBe(0);
 		expect(lone.farms[0]!.totalChangeM3Day).toBe(0);
+	});
+
+	it('splits R into irrigation and storage parts, and the supply cut ΔG = R_irr ÷ k (Q17)', () => {
+		// Charge −10 a day, of which −6 is irrigation; k = 1 − β(1 − e) = 0.75 → ΔG = 8.
+		const f: CurtailmentInput = { ...farm('F', [100, 100], [50, 50], [-10, -10]), ewrChargeIrrigation: [-6, -6], consumptivePerSupplied: 0.75, ewrBindingSiteId: 'g1' };
+		const r = computeCurtailment([f], win(0, 1)).farms[0]!;
+		expect(r.ewrShortfallM3Day).toBe(-10);
+		expect(r.ewrChargeIrrigationM3Day).toBe(-6);
+		expect(r.ewrChargeStorageM3Day).toBe(-4);
+		close(r.ewrSupplyCutM3Day, -8);
+		close(r.ewrSupplyCutLs, -8 / 86.4);
+		expect(r.ewrBindingSiteId).toBe('g1');
+	});
+
+	it('without an irrigation split the whole charge is irrigation, with k = 1', () => {
+		const r = computeCurtailment([farm('F', [100], [50], [-10])], win(0, 0)).farms[0]!;
+		expect([r.ewrChargeIrrigationM3Day, r.ewrChargeStorageM3Day, r.ewrSupplyCutM3Day, r.ewrBindingSiteId]).toEqual([-10, 0, -10, null]);
+	});
+
+	it('summarises each EWR site over the window: days not met, shortfall, charged and natural (Q17)', () => {
+		const k = computeCurtailment([farm('F', [1, 1, 1], [1, 1, 1], [0, 0, 0])], win(1, 2), [
+			{ nodeId: 'out', name: 'Outlet', isOutlet: true, farmCount: 3, shortfall: [-9, -10, 0], charged: [-9, -4, 0], natural: [0, -6, 0] }
+		]);
+		expect(k.ewrAttribution).toBe('netImpactProRata');
+		expect(k.ewrSites).toEqual([
+			{ nodeId: 'out', name: 'Outlet', isOutlet: true, farmCount: 3, daysNotMet: 1, shortfallM3Day: -5, chargedM3Day: -2, naturalM3Day: -3 }
+		]);
 	});
 
 	it('rejects an empty window', () => {

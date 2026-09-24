@@ -78,7 +78,9 @@ The page has these sections, top to bottom:
    side, stacked on narrow screens. Compare runs over the same observed days:
    if the day counts differ, part of the difference comes from the record.
 5. **Farms.** One row per farm with run B's value and the change from A for
-   demand, supplied, deficit, % supplied, EWR shortfall and days EWR not met.
+   demand, supplied, deficit, % supplied, EWR charge and days charged for the
+   EWR (engine ≥ 0.17.0, audit Q17; a run from an older engine holds its reach
+   shortfall AB there, so compare runs of the same engine).
    Click a column heading to sort by that change. Farms that exist in only one
    run are listed underneath.
 6. **Hydrograph.** One catchment series (simulated outflow by default) from

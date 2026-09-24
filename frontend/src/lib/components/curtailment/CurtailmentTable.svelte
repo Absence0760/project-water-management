@@ -7,7 +7,7 @@
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
-	import { curtailmentRows, cutCount, fmtSigned, fmtVol } from './curtailment';
+	import { curtailmentRows, cutCount, ewrSiteRows, fmtSigned, fmtVol } from './curtailment';
 
 	let {
 		summary,
@@ -21,6 +21,9 @@
 	const c = $derived(summary.curtailment ?? null);
 	const rows = $derived(c ? curtailmentRows(c, farmNames) : []);
 	const cuts = $derived(c ? cutCount(c) : 0);
+	const sites = $derived(c ? ewrSiteRows(c, farmNames) : []);
+	/** Engine ≥ 0.17.0: R is the EWR charge at the EWR sites, split by what the farm can change (audit Q17). */
+	const attributed = $derived(!!c?.ewrAttribution);
 </script>
 
 <section class="curtailment" aria-labelledby="curtailment-heading">
@@ -44,7 +47,7 @@
 		<p class="muted small">
 			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = may gain.
 			<em>Reduce/gain</em> shares irrigation fairly (target − supplied). <em>Total change</em> also removes the
-			farm's EWR shortfall. 1 l/s = 86.4 m³/day.
+			farm's {attributed ? 'EWR charge' : 'EWR shortfall'}. 1 l/s = 86.4 m³/day.
 			{#if cuts}
 				<span class="flag-key" aria-hidden="true"></span>
 				{cuts} of {rows.length} farm{rows.length === 1 ? '' : 's'} must cut (highlighted).
@@ -63,7 +66,7 @@
 						<th scope="col" rowspan="2">Farm</th>
 						<th scope="colgroup" colspan="3">Irrigation used</th>
 						<th scope="colgroup" colspan="3">Fair share (ex EWR)</th>
-						<th scope="colgroup" colspan="5">To balance and meet the EWR</th>
+						<th scope="colgroup" colspan={attributed ? 10 : 5}>To balance and meet the EWR</th>
 					</tr>
 					<tr>
 						<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
@@ -72,7 +75,14 @@
 						<th scope="col" class="num">Target<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Reduce / gain<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Reduce / gain<br /><span class="u">l/s</span></th>
-						<th scope="col" class="num">EWR shortfall<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'}<br /><span class="u">m³/day</span></th>
+						{#if attributed}
+							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num" title="The part of the EWR charge met by storing less or passing inflow">Store less / pass inflow<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num" title="The cut in supply that meets the irrigation part: irrigate less ÷ (1 − β(1 − e))">Supply cut<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Supply cut<br /><span class="u">l/s</span></th>
+							<th scope="col">EWR site<br /><span class="u">setting the charge</span></th>
+						{/if}
 						<th scope="col" class="num">Total change<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Total change<br /><span class="u">l/s</span></th>
 						<th scope="col" class="num">Volume left<br /><span class="u">m³/day</span></th>
@@ -97,6 +107,13 @@
 							<td class="num" class:neg={r.reduceGain.startsWith('-')} class:pos={r.reduceGain.startsWith('+')}>{r.reduceGain}</td>
 							<td class="num" class:neg={r.reduceGainLs.startsWith('-')} class:pos={r.reduceGainLs.startsWith('+')}>{r.reduceGainLs}</td>
 							<td class="num" class:neg={r.ewrShortfall.startsWith('-')}>{r.ewrShortfall}</td>
+							{#if attributed}
+								<td class="num" class:neg={r.ewrIrrigation.startsWith('-')}>{r.ewrIrrigation}</td>
+								<td class="num" class:neg={r.ewrStorage.startsWith('-')}>{r.ewrStorage}</td>
+								<td class="num" class:neg={r.supplyCut.startsWith('-')}>{r.supplyCut}</td>
+								<td class="num" class:neg={r.supplyCutLs.startsWith('-')}>{r.supplyCutLs}</td>
+								<td>{r.bindingSite}</td>
+							{/if}
 							<td class="num strong" class:neg={r.action === 'cut'} class:pos={r.action === 'gain'}>{r.totalChange}</td>
 							<td class="num" class:neg={r.totalChangeLs.startsWith('-')} class:pos={r.totalChangeLs.startsWith('+')}>{r.totalChangeLs}</td>
 							<td class="num">{r.volumeLeft}</td>
@@ -114,6 +131,13 @@
 						<td class="num">{fmtSigned(c.totals.reduceGainM3Day)}</td>
 						<td class="num">{fmtSigned(c.totals.reduceGainLs)}</td>
 						<td class="num">{fmtSigned(c.totals.ewrShortfallM3Day, 0)}</td>
+						{#if attributed}
+							<td class="num">{fmtSigned(c.totals.ewrChargeIrrigationM3Day, 0)}</td>
+							<td class="num">{fmtSigned(c.totals.ewrChargeStorageM3Day, 0)}</td>
+							<td class="num">{fmtSigned(c.totals.ewrSupplyCutM3Day)}</td>
+							<td class="num"></td>
+							<td></td>
+						{/if}
 						<td class="num">{fmtSigned(c.totals.totalChangeM3Day)}</td>
 						<td class="num"></td>
 						<td class="num">{fmtVol(c.totals.volumeLeftM3Day)}</td>
@@ -127,6 +151,50 @@
 			“gain” may not be physically reachable. <em>Demand left</em> is volume left ÷ demand (the workbook labels
 			this column “reduction of demand required”).
 		</p>
+		{#if attributed}
+			<p class="muted small note">
+				<strong>EWR charge:</strong> the EWR is assessed at each EWR site (the outlet and every gauge). A site's
+				shortfall is charged to the farms upstream of it in proportion to their net impact that day (inflow + runoff +
+				transfers − outflow); the part the farms did not cause is natural. A farm above several sites carries the
+				largest of its charges. The charge splits by what the farm can change: irrigating less, or storing less and
+				passing inflow.
+			</p>
+		{/if}
+		{#if sites.length}
+			<h4 id="ewr-sites-heading">EWR sites</h4>
+			{#if sites.length === 1}
+				<p class="muted small">
+					EWR assessed at 1 site (outlet). Add gauges at the Reserve determination's EWR sites to protect upstream
+					reaches.
+				</p>
+			{/if}
+			<div class="table-wrap">
+				<table class="data" aria-labelledby="ewr-sites-heading">
+					<thead>
+						<tr>
+							<th scope="col">Site</th>
+							<th scope="col" class="num">Farms upstream</th>
+							<th scope="col" class="num">Days not met</th>
+							<th scope="col" class="num">Shortfall<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Charged to farms<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Natural<br /><span class="u">m³/day</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each sites as s (s.nodeId)}
+							<tr>
+								<th scope="row">{s.name}</th>
+								<td class="num">{s.farmCount}</td>
+								<td class="num">{s.daysNotMet}</td>
+								<td class="num" class:neg={s.shortfall.startsWith('-')}>{s.shortfall}</td>
+								<td class="num" class:neg={s.charged.startsWith('-')}>{s.charged}</td>
+								<td class="num">{s.natural}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 	{/if}
 </section>
 

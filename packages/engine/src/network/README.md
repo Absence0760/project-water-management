@@ -27,8 +27,9 @@ workbook cells.
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
 | `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes; `moriasiRating`. |
-| `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain and total change (m³/day, l/s) over the reporting window → `RunSummary.curtailment`. |
-| `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm. |
+| `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain, the EWR charge and its irrigation / storage split, and total change (m³/day, l/s) over the reporting window, plus the EWR sites table → `RunSummary.curtailment`. |
+| `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm (from engine 0.17.0 the farm's EWR charge). |
+| `attribution.ts` | – (replaces the use of Element sheet AB) | Who is charged for an EWR shortfall (engine ≥ 0.17.0, audit Q17): each EWR site's (outlet, gauges) shortfall pro rata to the upstream farms' net impact, the natural remainder, each farm's largest charge and its irrigation part. docs/model.md §2.7b. |
 | `round.ts` | – | Excel `ROUND` / `ROUNDDOWN`, for tests that replay workbook cells only. |
 
 ## Daily farm balance
@@ -66,7 +67,7 @@ day trace read.
 | Y | `ewr` | EWR × farm share |
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
 | AA | `ewr_shortfall` | MIN(U − Z, 0) |
-| AB | `ewr_shortfall_incremental` | MIN(AA − Σ upstream AA, 0) — the shortfall this farm adds |
+| AB | `ewr_shortfall_incremental` | MIN(AA − Σ upstream AA, 0) — the reach shortfall; a diagnostic from engine 0.17.0, when `attribution.ts` sets the EWR charge (`ewr_charge`, `ewr_charge_irrigation`) instead |
 
 Every MIN(…, 0) shortfall here (AA, AB, the gauge's and the outlet's) goes
 through `shortfall(a, b, scale)`: a difference within 1e-12 of the volumes

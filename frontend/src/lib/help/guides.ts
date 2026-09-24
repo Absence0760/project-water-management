@@ -1022,12 +1022,12 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Reductions and gains cancel across the farms, so this step only redistributes water. Each farm’s average [[ewr-shortfall|EWR shortfall]] is then added on top: the **total change** both balances irrigation and meets the EWR. Negative means reduce.'
+						text: 'Reductions and gains cancel across the farms, so this step only redistributes water. Each farm’s average [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then added on top: the **total change** both balances irrigation and meets the EWR. Negative means reduce.'
 					}
 				]
 			}
 		],
-		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr'],
+		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr', 'ewr-charge', 'ewr-charge-split'],
 		related: ['set-the-ewr', 'run-and-read-results']
 	}
 ];
