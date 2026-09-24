@@ -5,6 +5,7 @@ import {
 	curtailmentLines,
 	ewrSiteLines,
 	zeroRainLines,
+	doubleMassLines,
 	columnGuideLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
@@ -67,8 +68,9 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
-		// EWR sites, water balance, CHIRPS factors, rain treated as missing, calibration, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(11);
+		// EWR sites, water balance, CHIRPS factors, rain treated as missing, double-mass check,
+		// calibration, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(12);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -227,6 +229,48 @@ describe('catchment rain treated as missing block (CR-20)', () => {
 	});
 });
 
+describe('double-mass block (engine ≥ 0.17.0)', () => {
+	const year = (wy: number, ratio: number, cum: number) => ({
+		waterYear: wy, days: 365, catchmentMm: 100 * ratio, chirpsMm: 100, ratio, cumChirpsMm: cum * 100, cumCatchmentMm: cum * 150, residualPct: -2.5
+	});
+	const dm = {
+		years: [year(2001, 1.5, 1), year(2002, 1.5, 2)],
+		skippedYears: [2000],
+		wholeSlope: 1.5,
+		segments: [
+			{ fromWaterYear: 2001, toWaterYear: 2010, years: 10, days: 3650, slope: 1.5 },
+			{ fromWaterYear: 2011, toWaterYear: 2016, years: 6, days: 2190, slope: 2.1 }
+		],
+		breaks: [{ afterWaterYear: 2010, slopeBefore: 1.5, slopeAfter: 2.1, change: 0.4, pettittP: 0.01, bicGain: 9 }]
+	};
+
+	it('lists the slope, segments, breaks and each judged year with units', () => {
+		expect([...doubleMassLines(dm)]).toEqual([
+			'Double-mass check: catchment rain vs CHIRPS',
+			'Whole-record slope: catchment / CHIRPS (×),1.5',
+			'Segment from water year,to water year,Years,Shared days,Slope (×)',
+			'2001,2010,10,3650,1.5',
+			'2011,2016,6,2190,2.1',
+			'Break after water year,Slope before (×),Slope after (×),Change (%),Pettitt p,BIC gain',
+			'2010,1.5,2.1,40,0.01,9',
+			'Water year,Shared days,Catchment rain (mm),CHIRPS (mm),Ratio (×),Cumulative catchment (mm),Cumulative CHIRPS (mm),Residual (%)',
+			'2001,365,150,100,1.5,150,100,-2.5',
+			'2002,365,150,100,1.5,300,200,-2.5',
+			'Water years too short to judge,2000'
+		]);
+	});
+
+	it('says why there is no check, and is part of the summary sheet', () => {
+		expect([...doubleMassLines({ ...dm, breaks: [] })]).toContain('No break found');
+		expect([...doubleMassLines(null)][1]).toMatch(/^Not checked: needs catchment rain and CHIRPS with at least 10 water years of 300\+ shared days/);
+		expect([...doubleMassLines(undefined)][1]).toMatch(/before engine 0\.17\.0/);
+		const lines = [...summaryCsvLines(meta, { ...summary, dataQuality: { observedAgreement: null, doubleMass: dm } })];
+		expect(lines).toContain('Double-mass check: catchment rain vs CHIRPS');
+		expect(lines).toContain('2010,1.5,2.1,40,0.01,9');
+		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.17.0: no double-mass check');
+	});
+});
+
 describe('CHIRPS bias factors block', () => {
 	const month = (m: number, factor: number | null, source: 'month' | 'pooled' | null) => ({
 		month: m, days: 100, catchmentMm: 200, chirpsMm: 100, ownFactor: factor, factor, source, clamped: false, fallbackDays: m === 7 ? 31 : 0
@@ -249,6 +293,29 @@ describe('CHIRPS bias factors block', () => {
 		expect(lines[11]!.split(',')[8]).toBe('31'); // Jul: days CHIRPS filled in
 		expect(lines[14]!.startsWith('Pooled,2,all months together')).toBe(true);
 		expect(lines[15]).toBe('Water years left out of the fit,1999');
+		expect(lines).toHaveLength(16); // a run before engine 0.17.0 says no more
+	});
+
+	it('says why years and days were left out of the fit (engine ≥ 0.17.0)', () => {
+		const lines = [
+			...chirpsFactorLines({
+				...corr,
+				excludedWaterYears: [1996, 1999],
+				lowVsChirpsYears: [1996],
+				doubtfulKeepDry: [{ start: '1999-12-28', end: '2000-02-10', days: 45, chirpsMm: 120, limitMm: 150, waterYears: [1999] }],
+				flaggedDaysLeftOut: 63,
+				missingDaysLeftOut: 5,
+				keptDryDaysInFit: 20
+			})
+		];
+		expect(lines.slice(15)).toEqual([
+			'Water years left out of the fit,1996 1999',
+			'of which far below CHIRPS,1996',
+			'of which a kept-dry run CHIRPS contradicts,1999,1999-12-28 to 2000-02-10,45,CHIRPS on the kept-dry days (mm),120,limit (mm),150',
+			'Days of flagged zero runs left out (treated as missing),63',
+			'Days listed as missing left out,5',
+			'Kept-dry days kept in the fit,20'
+		]);
 	});
 
 	it('says why there are no factors', () => {

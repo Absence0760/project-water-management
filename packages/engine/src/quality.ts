@@ -13,7 +13,9 @@
 // filled-in gap) in each input series, plus two catchment-rain checks for
 // missing data recorded as 0 (issue #2): long zero runs in the wet season
 // (zeroRainRuns) and water years far below CHIRPS (rainVsChirps). A zero is a
-// reading, so it blocks the CHIRPS fallback that a blank day gets.
+// reading, so it blocks the CHIRPS fallback that a blank day gets. The
+// double-mass check against CHIRPS ('doublemass', engine ≥ 0.17.0) lives in
+// ./doublemass.ts, because it needs the zero-rain settings (./rain.ts).
 // areaMismatches: farms whose area is not
 // the sum of their high- and low-MAP areas (engine-review F7).
 //
@@ -189,7 +191,7 @@ function pctText(r: number): string {
 // Series checks: negative values, outliers, flat-lines
 // ---------------------------------------------------------------------------
 
-export type SeriesCheckKind = 'negative' | 'outlier' | 'flatline' | 'zerorun' | 'lowvschirps';
+export type SeriesCheckKind = 'negative' | 'outlier' | 'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass';
 
 export interface SeriesCheck {
 	seriesKind: SeriesKind;
@@ -458,6 +460,20 @@ function monthlyMeans(s: DailySeries): number[] | null {
 	for (let m = 1; m <= 12; m++) if (n[m]! < CLIMATOLOGY_MIN_DAYS_PER_MONTH) return null;
 	const mean = sum.map((x, m) => (m === 0 ? 0 : x / n[m]!));
 	return mean.some((x) => x > 0) ? mean : null;
+}
+
+/** Mean days per calendar month (index 1–12; February averaged over leap years). */
+const MEAN_MONTH_DAYS = [0, 31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * The rain the series' own climatology puts in a year, mm: Σ over the
+ * calendar months of mean daily rain × the month's days. Its means include
+ * any suspect zeros, so it leans low. null when monthlyMeans has no
+ * climatology (a calendar month with too few valid days, or no rain at all).
+ */
+export function usualAnnualRainMm(s: DailySeries): number | null {
+	const mean = monthlyMeans(s);
+	return mean ? mean.reduce((a, x, m) => a + x * MEAN_MONTH_DAYS[m]!, 0) : null;
 }
 
 /**

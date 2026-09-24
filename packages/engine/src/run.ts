@@ -23,6 +23,7 @@ import {
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
 	finishZeroRainInfill,
+	keepDryDoubtWarnings,
 	resolveZeroRain,
 	ZERO_RAIN_COLUMN,
 	zeroRainMask,
@@ -30,6 +31,7 @@ import {
 	type ChirpsCorrection,
 	type ZeroRainMask
 } from './rain';
+import { doubleMass as doubleMassOf, doubleMassCheck, doubleMassRunWarning, type DoubleMass } from './doublemass';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
@@ -109,7 +111,7 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain } = prepareRun(input);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, doubleMass } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -363,6 +365,15 @@ export function runModelWith(
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
 	const checks = seriesChecks(series);
+	// The double-mass check (engine ≥ 0.17.0) follows the catchment rain's own checks.
+	const dmCheck = doubleMassCheck(doubleMass);
+	if (dmCheck) {
+		let at = 0;
+		checks.forEach((c, i) => {
+			if (c.seriesKind === 'rain_catchment_mm') at = i + 1;
+		});
+		checks.splice(at, 0, dmCheck);
+	}
 	for (const c of checks) warnings.push(c.text);
 	const areas = areaMismatches(nodes, settings.flowShareMethod);
 	const areaNote = areaMismatchWarning(areas);
@@ -401,7 +412,7 @@ export function runModelWith(
 			curtailment,
 			ewrCompliance: compliance,
 			...(wr2012 ? { wr2012 } : {}),
-			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
+			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
 			warnings
@@ -432,6 +443,8 @@ export interface PreparedRun {
 	chirpsCorrection: ChirpsCorrection | null;
 	/** Catchment rain days set aside as missing (CR-20; null without a catchment rain series). */
 	zeroRain: ZeroRainMask | null;
+	/** The double-mass check of catchment rain against CHIRPS (engine ≥ 0.17.0; null without both or too few years). */
+	doubleMass: DoubleMass | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
@@ -469,7 +482,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	// reads the rain through `aligned`.
 	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, exclusionRanges(settings.zeroRainRuns.missing));
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns);
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month) : null;
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
@@ -479,6 +492,11 @@ export function prepareRun(input: ModelInput): PreparedRun {
 				: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
+	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
+	// A double-mass break: does CHIRPS fill days in an era whose ratio differs from the fit's?
+	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
+	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), start);
+	if (dmNote) warnings.push(dmNote);
 	if (zeroRain) {
 		const chirps = aligned('rain_chirps_mm');
 		const forecast = aligned('rain_forecast_mm');
@@ -494,7 +512,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		);
 	}
 
-	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain };
+	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, doubleMass };
 }
 
 /**

@@ -428,12 +428,43 @@ models. Correcting the fallback was the first condition for adopting GR4J.
   factor(m) = Σ catchment rain / Σ CHIRPS, over the days in month *m* where
   both series have a reading (present, finite and not negative).
 
-- **Suspect years are left out.** A water year the issue #2 checks flag
-  (§2.10a) is left out of the fit: every water year a flagged zero-rain run
-  touches, and every low-vs-CHIRPS year. Their catchment rain is suspect
-  (zeros that may be missing data), and it would drag the factors down.
-  Periods listed as missing in `settings.zeroRainRuns.missing` (§2.4c) are
-  left out too, day by day.
+- **Suspect catchment rain is left out** (engine ≥ 0.17.0). Zeros that may
+  be missing data would drag the factors down, so the fit leaves out:
+  - every **low-vs-CHIRPS** water year (§2.10a), whole. A year that reads
+    half its usual share may be partly zero-filled anywhere in it, and
+    nobody has said which days;
+  - the days of every **flagged zero-rain run that is not kept dry**, one by
+    one, like the days of periods listed as missing in
+    `settings.zeroRainRuns.missing` (§2.4c). A run set aside as missing
+    tells the fit exactly which days are bad, so the rest of its water year
+    is good data and stays in. In `'asRecorded'` mode every flagged day is
+    left out this way: that mode runs them dry as a blanket choice, not
+    because anyone confirmed them.
+
+  **Kept-dry days stay in**, as confirmed readings. Leaving out real dry
+  spells would be selection bias: they are the days when the catchment reads
+  0 and CHIRPS its false-positive drizzle, so dropping them pushes every
+  factor up. Up to engine 0.16 the fit dropped every water year a flagged
+  run touched, kept dry or not.
+
+  **Keep-dry guard.** A keep-dry is a claim the fit can check: in a real dry
+  spell CHIRPS is dry too. So for each flagged run with kept-dry days, the
+  fit adds up CHIRPS over those days, bias-corrected with factors fitted
+  without any flagged-run day (so the verdict doesn't lean on the keep-dry
+  it is judging; raw CHIRPS when the mode is `'none'`). When that is above
+  **max(50 mm, 25 % of the catchment's usual annual rain)**
+  (`KEEP_DRY_DOUBT_MIN_MM`, `KEEP_DRY_DOUBT_ANNUAL_SHARE` in `rain.ts`; usual
+  annual rain = Σ over the calendar months of the series' own mean daily
+  rain × the month's days, `usualAnnualRainMm` in `quality.ts`), the
+  keep-dry looks doubtful: the run warns with the numbers, and the water
+  years of the kept days are left out of the fit whole. The kept days still
+  run dry, as Settings says; the guard only protects the factors. Why these
+  limits: 50 mm is the floor the fit already uses for a month's sample, so a
+  short dry spell with a little CHIRPS drizzle is never doubted. A quarter
+  of a year's rain is what the zero-run check itself looks for (60 wet-season
+  days), so CHIRPS putting that much rain on a "dry" run says it wasn't dry.
+  The annual share scales the limit to the climate, so a semi-arid record
+  isn't doubted on rain it would call ordinary.
 - **Minimum sample.** A month's own factor needs **90 shared days** (about
   three years of that month) and **50 mm of CHIRPS** on them, so a dry month
   with a few millimetres can't produce a wild ratio. A month short of either
@@ -471,8 +502,13 @@ and so does demand.
 own and applied factor, its source (`month`, `pooled` or none) and whether it
 was clamped, the pooled factor, the excluded water years, and the numbers of
 fallback days and corrected days, with the fallback rain before and after
-correction. A run that corrected any day adds one warning listing the
-factors (Oct–Sep) and the day count. GR4J's `rain_used` series shows the
+correction. From engine 0.17.0 it also says why years were left out
+(`lowVsChirpsYears`, `doubtfulKeepDry` with each doubted run's kept days,
+CHIRPS millimetres and limit) and how many shared days were left out one by
+one (`flaggedDaysLeftOut`, `missingDaysLeftOut`) or kept in as kept-dry
+(`keptDryDaysInFit`). A run that corrected any day adds one warning listing
+the factors (Oct–Sep), the day count and what the fit left out; a doubted
+keep-dry adds its own warning whether or not CHIRPS filled any day. GR4J's `rain_used` series shows the
 corrected rain day by day.
 
 **Rain columns in every run (engine ≥ 0.10.1).** Beside the model's own
@@ -492,8 +528,12 @@ The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
 pooled, or none), the unclamped own factor, whether it was clamped, the shared
 days and the catchment and CHIRPS rain on them, and the days CHIRPS filled in;
-then the pooled factor and the water years left out of the fit
-(`chirpsFactorLines` in `backend/src/export/run-tables.ts`).
+then the pooled factor and the water years left out of the fit, with (engine
+≥ 0.17.0) which were far below CHIRPS, each doubted keep-dry, and the day
+counts left out or kept in (`chirpsFactorLines` in
+`backend/src/export/run-tables.ts`). Run comparison notes when the two runs'
+factors or left-out years differ (`RunComparison.chirpsFit`,
+[run-comparison.md](./run-comparison.md)).
 
 Runs saved before 0.10.1 don't have these series; re-run to see them.
 
@@ -542,7 +582,7 @@ recorded rain exactly.
 | Setting | Values | Meaning |
 | --- | --- | --- |
 | `mode` | `'missing'` (default), `'asRecorded'` | What to do with flagged zero runs. `'asRecorded'` runs them dry, as up to 0.14 and as the workbook does |
-| `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0. Only affects flagged runs |
+| `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0 and count in the CHIRPS factor fit (§2.4b; engine ≥ 0.17.0). Only affects flagged runs |
 | `missing` | periods | Extra periods whose catchment rain is bad, e.g. the gap days inside a low-vs-CHIRPS year. They are also left out of the CHIRPS factor fit (§2.4b) |
 
 A period is a whole water year (`{ waterYear, reason }`) or a date range
@@ -551,11 +591,19 @@ exclusions (§2.10b). A day in two periods counts once: a flagged run claims
 its days first.
 
 **Not changed.** The data checks (§2.10a) still report the flagged runs,
-because the data is still suspect. The CHIRPS fit still leaves out every
-water year a flagged run touches, even one kept dry, which is the cautious
-choice. The low-vs-CHIRPS check never blanks a year by itself: a year that
-reads half its usual rain may be partly real, so the hydrologist lists the
-bad days as `missing`.
+because the data is still suspect. The low-vs-CHIRPS check never blanks a
+year by itself: a year that reads half its usual rain may be partly real, so
+the hydrologist lists the bad days as `missing`.
+
+**The CHIRPS fit follows the same decisions** (engine ≥ 0.17.0, §2.4b). A
+flagged run that is treated as missing, and a listed missing period, are
+left out of the factor fit day by day; a kept-dry run stays in as a
+confirmed reading, unless bias-corrected CHIRPS contradicts it (the keep-dry
+guard), and then its water years stay out and the run warns. Up to 0.16 the
+fit left out every water year a flagged run touched, even one kept dry.
+Because `keepDry` now changes the factors as well as the kept days, a fit
+record's `forcing.zeroRainRuns` (fit provenance, §2.10b) still flags
+"Forcing changed since fit" on any change to it.
 
 **Output.** `summary.zeroRainInfill` has the mode and each period set aside,
 flagged or listed, with its reason, the run days set aside, the catchment
@@ -1396,12 +1444,13 @@ reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
 | Flat-lines | the same non-zero value on 5+ consecutive days (rain) or 14+ days (observed / logger flow). Zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
 | Low vs CHIRPS (issue #2) | per water year, catchment rain on the days both it and CHIRPS have a reading, as a share of CHIRPS on those days, **below 50 % of the record's usual share** (the median over the judged years). A year is judged with 180+ shared days and 50+ mm of CHIRPS; with fewer than 5 judged years the usual share is taken as 100 % | as above; also catches years that are only partly zero-filled |
+| Double mass vs CHIRPS (CR-20, engine ≥ 0.17.0) | cumulative catchment rain against cumulative CHIRPS over water years with **300+ shared days and 100+ mm of CHIRPS** (10+ such years, else no result); a **break** where the slope (Σ catchment / Σ CHIRPS) changes by **20 %+** and a Pettitt test or the BIC gain confirms it (see below) | a station change, a moved gauge or a new way of building the catchment average; the CHIRPS factors then blend eras |
 | Farm area vs hi + lo (review F7) | \|areaKm2 − (areaHiKm2 + areaLoKm2)\| > 1 % of the larger. Farms with hi = lo = 0 are skipped unless the flow-share method is hi/lo | the area share and rain volume use `areaKm2`, the hi/lo share uses the split, so drift makes the two methods disagree |
 
 The outlier, flat-line and rain limits are engine constants
 (`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `ZERO_RUN_MIN_WET_DAYS`,
 `ZERO_RUN_PLAIN_DAYS`, `CLIMATOLOGY_MIN_DAYS_PER_MONTH`, `LOW_VS_CHIRPS_*`,
-`RATIO_BASELINE_MIN_YEARS`), not settings; whether they suit these catchments
+`RATIO_BASELINE_MIN_YEARS`, `DOUBLE_MASS_*`), not settings; whether they suit these catchments
 is a question for the hydrologist. Like the other series checks they look at
 the whole stored series, not only the run window.
 
@@ -1412,7 +1461,9 @@ So a stretch of missing data exported as zeros runs the catchment artificially
 dry, and natural flow, farm supply and the EWR results with it. Both warnings
 name the dates or water years. Up to engine 0.14 they were warnings only.
 From engine 0.7.0 the water years they flag are also left out of the
-CHIRPS bias-correction fit (§2.4b). From engine 0.15.0 a run sets the flagged
+CHIRPS bias-correction fit (§2.4b); from 0.17.0 a flagged zero run's days are
+left out one by one instead (kept-dry days stay in), while a low-vs-CHIRPS
+year is still left out whole. From engine 0.15.0 a run sets the flagged
 zero runs aside as missing by default, so corrected CHIRPS fills them, with
 per-project keep-dry and missing periods (§2.4c). The low-vs-CHIRPS check
 still only warns. The lasting fix is still in the data (re-export the stretch as
@@ -1448,6 +1499,68 @@ confirms it is missing.
   last year, or a dry half-year, from producing a noisy ratio. Days where
   either series is blank are left out, so a blank stretch (which already falls
   back to CHIRPS) doesn't count against the year.
+
+**Double mass against CHIRPS (engine ≥ 0.17.0, CR-20, `doubleMass` in
+`packages/engine/src/doublemass.ts`).** Two records of the same rain should
+keep a steady ratio, so cumulative catchment rain plotted against cumulative
+CHIRPS is a straight line; a kink means one record changed (Searcy & Hardison
+1960, USGS WSP 1541-B; WMO 2011, WMO-No. 100, on homogenisation). In South
+Africa the likeliest cause is the catchment average itself: the rain-gauge
+network has thinned since about 2000 (the WR2012 documentation discusses
+it), so a "catchment average" can be built from different stations in
+different decades. The CHIRPS factors (§2.4b) are one ratio per calendar
+month over the whole record, so a break means they blend eras that disagree,
+and a gap in the latest era is filled with an older era's ratio.
+
+- *Inputs.* Catchment rain and CHIRPS on the days both have a reading,
+  leaving out the days a run treats as suspect (a flagged zero run not kept
+  dry, a period listed as missing: `suspectRainDays` in `rain.ts`), over the
+  whole stored record.
+- *Water-year totals, not days.* A year is judged with at least **300**
+  shared days and **100 mm** of CHIRPS (`DOUBLE_MASS_MIN_DAYS`,
+  `DOUBLE_MASS_MIN_CHIRPS_MM`). A daily curve is dominated by timing
+  mismatches (CHIRPS days run from 06:00 UTC, gauge days from 08:00 local)
+  and overstates the sample size. With fewer than **10** judged years
+  (`DOUBLE_MASS_MIN_YEARS`) there is no result.
+- *Output per year.* Totals, the ratio, the cumulative sums, and the
+  departure from the whole-record line, (cumulative catchment − whole slope ×
+  cumulative CHIRPS) ÷ cumulative catchment. That departure shows drift far
+  better than the curve; it ends at 0 by construction.
+- *Breaks.* A segment's slope is Σ catchment / Σ CHIRPS over its years, the
+  same ratio the CHIRPS fit uses, so consecutive segment lines meet on the
+  curve. For 0, 1 and 2 breaks (`DOUBLE_MASS_MAX_BREAKS`) the best positions
+  come from an exhaustive search (O(N²) for two breaks), each segment at
+  least **5** water years long (`DOUBLE_MASS_MIN_SEGMENT_YEARS`). The number
+  of breaks is the one with the lowest BIC on the **annual ratios**, weighted
+  by CHIRPS (so the weighted least-squares level of a segment is exactly its
+  slope), with 2k + 1 parameters for k breaks. BIC on the cumulative curve
+  would overstate significance, because its residuals are autocorrelated.
+  Two breaks, not one, because the thing to catch can be a rise followed by
+  a fall, which a single-change test misses.
+- *Reported only when big and real.* A chosen break is reported when the
+  slope changes by at least **20 %** (`DOUBLE_MASS_MIN_CHANGE`) **and**
+  either a Pettitt test (Pettitt 1979) on the annual ratios of the two
+  segments either side gives **p < 0.05** (`DOUBLE_MASS_PETTITT_P`) or
+  keeping the break improves BIC by at least **6**
+  (`DOUBLE_MASS_MIN_BIC_GAIN`, "strong" evidence on the usual scale). Two
+  tests guard against one odd year making a break. A failing break is
+  dropped (the weakest first) and the rest are judged again; the remaining
+  breaks keep their place.
+- *It only warns.* A slope break doesn't say which record is wrong: it may be
+  the catchment network, CHIRPS, or a real improvement such as a better-placed
+  gauge. Leaving a segment out automatically could remove the only era that
+  matches today's network. So the fit and the rain a run uses don't change.
+  The run reports the result in `RunSummary.dataQuality.doubleMass`, a
+  `doublemass` data check lists the breaks, and a **run warning** says when
+  CHIRPS fills days in a segment whose slope differs by
+  `DOUBLE_MASS_RUN_WARN_CHANGE` (20 %) or more from the fit's pooled
+  catchment / CHIRPS ratio (a water year before the first judged year counts
+  in the first segment, after the last in the last). The Data tab draws the
+  curve with the whole-record line and the segments, and the departure by
+  year; the run's summary CSV has a *Double-mass check* block
+  (`doubleMassLines` in `backend/src/export/run-tables.ts`). The durable
+  response to a real break, a fit period or per-segment factors, is a
+  followup ([followups.md](./followups.md), *CHIRPS fit period*).
 
 On the client catchment both checks flag the stretches issue #2 describes;
 which runs and years are client data, so only their presence is tested (the

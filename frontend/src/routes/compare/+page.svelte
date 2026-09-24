@@ -14,6 +14,7 @@
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
+	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, type RunRef } from '$lib/components/compare/picker';
@@ -247,6 +248,11 @@
 							<div class="alert alert-info" role="status">
 								The runs used different model engine versions ({data.a.run.engineVersion} → {data.b.run.engineVersion}), so some
 								change may come from the model itself.
+							</div>
+						{/if}
+						{#if data.comparison.chirpsFit?.changed}
+							<div class="alert alert-info" role="status" data-testid="chirps-fit-changed">
+								{chirpsFitNote(data.comparison.chirpsFit)}
 							</div>
 						{/if}
 						{#if data.a.run.legacy || data.b.run.legacy}

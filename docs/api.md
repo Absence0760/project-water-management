@@ -405,12 +405,19 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
-  'flatline' | 'zerorun' | 'lowvschirps', days, examples: [{ date, value,
-  runDays?, endDate? }], text }[]`; the last two, engine ≥ 0.5.2, are the
-  catchment-rain checks of issue #2) and
+  'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
+  runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
+  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.17.0, lists
+  double-mass breaks against CHIRPS, one example per break: the next
+  segment's first and last day, its slope ÷ the one before, its shared days),
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
-  whose area is more than 1 % off high + low MAP area). The last two are absent
-  on older runs. Each check also appears in `warnings`. Rules:
+  whose area is more than 1 % off high + low MAP area) and `doubleMass`
+  (engine ≥ 0.17.0; `null` without both rain series or with fewer than 10
+  judged water years): `{ years: [{ waterYear, days, catchmentMm, chirpsMm,
+  ratio, cumChirpsMm, cumCatchmentMm, residualPct }], skippedYears,
+  wholeSlope, segments: [{ fromWaterYear, toWaterYear, years, days, slope }],
+  breaks: [{ afterWaterYear, slopeBefore, slopeAfter, change, pettittP,
+  bicGain }] }`. The last three are absent on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
 - `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
@@ -432,8 +439,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,
   chirpsMm, ownFactor, factor, source: 'month' | 'pooled' | null, clamped,
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
-  fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
-  lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  fallbackRawMm, fallbackCorrectedMm }`. Engine ≥ 0.17.0 adds why years and
+  days were left out of the fit: `lowVsChirpsYears`, `doubtfulKeepDry: [{
+  start, end, days, chirpsMm, limitMm, waterYears }]` (kept-dry runs CHIRPS
+  contradicts; their years are in `excludedWaterYears`), `flaggedDaysLeftOut`,
+  `missingDaysLeftOut` and `keptDryDaysInFit`; all absent on older runs. A
+  run that corrected any day also lists the factors in `warnings`, and a
+  doubted keep-dry adds its own warning. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 - `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
   treated as missing, `null` when the project has no catchment rain series:
   `{ mode, periods: [{ start, end, source: 'flagged' | 'listed', reason,
@@ -471,6 +483,10 @@ matched.
   every WR2012 input appears in `changes`, and `comparison.wr2012` (`null` when
   neither run has the check) holds the deltas of `marRatioOverlap`,
   `marRatioWhole`, `lowFlowRatio` and `patternCorrelation`.
+  `comparison.chirpsFit` (`null` when neither run fitted CHIRPS factors) is
+  `{ pooledFactor: MetricDelta, excludedWaterYearsA, excludedWaterYearsB,
+  changed }`: `changed` when any month's applied factor or the water years
+  left out of the fit differ ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
   isn't `<projectId>:<runId>`.
@@ -493,7 +509,7 @@ ahead of the usual header row.
 | Path | Query | Body |
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the EWR sites (days not met, shortfall, charged to farms, natural), the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the EWR sites (days not met, shortfall, charged to farms, natural), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

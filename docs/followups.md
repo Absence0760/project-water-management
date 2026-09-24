@@ -133,8 +133,16 @@ Tick items off (or move them into an issue) as they are done.
       warnings, so a false alarm is no longer free: item 2 matters more.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
-      Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
-      flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
+      issue #2 checks flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      **Done (engine 0.17.0): the fit follows the zero-rain decisions.** A
+      flagged run treated as missing is left out day by day (the rest of its
+      water year stays in), kept-dry days stay in as confirmed readings, and
+      a keep-dry that bias-corrected CHIRPS contradicts (more than max(50 mm,
+      25 % of the usual annual rain) over its kept days) leaves its year out
+      and warns. Low-vs-CHIRPS years are still left out whole. The run's
+      `chirpsCorrection`, summary CSV and run comparison (`chirpsFit`) say
+      what was left out. Confirm the guard's limits with the hydrologist.
       Confirm with the hydrologist:
       - linear scaling per month, versus quantile mapping (which also fixes
         the wet-day count and intensities that drive GR4J's event response);
@@ -150,8 +158,9 @@ Tick items off (or move them into an issue) as they are done.
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
       record's `forcing` (fit provenance), so a change flags "Forcing changed
-      since fit". Still open: the hydrologist's answer on the two flagged
-      runs.** The issue #2 checks find runs of zero catchment rain
+      since fit". Engine 0.17.0 added the double-mass check and made the
+      CHIRPS fit respect keep-dry (end of this item). Still open: the hydrologist's
+      answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season
@@ -186,8 +195,47 @@ Tick items off (or move them into an issue) as they are done.
       Still ask the hydrologist to confirm the two runs
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)). Out of
       scope: low-vs-CHIRPS years are never blanked whole; the `missing`
-      list covers them once the hydrologist names the bad days. CR-20's
-      double-mass check against CHIRPS follows as a separate step.
+      list covers them once the hydrologist names the bad days.
+      **Double-mass check against CHIRPS: done (engine 0.17.0, audit B3,
+      model.md §2.10a).** Water-year totals, up to two breaks, a data check,
+      a Data-tab chart, a summary-CSV block and a run warning when CHIRPS
+      fills an era whose ratio differs from the fit. It only warns; the
+      response to a real break is the *CHIRPS fit period* item below. The
+      same release made the CHIRPS fit leave flagged runs out day by day and
+      keep kept-dry days in (the *CHIRPS bias correction* item above).
+
+      **Simulated review (2026-09-24), a draft for the real hydrologist, not
+      sign-off.** A `persona-hydrologist` review
+      (`reviews/persona-hydrologist-zero-rain.md`, gitignored and local only,
+      because it quotes client numbers) judged both flagged runs to be
+      missing data, not real dry spells, from CHIRPS and the neighbouring
+      gauge's response. It suggested listing some adjacent days as `missing`
+      too: a probable accumulated reading straight after one run, shorter
+      zero runs in the same year below the 60-day rule, and zero-padded
+      stretches next to calendar-year blank blocks. It also suggested an
+      accumulation check (a very large reading straight after a zero or
+      blank run, on a day CHIRPS is dry). None of this is applied: the
+      hydrologist decides what to list
+      ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)).
+- [ ] **CHIRPS fit period / per-segment factors (tracked from audit B3,
+      2026-09-24).** The double-mass check (model.md §2.10a) warns when the
+      catchment / CHIRPS ratio breaks part-way through the record, but the
+      CHIRPS factors are still one set fitted over all eras, so a gap in the
+      latest era is filled with a blend of older ratios. The simulated
+      hydrologist review suggests two durable responses, never applied
+      silently:
+      1. a setting `chirpsFitPeriod`: `'all'` (the default), `'latestSegment'`,
+         or explicit water-year ranges, each with a reason, recorded in fit
+         provenance (`forcing`) and in run comparison;
+      2. better, **per-segment factors**: fit the monthly factors within
+         each double-mass segment and fill a gap with its own segment's
+         factors, which keeps the monthly shape and removes the blend.
+
+      Trigger: the hydrologist confirms a break on the client catchment is
+      the catchment series changing (station attrition, a new averaging),
+      not CHIRPS, or a project's fallback days mostly fall in a segment the
+      run warning names. Needs an `ENGINE_VERSION` bump, a Settings control,
+      docs (model.md §2.4b, §2.10a) and tests on synthetic broken records.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no

@@ -1,6 +1,15 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
-import { demandPctNote, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
+import {
+	demandPctNote,
+	DOUBLE_MASS_MIN_DAYS,
+	DOUBLE_MASS_MIN_YEARS,
+	EQUITABLE_SHARE_FOOTNOTE,
+	FARM_COLUMNS as FARM_DAILY_COLUMNS,
+	GAUGE_COLUMNS,
+	type RunSummary,
+	type WaterBalanceRow
+} from '@water-management/engine';
 import { csvRow } from './csv.js';
 
 /**
@@ -157,6 +166,43 @@ export function* chirpsFactorLines(c: RunSummary['chirpsCorrection']): Generator
 	}
 	yield csvRow(['Pooled', c.pooled.factor, 'all months together', c.pooled.ownFactor, c.pooled.clamped ? 'yes' : 'no', c.pooled.days, c.pooled.catchmentMm, c.pooled.chirpsMm, c.fallbackDays]);
 	if (c.excludedWaterYears.length) yield csvRow(['Water years left out of the fit', c.excludedWaterYears.join(' ')]);
+	// Engine ≥ 0.17.0: why, and the days left out one by one (absent on older runs).
+	if (c.lowVsChirpsYears?.length) yield csvRow(['of which far below CHIRPS', c.lowVsChirpsYears.join(' ')]);
+	for (const d of c.doubtfulKeepDry ?? []) {
+		yield csvRow(['of which a kept-dry run CHIRPS contradicts', d.waterYears.join(' '), `${d.start} to ${d.end}`, d.days, 'CHIRPS on the kept-dry days (mm)', d.chirpsMm, 'limit (mm)', d.limitMm]);
+	}
+	if (c.flaggedDaysLeftOut) yield csvRow(['Days of flagged zero runs left out (treated as missing)', c.flaggedDaysLeftOut]);
+	if (c.missingDaysLeftOut) yield csvRow(['Days listed as missing left out', c.missingDaysLeftOut]);
+	if (c.keptDryDaysInFit) yield csvRow(['Kept-dry days kept in the fit', c.keptDryDaysInFit]);
+}
+
+/**
+ * The double-mass check of catchment rain against CHIRPS (engine ≥ 0.17.0,
+ * model.md §2.10a): whole-record slope, the segments between reported
+ * breaks, the breaks, then one row per judged water year.
+ */
+export function* doubleMassLines(dm: NonNullable<RunSummary['dataQuality']>['doubleMass']): Generator<string> {
+	yield csvRow(['Double-mass check: catchment rain vs CHIRPS']);
+	if (dm === undefined) {
+		yield csvRow(['Run made before engine 0.17.0: no double-mass check']);
+		return;
+	}
+	if (dm === null) {
+		yield csvRow([`Not checked: needs catchment rain and CHIRPS with at least ${DOUBLE_MASS_MIN_YEARS} water years of ${DOUBLE_MASS_MIN_DAYS}+ shared days`]);
+		return;
+	}
+	yield csvRow(['Whole-record slope: catchment / CHIRPS (×)', dm.wholeSlope]);
+	yield csvRow(['Segment from water year', 'to water year', 'Years', 'Shared days', 'Slope (×)']);
+	for (const s of dm.segments) yield csvRow([s.fromWaterYear, s.toWaterYear, s.years, s.days, s.slope]);
+	if (dm.breaks.length) {
+		yield csvRow(['Break after water year', 'Slope before (×)', 'Slope after (×)', 'Change (%)', 'Pettitt p', 'BIC gain']);
+		for (const b of dm.breaks) yield csvRow([b.afterWaterYear, b.slopeBefore, b.slopeAfter, b.change * 100, b.pettittP, b.bicGain]);
+	} else {
+		yield csvRow(['No break found']);
+	}
+	yield csvRow(['Water year', 'Shared days', 'Catchment rain (mm)', 'CHIRPS (mm)', 'Ratio (×)', 'Cumulative catchment (mm)', 'Cumulative CHIRPS (mm)', 'Residual (%)']);
+	for (const y of dm.years) yield csvRow([y.waterYear, y.days, y.catchmentMm, y.chirpsMm, y.ratio, y.cumCatchmentMm, y.cumChirpsMm, y.residualPct]);
+	if (dm.skippedYears.length) yield csvRow(['Water years too short to judge', dm.skippedYears.join(' ')]);
 }
 
 /** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */
@@ -187,7 +233,7 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
  * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
- * the catchment rain treated as missing, calibration, warnings.
+ * the catchment rain treated as missing, the double-mass check, calibration, warnings.
  * Fields the engine adds to the summary later still appear (under their key).
  */
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
@@ -235,6 +281,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* zeroRainLines(summary.zeroRainInfill);
+	yield '';
+
+	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
