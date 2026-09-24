@@ -231,7 +231,12 @@ export const FitRecord = z
 			.object({
 				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 				apanMm: monthly,
-				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional()
+				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional(),
+				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
+				zeroRainRuns: z
+					.object({ mode: z.enum(ZERO_RAIN_MODES), keepDry: periodList('keep-dry period'), missing: periodList('missing-rain period') })
+					.strict()
+					.optional()
 			})
 			.strict()
 			.optional()

@@ -1,6 +1,6 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
 // engine ≥ 0.7.0; docs/model.md §2.4b).
-import type { ChirpsBiasMode, ZeroRainMode } from '@water-management/engine';
+import type { ChirpsBiasMode, ZeroRainMode, ZeroRainSettings } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [
 	{
@@ -29,3 +29,13 @@ export const ZERO_RAIN_OPTIONS: { value: ZeroRainMode; label: string; help: stri
 		help: 'Flagged zero runs stay 0 mm, as the workbook runs them. Only if every flagged run is a real dry spell; to keep just some of them, list those below as keep-dry instead.'
 	}
 ];
+
+const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** A zero-rain setting in one line, for fit provenance: "treated as missing; 1 keep-dry period". */
+export function describeZeroRain(z: ZeroRainSettings): string {
+	const parts = [z.mode === 'missing' ? 'flagged runs treated as missing' : 'flagged runs run as recorded (dry)'];
+	if (z.mode === 'missing' && z.keepDry.length) parts.push(count(z.keepDry.length, 'keep-dry period'));
+	if (z.missing.length) parts.push(count(z.missing.length, 'extra missing period'));
+	return parts.join('; ');
+}

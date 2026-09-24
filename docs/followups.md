@@ -114,10 +114,10 @@ Tick items off (or move them into an issue) as they are done.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
-      shading and the help entry (ui.md). Still to do: record
-      `zeroRainRuns` in a fit record's `forcing` (fit provenance), like
-      `chirpsBiasCorrection`, because it changes the rain a fit saw; and the
-      hydrologist's answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
+      shading and the help entry (ui.md), then `zeroRainRuns` in a fit
+      record's `forcing` (fit provenance), so a change flags "Forcing changed
+      since fit". Still open: the hydrologist's answer on the two flagged
+      runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season

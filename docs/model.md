@@ -1011,9 +1011,10 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   was asked for and against which independent record, every scored period
   (the in-sample fit, the split-sample and dry → wet tests, the independent
   record), the forcing it ran under (`forcing`: `panCoefficient` and `apanMm`,
-  water-year months, and `chirpsBiasCorrection` — absent on records made
-  before `forcing` was tracked; `chirpsBiasCorrection` absent on a `forcing`
-  made before it was added to it), the WR2012 MAR penalty when it was on
+  water-year months, `chirpsBiasCorrection`, and `zeroRainRuns` (§2.4c), because
+  it decides which zero-rain days CHIRPS fills. `forcing` is absent on records made
+  before it was tracked, and each of the last two is absent on a `forcing`
+  made before it was added), the WR2012 MAR penalty when it was on
   (§2.10c: its weight, the MAR band when one was used, the simulated MAR ratio
   and the fit without it) and the notes.
   The same engine version, inputs and seed reproduce the fit exactly.

@@ -10,7 +10,7 @@
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { CHIRPS_BIAS_OPTIONS } from '$lib/components/settings/rain';
+	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
 	import { fmtNum } from '$lib/format/number';
 	import { fitModelLabel, monthsText, paramLabel } from './provenance';
 
@@ -70,6 +70,10 @@
 				<div>
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
 					<dd>{record.forcing.chirpsBiasCorrection ? chirpsBiasLabel(record.forcing.chirpsBiasCorrection) : 'not recorded (fit made before this was tracked)'}</dd>
+				</div>
+				<div>
+					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" /></dt>
+					<dd>{record.forcing.zeroRainRuns ? describeZeroRain(record.forcing.zeroRainRuns) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
 			{:else}
 				<div><dt>Forcing</dt><dd>not recorded (fit made before this was tracked)</dd></div>

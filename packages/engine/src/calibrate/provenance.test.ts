@@ -207,7 +207,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation or CHIRPS bias correction has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction or zero-rain run handling has changed since the fit/);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
@@ -220,6 +220,19 @@ describe('fit record', () => {
 		expect(fitRecordStatus({ panCoefficient, apanMm: mono(apanMm.map((v, i) => (i === 3 ? v + 5 : v))), chirpsBiasCorrection: 'monthly' }, rec).forcingChanged).toBe(true);
 		// The CHIRPS bias correction mode alone can flag it too.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, rec).forcingChanged).toBe(true);
+		// Zero-rain run handling (engine ≥ 0.15.0) is part of the forcing too: a fit recorded with it flags a change of mode or list.
+		const zr = { mode: 'missing' as const, keepDry: [], missing: [] };
+		const withZr = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, zeroRainRuns: zr } });
+		expect(withZr.forcing!.zeroRainRuns).toEqual(zr);
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: zr }, withZr).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, withZr).forcingChanged).toBe(true);
+		expect(
+			fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: 'real' }] } }, withZr).forcingChanged
+		).toBe(true);
+		// … and a run snapshot from before the setting ran flagged runs as recorded.
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' }, withZr).forcingChanged).toBe(true);
+		// A fit recorded before zeroRainRuns was tracked: nothing to compare, so it alone never flags.
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, rec).forcingChanged).toBe(false);
 		// A forcing recorded before chirpsBiasCorrection was added to it: nothing to compare, so it alone never flags.
 		const noMode = { ...rec, forcing: { panCoefficient: [...panCoefficient], apanMm: [...apanMm] } };
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, noMode).forcingChanged).toBe(false);

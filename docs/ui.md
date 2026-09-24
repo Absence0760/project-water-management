@@ -271,15 +271,16 @@ The settings are grouped by what they drive:
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
     month, or "not recorded" for a fit made before this was tracked) and the
-    CHIRPS bias correction mode it ran under (or "not recorded" for a `forcing`
-    made before that field was added to it), the exclusions, the fitted
+    CHIRPS bias correction mode and zero-rain run handling it ran under (each
+    "not recorded" for a `forcing` made before that field was added to it),
+    the exclusions, the fitted
     values, and a table with the in-sample score ("Calibration period
     (in-sample)") next to each validation score, plus the notes. Editing a
     fitted parameter by hand shows a **Parameters edited since fit** badge and
     names the parameters at once; the server records the same on save. A
     change of runoff model, window, exclusions or flow series since the fit
-    is called out too, and a change to the pan coefficient, A-pan or CHIRPS
-    bias correction since the fit shows a **Forcing changed since fit** badge
+    is called out too, and a change to the pan coefficient, A-pan, CHIRPS
+    bias correction or zero-rain runs since the fit shows a **Forcing changed since fit** badge
     and a caveat explaining why (evaporation trades off against X1/X3, and
     CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
     fit needs redoing).
@@ -379,8 +380,8 @@ The settings are grouped by what they drive:
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
   "Parameters edited since fit" badge when they were edited, and a
-  "Forcing changed since fit" badge when this run's pan coefficient, A-pan or
-  CHIRPS bias correction differs from what the fit was made under), or "No fit
+  "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
+  CHIRPS bias correction or zero-rain runs differ from what the fit was made under), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that
