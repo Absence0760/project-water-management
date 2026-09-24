@@ -10,6 +10,7 @@ export interface ResultSection {
 export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'wr2012'>): ResultSection[] {
 	const out: ResultSection[] = [
 		{ id: 'res-summary', label: 'Summary' },
+		{ id: 'res-checks', label: 'Self-checks' },
 		{ id: 'res-curtailment', label: 'Curtailment' },
 		{ id: 'res-hydrograph', label: 'Hydrograph' },
 		{ id: 'res-calibration', label: 'Calibration' },

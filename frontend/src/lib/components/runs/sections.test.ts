@@ -7,6 +7,7 @@ describe('resultSections', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultSections({ farms: [farm] }).map((s) => s.id)).toEqual([
 			'res-summary',
+			'res-checks',
 			'res-curtailment',
 			'res-hydrograph',
 			'res-calibration',

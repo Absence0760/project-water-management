@@ -126,6 +126,26 @@ export interface RunSeriesRef {
 	unit: string;
 }
 
+/** GET …/runs/:runId/day: one node's columns on one day, for the day trace. */
+export interface RunDay {
+	date: string;
+	nodeId: string;
+	name: string;
+	kind: 'farm' | 'gauge';
+	/** Dam storage at the end of the day before (the run's initial storage on its first day); null for gauges. */
+	previousStorageM3: number | null;
+	/** The node's parameters as the run used them. */
+	params: {
+		pctUpstreamToDam: number | null;
+		pctRunoffToDam: number | null;
+		divertCapacityM3Day: number | null;
+		damCapacityM3: number | null;
+		damInitialPct: number | null;
+		returnFlowPct: number | null;
+	};
+	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+}
+
 /** One side of GET /compare/runs. */
 export interface CompareSide {
 	project: { id: string; name: string };

@@ -126,6 +126,14 @@ regional wet/dry index, but runs never read it, it is not in the gauge-vs-logger
 table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
 
+The run downloads (in the results' Download menu) are where the numbers can be
+checked outside the app. A farm's **daily CSV** has every column in the
+workbook's FarmTemplate order, the letter in each header
+(`Irrigation supplied [G] (m³/day)`), the working columns between them and the
+balance check `[V]` next to outflow. The **summary CSV** adds the self-checks,
+the water balance per water year and a column guide giving each letter's
+formula ([api.md § Export](./api.md)).
+
 ## Settings & calibration
 
 The settings are grouped by what they drive:
@@ -254,6 +262,24 @@ The settings are grouped by what they drive:
   from Fit automatically, the fit's validation scores sit beside the in-sample
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text.
+- <a id="self-checks"></a>**Self-checks** (`#res-checks`,
+  `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.11.0,
+  [model.md § Verification](./model.md#verification)) comes next. It has three
+  parts. First, one line saying all checks passed, or how many failed (a failure
+  is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
+  the first problem (farm name and date) under a failed one, and the largest
+  daily balance check (column V). Second, the **water balance by water year**: rain,
+  runoff coefficient, start storage, farm runoff, transfers, consumptive use,
+  outflow and end storage in Mm³, and the residual in m³, with a red residual
+  if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
+  The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
+  and a date (it opens on the farm-day with the largest residual) and it
+  fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
+  with its letter, value and formula, starting from the day before's storage,
+  then works the day's balance out from the numbers shown: in (H + I + J) −
+  used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
+  the run's input snapshot, not today's model. A run saved before 0.11.0 says
+  it has no checks, balance or working columns, and to run it again.
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
   the full period), the calibration panel (it opens with the same
@@ -294,7 +320,8 @@ The settings are grouped by what they drive:
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
 - Series are fetched one at a time when a chart needs them, and cached
-  (`runs/cache.ts`). A run stores about 170 series of about 16 000 values.
+  (`runs/cache.ts`). A run stores about 170 series of about 16 000 values
+  (more since engine 0.11.0: each farm adds 11 working columns).
   Large arrays live in `$state.raw` and are replaced, never mutated.
 
 ## Help (`/help`)

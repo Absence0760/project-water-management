@@ -383,6 +383,13 @@ the suggested order (the IDs carry the detail):
       per-checkout e2e database name and ports, derived from the worktree
       path or an env override, set up in the e2e global setup. Until then,
       don't run e2e in two worktrees at the same time.
+      Seen again 2026-09-24 in a full 2-worker run at load average ~6 while
+      another session was debugging e2e: `chirps-bias.spec.ts` (the Settings
+      select missing after `page.reload()`) and `data-quality.spec.ts` (the
+      gauge-vs-logger table missing after navigating to the Time series tab)
+      failed, then passed when rerun alone. Neither touches the runs page;
+      if either fails alone, look for a missing readiness signal on reload
+      rather than a longer timeout.
 - [ ] **Wall-clock test flakes under load.** "a GR4J run of an example
       catchment takes under 50 ms" failed once (2026-09-24) while all three
       workspaces' tests ran at once; it normally takes about 21 ms. The

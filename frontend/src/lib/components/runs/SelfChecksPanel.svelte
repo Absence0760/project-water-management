@@ -1,0 +1,278 @@
+<!--
+	What the model says about its own run (engine ≥ 0.11.0): the self-checks,
+	the water balance per water year, and a trace of one farm's day with every
+	intermediate column and its formula (docs/ui.md § Self-checks).
+-->
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import type { RunSummary } from '@water-management/engine';
+	import { api, type RunDay } from '$lib/api';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '$lib/format/number';
+	import { BALANCE_COLUMNS, balanceTableRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+
+	let {
+		summary,
+		projectId,
+		runId,
+		startDate,
+		endDate,
+		nodes
+	}: {
+		summary: RunSummary;
+		projectId: string;
+		runId: string;
+		startDate: string;
+		endDate: string;
+		/** Nodes that can be traced, in network order. */
+		nodes: { id: string; name: string; kind: 'farm' | 'gauge' }[];
+	} = $props();
+
+	const uid = $props.id();
+	const v = $derived(summary.verification);
+	const headline = $derived(checksHeadline(v));
+	const balance = $derived(balanceTableRows(summary.waterBalance));
+	const hasStores = $derived(balance.some((r) => r.runoff !== null));
+
+	// Trace: start on the farm and day with the largest balance residual, else the first farm on the first day.
+	let nodeId = $state('');
+	let date = $state('');
+	$effect(() => {
+		// Reset when another run is shown, and only then: a model edit mustn't clear the user's pick.
+		void runId;
+		untrack(() => {
+			nodeId = v?.maxResidual?.nodeId ?? nodes.find((n) => n.kind === 'farm')?.id ?? nodes[0]?.id ?? '';
+			date = v?.maxResidual?.date ?? startDate;
+			day = null;
+			traceError = null;
+		});
+	});
+	let day = $state.raw<RunDay | null>(null);
+	let traceError = $state<string | null>(null);
+	let tracing = $state(false);
+	const rows = $derived(day ? traceRows(day) : []);
+	const closure = $derived(day ? dayClosure(day) : null);
+
+	async function trace(e: SubmitEvent) {
+		e.preventDefault();
+		if (!nodeId || !date) return;
+		const want = runId;
+		tracing = true;
+		traceError = null;
+		try {
+			const res = await api.runs.day(projectId, want, nodeId, date);
+			if (want === runId) day = res;
+		} catch (err) {
+			if (want === runId) {
+				day = null;
+				traceError = err instanceof Error ? err.message : String(err);
+			}
+		} finally {
+			tracing = false;
+		}
+	}
+
+	/** Enough digits to see float noise without drowning the volumes. */
+	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2) : fmtNum(x, 3, true));
+</script>
+
+<section aria-labelledby="{uid}-h">
+	<h3 id="{uid}-h">Self-checks <HelpTip key="run.balance_residual" /></h3>
+	<p class="alert {headline.tone === 'bad' ? 'alert-error' : 'alert-info'}" class:ok={headline.tone === 'ok'} role="status">
+		{headline.text}
+	</p>
+	{#if v}
+		<ul class="checks">
+			{#each v.checks as c (c.id)}
+				<li class:failed={!c.passed}>
+					<span class="mark" aria-hidden="true">{c.passed ? '✓' : '✗'}</span>
+					<span class="visually-hidden">{c.passed ? 'Passed:' : 'Failed:'}</span>
+					{c.label}
+					{#if c.detail}<div class="detail">First problem: {c.detail}</div>{/if}
+				</li>
+			{/each}
+		</ul>
+		{#if v.maxResidual}
+			<p class="muted small">
+				Largest daily balance check (column V): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
+				It should be float noise, far below the flows.
+			</p>
+		{/if}
+	{/if}
+</section>
+
+<section aria-labelledby="{uid}-wb">
+	<h3 id="{uid}-wb">Water balance by water year</h3>
+	{#if balance.length === 0}
+		<p class="muted">This run was made before the water balance was recorded (engine 0.11.0). Run the model again to see it.</p>
+	{:else}
+		<p class="muted small">
+			Start storage + farm runoff + transfers = consumptive use + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
+			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
+		</p>
+		<div class="table-wrap">
+			<table class="data compact">
+				<thead>
+					<tr>
+						<th scope="col">Water year</th>
+						{#each BALANCE_COLUMNS as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}
+						{#if hasStores}<th scope="col" class="num" title="Runoff model: rain − evaporation − flow + exchange − change in storage">Runoff-model residual (mm)</th>{/if}
+					</tr>
+				</thead>
+				<tbody>
+					{#each balance as r (r.waterYear ?? 'total')}
+						<tr class:total={r.waterYear === null}>
+							<th scope="row">{waterYearLabel(r.waterYear)}</th>
+							{#each BALANCE_COLUMNS as col (col.key)}
+								{@const x = col.value(r)}
+								<td class="num" class:off={col.key === 'residual' && !residualIsNoise(r)}>
+									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtNum(x, 3, true)}
+								</td>
+							{/each}
+							{#if hasStores}<td class="num">{fmtValue(r.runoff?.residualMm ?? null)}</td>{/if}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+</section>
+
+<section aria-labelledby="{uid}-tr">
+	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
+	<p class="muted small">
+		Every column of one farm's day, with the formula the model used, so the day can be checked by hand. The farm's daily CSV has the same
+		columns for every day.
+	</p>
+	<form class="trace-form" onsubmit={trace}>
+		<label>
+			<span>Farm or gauge</span>
+			<select bind:value={nodeId}>
+				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : ''}</option>{/each}
+			</select>
+		</label>
+		<label>
+			<span>Day</span>
+			<input type="date" bind:value={date} min={startDate} max={endDate} required />
+		</label>
+		<button type="submit" class="btn btn-sm" disabled={tracing || !nodeId}>{tracing ? 'Tracing…' : 'Trace'}</button>
+	</form>
+	{#if traceError}<p class="alert alert-error" role="alert">{traceError}</p>{/if}
+	{#if day}
+		<div class="table-wrap" aria-live="polite">
+			<table class="data compact trace">
+				<caption>{day.name} on {day.date}</caption>
+				<thead>
+					<tr>
+						<th scope="col">Col.</th>
+						<th scope="col">Quantity</th>
+						<th scope="col" class="num">Value</th>
+						<th scope="col">Formula</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each rows as r (r.key)}
+						<tr class:residual={r.key === 'balance_residual'}>
+							<td class="letter">{r.letter ?? ''}</td>
+							<th scope="row">{r.label}</th>
+							<td class="num">{fmtValue(r.value)} <span class="u">{r.unit ?? ''}</span></td>
+							<td class="formula">{r.formula}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+		{#if closure}
+			<p class="closure small">
+				In (H + I + J) {fmtValue(closure.inflow)} − used (G − T) {fmtValue(closure.consumptive)} − stored (Q − Q[t−1]) {fmtValue(closure.storageChange)}
+				− out (U) {fmtValue(closure.outflow)} = <strong>{fmtValue(closure.residual)}</strong> m³
+			</p>
+		{:else if day.kind === 'farm'}
+			<p class="muted small">This run was made before the working columns were recorded (engine 0.11.0); run the model again to trace it in full.</p>
+		{/if}
+	{/if}
+</section>
+
+<style>
+	section + section {
+		margin-top: 1.25rem;
+	}
+	.small {
+		font-size: 0.8rem;
+	}
+	.alert.ok {
+		background: var(--success-soft);
+		color: var(--success);
+		border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+	}
+	.checks {
+		list-style: none;
+		padding: 0;
+		margin: 0.5rem 0;
+	}
+	.checks li {
+		padding: 0.2rem 0;
+	}
+	.mark {
+		display: inline-block;
+		width: 1.2rem;
+		color: var(--success);
+		font-weight: 700;
+	}
+	.failed .mark {
+		color: var(--danger);
+	}
+	.detail {
+		margin-left: 1.2rem;
+		font-size: 0.8rem;
+		color: var(--danger);
+		overflow-wrap: anywhere;
+	}
+	tr.total th,
+	tr.total td {
+		font-weight: 600;
+		border-top: 2px solid var(--border);
+	}
+	td.off {
+		color: var(--danger);
+		font-weight: 600;
+	}
+	.trace-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.5rem 0.75rem;
+		margin: 0.5rem 0;
+	}
+	.trace-form label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		font-size: 0.8rem;
+	}
+	.trace caption {
+		text-align: left;
+		font-weight: 600;
+		padding-bottom: 0.25rem;
+	}
+	.letter {
+		font-family: var(--font-mono, monospace);
+		white-space: nowrap;
+	}
+	.formula {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+	.u {
+		color: var(--text-muted);
+		font-size: 0.75rem;
+	}
+	tr.residual th,
+	tr.residual td {
+		border-top: 2px solid var(--border);
+	}
+	.closure {
+		margin: 0.5rem 0 0;
+		overflow-wrap: anywhere;
+	}
+</style>

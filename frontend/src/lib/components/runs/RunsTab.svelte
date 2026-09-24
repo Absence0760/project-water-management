@@ -19,6 +19,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { detailCache, forgetRun } from './cache';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
+	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Wr2012Panel from './Wr2012Panel.svelte';
 	import { resultSections } from './sections';
@@ -72,6 +73,12 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		const m = new Map(editor.model.nodes.map((n) => [n.id, n.name] as [string, string]));
 		for (const f of detail?.run.summary.farms ?? []) if (!m.has(f.nodeId)) m.set(f.nodeId, f.name);
 		return m;
+	});
+	// Farms and gauges for the day trace, in network order: only nodes the shown run has series for
+	// (a node added since the run has none; a deleted one lost its series with it).
+	const traceNodes = $derived.by(() => {
+		const inRun = new Set((detail?.series ?? []).map((s) => s.nodeId));
+		return editor.model.nodes.filter((n) => inRun.has(n.id)).map((n) => ({ id: n.id, name: n.name, kind: n.kind }));
 	});
 	const damCapacity = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.damCapacityM3] as [string, number])));
 	const runDays = (r: { startDate: string; endDate: string }) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
@@ -307,6 +314,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<section id="res-summary" aria-label="Run summary">
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
+			</section>
+			<section class="panel" id="res-checks">
+				<SelfChecksPanel
+					summary={detail.run.summary}
+					{projectId}
+					runId={detail.run.id}
+					startDate={detail.run.startDate}
+					endDate={detail.run.endDate}
+					nodes={traceNodes}
+				/>
 			</section>
 			<section class="panel" id="res-curtailment">
 				<CurtailmentTable summary={detail.run.summary} {farmNames} />

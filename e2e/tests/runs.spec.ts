@@ -88,6 +88,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
+		'Self-checks',
 		'Curtailment',
 		'Hydrograph',
 		'Calibration',
