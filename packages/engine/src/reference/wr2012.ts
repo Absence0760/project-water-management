@@ -68,8 +68,18 @@ export interface Wr2012Settings {
 	 */
 	lowFlowMonths: number[] | null;
 	flags: Wr2012Flags;
-	/** Soft penalty on the MAR in automatic calibration. Off by default. */
-	calibrationPenalty: { enabled: boolean; weight: number };
+	/**
+	 * Soft penalty on the MAR in automatic calibration. Off by default.
+	 * marLowMm3 / marHighMm3 (Mm³/a, already at the modelled catchment's
+	 * scale — not the quaternary's) are an optional band: both null (the
+	 * default) is a single target, ref.marMm3 scaled the usual way; both set
+	 * makes the penalty zero inside [marLowMm3, marHighMm3] and weight ×
+	 * |ln(simulated MAR ÷ the nearer bound)| outside it. Useful when two
+	 * published natural-MAR estimates for the catchment disagree, so there is
+	 * no single number to pull towards. Always both or neither (resolveWr2012
+	 * drops a one-sided or inverted band with a warning).
+	 */
+	calibrationPenalty: { enabled: boolean; weight: number; marLowMm3: number | null; marHighMm3: number | null };
 }
 
 export function defaultWr2012Settings(): Wr2012Settings {
@@ -78,7 +88,7 @@ export function defaultWr2012Settings(): Wr2012Settings {
 		scaling: 'area',
 		lowFlowMonths: null,
 		flags: { notePct: 10, queryPct: 25, queryWetterPct: 15, unusablePct: 50 },
-		calibrationPenalty: { enabled: false, weight: 0.5 }
+		calibrationPenalty: { enabled: false, weight: 0.5, marLowMm3: null, marHighMm3: null }
 	};
 }
 
@@ -142,6 +152,34 @@ export function wr2012ReferenceIssues(ref: Wr2012Reference): Wr2012Issue[] {
 	return out;
 }
 
+/**
+ * Validates the calibration penalty group: the weight must be in range, and
+ * the optional MAR band must be both bounds or neither, each 0 or more, low ≤
+ * high. Shared by the backend's zod schema, the Settings form and
+ * `resolveWr2012`.
+ */
+export function wr2012PenaltyIssues(p: { weight: number; marLowMm3: number | null | undefined; marHighMm3: number | null | undefined }): Wr2012Issue[] {
+	const out: Wr2012Issue[] = [];
+	if (!(isNum(p.weight) && p.weight >= 0 && p.weight <= WR2012_MAX_PENALTY_WEIGHT)) {
+		out.push({ field: 'weight', message: `Enter a penalty weight from 0 to ${WR2012_MAX_PENALTY_WEIGHT}.` });
+	}
+	// Settings stored before the band existed have no marLowMm3/marHighMm3 keys at all: treat missing the same as null.
+	const lo = p.marLowMm3 ?? null;
+	const hi = p.marHighMm3 ?? null;
+	if (lo !== null || hi !== null) {
+		if (lo === null || hi === null) {
+			out.push({ field: 'marLowMm3', message: 'Enter both a low and high bound for the MAR band, or leave both blank.' });
+		} else if (!isNum(lo) || lo < 0) {
+			out.push({ field: 'marLowMm3', message: 'The MAR band’s low bound must be 0 or more.' });
+		} else if (!isNum(hi) || hi < 0) {
+			out.push({ field: 'marHighMm3', message: 'The MAR band’s high bound must be 0 or more.' });
+		} else if (lo > hi) {
+			out.push({ field: 'marHighMm3', message: 'The MAR band’s low bound can’t be above its high bound.' });
+		}
+	}
+	return out;
+}
+
 /** The thresholds must be positive and ordered: note ≤ query ≤ unusable, and wetter-query ≤ query. */
 export function wr2012FlagIssues(f: Wr2012Flags): Wr2012Issue[] {
 	const out: Wr2012Issue[] = [];
@@ -185,8 +223,13 @@ export function resolveWr2012(raw: unknown, warnings: string[]): Wr2012Settings 
 		warnings.push(`WR2012 deviation thresholds aren't usable (${flagIssues.map((i) => i.message).join(' ')}); using the defaults`);
 		s.flags = d.flags;
 	}
-	const w = s.calibrationPenalty.weight;
-	if (!(isNum(w) && w >= 0 && w <= WR2012_MAX_PENALTY_WEIGHT)) s.calibrationPenalty = { ...s.calibrationPenalty, weight: d.calibrationPenalty.weight };
+	const penaltyIssues = wr2012PenaltyIssues(s.calibrationPenalty);
+	if (penaltyIssues.length) {
+		const bad = new Set(penaltyIssues.map((i) => i.field));
+		warnings.push(`WR2012 calibration penalty settings aren't usable (${penaltyIssues.map((i) => i.message).join(' ')}); using the default instead`);
+		if (bad.has('weight')) s.calibrationPenalty = { ...s.calibrationPenalty, weight: d.calibrationPenalty.weight };
+		if (bad.has('marLowMm3') || bad.has('marHighMm3')) s.calibrationPenalty = { ...s.calibrationPenalty, marLowMm3: null, marHighMm3: null };
+	}
 	s.calibrationPenalty.enabled = s.calibrationPenalty.enabled === true;
 	return s;
 }
@@ -528,15 +571,25 @@ export const monthNames = (months: readonly number[]) => months.map((m) => MONTH
 
 /**
  * The soft MAR penalty automatic calibration adds to its loss when
- * settings.wr2012.calibrationPenalty is on: weight × |ln(simulated MAR ÷
- * scaled WR2012 MAR)|, on the simulated *natural* flow of the first `days`
- * run days, over the complete water years inside the reference period (the
- * whole span when there are none). Symmetric in wetter and drier.
+ * settings.wr2012.calibrationPenalty is on, on the simulated *natural* flow
+ * of the first `days` run days, over the complete water years inside the
+ * reference period (the whole span when there are none):
+ * - a single target (no band): weight × |ln(simulated MAR ÷ scaled WR2012
+ *   MAR)|, symmetric in wetter and drier;
+ * - a band (marLowMm3 / marHighMm3 both set): 0 inside [marLowMm3,
+ *   marHighMm3], else weight × |ln(simulated MAR ÷ the nearer bound)|.
  */
 export interface Wr2012Penalty {
 	weight: number;
-	/** Scaled WR2012 MAR the simulated MAR is pulled towards, Mm³/a. */
+	/**
+	 * The MAR the simulated MAR is pulled towards, Mm³/a: the scaled WR2012
+	 * MAR for a single target, or the geometric mean of the band (the point
+	 * equally far in log space from both bounds) when one is set.
+	 */
 	targetMarMm3: number;
+	/** The band bounds (already at the modelled catchment's scale), when the penalty uses one; null for a single target. */
+	marLowMm3: number | null;
+	marHighMm3: number | null;
 	basis: 'overlap' | 'whole';
 	/** Simulated MAR (Mm³/a) of a natural-flow series (m³/day, at least `days` long). */
 	simulatedMar(natural: ArrayLike<number>): number;
@@ -555,7 +608,15 @@ export function wr2012Penalty(
 	if (!ws.calibrationPenalty.enabled || !ref || !(areaKm2 > 0) || days === 0) return null;
 	const ov = overlapDays(startDate, days, ref.periodStart, ref.periodEnd);
 	const scale = wr2012Scale(ws, ref, areaKm2, meanAnnualRain(rainMm, ov?.idx ?? null, days));
-	const target = ref.marMm3 * scale.factor;
+	const { marLowMm3, marHighMm3 } = ws.calibrationPenalty;
+	const hasBand = isNum(marLowMm3) && isNum(marHighMm3) && marLowMm3 >= 0 && marHighMm3 >= marLowMm3;
+	const lo = hasBand ? marLowMm3 : null;
+	const hi = hasBand ? marHighMm3 : null;
+	const single = ref.marMm3 * scale.factor;
+	// The band is already scaled to the modelled catchment (unlike marMm3, which is the
+	// quaternary's own figure): two independently published catchment-specific estimates,
+	// not one study figure to area-scale.
+	const target = hasBand ? Math.sqrt(lo! * hi!) : single;
 	if (!(target > 0)) return null;
 	const weight = ws.calibrationPenalty.weight;
 	const simulatedMar = (natural: ArrayLike<number>) => {
@@ -567,12 +628,22 @@ export function wr2012Penalty(
 		for (let t = 0; t < days; t++) s += natural[t]!;
 		return m3DayToMm3(s / days, DAYS_PER_YEAR);
 	};
+	const penaltyOf = (mar: number) => {
+		if (hasBand) {
+			if (mar >= lo! && mar <= hi!) return 0;
+			const nearest = mar < lo! ? lo! : hi!;
+			return weight * Math.abs(Math.log(Math.max(mar, 1e-9) / nearest));
+		}
+		return weight * Math.abs(Math.log(Math.max(mar, 1e-9) / target));
+	};
 	return {
 		weight,
 		targetMarMm3: target,
+		marLowMm3: lo,
+		marHighMm3: hi,
 		basis: ov ? 'overlap' : 'whole',
 		simulatedMar,
-		penalty: (natural) => weight * Math.abs(Math.log(Math.max(simulatedMar(natural), 1e-9) / target))
+		penalty: (natural) => penaltyOf(simulatedMar(natural))
 	};
 }
 

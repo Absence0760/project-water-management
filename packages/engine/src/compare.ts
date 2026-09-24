@@ -590,6 +590,10 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 	if (!same(pa?.weight, pb?.weight)) {
 		push('changed', 'WR2012 calibration penalty weight', `WR2012 calibration penalty weight: ${fmtValue(pa?.weight)} → ${fmtValue(pb?.weight)}`);
 	}
+	const band = (p: typeof pa) => (p?.marLowMm3 != null && p?.marHighMm3 != null ? `${fmtValue(p.marLowMm3)} – ${fmtValue(p.marHighMm3)} Mm³/a` : 'none (single target)');
+	if (!same(pa?.marLowMm3 ?? null, pb?.marLowMm3 ?? null) || !same(pa?.marHighMm3 ?? null, pb?.marHighMm3 ?? null)) {
+		push('changed', 'WR2012 calibration penalty MAR band', `WR2012 calibration penalty MAR band: ${band(pa)} → ${band(pb)}`);
+	}
 	return out;
 }
 

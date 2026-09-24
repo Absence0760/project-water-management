@@ -591,7 +591,7 @@ describe('diffInputs', () => {
 			scaling: 'areaRain',
 			lowFlowMonths: [12, 1, 2],
 			flags: { notePct: 5, queryPct: 20, queryWetterPct: 10, unusablePct: 40 },
-			calibrationPenalty: { enabled: true, weight: 1 }
+			calibrationPenalty: { enabled: true, weight: 1, marLowMm3: 5, marHighMm3: 10 }
 		};
 		expect(texts(b, c)).toEqual([
 			'WR2012 quaternary: "Z99A" → "Z99B"',
@@ -609,7 +609,8 @@ describe('diffInputs', () => {
 			'WR2012 query-if-wetter threshold: 15 % → 10 %',
 			'WR2012 not-usable threshold: 50 % → 40 %',
 			'WR2012 calibration penalty: off → on',
-			'WR2012 calibration penalty weight: 0.5 → 1'
+			'WR2012 calibration penalty weight: 0.5 → 1',
+			'WR2012 calibration penalty MAR band: none (single target) → 5 – 10 Mm³/a'
 		]);
 		// Every change sits in the settings area.
 		expect(diffInputs(b, c).every((x) => x.area === 'settings')).toBe(true);
@@ -617,6 +618,14 @@ describe('diffInputs', () => {
 		const old = structuredClone(a);
 		delete (old.settings as Record<string, unknown>).wr2012;
 		expect(texts(old, a)).toEqual([]);
+
+		// The band changing on its own (weight and enabled the same) is its own line.
+		const d = structuredClone(c);
+		d.settings.wr2012!.calibrationPenalty = { ...c.settings.wr2012!.calibrationPenalty, marLowMm3: 6, marHighMm3: 10 };
+		expect(texts(c, d)).toEqual(['WR2012 calibration penalty MAR band: 5 – 10 Mm³/a → 6 – 10 Mm³/a']);
+		const e = structuredClone(c);
+		e.settings.wr2012!.calibrationPenalty = { ...c.settings.wr2012!.calibrationPenalty, marLowMm3: null, marHighMm3: null };
+		expect(texts(c, e)).toEqual(['WR2012 calibration penalty MAR band: 5 – 10 Mm³/a → none (single target)']);
 	});
 
 	it('tolerates missing snapshots (runs stored before a field existed)', () => {

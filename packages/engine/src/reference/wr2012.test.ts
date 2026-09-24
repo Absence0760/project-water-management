@@ -14,6 +14,7 @@ import {
 	wr2012FlagIssues,
 	wr2012FlagLevel,
 	wr2012Penalty,
+	wr2012PenaltyIssues,
 	wr2012ReferenceIssues,
 	wr2012Report,
 	type Wr2012Reference,
@@ -309,6 +310,39 @@ describe('resolveWr2012', () => {
 		expect(ok.lowFlowMonths).toEqual([1, 3]);
 		expect(ok.flags).toEqual({ notePct: 5, queryPct: 25, queryWetterPct: 15, unusablePct: 50 });
 	});
+
+	it('accepts a valid MAR band, and drops a one-sided or inverted band (keeping a valid weight) with a warning', () => {
+		const ok = resolveWr2012({ calibrationPenalty: { enabled: true, weight: 2, marLowMm3: 5, marHighMm3: 10 } }, []);
+		expect(ok.calibrationPenalty).toEqual({ enabled: true, weight: 2, marLowMm3: 5, marHighMm3: 10 });
+
+		const w1: string[] = [];
+		const oneSided = resolveWr2012({ calibrationPenalty: { enabled: true, weight: 2, marLowMm3: 5, marHighMm3: null } }, w1);
+		expect(oneSided.calibrationPenalty).toEqual({ enabled: true, weight: 2, marLowMm3: null, marHighMm3: null });
+		expect(w1[0]).toMatch(/^WR2012 calibration penalty settings aren't usable/);
+
+		const w2: string[] = [];
+		const inverted = resolveWr2012({ calibrationPenalty: { enabled: false, weight: 0.5, marLowMm3: 10, marHighMm3: 5 } }, w2);
+		expect(inverted.calibrationPenalty).toEqual({ enabled: false, weight: 0.5, marLowMm3: null, marHighMm3: null });
+		expect(w2[0]).toMatch(/low bound can.t be above its high bound/);
+
+		// A bad weight and a bad band are corrected independently.
+		const w3: string[] = [];
+		const both = resolveWr2012({ calibrationPenalty: { enabled: true, weight: 99, marLowMm3: 10, marHighMm3: 5 } }, w3);
+		expect(both.calibrationPenalty).toEqual({ enabled: true, weight: 0.5, marLowMm3: null, marHighMm3: null });
+	});
+});
+
+describe('wr2012PenaltyIssues', () => {
+	it('requires both bounds or neither, low ≤ high, and a weight in range', () => {
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: null, marHighMm3: null })).toEqual([]);
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: 5, marHighMm3: 10 })).toEqual([]);
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: 5, marHighMm3: 5 })).toEqual([]); // equal bounds: a zero-width band
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: 5, marHighMm3: null }).map((i) => i.field)).toEqual(['marLowMm3']);
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: null, marHighMm3: 10 }).map((i) => i.field)).toEqual(['marLowMm3']);
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: 10, marHighMm3: 5 }).map((i) => i.field)).toEqual(['marHighMm3']);
+		expect(wr2012PenaltyIssues({ weight: 1, marLowMm3: -1, marHighMm3: 10 }).map((i) => i.field)).toEqual(['marLowMm3']);
+		expect(wr2012PenaltyIssues({ weight: 11, marLowMm3: null, marHighMm3: null }).map((i) => i.field)).toEqual(['weight']);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -395,12 +429,39 @@ describe('wr2012Penalty', () => {
 
 	it('is off by default, and weight × |ln(simulated ÷ target)| when on', () => {
 		expect(wr2012Penalty(settings(), start, days, 100, null)).toBeNull();
-		const p = wr2012Penalty(settings({ calibrationPenalty: { enabled: true, weight: 2 } }), start, days, 50, null)!;
+		const p = wr2012Penalty(settings({ calibrationPenalty: { enabled: true, weight: 2, marLowMm3: null, marHighMm3: null } }), start, days, 50, null)!;
 		expect(p.targetMarMm3).toBeCloseTo(5, 12);
 		expect(p.basis).toBe('overlap');
 		const q = (mar: number) => new Array(days).fill((mar * 1e6) / 365.25);
 		expect(p.penalty(q(5))).toBeCloseTo(0, 8);
 		expect(p.penalty(q(10))).toBeCloseTo(2 * Math.log(2), 8);
 		expect(p.penalty(q(2.5))).toBeCloseTo(2 * Math.log(2), 8); // symmetric: half is as bad as double
+		expect(p.marLowMm3).toBeNull();
+		expect(p.marHighMm3).toBeNull();
+	});
+
+	it('band: zero inside [low, high], weight × |ln(sim ÷ nearest bound)| outside it', () => {
+		const p = wr2012Penalty(settings({ calibrationPenalty: { enabled: true, weight: 2, marLowMm3: 4, marHighMm3: 8 } }), start, days, 50, null)!;
+		expect(p.marLowMm3).toBe(4);
+		expect(p.marHighMm3).toBe(8);
+		expect(p.targetMarMm3).toBeCloseTo(Math.sqrt(4 * 8), 10); // the band's geometric mean: equally far (in log space) from both bounds
+		const q = (mar: number) => new Array(days).fill((mar * 1e6) / 365.25);
+		expect(p.penalty(q(4))).toBeCloseTo(0, 8); // on the low bound
+		expect(p.penalty(q(6))).toBeCloseTo(0, 8); // inside
+		expect(p.penalty(q(8))).toBeCloseTo(0, 8); // on the high bound
+		expect(p.penalty(q(16))).toBeCloseTo(2 * Math.log(2), 8); // double the high bound
+		expect(p.penalty(q(2))).toBeCloseTo(2 * Math.log(2), 8); // half the low bound: the same penalty (symmetric per bound)
+	});
+
+	it('band: a one-sided or inverted band is ignored here too, falling back to the single scaled target', () => {
+		const oneSided = wr2012Penalty(settings({ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: 4, marHighMm3: null } }), start, days, 50, null)!;
+		expect(oneSided.marLowMm3).toBeNull();
+		expect(oneSided.marHighMm3).toBeNull();
+		expect(oneSided.targetMarMm3).toBeCloseTo(5, 12); // ref.marMm3 (10) × area factor (0.5)
+
+		const inverted = wr2012Penalty(settings({ calibrationPenalty: { enabled: true, weight: 1, marLowMm3: 8, marHighMm3: 4 } }), start, days, 50, null)!;
+		expect(inverted.marLowMm3).toBeNull();
+		expect(inverted.marHighMm3).toBeNull();
+		expect(inverted.targetMarMm3).toBeCloseTo(5, 12);
 	});
 });

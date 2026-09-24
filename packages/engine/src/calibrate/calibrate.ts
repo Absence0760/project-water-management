@@ -52,11 +52,24 @@ export interface DateRange {
 	end: string;
 }
 
+/** 'wide': each parameter's min/max. 'typical': Perrin et al.'s (2003) 80 % range. */
+export const CALIBRATION_BOUNDS = ['wide', 'typical'] as const;
+export type CalibrationBounds = (typeof CALIBRATION_BOUNDS)[number];
+
 export interface CalibrateOptions {
 	/** Runoff model to fit. Default: the project's settings.runoffModel. */
 	model?: RunoffModelId;
 	/** Default 'kgePrime'. */
 	objective?: ObjectiveId;
+	/**
+	 * The box the search is free to explore, per parameter (issue #4 phase 6
+	 * §"make the logger fit identifiable"): 'wide' (default) is each
+	 * parameter's min/max (GR4J_PARAMS / LEGACY_PARAMS); 'typical' is Perrin et
+	 * al.'s (2003) 80 % range (`typical`), tighter but not always enough to
+	 * pin down a short, drought-dominated record either. The starting point is
+	 * clamped into whichever box is used.
+	 */
+	bounds?: CalibrationBounds;
 	/** Model runs per optimisation (the full fit, and each validation fit). Default 1 500. */
 	budget?: number;
 	/** Default 1. The same seed gives the same result. */
@@ -140,6 +153,8 @@ export interface IndependentRecordTest extends ValidationTest {
 export interface CalibrationReport {
 	model: RunoffModelId;
 	objective: ObjectiveId;
+	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"). */
+	bounds: CalibrationBounds;
 	budget: number;
 	seed: number;
 	free: string[];
@@ -172,10 +187,13 @@ export interface CalibrationReport {
 }
 
 export interface MarPenaltyResult {
-	/** Loss = (1 − objective) + weight × |ln(simulated MAR ÷ scaled WR2012 MAR)|, on natural flow. */
+	/** Loss = (1 − objective) + weight × |ln(simulated MAR ÷ target)|, on natural flow (target = the nearer band bound outside a band). */
 	weight: number;
-	/** Scaled WR2012 MAR (Mm³/a) and the years it was compared over. */
+	/** The MAR pulled towards (Mm³/a): the scaled WR2012 MAR for a single target, or the band's geometric mean. */
 	targetMarMm3: number;
+	/** The band bounds (Mm³/a, already at the modelled catchment's scale), when the penalty uses one; null for a single target. */
+	marLowMm3: number | null;
+	marHighMm3: number | null;
 	basis: 'overlap' | 'whole';
 	/** Simulated natural MAR ÷ target for the fitted (penalised) parameters. */
 	marRatio: number;
@@ -358,7 +376,18 @@ interface FitResult {
 	cancelled: boolean;
 }
 
-function fit(pb: CalibrationProblem, idx: Int32Array, free: string[], objective: ObjectiveId, budget: number, seed: number, stage: CalibrationStage, onProgress: CalibrateOptions['onProgress'], penalty: Wr2012Penalty | null = null): FitResult {
+function fit(
+	pb: CalibrationProblem,
+	idx: Int32Array,
+	free: string[],
+	objective: ObjectiveId,
+	budget: number,
+	seed: number,
+	stage: CalibrationStage,
+	onProgress: CalibrateOptions['onProgress'],
+	penalty: Wr2012Penalty | null = null,
+	bounds: CalibrationBounds = 'wide'
+): FitResult {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
 	const obs = new Float64Array(idx.length);
@@ -374,7 +403,7 @@ function fit(pb: CalibrationProblem, idx: Int32Array, free: string[], objective:
 	};
 	const res = dds(
 		loss,
-		specs.map((s) => ({ min: s.min, max: s.max })),
+		specs.map((s) => (bounds === 'typical' ? { min: s.typical[0], max: s.typical[1] } : { min: s.min, max: s.max })),
 		{
 			budget,
 			seed,
@@ -473,6 +502,7 @@ const WET_DRY_CONTRAST = 1.5;
 /** Calibrate a runoff model's parameters against the project's observed flow. */
 export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
 	const objective = opts.objective ?? 'kgePrime';
+	const bounds = opts.bounds ?? 'wide';
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
 	const pb = prepareCalibration(input, opts.exclusions, opts.model);
@@ -485,7 +515,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	let cancelled = false;
 	const penalty = pb.marPenalty;
 	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null);
+		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds);
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r.params;
@@ -575,7 +605,15 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			const p0 = run(all, 'unpenalised', seed, false);
 			unpenalised = { params: p0, fit: scored(pb, p0, all), marRatio: ratio(p0) };
 		}
-		marPenalty = { weight: penalty.weight, targetMarMm3: penalty.targetMarMm3, basis: penalty.basis, marRatio: ratio(params), unpenalised };
+		marPenalty = {
+			weight: penalty.weight,
+			targetMarMm3: penalty.targetMarMm3,
+			marLowMm3: penalty.marLowMm3,
+			marHighMm3: penalty.marHighMm3,
+			basis: penalty.basis,
+			marRatio: ratio(params),
+			unpenalised
+		};
 	}
 	notes.push(...validationNotes(objective, splitSample, differential, independentRecord));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
@@ -583,6 +621,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	return {
 		model: pb.model,
 		objective,
+		bounds,
 		budget,
 		seed,
 		free,

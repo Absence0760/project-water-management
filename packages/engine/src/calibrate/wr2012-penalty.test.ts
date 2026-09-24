@@ -83,15 +83,15 @@ describe('WR2012 MAR penalty in calibration', () => {
 
 	it('is off by default: no penalty, and the fit is what it was without a reference', () => {
 		const plain = calibrate(input, opts);
-		const ref = calibrate(withReference(input, mar, 1.4, { enabled: false, weight: 1 }), opts);
+		const ref = calibrate(withReference(input, mar, 1.4, { enabled: false, weight: 1, marLowMm3: null, marHighMm3: null }), opts);
 		expect(plain.marPenalty).toBeNull();
 		expect(ref.marPenalty).toBeNull();
 		expect(ref.params).toEqual(plain.params);
-		expect(prepareCalibration(withReference(input, mar, 1.4, { enabled: false, weight: 1 })).marPenalty).toBeNull();
+		expect(prepareCalibration(withReference(input, mar, 1.4, { enabled: false, weight: 1, marLowMm3: null, marHighMm3: null })).marPenalty).toBeNull();
 	});
 
 	it('when on, records its weight and shows the fit with and without it; the penalty pulls the MAR towards the reference', () => {
-		const r = calibrate(withReference(input, mar, 1.4, { enabled: true, weight: 2 }), opts);
+		const r = calibrate(withReference(input, mar, 1.4, { enabled: true, weight: 2, marLowMm3: null, marHighMm3: null }), opts);
 		const p = r.marPenalty!;
 		expect(p.weight).toBe(2);
 		expect(p.basis).toBe('overlap');
@@ -110,7 +110,7 @@ describe('WR2012 MAR penalty in calibration', () => {
 
 	it('reports progress for the unpenalised stage after the others', () => {
 		const stages: string[] = [];
-		calibrate(withReference(input, mar, 1.4, { enabled: true, weight: 1 }), {
+		calibrate(withReference(input, mar, 1.4, { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null }), {
 			...opts,
 			budget: 20,
 			onProgress: (pr) => void (stages.at(-1) !== pr.stage && stages.push(pr.stage))
@@ -119,7 +119,50 @@ describe('WR2012 MAR penalty in calibration', () => {
 	});
 
 	it('is deterministic for a seed', () => {
-		const i = withReference(input, mar, 0.7, { enabled: true, weight: 1 });
+		const i = withReference(input, mar, 0.7, { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null });
 		expect(JSON.stringify(calibrate(i, opts))).toBe(JSON.stringify(calibrate(i, opts)));
+	});
+});
+
+describe('WR2012 MAR band penalty in calibration (issue #4 phase 6: two disagreeing published MAR estimates)', () => {
+	const { input, mar } = synthetic();
+	const opts = { budget: 150, validate: false, seed: 1 } as const;
+
+	/** A reference whose calibration-penalty band is [mar × loFactor, mar × hiFactor] (marMm3 itself is unused by a band fit). */
+	function withBand(loFactor: number, hiFactor: number, weight = 2): ModelInput {
+		return withReference(input, mar, 1, { enabled: true, weight, marLowMm3: mar * loFactor, marHighMm3: mar * hiFactor });
+	}
+
+	it('records the band on the report (target = its geometric mean), and pulls a fit outside it back in', () => {
+		// Well above the unconstrained fit's MAR (≈ the truth, since the "observed" record is noise-free).
+		const r = calibrate(withBand(1.8, 2.2), opts);
+		const p = r.marPenalty!;
+		expect(p.marLowMm3).toBeCloseTo(mar * 1.8, 8);
+		expect(p.marHighMm3).toBeCloseTo(mar * 2.2, 8);
+		expect(p.targetMarMm3).toBeCloseTo(Math.sqrt(mar * 1.8 * (mar * 2.2)), 8);
+		const simulated = p.marRatio * p.targetMarMm3;
+		const simulatedUnpenalised = p.unpenalised!.marRatio * p.targetMarMm3;
+		// Unconstrained, the fit tracks the observed record, well below the band; penalised (a soft pull, not
+		// a hard constraint), it moves substantially closer, to within 5 % of entering it.
+		expect(simulatedUnpenalised).toBeLessThan(p.marLowMm3!);
+		expect(simulated).toBeGreaterThan(simulatedUnpenalised);
+		expect(simulated).toBeGreaterThanOrEqual(p.marLowMm3! * 0.95);
+		expect(simulated).toBeLessThanOrEqual(p.marHighMm3! * 1.05);
+	});
+
+	it('costs nothing when the free fit’s MAR already falls inside a wide band', () => {
+		const r = calibrate(withBand(0.3, 3), opts);
+		const p = r.marPenalty!;
+		const simulated = p.marRatio * p.targetMarMm3;
+		expect(simulated).toBeGreaterThanOrEqual(p.marLowMm3!);
+		expect(simulated).toBeLessThanOrEqual(p.marHighMm3!);
+	});
+
+	it('a one-sided or inverted band falls back to a single target, same as prepareCalibration/wr2012Penalty', () => {
+		const oneSided = withReference(input, mar, 1.4, { enabled: true, weight: 1, marLowMm3: 5, marHighMm3: null });
+		const r = calibrate(oneSided, opts);
+		expect(r.marPenalty!.marLowMm3).toBeNull();
+		expect(r.marPenalty!.marHighMm3).toBeNull();
+		expect(r.marPenalty!.targetMarMm3).toBeCloseTo(mar * 1.4, 10);
 	});
 });

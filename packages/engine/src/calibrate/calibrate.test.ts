@@ -172,6 +172,19 @@ describe('calibrate', () => {
 		expect(calibrate(input, { budget: 300, seed: 5 }).params).not.toEqual(a.params);
 	}, 60_000);
 
+	it('bounds: "wide" (default) searches each parameter\'s min/max; "typical" restricts the search to Perrin et al.\'s (2003) 80 % range and clamps a starting point outside it', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
+		input.settings.gr4j = { x1: 2900, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 }; // x1 starts outside Perrin's typical range (100–1200)
+		const wide = calibrate(input, { budget: 150, seed: 3, validate: false });
+		expect(wide.bounds).toBe('wide');
+		const typical = calibrate(input, { budget: 150, seed: 3, validate: false, bounds: 'typical' });
+		expect(typical.bounds).toBe('typical');
+		for (const s of GR4J_PARAMS.filter((s) => typical.free.includes(s.key))) {
+			expect(typical.params[s.key]).toBeGreaterThanOrEqual(s.typical[0]);
+			expect(typical.params[s.key]).toBeLessThanOrEqual(s.typical[1]);
+		}
+	}, 60_000);
+
 	it('fits only the free parameters; X2 moves only when freed', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
 		const fixed = calibrate(input, { budget: 200, free: ['x1'], validate: false });
