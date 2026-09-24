@@ -588,8 +588,8 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'runoff-model',
 		term: 'Runoff model',
-		short: 'Which model turns rain into natural flow. GR4J is the default; legacy is the b023 recession model, kept to compare with the workbook.',
-		long: 'Legacy is the workbook’s empirical recession model, ported unchanged. The engine audit found that it does not conserve water: one small storm can return several times its own volume as flow (docs/engine-audit.md H1).\n\nThe setting only changes how rain becomes natural flow. Flow shares, farms, dams, transfers and the EWR are the same whichever model made the flow, so two runs that differ only in the runoff model compare directly.',
+		short: 'Which model turns rain into natural flow. GR4J is the default; legacy is the b023 model, kept for workbook comparison only, not evidence.',
+		long: 'Legacy is the workbook’s empirical recession model, ported unchanged. The engine audit found that it does not conserve water: one small storm can return several times its own volume as flow (docs/engine-audit.md H1). Decided (persona recommendation, 2026-09-24; pending the hydrologist): legacy stays unchanged and is kept for workbook comparison only — not evidence for a licence, Reserve or compliance assessment. A legacy run carries this warning, an amber “Workbook comparison” badge, and a leading comment on its CSV exports.\n\nThe setting only changes how rain becomes natural flow. Flow shares, farms, dams, transfers and the EWR are the same whichever model made the flow, so two runs that differ only in the runoff model compare directly.',
 		category: 'flow',
 		aliases: ['rain-runoff model', 'rainfall-runoff', 'legacy model'],
 		fields: ['settings.runoffModel'],

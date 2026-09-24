@@ -9,7 +9,8 @@ const run = (id: string, label = ''): RunMeta => ({
 	startDate: '2000-01-01',
 	endDate: '2020-12-31',
 	createdAt: '2026-09-23T12:00:00Z',
-	createdBy: 'A'
+	createdBy: 'A',
+	legacy: false
 });
 
 describe('run refs', () => {

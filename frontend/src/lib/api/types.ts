@@ -107,6 +107,8 @@ export interface RunMeta {
 	endDate: string;
 	createdAt: string;
 	createdBy: string | null;
+	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
+	legacy: boolean;
 }
 
 export interface Run extends RunMeta {
