@@ -102,15 +102,17 @@
 
 <SetupChecklist {steps} />
 
+<!-- Each fact links to the tab where it is edited or looked at; the link is
+     stretched over the whole tile, so the tile is the click target. -->
 <dl class="stats">
-	<div class="stat"><dt>Farms</dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
-	<div class="stat"><dt>Catchment area</dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
-	<div class="stat"><dt>Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
-	<div class="stat"><dt>Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
-	<div class="stat"><dt>Active transfers</dt><dd>{fmtNum(stats.transfers)}</dd></div>
-	<div class="stat"><dt>Time series</dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
-	<div class="stat"><dt>Model runs</dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
-	<div class="stat"><dt>Outflow gauge</dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
+	<div class="stat"><dt><a href="?tab=network">Farms</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
+	<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
+	<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
+	<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
+	<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
+	<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
+	<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
+	<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
 </dl>
 
 <div class="grid">
@@ -140,11 +142,13 @@
 				{/if}
 			</form>
 		</section>
-
-		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
 	</div>
 
-	<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
+	<!-- Who can open the project: the owning team, then the people shared directly. -->
+	<div class="col access">
+		<TeamPanel {project} {isOwner} {currentUserId} {onProjectChange} />
+		<MembersPanel projectId={project.id} team={project.team} {isOwner} {currentUserId} {onLeftProject} />
+	</div>
 </div>
 
 <style>
@@ -182,6 +186,39 @@
 	textarea,
 	input {
 		width: 100%;
+	}
+	/* The description grows with its text (up to a cap) instead of hiding it
+	   behind an inner scrollbar, which on a phone showed only a few lines.
+	   Browsers without field-sizing keep the fixed four rows. */
+	textarea {
+		field-sizing: content;
+		min-height: 6.5rem;
+		max-height: 24rem;
+	}
+	.stat {
+		position: relative;
+	}
+	.stat:hover {
+		border-color: var(--accent);
+	}
+	.stat:has(a:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.stat dt a {
+		color: inherit;
+		text-decoration: underline;
+		text-decoration-color: var(--border-strong);
+		text-underline-offset: 3px;
+	}
+	.stat dt a:focus-visible {
+		outline: none;
+	}
+	.stat dt a::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: var(--radius);
 	}
 	dd.text {
 		font-size: 1rem;

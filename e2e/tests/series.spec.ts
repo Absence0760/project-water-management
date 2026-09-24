@@ -57,7 +57,7 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(flowRow).toContainText('2021-12-31');
 
 	// View re-draws a stored series.
-	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View' }).click();
+	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment: line chart/ }).locator('canvas')).toBeVisible();
 });
 
@@ -115,17 +115,17 @@ test('clicking anywhere on a series row shows it in the chart; its buttons keep 
 
 	await flowRow.getByRole('cell').first().click();
 	await expect(page.getByRole('img', { name: /^Flow — observed gauge.*: line chart/ }).locator('canvas')).toBeVisible();
-	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
 	await rainRow.getByRole('rowheader').click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment: line chart/ }).locator('canvas')).toBeVisible();
-	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(rainRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'false');
 
 	// A row's own control doesn't also select the row.
 	page.once('dialog', (d) => void d.dismiss());
 	await flowRow.getByRole('button', { name: /^Delete/ }).click();
-	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(rainRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a US month/day CSV is read as month/day, and the summary says how dates were read', async ({ page, owner }) => {
@@ -165,4 +165,53 @@ test("a series' CSV menu opens in full, even on the table's last row", async ({ 
 	expect(await wrap.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
 	await page.keyboard.press('Escape');
 	await expect(item).toBeHidden();
+});
+
+test('on a phone each series row is a card: every column and button fits without scrolling sideways', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series phone');
+	await page.setViewportSize({ width: 390, height: 900 });
+
+	// Empty: the hint points at the upload form, which sits right under the series panel.
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await expect(page.getByText('No time series yet.')).toContainText('Upload CSV form below');
+	const upload = page.getByRole('region', { name: 'Upload CSV' });
+	const uses = page.getByRole('region', { name: 'What the model uses' });
+	expect((await upload.boundingBox())!.y).toBeLessThan((await uses.boundingBox())!.y);
+
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+	await page.reload();
+	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toBeVisible();
+
+	// Still a table to assistive tech: header cells and data cells keep their roles.
+	await expect(table.getByRole('columnheader', { name: 'Coverage by year' })).toHaveCount(1);
+	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-01');
+
+	// Nothing is hidden behind a sideways scroll, in the table's box or the page.
+	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
+	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	await expect(wrap).not.toHaveAttribute('tabindex'); // no sideways-scroll tab stop (a11y/scrollRegions.ts)
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	const del = flowRow.getByRole('button', { name: /^Delete/ });
+	await del.scrollIntoViewIfNeeded();
+	for (const b of [flowRow.getByRole('button', { name: 'View', exact: true }), flowRow.getByRole('button', { name: 'Preview', exact: true }), del]) {
+		await expect(b).toBeInViewport({ ratio: 1 });
+	}
+	// Each card shows its column labels.
+	const label = await flowRow.getByRole('cell').first().evaluate((el) => getComputedStyle(el, '::before').content);
+	expect(label).toContain('Period');
+});
+
+test('on a wide screen the upload form stays to the right of "What the model uses"', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series wide');
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const upload = (await page.getByRole('region', { name: 'Upload CSV' }).boundingBox())!;
+	const uses = (await page.getByRole('region', { name: 'What the model uses' }).boundingBox())!;
+	expect(upload.x).toBeGreaterThanOrEqual(uses.x + uses.width);
+	expect(Math.abs(upload.y - uses.y)).toBeLessThan(2);
 });

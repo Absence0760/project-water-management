@@ -102,6 +102,15 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Explore outputs'
 	]);
 
+	// The menu sits in the rail beside the results and stays in view as the page scrolls,
+	// marking the section being read.
+	await expect(menu.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
+	await menu.getByRole('link', { name: 'Hydrograph' }).click();
+	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ })).toBeInViewport();
+	await expect(menu).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Summary' })).not.toHaveAttribute('aria-current', 'location');
+
 	await menu.getByRole('link', { name: 'Farm detail' }).click();
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}#res-farm$/);
 	const farm = page.getByRole('region', { name: 'Farm detail' });
@@ -130,6 +139,30 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
 	await expect(list.getByRole('button', { name: /^Old 01/ })).toHaveCount(0);
 	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
+});
+
+test('with a long runs list the whole results menu stays in view on a laptop screen', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs rail');
+	// RUNS_KEPT_PER_PROJECT is 20, the most a project can hold.
+	for (let i = 1; i <= 20; i++) await createRun(page.request, project.id, `Run ${String(i).padStart(2, '0')}`);
+	await page.setViewportSize({ width: 1280, height: 768 });
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const menu = page.getByRole('navigation', { name: 'Result sections' });
+	await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
+	// The list scrolls inside its own panel rather than pushing the menu down.
+	const runs = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('list');
+	expect(await runs.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+	await expect(menu.getByRole('link', { name: 'Summary' })).toBeInViewport({ ratio: 1 });
+
+	// Once the rail is stuck under the header, the list and every menu link fit on screen.
+	await menu.getByRole('link', { name: 'EWR by month' }).click();
+	await expect(page.getByRole('region', { name: 'Runs', exact: true })).toBeInViewport();
+	// The rail needs no scrollbar of its own: nothing in it is clipped (a fixed 16rem list overflowed by 17px here).
+	const rail = page.getByRole('complementary');
+	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
+	for (const name of ['Summary', 'Explore outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
 });
 
 test('a run tells where its water went on the catchment picture', async ({ page, owner }) => {

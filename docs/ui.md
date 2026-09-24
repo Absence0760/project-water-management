@@ -54,7 +54,22 @@ button), so a scrolling table or a sticky header can't clip or cover them.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), eight headline facts, project
-details, team and members. Email addresses (member rows here and on team pages,
+details, team and members.
+
+- **Headline facts** each link to the tab where they are edited or looked at
+  (farms, area, dams and the outflow gauge to Network, irrigated area to
+  Crops, transfers to Transfers, time series to Data, runs to Runs). The
+  whole tile is the click target (the label's link is stretched over it), and
+  a focused tile gets an outline.
+- **Layout**: Project details on the left; on the right, "who has access":
+  Team above Members (or "Shared directly with" for a team project), so the
+  two panels that refer to each other sit together. Below 900 px it is one
+  column in the order details, team, members.
+- The **description** box grows with its text (up to about 24rem) instead of
+  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
+  without it keep four rows).
+
+Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
@@ -108,7 +123,15 @@ Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Uploads read year-last dates (DD/MM/YYYY or
+that series in the chart below. Below 640px wide each row becomes a card
+(series and role on top, then labelled Period / Data up to / Missing /
+Typical, the coverage strip, and the buttons wrapping underneath), so a phone
+never has to scroll the table sideways; explicit table roles keep it a table
+to screen readers, and the card labels are silent to them. For editors the
+**Upload CSV** form follows the series panels in reading order, so on a phone
+it sits right below them rather than after the whole *What the model uses*
+reference (wide screens still show it on the right); the empty state points at
+it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
 summary says so). In number fields, a comma is a thousands separator only in a
@@ -324,11 +347,21 @@ The settings are grouped by what they drive:
 
 ## Runs & results
 
-- A **Result sections** menu under the run's title links to each panel
-  (`#res-summary` … `#res-explore`, listed by `runs/sections.ts`). Farm
-  detail appears only when the run has farms, and Runoff model only for a
-  GR4J run. The page's `scroll-padding-top` keeps
-  a jumped-to section, or a focused control, clear of the sticky header.
+- **The rail.** On wide screens (over 900px) a left rail holds the runs
+  list and, below it, an **On this page** menu (the "Result sections"
+  navigation) linking to each panel (`#res-summary` … `#res-explore`, listed
+  by `runs/sections.ts`). The rail is sticky, so the menu stays in view down
+  the long results page, and it marks the section being read with
+  `aria-current="location"` (scroll spy: `activeSectionId`, the last section
+  whose top has passed under the sticky header, or the last one at the
+  bottom of the page). A long runs list scrolls inside its panel so the menu
+  stays in reach: its height is capped at `min(16rem, 25vh)`, so with 20
+  runs the rail still fits a 768px-tall window without clipping (below about
+  720px the rail scrolls on its own). Narrower, the rail stacks above the results and the menu
+  becomes wrapping chips. Farm detail appears only when the run has farms,
+  and Runoff model only for a GR4J run. The page's `scroll-padding-top`
+  keeps a jumped-to section, or a focused control, clear of the sticky
+  header.
 - The run button is disabled, with links, until the project has a network
   and a rainfall series. While a run is going it shows progress.
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the

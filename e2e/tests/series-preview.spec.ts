@@ -65,9 +65,17 @@ test('the card header’s "Preview data" opens with every column, the column pic
 	await expect(dialog).toBeVisible();
 	await expect(dialog).toContainText('3 of 3 days shown');
 
-	// One column per series, plus the flow series' own m³/day column: Date + 3.
+	// Every column: Date, one per series, then "how the model used it" — the flow
+	// series' m³/day, Rain used (there is rain) and Excluded from calibration.
 	const headerCells = dialog.locator('thead th');
-	await expect(headerCells).toHaveCount(4);
+	await expect(headerCells).toHaveText([
+		'Date',
+		/^Flow — observed gauge/,
+		/^Rainfall — catchment/,
+		/^Flow — observed gauge \(m³\/day\)/,
+		/^Rain used \(model\)/,
+		'Excluded from calibration'
+	]);
 
 	// The column picker's "Series" group can hide a raw series column. (Its
 	// <summary> toggle carries no ARIA button role in this browser build, so
@@ -77,7 +85,9 @@ test('the card header’s "Preview data" opens with every column, the column pic
 	const flowCheckbox = seriesGroup.getByRole('checkbox', { name: 'Flow — observed gauge', exact: true });
 	await expect(flowCheckbox).toBeChecked();
 	await flowCheckbox.uncheck();
-	await expect(headerCells).toHaveCount(3);
+	// Only the raw flow column goes; its m³/day column is a separate choice.
+	await expect(headerCells).toHaveCount(5);
+	await expect(headerCells.filter({ hasText: /^Flow — observed gauge\(/ })).toHaveCount(0);
 
 	await page.keyboard.press('Escape');
 	await expect(dialog).toBeHidden();
