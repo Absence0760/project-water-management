@@ -356,6 +356,33 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's
   own start/end; clipped to the run with a warning). Runs stored by older
   engines have no `curtailment` key. Formulas: [model.md §2.11](./model.md#211-curtailment-targets-shortfalls).
+  From engine 0.17.0 (audit Q17) its EWR column `ewrShortfallM3Day` is the
+  farm's **EWR charge**: its share of the shortfall at the EWR sites below it
+  (the outlet and every gauge), pro rata to its net impact
+  ([model.md §2.7b](./model.md#27b-ewr-attribution-who-is-charged-for-a-shortfall-engine--0170-audit-q17)).
+  Each farm row adds `ewrChargeIrrigationM3Day` and `ewrChargeStorageM3Day`
+  (the charge met by irrigating less, and by storing less / passing inflow;
+  they sum to the charge), `ewrSupplyCutM3Day` / `ewrSupplyCutLs` (−ΔG, the
+  supply cut that meets the irrigation part) and `ewrBindingSiteId` (the EWR
+  site that set most of the charge, `null` when not charged); `totals` adds
+  the first three. From 0.17.0 (audit Q13) `totalChangeM3Day` is reduce/gain +
+  `ewrSupplyCutM3Day` (the change in supply), `volumeLeftM3Day` is
+  `MAX(target + ewrSupplyCutM3Day, 0)`, `fractionOfDemandLeft` is in 0–1, and
+  `ewrCutBeyondShareM3Day` (≥ 0, also in `totals`) is how far the EWR supply
+  cut exceeds the equitable share. `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) and
+  `demandPctNote()` are exported by the engine for clients that show demand
+  left %. The summary adds `ewrAttribution: 'netImpactProRata'` and
+  `ewrSites` (outlet first, then gauges by node id): `{ nodeId, name,
+  isOutlet, farmCount, daysNotMet, shortfallM3Day, chargedM3Day,
+  naturalM3Day }`, window means ≤ 0 with charged + natural = shortfall.
+  `FarmSummary.avgEwrShortfallM3Day` / `daysEwrNotMet` and the farm grids of
+  `ewrCompliance` also come from the charge (positive mean; days charged).
+  Before 0.17.0 all of these came from the Element sheet's incremental
+  shortfall AB, which stays as the diagnostic series
+  `ewr_shortfall_incremental` ("reach shortfall"). New run series: per farm
+  `ewr_charge` and `ewr_charge_irrigation`; per site `ewr_charged` and
+  `ewr_natural` (catchment scope for the outlet, the gauge's node for a
+  gauge), all ≤ 0.
 
 - `summary.runoff` (engine ≥ 0.5.0, GR4J runs only) is the runoff model's water
   balance in mm over the catchment: `{ model, params, warmupDays, areaKm2,
@@ -465,8 +492,8 @@ ahead of the usual header row.
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the EWR sites (days not met, shortfall, charged to farms, natural), the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

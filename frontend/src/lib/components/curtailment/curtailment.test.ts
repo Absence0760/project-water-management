@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CurtailmentFarm, CurtailmentSummary } from '@water-management/engine';
-import { actionOf, curtailmentRows, cutCount, fmtSigned, fmtVol } from './curtailment';
+import { actionOf, curtailmentRows, cutCount, ewrSiteRows, fmtDemandLeft, fmtSigned, fmtVol } from './curtailment';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -108,14 +108,83 @@ describe('curtailmentRows', () => {
 			ewrShortfall: '-5',
 			totalChange: '-38.3',
 			totalChangeLs: '-0.4',
-			demandLeftPct: '61.7%',
+			demandLeftPct: '62%',
 			verdict: 'cut 38.3 m³/day'
 		});
-		expect(b).toMatchObject({ name: 'B', action: 'gain', suppliedPct: '–', demandLeftPct: '–', verdict: 'may gain 12.5 m³/day' });
+		expect(b).toMatchObject({ name: 'B', action: 'gain', suppliedPct: '–', demandLeftPct: 'no demand', verdict: 'below its equitable share by 12.5 m³/day' });
+		// Q11: the fair share is a benchmark, so no row ever says a farm may "gain" water.
+		for (const r of curtailmentRows(c)) expect(r.verdict).not.toMatch(/gain/i);
 		expect(cc).toMatchObject({ action: 'none', totalChange: '0', verdict: 'no change' });
 	});
 
 	it('counts the farms that must cut', () => {
 		expect(cutCount(c)).toBe(1);
+	});
+
+	it('shows "–" for the EWR split on a run made before engine 0.17.0', () => {
+		const [a] = curtailmentRows(c);
+		expect(a).toMatchObject({ ewrIrrigation: '–', ewrStorage: '–', supplyCut: '–', supplyCutLs: '–', bindingSite: '' });
+	});
+});
+
+describe('demand left % (Q13)', () => {
+	it('says "no demand" for a farm without demand', () => {
+		expect(fmtDemandLeft(0, null)).toEqual({ text: 'no demand', title: null });
+	});
+	it('shows a dash with a tooltip below the 1 m³/day floor', () => {
+		expect(fmtDemandLeft(0.4, 0.5)).toEqual({ text: '—', title: 'demand under 1 m³/day; % not meaningful' });
+	});
+	it('shows whole percentages, <1% and >99% at the ends, never outside 0–100', () => {
+		const t = (f: number) => fmtDemandLeft(100, f).text;
+		expect([t(0), t(0.004), t(0.005), t(0.617), t(0.994), t(0.995), t(1)]).toEqual(['0%', '<1%', '1%', '62%', '99%', '>99%', '100%']);
+		// A run from before engine 0.17.0 could hold a negative volume left.
+		expect([t(-0.3), t(1.2)]).toEqual(['0%', '100%']);
+	});
+});
+
+describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
+	const c: CurtailmentSummary = {
+		...summary([
+			farm({
+				nodeId: 'a',
+				ewrShortfallM3Day: -30,
+				ewrChargeIrrigationM3Day: -12,
+				ewrChargeStorageM3Day: -18,
+				ewrSupplyCutM3Day: -16,
+				ewrSupplyCutLs: -16 / 86.4,
+				ewrBindingSiteId: 'g'
+			}),
+			farm({ nodeId: 'b', ewrChargeIrrigationM3Day: 0, ewrChargeStorageM3Day: 0, ewrSupplyCutM3Day: 0, ewrSupplyCutLs: 0, ewrBindingSiteId: null })
+		]),
+		ewrAttribution: 'netImpactProRata',
+		ewrSites: [
+			{ nodeId: 'o', name: 'Outlet gauge', isOutlet: true, farmCount: 2, daysNotMet: 40, shortfallM3Day: -50, chargedM3Day: -30, naturalM3Day: -20 },
+			{ nodeId: 'g', name: 'Weir', isOutlet: false, farmCount: 1, daysNotMet: 3, shortfallM3Day: -30, chargedM3Day: -30, naturalM3Day: 0 }
+		]
+	};
+
+	it('splits the charge into irrigate less and store less, with the supply cut and the binding site', () => {
+		const [a, b] = curtailmentRows(c, { g: 'Weir (renamed)' });
+		expect(a).toMatchObject({ ewrShortfall: '-30', ewrIrrigation: '-12', ewrStorage: '-18', supplyCut: '-16', supplyCutLs: '-0.2', bindingSite: 'Weir (renamed)' });
+		expect(b).toMatchObject({ ewrIrrigation: '0', ewrStorage: '0', supplyCut: '0', bindingSite: '' });
+	});
+
+	it('Q13: a farm with only a storage charge is told to store less / pass inflow, and a cut beyond its share is flagged', () => {
+		const [z, f] = curtailmentRows(
+			summary([
+				farm({ nodeId: 'z', demandM3Day: 0, fractionOfDemandLeft: null, ewrShortfallM3Day: -10, ewrChargeIrrigationM3Day: 0, ewrChargeStorageM3Day: -10, ewrSupplyCutM3Day: 0 }),
+				farm({ nodeId: 'f', totalChangeM3Day: -50, volumeLeftM3Day: 0, fractionOfDemandLeft: 0, ewrCutBeyondShareM3Day: 40 })
+			])
+		);
+		expect(z).toMatchObject({ action: 'store', verdict: 'store less / pass inflow 10 m³/day', demandLeftPct: 'no demand', beyondShare: '' });
+		expect(f).toMatchObject({ action: 'cut', demandLeftPct: '0%', beyondShare: '40' });
+	});
+
+	it('lists each EWR site with its days not met, shortfall, charged and natural parts', () => {
+		expect(ewrSiteRows(c)).toEqual([
+			{ nodeId: 'o', name: 'Outlet gauge (outlet)', farmCount: 2, daysNotMet: '40', shortfall: '-50', charged: '-30', natural: '-20' },
+			{ nodeId: 'g', name: 'Weir', farmCount: 1, daysNotMet: '3', shortfall: '-30', charged: '-30', natural: '0' }
+		]);
+		expect(ewrSiteRows(summary([]))).toEqual([]);
 	});
 });

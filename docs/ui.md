@@ -508,7 +508,28 @@ value such as 108700.
   it has no checks, balance or working columns, and to run it again.
   Not yet: a trace of the runoff model's day, an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
-- Then come, in order: curtailment targets, the hydrograph (observed flow as
+- Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
+  view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
+  demand, supply, the *equitable share volume* and *above (−) / below (+)
+  equitable share* under "Equitable share (fairness benchmark, ex EWR)", then
+  the EWR columns. No label or badge says "gain" (audit Q11): a farm below its
+  share reads "below its equitable share by X m³/day", and the table ends with
+  the fixed footnote "Fairness benchmark only: … Not an allocation or licence
+  condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
+  column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
+  pass inflow*, the *Supply cut* (m³/day and l/s) and the *EWR site* setting
+  the charge, with a note on the rule; older runs show the single "EWR
+  shortfall" column (AB). *Total change* and *volume left* count only the
+  supply cut (Q13): a farm with no demand shows no cut, and a farm with only a
+  storage charge gets a "store less / pass inflow X m³/day" badge; a farm
+  whose EWR cut exceeds its equitable share gets a warning badge. *Demand left*
+  is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
+  demand, "<1%" / ">99%" at the ends. Below it, the **EWR sites** table (outlet first, then
+  gauges): farms upstream, days not met, and the mean shortfall, the part
+  charged to farms and the natural part over the reporting window; with the
+  outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
+  at the Reserve determination's EWR sites to protect upstream reaches.* Then
+  the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
   the full period), the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
@@ -533,7 +554,9 @@ value such as 108700.
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
-  EWR against outflow, the monthly EWR compliance grid, the **EWR test
+  EWR against outflow, the monthly EWR compliance grid (per farm, from engine
+  0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the
+  site picker), the **EWR test
   against observed flow** (`ewr/EwrAgreementTable.svelte`, `ewr/agreement.ts`;
   [model.md §2.9b](./model.md)): a one-line verdict on the frequency bias, the
   hit rate, false-alarm ratio and frequency bias, the 2×2 table of observed

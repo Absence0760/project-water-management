@@ -94,8 +94,8 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'suppliedM3Day', label: 'Supplied', unit: 'm³/day', format: 'volume', better: 'higher' },
 	{ key: 'deficitM3Day', label: 'Deficit', unit: 'm³/day', format: 'volume', better: 'lower' },
 	{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', format: 'fraction', better: 'higher' },
-	{ key: 'ewrShortfallM3Day', label: 'EWR shortfall', unit: 'm³/day', format: 'volume', better: 'lower' },
-	{ key: 'daysEwrNotMet', label: 'EWR not met', unit: 'days', format: 'days', better: 'lower' }
+	{ key: 'ewrShortfallM3Day', label: 'EWR charge', unit: 'm³/day', format: 'volume', better: 'lower' },
+	{ key: 'daysEwrNotMet', label: 'Days charged for the EWR', unit: 'days', format: 'days', better: 'lower' }
 ];
 
 export type SortKey = 'name' | FarmMetricKey;

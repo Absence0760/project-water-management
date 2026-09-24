@@ -582,7 +582,13 @@ export interface FarmSummary {
 	fractionSupplied: number;
 	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.16.0); absent on older runs. */
 	avgCropRequirementM3Day?: number;
+	/**
+	 * Mean EWR charge (positive): this farm's share of the shortfall at the EWR
+	 * sites below it (engine ≥ 0.17.0, audit Q17). Engines before 0.17.0 stored
+	 * the mean incremental shortfall (Element sheet AB).
+	 */
 	avgEwrShortfallM3Day: number;
+	/** Days the farm was charged (engine ≥ 0.17.0); before, days its AB was below 0. */
 	daysEwrNotMet: number;
 }
 
@@ -677,7 +683,11 @@ export interface EwrCompliance {
 	/** Days simulated in each cell (0 outside the run), same shape as the grids. */
 	days: number[][];
 	outlet: EwrComplianceGrid;
-	/** Per farm, from the shortfall the farm itself adds (ewr_shortfall_incremental). */
+	/**
+	 * Per farm, from its EWR charge (`ewr_charge`, engine ≥ 0.17.0, audit Q17):
+	 * the days it was charged and the volume charged to it. Engines before
+	 * 0.17.0 gridded the incremental shortfall (`ewr_shortfall_incremental`).
+	 */
 	farms: EwrComplianceGrid[];
 }
 
@@ -754,16 +764,69 @@ export interface CurtailmentFarm {
 	reduceGainLs: number;
 	/** [P] target / demand; null when demand is 0. */
 	targetFraction: number | null;
-	/** [R] Average incremental EWR shortfall, ≤ 0. */
+	/**
+	 * [R] Average EWR charge, ≤ 0: the farm's share of the shortfall at the EWR
+	 * sites below it, net-impact pro rata (engine ≥ 0.17.0, audit Q17). Engines
+	 * before 0.17.0: the average incremental shortfall (Element sheet AB).
+	 */
 	ewrShortfallM3Day: number;
-	/** [S] reduceGain + ewrShortfall. Negative = total cut needed to balance irrigation and meet the EWR. */
+	/**
+	 * [S] Negative = total cut in supply needed to balance irrigation and meet
+	 * the EWR. Engine ≥ 0.17.0 (audit Q13): reduceGain + ewrSupplyCut, so only
+	 * the part of the charge irrigation can meet; before: reduceGain + ewrShortfall.
+	 */
 	totalChangeM3Day: number;
 	/** [T] totalChangeM3Day / 86.4, l/s. */
 	totalChangeLs: number;
-	/** [U] target + ewrShortfall: irrigation volume left once balanced and the EWR is met. */
+	/**
+	 * [U] Irrigation volume left once balanced and the EWR is met. Engine ≥
+	 * 0.17.0 (audit Q13): MAX(target + ewrSupplyCut, 0), never below 0; before:
+	 * target + ewrShortfall, which could be negative.
+	 */
 	volumeLeftM3Day: number;
-	/** [V] volumeLeft / demand: share of demand that is left (the workbook labels it "reduction of demand required"). null when demand is 0. */
+	/**
+	 * [V] volumeLeft / demand: share of demand that is left (the workbook labels
+	 * it "reduction of demand required"), in 0–1 from engine 0.17.0. null when
+	 * demand is 0. Below DEMAND_PCT_FLOOR_M3_DAY of demand the UI shows "—".
+	 */
 	fractionOfDemandLeft: number | null;
+	/**
+	 * The part of R met by irrigating less (R_irr, ≤ 0; engine ≥ 0.17.0, audit
+	 * Q17): the mean of A · c / (c + MAX(o, 0)) with c = G − T the farm's
+	 * consumptive irrigation and o = e − c its storage gain and net export.
+	 */
+	ewrChargeIrrigationM3Day?: number;
+	/** R − R_irr (≤ 0): the part met by storing less or passing inflow (audit Q13). */
+	ewrChargeStorageM3Day?: number;
+	/** −ΔG (≤ 0): the cut in supply that removes R_irr of consumptive use, R_irr ÷ (1 − β(1 − e)). */
+	ewrSupplyCutM3Day?: number;
+	/** ewrSupplyCutM3Day / 86.4, l/s. */
+	ewrSupplyCutLs?: number;
+	/** The EWR site (node id) that set most of the charge over the window; null when not charged. */
+	ewrBindingSiteId?: string | null;
+	/** MAX(ΔG − target, 0) ≥ 0: how far the EWR supply cut exceeds the farm's equitable share (audit Q13); flagged when > 0. */
+	ewrCutBeyondShareM3Day?: number;
+}
+
+/**
+ * One EWR site over the reporting window (engine ≥ 0.17.0, audit Q17): the
+ * outlet and every gauge. Volumes are window means in m³/day, ≤ 0;
+ * charged + natural = shortfall.
+ */
+export interface EwrSiteSummary {
+	/** The site's node (the outlet node for the outlet). */
+	nodeId: string;
+	name: string;
+	/** The catchment outlet: its shortfall is the simulated outflow against the full pragmatic EWR. */
+	isOutlet: boolean;
+	/** Farms whose outflow reaches the site. */
+	farmCount: number;
+	daysNotMet: number;
+	shortfallM3Day: number;
+	/** The part charged to the farms upstream (D* = MIN(D, Σ net impact)). */
+	chargedM3Day: number;
+	/** The natural part: natural flow was already below the EWR. */
+	naturalM3Day: number;
 }
 
 /** b023 [Shortfalls] over a reporting window: per-farm targets and cuts, plus the totals row. */
@@ -775,6 +838,10 @@ export interface CurtailmentSummary {
 	/** [K total] Σ supplied / Σ demand over all farms; null when total demand is 0 (the workbook shows #DIV/0!). */
 	equitableFraction: number | null;
 	farms: CurtailmentFarm[];
+	/** The rule that set R (engine ≥ 0.17.0): net-impact pro rata at the EWR sites (audit Q17). Absent on older runs. */
+	ewrAttribution?: 'netImpactProRata';
+	/** The EWR sites (outlet first, then gauges by node id) over the window; absent on older runs. */
+	ewrSites?: EwrSiteSummary[];
 	/** The workbook's totals row: plain sums of the farm columns. */
 	totals: {
 		demandM3Day: number;
@@ -784,6 +851,10 @@ export interface CurtailmentSummary {
 		reduceGainM3Day: number;
 		reduceGainLs: number;
 		ewrShortfallM3Day: number;
+		ewrChargeIrrigationM3Day?: number;
+		ewrChargeStorageM3Day?: number;
+		ewrSupplyCutM3Day?: number;
+		ewrCutBeyondShareM3Day?: number;
 		totalChangeM3Day: number;
 		volumeLeftM3Day: number;
 	};
@@ -887,7 +958,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

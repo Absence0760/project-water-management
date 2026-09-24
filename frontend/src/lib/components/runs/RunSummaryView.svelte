@@ -48,8 +48,8 @@
 		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
 		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
 		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; farms under ${SUPPLY_TARGET * 100} % are flagged.` },
-		{ key: 'avgEwrShortfallM3Day', label: 'EWR shortfall', unit: 'm³/day', title: "Mean shortfall against the farm's share of the EWR that this farm adds." },
-		{ key: 'daysEwrNotMet', label: 'EWR not met', unit: 'days', title: 'Days on which this farm added to an EWR shortfall.' }
+		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day', title: 'Mean share of the shortfall at the EWR sites below this farm that is charged to it, pro rata to its net impact (engine 0.17.0; older runs: the reach shortfall it adds).' },
+		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this farm was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
 	];
 </script>
 

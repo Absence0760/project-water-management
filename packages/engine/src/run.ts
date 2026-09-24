@@ -33,6 +33,7 @@ import {
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
+import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -64,7 +65,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.16.0';
+export const ENGINE_VERSION = '0.17.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -171,6 +172,37 @@ export function runModelWith(
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
 	push(null, 'ewr_shortfall', 'EWR not met (negative = shortfall)', 'm³/day', ewrShort);
+
+	// Who is charged for a shortfall (engine ≥ 0.17.0, audit Q17): the EWR is
+	// assessed at the outlet and every gauge, and each site's shortfall is
+	// charged to the farms upstream of it pro rata to their net impact
+	// (./network/attribution.ts). Sites: the outlet first, then gauges by node id.
+	const gaugeSites = nodes
+		.flatMap((n, i) => (n.kind === 'gauge' && i !== topo.outflow ? [i] : []))
+		.sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+	const attribution = attributeEwrShortfall({
+		days,
+		kind: plan.nodes.map((n) => n.kind),
+		upstream: plan.upstream,
+		order: plan.order,
+		inflow: sim.nodes.map((r) => r.inflowUpstream),
+		runoff: sim.nodes.map((r) => r.runoff),
+		outflow: sim.nodes.map((r) => r.outflow),
+		supplied: sim.nodes.map((r) => r.supplied),
+		consumptivePerSupplied: plan.nodes.map((n) => 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency)),
+		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
+		sites: [
+			...(topo.outflow >= 0 ? [{ node: topo.outflow, shortfall: ewrShort }] : []),
+			...gaugeSites.map((g) => ({ node: g, shortfall: sim.nodes[g]!.ewrShortfall }))
+		]
+	});
+	const posInOrder = new Int32Array(nodes.length);
+	plan.order.forEach((node, k) => (posInOrder[node] = k));
+	for (const [si, site] of attribution.sites.entries()) {
+		const id = si === 0 && topo.outflow >= 0 ? null : nodes[site.node]!.id;
+		push(id, 'ewr_charged', 'EWR shortfall charged to the farms upstream (negative)', 'm³/day', site.charged);
+		push(id, 'ewr_natural', 'EWR shortfall not caused by use: natural (negative)', 'm³/day', site.natural);
+	}
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
 	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
@@ -191,7 +223,7 @@ export function runModelWith(
 		['ewr', 'ewr', 'EWR share'],
 		['ewrCumulative', 'ewr_cumulative', 'EWR required (this + upstream)'],
 		['ewrShortfall', 'ewr_shortfall', 'EWR shortfall (negative = not met)'],
-		['ewrShortfallIncremental', 'ewr_shortfall_incremental', 'EWR shortfall caused here']
+		['ewrShortfallIncremental', 'ewr_shortfall_incremental', 'Reach shortfall (workbook AB; diagnostic, does not set the EWR charge)']
 	];
 	const WORKING_SERIES: [keyof FarmWorkings, string, string, string][] = [
 		['grossDemand', 'gross_demand', 'Gross irrigation demand (before effective rain)', 'm³/day'],
@@ -222,6 +254,8 @@ export function runModelWith(
 		if (!w) return;
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
+		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
+		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
 	});
 
 	// --- summary -----------------------------------------------------------------
@@ -237,8 +271,9 @@ export function runModelWith(
 		const avgDemand = mean(r.demand);
 		const avgSupplied = mean(r.supplied);
 		const avgCrop = mean(r.cropRequirement);
+		const charge = attribution.charge[i]!;
 		let notMet = 0;
-		for (let t = 0; t < days; t++) if (r.ewrShortfallIncremental[t]! < 0) notMet++;
+		for (let t = 0; t < days; t++) if (charge[t]! < 0) notMet++;
 		farms.push({
 			nodeId: node.id,
 			name: node.name,
@@ -247,28 +282,42 @@ export function runModelWith(
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
-			// Positive volume: the average EWR shortfall this farm adds (b023 [Shortfalls] col R, sign flipped).
-			avgEwrShortfallM3Day: -mean(r.ewrShortfallIncremental),
+			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
+			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet
 		});
 	});
 
 	const window = resolveReportWindow(settings, start, days, warnings);
+	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
 			if (node.kind !== 'farm') return [];
 			const r = sim.nodes[i]!;
+			const bind = bindingSite(attribution, i, window.from, window.to, posOf);
 			return [
 				{
 					nodeId: node.id,
 					name: node.name,
 					demand: r.demand,
 					supplied: r.supplied,
-					ewrShortfallIncremental: r.ewrShortfallIncremental
+					ewrCharge: attribution.charge[i]!,
+					ewrChargeIrrigation: attribution.chargeIrrigation[i]!,
+					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
+					ewrBindingSiteId: bind < 0 ? null : nodes[attribution.sites[bind]!.node]!.id
 				}
 			];
 		}),
-		window
+		window,
+		attribution.sites.map((site, si) => ({
+			nodeId: nodes[site.node]!.id,
+			name: nodes[site.node]!.name,
+			isOutlet: si === 0 && topo.outflow >= 0,
+			farmCount: site.farms.length,
+			shortfall: si === 0 && topo.outflow >= 0 ? ewrShort : sim.nodes[site.node]!.ewrShortfall,
+			charged: site.charged,
+			natural: site.natural
+		}))
 	);
 
 	// Gauge and logger records measure the impacted river (farms, dams,
@@ -326,7 +375,7 @@ export function runModelWith(
 		{ nodeId: null, name: outflowNode?.name ?? 'Outlet', shortfallM3Day: ewrShort },
 		nodes.flatMap((node, i) =>
 			node.kind === 'farm'
-				? [{ nodeId: node.id, name: node.name, shortfallM3Day: sim.nodes[i]!.ewrShortfallIncremental }]
+				? [{ nodeId: node.id, name: node.name, shortfallM3Day: attribution.charge[i]! }]
 				: []
 		)
 	);

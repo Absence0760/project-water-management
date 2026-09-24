@@ -1,6 +1,6 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
-import { FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
+import { demandPctNote, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
 import { csvRow } from './csv.js';
 
 /**
@@ -16,6 +16,8 @@ const CATCHMENT_ORDER = [
 	'observed_flow',
 	'ewr',
 	'ewr_shortfall',
+	'ewr_charged',
+	'ewr_natural',
 	'rain_used',
 	'rain_final',
 	'rain_chirps',
@@ -79,8 +81,9 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
 	['avgDeficitM3Day', 'Average deficit (m³/day)'],
 	['fractionSupplied', 'Demand supplied (%)'],
-	['avgEwrShortfallM3Day', 'Average EWR shortfall (m³/day)'],
-	['daysEwrNotMet', 'Days EWR not met']
+	// Engine ≥ 0.17.0: the EWR charge at the EWR sites (audit Q17); older runs: the reach shortfall AB.
+	['avgEwrShortfallM3Day', 'Average EWR charge (m³/day)'],
+	['daysEwrNotMet', 'Days charged for the EWR']
 ];
 
 const CATCHMENT_ROWS: Record<string, string> = {
@@ -219,6 +222,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
 	yield '';
 
+	yield* curtailmentLines(summary.curtailment);
+	yield '';
+
+	yield* ewrSiteLines(summary.curtailment);
+	yield '';
+
 	yield* waterBalanceLines(summary.waterBalance);
 	yield '';
 
@@ -245,6 +254,98 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield csvRow(['Warnings']);
 		for (const w of summary.warnings) yield csvRow([w]);
 	}
+}
+
+type Curtailment = NonNullable<RunSummary['curtailment']>;
+type CurtailmentRow = Curtailment['farms'][number];
+
+/** The curtailment table's columns (model.md §2.11), workbook letter in brackets where it has one. Unrounded. */
+const CURTAILMENT_COLUMNS: [header: string, value: (f: CurtailmentRow, siteName: (id: string) => string) => Cell][] = [
+	['Average demand [H] (m³/day)', (f) => f.demandM3Day],
+	['Average supplied [I] (m³/day)', (f) => f.suppliedM3Day],
+	['Deficit [J] (m³/day)', (f) => f.deficitM3Day],
+	['Supplied [K] (% of demand)', (f) => pct(f.fractionSupplied) as Cell],
+	// Q11 (engine ≥ 0.17.0 labels): the equitable share is a fairness benchmark, never water a farm may "gain".
+	['Equitable share volume [M] (m³/day)', (f) => f.targetM3Day],
+	['Above (−) / below (+) equitable share [N] (m³/day)', (f) => f.reduceGainM3Day],
+	['Above (−) / below (+) equitable share [O] (l/s)', (f) => f.reduceGainLs],
+	['Equitable share [P] (% of demand)', (f) => pct(f.targetFraction) as Cell],
+	['EWR charge [R] (m³/day)', (f) => f.ewrShortfallM3Day],
+	['EWR charge met by irrigating less (m³/day)', (f) => f.ewrChargeIrrigationM3Day ?? null],
+	['EWR charge met by storing less / passing inflow (m³/day)', (f) => f.ewrChargeStorageM3Day ?? null],
+	['Supply cut for the EWR (m³/day)', (f) => f.ewrSupplyCutM3Day ?? null],
+	['Supply cut for the EWR (l/s)', (f) => f.ewrSupplyCutLs ?? null],
+	['EWR site setting the charge', (f, site) => (f.ewrBindingSiteId ? site(f.ewrBindingSiteId) : '')],
+	['Total change [S] (m³/day)', (f) => f.totalChangeM3Day],
+	['Total change [T] (l/s)', (f) => f.totalChangeLs],
+	['Volume left [U] (m³/day)', (f) => f.volumeLeftM3Day],
+	['Demand left [V] (%)', (f) => pct(f.fractionOfDemandLeft) as Cell],
+	// Why V is empty or not meaningful (audit Q13): no_demand | below_floor (demand under DEMAND_PCT_FLOOR_M3_DAY) | empty.
+	['demand_pct_note', (f) => demandPctNote(f.demandM3Day)],
+	['EWR cut beyond equitable share (m³/day)', (f) => f.ewrCutBeyondShareM3Day ?? null]
+];
+
+/**
+ * The curtailment report over its reporting window (model.md §2.11), one row
+ * per farm plus the totals, every number unrounded. From engine 0.17.0 the
+ * EWR column is the farm's charge at the EWR sites (audit Q17), a header
+ * row names the rule, and the fixed footnote closes the table (Q11).
+ */
+export function* curtailmentLines(c: RunSummary['curtailment']): Generator<string> {
+	yield csvRow(['Curtailment targets']);
+	if (!c) {
+		yield csvRow(['Run made before engine 0.3.0: no curtailment report. Run it again to see it.']);
+		return;
+	}
+	yield csvRow(['Reporting window', c.reportStart, c.reportEnd, `${c.days} days`]);
+	yield csvRow(['Equitable share of supply (fairness benchmark) [K total] (%)', pct(c.equitableFraction) as Cell]);
+	yield csvRow([
+		'EWR attribution',
+		c.ewrAttribution === 'netImpactProRata'
+			? `net impact pro rata (Q17), sites: outlet + gauges (${(c.ewrSites ?? []).length})`
+			: 'run made before engine 0.17.0: incremental shortfall (workbook AB)'
+	]);
+	const names = new Map((c.ewrSites ?? []).map((s) => [s.nodeId, s.name]));
+	for (const f of c.farms) if (!names.has(f.nodeId)) names.set(f.nodeId, f.name);
+	const site = (id: string) => names.get(id) ?? id;
+	yield csvRow(['Farm', ...CURTAILMENT_COLUMNS.map(([h]) => h)]);
+	for (const f of c.farms) yield csvRow([f.name, ...CURTAILMENT_COLUMNS.map(([, v]) => v(f, site))]);
+	const t = c.totals;
+	yield csvRow([
+		'Total',
+		t.demandM3Day,
+		t.suppliedM3Day,
+		t.deficitM3Day,
+		pct(c.equitableFraction) as Cell,
+		t.targetM3Day,
+		t.reduceGainM3Day,
+		t.reduceGainLs,
+		'',
+		t.ewrShortfallM3Day,
+		t.ewrChargeIrrigationM3Day ?? null,
+		t.ewrChargeStorageM3Day ?? null,
+		t.ewrSupplyCutM3Day ?? null,
+		'',
+		'',
+		t.totalChangeM3Day,
+		'',
+		t.volumeLeftM3Day,
+		'',
+		'',
+		t.ewrCutBeyondShareM3Day ?? null
+	]);
+	yield csvRow([EQUITABLE_SHARE_FOOTNOTE]);
+}
+
+/** Each EWR site over the reporting window (engine ≥ 0.17.0, audit Q17): charged + natural = shortfall. */
+export function* ewrSiteLines(c: RunSummary['curtailment']): Generator<string> {
+	yield csvRow(['EWR sites (reporting window)']);
+	if (!c?.ewrSites) {
+		yield csvRow(['Run made before engine 0.17.0: the EWR was assessed farm by farm (workbook AB), not at sites.']);
+		return;
+	}
+	yield csvRow(['Site', 'Outlet', 'Farms upstream', 'Days not met', 'Average shortfall (m³/day)', 'Charged to farms (m³/day)', 'Natural (m³/day)']);
+	for (const s of c.ewrSites) yield csvRow([s.name, s.isOutlet ? 'yes' : 'no', s.farmCount, s.daysNotMet, s.shortfallM3Day, s.chargedM3Day, s.naturalM3Day]);
 }
 
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */

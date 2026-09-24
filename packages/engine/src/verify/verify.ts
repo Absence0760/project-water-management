@@ -15,7 +15,7 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkBalance, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
+import { checkBalance, checkEwrAttribution, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
@@ -23,7 +23,8 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['soilWater', 'Each farm’s soil-water store stays between empty and full and hands out no more effective rain than fell', checkSoilWater],
 	['runoff', 'The runoff model balances: rain − evaporation − flow + exchange = change in storage', checkRunoffBalance],
 	['transfers', 'Transfers stay within their months, rates, daily caps and minimum storage', checkTransferLimits],
-	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals]
+	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals],
+	['ewrAttribution', 'Each EWR site’s shortfall splits exactly into the part charged to the farms upstream (pro rata to their net impact, never more than a farm took) and the natural part', checkEwrAttribution]
 ];
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {

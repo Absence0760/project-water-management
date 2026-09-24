@@ -787,16 +787,46 @@ describe('runModel — EWR', () => {
 		expect(get(out, 'G', 'ewr_cumulative')).toEqual([150, 150]);
 	});
 
-	it('attributes shortfalls to the farm that causes them', () => {
+	it('keeps the reach shortfall (AB) as a diagnostic, but charges no one while the EWR sites are met (Q17)', () => {
 		expect(get(out, 'X', 'ewr_shortfall')).toEqual([0, 0]); // 100 out ≥ 50
 		expect(get(out, 'Y', 'ewr_shortfall')).toEqual([-50, -50]); // 0 out < 50
 		expect(get(out, 'Y', 'ewr_shortfall_incremental')).toEqual([-50, -50]);
 		// Z: out 200 ≥ 150 → met; incremental = MIN(0 − (0 + −50), 0) = 0
 		expect(get(out, 'Z', 'ewr_shortfall')).toEqual([0, 0]);
 		expect(get(out, 'Z', 'ewr_shortfall_incremental')).toEqual([0, 0]);
+		// Y is short on its own reach, but the only EWR site (the outlet gauge G)
+		// is met, so Y is not charged: engine ≥ 0.17.0 (audit Q17). Before, AB
+		// asked Y to cut 50 m³/day.
+		expect(get(out, 'Y', 'ewr_charge')).toEqual([0, 0]);
 		const y = out.summary.farms.find((f) => f.nodeId === 'Y')!;
-		expect(y.avgEwrShortfallM3Day).toBe(50);
-		expect(y.daysEwrNotMet).toBe(2);
+		expect(y.avgEwrShortfallM3Day).toBe(0);
+		expect(y.daysEwrNotMet).toBe(0);
+		expect(get(out, null, 'ewr_charged')).toEqual([0, 0]);
+		expect(get(out, null, 'ewr_natural')).toEqual([0, 0]);
+	});
+
+	it('charges a short outlet to the farms upstream, pro rata to their net impact (Q17)', () => {
+		// EWR 250 at the outlet; outflow 200 → D = 50. Net impact: X 0 (passes its
+		// 100 on), Y 100 (stores all of it), Z 0. Y carries all 50; nothing is natural.
+		const short = run({ nodes, natural: [300, 300], settings: { ewrPragmaticM3PerDay: flat(250) as Monthly } });
+		expect(get(short, null, 'ewr_shortfall')).toEqual([-50, -50]);
+		expect(get(short, null, 'ewr_charged')).toEqual([-50, -50]);
+		expect(get(short, null, 'ewr_natural')).toEqual([0, 0]);
+		expect(get(short, 'Y', 'ewr_charge')).toEqual([-50, -50]);
+		// Y has no irrigation: all of its charge is "store less / pass inflow".
+		expect(get(short, 'Y', 'ewr_charge_irrigation')).toEqual([0, 0]);
+		expect(get(short, 'X', 'ewr_charge')).toEqual([0, 0]);
+		expect(get(short, 'Z', 'ewr_charge')).toEqual([0, 0]);
+		const y = short.summary.curtailment!.farms.find((f) => f.nodeId === 'Y')!;
+		expect([y.ewrShortfallM3Day, y.ewrChargeIrrigationM3Day, y.ewrChargeStorageM3Day, y.ewrSupplyCutM3Day, y.ewrBindingSiteId]).toEqual([-50, 0, -50, 0, 'G']);
+		expect(short.summary.curtailment!.ewrSites).toEqual([
+			{ nodeId: 'G', name: 'G', isOutlet: true, farmCount: 3, daysNotMet: 2, shortfallM3Day: -50, chargedM3Day: -50, naturalM3Day: 0 }
+		]);
+		// With EWR 350 the farms' total impact (100) is below the shortfall (150): the rest is natural.
+		const drought = run({ nodes, natural: [300, 300], settings: { ewrPragmaticM3PerDay: flat(350) as Monthly } });
+		expect(get(drought, null, 'ewr_charged')).toEqual([-100, -100]);
+		expect(get(drought, null, 'ewr_natural')).toEqual([-50, -50]);
+		expect(get(drought, 'Y', 'ewr_charge')).toEqual([-100, -100]);
 	});
 
 	it('counts catchment days where simulated outflow is below the EWR', () => {
@@ -1733,6 +1763,27 @@ describe.skipIf(!dataDir)(
 			);
 		});
 
+		// Q17 (engine ≥ 0.17.0): the EWR charge replaces AB as what drives
+		// curtailment. AB is still compared with the workbook above (a diagnostic
+		// series now); the farms' EWR grids, FarmSummary EWR means and curtailment R,
+		// S, T, U and V come from the charge, which the workbook doesn't have.
+		it('Q17: every EWR site splits exactly into charged + natural, and the self-checks pass', () => {
+			const checked = withVerification(modelInput, out);
+			expect(checked.summary.verification!.checks.filter((c) => !c.passed).map((c) => `${c.label}: ${c.detail}`)).toEqual([]);
+			const sites = out.summary.curtailment!.ewrSites!;
+			expect(sites[0]!.isOutlet).toBe(true);
+			expect(sites.length).toBe(1 + project.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null).length);
+			for (const s of sites) {
+				expect(s.chargedM3Day + s.naturalM3Day).toBeCloseTo(s.shortfallM3Day, 6);
+				expect(s.chargedM3Day).toBeLessThanOrEqual(0);
+				expect(s.naturalM3Day).toBeLessThanOrEqual(0);
+			}
+			for (const f of out.summary.curtailment!.farms) {
+				expect(f.ewrShortfallM3Day).toBeCloseTo(f.ewrChargeIrrigationM3Day! + f.ewrChargeStorageM3Day!, 9);
+				expect(f.ewrShortfallM3Day).toBeLessThanOrEqual(0);
+			}
+		});
+
 		it('scores the calibration window from the workbook settings (plausible NSE)', () => {
 			const full = runModel(modelInput);
 			const c = full.summary.calibration!;
@@ -1754,6 +1805,11 @@ describe.skipIf(!dataDir)(
 
 		// [Shortfalls]: computeCurtailment is fed the workbook's own daily F, G and AB,
 		// so these test curtailment.ts alone, not the network's R1 differences.
+		// Q17 (engine ≥ 0.17.0): the engine's own R is the EWR charge at the EWR
+		// sites (network/attribution.ts), not AB, so R and everything built on it
+		// (S, T, U, V) differ from the sheet on the engine's own run. The replay
+		// feeds AB in as the charge, all of it irrigation with k = 1 (the old way),
+		// so the sheet's formulas can still be checked.
 		const wbCurtailment = (window: ReportWindow) =>
 			computeCurtailment(
 				Object.entries(expected.nodes)
@@ -1763,7 +1819,7 @@ describe.skipIf(!dataDir)(
 						name,
 						demand: n.demand!.map((v) => v ?? 0),
 						supplied: n.supplied!.map((v) => v ?? 0),
-						ewrShortfallIncremental: n.ewr_shortfall_incremental!.map((v) => v ?? 0)
+						ewrCharge: n.ewr_shortfall_incremental!.map((v) => v ?? 0)
 					})),
 				window
 			);
@@ -1831,7 +1887,8 @@ describe.skipIf(!dataDir)(
 				close(got.reduceGainLs, N / 86.4);
 				close(got.totalChangeM3Day, S);
 				close(got.totalChangeLs, S / 86.4);
-				close(got.volumeLeftM3Day, M + r.R);
+				// Q13 (engine ≥ 0.17.0): the volume left is never below 0; the sheet's M + R can be.
+				close(got.volumeLeftM3Day, Math.max(M + r.R, 0));
 			}
 			// Some farm must give water up and another may gain it.
 			expect(c.farms.some((f) => f.reduceGainM3Day < 0)).toBe(true);
