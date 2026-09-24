@@ -320,6 +320,39 @@ the reports):
       it (`.claude/agents/persona-*.md`); either add `tsx` as an engine dev
       dependency or point the agents at the backend's copy.
 
+## Calibration research (2026-09-24)
+
+The review in [calibration-research.md](./calibration-research.md) turned into
+34 recommendations (CR-1 … CR-34), with priorities and effort. Open items, in
+the suggested order (the IDs carry the detail):
+
+- [ ] **Cheap first:** CR-2 multi-start DDS, CR-3 KGE(Q)+KGE(1/Q) objective,
+      CR-6 drop Moriasi words on daily scores, CR-34 record-representativeness
+      note.
+- [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
+      objective → CR-20 flagged zero-rain runs become missing so corrected
+      CHIRPS fills them (closes the gap behind issue #3) → CR-22 data-quality
+      panel.
+- [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
+      → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
+      "not determinable" → CR-28 WR2012 five-statistic table (confirm the
+      thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
+      FDC overlays and %nMAR.
+- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q against the imported
+      table), then CR-14 mass-conserving store once the hydrologist decides
+      (question 1 below).
+- [ ] **Hydrologist questions** from the review: recession fix vs GR4J (CR-14),
+      the EWR form the CMA expects (CR-30), the logger's highest gauging and
+      rating (CR-18), the defensible abstraction estimate and range (CR-21,
+      CR-32), and which of the two MAR estimates to trust (CR-7). Add them to
+      [plan.md](./plan.md) when the review session is booked.
+- [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
+      proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
+      uncertainty and BFI, CR-23 CHIRPS quantile mapping, CR-24 alternative
+      ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
+      scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
+      reporting.
+
 ## Verification
 
 - ✅ **Engine audit** (engine 0.4.0, [engine-audit.md](./engine-audit.md)):

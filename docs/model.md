@@ -682,6 +682,10 @@ gauge are not a measure of fit (issue #1; sign-off pending).
 
 ### 2.10b Automatic calibration (engine ≥ 0.5.0, issue #4 phase 4)
 
+> How this compares with published practice, and what should change (ensembles,
+> low-flow objectives, quality flags, WR2012 statistics), is reviewed in
+> [calibration-research.md](./calibration-research.md).
+
 `packages/engine/src/calibrate/` fits a runoff model's parameters to the
 project's observed record. It is pure and deterministic for a seed, so the
 browser runs it in a Web Worker and a test can pin it. It doesn't change

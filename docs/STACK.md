@@ -102,6 +102,7 @@ Deploying (only when the client is ready for it) is covered in
 ## Where to look
 
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
+- `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
