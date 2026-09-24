@@ -191,7 +191,7 @@ test('large values show thousands separators in the one-node form and the view-o
 });
 
 test.describe('network layout', () => {
-	test('on a laptop screen the node table scrolls inside its box, with each row\'s name and remove kept in view', async ({ page, owner }) => {
+	test('the node table fits a 1440px screen, flow share and remove included', async ({ page, owner }) => {
 		void owner;
 		await page.setViewportSize({ width: 1440, height: 900 });
 		const project = await createProject(page.request, 'Network fit');
@@ -200,21 +200,32 @@ test.describe('network layout', () => {
 
 		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
 		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
-		// Sixteen fields are wider than a 1440px screen: the table's own box scrolls, never the page.
+		// Field headers wrap rather than widen their columns, so nothing is hidden off to the right.
+		const overflow = await table.evaluate((t) => t.parentElement!.scrollWidth - t.parentElement!.clientWidth);
+		expect(overflow).toBeLessThanOrEqual(0);
+		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
+		await expect(table.getByRole('button', { name: 'Remove Lower farm' })).toBeInViewport();
+	});
+
+	test('narrower, the node table scrolls in its box with each row named and removable at either end', async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1100, height: 900 });
+		const project = await createProject(page.request, 'Network narrow');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+
+		const table = page.getByRole('table').filter({ has: page.getByRole('columnheader', { name: /In use/ }) });
+		await expect(table.getByRole('textbox', { name: 'Name' })).toHaveCount(3);
 		const box = table.locator('xpath=..');
 		expect(await box.evaluate((b) => b.scrollWidth > b.clientWidth)).toBe(true);
-		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
-		const remove = table.getByRole('button', { name: 'Remove Lower farm' });
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1100);
 		const name = table.getByRole('textbox', { name: 'Name' }).last();
-		await expect(remove).toBeInViewport({ ratio: 1 });
-		// Scrolled to either end, the row is still named on the left and removable on the right.
+		const remove = table.getByRole('button', { name: 'Remove Lower farm' });
 		for (const end of ['right', 'left'] as const) {
 			await box.evaluate((b, e) => (b.scrollLeft = e === 'right' ? b.scrollWidth : 0), end);
 			await expect(name).toBeInViewport({ ratio: 1 });
 			await expect(remove).toBeInViewport({ ratio: 1 });
 		}
-		await box.evaluate((b) => (b.scrollLeft = b.scrollWidth));
-		await expect(table.getByRole('columnheader', { name: /In use/ })).toBeInViewport();
 	});
 
 	test.describe('phone', () => {

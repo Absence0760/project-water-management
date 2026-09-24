@@ -415,8 +415,8 @@
 	.net tr.sel {
 		background: var(--accent-soft);
 	}
-	/* Remove stays pinned on the right as the name is on the left: with sixteen
-	   fields the table scrolls sideways inside its box, and each row's action
+	/* Remove stays pinned on the right as the name is on the left: below about
+	   1440px the table scrolls sideways inside its box, and each row's action
 	   must stay in reach. */
 	.net .rm {
 		position: sticky;
