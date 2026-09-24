@@ -30,7 +30,7 @@ import {
 	type ChirpsCorrection,
 	type ZeroRainMask
 } from './rain';
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
+import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
@@ -46,21 +46,25 @@ import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowI
 import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
+	DAM_AREA_EXPONENT,
 	defaultProjectSettings,
+	ESTIMATED_DAM_DEPTH_M,
 	panCoefficientOutOfRange,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
+	upgradeLegacyModel,
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
 	type ModelInput,
+	type NetworkNode,
 	type ModelOutput,
 	type ProjectSettings,
 	type RunSeries,
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.15.0';
+export const ENGINE_VERSION = '0.16.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -174,7 +178,8 @@ export function runModelWith(
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
-		['demand', 'demand', 'Irrigation demand (net)'],
+		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
+		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
 		['deficit', 'deficit', 'Irrigation deficit'],
 		['inflowUpstream', 'inflow_upstream', 'Inflow from upstream'],
@@ -199,6 +204,10 @@ export function runModelWith(
 		['divertedToDam', 'diverted_to_dam', 'Diverted back to the dam', 'm³/day'],
 		['interimStorage', 'interim_storage', 'Interim storage (before spill)', 'm³'],
 		['belowDamNotDiverted', 'below_dam_not_diverted', 'Below-dam flow not diverted', 'm³/day'],
+		['damArea', 'dam_area', 'Dam surface area (start of day)', 'm²'],
+		['rainOnDam', 'rain_on_dam', 'Rain on the dam surface', 'm³/day'],
+		['damEvaporation', 'dam_evaporation', 'Evaporation from the dam', 'm³/day'],
+		['damSeepage', 'dam_seepage', 'Seepage from the dam (joins the outflow)', 'm³/day'],
 		['returnFlow', 'return_flow', 'Irrigation return flow', 'm³/day'],
 		['balanceResidual', 'balance_residual', 'Balance check (should be 0)', 'm³/day']
 	];
@@ -227,6 +236,7 @@ export function runModelWith(
 		const r = sim.nodes[i]!;
 		const avgDemand = mean(r.demand);
 		const avgSupplied = mean(r.supplied);
+		const avgCrop = mean(r.cropRequirement);
 		let notMet = 0;
 		for (let t = 0; t < days; t++) if (r.ewrShortfallIncremental[t]! < 0) notMet++;
 		farms.push({
@@ -236,6 +246,7 @@ export function runModelWith(
 			avgSuppliedM3Day: avgSupplied,
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
+			avgCropRequirementM3Day: avgCrop,
 			// Positive volume: the average EWR shortfall this farm adds (b023 [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: -mean(r.ewrShortfallIncremental),
 			daysEwrNotMet: notMet
@@ -452,7 +463,8 @@ export function buildNetworkPlan(
 	natural: Float64Array,
 	warnings: string[]
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology> } {
-	const { model } = input;
+	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
+	const model = upgradeLegacyModel(input.model);
 	const nodes = model.nodes;
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
@@ -463,7 +475,7 @@ export function buildNetworkPlan(
 	const ewr = new Float64Array(days);
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
-	const demand = buildDemand(input, settings, days, month, aligned, warnings);
+	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings);
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -488,14 +500,38 @@ export function buildNetworkPlan(
 			from,
 			to,
 			activeMonth,
-			reserveM3: nodes[from]!.damCapacityM3 * tr.minStoragePct,
-			maxDailyM3: Math.max(0, maxDaily)
+			// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
+			reserveM3: nodes[from]!.damCapacityM3 * Math.max(tr.minStoragePct, nodes[from]!.damMinPct),
+			maxDailyM3: Math.max(0, maxDaily),
+			// Lower moves first; a rule without one (an older model) runs in list order, as before (Q18).
+			priority: Number.isFinite(tr.priority) ? tr.priority : 0
 		});
+	}
+
+	// Dam evaporation and rain on the dams (audit N2): open-water evaporation
+	// depth = lake factor × A-pan for the month ÷ days in the month; rain on the
+	// surface is the day's rain before any threshold (missing = 0).
+	const monthDays = daysPerMonth(settings.februaryDays);
+	const lakeEvapMmDay = new Float64Array(days);
+	for (let t = 0; t < days; t++) {
+		const m = waterYearIndex(month[t]!);
+		lakeEvapMmDay[t] = (settings.lakeEvapFactor * settings.apanMm[m]!) / monthDays[m]!;
+	}
+	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
+	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
+	const estimated = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0 && (n.damAreaFullM2 === null || n.damAreaFullM2 === undefined));
+	if (estimated.length) {
+		warnings.push(
+			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
+				`capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m mean depth (Mantel & Hughes 2023). Enter the area for (${estimated.map((n) => n.name).join('; ')})`
+		);
 	}
 
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
+		lakeEvapMmDay,
+		...(damRainMm ? { damRainMm } : {}),
 		// Sum each node's upstream in node-id order, not display order, so the
 		// float result can't depend on how the nodes are listed (review F8).
 		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
@@ -514,7 +550,9 @@ export function buildNetworkPlan(
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
 				initialStorageM3: n.damInitialPct * cap,
-				returnFlowPct: n.returnFlowPct,
+				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
+				...irrigation(n, warnings),
+				...damLosses(n, warnings),
 				demand: demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
@@ -526,6 +564,49 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * A dam's evaporation and seepage parameters (audit N2): the full-supply area
+ * as entered, or capacity ÷ 3 m when it isn't known (warning W6, in
+ * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning);
+ * seepage per day clamped to 0–1. A node without a dam gets none.
+ */
+function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
+	const cap = n.damCapacityM3;
+	if (n.kind !== 'farm' || !(cap > 0)) return { damAreaFullM2: 0, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
+	let area = n.damAreaFullM2 ?? cap / ESTIMATED_DAM_DEPTH_M;
+	if (!(Number.isFinite(area) && area >= 0)) {
+		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m`);
+		area = cap / ESTIMATED_DAM_DEPTH_M;
+	}
+	let b = n.damAreaExponent;
+	if (!(b > 0 && b <= 3)) {
+		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
+		b = DAM_AREA_EXPONENT;
+	}
+	const s = n.damSeepagePerDay;
+	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;
+	if (seep !== s) warnings.push(`farm "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
+	return { damAreaFullM2: area, damAreaExponent: b, damSeepagePerDay: seep };
+}
+
+/**
+ * A farm's irrigation efficiency and loss return (audit N1). Validation keeps
+ * 0 < e ≤ 1 and 0 ≤ β ≤ 1; a value outside that (a hand-edited document)
+ * runs as e = 1 and β clamped, with a warning, rather than dividing by 0.
+ */
+function irrigation(n: NetworkNode, warnings: string[]): { irrigationEfficiency: number; lossReturnFraction: number } {
+	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
+	let e = n.irrigationEfficiency;
+	if (!(e > 0 && e <= 1)) {
+		warnings.push(`farm "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
+		e = 1;
+	}
+	const b = n.lossReturnFraction;
+	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
+	if (beta !== b) warnings.push(`farm "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
+	return { irrigationEfficiency: e, lossReturnFraction: beta };
+}
 
 /**
  * Natural-flow volume / rain volume over the run (null without rain). A value
@@ -725,6 +806,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
+	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
+		warnings.push(`dam evaporation factor "${String(s.lakeEvapFactor)}" is not a number ≥ 0; using ${d.lakeEvapFactor}`);
+		s.lakeEvapFactor = d.lakeEvapFactor;
+	}
 	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
 		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);
 		s.effectiveRainStoreMm = d.effectiveRainStoreMm;

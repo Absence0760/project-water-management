@@ -463,3 +463,19 @@ describe('SettingsPatch.effectiveRainStoreMm (engine N3)', () => {
 		expect(defaultProjectSettings().effectiveRainStoreMm).toBe(25);
 	});
 });
+
+describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
+	const ok = (lakeEvapFactor: unknown) => SettingsPatch.safeParse({ lakeEvapFactor }).success;
+
+	it('accepts 0 (no dam evaporation) up to 2 × A-pan', () => {
+		for (const v of [0, 0.6, 0.75, 2]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects a negative, oversized or non-numeric factor', () => {
+		for (const v of [-0.1, 2.5, Infinity, '0.75', null]) expect(ok(v), String(v)).toBe(false);
+	});
+
+	it('defaults to 0.75 × A-pan for a project that never set it', () => {
+		expect(mergeSettings({}).lakeEvapFactor).toBe(0.75);
+	});
+});

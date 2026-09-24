@@ -74,16 +74,13 @@ const sortNameLists = (w: string) => w.replace(/\(([^()]*;[^()]*)\)/g, (_, inner
 
 /**
  * Display order must not matter: the node array and every sortOrder, the crop
- * list and crop-area rows give the same results. Transfer order is kept when
- * two enabled rules share a source dam, because their priority (document
- * order today) is an open modelling question (docs/model.md Q18); otherwise it
- * is shuffled too.
+ * list, the crop-area rows and the transfer rules give the same results.
+ * Transfer rules run by their priority, and rules of equal priority share a
+ * dam pro rata (engine ≥ 0.16.0, docs/model.md Q18), so shuffling them is
+ * no exception any more.
  */
 export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: number): string | null {
-	const sources = input.model.transfers.filter((t) => t.enabled).map((t) => t.fromNodeId);
-	const shared = new Set(sources).size !== sources.length;
 	const x = scrambleOrder(input, seed);
-	if (shared) x.model.transfers = cloneInput(input).model.transfers;
 	let y: ModelOutput;
 	try {
 		y = runModel(x);
@@ -102,7 +99,7 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 		d ??= sameValue(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`, scale, scale);
 	}
 	d ??= sameValue({ ...ca, series: null }, { ...cb, series: null }, 'output', 1, scale);
-	return d ? `order invariance (seed ${seed}${shared ? ', transfer order kept' : ''}): ${d}` : null;
+	return d ? `order invariance (seed ${seed}): ${d}` : null;
 }
 
 /**
@@ -111,7 +108,8 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * the catchment's Σ supplied / Σ demand.
  *
  * This is a law only without return flow, so both runs set every
- * returnFlowPct to 0. With return flow it can fail legitimately: a farm that
+ * lossReturnFraction to 0 (no losses return; irrigation efficiency stays as it
+ * is, audit N1). With return flow it can fail legitimately: a farm that
  * doubles its draw on stored water that would otherwise have stayed in its dam
  * returns part of it to the river, and a starved farm downstream gets more
  * than twice the water (found by the soak, seed 4660: 25.43 % → 25.72 %).
@@ -122,7 +120,7 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  */
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
-	for (const n of base.model.nodes) n.returnFlowPct = 0;
+	for (const n of base.model.nodes) n.lossReturnFraction = 0;
 	const x = cloneInput(base);
 	for (const a of x.model.cropAreas) a.areaM2 *= 2;
 	let o1: ModelOutput;

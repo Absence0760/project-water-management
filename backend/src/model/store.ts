@@ -10,7 +10,9 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 				flow_share_manual AS "flowShareManual", pct_upstream_to_dam AS "pctUpstreamToDam",
 				pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
 				dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
-				divert_capacity_m3_day AS "divertCapacityM3Day", return_flow_pct AS "returnFlowPct"
+				divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
+				loss_return_fraction AS "lossReturnFraction", dam_area_full_m2 AS "damAreaFullM2",
+				dam_area_exponent AS "damAreaExponent", dam_seepage_per_day AS "damSeepagePerDay"
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
 		);
@@ -24,8 +26,8 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 		);
 	const transfers = await db.query(
 			`SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
-				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled
-			 FROM transfer WHERE project_id = $1 ORDER BY id`,
+				max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled, priority
+			 FROM transfer WHERE project_id = $1 ORDER BY priority, id`,
 			[projectId]
 		);
 	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows };
@@ -62,19 +64,23 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		await upserted(
 			`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 				flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
-				dam_min_pct, divert_capacity_m3_day, return_flow_pct)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+				dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
+				dam_area_full_m2, dam_area_exponent, dam_seepage_per_day)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 				area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
 				flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
 				pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
 				dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
-				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, return_flow_pct = EXCLUDED.return_flow_pct
+				divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, irrigation_efficiency = EXCLUDED.irrigation_efficiency,
+				loss_return_fraction = EXCLUDED.loss_return_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
+				dam_area_exponent = EXCLUDED.dam_area_exponent, dam_seepage_per_day = EXCLUDED.dam_seepage_per_day
 			 WHERE node.project_id = EXCLUDED.project_id`,
 			[
 				n.id, projectId, n.name, n.kind, n.sortOrder, n.areaKm2, n.areaHiKm2, n.areaLoKm2, n.flowShareManual,
 				n.pctUpstreamToDam, n.pctRunoffToDam, n.damCapacityM3, n.damInitialPct, n.damMinPct,
-				n.divertCapacityM3Day, n.returnFlowPct
+				n.divertCapacityM3Day, n.irrigationEfficiency, n.lossReturnFraction, n.damAreaFullM2, n.damAreaExponent,
+				n.damSeepagePerDay
 			],
 			'node'
 		);
@@ -106,13 +112,13 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	for (const t of m.transfers) {
 		await upserted(
 			`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3,
-				min_storage_pct, enabled)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				min_storage_pct, enabled, priority)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			 ON CONFLICT (id) DO UPDATE SET from_node_id = EXCLUDED.from_node_id, to_node_id = EXCLUDED.to_node_id,
 				months = EXCLUDED.months, max_rate_m3s = EXCLUDED.max_rate_m3s, daily_cap_m3 = EXCLUDED.daily_cap_m3,
-				min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled
+				min_storage_pct = EXCLUDED.min_storage_pct, enabled = EXCLUDED.enabled, priority = EXCLUDED.priority
 			 WHERE transfer.project_id = EXCLUDED.project_id`,
-			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled],
+			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority],
 			'transfer'
 		);
 	}

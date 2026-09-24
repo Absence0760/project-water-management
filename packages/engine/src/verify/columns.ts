@@ -6,7 +6,7 @@
 export interface FarmColumn {
 	/** run_series key. */
 	key: string;
-	/** FarmTemplate column letter; null for the demand columns that come from [Irrigation Demand]. */
+	/** FarmTemplate column letter; null for the columns the workbook doesn't have (the [Irrigation Demand] inputs, abstraction demand D). */
 	letter: string | null;
 	/** How the engine computes it, in the column letters. */
 	formula: string;
@@ -21,8 +21,9 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			"MIN(soil store[t−1] + Pe, MAX(0, gross demand)), in m³ (Pe = cropped area × effective rain fraction ÷ 1000 × rain; rain ≤ threshold counts as 0; the store in m³ = mm × cropped area ÷ 1000)"
 	},
 	{ key: 'soil_water', letter: null, formula: 'MIN(store size, soil store[t−1] + Pe − effective rain used), in mm over the cropped area; starts empty' },
-	{ key: 'demand', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used' },
-	{ key: 'supplied', letter: 'G', formula: 'MIN(Q[t−1] + M + O + K + J, F)' },
+	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used' },
+	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
+	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
 	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share" },
 	{ key: 'transfer', letter: 'J', formula: 'Σ transfers in − Σ transfers out (limited by rate, daily cap and minimum storage)' },
@@ -31,14 +32,18 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'runoff_to_dam', letter: 'M', formula: 'I × % runoff to dam' },
 	{ key: 'runoff_below_dam', letter: 'N', formula: 'I − M' },
 	{ key: 'diverted_to_dam', letter: 'O', formula: 'MIN(diversion capacity, L + N)' },
-	{ key: 'interim_storage', letter: 'P', formula: 'Q[t−1] + M + O + K + J − G' },
+	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m' },
+	{ key: 'rain_on_dam', letter: null, formula: 'rain (before any threshold) ÷ 1000 × dam area' },
+	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J)' },
+	{ key: 'dam_seepage', letter: null, formula: 'MIN(seepage per day × Q[t−1], Q[t−1] + rain on dam + J − evaporation)' },
+	{ key: 'interim_storage', letter: 'P', formula: 'Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G' },
 	{ key: 'dam_storage', letter: 'Q', formula: 'MIN(P, dam capacity)' },
 	{ key: 'spill', letter: 'R', formula: 'MAX(P − dam capacity, 0)' },
 	{ key: 'below_dam_not_diverted', letter: 'S', formula: 'L + N − O' },
-	{ key: 'return_flow', letter: 'T', formula: 'G × return flow %' },
-	{ key: 'outflow', letter: 'U', formula: 'R + S + T' },
-	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J) − (G − T) − (Q[t] − Q[t−1]) − U; 0 up to float noise' },
-	{ key: 'deficit', letter: 'W', formula: 'F − G' },
+	{ key: 'return_flow', letter: 'T', formula: 'loss return fraction β × (1 − e) × G: the share of the application losses that reaches the river' },
+	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage' },
+	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise' },
+	{ key: 'deficit', letter: 'W', formula: 'D − G' },
 	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
 	{ key: 'ewr_shortfall', letter: 'AA', formula: 'MIN(U − Z, 0)' },

@@ -306,15 +306,39 @@ export const HELP: HelpEntry[] = [
 	},
 	{
 		id: 'dam-min',
-		term: 'Minimum dam storage',
-		short: 'A reserve level recorded with the dam, as a fraction of capacity. The model does not use it yet: neither irrigation nor transfers read it.',
-		long: 'Irrigation can empty the dam completely. A transfer keeps its own minimum storage in the source dam (set on the transfer, not here). Whether this dam-level reserve should limit irrigation or transfers is open question Q5 for the hydrologist; until then changing it does not change results.',
+		term: 'Minimum operating level',
+		short: 'Dead storage, as a fraction of capacity: irrigation draws only the water above it, and transfers leave at least this much.',
+		long: 'The level below which a farmer stops irrigating from the dam (a pump intake, a reserve for stock water or the dam wall). Each day irrigation can take only yesterday’s storage plus today’s inflows above capacity × this level. A transfer out of the dam keeps the higher of its own minimum storage and this level.\n\n0 % means irrigation may empty the dam, which is how the b023 workbook works; the network editor flags such dams as a hint. The workbook’s “min %” column was the minimum for transfers, which each transfer rule carries, so imported dams start at 0 %.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		aliases: ['min dam volume'],
+		aliases: ['min dam volume', 'dead storage', 'minimum storage'],
 		fields: ['node.damMinPct'],
-		related: ['transfer', 'transfer-min-storage'],
-		source: 'b023 Farm spec; docs/model.md §3 Q5'
+		related: ['transfer', 'transfer-min-storage', 'irrigation-supplied'],
+		source: 'docs/engine-audit.md Q5; docs/model.md §2.7'
+	},
+	{
+		id: 'dam-evaporation',
+		term: 'Dam evaporation and rain on the dam',
+		short: 'A dam loses open-water evaporation from its surface and catches the rain falling on it, every day before irrigation, in m³/day.',
+		long: 'The surface shrinks as the dam empties: area = area when full × (yesterday’s storage ÷ capacity)^exponent, with exponent 0.7 for small reservoirs (Liebe et al. 2005). Evaporation = dam evaporation factor × the month’s A-pan ÷ days in the month × area; the factor (Settings, default 0.75) is an A-pan factor: the WR90 / WR2012 lake factors are ratios to S-pan evaporation and must not be entered unchanged. Rain on the dam = the day’s rain (before the rain threshold) × area. Evaporation never takes more than the dam holds.\n\nWhen a dam’s area isn’t known the run estimates it as capacity ÷ 3 m (about the median mean depth of South African farm dams, Mantel & Hughes 2023) and its warnings say how many dams used the estimate. A 100 000 m³ dam of 3 ha loses about 180 m³/day at 6 mm/day of evaporation.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
+		units: 'm³/day; area m²; factor × A-pan',
+		category: 'farm',
+		aliases: ['evaporation', 'lake evaporation', 'open-water evaporation', 'surface area', 'area–volume', 'lake factor'],
+		fields: ['settings.lakeEvapFactor', 'node.damAreaFullM2', 'node.damAreaExponent', 'run.dam_area', 'run.dam_evaporation', 'run.rain_on_dam'],
+		related: ['dam-capacity', 'dam-seepage', 'dam-storage'],
+		source: 'docs/engine-audit.md N2; Linsley et al. 1982; Liebe et al. 2005; Mantel & Hughes 2023'
+	},
+	{
+		id: 'dam-seepage',
+		term: 'Dam seepage',
+		short: 'The share of a dam’s storage that seeps out each day; it reaches the river below the dam the same day.',
+		long: 'Seepage = seepage per day × yesterday’s storage, taken after evaporation and never more than is left. It is part of the farm’s outflow, so it stays in the catchment. 0 % (the default) for a sealed dam.',
+		units: 'fraction of storage per day (shown as %)',
+		category: 'farm',
+		aliases: ['leakage', 'leak'],
+		fields: ['node.damSeepagePerDay', 'run.dam_seepage'],
+		related: ['dam-evaporation', 'dam-storage'],
+		source: 'docs/engine-audit.md N2'
 	},
 	{
 		id: 'diversion',
@@ -329,15 +353,28 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Farm spec'
 	},
 	{
+		id: 'irrigation-efficiency',
+		term: 'Irrigation efficiency',
+		short: 'Share of the water abstracted for irrigation that reaches the crop. The farm abstracts crop requirement ÷ efficiency.',
+		long: 'Application losses (evaporation from sprays, wind drift, runoff at the end of the field, deep percolation and leaks) mean a farm has to abstract more than its crops use. With efficiency e, abstraction demand = crop requirement ÷ e, and a fully supplied crop gets exactly its requirement. Indicative values by system: drip 90 %, micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood or furrow 65 %; a scheme’s own measurement is better. The one-node form offers these as a helper.\n\nSet 100 % for a stand-alone dam or natural area (no irrigation), or to leave losses out. New farms start at 80 %. Farms from before engine 0.16.0 were converted from their return flow % r as e = 1 − r with every loss returning, so their water balance per unit supplied is unchanged.\n\nDecided on the recommendation of a simulated hydrologist review (engine 0.16.0), pending confirmation by the project hydrologist.',
+		units: 'fraction 0–1 (shown as %), above 0',
+		category: 'farm',
+		aliases: ['application efficiency', 'irrigation system', 'drip', 'pivot', 'sprinkler', 'flood'],
+		fields: ['node.irrigationEfficiency'],
+		related: ['return-flow', 'irrigation-demand', 'crop-requirement'],
+		source: 'docs/engine-audit.md N1; Allen et al. 1998 (FAO-56); Keller & Bliesner 1990'
+	},
+	{
 		id: 'return-flow',
 		term: 'Irrigation return flow',
-		short: 'Fraction of the water used for irrigation that runs back into the river the same day.',
-		long: 'Over-irrigation, leaks and drainage return part of the applied water. It adds to the farm’s outflow. Set 0 % for a stand-alone dam or natural area.',
+		short: 'The part of the irrigation losses that runs back into the river the same day: loss return fraction × (1 − efficiency) × supplied.',
+		long: 'Of the water lost in application, some drains back to the river below the farm (tail-water, shallow drainage, leaks) and some leaves the catchment (evaporation, deep percolation). The loss return fraction is the share that returns; it adds to the farm’s outflow the same day. Consumptive use (what leaves the river) is supplied − return flow.\n\nNew farms start at 50 %. A farm upstream of a starved neighbour can pass it some water this way: that is real (the return is bounded by what the upstream farm abstracts) and attribution by net consumptive use accounts for it.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
-		fields: ['node.returnFlowPct'],
-		related: ['irrigation-supplied'],
-		source: 'b023 Farm spec'
+		aliases: ['loss return', 'return flow %', 'drainage return'],
+		fields: ['node.lossReturnFraction'],
+		related: ['irrigation-efficiency', 'irrigation-supplied'],
+		source: 'docs/engine-audit.md N1; docs/model.md §2.7'
 	},
 	{
 		id: 'spill',
@@ -388,7 +425,7 @@ export const HELP: HelpEntry[] = [
 		id: 'balance-check',
 		term: 'Self-checks and the balance check',
 		short: 'Every run checks its own output: each farm’s day must balance, and the reports must add up to the daily series.',
-		long: 'The balance check (column V) is, for each farm and day: water in (upstream inflow + runoff + transfers) − water used (supplied − return flow) − the change in dam storage − outflow. It must be 0; in practice it is float noise, many orders of magnitude below the flows.\n\nEvery run also runs the checks the test suite runs on thousands of random networks: storage stays between 0 and the dam capacity, supply never exceeds demand, transfers keep to their months, rates, caps and minimum storage, the runoff model’s stores balance, and the EWR grid, farm summaries and curtailment report add up to the daily series. The results show which passed and, for a failure, the first farm and date where it broke. A failed check means a bug in the model, not in your data: report it.\n\nThe water balance per water year shows where the water went: start storage + farm runoff + transfers = consumptive use (supplied − return flow) + outflow + end storage, with a residual that should be 0.',
+		long: 'The balance check (column V) is, for each farm and day: water in (upstream inflow + runoff + transfers + rain on the dam) − water used (supplied − return flow) − dam evaporation − the change in dam storage − outflow (which includes dam seepage). It must be 0; in practice it is float noise, many orders of magnitude below the flows.\n\nEvery run also runs the checks the test suite runs on thousands of random networks: storage stays between 0 and the dam capacity, supply never exceeds demand, transfers keep to their months, rates, caps and minimum storage, the runoff model’s stores balance, and the EWR grid, farm summaries and curtailment report add up to the daily series. The results show which passed and, for a failure, the first farm and date where it broke. A failed check means a bug in the model, not in your data: report it.\n\nThe water balance per water year shows where the water went: start storage + farm runoff + transfers + rain on dams = consumptive use (supplied − return flow) + dam evaporation + outflow + end storage, with a residual that should be 0.',
 		units: 'm³/day',
 		category: 'results',
 		aliases: ['verification', 'invariants', 'mass balance', 'water balance', 'residual'],
@@ -459,22 +496,34 @@ export const HELP: HelpEntry[] = [
 		source: 'Allen et al. 1998 (FAO-56) ch. 8; docs/engine-audit.md N3; docs/model.md §2.3'
 	},
 	{
-		id: 'irrigation-demand',
-		term: 'Irrigation demand (net)',
-		short: 'Water the farm’s crops need from irrigation on a given day, after effective rain, in m³/day.',
-		long: 'Gross demand comes from crop areas × A-pan × crop factor, spread over the days of the month. Net demand subtracts the effective rain used that day, from the day’s rain or from the soil-water store it filled on earlier days, and never goes below zero.',
+		id: 'crop-requirement',
+		term: 'Crop water requirement',
+		short: 'Water the farm’s crops need from irrigation on a given day, after effective rain, in m³/day (the workbook’s net irrigation demand).',
+		long: 'Gross demand comes from crop areas × A-pan × crop factor, spread over the days of the month. The requirement subtracts the effective rain used that day, from the day’s rain or from the soil-water store it filled on earlier days, and never goes below zero. The farm abstracts more than this to cover application losses: see irrigation demand.',
 		units: 'm³/day',
 		category: 'crops',
-		aliases: ['demand', 'crop water requirement'],
-		fields: ['run.demand', 'summary.avgDemandM3Day'],
-		related: ['irrigation-supplied', 'irrigation-deficit', 'effective-rainfall'],
+		aliases: ['crop water requirement', 'net irrigation need', 'net demand'],
+		fields: ['run.crop_requirement', 'summary.avgCropRequirementM3Day'],
+		related: ['irrigation-demand', 'irrigation-efficiency', 'effective-rainfall'],
 		source: 'b023 Irrigation Demand; docs/model.md §2.3'
+	},
+	{
+		id: 'irrigation-demand',
+		term: 'Irrigation demand (abstraction)',
+		short: 'Water the farm has to abstract to meet its crop water requirement: requirement ÷ irrigation efficiency, in m³/day.',
+		long: 'Supply, deficit, the fraction supplied and the curtailment report are all measured against this abstraction demand, so 100 % supplied means the crop got its full requirement. With 100 % efficiency it equals the crop water requirement, as in the b023 workbook.',
+		units: 'm³/day',
+		category: 'crops',
+		aliases: ['demand', 'abstraction', 'gross irrigation requirement'],
+		fields: ['run.demand', 'summary.avgDemandM3Day'],
+		related: ['crop-requirement', 'irrigation-efficiency', 'irrigation-supplied', 'irrigation-deficit'],
+		source: 'docs/engine-audit.md N1; docs/model.md §2.7'
 	},
 	{
 		id: 'irrigation-supplied',
 		term: 'Irrigation supplied',
 		short: 'Water actually delivered to the crops that day: the demand, or less when the dam and inflows run short.',
-		long: 'Irrigation draws on yesterday’s storage plus today’s captured inflows and transfers. Average supplied ÷ average demand is the fraction of demand supplied.',
+		long: 'Irrigation draws on yesterday’s storage above the dam’s minimum operating level plus today’s captured inflows and transfers, up to the abstraction demand. Average supplied ÷ average demand is the fraction of demand supplied; the crop gets efficiency × supplied, so the same fraction of its requirement.',
 		units: 'm³/day',
 		category: 'crops',
 		aliases: ['supply'],
@@ -485,7 +534,7 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'irrigation-deficit',
 		term: 'Irrigation deficit',
-		short: 'Demand that could not be met: demand minus supplied, in m³/day.',
+		short: 'Abstraction demand that could not be met: demand minus supplied, in m³/day.',
 		long: 'A farm with a persistent deficit is over-allocated for the water it can capture. The b023 Shortfalls sheet reports it per farm over a reporting window.',
 		units: 'm³/day',
 		category: 'crops',
@@ -532,13 +581,25 @@ export const HELP: HelpEntry[] = [
 	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
-		short: 'The source dam is not drawn below this fraction of its capacity by this transfer.',
-		long: 'Checked against yesterday’s end-of-day storage. The receiving dam’s free space is not checked: water that doesn’t fit spills (open question Q3).',
+		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',
+		long: 'Checked against yesterday’s end-of-day storage. The reserve kept is the higher of this value and the source dam’s minimum operating level.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'transfers',
 		fields: ['transfer.minStoragePct'],
 		related: ['dam-min', 'transfer'],
 		source: 'b023 Transfers configuration; docs/model.md §3 Q3'
+	},
+	{
+		id: 'transfer-priority',
+		term: 'Transfer priority and the receiver’s room',
+		short: 'Rules with a lower priority move first; rules of equal priority from one dam share it in proportion to their limits.',
+		long: 'Each day, before any farm irrigates, each rule moves the smallest of: what its source dam holds above its minimum (yesterday’s storage, less what earlier rules took), the room at its destination (free space in the destination’s dam plus that day’s irrigation demand, less what other rules already sent it), and its rate or daily cap. A transfer to a farm with no dam still serves the farm’s demand; water is never pumped into a full dam only to spill.\n\nRules run by priority, lowest first. Rules with the same priority share: two rules from one dam split its water in proportion to their own limits, and two rules into one farm split its room the same way, so the order of the list never changes a result. New rules start after the existing ones. The source’s own irrigation comes after the day’s transfers (the source doesn’t irrigate first).\n\nDecided on the recommendation of simulated hydrologist and licensing reviews (engine 0.16.0), pending confirmation by the project hydrologist.',
+		units: 'whole number',
+		category: 'transfers',
+		aliases: ['priority', 'order', 'pro rata', 'free space', 'receiving dam'],
+		fields: ['transfer.priority'],
+		related: ['transfer', 'transfer-min-storage', 'transfer-rate'],
+		source: 'docs/engine-audit.md N4, Q18; docs/model.md §2.6'
 	},
 
 	// ---- Natural flow and calibration -----------------------------------------

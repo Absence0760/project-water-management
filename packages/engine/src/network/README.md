@@ -43,7 +43,8 @@ day trace read.
 
 | Col | Output key | Formula |
 | --- | --- | --- |
-| F | `demand` | net irrigation demand (below) |
+| F | `crop_requirement` | crop water requirement, the workbook's net irrigation demand (below) |
+| – | `demand` | abstraction demand D = F ÷ `irrigationEfficiency` (engine ≥ 0.16.0, audit N1) |
 | H | `inflow_upstream` | Σ upstream nodes' U |
 | I | `runoff` | natural flow × farm share |
 | J | `transfer` | Σ transfers in − Σ transfers out |
@@ -52,15 +53,16 @@ day trace read.
 | M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
 | N | `runoff_below_dam` | I − M — own runoff below the dam |
 | O | `diverted_to_dam` | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
-| G | `supplied` | MIN(Qprev + M + O + K + J, F) |
-| P | `interim_storage` | Qprev + M + O + K + J − G |
+| G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
+| – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
+| P | `interim_storage` | Qprev + rain on dam − evaporation − seepage + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |
 | S | `below_dam_not_diverted` | L + N − O — passes below the dam |
-| T | `return_flow` | G × `returnFlowPct` — irrigation return flow |
-| U | `outflow` | R + S + T |
-| V | `balance_residual` | (H + I + J) − (G − T) − (Q − Qprev) − U: float noise |
-| W | `deficit` | F − G |
+| T | `return_flow` | `lossReturnFraction` × (1 − `irrigationEfficiency`) × G — the share of the application losses that returns (audit N1) |
+| U | `outflow` | R + S + T + seepage |
+| V | `balance_residual` | (H + I + J + rain on dam) − (G − T) − evaporation − (Q − Qprev) − U: float noise |
+| W | `deficit` | D − G |
 | Y | `ewr` | EWR × farm share |
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
 | AA | `ewr_shortfall` | MIN(U − Z, 0) |

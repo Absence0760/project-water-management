@@ -122,7 +122,11 @@ function node(name: string, kind: 'farm' | 'gauge', downstreamNodeId: string | n
 		damInitialPct: 0.5,
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0.1,
+		irrigationEfficiency: 0.8,
+		lossReturnFraction: 0.5,
+		damAreaFullM2: null,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...extra
 	};
 }
@@ -149,7 +153,8 @@ export function sampleModel(): Model {
 				maxRateM3s: 0.01,
 				dailyCapM3: null,
 				minStoragePct: 0.2,
-				enabled: true
+				enabled: true,
+				priority: 0
 			}
 		]
 	};

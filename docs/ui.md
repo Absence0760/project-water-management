@@ -110,11 +110,31 @@ pending invitations, the confirm-email banner) render through
   a node on the schematic selects it and, when the form is below the lower
   part of the screen (as on a phone, where the form sits under the drawing),
   scrolls the picker to the top so the form is in view (`scroll.ts`).
+- **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
+  efficiency and the share of losses returning. The one-node form adds an
+  **Irrigation system** select that sets an indicative efficiency (drip 90 %,
+  micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
+  `IRRIGATION_SYSTEMS` in the engine), labelled indicative; "Other" keeps the
+  value as typed. New farms start at 80 % and 50 %.
+- **Dam** fields also hold the area when full (m², empty = unknown), the area
+  exponent (default 0.7) and seepage (% of storage per day) for dam
+  evaporation and seepage ([engine-audit N2](./engine-audit.md)).
+- **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
+  under a dam's fields when irrigation may empty it (minimum operating level
+  0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
+  the capacity ÷ 3 m estimate the run will use (N2, warning W6).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
   order is `node.sortOrder`, which is display only: runs always use the
   topological order. Every list of nodes uses it (`lib/model/order.ts`).
+
+## Transfers
+
+Each rule has a **Priority** column (whole number, lower moves first; equal
+priorities share a source dam pro rata to their limits, [engine-audit
+Q18](./engine-audit.md)). A new rule starts after the existing ones (the
+highest priority + 1). The help explains the destination's room cap (N4).
 
 ## Crops & demand
 
@@ -257,6 +277,9 @@ The settings are grouped by what they drive:
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
   the workbook does; [model.md §2.3](./model.md#23-irrigation-demand) step 4),
+  the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
+  0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
+  [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
   and days in February.
 - **Flow calibration**: the **runoff model** picker (GR4J, the default, or
   "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
@@ -445,7 +468,8 @@ The settings are grouped by what they drive:
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
   the first problem (farm name and date) under a failed one, and the largest
   daily balance check (column V). Second, the **water balance by water year**: rain,
-  runoff coefficient, start storage, farm runoff, transfers, consumptive use,
+  runoff coefficient, start storage, farm runoff, transfers, rain on dams,
+  consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
   outflow and end storage in Mm³, and the residual in m³, with a red residual
   if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
@@ -453,8 +477,8 @@ The settings are grouped by what they drive:
   fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
   with its letter, value and formula, starting from the day before's storage
   (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
-  day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J) −
-  used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
+  day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J +
+  rain on dam) − used (G − T) − evaporated − stored (Q − Q[t−1]) − out (U). Parameters and names come from
   the run's input snapshot, not today's model. A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
   Not yet: a trace of the runoff model's day, an Excel audit workbook, and
