@@ -7,7 +7,7 @@ import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
 import { GR4J_NO_PET, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { calibrate, prepareCalibration, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
+import { calibrate, MAX_STARTS, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
 import { fitScores } from './objective';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -332,6 +332,59 @@ describe('calibrate', () => {
 		expect(report.splitSample).toBeNull();
 		expect(new Set(seen)).toEqual(new Set(['full']));
 		expect(report.notes.join(' ')).toMatch(/cancelled/);
+	});
+
+	it('multi-start (CR-2): every start is reported, the best is kept, and one start is the single-start fit', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		const one = calibrate(input, { budget: 150, seed: 9, validate: false });
+		expect(one.starts).toBe(1);
+		expect(one.startResults).toEqual([{ seed: 9, params: one.params, score: one.fit.scores.kgePrime, best: true }]);
+		expect(calibrate(input, { budget: 150, seed: 9, validate: false, starts: 1 })).toEqual(one);
+
+		const progress: { start?: number; starts?: number }[] = [];
+		const three = calibrate(input, { budget: 150, seed: 9, validate: false, starts: 3, onProgress: (p) => void progress.push({ start: p.start, starts: p.starts }) });
+		expect(three.starts).toBe(3);
+		expect(three.startResults.map((r) => r.seed)).toEqual([9, startSeed(9, 1), startSeed(9, 2)]);
+		expect(three.evaluations).toBe(3 * 150);
+		// Start 0 is the single-start fit, so more starts never do worse.
+		expect(three.startResults[0]!.params).toEqual(one.params);
+		const best = three.startResults.filter((r) => r.best);
+		expect(best).toHaveLength(1);
+		expect(three.params).toEqual(best[0]!.params);
+		for (const r of three.startResults) expect(best[0]!.score!).toBeGreaterThanOrEqual(r.score!);
+		expect(three.fit.scores.kgePrime).toBe(best[0]!.score);
+		expect(new Set(progress.map((p) => `${p.start}/${p.starts}`))).toEqual(new Set(['1/3', '2/3', '3/3']));
+		expect(calibrate(input, { budget: 150, seed: 9, validate: false, starts: 3 })).toEqual(three);
+	}, 60_000);
+
+	it('multi-start: starts are clamped to 1–MAX_STARTS, and cancelling stops the remaining starts', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
+		expect(calibrate(input, { budget: 10, validate: false, starts: 0 }).starts).toBe(1);
+		expect(calibrate(input, { budget: 10, validate: false, starts: 99 }).startResults).toHaveLength(MAX_STARTS);
+		const cut = calibrate(input, { budget: 100, validate: false, starts: 4, onProgress: (p) => p.start === 2 && p.evaluations >= 5 });
+		expect(cut.cancelled).toBe(true);
+		expect(cut.startResults).toHaveLength(2);
+		expect(cut.evaluations).toBe(100 + 5);
+	});
+
+	it('startsNotes names parameters the near-best starts disagree on, and starts that stopped short', () => {
+		const specs = [
+			{ key: 'x1', label: 'X1', unit: 'mm', lo: 10, hi: 3000 },
+			{ key: 'x4', label: 'X4', unit: 'days', lo: 0.5, hi: 10 }
+		];
+		const r = (score: number | null, x1: number, x4 = 2, best = false) => ({ seed: 1, params: { x1, x4 }, score, best });
+		expect(startsNotes('kgePrime', [r(0.8, 300, 2, true)], specs)).toEqual([]);
+		// Agreement: nothing to say.
+		expect(startsNotes('kgePrime', [r(0.8, 300, 2, true), r(0.795, 350, 2.1)], specs)).toEqual([]);
+		// Equal scores, X1 across 30 % of its range: equifinality.
+		const [ridge] = startsNotes('kgePrime', [r(0.8, 300, 2, true), r(0.795, 1200, 2.05), r(0.799, 700)], specs);
+		expect(ridge).toMatch(/^3 of 3 starts reach nearly the same KGE′ \(0.80–0.80\) with X1 from 300 to 1200 mm: the record can’t pin these down/);
+		expect(ridge).not.toMatch(/X4/);
+		// A start that fell short is named, and doesn't count as scatter.
+		const notes = startsNotes('kgePrime', [r(0.8, 300, 2, true), r(0.5, 2900, 9)], specs);
+		expect(notes).toEqual([expect.stringMatching(/^1 of 2 starts stopped short of the best KGE′ \(lowest 0.50 against 0.80\)/)]);
+		// A start with no score is left out.
+		expect(startsNotes('kgePrime', [r(0.8, 300, 2, true), r(null, 2900)], specs)).toEqual([]);
 	});
 
 	it('the fast path matches the traced simulation over the scored days', () => {

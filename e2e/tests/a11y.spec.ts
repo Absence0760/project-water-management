@@ -12,7 +12,14 @@ import { expect, test } from '../support/fixtures.ts';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
 
+/**
+ * Scans the whole page from the top. axe's target-size rule counts a control
+ * scrolled under the sticky app header as obscured, so a scan made wherever
+ * the last click left the page depends on the scroll position rather than on
+ * the controls (focused controls clear the header through scroll-padding-top).
+ */
 async function expectNoViolations(page: Page) {
+	await page.evaluate(() => window.scrollTo(0, 0));
 	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
 	const report = violations.map((v) => ({
 		id: v.id,

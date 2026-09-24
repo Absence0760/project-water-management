@@ -38,6 +38,8 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 		bounds: 'wide',
 		budget: 300,
 		seed: 7,
+		starts: 1,
+		startResults: [{ seed: 7, params: { x1: 512.25, x2: 0, x3: 61.5, x4: 2.25 }, score: 0.8, best: true }],
 		free: ['x1', 'x3', 'x4'],
 		params: { x1: 512.25, x2: 0, x3: 61.5, x4: 2.25 },
 		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },

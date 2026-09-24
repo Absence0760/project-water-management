@@ -163,7 +163,8 @@ The settings are grouped by what they drive:
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0. Then comes the monthly **pan
-    coefficient** row. A notice appears when A-pan is 0 in every month.
+    coefficient** row. A notice appears when A-pan × pan coefficient is 0 in
+    every month: the engine then refuses GR4J runs and fits.
   - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
     window) fits the selected model's parameters in a Web Worker
     (`lib/calibration/`). It takes the objective, **Bounds** (a select: "Wide
@@ -171,11 +172,17 @@ The settings are grouped by what they drive:
     (Perrin et al. 80 %)" — a tighter, published range, with a hint under it;
     model.md §2.10b), the model runs per fit
     (default 1 500), the **seed** (default 1; the same seed, data and engine
-    version give the same fit, and the seed is recorded), which parameters to
-    fit (GR4J X2 only when exchange is on), and whether to validate.
-    Validation runs the split-sample and dry → wet tests, which means three
-    fits. The fit always leaves out the stored exclusions; the result line
-    gives the bounds, the seed and the number of excluded periods.
+    version give the same fit, and the seed is recorded), the **starts**
+    (default 5, 1–10: separate searches of the whole record from their own
+    seeds, the best kept; model.md §2.10b), which parameters to fit (GR4J X2
+    only when exchange is on), and whether to validate. Validation runs the
+    split-sample and dry → wet tests: two more fits. The run count is budget ×
+    (starts + 2 with validation + 1 with the WR2012 penalty), and the progress
+    line names the start. The fit always leaves out the stored exclusions; the
+    result line gives the bounds, the seed, the starts and the number of
+    excluded periods. With more than one start a **Starts** table lists each
+    start's seed, score and fitted parameters, the kept one marked, and a
+    note says when near-equal scores come with scattered parameters.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to

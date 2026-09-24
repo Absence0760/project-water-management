@@ -13,11 +13,20 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Objective')).toHaveValue('kgePrime');
 	await fit.getByLabel('Model runs per fit').fill('60');
-	await expect(fit.getByText('180 runs in all.')).toBeVisible();
+	// 5 starts of the whole record by default (CR-2), then the two validation fits.
+	await expect(fit.getByLabel('Starts')).toHaveValue('5');
+	await expect(fit.getByText('420 runs in all.')).toBeVisible();
+	await fit.getByLabel('Starts').fill('3');
+	await expect(fit.getByText('300 runs in all.')).toBeVisible();
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
 
 	const scores = fit.getByRole('table', { name: /^Fit, and validation/ });
 	await expect(scores).toBeVisible();
+	// Every start is listed with its seed, and exactly one is kept.
+	const starts = fit.getByRole('table', { name: /^Starts: separate searches/ });
+	await expect(starts.getByRole('rowheader')).toHaveCount(3);
+	await expect(starts.getByRole('rowheader', { name: /\(kept\)$/ })).toHaveCount(1);
+	await expect(starts.getByRole('row', { name: /^1/ }).getByRole('cell').first()).toHaveText('1');
 	for (const col of ['Current parameters', 'Fitted', 'Split: fitted half', 'Split: other half']) {
 		await expect(scores.getByRole('columnheader', { name: new RegExp(`^${col}`) })).toBeVisible();
 	}

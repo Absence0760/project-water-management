@@ -45,8 +45,8 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(definition(prov, 'Seed')).toHaveText('7');
 	await expect(definition(prov, 'Objective')).toHaveText('KGE′ (Kling–Gupta, 2012)');
 	await expect(definition(prov, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
-	// Full fit and split-sample; 120 days hold no water years for the dry → wet test.
-	await expect(definition(prov, 'Model runs')).toHaveText('50 per fit, 100 in all');
+	// Five starts of the full fit (CR-2) and the split-sample; 120 days hold no water years for the dry → wet test.
+	await expect(definition(prov, 'Model runs')).toHaveText('50 per fit, 5 starts, 300 in all');
 	// The in-sample score sits next to the validation scores.
 	const scores = prov.getByRole('table');
 	await expect(scores.getByRole('columnheader', { name: /^Calibration period \(in-sample\)/ })).toBeVisible();

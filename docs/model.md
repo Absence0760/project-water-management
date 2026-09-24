@@ -769,6 +769,21 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   out-of-bounds value. It starts from the project's current parameters.
   The budget is 1 500 runs per fit by default. It replaces WP-1.18's
   Nelder–Mead, which handles bounds and surfaces of 4+ parameters worse.
+- **Multi-start** (`starts`, engine ≥ 0.13.0, calibration research CR-2). The whole-record fit
+  runs `starts` times (1–`MAX_STARTS` = 10; the app asks for
+  `DEFAULT_STARTS` = 5), each DDS search from its own seed:
+  `startSeed(seed, i) = (seed + i × 1 000 003) mod 2³¹`, so start 0 is the
+  seed itself and one start is exactly the single-start fit. The lowest loss
+  (penalty included) is kept, first on a tie; the validation fits and the
+  unpenalised fit run once, as before. `report.startResults` lists each
+  start's seed, parameters and objective score (without any penalty). A more
+  capable optimiser wouldn't help much: the record, not the search, limits
+  the fit, and a flat X1/X3 ridge just gives an arbitrary point on the ridge
+  more precisely. What the starts add is evidence of that. `startsNotes` adds
+  two notes: when two or more starts score within `NEAR_BEST` (0.01) of the
+  best but a free parameter spreads over more than `SCATTER_SHARE` (10 %) of
+  its search range across them ("the record can't pin these down"), and when
+  starts stop more than 0.01 below the best.
 - **Objectives** (`calibrate/objective.ts`; the optimiser minimises 1 − score):
   - **KGE′** (Kling et al. 2012), the default. Simulating the mean observed
     flow scores 1 − √2 ≈ −0.41, the benchmark of Knoben et al. (2019);
@@ -828,8 +843,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
   stores a `FitRecord` with the parameters: when (`fittedAt`), the engine
-  version, the runoff model, objective, the bounds searched, seed, budget and
-  runs used, the parameters fitted and their values before and after, the
+  version, the runoff model, objective, the bounds searched, seed, the starts
+  and each start's result (absent on records from before multi-start: one
+  start), budget and runs used, the parameters fitted and their values before and after, the
   record fitted to, the calibration window and exclusions, whether validation
   was asked for and against which independent record, every scored period
   (the in-sample fit, the split-sample and dry → wet tests, the independent

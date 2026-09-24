@@ -8,6 +8,7 @@ import {
 	exclusionKey,
 	EXCLUSIONS_MAX,
 	GR4J_PARAMS,
+	MAX_STARTS,
 	OBJECTIVES,
 	resolveFitRecord,
 	RUNOFF_MODELS,
@@ -161,6 +162,12 @@ export const FitRecord = z
 		objective: z.enum(OBJECTIVES),
 		bounds: z.enum(CALIBRATION_BOUNDS),
 		seed: z.number().int().min(0).max(2 ** 31 - 1),
+		// Records made before multi-start fits (CR-2) have neither: one start.
+		starts: z.number().int().min(1).max(MAX_STARTS).optional(),
+		startResults: z
+			.array(z.object({ seed: z.number().int().min(0).max(2 ** 31 - 1), params, score: z.number().finite().nullable(), best: z.boolean() }).strict())
+			.max(MAX_STARTS)
+			.optional(),
 		budget: z.number().int().min(1).max(1_000_000),
 		evaluations: z.number().int().min(0),
 		cancelled: z.boolean(),

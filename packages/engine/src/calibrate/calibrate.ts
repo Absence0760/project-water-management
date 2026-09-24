@@ -75,6 +75,14 @@ export interface CalibrateOptions {
 	/** Default 1. The same seed gives the same result. */
 	seed?: number;
 	/**
+	 * Independent searches of the whole record, each from its own seed
+	 * (`startSeed`); the best is kept and every start is reported, so nearly
+	 * equal scores with scattered parameters show the record can't pin them
+	 * down (calibration research CR-2). 1–MAX_STARTS; default 1. The app asks
+	 * for DEFAULT_STARTS. Validation fits run once, from the best start.
+	 */
+	starts?: number;
+	/**
 	 * Parameters to fit; the rest keep their current value. Default: every
 	 * parameter not fixed by default (GR4J X1, X3, X4, with X2 as set, normally
 	 * 0; legacy a, b and the season factors).
@@ -105,6 +113,9 @@ export type CalibrationStage = 'full' | 'split' | 'dsst' | 'unpenalised';
 
 export interface CalibrationProgress {
 	stage: CalibrationStage;
+	/** For the full fit: which start this is (1-based), of how many. */
+	start?: number;
+	starts?: number;
 	/** Model runs done in this stage, and the stage's budget. */
 	evaluations: number;
 	budget: number;
@@ -150,6 +161,17 @@ export interface IndependentRecordTest extends ValidationTest {
 	overlapDays: number;
 }
 
+/** One start of the full fit (`CalibrateOptions.starts`). */
+export interface StartResult {
+	seed: number;
+	/** Every parameter of the model as this start left it (the free ones fitted). */
+	params: ParamSet;
+	/** The objective over the whole window, without any WR2012 penalty (higher is better). */
+	score: number | null;
+	/** The start the fit kept: the lowest loss, penalty included, first on a tie. */
+	best: boolean;
+}
+
 export interface CalibrationReport {
 	model: RunoffModelId;
 	objective: ObjectiveId;
@@ -157,6 +179,9 @@ export interface CalibrationReport {
 	bounds: CalibrationBounds;
 	budget: number;
 	seed: number;
+	/** Starts of the full fit, and each one's result (`CalibrateOptions.starts`). */
+	starts: number;
+	startResults: StartResult[];
 	free: string[];
 	/** Best parameters over the whole window: what "Apply" would put in the form (settings.gr4j, or settings.calibration for legacy). */
 	params: ParamSet;
@@ -367,8 +392,65 @@ function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<
 
 interface FitResult {
 	params: ParamSet;
+	/** The best loss found (minimised; penalty included when on). */
+	loss: number;
 	evaluations: number;
 	cancelled: boolean;
+}
+
+/** Most starts a fit may ask for, and how many the app asks for. */
+export const MAX_STARTS = 10;
+export const DEFAULT_STARTS = 5;
+
+/** Seed of start `i` (0-based) of a fit seeded `seed`: start 0 is the seed itself, so one start reproduces a single-start fit. */
+export const startSeed = (seed: number, i: number): number => (seed + i * 1_000_003) % 2 ** 31;
+
+/** Starts within this of the best score count as reaching it. */
+export const NEAR_BEST = 0.01;
+/** A parameter whose near-best starts span more than this share of its search range is called unidentifiable. */
+export const SCATTER_SHARE = 0.1;
+
+/**
+ * What the starts say about the fit: parameters the near-best starts
+ * disagree on (equifinality), or starts that stopped short of the best.
+ * Nothing when there is one start or they agree.
+ */
+export function startsNotes(
+	objective: ObjectiveId,
+	results: readonly StartResult[],
+	specs: readonly { key: string; label: string; unit: string; lo: number; hi: number }[]
+): string[] {
+	const scored = results.filter((r): r is StartResult & { score: number } => r.score !== null);
+	if (scored.length < 2) return [];
+	const label = OBJECTIVE_LABELS[objective].replace(/ \(.*\)$/, '');
+	const top = Math.max(...scored.map((r) => r.score));
+	const near = scored.filter((r) => r.score >= top - NEAR_BEST);
+	const out: string[] = [];
+	const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
+	const scattered = specs
+		.map((s) => {
+			const v = near.map((r) => r.params[s.key]!);
+			const lo = Math.min(...v);
+			const hi = Math.max(...v);
+			return { s, lo, hi, share: s.hi > s.lo ? (hi - lo) / (s.hi - s.lo) : 0 };
+		})
+		.filter((x) => x.share > SCATTER_SHARE);
+	if (near.length >= 2 && scattered.length) {
+		const low = Math.min(...near.map((r) => r.score));
+		out.push(
+			`${near.length} of ${results.length} starts reach nearly the same ${label} (${fmt(low)}–${fmt(top)}) with ` +
+				scattered.map((x) => `${x.s.label} from ${fmt(x.lo)} to ${fmt(x.hi)}${x.s.unit ? ` ${x.s.unit}` : ''}`).join(', ') +
+				': the record can’t pin these down, so the fitted values are one choice among near-equals.'
+		);
+	}
+	const short = scored.filter((r) => r.score < top - NEAR_BEST);
+	if (short.length) {
+		out.push(
+			`${short.length} of ${results.length} starts stopped short of the best ${label} (lowest ${fmt(Math.min(...short.map((r) => r.score)))} against ${fmt(top)}); ` +
+				'the best is kept. If many do, a larger budget may find better parameters.'
+		);
+	}
+	return out;
 }
 
 function fit(
@@ -381,7 +463,8 @@ function fit(
 	stage: CalibrationStage,
 	onProgress: CalibrateOptions['onProgress'],
 	penalty: Wr2012Penalty | null = null,
-	bounds: CalibrationBounds = 'wide'
+	bounds: CalibrationBounds = 'wide',
+	start?: { start: number; starts: number }
 ): FitResult {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
@@ -403,12 +486,12 @@ function fit(
 			budget,
 			seed,
 			x0: specs.map((s) => pb.startParams[s.key]!),
-			onEvaluation: (n, f) => onProgress?.({ stage, evaluations: n, budget, best: 1 - f }) === true
+			onEvaluation: (n, f) => onProgress?.({ stage, ...start, evaluations: n, budget, best: 1 - f }) === true
 		}
 	);
 	const params: ParamSet = { ...pb.startParams };
 	specs.forEach((s, j) => (params[s.key] = res.x[j]!));
-	return { params, evaluations: res.evaluations, cancelled: res.stopped };
+	return { params, loss: res.f, evaluations: res.evaluations, cancelled: res.stopped };
 }
 
 /** Days grouped by water year, for water years with at least `minDays` scored days. */
@@ -499,6 +582,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const bounds = opts.bounds ?? 'wide';
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
+	const starts = Math.min(MAX_STARTS, Math.max(1, Math.floor(opts.starts ?? 1)));
 	const pb = prepareCalibration(input, opts.exclusions, opts.model);
 	const specs = CALIBRATION_PARAMS[pb.model];
 	const free = opts.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);
@@ -508,15 +592,29 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	let evaluations = 0;
 	let cancelled = false;
 	const penalty = pb.marPenalty;
-	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds);
+	const fitOnce = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true, start?: { start: number; starts: number }) => {
+		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start);
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
-		return r.params;
+		return r;
 	};
+	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => fitOnce(idx, stage, s, withPenalty).params;
 
 	const all = pb.scoredDays;
-	const params = run(all, 'full', seed);
+	// The whole record from each start; the lowest loss is kept (CR-2).
+	const fulls: { seed: number; r: FitResult }[] = [];
+	for (let i = 0; i < starts && !cancelled; i++) {
+		const s = startSeed(seed, i);
+		fulls.push({ seed: s, r: fitOnce(all, 'full', s, true, starts > 1 ? { start: i + 1, starts } : undefined) });
+	}
+	const kept = fulls.reduce((b, x) => (x.r.loss < b.r.loss ? x : b), fulls[0]!);
+	const params = kept.r.params;
+	const startResults: StartResult[] = fulls.map((x) => ({
+		seed: x.seed,
+		params: x.r.params,
+		score: scored(pb, x.r.params, all).scores[objective],
+		best: x === kept
+	}));
 	const notes: string[] = [];
 	let splitSample: ValidationTest | null = null;
 	let differential: DifferentialTest | null = null;
@@ -610,6 +708,17 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		};
 	}
 	notes.push(...validationNotes(objective, splitSample, differential, independentRecord));
+	notes.push(
+		...startsNotes(
+			objective,
+			startResults,
+			free.map((k) => {
+				const s = specs.find((x) => x.key === k)!;
+				const [lo, hi] = bounds === 'typical' ? s.typical : [s.min, s.max];
+				return { key: k, label: s.label, unit: s.unit, lo, hi };
+			})
+		)
+	);
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
 	return {
@@ -618,6 +727,8 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		bounds,
 		budget,
 		seed,
+		starts,
+		startResults,
 		free,
 		params,
 		startParams: pb.startParams,

@@ -8,6 +8,8 @@
 <script lang="ts">
 	import {
 		CALIBRATION_BOUNDS,
+		DEFAULT_STARTS,
+		MAX_STARTS,
 		OBJECTIVES,
 		type CalibrationBounds,
 		type CalibrationFlowKind,
@@ -34,7 +36,7 @@
 		scoreColumns,
 		SEED_MAX,
 		seedError,
-		STAGE_LABEL,
+		stageText,
 		totalRuns,
 		validationRecordOptions
 	} from '$lib/calibration/fit';
@@ -82,6 +84,12 @@
 	// Shown and recorded: the same seed, inputs and engine version reproduce the fit.
 	let seed = $state<number | null>(1);
 	const seedProblem = $derived(seedError(seed));
+	// Several searches from different seeds: nearly equal scores with scattered
+	// parameters show what the record can't pin down (calibration research CR-2).
+	let starts = $state<number | null>(DEFAULT_STARTS);
+	const startsOk = $derived(starts !== null && Number.isInteger(starts) && starts >= 1 && starts <= MAX_STARTS);
+	// The running fit's starts, for its progress bar.
+	let runStarts = 1;
 	let validationRecord = $state<CalibrationFlowKind | null>(null);
 	// Offered only when the project has both a gauge and a logger record.
 	const recordOptions = $derived(validationRecordOptions(seriesKinds, calibrationFlowKind));
@@ -106,15 +114,15 @@
 	const free = $derived(params.filter((p) => picked[p.key]).map((p) => p.key));
 	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
-	const runs = $derived(totalRuns(budget ?? 0, validate, penalty));
-	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && status !== 'running' && status !== 'loading');
+	const runs = $derived(totalRuns(budget ?? 0, validate, penalty, startsOk ? starts! : 1));
+	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && startsOk && status !== 'running' && status !== 'loading');
 	const columns = $derived(report ? scoreColumns(report) : []);
-	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty)) : 0);
+	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty, runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
 	const stale = $derived(report !== null && report.model !== runoffModel);
 
 	async function start() {
-		if (!canStart || budget === null || seed === null) return;
+		if (!canStart || budget === null || seed === null || starts === null) return;
 		status = 'loading';
 		error = null;
 		report = null;
@@ -125,7 +133,8 @@
 			const input = fitInput(server, form, model?.());
 			const context = { settings: form, validate, validationRecord: chosenRecord };
 			status = 'running';
-			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
+			runStarts = starts;
+			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
 			ran = context;
 			status = 'done';
@@ -190,6 +199,15 @@
 				<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
 				<span class="hint" id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
 			</div>
+			<div class="field">
+				<label for="{uid}-starts">Starts</label>
+				<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} bind:value={starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
+				<span class="hint" id="{uid}-starts-h">
+					{startsOk
+						? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
+						: `Starts must be a whole number from 1 to ${MAX_STARTS}.`}
+				</span>
+			</div>
 			<fieldset class="plain params">
 				<legend>Parameters to fit</legend>
 				{#each params as p (p.key)}
@@ -201,7 +219,7 @@
 			</fieldset>
 			<label class="check validate">
 				<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
-				Validate: split-sample and dry → wet tests (three fits)
+				Validate: split-sample and dry → wet tests (two more fits)
 			</label>
 			{#if recordOptions.length}
 				<div class="field">
@@ -238,12 +256,12 @@
 					aria-valuemin={0}
 					aria-valuemax={100}
 					aria-valuenow={pct}
-					aria-valuetext="{pct}%{progress ? `, ${STAGE_LABEL[progress.stage]}` : ''}"
+					aria-valuetext="{pct}%{progress ? `, ${stageText(progress)}` : ''}"
 				>
 					<span style:width="{pct}%"></span>
 				</div>
 				<p class="muted small" aria-live="polite">
-					{#if progress}{STAGE_LABEL[progress.stage]}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
+					{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
 				</p>
 			</div>
 		{:else if status === 'error'}
@@ -254,7 +272,7 @@
 			<div class="result" aria-live="polite">
 				<h4>Result</h4>
 				<p class="small muted">
-					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
+					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>
 				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
 				{#if stale}<p class="alert alert-info small">This fit is for the other runoff model; switch back to apply it.</p>{/if}
@@ -269,6 +287,31 @@
 						</tbody>
 					</table>
 				</div>
+				{#if report.startResults.length > 1}
+					<div class="table-wrap">
+						<table class="data compact">
+							<caption>Starts: separate searches of the whole record ({objectiveName(report.objective)} without any penalty)</caption>
+							<thead>
+								<tr>
+									<th scope="col">Start</th>
+									<th scope="col" class="num">Seed</th>
+									<th scope="col" class="num">Score</th>
+									{#each report.free as k (k)}<th scope="col" class="num">{paramLabel(k)}</th>{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each report.startResults as r, i (r.seed)}
+									<tr class:kept={r.best}>
+										<th scope="row">{i + 1}{#if r.best} (kept){/if}</th>
+										<td class="num">{r.seed}</td>
+										<td class="num">{fmtScore(r.score, '')}</td>
+										{#each report.free as k (k)}<td class="num">{fmtParam(r.params[k])}</td>{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 				<div class="table-wrap">
 					<table class="data compact scores">
 						<caption>Fit, and validation on days the parameters were not fitted to</caption>
@@ -392,6 +435,10 @@
 	.scores th.val,
 	.scores td.val {
 		background: var(--accent-soft);
+	}
+	tr.kept th,
+	tr.kept td {
+		font-weight: 600;
 	}
 	.period {
 		font-weight: 400;

@@ -1,6 +1,6 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, type CalibrationReport, type ModelInput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, totalRuns, validationRecordOptions, waterYearsText } from './fit';
+import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, stageText, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
 const scores = (kge: number) => ({
 	days: 100,
@@ -29,6 +29,8 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 		bounds: 'wide',
 		budget: 100,
 		seed: 1,
+		starts: 1,
+		startResults: [{ seed: 1, params: { x1: 800, x2: 0, x3: 40, x4: 1.2 }, score: 0.8, best: true }],
 		free: ['x1', 'x3', 'x4'],
 		params: { x1: 800, x2: 0, x3: 40, x4: 1.2 },
 		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
@@ -85,6 +87,21 @@ describe('progress', () => {
 		expect(progressFraction({ stage: 'dsst', evaluations: 1500, budget: 1500, best: 0 }, true, true)).toBe(0.75);
 		expect(progressFraction({ stage: 'unpenalised', evaluations: 750, budget: 1500, best: 0 }, false, true)).toBe(0.75);
 		expect(STAGE_LABEL.unpenalised).toBe('Fitting again without the WR2012 penalty');
+	});
+
+	it('weights the full fit by its starts, and says which start is running (CR-2)', () => {
+		expect(totalRuns(1500, true, false, 5)).toBe(1500 * 7);
+		expect(totalRuns(1500, true, true, 5)).toBe(1500 * 8);
+		const p = (stage: 'full' | 'split' | 'dsst' | 'unpenalised', evaluations: number, start?: number) =>
+			({ stage, evaluations, budget: 100, best: 0, ...(start ? { start, starts: 5 } : {}) }) as const;
+		// 5 starts + split + dsst = 7 equal parts.
+		expect(progressFraction(p('full', 50, 1), true, false, 5)).toBeCloseTo(0.5 / 7, 12);
+		expect(progressFraction(p('full', 100, 5), true, false, 5)).toBeCloseTo(5 / 7, 12);
+		expect(progressFraction(p('split', 50), true, false, 5)).toBeCloseTo(5.5 / 7, 12);
+		expect(progressFraction(p('dsst', 100), true, false, 5)).toBe(1);
+		expect(progressFraction(p('unpenalised', 50), false, true, 5)).toBeCloseTo(5.5 / 6, 12);
+		expect(stageText(p('full', 10, 2))).toBe('Fitting the whole record (start 2 of 5)');
+		expect(stageText(p('split', 10))).toBe('Split-sample test');
 	});
 
 	it('the penalty applies only when switched on and a reference is entered', () => {
@@ -234,6 +251,8 @@ describe('fitRecordFor', () => {
 			fittedAt: '2026-09-24T10:05:33.120Z',
 			engineVersion: ENGINE_VERSION,
 			seed: 99,
+			starts: 1,
+			startResults: [{ seed: 1, params: { x1: 800, x2: 0, x3: 40, x4: 1.2 }, score: 0.8, best: true }],
 			budget: 100,
 			objective: 'kgePrime',
 			calibrationStart: '2014-10-01',

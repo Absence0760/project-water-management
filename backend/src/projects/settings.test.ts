@@ -330,6 +330,19 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
+	it('accepts the starts of a multi-start fit (CR-2), and a record from before them without', () => {
+		const startResults = [
+			{ seed: 7, params: { x1: 512, x2: 0, x3: 61, x4: 2.2 }, score: 0.8, best: true },
+			{ seed: 1000010, params: { x1: 900, x2: 0, x3: 40, x4: 2.2 }, score: null, best: false }
+		];
+		expect(ok({ ...record, starts: 2, startResults })).toBe(true);
+		expect(ok(record)).toBe(true);
+		expect(ok({ ...record, starts: 0, startResults })).toBe(false);
+		expect(ok({ ...record, starts: 11, startResults })).toBe(false);
+		expect(ok({ ...record, starts: 2, startResults: [{ ...startResults[0], extra: 1 }] })).toBe(false);
+		expect(ok({ ...record, starts: 11, startResults: new Array(11).fill(startResults[0]) })).toBe(false);
+	});
+
 	it('rejects a record missing its provenance, with an unknown objective or model, a bad time, or extra keys', () => {
 		const without = (k: string) => Object.fromEntries(Object.entries(record).filter(([key]) => key !== k));
 		for (const bad of [

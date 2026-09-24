@@ -16,7 +16,7 @@ import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
 import type { RunoffModelId } from '../runoff/types';
-import type { CalibrationBounds, CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ParamSet, ScoredPeriod, ValidationTest } from './calibrate';
+import type { CalibrationBounds, CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ParamSet, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { ObjectiveId } from './objective';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
@@ -136,6 +136,9 @@ export interface FitRecord {
 	/** The box the search explored (issue #4 phase 6 §"make the logger fit identifiable"). */
 	bounds: CalibrationBounds;
 	seed: number;
+	/** Starts of the full fit and each one's result (calibration research CR-2); absent on records made before it: one start. */
+	starts?: number;
+	startResults?: StartResult[];
 	/** Model runs per optimisation. */
 	budget: number;
 	/** Model runs used over every stage. */
@@ -197,6 +200,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		objective: r.objective,
 		bounds: r.bounds,
 		seed: r.seed,
+		starts: r.starts,
+		startResults: r.startResults.map((x) => ({ ...x, params: { ...x.params } })),
 		budget: r.budget,
 		evaluations: r.evaluations,
 		cancelled: r.cancelled,

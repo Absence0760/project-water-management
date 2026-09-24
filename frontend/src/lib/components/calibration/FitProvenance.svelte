@@ -57,7 +57,7 @@
 			<div><dt>Objective</dt><dd>{objectiveName(record.objective)}</dd></div>
 			<div><dt>Bounds</dt><dd>{record.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : 'wide'}</dd></div>
 			<div><dt>Seed</dt><dd>{record.seed}</dd></div>
-			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
+			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit{(record.starts ?? 1) > 1 ? `, ${record.starts} starts` : ''}, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>
 			<div><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}, {windowText(record)}</dd></div>
 			<div>

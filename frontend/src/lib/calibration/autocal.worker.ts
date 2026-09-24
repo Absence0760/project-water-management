@@ -18,6 +18,7 @@ self.onmessage = (e: MessageEvent<FitRequest>) => {
 			free: req.free,
 			validate: req.validate,
 			seed: req.seed,
+			starts: req.starts,
 			validationRecord: req.validationRecord,
 			onProgress: (progress) => {
 				const now = performance.now();

@@ -32,6 +32,8 @@ export interface FitRequest {
 	free: string[];
 	validate: boolean;
 	seed: number;
+	/** Independent searches of the whole record (engine CalibrateOptions.starts). */
+	starts: number;
 	/** A second observed record to validate the fit against; undefined = none. */
 	validationRecord?: CalibrationFlowKind;
 }
@@ -87,8 +89,8 @@ export function waterYearsText(years: readonly number[]): string {
 	return years.length ? `WY ${years.map(waterYearLabel).join(', ')}` : '–';
 }
 
-/** Runs the fit will make: one optimisation, or three with validation, plus one without the WR2012 penalty when it is on. */
-export const totalRuns = (budget: number, validate: boolean, penalty = false) => budget * ((validate ? 3 : 1) + (penalty ? 1 : 0));
+/** Runs the fit will make: one optimisation per start, two more with validation, plus one without the WR2012 penalty when it is on. */
+export const totalRuns = (budget: number, validate: boolean, penalty = false, starts = 1) => budget * (starts + (validate ? 2 : 0) + (penalty ? 1 : 0));
 
 export const STAGE_LABEL: Record<CalibrationStage, string> = {
 	full: 'Fitting the whole record',
@@ -97,12 +99,20 @@ export const STAGE_LABEL: Record<CalibrationStage, string> = {
 	unpenalised: 'Fitting again without the WR2012 penalty'
 };
 
-/** Overall progress 0–1 across the stages (validation stages run after the full fit, the unpenalised fit last). */
-export function progressFraction(p: CalibrationProgress, validate: boolean, penalty = false): number {
+/**
+ * Overall progress 0–1 across the stages, each weighted by its runs: the
+ * full fit once per start, then the validation stages, the unpenalised fit last.
+ */
+export function progressFraction(p: CalibrationProgress, validate: boolean, penalty = false, starts = 1): number {
 	const stages: CalibrationStage[] = [...(validate ? (['full', 'split', 'dsst'] as const) : (['full'] as const)), ...(penalty ? (['unpenalised'] as const) : [])];
 	const i = Math.max(0, stages.indexOf(p.stage));
-	return Math.min(1, (i + p.evaluations / p.budget) / stages.length);
+	// Stages before this one: the full fit counts `starts` times.
+	const before = i === 0 ? (p.start ?? 1) - 1 : starts + i - 1;
+	return Math.min(1, (before + p.evaluations / p.budget) / (starts + stages.length - 1));
 }
+
+/** The stage being run, with which start for a multi-start full fit. */
+export const stageText = (p: CalibrationProgress) => `${STAGE_LABEL[p.stage]}${p.starts ? ` (start ${p.start} of ${p.starts})` : ''}`;
 
 export interface ScoreRow {
 	key: keyof FitScores;
