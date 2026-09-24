@@ -224,9 +224,13 @@ describe('calibrate', () => {
 		expect(report.exclusions).toHaveLength(2);
 		expect(report.fit.waterYears).not.toContain(2011);
 		// The same days runModel's calibration statistics score.
-		const stats = runModel(input).summary.calibration!;
+		const out = runModel(input);
+		const stats = out.summary.calibration!;
 		expect(stats.days).toBe(report.fit.scores.days);
 		expect(stats.excludedDays).toBe(366 + 10);
+		// The EWR test on the observed record leaves them out too (it scores the whole record, not just the window).
+		expect(out.summary.catchment.ewrAgreement!.excludedDays).toBe(366 + 10);
+		expect(checkAll(input)).toBeNull();
 	});
 
 	it('runModel warns when the exclusions leave nothing to score, and drops an invalid one', () => {

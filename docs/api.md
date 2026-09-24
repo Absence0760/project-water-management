@@ -141,7 +141,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   calibration score: `{ waterYear, reason }` (a whole water year, Oct–Sep,
   by the year it starts in) or `{ start, end, reason }` (inclusive
   `YYYY-MM-DD`, start ≤ end). `reason` is required (1–500 characters,
-  trimmed); an entry without one is a `400`.
+  trimmed); an entry without one is a `400`, and so is the same period
+  listed twice (overlapping periods are fine). They apply to the run's
+  calibration statistics and EWR test on the observed record, and to Fit
+  automatically.
   `fitRecord` is the record of the automatic fit whose parameters Apply wrote
   (`FitRecord` in `packages/engine/src/calibrate/provenance.ts`), or `null`:
   `{ fittedAt (ISO timestamp), engineVersion, model, objective, seed, budget,

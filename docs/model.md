@@ -536,9 +536,9 @@ wrong in the dry season shows up.
   and days outside the window are out-of-sample evidence. The function takes
   an optional window and **calibration exclusions** (`exclusions`, the same
   shape as the automatic calibration's); excluded observed days are counted
-  in `excludedDays`, not scored. `runModel` passes none, because exclusions
-  are not saved with the project yet (only the automatic-calibration dialog
-  holds them).
+  in `excludedDays`, not scored. From engine 0.6.0 `runModel` passes the
+  project's stored calibration exclusions (§2.10), so a period whose record
+  isn't trusted is left out of this test too.
 - **Which record.** The one `pickObservedKind` chooses (§2.10). Pitman flow is
   naturalised, so it can't take the outlet test and the agreement is `null`,
   as it is when the project has no observed record.

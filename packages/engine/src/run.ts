@@ -230,9 +230,12 @@ export function runModelWith(
 	// model's "below the EWR" with the river's. Every observed day in the run
 	// counts, not just the calibration window: the parameters were fitted to
 	// flows, and days outside the window are the out-of-sample evidence.
-	// Pitman flow is naturalised and can't take this test.
+	// Pitman flow is naturalised and can't take this test. The calibration
+	// exclusions apply: a period whose record isn't trusted isn't evidence here either.
 	const ewrObserved =
-		observedKind && !scoreNatural ? ewrAgreement(simOutflow, observedM3s, ewr, { startDate }) : null;
+		observedKind && !scoreNatural
+			? ewrAgreement(simOutflow, observedM3s, ewr, { startDate, exclusions: exclusionRanges(settings.calibrationExclusions) })
+			: null;
 
 	// Input data quality: do the two observed flow records agree? Are there
 	// impossible or suspicious values? Do the farm areas add up?
