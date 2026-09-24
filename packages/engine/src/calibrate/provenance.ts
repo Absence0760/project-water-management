@@ -85,17 +85,17 @@ export function exclusionsError(list: readonly unknown[]): string | null {
  * a warning (the backend rejects them on save; this guards older or imported
  * settings).
  */
-export function sanitizeExclusions(raw: unknown, warnings: string[]): CalibrationExclusion[] {
+export function sanitizeExclusions(raw: unknown, warnings: string[], what = 'calibration exclusion'): CalibrationExclusion[] {
 	if (raw == null) return [];
 	if (!Array.isArray(raw)) {
-		warnings.push('calibration exclusions are not a list; ignored');
+		warnings.push(`${what}s are not a list; ignored`);
 		return [];
 	}
 	const out: CalibrationExclusion[] = [];
 	for (const x of raw) {
 		const err = exclusionError(x);
 		if (err) {
-			warnings.push(`calibration exclusion ${JSON.stringify(x).slice(0, 80)} ${err}; ignored`);
+			warnings.push(`${what} ${JSON.stringify(x).slice(0, 80)} ${err}; ignored`);
 			continue;
 		}
 		const o = x as Record<string, unknown>;

@@ -112,7 +112,9 @@ Tick items off (or move them into an issue) as they are done.
       catchment with the correction on (condition 1), and record the result
       in the issue.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #3). In progress
-      (2026-09-24).** The issue #2 checks find runs of zero catchment rain
+      (2026-09-24): engine, API and CSV export landed in engine 0.15.0
+      (audit B2, model.md §2.4c); the Settings UI, the daily-chart shading
+      and the help text are next.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season

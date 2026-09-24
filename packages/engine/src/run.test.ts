@@ -8,6 +8,7 @@ const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
+import { zeroRainRuns } from './quality';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
 import { netDailyDemandM3 } from './demand';
@@ -991,9 +992,17 @@ describe.skipIf(!dataDir)(
 		// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
 		// store; the workbook has none. The replay switches it off (0 mm), which
 		// is bit for bit the workbook's rule; the N3 test below runs it on.
+		// B2 (engine ≥ 0.15.0): flagged zero-rain runs are treated as missing and
+		// CHIRPS fills them; the workbook runs them dry. The replay keeps them as
+		// recorded; the B2 test below runs the default.
 		const modelInput: ModelInput = {
 			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
-			settings: { ...project.settings, runoffModel: 'legacy', effectiveRainStoreMm: 0 },
+			settings: {
+				...project.settings,
+				runoffModel: 'legacy',
+				effectiveRainStoreMm: 0,
+				zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] }
+			},
 			model: { ...project.model, nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam })) },
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
@@ -1051,6 +1060,12 @@ describe.skipIf(!dataDir)(
 		//          shortfalls, curtailment), differ on the days after rain. Every
 		//          comparison here runs with effectiveRainStoreMm: 0, the
 		//          workbook's rule; the "N3:" test checks the store's effect.
+		//   B2     (engine ≥ 0.15.0) flagged zero-rain runs in the catchment rain
+		//          are treated as missing, so corrected CHIRPS fills them. Rain
+		//          used, natural flow, demand and everything downstream differ
+		//          in and after those runs. Every comparison here runs with
+		//          zeroRainRuns.mode 'asRecorded', the workbook's rule; the "B2:"
+		//          test checks what the default sets aside.
 		// -------------------------------------------------------------------------
 		type Rule =
 			| { kind: 'exact' }
@@ -1258,6 +1273,40 @@ describe.skipIf(!dataDir)(
 				if (a[t] !== want) bad.push(t);
 			}
 			expect(bad.slice(0, 5)).toEqual([]);
+		});
+
+		it('B2: sets aside exactly the flagged zero runs, fills them from CHIRPS, and changes no other day', () => {
+			const recorded = prepareRun(modelInput);
+			const settings = { ...modelInput.settings } as Record<string, unknown>;
+			delete settings.zeroRainRuns; // the default
+			const filled = prepareRun({ ...modelInput, settings });
+			const z = filled.zeroRain!.infill;
+			const catchmentSeries = modelInput.series.rain_catchment_mm!;
+			const flagged = zeroRainRuns(catchmentSeries).runs;
+			expect(recorded.zeroRain!.infill.days).toBe(0);
+			expect(z.mode).toBe('missing');
+			// Every flagged run inside the run window is set aside whole, and nothing else.
+			const d0 = toEpochDay(filled.startDate);
+			const want = new Uint8Array(filled.days);
+			for (const r of flagged) {
+				for (let day = toEpochDay(r.startDate); day <= toEpochDay(r.endDate); day++) {
+					if (day >= d0 && day < d0 + filled.days) want[day - d0] = 1;
+				}
+			}
+			expect(Array.from(filled.zeroRain!.mask)).toEqual(Array.from(want));
+			expect(z.periods.every((p) => p.source === 'flagged' && p.recordedMm === 0)).toBe(true);
+			const a = filled.aligned('rain_catchment_mm');
+			const b = recorded.aligned('rain_catchment_mm');
+			const bad: number[] = [];
+			for (let t = 0; t < filled.days; t++) if (want[t] ? a[t] !== null : a[t] !== b[t]) bad.push(t);
+			expect(bad.slice(0, 5)).toEqual([]);
+			// On the client catchment CHIRPS covers every set-aside day, so none runs as 0 mm.
+			expect(z.unfilledDays).toBe(0);
+			if (z.days > 0) expect(z.filledMm).toBeGreaterThan(0);
+			// The model still conserves water with the default on.
+			const input = { ...modelInput, settings };
+			const full = withVerification(input, runModel(input));
+			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
 		});
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only

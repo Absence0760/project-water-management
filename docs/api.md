@@ -133,13 +133,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   reference is also checked for plausibility: with a MAP, the MAR can't
   exceed MAP × area ÷ 1 000 Mm³, and the monthly means must add up to the MAR
   within 5 %; otherwise `400` naming the field.
-  A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `wr2012`,
+  A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
   values, and each `wr2012` group, are replaced whole.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  `zeroRainRuns` (engine ≥ 0.15.0) is `{ mode, keepDry, missing }`:
+  `mode` is `missing` (the default: flagged zero-rain runs in the catchment
+  rain are treated as blank, so corrected CHIRPS fills them) or `asRecorded`
+  (they run dry). `keepDry` and `missing` are period lists shaped and
+  validated like `calibrationExclusions` (below): flagged runs kept dry, and
+  extra periods treated as missing in either mode. A `PATCH` merges the group
+  one level deep, so sending `{ mode }` keeps the stored lists; each list is
+  replaced whole. [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
   `calibrationExclusions` (at most 100) lists periods left out of every
   calibration score: `{ waterYear, reason }` (a whole water year, Oct–Sep,
   by the year it starts in) or `{ start, end, reason }` (inclusive
@@ -384,6 +392,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
   fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
   lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+- `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
+  treated as missing, `null` when the project has no catchment rain series:
+  `{ mode, periods: [{ start, end, source: 'flagged' | 'listed', reason,
+  days, recordedMm, filledMm, unfilledDays }], keptDry: [{ start, end,
+  reason, days }], asRecordedDays, days, recordedMm, filledMm, unfilledDays }`.
+  The catchment series `rain_catchment_missing` is 1 on each day set aside.
+  Rules: [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
 
 ## Compare runs
 

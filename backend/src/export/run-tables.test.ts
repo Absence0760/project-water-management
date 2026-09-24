@@ -2,6 +2,7 @@ import { FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance,
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
+	zeroRainLines,
 	columnGuideLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
@@ -63,8 +64,8 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, water balance,
-		// CHIRPS factors, calibration, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(8);
+		// CHIRPS factors, rain treated as missing, calibration, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(9);
 	});
 
 	it('writes fractions as percentages without binary noise', () => {
@@ -91,6 +92,43 @@ describe('summary sheet', () => {
 		expect(lines).toContain('kge,0.4');
 		expect(lines.some((l) => l.includes('calibration not computed'))).toBe(true);
 		expect(lines).not.toContain('Warnings');
+	});
+});
+
+describe('catchment rain treated as missing block (CR-20)', () => {
+	const period = { start: '2003-05-01', end: '2003-08-28', source: 'flagged' as const, reason: null, days: 120, recordedMm: 0, filledMm: 310.5, unfilledDays: 0 };
+	const z = {
+		mode: 'missing' as const,
+		periods: [period, { ...period, start: '2004-01-01', end: '2004-01-31', source: 'listed' as const, reason: 'logger fault', days: 31, recordedMm: 90, filledMm: 12 }],
+		keptDry: [{ start: '2005-06-01', end: '2005-07-31', reason: 'real drought', days: 61 }],
+		asRecordedDays: 0,
+		days: 151,
+		recordedMm: 90,
+		filledMm: 322.5,
+		unfilledDays: 0
+	};
+
+	it('lists each period set aside, the total, and the runs kept dry', () => {
+		expect([...zeroRainLines(z)]).toEqual([
+			'Catchment rain treated as missing',
+			'Flagged zero runs,treated as missing',
+			'Start,End,Source,Reason,Days set aside,Catchment rain recorded (mm),Rain used instead (mm),Days with nothing to fill them',
+			'2003-05-01,2003-08-28,flagged zero run,,120,0,310.5,0',
+			'2004-01-01,2004-01-31,listed in settings,logger fault,31,90,12,0',
+			'Total,,,,151,90,322.5,0',
+			'Kept as recorded (dry),2005-06-01,2005-07-31,real drought,61'
+		]);
+	});
+
+	it('says why nothing was set aside', () => {
+		expect([...zeroRainLines({ ...z, mode: 'asRecorded', periods: [], keptDry: [], asRecordedDays: 120, days: 0 })]).toEqual([
+			'Catchment rain treated as missing',
+			'Flagged zero runs,run as recorded (dry)',
+			'Days of flagged runs run as recorded,120',
+			'No days set aside'
+		]);
+		expect([...zeroRainLines(null)][1]).toBe('No catchment rain series');
+		expect([...zeroRainLines(undefined)][1]).toMatch(/before engine 0\.15\.0/);
 	});
 });
 

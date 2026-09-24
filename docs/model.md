@@ -387,6 +387,8 @@ models. Correcting the fallback was the first condition for adopting GR4J.
   (§2.10a) is left out of the fit: every water year a flagged zero-rain run
   touches, and every low-vs-CHIRPS year. Their catchment rain is suspect
   (zeros that may be missing data), and it would drag the factors down.
+  Periods listed as missing in `settings.zeroRainRuns.missing` (§2.4c) are
+  left out too, day by day.
 - **Minimum sample.** A month's own factor needs **90 shared days** (about
   three years of that month) and **50 mm of CHIRPS** on them, so a dry month
   with a few millimetres can't produce a wild ratio. A month short of either
@@ -411,7 +413,8 @@ models. Correcting the fallback was the first condition for adopting GR4J.
 **Where it applies.** Only to CHIRPS that is actually used: a day with no
 catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`.
 Catchment rain is never changed. A day where the catchment reads 0 keeps its
-0 (a zero is a reading and blocks the fallback, §2.10a). **Forecast rain is
+0 (a zero is a reading and blocks the fallback, §2.10a), unless §2.4c sets
+it aside as missing first: then it is a blank day like any other. **Forecast rain is
 not corrected**: there is no overlap to fit a forecast factor from, and a
 forecast product's bias is not CHIRPS's. The corrected rain then goes
 through everything that reads rain used: the legacy model (before its rain
@@ -438,6 +441,7 @@ and the series explorer:
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
+| `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -459,6 +463,73 @@ it again would double the bias correction. So the default is `'monthly'`,
 and `'none'` is there for that case, not to reproduce the workbook. Runs
 saved before 0.7.0 used raw CHIRPS; run comparison flags the engine version
 change, and compares a stored run without the setting as the default.
+
+### 2.4c Zero-rain runs treated as missing
+
+Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
+([calibration-research.md](./calibration-research.md)), issue #3,
+`zeroRainMask` in `packages/engine/src/rain.ts`. Setting:
+`settings.zeroRainRuns`.
+
+**Why.** A zero is a reading, so a stretch of missing catchment rain exported
+as zeros blocks the CHIRPS fallback (§2.4b) and runs the catchment dry, and
+natural flow, demand and the EWR results with it. The issue #2 check (§2.10a)
+finds these stretches: runs of zeros with 60+ days in the series' own six
+wettest months. Up to 0.14 it only warned. A zero run that long in the wet
+season is far more likely to be a logger or export gap than weather. Where
+it is real weather, CHIRPS is dry over it too, so filling it adds little
+rain. So a false alarm costs little and a missed gap costs a whole wet season.
+That is why the default fills.
+
+**The rule.** Before rain used is picked, the run blanks the catchment rain on:
+
+1. every day of every zero run the issue #2 check flags, in mode `'missing'`
+   (the default), except days inside a **keep-dry** period; and
+2. every day inside a **missing** period, in either mode, whatever it reads.
+
+Those days are then blank days like any other: bias-corrected CHIRPS fills
+them, then forecast rain, then nothing (the model treats a day with no value
+as 0 mm and the run warns). Flagged runs come from the **whole stored
+record**, as the Data tab's checks see it, not only the run window. **The
+stored series is never changed**, so turning the setting off gives back the
+recorded rain exactly.
+
+| Setting | Values | Meaning |
+| --- | --- | --- |
+| `mode` | `'missing'` (default), `'asRecorded'` | What to do with flagged zero runs. `'asRecorded'` runs them dry, as up to 0.14 and as the workbook does |
+| `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0. Only affects flagged runs |
+| `missing` | periods | Extra periods whose catchment rain is bad, e.g. the gap days inside a low-vs-CHIRPS year. They are also left out of the CHIRPS factor fit (§2.4b) |
+
+A period is a whole water year (`{ waterYear, reason }`) or a date range
+(`{ start, end, reason }`), always with a reason, as for calibration
+exclusions (§2.10b). A day in two periods counts once: a flagged run claims
+its days first.
+
+**Not changed.** The data checks (§2.10a) still report the flagged runs,
+because the data is still suspect. The CHIRPS fit still leaves out every
+water year a flagged run touches, even one kept dry, which is the cautious
+choice. The low-vs-CHIRPS check never blanks a year by itself: a year that
+reads half its usual rain may be partly real, so the hydrologist lists the
+bad days as `missing`.
+
+**Output.** `summary.zeroRainInfill` has the mode and each period set aside,
+flagged or listed, with its reason, the run days set aside, the catchment
+rain recorded on them, the rain used instead, and the days with nothing to
+fill them. It also lists the keep-dry periods that kept any days, and, in
+`'asRecorded'` mode, how many flagged-run days ran dry. It has totals too. The run
+warns once for what it set aside and filled, once for what it kept dry, and
+once when the mode left flagged runs dry. The `rain_catchment_missing` column
+(§2.4b table) marks each day set aside. The run's summary CSV has a *Catchment rain
+treated as missing* block (`zeroRainLines` in
+`backend/src/export/run-tables.ts`). Run comparison lists changes to the
+mode and to both period lists. A run saved before 0.15.0 compares as
+`'asRecorded'`, which is what it did.
+
+**Workbook regression.** The workbook runs the zeros dry, so the client
+catchment suite replays with `'asRecorded'`. Its "B2:" test checks that the
+default sets aside exactly the flagged runs, changes catchment rain on no
+other day, finds CHIRPS for every day it sets aside, and passes the
+self-checks.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -1083,15 +1154,14 @@ column R) is the first *non-blank* of catchment rain, CHIRPS and forecast. A
 blank day falls back to CHIRPS; a **0 does not**, because a zero is a reading.
 So a stretch of missing data exported as zeros runs the catchment artificially
 dry, and natural flow, farm supply and the EWR results with it. Both warnings
-name the dates or water years and say that the zeros block the CHIRPS
-fallback. They are warnings only: the fallback is unchanged and zero stays a
-value. From engine 0.7.0 the water years they flag are also left out of the
-CHIRPS bias-correction fit (§2.4b). The fix is in the data (re-export the stretch as blank, or fill it from
-a trusted source), once the hydrologist or client confirms it is missing.
-**Planned (CR-20, in progress):** a run will treat a flagged zero run as
-blank by default, so bias-corrected CHIRPS fills it, with per-project
-overrides and a per-day infill flag. The plan is in
-[followups.md](./followups.md); this section changes when it lands.
+name the dates or water years. Up to engine 0.14 they were warnings only.
+From engine 0.7.0 the water years they flag are also left out of the
+CHIRPS bias-correction fit (§2.4b). From engine 0.15.0 a run sets the flagged
+zero runs aside as missing by default, so corrected CHIRPS fills them, with
+per-project keep-dry and missing periods (§2.4c). The low-vs-CHIRPS check
+still only warns. The lasting fix is still in the data (re-export the stretch as
+blank, or fill it from a trusted source) once the hydrologist or client
+confirms it is missing.
 
 - *Zero runs: why the wet season, from the series itself.* A South African
   catchment may get its rain in winter (the south-western Cape) or summer

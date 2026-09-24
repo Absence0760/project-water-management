@@ -4,7 +4,7 @@
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
-import type { ChirpsCorrection } from './rain';
+import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
@@ -20,6 +20,30 @@ export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
  */
 export const CHIRPS_BIAS_MODES = ['monthly', 'none'] as const;
 export type ChirpsBiasMode = (typeof CHIRPS_BIAS_MODES)[number];
+
+/**
+ * What a run does with the zero runs the catchment-rain check flags as
+ * probable missing data (settings.zeroRainRuns, ./rain.ts, CR-20). 'missing'
+ * treats them as blank, so corrected CHIRPS then forecast rain fill them;
+ * 'asRecorded' runs them as the dry days they say they are.
+ */
+export const ZERO_RAIN_MODES = ['missing', 'asRecorded'] as const;
+export type ZeroRainMode = (typeof ZERO_RAIN_MODES)[number];
+
+/**
+ * settings.zeroRainRuns (engine ≥ 0.15.0). Periods use the calibration
+ * exclusions' shape: a water year or a date range, each with a reason.
+ */
+export interface ZeroRainSettings {
+	/** For flagged zero runs. Default 'missing'. */
+	mode: ZeroRainMode;
+	/** Flagged zero runs confirmed as real dry spells: their days stay 0 even in 'missing' mode. */
+	keepDry: CalibrationExclusion[];
+	/** Extra periods whose catchment rain is treated as missing whatever it reads, in either mode. */
+	missing: CalibrationExclusion[];
+}
+
+export const defaultZeroRainSettings = (): ZeroRainSettings => ({ mode: 'missing', keepDry: [], missing: [] });
 
 /**
  * Rain → natural-flow calibration (b023 [Flow Calibration Cfg]); consumed by
@@ -113,6 +137,11 @@ export interface ProjectSettings {
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
 	chirpsBiasCorrection: ChirpsBiasMode;
+	/**
+	 * Flagged zero runs in the catchment rain, and other periods the
+	 * hydrologist marks, treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20).
+	 */
+	zeroRainRuns: ZeroRainSettings;
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
@@ -193,6 +222,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		chirpsBiasCorrection: 'monthly',
+		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: {
 			a: 0.09,
 			b: 1.2,
@@ -666,6 +696,12 @@ export interface RunSummary {
 	 * when the project has no CHIRPS series; absent on older runs.
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
+	/**
+	 * Catchment rain treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20):
+	 * the flagged zero runs and listed periods, and what filled them. null when
+	 * the project has no catchment rain; absent on older runs.
+	 */
+	zeroRainInfill?: ZeroRainInfill | null;
 	/**
 	 * The engine's self-checks on this run's own output (engine ≥ 0.12.0,
 	 * ./verify): the invariants the test suite asserts on random networks,
