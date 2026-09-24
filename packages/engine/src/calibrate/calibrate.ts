@@ -30,6 +30,7 @@ import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
 import type { ParamSpec, RunoffModelId } from '../runoff/types';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { dds } from './dds';
 import { fitScores, OBJECTIVE_LABELS, objectiveLoss, type FitScores, type ObjectiveId } from './objective';
 
@@ -81,7 +82,8 @@ export interface CalibrateOptions {
 	onProgress?: (p: CalibrationProgress) => boolean | void;
 }
 
-export type CalibrationStage = 'full' | 'split' | 'dsst';
+/** 'unpenalised': the second full fit, without the WR2012 MAR penalty, run only when the penalty is on. */
+export type CalibrationStage = 'full' | 'split' | 'dsst' | 'unpenalised';
 
 export interface CalibrationProgress {
 	stage: CalibrationStage;
@@ -152,9 +154,26 @@ export interface CalibrationReport {
 	independentRecord: IndependentRecordTest | null;
 	/** Plain-language limits of the validation (e.g. no wet years to test on). */
 	notes: string[];
+	/**
+	 * The soft WR2012 MAR penalty (settings.wr2012.calibrationPenalty), when it
+	 * was on: its weight, and the fit with and without it. null when off.
+	 */
+	marPenalty: MarPenaltyResult | null;
 	/** Model runs used, over every stage. */
 	evaluations: number;
 	cancelled: boolean;
+}
+
+export interface MarPenaltyResult {
+	/** Loss = (1 − objective) + weight × |ln(simulated MAR ÷ scaled WR2012 MAR)|, on natural flow. */
+	weight: number;
+	/** Scaled WR2012 MAR (Mm³/a) and the years it was compared over. */
+	targetMarMm3: number;
+	basis: 'overlap' | 'whole';
+	/** Simulated natural MAR ÷ target for the fitted (penalised) parameters. */
+	marRatio: number;
+	/** The same fit without the penalty, for comparison; null when cancelled before it ran. */
+	unpenalised: { params: ParamSet; fit: ScoredPeriod; marRatio: number } | null;
 }
 
 /** Everything a calibration needs, built once: forcing, network plan, observed record, scored days. */
@@ -170,6 +189,10 @@ export interface CalibrationProblem {
 	observed: Float64Array;
 	/** Day indices scored: observed, inside the calibration window, outside every exclusion. */
 	scoredDays: Int32Array;
+	/** Natural flow (m³/day) of the last simulate() call, filled up to the last scored day. */
+	natural: Float64Array;
+	/** The WR2012 MAR penalty when settings.wr2012.calibrationPenalty is on (and there is a reference), else null. */
+	marPenalty: Wr2012Penalty | null;
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
 	/**
@@ -271,6 +294,15 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		scoreNatural,
 		observed,
 		scoredDays: Int32Array.from(idx),
+		natural,
+		// On natural flow, never the outflow: WR2012 flows are naturalised.
+		marPenalty: wr2012Penalty(
+			settings.wr2012,
+			startDate,
+			idx[idx.length - 1]! + 1,
+			area,
+			runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1)
+		),
 		simulate: simulator(idx[idx.length - 1]! + 1, scoreNatural),
 		record(k) {
 			if (!input.series?.[k]) return null;
@@ -320,7 +352,7 @@ interface FitResult {
 	cancelled: boolean;
 }
 
-function fit(pb: CalibrationProblem, idx: Int32Array, free: string[], objective: ObjectiveId, budget: number, seed: number, stage: CalibrationStage, onProgress: CalibrateOptions['onProgress']): FitResult {
+function fit(pb: CalibrationProblem, idx: Int32Array, free: string[], objective: ObjectiveId, budget: number, seed: number, stage: CalibrationStage, onProgress: CalibrateOptions['onProgress'], penalty: Wr2012Penalty | null = null): FitResult {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
 	const obs = new Float64Array(idx.length);
@@ -331,7 +363,8 @@ function fit(pb: CalibrationProblem, idx: Int32Array, free: string[], objective:
 		for (let j = 0; j < specs.length; j++) p[specs[j]!.key] = x[j]!;
 		const full = pb.simulate(p);
 		for (let i = 0; i < idx.length; i++) sim[i] = full[idx[i]!]!;
-		return objectiveLoss(objective, obs, sim, years);
+		const l = objectiveLoss(objective, obs, sim, years);
+		return penalty ? l + penalty.penalty(pb.natural) : l;
 	};
 	const res = dds(
 		loss,
@@ -444,8 +477,9 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	if (unknown.length) throw new Error(`not a calibratable ${pb.model} parameter: ${unknown.join(', ')}`);
 	let evaluations = 0;
 	let cancelled = false;
-	const run = (idx: Int32Array, stage: CalibrationStage, s: number) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress);
+	const penalty = pb.marPenalty;
+	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => {
+		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null);
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r.params;
@@ -523,6 +557,20 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			};
 		}
 	}
+	let marPenalty: MarPenaltyResult | null = null;
+	if (penalty) {
+		const ratio = (p: ParamSet) => {
+			pb.simulate(p);
+			return penalty.simulatedMar(pb.natural) / penalty.targetMarMm3;
+		};
+		let unpenalised: MarPenaltyResult['unpenalised'] = null;
+		if (!cancelled) {
+			// The same fit without the penalty, so its effect is visible.
+			const p0 = run(all, 'unpenalised', seed, false);
+			unpenalised = { params: p0, fit: scored(pb, p0, all), marRatio: ratio(p0) };
+		}
+		marPenalty = { weight: penalty.weight, targetMarMm3: penalty.targetMarMm3, basis: penalty.basis, marRatio: ratio(params), unpenalised };
+	}
 	notes.push(...validationNotes(objective, splitSample, differential, independentRecord));
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
@@ -541,6 +589,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		splitSample,
 		differential,
 		independentRecord,
+		marPenalty,
 		notes,
 		evaluations,
 		cancelled
