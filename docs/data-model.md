@@ -116,7 +116,7 @@ its `inputs` snapshot plus `engine_version`.
   high-entropy key is charted or exported, so dropping keys would save little
   and change the API. If space ever matters, `real` (float4) outputs or a
   lower cap are the levers.
-- **Working columns (engine ≥ 0.11.0).** Each farm also stores its 11
+- **Working columns (engine ≥ 0.12.0).** Each farm also stores its 11
   intermediate columns (gross demand, effective rain, K–P, S, T and the
   balance check V; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
   so a day can be checked by hand from the export. On the two-farm e2e

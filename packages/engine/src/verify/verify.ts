@@ -1,4 +1,4 @@
-// What runModel reports about its own output (engine ≥ 0.11.0):
+// What runModel reports about its own output (engine ≥ 0.12.0):
 // - verification: the invariant checks of ./checks.ts, each run on its own
 //   so one failure doesn't hide another, with node ids and day numbers turned
 //   into names and dates a user can look up;

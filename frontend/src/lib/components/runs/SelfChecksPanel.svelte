@@ -1,5 +1,5 @@
 <!--
-	What the model says about its own run (engine ≥ 0.11.0): the self-checks,
+	What the model says about its own run (engine ≥ 0.12.0): the self-checks,
 	the water balance per water year, and a trace of one farm's day with every
 	intermediate column and its formula (docs/ui.md § Self-checks).
 -->
@@ -104,7 +104,7 @@
 <section aria-labelledby="{uid}-wb">
 	<h3 id="{uid}-wb">Water balance by water year</h3>
 	{#if balance.length === 0}
-		<p class="muted">This run was made before the water balance was recorded (engine 0.11.0). Run the model again to see it.</p>
+		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}
 		<p class="muted small">
 			Start storage + farm runoff + transfers = consumptive use + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
@@ -188,7 +188,7 @@
 				− out (U) {fmtValue(closure.outflow)} = <strong>{fmtValue(closure.residual)}</strong> m³
 			</p>
 		{:else if day.kind === 'farm'}
-			<p class="muted small">This run was made before the working columns were recorded (engine 0.11.0); run the model again to trace it in full.</p>
+			<p class="muted small">This run was made before the working columns were recorded (engine 0.12.0); run the model again to trace it in full.</p>
 		{/if}
 	{/if}
 </section>

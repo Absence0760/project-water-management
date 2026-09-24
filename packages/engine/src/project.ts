@@ -657,12 +657,12 @@ export interface RunSummary {
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
 	/**
-	 * The engine's self-checks on this run's own output (engine ≥ 0.11.0,
+	 * The engine's self-checks on this run's own output (engine ≥ 0.12.0,
 	 * ./verify): the invariants the test suite asserts on random networks,
 	 * run on the real catchment. Absent on older runs.
 	 */
 	verification?: RunVerification;
-	/** Where the water went, per water year and over the run (engine ≥ 0.11.0). Absent on older runs. */
+	/** Where the water went, per water year and over the run (engine ≥ 0.12.0). Absent on older runs. */
 	waterBalance?: WaterBalance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];

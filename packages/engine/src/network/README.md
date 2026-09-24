@@ -34,7 +34,7 @@ workbook cells.
 ## Daily farm balance
 
 FarmTemplate columns, per day *t*, with `Qprev` = yesterday's storage (the
-initial storage on day 0). Since engine 0.11.0 every column is a run series:
+initial storage on day 0). Since engine 0.12.0 every column is a run series:
 the working ones (K–P, S, T, V, plus `gross_demand` and `effective_rain`
 behind F) are recorded when `simulateNetwork` is called with
 `{ workings: true }`, as `runModel` does and calibration doesn't. The same

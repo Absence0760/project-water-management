@@ -8,7 +8,7 @@ import type { RunDay } from '$lib/api';
 export type Tone = 'ok' | 'bad' | 'none';
 
 export function checksHeadline(v: RunVerification | undefined): { tone: Tone; text: string } {
-	if (!v) return { tone: 'none', text: 'This run was made before the model checked itself (engine 0.11.0). Run it again to check it.' };
+	if (!v) return { tone: 'none', text: 'This run was made before the model checked itself (engine 0.12.0). Run it again to check it.' };
 	const failed = v.checks.filter((c) => !c.passed).length;
 	if (failed === 0) return { tone: 'ok', text: `All ${v.checks.length} self-checks passed.` };
 	return { tone: 'bad', text: `${failed} of ${v.checks.length} self-checks failed. That is a bug in the model, not in your data: please report it.` };
@@ -76,7 +76,7 @@ export function traceRows(day: RunDay): TraceRow[] {
 	}
 	for (const c of catalogue) {
 		const col = byKey.get(c.key);
-		// A run from before engine 0.11.0 has no working columns: leave them out.
+		// A run from before engine 0.12.0 has no working columns: leave them out.
 		if (!col) continue;
 		rows.push({ key: c.key, letter: c.letter, label: col.label, unit: col.unit, formula: c.formula, value: col.value });
 	}
@@ -103,7 +103,7 @@ export function dayClosure(day: RunDay): Closure | null {
 	const need = ['inflow_upstream', 'runoff', 'transfer', 'supplied', 'dam_storage', 'outflow'];
 	if (need.some((k) => typeof v.get(k) !== 'number')) return null;
 	const g = (k: string) => v.get(k) as number;
-	// Return flow is a working column (engine ≥ 0.11.0); an older run has none.
+	// Return flow is a working column (engine ≥ 0.12.0); an older run has none.
 	const T = v.get('return_flow');
 	if (typeof T !== 'number') return null;
 	const inflow = g('inflow_upstream') + g('runoff') + g('transfer');

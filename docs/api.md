@@ -352,12 +352,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   whose area is more than 1 % off high + low MAP area). The last two are absent
   on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
-- `summary.verification` (engine ≥ 0.11.0) is the engine's self-checks on the
+- `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
   with `id` one of `balance`, `workings`, `runoff`, `transfers`, `reports`, and
   `detail` the first broken property (farm names and dates) or `null`.
-- `summary.waterBalance` (engine ≥ 0.11.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
+- `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
   one row per water year (Oct–Sep, `waterYear` = its start year) and one for
   the run (`waterYear: null`): `rainMm`, `naturalFlowMm`, `runoffCoefficient`,
   `runoff` (GR4J store balance: `aetMm`, `exchangeMm`, `storageChangeMm`,
@@ -422,8 +422,8 @@ routes (`401` signed out, `404` not a member). Responses carry
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain, F, G, H, I, J, K … P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.11.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.11.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain, F, G, H, I, J, K … P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

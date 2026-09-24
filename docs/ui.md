@@ -263,7 +263,7 @@ The settings are grouped by what they drive:
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
-  `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.11.0,
+  `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)) comes next. It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
@@ -278,7 +278,7 @@ The settings are grouped by what they drive:
   with its letter, value and formula, starting from the day before's storage,
   then works the day's balance out from the numbers shown: in (H + I + J) −
   used (G − T) − stored (Q − Q[t−1]) − out (U). Parameters and names come from
-  the run's input snapshot, not today's model. A run saved before 0.11.0 says
+  the run's input snapshot, not today's model. A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
@@ -321,7 +321,7 @@ The settings are grouped by what they drive:
   monthly factors.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores about 170 series of about 16 000 values
-  (more since engine 0.11.0: each farm adds 11 working columns).
+  (more since engine 0.12.0: each farm adds 11 working columns).
   Large arrays live in `$state.raw` and are replaced, never mutated.
 
 ## Help (`/help`)

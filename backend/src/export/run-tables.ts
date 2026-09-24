@@ -28,7 +28,7 @@ const CATCHMENT_ORDER = [
 	'resultant_flow'
 ];
 // A farm's columns in FarmTemplate order (F … AB), intermediate ones included
-// (engine ≥ 0.11.0), so the file reads left to right like the formulas.
+// (engine ≥ 0.12.0), so the file reads left to right like the formulas.
 const NODE_ORDER = FARM_DAILY_COLUMNS.map((c) => c.key);
 const rank = (keys: string[]) => new Map(keys.map((k, i) => [k, i]));
 const RANK = { catchment: rank(CATCHMENT_ORDER), node: rank(NODE_ORDER) };
@@ -218,11 +218,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	}
 }
 
-/** The engine's self-checks on the run (engine ≥ 0.11.0, model.md §6 "Verification"). */
+/** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */
 export function* verificationLines(v: RunSummary['verification']): Generator<string> {
 	yield csvRow(['Self-checks']);
 	if (!v) {
-		yield csvRow(['Run made before engine 0.11.0: no self-checks recorded. Run it again to check it.']);
+		yield csvRow(['Run made before engine 0.12.0: no self-checks recorded. Run it again to check it.']);
 		return;
 	}
 	yield csvRow(['All passed', v.passed ? 'yes' : 'NO']);
@@ -258,13 +258,13 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 
 /**
  * Where the water went, one row per water year and one for the run (engine ≥
- * 0.11.0). The network closes: start storage + farm runoff + transfers =
+ * 0.12.0). The network closes: start storage + farm runoff + transfers =
  * consumptive use + outflow + end storage + residual.
  */
 export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<string> {
 	yield csvRow(['Water balance by water year (Oct–Sep)']);
 	if (!wb) {
-		yield csvRow(['Run made before engine 0.11.0: no water balance recorded. Run it again to see it.']);
+		yield csvRow(['Run made before engine 0.12.0: no water balance recorded. Run it again to see it.']);
 		return;
 	}
 	yield csvRow(['Start storage + farm runoff + transfers = consumptive use + outflow + end storage + residual; the residual should be 0']);

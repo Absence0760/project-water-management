@@ -160,7 +160,7 @@ describe('self-checks block', () => {
 	});
 
 	it('says an old run has none', () => {
-		expect([...verificationLines(undefined)][1]).toMatch(/before engine 0\.11\.0/);
+		expect([...verificationLines(undefined)][1]).toMatch(/before engine 0\.12\.0/);
 	});
 });
 
@@ -198,7 +198,7 @@ describe('water balance block', () => {
 	});
 
 	it('says an old run has none', () => {
-		expect([...waterBalanceLines(undefined)][1]).toMatch(/before engine 0\.11\.0/);
+		expect([...waterBalanceLines(undefined)][1]).toMatch(/before engine 0\.12\.0/);
 	});
 });
 

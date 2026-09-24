@@ -104,7 +104,7 @@ describe('run daily export', () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-disposition')).toContain('_baseline_farm-upper_daily_');
 		const header = lines(res.text)[0]!;
-		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.11.0).
+		// FarmTemplate order with the column letters, the intermediate columns included (engine 0.12.0).
 		expect(header.split(',').slice(0, 6)).toEqual([
 			'date',
 			'Gross irrigation demand (before effective rain) (m³/day)',
@@ -145,7 +145,7 @@ describe('run summary export', () => {
 		expect(rows.some((r) => r.startsWith('Farm 2,'))).toBe(true);
 		expect(rows).toContain('Catchment');
 		expect(rows.some((r) => r.startsWith('NSE,'))).toBe(true);
-		// The engine's self-checks and the water balance (engine 0.11.0).
+		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
 		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(5);

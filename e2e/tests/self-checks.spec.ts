@@ -1,4 +1,4 @@
-// The self-checks panel (engine 0.11.0): the model's checks on its own run,
+// The self-checks panel (engine 0.12.0): the model's checks on its own run,
 // the water balance per water year, and the trace of one farm's day with its
 // working columns (docs/ui.md § Self-checks).
 import { createRun, seedRunnableProject } from '../support/api.ts';

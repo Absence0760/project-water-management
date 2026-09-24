@@ -490,7 +490,7 @@ water to spare; the engine (≥ 0.4.0) doesn't ([audit G1](./engine-audit.md)). 
 catchment's simulated outflow that goes back into `[Flow data]` AG. That is
 compared with the full pragmatic EWR and the observed flow.
 
-**Every column is a run series (engine ≥ 0.11.0).** Besides F, G, H, I, J, Q,
+**Every column is a run series (engine ≥ 0.12.0).** Besides F, G, H, I, J, Q,
 R, U, W and Y–AB, each farm stores its working columns, so any day can be
 redone by hand from the farm's daily CSV: `gross_demand` and `effective_rain`
 (the two sides of F, §2.3), `upstream_to_dam` (K), `upstream_below_dam` (L),
@@ -501,7 +501,7 @@ one catalogue, `packages/engine/src/verify/columns.ts`, which the CSV headers,
 the summary CSV's column guide and the results' day trace all read. The
 simulator records them only for a saved run (`simulateNetwork(plan, {
 workings: true })`), so calibration's thousands of runs don't pay for them.
-Runs saved before 0.11.0 don't have them.
+Runs saved before 0.12.0 don't have them.
 
 ### 2.8 Outputs
 
@@ -1307,7 +1307,7 @@ asserts that an exempt model still *fails* the check, so the exemption can't
 outlive the problem. From a June start, 20 mm returns 1.05× its rain and
 200 mm returns 16.6×.
 
-**Every saved run checks itself (engine ≥ 0.11.0).** The backend saves runs
+**Every saved run checks itself (engine ≥ 0.12.0).** The backend saves runs
 through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
 `checkBalance`, `checkWorkings`, `checkRunoffBalance`, `checkTransferLimits`

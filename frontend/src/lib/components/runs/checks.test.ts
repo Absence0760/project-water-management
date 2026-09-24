@@ -10,7 +10,7 @@ describe('checksHeadline', () => {
 		const v = (p: boolean[]): RunVerification => ({ passed: p.every(Boolean), checks: p.map(check), maxResidual: null });
 		expect(checksHeadline(v([true, true, true]))).toEqual({ tone: 'ok', text: 'All 3 self-checks passed.' });
 		expect(checksHeadline(v([true, false, false]))).toMatchObject({ tone: 'bad', text: expect.stringMatching(/^2 of 3 self-checks failed/) });
-		expect(checksHeadline(undefined)).toMatchObject({ tone: 'none', text: expect.stringMatching(/before .*engine 0\.11\.0/) });
+		expect(checksHeadline(undefined)).toMatchObject({ tone: 'none', text: expect.stringMatching(/before .*engine 0\.12\.0/) });
 	});
 });
 

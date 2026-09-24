@@ -46,7 +46,7 @@ const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
 	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
-	// Farm working columns (engine 0.11.0, packages/engine/src/verify/columns.ts)
+	// Farm working columns (engine 0.12.0, packages/engine/src/verify/columns.ts)
 	'gross_demand', 'effective_rain', 'upstream_to_dam', 'upstream_below_dam', 'runoff_to_dam', 'runoff_below_dam',
 	'diverted_to_dam', 'interim_storage', 'below_dam_not_diverted', 'return_flow', 'balance_residual',
 	// GR4J (packages/engine/src/runoff/simulate.ts)

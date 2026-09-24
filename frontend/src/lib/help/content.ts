@@ -365,7 +365,7 @@ export const HELP: HelpEntry[] = [
 		id: 'working-columns',
 		term: 'Working columns',
 		short: "A farm's intermediate daily numbers (K … T), so any day can be redone by hand from the daily CSV.",
-		long: 'Next to demand, supply, storage and outflow, each farm records the steps in between, in the order of the workbook’s farm sheet: gross demand and the effective rain taken off it; upstream inflow into the dam (K) and below it (L); farm runoff into the dam (M) and below it (N); water diverted back to the dam (O); interim storage before spill (P); below-dam flow not diverted (S); and irrigation return flow (T).\n\nThe farm’s daily CSV has them in letter order, each header carrying its letter, and the run summary CSV lists every letter’s formula. The results’ “Trace a day” shows them worked out for one farm and one day. Runs made before engine 0.11.0 don’t have them.',
+		long: 'Next to demand, supply, storage and outflow, each farm records the steps in between, in the order of the workbook’s farm sheet: gross demand and the effective rain taken off it; upstream inflow into the dam (K) and below it (L); farm runoff into the dam (M) and below it (N); water diverted back to the dam (O); interim storage before spill (P); below-dam flow not diverted (S); and irrigation return flow (T).\n\nThe farm’s daily CSV has them in letter order, each header carrying its letter, and the run summary CSV lists every letter’s formula. The results’ “Trace a day” shows them worked out for one farm and one day. Runs made before engine 0.12.0 don’t have them.',
 		units: 'm³/day (interim storage m³)',
 		category: 'results',
 		aliases: ['intermediate columns', 'workings', 'FarmTemplate columns'],

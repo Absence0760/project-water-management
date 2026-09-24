@@ -45,7 +45,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.11.1';
+export const ENGINE_VERSION = '0.12.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -67,7 +67,7 @@ export function runModelChecked(input: ModelInput): ModelOutput {
 }
 
 /**
- * Attach summary.verification and summary.waterBalance (engine ≥ 0.11.0) to a
+ * Attach summary.verification and summary.waterBalance (engine ≥ 0.12.0) to a
  * run's output. A failed check is reported, never thrown: the run is kept so
  * the failure can be looked into, and each failed check becomes a warning.
  */
@@ -193,7 +193,7 @@ export function runModelWith(
 		}
 		const w = sim.workings?.[i];
 		if (!w) return;
-		// The intermediate columns (engine ≥ 0.11.0), so any day can be redone by hand (verify/columns.ts).
+		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
 	});
 

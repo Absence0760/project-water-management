@@ -34,7 +34,9 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 // Farm u (a quarter of the area, no dam) drains into farm b, which has a dam,
 // a diversion, return flow and one crop. Day 1 is worked by hand below.
 const handInput = (): ModelInput => ({
-	settings: { ewrPragmaticM3PerDay: zeros, apanMm: flat(100) },
+	// Natural flow is injected (runModelWith), so no conceptual runoff model runs:
+	// say legacy, or the GR4J default (engine 0.11.0) would expect its store balance.
+	settings: { ewrPragmaticM3PerDay: zeros, apanMm: flat(100), runoffModel: 'legacy' },
 	model: {
 		nodes: [
 			node('u', { areaKm2: 1, downstreamNodeId: 'b' }),
@@ -57,7 +59,7 @@ const handInput = (): ModelInput => ({
 const handRun = () => withVerification(handInput(), runModelWith(handInput(), () => ({ naturalFlowM3Day: [1000, 1000] })));
 const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((s) => s.nodeId === nodeId && s.key === key)!.values;
 
-describe('farm working columns (engine 0.11.0)', () => {
+describe('farm working columns (engine 0.12.0)', () => {
 	it('match a day worked by hand', () => {
 		const out = handRun();
 		const b = (k: string) => col(out, 'b', k)[0]!;
@@ -93,7 +95,7 @@ describe('farm working columns (engine 0.11.0)', () => {
 	});
 });
 
-describe('verification (engine 0.11.0)', () => {
+describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
@@ -159,7 +161,7 @@ describe('verification (engine 0.11.0)', () => {
 	});
 });
 
-describe('water balance per water year (engine 0.11.0)', () => {
+describe('water balance per water year (engine 0.12.0)', () => {
 	const volumeKeys = ['naturalFlowM3', 'farmRunoffM3', 'demandM3', 'suppliedM3', 'returnFlowM3', 'consumptiveUseM3', 'transfersM3', 'spillM3', 'outflowM3'] as const;
 	const scaleOf = (r: WaterBalanceRow) => Math.max(1, r.openingStorageM3, r.farmRunoffM3, r.outflowM3, r.closingStorageM3, r.suppliedM3);
 

@@ -54,7 +54,7 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 /** Run the engine and persist outputs. Returns the new run id. */
 export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
 	const input = await loadModelInput(db, projectId);
-	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.11.0).
+	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
 	const output = runModelChecked(input);
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
