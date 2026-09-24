@@ -7,6 +7,7 @@
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
+import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -288,18 +289,20 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 	}
 
 	// EWR agreement with the observed record: it counts every observed day once,
+	// either scored or left out by a calibration exclusion; on the scored days
 	// the model side is exactly the outlet test, and the breakdowns add back up.
 	const ag = out.summary.catchment.ewrAgreement;
 	const obsSeries = get.get('null|observed_flow');
 	if (ag) {
 		if (!obsSeries) return 'EWR agreement without an observed_flow series';
 		const shortDaily = get.get('null|ewr_shortfall')!;
+		const excluded = excludedDayMask(exclusionRanges(sanitizeExclusions(input.settings.calibrationExclusions, [])), out.startDate, out.days);
 		let observed = 0;
 		let modelBelow = 0;
 		for (let t = 0; t < out.days; t++) {
 			if (!Number.isFinite(obsSeries[t]!)) continue;
 			observed++;
-			if (shortDaily[t]! < 0) modelBelow++;
+			if (!excluded[t] && shortDaily[t]! < 0) modelBelow++;
 		}
 		const o = ag.overall;
 		if (ag.days + ag.excludedDays !== observed || o.days !== ag.days) return `EWR agreement: ${ag.days} days counted, ${observed} observed`;
