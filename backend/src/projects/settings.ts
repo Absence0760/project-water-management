@@ -213,13 +213,18 @@ export const FitRecord = z
 			.default(null),
 		notes: z.array(z.string().max(2000)).max(50),
 		editedParams: z.array(z.string().max(40)).max(30).default([]),
-		// The evaporation forcing the fit ran under (issue #4 pan-coefficient
-		// provenance): GR4J's parameters trade off against it, so it's held
-		// fixed and recorded, never fitted. Absent on records made before it.
+		// The forcing the fit ran under (issue #4 pan-coefficient provenance):
+		// GR4J's parameters trade off against the evaporation forcing, so the
+		// pan coefficient is held fixed and recorded, never fitted; CHIRPS bias
+		// correction changes the rain fed to the model on the days CHIRPS fills
+		// a gap, so it's recorded too. Absent on records made before `forcing`;
+		// `chirpsBiasCorrection` optional so a `forcing` made before it was
+		// added still validates.
 		forcing: z
 			.object({
 				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
-				apanMm: monthly
+				apanMm: monthly,
+				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional()
 			})
 			.strict()
 			.optional()
