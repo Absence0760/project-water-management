@@ -387,6 +387,17 @@ the suggested order (the IDs carry the detail):
       use against demand, storage change). This is the first time the
       self-checks would see real data; nothing else tells us as much for as
       little. Record findings here without client numbers (public repo).
+      **Partly done 2026-09-24** (engine 0.13.0, local dev DB): a fresh run of
+      the client catchment passed all five self-checks, every yearly residual
+      was float noise, and 2 000 sampled farm-days plus a wet, spill, deficit,
+      transfer and diversion day recomputed independently from the Network,
+      Crops and Settings inputs agreed with the model to float precision. One
+      water year shows a runoff coefficient near 0.9: its catchment rain is a
+      long run of zeros (missing data recorded as 0, issue #2), which the
+      run's data checks already flag, while flow comes from the stores
+      draining. That is an input question for the hydrologist, not a
+      calculation error. Still open: the regression suite against the
+      re-extracted workbook.
 - [ ] **`verify/` (Python cross-check):** it transcribes the workbook's
       formulas, which the engine no longer follows. Decide whether to delete it
       or rebuild it against the audited model. Operator call.
