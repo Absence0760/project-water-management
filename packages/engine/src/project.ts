@@ -656,8 +656,87 @@ export interface RunSummary {
 	 * when the project has no CHIRPS series; absent on older runs.
 	 */
 	chirpsCorrection?: ChirpsCorrection | null;
+	/**
+	 * The engine's self-checks on this run's own output (engine ≥ 0.11.0,
+	 * ./verify): the invariants the test suite asserts on random networks,
+	 * run on the real catchment. Absent on older runs.
+	 */
+	verification?: RunVerification;
+	/** Where the water went, per water year and over the run (engine ≥ 0.11.0). Absent on older runs. */
+	waterBalance?: WaterBalance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
+}
+
+export type VerificationCheckId = 'balance' | 'workings' | 'runoff' | 'transfers' | 'reports';
+
+export interface VerificationCheck {
+	id: VerificationCheckId;
+	/** What the check asserts, in words. */
+	label: string;
+	passed: boolean;
+	/** The first broken property (node names and dates, not ids), null when passed. */
+	detail: string | null;
+}
+
+export interface RunVerification {
+	/** Every check passed. */
+	passed: boolean;
+	checks: VerificationCheck[];
+	/**
+	 * The largest |balance check| (column V) of any farm on any day, m³/day:
+	 * float noise only, many orders of magnitude below the flows. null without farms.
+	 */
+	maxResidual: { valueM3Day: number; nodeId: string; name: string; date: string } | null;
+}
+
+/**
+ * One water year's (or the whole run's) water balance. Volumes in m³ over the
+ * period, depths in mm over the catchment. The network closes:
+ * opening storage + farm runoff + transfers = consumptive use + outflow +
+ * closing storage + residual, with consumptive use = supplied − return flow
+ * and the residual float noise.
+ */
+export interface WaterBalanceRow {
+	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
+	waterYear: number | null;
+	days: number;
+	/** Catchment rain after gap-filling (rain_final, mm); null when the run has no rain series. */
+	rainMm: number | null;
+	/** Natural flow as depth over the catchment (mm); null without an area. */
+	naturalFlowMm: number | null;
+	/** naturalFlowMm / rainMm; null without rain or an area. */
+	runoffCoefficient: number | null;
+	/** Runoff model store balance (GR4J only; null for legacy runs). */
+	runoff: {
+		aetMm: number;
+		exchangeMm: number;
+		storageChangeMm: number;
+		/** Rain the model used (rain_used, missing days 0) − AET − flow + exchange − Δstorage. */
+		residualMm: number;
+	} | null;
+	naturalFlowM3: number;
+	/** Σ farm runoff (I). Equals the natural flow when the farm shares sum to 1. */
+	farmRunoffM3: number;
+	openingStorageM3: number;
+	demandM3: number;
+	suppliedM3: number;
+	returnFlowM3: number;
+	/** Supplied − return flow: the water that leaves the river. */
+	consumptiveUseM3: number;
+	/** Net transfers across all farms; 0 up to float noise. */
+	transfersM3: number;
+	spillM3: number;
+	outflowM3: number;
+	closingStorageM3: number;
+	/** opening + runoff + transfers − consumptive use − outflow − closing. */
+	residualM3: number;
+}
+
+export interface WaterBalance {
+	areaKm2: number | null;
+	years: WaterBalanceRow[];
+	total: WaterBalanceRow;
 }
 
 export interface ModelOutput {

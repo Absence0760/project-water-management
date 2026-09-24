@@ -19,10 +19,11 @@ import {
 } from './quality';
 import { applyChirpsCorrection, chirpsBiasFactors, chirpsCorrectionWarning, type ChirpsCorrection } from './rain';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
-import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
+import { grossFarmDemandM3PerDay, netDailyDemandM3, rainOffsetM3, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
-import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { verifyRun } from './verify/verify';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { exclusionRanges, sanitizeExclusions } from './calibrate/provenance';
@@ -54,6 +55,28 @@ export { resolveCatchmentAreaKm2 } from './runoff';
 /** Run the full model: natural flow from the selected runoff model (./runoff), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
 	return runModelWith(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx));
+}
+
+/**
+ * runModel, then the engine's checks on its own output (./verify): what a
+ * saved run uses. The checks are a separate step so runModel stays within its
+ * time budget and the tests that re-run the model don't pay for them.
+ */
+export function runModelChecked(input: ModelInput): ModelOutput {
+	return withVerification(input, runModel(input));
+}
+
+/**
+ * Attach summary.verification and summary.waterBalance (engine ≥ 0.11.0) to a
+ * run's output. A failed check is reported, never thrown: the run is kept so
+ * the failure can be looked into, and each failed check becomes a warning.
+ */
+export function withVerification(input: ModelInput, output: ModelOutput): ModelOutput {
+	const cal = { catchmentAreaKm2: input.settings.calibration?.catchmentAreaKm2 ?? null };
+	const { verification, waterBalance } = verifyRun(input, output, resolveCatchmentAreaKm2(cal, input));
+	const warnings = [...output.summary.warnings];
+	for (const c of verification.checks) if (!c.passed) warnings.push(`self-check failed (${c.label}): ${c.detail}`);
+	return { ...output, summary: { ...output.summary, verification, waterBalance, warnings } };
 }
 
 /**
@@ -94,7 +117,7 @@ export function runModelWith(
 	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
 	const nodes = input.model.nodes;
 	const ewr = plan.ewr;
-	const sim = simulateNetwork(plan);
+	const sim = simulateNetwork(plan, { workings: true });
 
 	// --- outputs -----------------------------------------------------------------
 	const out: RunSeries[] = [];
@@ -148,6 +171,19 @@ export function runModelWith(
 		['ewrShortfall', 'ewr_shortfall', 'EWR shortfall (negative = not met)'],
 		['ewrShortfallIncremental', 'ewr_shortfall_incremental', 'EWR shortfall caused here']
 	];
+	const WORKING_SERIES: [keyof FarmWorkings, string, string, string][] = [
+		['grossDemand', 'gross_demand', 'Gross irrigation demand (before effective rain)', 'm³/day'],
+		['rainOffset', 'effective_rain', 'Effective rain on the cropped area', 'm³/day'],
+		['upstreamToDam', 'upstream_to_dam', 'Upstream inflow into the dam', 'm³/day'],
+		['upstreamBelowDam', 'upstream_below_dam', 'Upstream inflow below the dam', 'm³/day'],
+		['runoffToDam', 'runoff_to_dam', 'Farm runoff into the dam', 'm³/day'],
+		['runoffBelowDam', 'runoff_below_dam', 'Farm runoff below the dam', 'm³/day'],
+		['divertedToDam', 'diverted_to_dam', 'Diverted back to the dam', 'm³/day'],
+		['interimStorage', 'interim_storage', 'Interim storage (before spill)', 'm³'],
+		['belowDamNotDiverted', 'below_dam_not_diverted', 'Below-dam flow not diverted', 'm³/day'],
+		['returnFlow', 'return_flow', 'Irrigation return flow', 'm³/day'],
+		['balanceResidual', 'balance_residual', 'Balance check (should be 0)', 'm³/day']
+	];
 	const gaugeSeries = new Set<keyof NodeResult>(['inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
@@ -155,6 +191,10 @@ export function runModelWith(
 			if (node.kind === 'gauge' && !gaugeSeries.has(field)) continue;
 			push(node.id, key, label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
+		const w = sim.workings?.[i];
+		if (!w) return;
+		// The intermediate columns (engine ≥ 0.11.0), so any day can be redone by hand (verify/columns.ts).
+		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
 	});
 
 	// --- summary -----------------------------------------------------------------
@@ -442,7 +482,9 @@ export function buildNetworkPlan(
 				damCapacityM3: cap,
 				initialStorageM3: n.damInitialPct * cap,
 				returnFlowPct: n.returnFlowPct,
-				demand: demand[i]!
+				demand: demand[i]!.net,
+				grossDemand: demand[i]!.gross,
+				rainOffset: demand[i]!.rainOffset
 			};
 		})
 	};
@@ -680,7 +722,7 @@ function buildDemand(
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[]
-): Float64Array[] {
+): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => ({
 		id: c.id,
@@ -706,7 +748,7 @@ function buildDemand(
 
 	let anyArea = false;
 	const out = nodes.map((node) => {
-		const d = new Float64Array(days);
+		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days) };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
@@ -723,7 +765,10 @@ function buildDemand(
 		anyArea = true;
 		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
 		for (let t = 0; t < days; t++) {
-			d[t] = netDailyDemandM3(gross[wy[t]!]!, cropped, rain[t]!, settings.effectiveRainFraction);
+			const g = gross[wy[t]!]!;
+			d.gross[t] = g;
+			d.rainOffset[t] = rainOffsetM3(cropped, rain[t]!, settings.effectiveRainFraction);
+			d.net[t] = netDailyDemandM3(g, cropped, rain[t]!, settings.effectiveRainFraction);
 		}
 		return d;
 	});

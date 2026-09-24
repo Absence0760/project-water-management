@@ -490,6 +490,19 @@ water to spare; the engine (≥ 0.4.0) doesn't ([audit G1](./engine-audit.md)). 
 catchment's simulated outflow that goes back into `[Flow data]` AG. That is
 compared with the full pragmatic EWR and the observed flow.
 
+**Every column is a run series (engine ≥ 0.11.0).** Besides F, G, H, I, J, Q,
+R, U, W and Y–AB, each farm stores its working columns, so any day can be
+redone by hand from the farm's daily CSV: `gross_demand` and `effective_rain`
+(the two sides of F, §2.3), `upstream_to_dam` (K), `upstream_below_dam` (L),
+`runoff_to_dam` (M), `runoff_below_dam` (N), `diverted_to_dam` (O),
+`interim_storage` (P), `below_dam_not_diverted` (S), `return_flow` (T) and
+`balance_residual` (V, signed, float noise). The letters and formulas live in
+one catalogue, `packages/engine/src/verify/columns.ts`, which the CSV headers,
+the summary CSV's column guide and the results' day trace all read. The
+simulator records them only for a saved run (`simulateNetwork(plan, {
+workings: true })`), so calibration's thousands of runs don't pay for them.
+Runs saved before 0.11.0 don't have them.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
@@ -1259,14 +1272,17 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
 Matching the workbook shows the port is faithful; it can't show the model is
 *sound*, and it stops being the goal wherever an algorithm is corrected. The
 main safety net is therefore a suite of **physical invariants** that any
-correct water balance must satisfy, whatever the formulas inside. They live in
-`packages/engine/src/testing/invariants.ts` (exported as
-`@water-management/engine/testing`) and each returns the first broken property
-as text:
+correct water balance must satisfy, whatever the formulas inside. The per-run
+checks live in `packages/engine/src/verify/checks.ts`; the ones that re-run the
+model (order invariance, doubled crop areas, determinism) in
+`packages/engine/src/testing/invariants.ts`, which re-exports the rest (as
+`@water-management/engine/testing`). Each returns the first broken property as
+text:
 
 | Check | What must hold |
 | --- | --- |
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + yesterday's storage = outflow + supplied − return flow + storage. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand − effective rain); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = G × return %; U = R + S + T; V is the recomputed residual and float noise. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ limits, storage − highest reserve). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) scores every observed day once, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on observed days; it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means (I ≤ H, R ≤ 0); totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, S = N + R, U = M + R, l/s = m³/day ÷ 86.4. |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, except when two enabled rules share a source dam, because their priority is still the open question Q18. |
@@ -1290,6 +1306,38 @@ PET in, mm out), in `testing/runoff.ts`. Every model offered must pass them
 asserts that an exempt model still *fails* the check, so the exemption can't
 outlive the problem. From a June start, 20 mm returns 1.05× its rain and
 200 mm returns 16.6×.
+
+**Every saved run checks itself (engine ≥ 0.11.0).** The backend saves runs
+through `runModelChecked` = `runModel` + `withVerification`, which calls
+`verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
+`checkBalance`, `checkWorkings`, `checkRunoffBalance`, `checkTransferLimits`
+and `checkReportTotals`. Each runs separately, so one failure doesn't hide
+another, and a check that throws counts as failed with the reason. The result
+is `RunSummary.verification`: pass/fail per check, the first broken property
+with node ids and day numbers turned into farm names and dates, and the largest
+|V| of any farm-day. A failure is never thrown: the run is kept so it can be
+looked into, and each failed check is added to the run's warnings. A failure
+means an engine bug, not bad data.
+
+The checks are a step *after* `runModel`, not inside it. On a 15-year example
+catchment they take about 15 ms against the model's 25 ms (measured
+2026-09-24 under load), and `runModel` has a 50 ms budget
+(`backend/src/model/examples.invariants.test.ts`) that the tests which re-run
+the model many times (order invariance, calibration) also rely on. Recording
+the working columns stays inside `runModel` (about 8 ms on the same run).
+Keep the checks cheap all the same: series are looked up once per node, never
+per day.
+
+`verifyRun` also records **`RunSummary.waterBalance`**: per water year (Oct–Sep)
+and over the run, the catchment rain (`rain_final`), natural flow as depth and
+runoff coefficient, the GR4J store balance (AET, exchange, Δstorage and its
+residual in mm), and the network balance in m³: start storage + farm runoff +
+transfers = consumptive use (supplied − return flow) + outflow + end storage +
+residual. Farm runoff equals natural flow only when the farm shares sum to 1,
+so both are shown. The residual is float noise; anything else is a bug.
+
+The results page shows both (Self-checks panel, [ui.md](./ui.md#self-checks)),
+and the summary CSV has them as blocks.
 
 They run on:
 

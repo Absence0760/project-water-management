@@ -41,6 +41,9 @@ export interface PlanNode {
 	returnFlowPct: number;
 	/** Daily net irrigation demand (F); zeros for gauges. */
 	demand: Float64Array;
+	/** Gross demand before effective rain and the rain offset taken off it (m³/day); only needed for workings. */
+	grossDemand?: Float64Array;
+	rainOffset?: Float64Array;
 }
 
 export interface PlanTransfer {
@@ -90,8 +93,30 @@ export interface NodeResult {
 	ewrShortfallIncremental: Float64Array; // AB
 }
 
+/**
+ * A farm's intermediate columns (model.md §2.7), recorded only when asked
+ * (simulateNetwork(plan, { workings: true })) so calibration's thousands of
+ * runs don't pay for them. They let a user redo any day by hand.
+ */
+export interface FarmWorkings {
+	grossDemand: Float64Array; // before effective rain
+	rainOffset: Float64Array; // cropped area × effective fraction × rain
+	upstreamToDam: Float64Array; // K
+	upstreamBelowDam: Float64Array; // L
+	runoffToDam: Float64Array; // M
+	runoffBelowDam: Float64Array; // N
+	divertedToDam: Float64Array; // O
+	interimStorage: Float64Array; // P
+	belowDamNotDiverted: Float64Array; // S
+	returnFlow: Float64Array; // T
+	/** V, signed: (H + I + J) − G·(1 − returnPct) − (Q[t] − Q[t−1]) − U. Float noise only. */
+	balanceResidual: Float64Array;
+}
+
 export interface NetworkResult {
 	nodes: NodeResult[];
+	/** Per node when simulated with { workings: true } (gauges get none). */
+	workings?: (FarmWorkings | null)[];
 	/** Volume moved by each transfer per day (m³). */
 	transfers: Float64Array[];
 }
@@ -115,9 +140,27 @@ function allocNode(days: number): NodeResult {
 	};
 }
 
-export function simulateNetwork(plan: NetworkPlan): NetworkResult {
+function allocWorkings(node: PlanNode, days: number): FarmWorkings {
+	const f = () => new Float64Array(days);
+	return {
+		grossDemand: node.grossDemand ?? node.demand,
+		rainOffset: node.rainOffset ?? f(),
+		upstreamToDam: f(),
+		upstreamBelowDam: f(),
+		runoffToDam: f(),
+		runoffBelowDam: f(),
+		divertedToDam: f(),
+		interimStorage: f(),
+		belowDamNotDiverted: f(),
+		returnFlow: f(),
+		balanceResidual: f()
+	};
+}
+
+export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr } = plan;
 	const res = nodes.map(() => allocNode(days));
+	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
 	// Volume already committed today by earlier transfers from each source dam.
@@ -223,7 +266,19 @@ export function simulateNetwork(plan: NetworkPlan): NetworkResult {
 			r.ewrCumulative[t] = Z;
 			r.ewrShortfall[t] = AA;
 			r.ewrShortfallIncremental[t] = AB;
+			const w = work?.[i];
+			if (w) {
+				w.upstreamToDam[t] = K;
+				w.upstreamBelowDam[t] = L;
+				w.runoffToDam[t] = M;
+				w.runoffBelowDam[t] = N;
+				w.divertedToDam[t] = O;
+				w.interimStorage[t] = P;
+				w.belowDamNotDiverted[t] = S;
+				w.returnFlow[t] = T;
+				w.balanceResidual[t] = H + I + J - (G - T) - (Q - qPrev) - U;
+			}
 		}
 	}
-	return { nodes: res, transfers: trOut };
+	return { nodes: res, transfers: trOut, ...(work ? { workings: work } : {}) };
 }

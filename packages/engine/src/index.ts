@@ -15,6 +15,8 @@ export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './ca
 export { Rng } from './random';
 export * from './quality';
 export * from './rain';
+export * from './verify/columns';
+export { verifyRun } from './verify/verify';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, waterYearOf, type CalibrationWindow } from './network/stats';

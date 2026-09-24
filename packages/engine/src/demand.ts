@@ -51,7 +51,11 @@ export function netDailyDemandM3(
 	rainMm: number,
 	effectiveRainFraction: number
 ): number {
+	return Math.max(0, grossM3PerDay - rainOffsetM3(croppedAreaM2, rainMm, effectiveRainFraction));
+}
+
+/** Effective rain on the cropped area (m³/day), the offset netDailyDemandM3 takes off gross demand. */
+export function rainOffsetM3(croppedAreaM2: number, rainMm: number, effectiveRainFraction: number): number {
 	// Same operand order as the workbook: (area × fraction/1000) × rain.
-	const rainOffset = croppedAreaM2 * (effectiveRainFraction / 1000) * rainMm;
-	return Math.max(0, grossM3PerDay - rainOffset);
+	return croppedAreaM2 * (effectiveRainFraction / 1000) * rainMm;
 }

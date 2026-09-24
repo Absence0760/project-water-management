@@ -116,6 +116,15 @@ its `inputs` snapshot plus `engine_version`.
   high-entropy key is charted or exported, so dropping keys would save little
   and change the API. If space ever matters, `real` (float4) outputs or a
   lower cap are the levers.
+- **Working columns (engine ≥ 0.11.0).** Each farm also stores its 11
+  intermediate columns (gross demand, effective rain, K–P, S, T and the
+  balance check V; [model.md §2.7](./model.md#27-farm-balance-one-sheet-per-element)),
+  so a day can be checked by hand from the export. On the two-farm e2e
+  catchment (120 days) they added 52 % to the run's `run_series` bytes
+  (21.6 KB on 41.3 KB); expect roughly that share on a long run, since most of
+  them are high-entropy. The alternative, recomputing them at export time from
+  the input snapshot, would need the input series the snapshot doesn't keep,
+  and would be a second implementation to keep in step with the engine.
 
 **Run input snapshots.** `model_run.inputs` holds the settings and model data
 the run used. Input *series* are not copied into it (they are large): the run

@@ -34,7 +34,12 @@ workbook cells.
 ## Daily farm balance
 
 FarmTemplate columns, per day *t*, with `Qprev` = yesterday's storage (the
-initial storage on day 0):
+initial storage on day 0). Since engine 0.11.0 every column is a run series:
+the working ones (K–P, S, T, V, plus `gross_demand` and `effective_rain`
+behind F) are recorded when `simulateNetwork` is called with
+`{ workings: true }`, as `runModel` does and calibration doesn't. The same
+letters and formulas are in `../verify/columns.ts`, which the exports and the
+day trace read.
 
 | Col | Output key | Formula |
 | --- | --- | --- |
@@ -42,18 +47,19 @@ initial storage on day 0):
 | H | `inflow_upstream` | Σ upstream nodes' U |
 | I | `runoff` | natural flow × farm share |
 | J | `transfer` | Σ transfers in − Σ transfers out |
-| K | – | H × `pctUpstreamToDam` — upstream inflow into the dam (engine ≥ 0.9.0, see quirk 1) |
-| L | – | H − K — upstream inflow *below* the dam |
-| M | – | I × `pctRunoffToDam` — own runoff into the dam |
-| N | – | I − M — own runoff below the dam |
-| O | – | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
+| K | `upstream_to_dam` | H × `pctUpstreamToDam` — upstream inflow into the dam (engine ≥ 0.9.0, see quirk 1) |
+| L | `upstream_below_dam` | H − K — upstream inflow *below* the dam |
+| M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
+| N | `runoff_below_dam` | I − M — own runoff below the dam |
+| O | `diverted_to_dam` | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
 | G | `supplied` | MIN(Qprev + M + O + K + J, F) |
-| P | – | Qprev + M + O + K + J − G |
+| P | `interim_storage` | Qprev + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |
-| S | – | L + N − O — passes below the dam |
-| T | – | G × `returnFlowPct` — irrigation return flow |
+| S | `below_dam_not_diverted` | L + N − O — passes below the dam |
+| T | `return_flow` | G × `returnFlowPct` — irrigation return flow |
 | U | `outflow` | R + S + T |
+| V | `balance_residual` | (H + I + J) − (G − T) − (Q − Qprev) − U: float noise |
 | W | `deficit` | F − G |
 | Y | `ewr` | EWR × farm share |
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
