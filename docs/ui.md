@@ -54,7 +54,22 @@ button), so a scrolling table or a sticky header can't clip or cover them.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), eight headline facts, project
-details, team and members. Email addresses (member rows here and on team pages,
+details, team and members.
+
+- **Headline facts** each link to the tab where they are edited or looked at
+  (farms, area, dams and the outflow gauge to Network, irrigated area to
+  Crops, transfers to Transfers, time series to Data, runs to Runs). The
+  whole tile is the click target (the label's link is stretched over it), and
+  a focused tile gets an outline.
+- **Layout**: Project details on the left; on the right, "who has access":
+  Team above Members (or "Shared directly with" for a team project), so the
+  two panels that refer to each other sit together. Below 900 px it is one
+  column in the order details, team, members.
+- The **description** box grows with its text (up to about 24rem) instead of
+  hiding it behind an inner scrollbar (`field-sizing: content`; browsers
+  without it keep four rows).
+
+Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
