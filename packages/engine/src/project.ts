@@ -100,7 +100,7 @@ export interface ProjectSettings {
 	panCoefficient: Monthly;
 	/**
 	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
-	 * (engine ≥ 0.6.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
+	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
 	chirpsBiasCorrection: ChirpsBiasMode;
 	calibration: CalibrationParams;
@@ -621,7 +621,7 @@ export interface RunSummary {
 		areaMismatches?: AreaMismatch[];
 	};
 	/**
-	 * The CHIRPS fallback bias correction (engine ≥ 0.6.0, ./rain.ts): the
+	 * The CHIRPS fallback bias correction (engine ≥ 0.7.0, ./rain.ts): the
 	 * factors fitted per calendar month and how many run days used them. null
 	 * when the project has no CHIRPS series; absent on older runs.
 	 */

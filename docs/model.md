@@ -155,7 +155,7 @@ Per day *t*, with the workbook column letters:
 
 | Col | Quantity | Formula |
 | --- | --- | --- |
-| R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold. From engine 0.6.0, CHIRPS used here is **bias-corrected** per calendar month first (§2.4b, audit B1); the workbook used it raw |
+| R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold. From engine 0.7.0, CHIRPS used here is **bias-corrected** per calendar month first (§2.4b, audit B1); the workbook used it raw |
 | N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
 | V | **Rain-added flow** | `a · R^b · RainToM3 · seasonFactor` if R > 0, else 0 (workbook: `INT(…)`) |
 | S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. (Workbook: rounded to 0 dp.) |
@@ -299,7 +299,7 @@ them) falls back to its default with a warning.
 
 ### 2.4b CHIRPS fallback bias correction
 
-Engine ≥ 0.6.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
+Engine ≥ 0.7.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
 Setting: `settings.chirpsBiasCorrection`, `'monthly'` (default) or `'none'`.
 
 **Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
@@ -373,7 +373,7 @@ series that is **already** bias-corrected to the catchment (by the
 hydrologist, or a product such as a station-blended CHIRPS), and correcting
 it again would double the bias correction. So the default is `'monthly'`,
 and `'none'` is there for that case, not to reproduce the workbook. Runs
-saved before 0.6.0 used raw CHIRPS; run comparison flags the engine version
+saved before 0.7.0 used raw CHIRPS; run comparison flags the engine version
 change, and compares a stored run without the setting as the default.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
@@ -867,7 +867,7 @@ So a stretch of missing data exported as zeros runs the catchment artificially
 dry, and natural flow, farm supply and the EWR results with it. Both warnings
 name the dates or water years and say that the zeros block the CHIRPS
 fallback. They are warnings only: the fallback is unchanged and zero stays a
-value. From engine 0.6.0 the water years they flag are also left out of the
+value. From engine 0.7.0 the water years they flag are also left out of the
 CHIRPS bias-correction fit (§2.4b). The fix is in the data (re-export the stretch as blank, or fill it from
 a trusted source), once the hydrologist or client confirms it is missing.
 

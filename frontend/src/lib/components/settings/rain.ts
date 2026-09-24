@@ -1,5 +1,5 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
-// engine ≥ 0.6.0; docs/model.md §2.4b).
+// engine ≥ 0.7.0; docs/model.md §2.4b).
 import type { ChirpsBiasMode } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [

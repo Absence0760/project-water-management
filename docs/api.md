@@ -304,7 +304,7 @@ engine's `runModel`, stores the outputs, and returns the summary.
   whose area is more than 1 % off high + low MAP area). The last two are absent
   on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
-- `summary.chirpsCorrection` (engine ≥ 0.6.0) is the CHIRPS fallback bias
+- `summary.chirpsCorrection` (engine ≥ 0.7.0) is the CHIRPS fallback bias
   correction, `null` when the project has no CHIRPS series: `{ mode, minDays,
   minMm, clampMin, clampMax, pooled: { days, catchmentMm, chirpsMm, ownFactor,
   factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,

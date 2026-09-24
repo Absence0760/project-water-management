@@ -970,7 +970,7 @@ describe.skipIf(!dataDir)(
 		//          whole-run mean: |Δmean| ≤ 1 % of mean|workbook| + 1 m³/day.
 		//   skip   not comparable, with the reason.
 		//
-		//   B1     (engine ≥ 0.6.0) CHIRPS used as fallback rain is bias-corrected
+		//   B1     (engine ≥ 0.7.0) CHIRPS used as fallback rain is bias-corrected
 		//          per calendar month. Demand is compared per day except on the
 		//          fallback days; natural flow end to end is compared year by year
 		//          with the correction off, and with it on only years holding

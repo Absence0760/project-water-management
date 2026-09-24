@@ -1,4 +1,4 @@
-// Rain used: bias correction of the CHIRPS fallback (engine ≥ 0.6.0, audit B1).
+// Rain used: bias correction of the CHIRPS fallback (engine ≥ 0.7.0, audit B1).
 //
 // Rain used (model.md §2.4, column R) is the first non-blank of catchment,
 // CHIRPS and forecast rain. CHIRPS is a 0.05° satellite-and-gauge product; at

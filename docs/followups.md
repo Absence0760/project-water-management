@@ -96,7 +96,7 @@ Tick items off (or move them into an issue) as they are done.
       Test the semi-arid defaults on a Karoo gauge record with a known
       drought (e.g. 2015–19) before changing them. Do this after the CHIRPS
       fallback bias correction lands, because it uses these flags.
-- [ ] **CHIRPS bias correction (engine 0.6.0, audit B1).** CHIRPS that fills
+- [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
       flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
@@ -129,7 +129,7 @@ default, and don't build the IHACRES-CMD benchmark (Phase 7) first. Three
 conditions come before any client numbers:
 - [x] **CHIRPS fallback bias correction.** Raw CHIRPS reads well below the
       catchment rain, especially in winter, so fallback years produce almost
-      no flow under a water-conserving model. **Landed in engine 0.6.0**
+      no flow under a water-conserving model. **Landed in engine 0.7.0**
       (audit B1, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)):
       monthly factors, on by default. The re-run of the comparison and the
       hydrologist's confirmation are the open item under Hydrologist above.
