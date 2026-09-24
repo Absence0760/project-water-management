@@ -69,18 +69,19 @@ export function waterYearsText(years: readonly number[]): string {
 	return years.length ? `WY ${years.map(waterYearLabel).join(', ')}` : '–';
 }
 
-/** Runs the fit will make: one optimisation, or three with validation. */
-export const totalRuns = (budget: number, validate: boolean) => budget * (validate ? 3 : 1);
+/** Runs the fit will make: one optimisation, or three with validation, plus one without the WR2012 penalty when it is on. */
+export const totalRuns = (budget: number, validate: boolean, penalty = false) => budget * ((validate ? 3 : 1) + (penalty ? 1 : 0));
 
 export const STAGE_LABEL: Record<CalibrationStage, string> = {
 	full: 'Fitting the whole record',
 	split: 'Split-sample test',
-	dsst: 'Dry → wet test'
+	dsst: 'Dry → wet test',
+	unpenalised: 'Fitting again without the WR2012 penalty'
 };
 
-/** Overall progress 0–1 across the stages (validation stages run after the full fit). */
-export function progressFraction(p: CalibrationProgress, validate: boolean): number {
-	const stages: CalibrationStage[] = validate ? ['full', 'split', 'dsst'] : ['full'];
+/** Overall progress 0–1 across the stages (validation stages run after the full fit, the unpenalised fit last). */
+export function progressFraction(p: CalibrationProgress, validate: boolean, penalty = false): number {
+	const stages: CalibrationStage[] = [...(validate ? (['full', 'split', 'dsst'] as const) : (['full'] as const)), ...(penalty ? (['unpenalised'] as const) : [])];
 	const i = Math.max(0, stages.indexOf(p.stage));
 	return Math.min(1, (i + p.evaluations / p.budget) / stages.length);
 }
@@ -144,6 +145,9 @@ export function scoreColumns(r: CalibrationReport): ScoreColumn[] {
 	}
 	return cols;
 }
+
+/** The WR2012 MAR penalty will apply: it is switched on and there is a reference to pull towards. */
+export const marPenaltyOn = (s: Pick<ProjectSettings, 'wr2012'>) => !!(s.wr2012?.calibrationPenalty?.enabled && s.wr2012.reference);
 
 /** The objective's label, without the citation. */
 export const objectiveName = (id: ObjectiveId) => OBJECTIVE_LABELS[id];

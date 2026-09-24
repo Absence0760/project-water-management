@@ -1,6 +1,6 @@
 import { calibrate, defaultProjectSettings, type CalibrationReport, type ModelInput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyReport, fitInput, fitParams, progressFraction, SCORE_ROWS, scoreColumns, totalRuns, validationRecordOptions, waterYearsText } from './fit';
+import { applyReport, fitInput, fitParams, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
 const scores = (kge: number) => ({
 	days: 100,
@@ -75,6 +75,23 @@ describe('progress', () => {
 		expect(progressFraction({ stage: 'full', evaluations: 750, budget: 1500, best: 0 }, false)).toBe(0.5);
 		expect(progressFraction({ stage: 'full', evaluations: 1500, budget: 1500, best: 0 }, true)).toBeCloseTo(1 / 3, 12);
 		expect(progressFraction({ stage: 'dsst', evaluations: 1500, budget: 1500, best: 0 }, true)).toBe(1);
+	});
+
+	it('adds the fit without the WR2012 penalty as a last stage when the penalty is on', () => {
+		expect(totalRuns(1500, true, true)).toBe(6000);
+		expect(totalRuns(1500, false, true)).toBe(3000);
+		expect(progressFraction({ stage: 'dsst', evaluations: 1500, budget: 1500, best: 0 }, true, true)).toBe(0.75);
+		expect(progressFraction({ stage: 'unpenalised', evaluations: 750, budget: 1500, best: 0 }, false, true)).toBe(0.75);
+		expect(STAGE_LABEL.unpenalised).toBe('Fitting again without the WR2012 penalty');
+	});
+
+	it('the penalty applies only when switched on and a reference is entered', () => {
+		const s = defaultProjectSettings();
+		expect(marPenaltyOn(s)).toBe(false);
+		expect(marPenaltyOn({ wr2012: { ...s.wr2012, calibrationPenalty: { enabled: true, weight: 1 } } })).toBe(false);
+		const reference = { quaternary: 'Z99A', areaKm2: 1, marMm3: 1, monthlyMm3: new Array(12).fill(1 / 12), periodStart: 1990, periodEnd: 2000, mapMm: null, source: 's' };
+		expect(marPenaltyOn({ wr2012: { ...s.wr2012, reference } })).toBe(false);
+		expect(marPenaltyOn({ wr2012: { ...s.wr2012, reference, calibrationPenalty: { enabled: true, weight: 1 } } })).toBe(true);
 	});
 });
 

@@ -1,0 +1,67 @@
+<!--
+	The fit with and without the soft WR2012 MAR penalty (issue #4 phase 8),
+	so the user sees what pulling the MAR towards WR2012 costs the fit.
+-->
+<script lang="ts">
+	import type { CalibrationReport, MarPenaltyResult } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { objectiveName } from '$lib/calibration/fit';
+	import { fmtNum } from '$lib/format/number';
+
+	let { report, penalty, paramLabel }: { report: CalibrationReport; penalty: MarPenaltyResult; paramLabel: (k: string) => string } = $props();
+
+	const uid = $props.id();
+	const obj = $derived(report.objective);
+	const score = (v: number | null | undefined) => (v == null ? '–' : fmtNum(v, 2));
+	const ratio = (v: number) => `${fmtNum(v, 2)} (${v >= 1 ? '+' : '−'}${fmtNum(Math.abs(100 * (v - 1)), 0)} %)`;
+	const param = (v: number | undefined) => (v === undefined ? '–' : fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3));
+</script>
+
+<div class="table-wrap">
+	<table class="data compact" aria-labelledby="{uid}-c">
+		<caption id="{uid}-c">
+			WR2012 MAR penalty, weight {fmtNum(penalty.weight, 2)} <HelpTip key="wr2012-penalty" />
+		</caption>
+		<thead>
+			<tr>
+				<th scope="col"></th>
+				<th scope="col" class="num">With the penalty</th>
+				<th scope="col" class="num">Without it</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<th scope="row">{objectiveName(obj)}</th>
+				<td class="num">{score(report.fit.scores[obj])}</td>
+				<td class="num">{penalty.unpenalised ? score(penalty.unpenalised.fit.scores[obj]) : '–'}</td>
+			</tr>
+			<tr>
+				<th scope="row">Simulated natural MAR ÷ WR2012 ({fmtNum(penalty.targetMarMm3, 3)} Mm³/a)</th>
+				<td class="num">{ratio(penalty.marRatio)}</td>
+				<td class="num">{penalty.unpenalised ? ratio(penalty.unpenalised.marRatio) : '–'}</td>
+			</tr>
+			{#each report.free as k (k)}
+				<tr>
+					<th scope="row">{paramLabel(k)}</th>
+					<td class="num">{param(report.params[k])}</td>
+					<td class="num">{param(penalty.unpenalised?.params[k])}</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+</div>
+<p class="muted small">
+	The penalty pulls the simulated natural MAR towards the scaled WR2012 MAR ({penalty.basis === 'overlap' ? 'over the years both cover' : 'over the simulated period'}).
+	“Apply to form” uses the fit with the penalty. {#if !penalty.unpenalised}The fit without it didn’t run because the calibration was cancelled.{/if}
+</p>
+
+<style>
+	caption {
+		text-align: left;
+		font-weight: 500;
+		padding-bottom: 0.25rem;
+	}
+	.small {
+		font-size: 0.8rem;
+	}
+</style>

@@ -156,9 +156,9 @@ export interface CalibrationReport {
 	notes: string[];
 	/**
 	 * The soft WR2012 MAR penalty (settings.wr2012.calibrationPenalty), when it
-	 * was on: its weight, and the fit with and without it. null when off.
+	 * was on: its weight, and the fit with and without it. null (or absent) when off.
 	 */
-	marPenalty: MarPenaltyResult | null;
+	marPenalty?: MarPenaltyResult | null;
 	/** Model runs used, over every stage. */
 	evaluations: number;
 	cancelled: boolean;

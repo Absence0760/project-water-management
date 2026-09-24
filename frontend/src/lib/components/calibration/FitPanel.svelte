@@ -8,8 +8,9 @@
 	import { OBJECTIVES, type CalibrationFlowKind, type CalibrationProgress, type CalibrationReport, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { api } from '$lib/api';
-	import { fitInput, fitParams, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
+	import { fitInput, fitParams, marPenaltyOn, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
+	import MarPenaltyResult from './MarPenaltyResult.svelte';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -67,10 +68,12 @@
 		picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
 	});
 	const free = $derived(params.filter((p) => picked[p.key]).map((p) => p.key));
-	const runs = $derived(totalRuns(budget ?? 0, validate));
+	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
+	const penalty = $derived(marPenaltyOn(settings()));
+	const runs = $derived(totalRuns(budget ?? 0, validate, penalty));
 	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && status !== 'running' && status !== 'loading');
 	const columns = $derived(report ? scoreColumns(report) : []);
-	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate)) : 0);
+	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty)) : 0);
 	// A report for another model than the form now shows can't be applied.
 	const stale = $derived(report !== null && report.model !== runoffModel);
 
@@ -160,6 +163,11 @@
 				</div>
 			{/if}
 		</div>
+		{#if penalty}
+			<p class="muted small">
+				The WR2012 MAR penalty is on (Settings → WR2012 check), so the fit also runs once without it for comparison.
+			</p>
+		{/if}
 		<div class="row">
 			{#if status === 'running' || status === 'loading'}
 				<button type="button" class="btn" onclick={cancel} disabled={status === 'loading'}>Cancel</button>
@@ -233,6 +241,9 @@
 						</tbody>
 					</table>
 				</div>
+				{#if report.marPenalty}
+					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
+				{/if}
 				<p class="muted small">
 					Judge the fit by the validation columns: they score days the parameters never saw. KGE of the mean flow is −0.41, so a
 					model should clearly beat that.
