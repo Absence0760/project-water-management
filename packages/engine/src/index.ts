@@ -13,6 +13,7 @@ export * from './reference/wr2012';
 export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './calibrate/dds';
 export { Rng } from './random';
 export * from './quality';
+export * from './rain';
 export { buildTopology, type Topology } from './network/topology';
 export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, moriasiRating, waterYearOf, type CalibrationWindow, type MoriasiRating } from './network/stats';

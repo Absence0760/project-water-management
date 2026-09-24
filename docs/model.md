@@ -155,7 +155,7 @@ Per day *t*, with the workbook column letters:
 
 | Col | Quantity | Formula |
 | --- | --- | --- |
-| R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold |
+| R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold. From engine 0.6.0, CHIRPS used here is **bias-corrected** per calendar month first (§2.4b, audit B1); the workbook used it raw |
 | N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
 | V | **Rain-added flow** | `a · R^b · RainToM3 · seasonFactor` if R > 0, else 0 (workbook: `INT(…)`) |
 | S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. (Workbook: rounded to 0 dp.) |
@@ -226,8 +226,9 @@ hydrologist signs GR4J off (issue #4 phase 6).
 
 **Forcing** (`runoff/simulate.ts`, `runoffForcing`):
 
-- **Rain P**: catchment rain, else CHIRPS, else forecast, as for legacy, but
-  with **no rain threshold** (that was part of the legacy model). A day with no
+- **Rain P**: catchment rain, else CHIRPS (bias-corrected, §2.4b), else
+  forecast, as for legacy, but with **no rain threshold** (that was part of
+  the legacy model). A day with no
   value is dry, and the run counts those days (W2). Negative values count as 0.
 - **Potential evaporation E** = `panCoefficient[month] × apanMm[month] / days
   in that calendar month`, so each month's PET totals exactly coefficient ×
@@ -295,6 +296,85 @@ rain − AET − flow + exchange = end − start. When a short run's natural flo
 exceeds its rain, the W1 warning names the starting storage instead of blaming
 the calibration. An out-of-bounds parameter in stored settings (the API rejects
 them) falls back to its default with a warning.
+
+### 2.4b CHIRPS fallback bias correction
+
+Engine ≥ 0.6.0, [audit B1](./engine-audit.md), `packages/engine/src/rain.ts`.
+Setting: `settings.chirpsBiasCorrection`, `'monthly'` (default) or `'none'`.
+
+**Why.** Rain used (column R, and GR4J's P) falls back to CHIRPS on every day
+the catchment rain is blank. CHIRPS is a 0.05° satellite-and-gauge product.
+At the scale of a small mountain catchment it can read a fraction of the
+catchment's own gauges, and by different amounts in different seasons:
+frontal and orographic rain on the ridges is what a satellite estimate
+misses most. Used raw, a year whose
+catchment rain is missing runs far too dry. The legacy model hides some of
+this, because its base-flow reset makes flow out of little rain (H1). GR4J
+conserves water, so in those years it makes almost no flow. In the
+hydrologist's review of issue #4 phase 6 on the client catchment, those
+fallback years made up most of the EWR-failure difference between the two
+models. Correcting the fallback was the first condition for adopting GR4J.
+
+**The factors.** For each calendar month *m*:
+
+  factor(m) = Σ catchment rain / Σ CHIRPS, over the days in month *m* where
+  both series have a reading (present, finite and not negative).
+
+- **Suspect years are left out.** A water year the issue #2 checks flag
+  (§2.10a) is left out of the fit: every water year a flagged zero-rain run
+  touches, and every low-vs-CHIRPS year. Their catchment rain is suspect
+  (zeros that may be missing data), and it would drag the factors down.
+- **Minimum sample.** A month's own factor needs **90 shared days** (about
+  three years of that month) and **50 mm of CHIRPS** on them, so a dry month
+  with a few millimetres can't produce a wild ratio. A month short of either
+  takes the **pooled** factor: the same ratio over all months together, with
+  the same minimums. With too little overlap for even that (for example a
+  project with CHIRPS but no catchment rain), CHIRPS stays raw and the run
+  warns how many days used it uncorrected.
+- **Clamp: 0.25–4.** CHIRPS is known to miss orographic rain in mountain
+  terrain, and the size of its bias changes with the season, so a factor of
+  two or three in the frontal-rain months of a mountain catchment is
+  plausible. A
+  factor beyond four either way is more likely a sign that the two series
+  don't describe the same area, or of a unit error, than a real bias. It is
+  clamped, and the warning marks it "(clamped)". The range is engineering
+  judgement, open for the hydrologist to confirm ([followups.md](./followups.md)).
+- The factors come from the **whole stored record**, not only the run
+  window, so a shorter simulation period doesn't change them. A monthly
+  factor is *linear scaling* (Teutschbein & Seibert 2012, *J. Hydrol.*
+  456–457): it corrects the monthly volume, not the number of wet days or the
+  intensity distribution.
+
+**Where it applies.** Only to CHIRPS that is actually used: a day with no
+catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`.
+Catchment rain is never changed. A day where the catchment reads 0 keeps its
+0 (a zero is a reading and blocks the fallback, §2.10a). **Forecast rain is
+not corrected**: there is no overlap to fit a forecast factor from, and a
+forecast product's bias is not CHIRPS's. The corrected rain then goes
+through everything that reads rain used: the legacy model (before its rain
+threshold), GR4J, the effective-rain offset on irrigation demand, automatic
+calibration, and the runoff coefficient (W1). So both runoff models change,
+and so does demand.
+
+**Output.** `summary.chirpsCorrection` holds each month's shared days, sums,
+own and applied factor, its source (`month`, `pooled` or none) and whether it
+was clamped, the pooled factor, the excluded water years, and the numbers of
+fallback days and corrected days, with the fallback rain before and after
+correction. A run that corrected any day adds one warning listing the
+factors (Oct–Sep) and the day count. GR4J's `rain_used` series shows the
+corrected rain day by day.
+
+**Why a setting.** The operator's policy is no workbook-compatibility modes
+(plan.md risks; roadmap D3): an unsound workbook algorithm is replaced
+outright, and `engineVersion` explains older results. `chirpsBiasCorrection`
+is not such a mode. The correction is a data-preparation choice, like the
+pan coefficient, and it has a legitimate "off": a project may load a CHIRPS
+series that is **already** bias-corrected to the catchment (by the
+hydrologist, or a product such as a station-blended CHIRPS), and correcting
+it again would double the bias correction. So the default is `'monthly'`,
+and `'none'` is there for that case, not to reproduce the workbook. Runs
+saved before 0.6.0 used raw CHIRPS; run comparison flags the engine version
+change, and compares a stored run without the setting as the default.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -787,7 +867,8 @@ So a stretch of missing data exported as zeros runs the catchment artificially
 dry, and natural flow, farm supply and the EWR results with it. Both warnings
 name the dates or water years and say that the zeros block the CHIRPS
 fallback. They are warnings only: the fallback is unchanged and zero stays a
-value. The fix is in the data (re-export the stretch as blank, or fill it from
+value. From engine 0.6.0 the water years they flag are also left out of the
+CHIRPS bias-correction fit (§2.4b). The fix is in the data (re-export the stretch as blank, or fill it from
 a trusted source), once the hydrologist or client confirms it is missing.
 
 - *Zero runs: why the wet season, from the series itself.* A South African

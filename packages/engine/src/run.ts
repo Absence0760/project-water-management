@@ -17,6 +17,7 @@ import {
 	resolveDataQuality,
 	seriesChecks
 } from './quality';
+import { applyChirpsCorrection, chirpsBiasFactors, chirpsCorrectionWarning, type ChirpsCorrection } from './rain';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
@@ -30,6 +31,7 @@ import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
 import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	CALIBRATION_FLOW_KINDS,
+	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
 	type CalibrationFlowKind,
 	type DailySeries,
@@ -63,7 +65,7 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	const { warnings, settings, series, start, end, days, startDate, aligned, month } = prepareRun(input);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -273,6 +275,7 @@ export function runModelWith(
 			ewrCompliance: compliance,
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
+			chirpsCorrection,
 			warnings
 		}
 	};
@@ -289,9 +292,16 @@ export interface PreparedRun {
 	end: number;
 	days: number;
 	startDate: string;
+	/**
+	 * A project series cut/padded to the run window (null where missing). CHIRPS
+	 * comes back bias-corrected on the days it stands in for blank catchment
+	 * rain (./rain.ts); every other series, and CHIRPS on other days, as stored.
+	 */
 	aligned: (kind: SeriesKind) => (number | null)[];
 	/** Calendar month (1–12) of each simulated day. */
 	month: Uint8Array;
+	/** The CHIRPS fallback correction (null without a CHIRPS series). */
+	chirpsCorrection: ChirpsCorrection | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
@@ -319,7 +329,20 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	if (end < start) throw new Error(`simulation end ${fromEpochDay(end)} is before start ${fromEpochDay(start)}`);
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);
-	const aligned = (kind: SeriesKind) => alignSeries(series[kind], start, days);
+	const month = new Uint8Array(days);
+	for (let t = 0; t < days; t++) month[t] = monthOfEpochDay(start + t);
+
+	// Rain used = catchment ?? CHIRPS ?? forecast; CHIRPS is bias-corrected
+	// where it fills in (audit B1). Every consumer (runoff models, demand,
+	// calibration, the runoff coefficient) reads CHIRPS through `aligned`.
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection);
+	const chirpsUsed = chirpsCorrection
+		? applyChirpsCorrection(chirpsCorrection, alignSeries(series.rain_catchment_mm, start, days), alignSeries(series.rain_chirps_mm, start, days), month)
+		: null;
+	const aligned = (kind: SeriesKind) =>
+		kind === 'rain_chirps_mm' && chirpsUsed ? chirpsUsed.slice() : alignSeries(series[kind], start, days);
+	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
+	if (chirpsNote) warnings.push(chirpsNote);
 
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
 		warnings.push(
@@ -329,10 +352,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		);
 	}
 
-	const month = new Uint8Array(days);
-	for (let t = 0; t < days; t++) month[t] = monthOfEpochDay(start + t);
-
-	return { warnings, settings, series, start, end, days, startDate, aligned, month };
+	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection };
 }
 
 /**
@@ -600,6 +620,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (!(RUNOFF_MODELS as readonly string[]).includes(s.runoffModel)) {
 		warnings.push(`unknown runoff model "${String(s.runoffModel)}"; using ${d.runoffModel}`);
 		s.runoffModel = d.runoffModel;
+	}
+	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
+		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
+		s.chirpsBiasCorrection = d.chirpsBiasCorrection;
 	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);

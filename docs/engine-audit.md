@@ -38,6 +38,7 @@ engine 0.4.0.
 | **N4** | Low | `simulate.ts:114` | **Transfers ignore the receiving dam's free space, and the source's irrigation comes second** (Q3). Water pumped into a full dam spills straight away, and the transfer is decided before the source irrigates. | Code read | **Needs hydrologist** (an operating rule). **Recommendation:** cap a transfer at the receiver's free space at the start of the day, `cap − Q[t−1]`. The source rule order is Q18. |
 | **M1** | Low | `scripts/wbt-import/{calibration,extract_project}.py` | **Month lists were imported with the workbook's substring bug.** `FIND(m & ",", list & ",")` makes "11" also mean January and "12" February, and the importer copied that into the project. | `scripts/wbt-import/test_months.py` | **Fixed.** The importer keeps the months a list names and prints a `note:` when the workbook would have added others. Neither sample workbook's lists are affected. |
 | **W1–W5** | Low | `run.ts`, `flow.ts`, `network/shares.ts` | Inputs that are physically impossible or silently patched gave no warning. | `run.test.ts` › "soundness warnings (audit W1–W5)" | **Fixed (warnings, no numeric change):** W1 runoff coefficient > 1 (H1); W2 days with no rainfall value, treated as dry; W3 a farm area ≠ hi + lo by more than 1 % (review F7; one warning per run from `quality.ts` `areaMismatches`, also in `RunSummary.dataQuality.areaMismatches`); W4 recession factors outside 0–1, a rising curve, or tables of different length; W5 days of natural flow taken from the Pitman fallback (Q7). |
+| **B1** | High (catchments with gaps in the catchment rain) | `run.ts` `prepareRun`, `rain.ts` (engine 0.6.0) | **CHIRPS fills gaps in the catchment rain without bias correction.** Rain used (column R) falls back to raw CHIRPS on every day the catchment rain is blank. At catchment scale CHIRPS can read a fraction of the catchment's gauges, by different amounts in different seasons. On the client catchment it reads well under catchment rain overall and less than half of it in the winter (wet-season) months, so a fallback year runs far too dry. GR4J, which conserves water, then makes almost no flow in those years, and they dominated the EWR-failure difference between the models in the hydrologist's review of issue #4 phase 6 (condition 1 for adopting GR4J). | `rain.test.ts` (known factors, minimum-sample fallback, flagged years excluded, catchment and forecast rain untouched, no CHIRPS → no-op, skewed TZ, GR4J balance still closes); `run.test.ts` › "B1: changes CHIRPS only on the fallback days" (client catchment) | **Fixed.** CHIRPS used as fallback is scaled by a per-calendar-month factor Σ catchment / Σ CHIRPS over the days both have a reading, leaving out the water years the issue #2 checks flag. A month with fewer than 90 shared days or 50 mm of CHIRPS takes the pooled factor; with no pooled factor CHIRPS stays raw and the run warns. Factors are clamped to 0.25–4. Catchment and forecast rain are unchanged. Linear scaling per month ([Teutschbein & Seibert 2012]). Rules and reasons: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction). It changes both runoff models and irrigation demand, so the regression suite names B1 (below). A setting, `chirpsBiasCorrection: 'monthly' \| 'none'` (default `'monthly'`), turns it off for a CHIRPS series that is already corrected; this is not a workbook-compatibility mode (model.md §2.4b, "Why a setting"). |
 | T1 | Low (tests) | `run.test.ts` | The skipped client catchment suite read its absent fixtures while vitest collected tests, which crashed `pnpm test` on any clone without `data/`. | `pnpm test` on main | **Fixed** (it now reports one skipped test). |
 
 ## Workbook quirks (model.md §3): decisions
@@ -123,7 +124,19 @@ reproduced the workbook exactly) with 0.4.0:
 | Largest mean change | small deficits (3–5 %, < 0.2 m³/day) | 0.1 % | confluence gauge shortfall −8 % and the farm below it (G1) |
 
 E1 shows up as a day-1 difference of 261 m³/day (295 vs 34). None of the
-examples trips a new warning. **H1, N1, N2 and N3 are the findings that could
+examples trips a new warning.
+
+**B1 (engine 0.6.0).** The example catchments have no CHIRPS series, so their
+results don't change. On the client catchment the fit finds a factor for
+every calendar month from its own sample, leaves out the water years the
+issue #2 checks flag, and clamps none. The factors are largest in the
+winter (wet-season) months and close to 1 in summer, where one month is
+slightly below 1, so the correction is not a flat scaling. Every fallback day is corrected,
+and the fallback rain roughly doubles. Natural flow rises in the fallback
+years with both models, more with GR4J than with legacy, and the days the
+EWR is not met fall with both, again more with GR4J. The calibration window
+holds no fallback days, so the calibration statistics don't change. (The
+client values are not recorded here: the repo is public.) **H1, N1, N2 and N3 are the findings that could
 move results materially**, and all four wait for the hydrologist.
 
 ## Regression suite: deviation list
@@ -142,6 +155,23 @@ workbook column by column, under a rule that names the finding:
   natural flow, end to end.
 - **G1:** a confluence gauge's shortfall, and the AB of a farm directly below
   one, are checked against the new definition instead.
+- **B1 (engine ≥ 0.6.0):** on the days CHIRPS stands in for blank catchment
+  rain, the engine bias-corrects it and the workbook doesn't.
+  - *Demand* keeps its R1 per-day bound on every other day and is not
+    compared on those days (its effective-rain offset uses the corrected
+    rain).
+  - *Natural flow end to end* is compared with the correction **off**
+    (`chirpsBiasCorrection: 'none'`, the workbook's rain used), where every
+    water year must stay within the E1/R1 bound. With it on, only water years
+    that hold fallback days may leave that bound.
+  - A separate test checks that, with the correction on, CHIRPS changes on
+    exactly the fallback days, by exactly the month's factor, and that
+    catchment rain doesn't change.
+  - The mean columns fed by demand (supplied, deficit, inflow, storage,
+    spill, outflow, shortfalls) stay within their R1 bound with it on.
+  - `flow.test.ts` feeds `computeNaturalFlow` the workbook's own rain
+    columns, so B1 (applied in `prepareRun`) doesn't reach it and rain used
+    stays exact there.
 - `[Shortfalls]` and the EWR pivot are fed the workbook's own daily columns, so
   they test `curtailment.ts` and `ewr.ts` in isolation. The saved window's H,
   I, R are within the sheet's `ROUND` (±0.5), and the whole run is replayed
@@ -189,6 +219,7 @@ the bound.
 - [Perrin et al. 2003]: Perrin, Michel, Andréassian. Improvement of a parsimonious model for streamflow simulation (GR4J). *J. Hydrol.* 279.
 - [Pushpalatha et al. 2012]: A review of efficiency criteria suitable for evaluating low-flow simulations. *J. Hydrol.* 420–421.
 - [Tallaksen 1995]: A review of baseflow recession analysis. *J. Hydrol.* 165.
+- [Teutschbein & Seibert 2012]: Bias correction of regional climate model simulations for hydrological climate-change impact studies: review and evaluation of different methods. *J. Hydrol.* 456–457.
 - [WR2012]: Bailey & Pitman. *Water Resources of South Africa 2012 Study*. Water Research Commission.
 
 [Allen et al. 1998]: #references
@@ -207,4 +238,5 @@ the bound.
 [Perrin et al. 2003]: #references
 [Pushpalatha et al. 2012]: #references
 [Tallaksen 1995]: #references
+[Teutschbein & Seibert 2012]: #references
 [WR2012]: #references

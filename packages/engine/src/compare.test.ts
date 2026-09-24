@@ -398,6 +398,17 @@ describe('diffInputs', () => {
 		expect(diffInputs(old, a)).toEqual([]);
 	});
 
+	it('describes a change of the CHIRPS bias correction', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.chirpsBiasCorrection = 'none';
+		expect(texts(a, b)).toEqual(['CHIRPS bias correction: monthly factors → raw CHIRPS']);
+		// A run saved before the setting existed compares as the default.
+		const old = structuredClone(a);
+		delete (old.settings as Record<string, unknown>).chirpsBiasCorrection;
+		expect(diffInputs(old, a)).toEqual([]);
+	});
+
 	it('describes series added, removed, extended and trimmed', () => {
 		const a = snapshot({
 			series: {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
@@ -928,6 +928,20 @@ describe.skipIf(!dataDir)(
 			model: project.model,
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
+		// B1: days where CHIRPS stands in for blank catchment rain. The engine
+		// bias-corrects CHIRPS there; the workbook uses it raw.
+		const chirpsFallback = (() => {
+			const d0 = toEpochDay(expected.startDate);
+			const at = (kind: string, t: number) => {
+				const s = project.series.find((x) => x.kind === kind);
+				if (!s) return null;
+				const v = s.values[d0 + t - toEpochDay(s.startDate)];
+				return typeof v === 'number' && Number.isFinite(v) ? v : null;
+			};
+			return Uint8Array.from({ length: expected.days }, (_, t) =>
+				at('rain_catchment_mm', t) === null && at('rain_chirps_mm', t) !== null ? 1 : 0
+			);
+		})();
 		// Feed the workbook's own natural flow so this isolates the network port from the rain model.
 		const natural = expected.catchment.natural_flow!.map((v) => v ?? 0);
 		const t0 = Date.now();
@@ -955,8 +969,19 @@ describe.skipIf(!dataDir)(
 		//          (R1) shifts the state and the shift propagates, so compare the
 		//          whole-run mean: |Δmean| ≤ 1 % of mean|workbook| + 1 m³/day.
 		//   skip   not comparable, with the reason.
+		//
+		//   B1     (engine ≥ 0.6.0) CHIRPS used as fallback rain is bias-corrected
+		//          per calendar month. Demand is compared per day except on the
+		//          fallback days; natural flow end to end is compared year by year
+		//          with the correction off, and with it on only years holding
+		//          fallback days may differ. The mean columns fed by demand
+		//          (supplied, deficit, …) stay within their R1 bound.
 		// -------------------------------------------------------------------------
-		type Rule = { kind: 'exact' } | { kind: 'daily'; bound: number } | { kind: 'mean' } | { kind: 'skip'; why: string };
+		type Rule =
+			| { kind: 'exact' }
+			| { kind: 'daily'; bound: number; except?: { days: Uint8Array; why: 'B1' } }
+			| { kind: 'mean' }
+			| { kind: 'skip'; why: string };
 		const MEAN_REL = 0.01;
 		const MEAN_ABS = 1;
 		function nodeRule(name: string, key: string): Rule {
@@ -965,7 +990,12 @@ describe.skipIf(!dataDir)(
 			switch (key) {
 				case 'demand':
 					// R1: net ROUND(,0) 0.5 + farm ROUND(,1) 0.05 + crop mm ROUND(,2) 0.005 mm on the cropped area.
-					return { kind: 'daily', bound: 0.55 + (croppedM2(n.id) * 0.005) / 1000 / 28 + 1e-6 };
+					// B1: the effective-rain offset uses bias-corrected CHIRPS on fallback days.
+					return {
+						kind: 'daily',
+						bound: 0.55 + (croppedM2(n.id) * 0.005) / 1000 / 28 + 1e-6,
+						except: { days: chirpsFallback, why: 'B1' }
+					};
 				case 'runoff':
 				case 'ewr':
 					return { kind: 'daily', bound: 0.5 + 1e-6 }; // R1: ROUND(value × share, 0)
@@ -1003,7 +1033,9 @@ describe.skipIf(!dataDir)(
 			let bad = 0;
 			let first = -1;
 			let worst = 0;
+			const except = rule.kind === 'daily' ? rule.except?.days : undefined;
 			for (let t = 0; t < n; t++) {
+				if (except?.[t]) continue;
 				const d = Math.abs(actual[t]! - (want[t] ?? 0));
 				worst = Math.max(worst, d);
 				if (!(d <= bound)) {
@@ -1066,10 +1098,8 @@ describe.skipIf(!dataDir)(
 			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, { kind: 'mean' })).toBeNull(); // R1
 		});
 
-		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
-			const t1 = Date.now();
-			const full = runModel(modelInput);
-			expect(Date.now() - t1).toBeLessThan(1000);
+		/** Water years whose end-to-end natural flow is off the workbook's by more than E1/R1 allow. */
+		function naturalFlowYearsOff(full: ReturnType<typeof runModel>): { wy: number; text: string }[] {
 			// E1 (day-1 base flow) and R1 (no rounding floor in the recessions): compare
 			// water-year volumes, allowing 2 % plus the workbook's rounding floor
 			// 0.5 / (1 − f_max) m³/day, which the engine no longer adds on dry days.
@@ -1088,13 +1118,51 @@ describe.skipIf(!dataDir)(
 				y.days++;
 				years.set(wy, y);
 			}
-			const bad = [...years].filter(([, y]) => Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor);
-			expect(bad.map(([wy, y]) => `${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³`)).toEqual([]);
-			const sim = get(full, null, 'simulated_outflow');
+			return [...years]
+				.filter(([, y]) => Math.abs(y.e - y.w) > 0.02 * y.w + y.days * floor)
+				.map(([wy, y]) => ({ wy, text: `${wy}: engine ${y.e.toFixed(0)} vs workbook ${y.w.toFixed(0)} m³` }));
+		}
+
+		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
+			// With the CHIRPS correction off, rain used is the workbook's: every year within E1/R1.
+			const t1 = Date.now();
+			const raw = runModel({ ...modelInput, settings: { ...modelInput.settings, chirpsBiasCorrection: 'none' } });
+			expect(Date.now() - t1).toBeLessThan(1000);
+			expect(naturalFlowYearsOff(raw).map((y) => y.text)).toEqual([]);
+			// With it on (the default), only water years that hold corrected fallback days may differ (B1).
+			const full = runModel(modelInput);
+			const d0 = toEpochDay(expected.startDate);
+			const b1Years = new Set<number>();
+			chirpsFallback.forEach((f, t) => {
+				if (!f) return;
+				const d = new Date((d0 + t) * 86_400_000);
+				b1Years.add(d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1);
+			});
+			expect(naturalFlowYearsOff(full).filter((y) => !b1Years.has(y.wy)).map((y) => y.text)).toEqual([]);
+			const cal = { ...defaultCal(), ...(project.settings.calibration as object | undefined) } as ReturnType<typeof defaultCal>;
+			const floor = 0.5 / (1 - Math.max(...cal.recessionFactors)) + 1;
+			const sim = get(raw, null, 'simulated_outflow');
 			const simW = expected.catchment.simulated_outflow!;
 			const mean = (v: ArrayLike<number | null>) => Array.from(v).reduce<number>((s, x) => s + (x ?? 0), 0) / v.length;
 			expect(Math.abs(mean(sim) - mean(simW))).toBeLessThanOrEqual(0.02 * mean(simW) + floor);
 			expect(full.summary.calibration?.days).toBeGreaterThan(0);
+		});
+
+		it('B1: changes CHIRPS only on the fallback days, by the month factor, and never catchment rain', () => {
+			const on = prepareRun(modelInput);
+			const off = prepareRun({ ...modelInput, settings: { ...modelInput.settings, chirpsBiasCorrection: 'none' } });
+			const c = on.chirpsCorrection!;
+			expect(c.months.every((m) => m.factor !== null)).toBe(true);
+			expect(c.correctedDays).toBe(chirpsFallback.reduce((a, f) => a + f, 0));
+			expect(on.aligned('rain_catchment_mm')).toEqual(off.aligned('rain_catchment_mm'));
+			const a = on.aligned('rain_chirps_mm');
+			const b = off.aligned('rain_chirps_mm');
+			const bad: number[] = [];
+			for (let t = 0; t < a.length; t++) {
+				const want = chirpsFallback[t] ? b[t]! * c.months[on.month[t]! - 1]!.factor! : b[t];
+				if (a[t] !== want) bad.push(t);
+			}
+			expect(bad.slice(0, 5)).toEqual([]);
 		});
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only

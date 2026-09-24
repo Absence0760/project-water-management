@@ -3,12 +3,22 @@
 // field maps onto the b023 workbook.
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
+import type { ChirpsCorrection } from './rain';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
+
+/**
+ * How CHIRPS rain is corrected where it stands in for blank catchment rain
+ * (settings.chirpsBiasCorrection, ./rain.ts). 'monthly' scales it by a
+ * per-calendar-month catchment / CHIRPS factor fitted on the days both have a
+ * reading; 'none' uses raw CHIRPS (for a series that is already corrected).
+ */
+export const CHIRPS_BIAS_MODES = ['monthly', 'none'] as const;
+export type ChirpsBiasMode = (typeof CHIRPS_BIAS_MODES)[number];
 
 /**
  * Rain → natural-flow calibration (b023 [Flow Calibration Cfg]); consumed by
@@ -88,6 +98,11 @@ export interface ProjectSettings {
 	 * legacy one or irrigation demand. Default 0.7 every month.
 	 */
 	panCoefficient: Monthly;
+	/**
+	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
+	 * (engine ≥ 0.6.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
+	 */
+	chirpsBiasCorrection: ChirpsBiasMode;
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
@@ -154,6 +169,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		runoffModel: 'legacy',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
+		chirpsBiasCorrection: 'monthly',
 		calibration: {
 			a: 0.09,
 			b: 1.2,
@@ -604,6 +620,12 @@ export interface RunSummary {
 		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
 		areaMismatches?: AreaMismatch[];
 	};
+	/**
+	 * The CHIRPS fallback bias correction (engine ≥ 0.6.0, ./rain.ts): the
+	 * factors fitted per calendar month and how many run days used them. null
+	 * when the project has no CHIRPS series; absent on older runs.
+	 */
+	chirpsCorrection?: ChirpsCorrection | null;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 }

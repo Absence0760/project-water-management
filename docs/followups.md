@@ -96,6 +96,20 @@ Tick items off (or move them into an issue) as they are done.
       Test the semi-arid defaults on a Karoo gauge record with a known
       drought (e.g. 2015–19) before changing them. Do this after the CHIRPS
       fallback bias correction lands, because it uses these flags.
+- [ ] **CHIRPS bias correction (engine 0.6.0, audit B1).** CHIRPS that fills
+      in for blank catchment rain is now scaled per calendar month by
+      Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
+      flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      Confirm with the hydrologist:
+      - linear scaling per month, versus quantile mapping (which also fixes
+        the wet-day count and intensities that drive GR4J's event response);
+      - the minimum sample (90 shared days and 50 mm of CHIRPS per month,
+        else the pooled factor) and the 0.25–4 clamp;
+      - whether a neighbouring gauge should fill gaps before CHIRPS does.
+
+      Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
+      catchment with the correction on (condition 1), and record the result
+      in the issue.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny
@@ -113,10 +127,12 @@ a decision in `docs/plan.md` (D3).
 **Recommendation to put to the hydrologist.** Make GR4J (with X2 = 0) the
 default, and don't build the IHACRES-CMD benchmark (Phase 7) first. Three
 conditions come before any client numbers:
-- [ ] **CHIRPS fallback bias correction.** Raw CHIRPS reads well below the
+- [x] **CHIRPS fallback bias correction.** Raw CHIRPS reads well below the
       catchment rain, especially in winter, so fallback years produce almost
-      no flow under a water-conserving model. This is in progress on its own
-      branch.
+      no flow under a water-conserving model. **Landed in engine 0.6.0**
+      (audit B1, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)):
+      monthly factors, on by default. The re-run of the comparison and the
+      hydrologist's confirmation are the open item under Hydrologist above.
 - [ ] **Make the logger fit identifiable, keeping the logger as the target.**
       The logger-only fit gives X1 and X3 outside the typical GR4J ranges,
       because a short record that is mostly drought can't pin them down.

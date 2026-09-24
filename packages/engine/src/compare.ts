@@ -394,6 +394,10 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
+	chirpsBiasCorrection: {
+		label: 'CHIRPS bias correction',
+		fmt: (v) => (v === 'monthly' ? 'monthly factors' : v === 'none' ? 'raw CHIRPS' : String(v))
+	},
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
