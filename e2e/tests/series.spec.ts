@@ -57,7 +57,7 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(flowRow).toContainText('2021-12-31');
 
 	// View re-draws a stored series.
-	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View' }).click();
+	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment: line chart/ }).locator('canvas')).toBeVisible();
 });
 
@@ -115,17 +115,17 @@ test('clicking anywhere on a series row shows it in the chart; its buttons keep 
 
 	await flowRow.getByRole('cell').first().click();
 	await expect(page.getByRole('img', { name: /^Flow — observed gauge.*: line chart/ }).locator('canvas')).toBeVisible();
-	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
 	await rainRow.getByRole('rowheader').click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment: line chart/ }).locator('canvas')).toBeVisible();
-	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(flowRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(rainRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'false');
 
 	// A row's own control doesn't also select the row.
 	page.once('dialog', (d) => void d.dismiss());
 	await flowRow.getByRole('button', { name: /^Delete/ }).click();
-	await expect(rainRow.getByRole('button', { name: 'View' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(rainRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a US month/day CSV is read as month/day, and the summary says how dates were read', async ({ page, owner }) => {
