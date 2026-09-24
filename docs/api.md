@@ -117,7 +117,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   model).
   `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
   (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
-  `panCoefficient` is 12 monthly values, each 0–2, in water-year order.
+  `panCoefficient` is 12 monthly values, each 0–2, in water-year order. That
+  0–2 bound is validation only; the engine separately warns (and Settings
+  hints, with a preset picker: `PAN_COEFFICIENT_PRESETS`) when a month sits
+  outside FAO-56's usual 0.6–0.85 range for a Class A pan (model.md §2.4a).
   `wr2012` (engine ≥ 0.6.0; model.md §2.10c) is the optional WR2012 check:
   `reference` (`null`, the default, or the whole object `{ quaternary` 1–16
   chars, `areaKm2` > 0, `marMm3` ≥ 0 (Mm³ a year), `monthlyMm3` 12 values ≥ 0
@@ -133,13 +136,21 @@ alongside teams, e.g. to give an outside client `viewer` access.
   reference is also checked for plausibility: with a MAP, the MAR can't
   exceed MAP × area ÷ 1 000 Mm³, and the monthly means must add up to the MAR
   within 5 %; otherwise `400` naming the field.
-  A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `wr2012`,
+  A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
   values, and each `wr2012` group, are replaced whole.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  `zeroRainRuns` (engine ≥ 0.15.0) is `{ mode, keepDry, missing }`:
+  `mode` is `missing` (the default: flagged zero-rain runs in the catchment
+  rain are treated as blank, so corrected CHIRPS fills them) or `asRecorded`
+  (they run dry). `keepDry` and `missing` are period lists shaped and
+  validated like `calibrationExclusions` (below): flagged runs kept dry, and
+  extra periods treated as missing in either mode. A `PATCH` merges the group
+  one level deep, so sending `{ mode }` keeps the stored lists; each list is
+  replaced whole. [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
   `calibrationExclusions` (at most 100) lists periods left out of every
   calibration score: `{ waterYear, reason }` (a whole water year, Oct–Sep,
   by the year it starts in) or `{ start, end, reason }` (inclusive
@@ -159,11 +170,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
   marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
   off, the default), `editedParams` and `forcing`, and no others. `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
-  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm }`, each
-  12 monthly numbers, same bounds as the settings fields) is the pan
-  coefficient and A-pan evaporation the fit ran under: GR4J's parameters
-  trade off against it, so it is never calibrated and a fit is only valid for
-  the forcing it recorded — absent on a record made before this was tracked.
+  (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
+  chirpsBiasCorrection }`, `panCoefficient`/`apanMm` each 12 monthly numbers
+  with the same bounds as the settings fields, `chirpsBiasCorrection` optional
+  — `monthly | none`) is the pan coefficient, A-pan evaporation and CHIRPS
+  bias correction mode the fit ran under: GR4J's parameters trade off against
+  evaporation, so the pan coefficient is never calibrated, and CHIRPS bias
+  correction changes the rain fed to the model on the days CHIRPS fills a gap,
+  so a fit is only valid for the forcing it recorded — `forcing` absent on a
+  record made before it was tracked, `chirpsBiasCorrection` absent on a
+  `forcing` made before it was added to it.
   `fitRecordStatus`'s `forcingChanged` compares it against the current
   settings, tolerant of float noise, and is `false` when there is nothing
   recorded to compare.
@@ -296,7 +312,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
-| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.15.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
+| GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -384,6 +400,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
   fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
   lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+- `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
+  treated as missing, `null` when the project has no catchment rain series:
+  `{ mode, periods: [{ start, end, source: 'flagged' | 'listed', reason,
+  days, recordedMm, filledMm, unfilledDays }], keptDry: [{ start, end,
+  reason, days }], asRecordedDays, days, recordedMm, filledMm, unfilledDays }`.
+  The catchment series `rain_catchment_missing` is 1 on each day set aside.
+  Rules: [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
 
 ## Compare runs
 
@@ -435,7 +458,7 @@ ahead of the usual header row.
 
 | Path | Query | Body |
 | --- | --- | --- |
-| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.15.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.15.0), P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
+| `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB, the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
 | `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |

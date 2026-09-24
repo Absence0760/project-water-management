@@ -40,7 +40,7 @@ export interface PlanNode {
 	initialStorageM3: number;
 	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
-	 * 0.15.0, audit Q5). Irrigation draws only the storage above it, and
+	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
 	 */
 	deadStorageM3: number;
@@ -51,7 +51,7 @@ export interface PlanNode {
 	/**
 	 * Dam surface area when full (m²), as entered or estimated (capacity ÷ 3 m
 	 * mean depth); the area on a day is A = full × (Q[t−1] / capacity)^b
-	 * (engine ≥ 0.15.0, audit N2). 0 for a node without a dam.
+	 * (engine ≥ 0.16.0, audit N2). 0 for a node without a dam.
 	 */
 	damAreaFullM2: number;
 	/** Exponent b of the area–storage relation (Liebe et al. 2005: 0.7). */
@@ -100,7 +100,7 @@ export interface NetworkPlan {
 	ewr: Float64Array;
 	/**
 	 * Open-water evaporation depth per day (mm): lake factor × A-pan for the
-	 * month ÷ days in the month (engine ≥ 0.15.0, audit N2). Absent = none.
+	 * month ÷ days in the month (engine ≥ 0.16.0, audit N2). Absent = none.
 	 */
 	lakeEvapMmDay?: Float64Array;
 	/** Rain falling on a dam's surface per day (mm): the day's rain before any threshold (audit N2). Absent = none. */
@@ -109,7 +109,7 @@ export interface NetworkPlan {
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
 export interface NodeResult {
-	/** Abstraction demand D = F / e (engine ≥ 0.15.0, audit N1). */
+	/** Abstraction demand D = F / e (engine ≥ 0.16.0, audit N1). */
 	demand: Float64Array;
 	/** Crop water requirement F (net irrigation need). */
 	cropRequirement: Float64Array;

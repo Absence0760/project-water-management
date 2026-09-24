@@ -138,7 +138,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				kind: node.kind,
 				previousStorageM3,
 				previousSoilWaterMm,
-				// A run saved before engine 0.15.0 reads as migration 006 stored its model (return flow % → efficiency).
+				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
 				params: pick(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as Record<string, unknown>, DAY_PARAMS),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});

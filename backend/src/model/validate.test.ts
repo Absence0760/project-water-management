@@ -44,7 +44,7 @@ describe('ModelBody (PUT /model, project documents)', () => {
 		expect(ModelBody.safeParse(body([out, { ...farm, lossReturnFraction: -0.1 }])).success).toBe(false);
 	});
 
-	it('reads a model from before engine 0.15.0 as migration 006 stored it: return flow % → efficiency', () => {
+	it('reads a model from before engine 0.16.0 as migration 006 stored it: return flow % → efficiency', () => {
 		const out = node('Gauge', null);
 		const { irrigationEfficiency: _e, lossReturnFraction: _b, ...legacy } = node('A', out.id);
 		const parsed = ModelBody.parse(body([out, { ...legacy, returnFlowPct: 0.25 }, { ...legacy, id: crypto.randomUUID(), name: 'B', returnFlowPct: 0 }]));

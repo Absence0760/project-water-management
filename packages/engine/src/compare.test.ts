@@ -285,10 +285,12 @@ describe('diffInputs', () => {
 		const a = snapshot({ settings: {} as RunInputsSnapshot['settings'] });
 		// Except the runoff model: a run stored without one predates it and ran legacy.
 		// Likewise the soil-water store: none stored means none used (engine < 0.14.0),
-		// and dam evaporation (engine < 0.15.0).
+		// zero-rain runs: none stored means flagged runs ran as recorded (< 0.15.0),
+		// and dam evaporation (engine < 0.16.0).
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
 		b.settings.effectiveRainStoreMm = 0;
+		b.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
 		b.settings.lakeEvapFactor = 0;
 		expect(diffInputs(a, b)).toEqual([]);
 	});
@@ -335,7 +337,7 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual(['Farm "Bergwater" removed']);
 	});
 
-	it('reads a run saved before engine 0.15.0 as migration 006 stored it: return flow % → efficiency (N1)', () => {
+	it('reads a run saved before engine 0.16.0 as migration 006 stored it: return flow % → efficiency (N1)', () => {
 		const old = snapshot();
 		for (const n of old.model.nodes as unknown as Record<string, unknown>[]) {
 			delete n.irrigationEfficiency;
@@ -470,6 +472,27 @@ describe('diffInputs', () => {
 		const old = snapshot();
 		delete (old.settings as Record<string, unknown>).calibrationExclusions;
 		expect(diffInputs(old, snapshot())).toEqual([]);
+	});
+
+	it('describes the zero-rain run settings (CR-20); a run saved before them ran flagged runs as recorded', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.zeroRainRuns = {
+			mode: 'asRecorded',
+			keepDry: [{ start: '2003-05-01', end: '2003-08-31', reason: 'real drought' }],
+			missing: [{ waterYear: 1999, reason: 'gauge offline' }]
+		};
+		expect(texts(a, b)).toEqual([
+			'Flagged zero-rain runs: treated as missing (CHIRPS fills them) → run as recorded (dry)',
+			'Keep-dry period 2003-05-01 – 2003-08-31 added: “real drought”',
+			'Missing-rain period WY 1999/00 added: “gauge offline”'
+		]);
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).zeroRainRuns;
+		expect(texts(old, a)).toEqual(['Flagged zero-rain runs: run as recorded (dry) → treated as missing (CHIRPS fills them)']);
+		const recorded = structuredClone(a);
+		recorded.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
+		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 
 	it('describes the fit record: set, replaced, edited since, and removed', () => {

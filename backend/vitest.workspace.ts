@@ -10,7 +10,10 @@ export default defineWorkspace([
 			name: 'unit',
 			environment: 'node',
 			setupFiles: ['./src/__tests__/setup.ts'],
-			include: ['src/**/*.test.ts'],
+			// scripts/**: operational CLI tools; only pan-sensitivity.test.ts lives
+			// there so far, testing its pure helpers (plus a skip-if-absent smoke
+			// test against the real client catchment, never asserting its figures).
+			include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
 			exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.test.ts']
 		}
 	},

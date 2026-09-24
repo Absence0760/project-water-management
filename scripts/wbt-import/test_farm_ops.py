@@ -1,4 +1,4 @@
-"""Farm and dam operating rules the importer writes (engine >= 0.15.0, docs/engine-audit.md Q5, N1, N2).
+"""Farm and dam operating rules the importer writes (engine >= 0.16.0, docs/engine-audit.md Q5, N1, N2).
 
     .venv/bin/python -m unittest discover -s scripts/wbt-import
     (or: uv run --no-project --with openpyxl python -m unittest discover -s scripts/wbt-import)

@@ -77,7 +77,7 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  */
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
-	// Irrigation efficiency and loss return (engine ≥ 0.15.0) come from their own
+	// Irrigation efficiency and loss return (engine ≥ 0.16.0) come from their own
 	// generator, so the rest of a seed's network is what it was before them.
 	const ops = new Rng(seed ^ 0x2c1b3c6d);
 	// Dam evaporation and seepage (N2) likewise.

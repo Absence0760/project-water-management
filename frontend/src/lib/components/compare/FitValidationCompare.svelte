@@ -12,7 +12,7 @@
 	}: {
 		a: FitRecord | null;
 		b: FitRecord | null;
-		/** Each run's own settings snapshot, so "Evaporation changed since fit" can be said for that run. */
+		/** Each run's own settings snapshot, so "Forcing changed since fit" can be said for that run. */
 		settingsA?: Partial<ProjectSettings> | null;
 		settingsB?: Partial<ProjectSettings> | null;
 	} = $props();

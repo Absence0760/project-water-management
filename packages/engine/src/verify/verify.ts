@@ -106,7 +106,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		return a;
 	};
 	const [fRunoff, fDemand, fSupplied, fReturn, fTransfer, fSpill, fStorage, fRainOnDam, fEvap] = ['runoff', 'demand', 'supplied', 'return_flow', 'transfer', 'spill', 'dam_storage', 'rain_on_dam', 'dam_evaporation'].map(totals) as Float64Array[];
-	// Runs before engine 0.15.0 have no dam evaporation columns (audit N2).
+	// Runs before engine 0.16.0 have no dam evaporation columns (audit N2).
 	const hasDamLosses = farms.some((n) => series.has(`${n.id}|dam_evaporation`));
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);

@@ -44,7 +44,7 @@ day trace read.
 | Col | Output key | Formula |
 | --- | --- | --- |
 | F | `crop_requirement` | crop water requirement, the workbook's net irrigation demand (below) |
-| – | `demand` | abstraction demand D = F ÷ `irrigationEfficiency` (engine ≥ 0.15.0, audit N1) |
+| – | `demand` | abstraction demand D = F ÷ `irrigationEfficiency` (engine ≥ 0.16.0, audit N1) |
 | H | `inflow_upstream` | Σ upstream nodes' U |
 | I | `runoff` | natural flow × farm share |
 | J | `transfer` | Σ transfers in − Σ transfers out |
@@ -53,8 +53,8 @@ day trace read.
 | M | `runoff_to_dam` | I × `pctRunoffToDam` — own runoff into the dam |
 | N | `runoff_below_dam` | I − M — own runoff below the dam |
 | O | `diverted_to_dam` | MIN(`divertCapacityM3Day`, L + N) — diverted back into the dam |
-| G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.15.0, audit Q5) |
-| – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.15.0, audit N2; docs/model.md §2.7a) |
+| G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
+| – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
 | P | `interim_storage` | Qprev + rain on dam − evaporation − seepage + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |

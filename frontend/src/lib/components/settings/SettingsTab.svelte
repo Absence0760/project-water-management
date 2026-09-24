@@ -1,6 +1,19 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { CALIBRATION_FLOW_KINDS, hasPotentialEvaporation, type CalibrationParams, type CalibrationReport, type FitRecord, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
+	import {
+		CALIBRATION_FLOW_KINDS,
+		hasPotentialEvaporation,
+		PAN_COEFFICIENT_PRESET_SOURCE,
+		PAN_COEFFICIENT_PRESETS,
+		PAN_COEFFICIENT_TYPICAL_MAX,
+		PAN_COEFFICIENT_TYPICAL_MIN,
+		panCoefficientOutOfRange,
+		type CalibrationParams,
+		type CalibrationReport,
+		type FitRecord,
+		type FlowShareMethod,
+		type ProjectSettings
+	} from '@water-management/engine';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
@@ -63,6 +76,8 @@
 	let justSaved = $state(false);
 	// X2 (groundwater exchange) is fixed at 0 unless the user opts in.
 	let x2Open = $state(untrack(() => project.settings.gr4j?.x2 !== 0));
+	// The preset picker itself is never saved — it only fills panCoefficient, then resets.
+	let panPreset = $state('');
 
 	const dirty = $derived(JSON.stringify(s) !== saved);
 	const cal = $derived(s.calibration);
@@ -89,6 +104,7 @@
 	);
 	const ewrAnnual = $derived(annualMm3(s.ewrPragmaticM3PerDay, s.februaryDays));
 	const apanAnnual = $derived(s.apanMm.reduce((t, v) => t + (v || 0), 0));
+	const panOutOfRange = $derived(panCoefficientOutOfRange(s.panCoefficient));
 
 	// Free-text lists only for calibration keys the tab doesn't know about.
 	function resetListText() {
@@ -109,6 +125,13 @@
 	function setX2Open(open: boolean) {
 		x2Open = open;
 		if (!open) s.gr4j.x2 = 0;
+	}
+
+	/** Fills panCoefficient with a preset's values (still editable after); doesn't store which preset was picked. */
+	function applyPanPreset(id: string) {
+		const preset = PAN_COEFFICIENT_PRESETS.find((p) => p.id === id);
+		if (preset) s.panCoefficient = [...preset.values];
+		panPreset = '';
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
@@ -305,6 +328,14 @@
 				{/if}
 				<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 			</fieldset>
+			<div class="field pan-preset">
+				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
+				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => applyPanPreset(e.currentTarget.value)} aria-describedby="st-pan-preset-h">
+					<option value="">Choose a preset…</option>
+					{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+				</select>
+				<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; nothing is stored about which preset was picked. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
+			</div>
 			<div class="table-wrap">
 				<table class="data compact monthly">
 					<thead>
@@ -324,6 +355,12 @@
 				</table>
 			</div>
 			<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
+			{#if panOutOfRange.length}
+				<p class="alert alert-warning small" role="status">
+					Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
+					{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
+				</p>
+			{/if}
 		{:else}
 			<div class="fields">
 				{#each FLOW_PARAMS as p (p.key)}

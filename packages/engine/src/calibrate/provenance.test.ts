@@ -115,7 +115,14 @@ describe('fit record', () => {
 	const panCoefficient: Monthly = [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7];
 	const apanMm: Monthly = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 	const ctx = {
-		settings: { calibrationStart: '2012-10-01', calibrationEnd: null, calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }], panCoefficient, apanMm },
+		settings: {
+			calibrationStart: '2012-10-01',
+			calibrationEnd: null,
+			calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }],
+			panCoefficient,
+			apanMm,
+			chirpsBiasCorrection: 'monthly' as const
+		},
 		validate: true,
 		validationRecord: null,
 		engineVersion: '9.9.9',
@@ -139,7 +146,7 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
-		expect(r.forcing).toEqual({ panCoefficient, apanMm });
+		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' });
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -188,7 +195,8 @@ describe('fit record', () => {
 				calibrationEnd: '2014-01-01',
 				calibrationExclusions: [],
 				calibrationFlowKind: 'flow_observed_m3s',
-				panCoefficient: [0.9, ...s.panCoefficient.slice(1)] as unknown as ProjectSettings['panCoefficient']
+				panCoefficient: [0.9, ...s.panCoefficient.slice(1)] as unknown as ProjectSettings['panCoefficient'],
+				chirpsBiasCorrection: 'none'
 			},
 			rec
 		);
@@ -196,17 +204,22 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/pan coefficient or A-pan evaporation has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation or CHIRPS bias correction has changed since the fit/);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
 		const rec = fitRecordFromReport(report(), ctx);
 		const mono = (arr: number[]): Monthly => arr as unknown as Monthly;
-		expect(fitRecordStatus({ panCoefficient, apanMm }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' }, rec).forcingChanged).toBe(false);
 		// Same tolerance as `close` / `editedParams`: negligible float noise doesn't count.
-		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v) => v + 1e-12)), apanMm }, rec).forcingChanged).toBe(false);
-		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v, i) => (i === 0 ? v + 0.1 : v))), apanMm }, rec).forcingChanged).toBe(true);
-		expect(fitRecordStatus({ panCoefficient, apanMm: mono(apanMm.map((v, i) => (i === 3 ? v + 5 : v))) }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v) => v + 1e-12)), apanMm, chirpsBiasCorrection: 'monthly' }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient: mono(panCoefficient.map((v, i) => (i === 0 ? v + 0.1 : v))), apanMm, chirpsBiasCorrection: 'monthly' }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ panCoefficient, apanMm: mono(apanMm.map((v, i) => (i === 3 ? v + 5 : v))), chirpsBiasCorrection: 'monthly' }, rec).forcingChanged).toBe(true);
+		// The CHIRPS bias correction mode alone can flag it too.
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, rec).forcingChanged).toBe(true);
+		// A forcing recorded before chirpsBiasCorrection was added to it: nothing to compare, so it alone never flags.
+		const noMode = { ...rec, forcing: { panCoefficient: [...panCoefficient], apanMm: [...apanMm] } };
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, noMode).forcingChanged).toBe(false);
 		// A record made before `forcing` existed: nothing to compare, so it is never flagged.
 		const old = { ...rec, forcing: undefined };
 		const zeros = mono([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);

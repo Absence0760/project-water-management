@@ -94,7 +94,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		const v = (k: string) => valueOf(res.body, k);
 		expect(v('effective_rain')).toBeCloseTo(Math.min((res.body.previousSoilWaterMm * 10_000) / 1000, v('gross_demand')), 9);
 		expect(v('crop_requirement')).toBeCloseTo(v('gross_demand') - v('effective_rain'), 9);
-		// The farm abstracts the crop requirement ÷ its 80 % efficiency (N1, engine 0.15.0).
+		// The farm abstracts the crop requirement ÷ its 80 % efficiency (N1, engine 0.16.0).
 		expect(v('demand')).toBeCloseTo(v('crop_requirement') / 0.8, 9);
 	});
 
@@ -107,7 +107,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(res.body.params.irrigationEfficiency).toBe(0.8);
 	});
 
-	it('reads a run saved before engine 0.15.0 with its return flow % as migration 006 maps it', async () => {
+	it('reads a run saved before engine 0.16.0 with its return flow % as migration 006 maps it', async () => {
 		// Rewrite the stored snapshot as an engine 0.14 run held it (as the owner role: runs are immutable to the app).
 		const pg = (await import('pg')).default;
 		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });

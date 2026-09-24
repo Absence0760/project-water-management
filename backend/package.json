@@ -14,7 +14,8 @@
 		"test:db": "vitest run --project db",
 		"db:migrate": "tsx scripts/migrate.ts",
 		"import:project": "tsx scripts/import-project.ts",
-		"seed:examples": "tsx scripts/seed-examples.ts"
+		"seed:examples": "tsx scripts/seed-examples.ts",
+		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-sesv2": "3.1138.0",

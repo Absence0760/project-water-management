@@ -351,6 +351,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
   The importer prints the zero-run note; the low-vs-CHIRPS check is
   engine-only. The fix itself stays with the data (issue #2 item 1).
+  **Superseded in part (2026-09-24):** CR-20, in progress, treats flagged
+  runs as missing in the run so that bias-corrected CHIRPS fills them, with
+  per-project overrides. The stored data still isn't changed. Plan in
+  [followups.md](../followups.md).
 - **Changes (as planned):**
   - **engine:** `quality.ts` `checkSeries` gains two checks:
     - `zerorun`: ≥ N consecutive zero days, default 60, counted only when
@@ -1004,7 +1008,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     shuffle exemption in `checkOrderInvariance`.
   - **Q5:** irrigation stops at `node.damMinPct` (today only transfers
     respect it); the help text in `lib/help/content.ts` changes too.
-    **Landed (engine 0.15.0)** on persona recommendation, pending the
+    **Landed (engine 0.16.0)** on persona recommendation, pending the
     hydrologist ([audit Q5](../engine-audit.md)); stored values were reset to
     0 in migration 006.
   - ~~**Q7:** Pitman fallback only on days with **no rain value**.~~ Done
@@ -1046,7 +1050,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** abstraction covers crop need plus losses; return flow is a share
   of the losses.
-- **Status: landed (engine 0.15.0)** on persona recommendation, pending the
+- **Status: landed (engine 0.16.0)** on persona recommendation, pending the
   hydrologist ([audit N1](../engine-audit.md)): per farm, backfill e = 1 − r
   with β = 1, and `return_flow_pct` dropped in the same migration (006)
   because it was never deployed.
@@ -1085,7 +1089,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.21 N2 dam area–volume, evaporation, seepage
 
 - **Goal:** dams lose open-water evaporation and optional seepage.
-- **Status: landed (engine 0.15.0)** on persona recommendation, pending the
+- **Status: landed (engine 0.16.0)** on persona recommendation, pending the
   hydrologist ([audit N2](../engine-audit.md)). As built: one A-pan-based
   lake factor (0.75), rain on the dam added, seepage joining the outflow, and
   an unknown area *estimated* as capacity ÷ 3 m with warning W6 (not "no
@@ -1540,7 +1544,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
     It returns the filled values plus a per-day `filled` mask. This is the
     first per-value flag; Step 4 WP-4.10 generalises it into DWS quality
-    codes. New invariant: filled days never change observed days, and a
+    codes. (CR-20, in progress, adds a per-day infilled-rain flag for zero
+    runs filled from CHIRPS first; reuse its shape here.) New invariant: filled days never change observed days, and a
     series with no gaps is returned unchanged.
   - **backend + migration:** store the fill choice per series (method, max
     gap, donor series id) in `time_series`. The filled values are derived at

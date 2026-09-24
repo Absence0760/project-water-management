@@ -8,6 +8,7 @@ const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
+import { zeroRainRuns } from './quality';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
 import { netDailyDemandM3 } from './demand';
@@ -284,7 +285,7 @@ describe('runModel — dam behaviour', () => {
 		expect(s.fractionSupplied).toBe(0.75);
 	});
 
-	it('irrigation stops at the minimum operating level: storage below it is dead storage (Q5, engine 0.15.0)', () => {
+	it('irrigation stops at the minimum operating level: storage below it is dead storage (Q5, engine 0.16.0)', () => {
 		// 150 m³ dam, full, minimum 20 % = 30 m³ dead storage; demand 100 m³/day.
 		// Day 0 takes 100 (120 above the floor), day 1 only the 20 left above it, day 2 nothing.
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
@@ -317,7 +318,7 @@ describe('runModel — dam behaviour', () => {
 	});
 });
 
-describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.15.0)', () => {
+describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.16.0)', () => {
 	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 	// 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day of crop requirement in October.
 	const farm = (over: Partial<NetworkNode>, natural = [0]) =>
@@ -371,7 +372,7 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		expect(get(out, 'F', 'return_flow')).toEqual([0]);
 	});
 
-	it('runs a model saved before engine 0.15.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
+	it('runs a model saved before engine 0.16.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
 		const legacy = farm({});
 		const input0 = input({
 			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1 })],
@@ -400,7 +401,7 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 	});
 });
 
-describe('runModel — dam evaporation and seepage (audit N2, engine 0.15.0)', () => {
+describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', () => {
 	// October (31 days), A-pan 248 mm: 0.75 × 248 / 31 = 6 mm/day of open-water evaporation.
 	const dam = (over: Partial<NetworkNode>, f: Partial<Fixture> = {}) =>
 		run({
@@ -645,7 +646,7 @@ describe('runModel — transfers', () => {
 		expect(get(out, 'S', 'dam_storage')).toEqual([3000]);
 	});
 
-	it("keeps the source dam's minimum operating level when it is above the rule's minimum (Q5, engine 0.15.0)", () => {
+	it("keeps the source dam's minimum operating level when it is above the rule's minimum (Q5, engine 0.16.0)", () => {
 		// S: start 4000 of 10 000; rule keeps 30 %, the dam's own floor is 35 % → 3500 kept, 500 moves.
 		const out = run({
 			nodes: nodes().map((n) => (n.id === 'S' ? { ...n, damMinPct: 0.35 } : n)),
@@ -1224,17 +1225,25 @@ describe.skipIf(!dataDir)(
 		// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
 		// store; the workbook has none. The replay switches it off (0 mm), which
 		// is bit for bit the workbook's rule; the N3 test below runs it on.
-		// Q5 (engine ≥ 0.15.0): a dam's minimum operating level stops irrigation.
+		// B2 (engine ≥ 0.15.0): flagged zero-rain runs are treated as missing and
+		// CHIRPS fills them; the workbook runs them dry. The replay keeps them as
+		// recorded; the B2 test below runs the default.
+		// Q5 (engine ≥ 0.16.0): a dam's minimum operating level stops irrigation.
 		// The workbook's "min %" column is the transfer minimum, which each
 		// transfer rule already carries; migration 006 sets every stored value to
 		// 0 and the importer no longer fills it, so the replay does the same.
-		// N2 (engine ≥ 0.15.0): dams lose evaporation and seepage and gain the rain
+		// N2 (engine ≥ 0.16.0): dams lose evaporation and seepage and gain the rain
 		// on their surface; the workbook's dams have none. The replay gives every
 		// dam a surface of 0 m² and no seepage, which is bit for bit the
 		// workbook's dam; the "N2:" test below runs the estimated areas.
 		const modelInput: ModelInput = {
 			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
-			settings: { ...project.settings, runoffModel: 'legacy', effectiveRainStoreMm: 0 },
+			settings: {
+				...project.settings,
+				runoffModel: 'legacy',
+				effectiveRainStoreMm: 0,
+				zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] }
+			},
 			model: {
 				...project.model,
 				nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0, damAreaFullM2: 0, damSeepagePerDay: 0 }))
@@ -1263,7 +1272,7 @@ describe.skipIf(!dataDir)(
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
 		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
 		const topo = buildTopology(project.model.nodes);
-		// N1 (engine ≥ 0.15.0): a farm's return flow % r becomes irrigation
+		// N1 (engine ≥ 0.16.0): a farm's return flow % r becomes irrigation
 		// efficiency e = 1 − r with every loss returning (migration 006, which
 		// runModel also applies to the fixture's returnFlowPct). The crop is then
 		// fully supplied, so the farm abstracts F / (1 − r) where the workbook
@@ -1323,8 +1332,14 @@ describe.skipIf(!dataDir)(
 		//          shortfalls, curtailment), differ on the days after rain. Every
 		//          comparison here runs with effectiveRainStoreMm: 0, the
 		//          workbook's rule; the "N3:" test checks the store's effect.
+		//   B2     (engine ≥ 0.15.0) flagged zero-rain runs in the catchment rain
+		//          are treated as missing, so corrected CHIRPS fills them. Rain
+		//          used, natural flow, demand and everything downstream differ
+		//          in and after those runs. Every comparison here runs with
+		//          zeroRainRuns.mode 'asRecorded', the workbook's rule; the "B2:"
+		//          test checks what the default sets aside.
 		//
-		//   N1     (engine ≥ 0.15.0) abstraction demand = crop requirement ÷
+		//   N1     (engine ≥ 0.16.0) abstraction demand = crop requirement ÷
 		//          irrigation efficiency; return flow = β (1 − e) × supplied.
 		//          Workbook F is compared with `crop_requirement` (daily, R1).
 		//          supplied, deficit, inflow_upstream, transfer, dam_storage,
@@ -1332,7 +1347,7 @@ describe.skipIf(!dataDir)(
 		//          are skipped on the nodes n1Affected names, and the catchment
 		//          outflow and EWR-not-met series when the outlet is one.
 		//
-		//   N2     (engine ≥ 0.15.0) dams evaporate, seep and catch the rain on
+		//   N2     (engine ≥ 0.16.0) dams evaporate, seep and catch the rain on
 		//          their surface. Every comparison here runs with each dam's
 		//          area 0 m² and seepage 0, which is the workbook's dam bit for
 		//          bit; the "N2:" test checks the losses with estimated areas.
@@ -1565,6 +1580,40 @@ describe.skipIf(!dataDir)(
 				if (a[t] !== want) bad.push(t);
 			}
 			expect(bad.slice(0, 5)).toEqual([]);
+		});
+
+		it('B2: sets aside exactly the flagged zero runs, fills them from CHIRPS, and changes no other day', () => {
+			const recorded = prepareRun(modelInput);
+			const settings = { ...modelInput.settings } as Record<string, unknown>;
+			delete settings.zeroRainRuns; // the default
+			const filled = prepareRun({ ...modelInput, settings });
+			const z = filled.zeroRain!.infill;
+			const catchmentSeries = modelInput.series.rain_catchment_mm!;
+			const flagged = zeroRainRuns(catchmentSeries).runs;
+			expect(recorded.zeroRain!.infill.days).toBe(0);
+			expect(z.mode).toBe('missing');
+			// Every flagged run inside the run window is set aside whole, and nothing else.
+			const d0 = toEpochDay(filled.startDate);
+			const want = new Uint8Array(filled.days);
+			for (const r of flagged) {
+				for (let day = toEpochDay(r.startDate); day <= toEpochDay(r.endDate); day++) {
+					if (day >= d0 && day < d0 + filled.days) want[day - d0] = 1;
+				}
+			}
+			expect(Array.from(filled.zeroRain!.mask)).toEqual(Array.from(want));
+			expect(z.periods.every((p) => p.source === 'flagged' && p.recordedMm === 0)).toBe(true);
+			const a = filled.aligned('rain_catchment_mm');
+			const b = recorded.aligned('rain_catchment_mm');
+			const bad: number[] = [];
+			for (let t = 0; t < filled.days; t++) if (want[t] ? a[t] !== null : a[t] !== b[t]) bad.push(t);
+			expect(bad.slice(0, 5)).toEqual([]);
+			// On the client catchment CHIRPS covers every set-aside day, so none runs as 0 mm.
+			expect(z.unfilledDays).toBe(0);
+			if (z.days > 0) expect(z.filledMm).toBeGreaterThan(0);
+			// The model still conserves water with the default on.
+			const input = { ...modelInput, settings };
+			const full = withVerification(input, runModel(input));
+			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
 		});
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only

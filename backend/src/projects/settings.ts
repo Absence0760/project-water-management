@@ -17,6 +17,7 @@ import {
 	wr2012FlagIssues,
 	wr2012PenaltyIssues,
 	wr2012ReferenceIssues,
+	ZERO_RAIN_MODES,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -112,28 +113,34 @@ const bounded = (key: string) => {
 };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-const reason = z.string().trim().min(1, 'an exclusion needs a reason').max(EXCLUSION_REASON_MAX);
-
 /**
- * A calibration exclusion: a whole water year, or a date range, each with a
- * reason (engine calibrate/provenance.ts). The engine's own check (real
- * dates, start ≤ end) runs too, so the two can't disagree.
+ * A dated period with a reason: a whole water year, or a date range (engine
+ * calibrate/provenance.ts). Calibration exclusions and the zero-rain run
+ * periods share it. The engine's own check (real dates, start ≤ end) runs
+ * too, so the two can't disagree.
  */
-export const CalibrationExclusion = z
-	.union([
-		z.object({ waterYear: z.number().int().min(1800).max(2200), reason }).strict(),
-		z.object({ start: isoDate, end: isoDate, reason }).strict()
-	])
-	.superRefine((x, ctx) => {
-		const err = exclusionError(x);
-		if (err) ctx.addIssue({ code: 'custom', message: `calibration exclusion ${err}` });
-	});
+const datedPeriod = (noun: string) => {
+	const reason = z.string().trim().min(1, `a ${noun} needs a reason`).max(EXCLUSION_REASON_MAX);
+	return z
+		.union([
+			z.object({ waterYear: z.number().int().min(1800).max(2200), reason }).strict(),
+			z.object({ start: isoDate, end: isoDate, reason }).strict()
+		])
+		.superRefine((x, ctx) => {
+			const err = exclusionError(x);
+			if (err) ctx.addIssue({ code: 'custom', message: `${noun} ${err}` });
+		});
+};
 
 /** At most EXCLUSIONS_MAX, and no period listed twice. */
-const ExclusionList = z
-	.array(CalibrationExclusion)
-	.max(EXCLUSIONS_MAX)
-	.refine((list) => new Set(list.map(exclusionKey)).size === list.length, 'a calibration exclusion period is listed twice');
+const periodList = (noun: string) =>
+	z
+		.array(datedPeriod(noun))
+		.max(EXCLUSIONS_MAX)
+		.refine((list) => new Set(list.map(exclusionKey)).size === list.length, `a ${noun} period is listed twice`);
+
+export const CalibrationExclusion = datedPeriod('calibration exclusion');
+const ExclusionList = periodList('calibration exclusion');
 
 const scoreValue = z.number().finite().nullable();
 const ScoredPeriod = z
@@ -213,13 +220,18 @@ export const FitRecord = z
 			.default(null),
 		notes: z.array(z.string().max(2000)).max(50),
 		editedParams: z.array(z.string().max(40)).max(30).default([]),
-		// The evaporation forcing the fit ran under (issue #4 pan-coefficient
-		// provenance): GR4J's parameters trade off against it, so it's held
-		// fixed and recorded, never fitted. Absent on records made before it.
+		// The forcing the fit ran under (issue #4 pan-coefficient provenance):
+		// GR4J's parameters trade off against the evaporation forcing, so the
+		// pan coefficient is held fixed and recorded, never fitted; CHIRPS bias
+		// correction changes the rain fed to the model on the days CHIRPS fills
+		// a gap, so it's recorded too. Absent on records made before `forcing`;
+		// `chirpsBiasCorrection` optional so a `forcing` made before it was
+		// added still validates.
 		forcing: z
 			.object({
 				panCoefficient: z.array(z.number().min(0).max(2)).length(12),
-				apanMm: monthly
+				apanMm: monthly,
+				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional()
 			})
 			.strict()
 			.optional()
@@ -258,6 +270,16 @@ export const SettingsPatch = z
 			.strict(),
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
+		// Flagged zero-rain runs (engine rain.ts, CR-20): any subset may be
+		// patched; each list is replaced whole.
+		zeroRainRuns: z
+			.object({
+				mode: z.enum(ZERO_RAIN_MODES),
+				keepDry: periodList('keep-dry period'),
+				missing: periodList('missing-rain period')
+			})
+			.partial()
+			.strict(),
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
 		simulationStart: isoDate.nullable(),

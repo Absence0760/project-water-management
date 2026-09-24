@@ -169,7 +169,7 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    The result, net demand, is the farm's **crop water requirement** F (run
    series `crop_requirement`, the workbook's net irrigation demand).
 
-5. **Abstraction demand (engine ≥ 0.15.0, [audit N1](./engine-audit.md))**:
+5. **Abstraction demand (engine ≥ 0.16.0, [audit N1](./engine-audit.md))**:
    the farm abstracts enough to cover its application losses,
 
    `D[f][t] = F[f][t] / e[f]`
@@ -302,8 +302,40 @@ predates the setting, so run comparison reads it as legacy.
   irrigation demand. **It is held fixed, never calibrated**: it trades off
   against X1/X3 (a higher coefficient and a smaller store fit the same
   record), so automatic calibration (§2.10b) never searches it, and each fit
-  records the coefficient and A-pan it ran under — a later change to either
+  records the coefficient (and, from the same forcing snapshot, the A-pan and
+  CHIRPS bias correction mode) it ran under — a later change to any of them
   is fit provenance's `forcingChanged` (§2.10b).
+  - **Presets** (`PAN_COEFFICIENT_PRESETS`, `packages/engine/src/project.ts`;
+    a simulated hydrologist recommendation, pending the real one). Three
+    water-year (Oct–Sep) starting points a Settings picker can fill the row
+    with — the row stays monthly and editable after, and nothing records
+    which preset (or whether one at all) was used:
+    | Preset | Oct–Mar | Apr–Sep |
+    | --- | --- | --- |
+    | Generic | 0.70 every month | 0.70 every month |
+    | Winter rainfall (e.g. Western Cape) | 0.70, 0.65, 0.65, 0.65, 0.65, 0.70 | 0.75, 0.80, 0.80, 0.80, 0.80, 0.75 |
+    | Summer rainfall | 0.65, 0.70, 0.75, 0.75, 0.75, 0.75 | 0.70, 0.70, 0.70, 0.65, 0.60, 0.60 |
+
+    They are **indicative, from FAO-56 Table 5 climate classes** (Allen et
+    al. 1998); confirm against local humidity and wind before relying on
+    them.
+  - **Plausibility warning.** A run warns, and Settings hints
+    (`panCoefficientOutOfRange`), when a month sits outside **0.6–0.85**,
+    FAO-56's usual range for a Class A pan. This is a soundness check, not a
+    bound: the API keeps the wider 0–2 it always has, so a stored project with
+    a coefficient further out still loads, saves and runs — the warning just
+    says so. All three presets sit inside 0.6–0.85.
+  - **Testing the effect of a choice.** There is no automated sensitivity
+    harness yet (that is CR-21, [calibration-research.md](./calibration-research.md));
+    until it exists, `pnpm pan-sensitivity <project.json>`
+    (`backend/scripts/pan-sensitivity.ts`) is the manual way to see how much a
+    pan-coefficient choice moves a catchment's results: it runs GR4J at a few
+    values (flat 0.60, 0.70, 0.85, and a preset) and reports MAR, Q95 and EWR
+    compliance, both with GR4J's parameters held fixed and refitted, scored
+    against the logger record. The script takes any project.json and carries
+    no client data; a report run against the client catchment
+    (`data/client-catchment/`, gitignored) stays local, never committed, per
+    the public-repo rule.
 - **No evaporation, no run** (engine ≥ 0.11.1). When A-pan × pan
   coefficient is 0 in every month, GR4J is refused (`GR4J_NO_PET`), as a run
   with no rainfall is. Without evaporation the production store only fills,
@@ -400,6 +432,8 @@ models. Correcting the fallback was the first condition for adopting GR4J.
   (§2.10a) is left out of the fit: every water year a flagged zero-rain run
   touches, and every low-vs-CHIRPS year. Their catchment rain is suspect
   (zeros that may be missing data), and it would drag the factors down.
+  Periods listed as missing in `settings.zeroRainRuns.missing` (§2.4c) are
+  left out too, day by day.
 - **Minimum sample.** A month's own factor needs **90 shared days** (about
   three years of that month) and **50 mm of CHIRPS** on them, so a dry month
   with a few millimetres can't produce a wild ratio. A month short of either
@@ -424,7 +458,8 @@ models. Correcting the fallback was the first condition for adopting GR4J.
 **Where it applies.** Only to CHIRPS that is actually used: a day with no
 catchment rain value and a CHIRPS value gets `CHIRPS × factor(month)`.
 Catchment rain is never changed. A day where the catchment reads 0 keeps its
-0 (a zero is a reading and blocks the fallback, §2.10a). **Forecast rain is
+0 (a zero is a reading and blocks the fallback, §2.10a), unless §2.4c sets
+it aside as missing first: then it is a blank day like any other. **Forecast rain is
 not corrected**: there is no overlap to fit a forecast factor from, and a
 forecast product's bias is not CHIRPS's. The corrected rain then goes
 through everything that reads rain used: the legacy model (before its rain
@@ -451,6 +486,7 @@ and the series explorer:
 | `rain_chirps` | CHIRPS as uploaded | NaN |
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
+| `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -472,6 +508,73 @@ it again would double the bias correction. So the default is `'monthly'`,
 and `'none'` is there for that case, not to reproduce the workbook. Runs
 saved before 0.7.0 used raw CHIRPS; run comparison flags the engine version
 change, and compares a stored run without the setting as the default.
+
+### 2.4c Zero-rain runs treated as missing
+
+Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
+([calibration-research.md](./calibration-research.md)), issue #3,
+`zeroRainMask` in `packages/engine/src/rain.ts`. Setting:
+`settings.zeroRainRuns`.
+
+**Why.** A zero is a reading, so a stretch of missing catchment rain exported
+as zeros blocks the CHIRPS fallback (§2.4b) and runs the catchment dry, and
+natural flow, demand and the EWR results with it. The issue #2 check (§2.10a)
+finds these stretches: runs of zeros with 60+ days in the series' own six
+wettest months. Up to 0.14 it only warned. A zero run that long in the wet
+season is far more likely to be a logger or export gap than weather. Where
+it is real weather, CHIRPS is dry over it too, so filling it adds little
+rain. So a false alarm costs little and a missed gap costs a whole wet season.
+That is why the default fills.
+
+**The rule.** Before rain used is picked, the run blanks the catchment rain on:
+
+1. every day of every zero run the issue #2 check flags, in mode `'missing'`
+   (the default), except days inside a **keep-dry** period; and
+2. every day inside a **missing** period, in either mode, whatever it reads.
+
+Those days are then blank days like any other: bias-corrected CHIRPS fills
+them, then forecast rain, then nothing (the model treats a day with no value
+as 0 mm and the run warns). Flagged runs come from the **whole stored
+record**, as the Data tab's checks see it, not only the run window. **The
+stored series is never changed**, so turning the setting off gives back the
+recorded rain exactly.
+
+| Setting | Values | Meaning |
+| --- | --- | --- |
+| `mode` | `'missing'` (default), `'asRecorded'` | What to do with flagged zero runs. `'asRecorded'` runs them dry, as up to 0.14 and as the workbook does |
+| `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0. Only affects flagged runs |
+| `missing` | periods | Extra periods whose catchment rain is bad, e.g. the gap days inside a low-vs-CHIRPS year. They are also left out of the CHIRPS factor fit (§2.4b) |
+
+A period is a whole water year (`{ waterYear, reason }`) or a date range
+(`{ start, end, reason }`), always with a reason, as for calibration
+exclusions (§2.10b). A day in two periods counts once: a flagged run claims
+its days first.
+
+**Not changed.** The data checks (§2.10a) still report the flagged runs,
+because the data is still suspect. The CHIRPS fit still leaves out every
+water year a flagged run touches, even one kept dry, which is the cautious
+choice. The low-vs-CHIRPS check never blanks a year by itself: a year that
+reads half its usual rain may be partly real, so the hydrologist lists the
+bad days as `missing`.
+
+**Output.** `summary.zeroRainInfill` has the mode and each period set aside,
+flagged or listed, with its reason, the run days set aside, the catchment
+rain recorded on them, the rain used instead, and the days with nothing to
+fill them. It also lists the keep-dry periods that kept any days, and, in
+`'asRecorded'` mode, how many flagged-run days ran dry. It has totals too. The run
+warns once for what it set aside and filled, once for what it kept dry, and
+once when the mode left flagged runs dry. The `rain_catchment_missing` column
+(§2.4b table) marks each day set aside. The run's summary CSV has a *Catchment rain
+treated as missing* block (`zeroRainLines` in
+`backend/src/export/run-tables.ts`). Run comparison lists changes to the
+mode and to both period lists. A run saved before 0.15.0 compares as
+`'asRecorded'`, which is what it did.
+
+**Workbook regression.** The workbook runs the zeros dry, so the client
+catchment suite replays with `'asRecorded'`. Its "B2:" test checks that the
+default sets aside exactly the flagged runs, changes catchment rain on no
+other day, finds CHIRPS for every day it sets aside, and passes the
+self-checks.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -504,7 +607,7 @@ The workbook has two blocks of columns:
 
   The engine's reserve is `cap[src] × MAX(minPct, damMinPct[src])`: the
   rule's own minimum, or the source dam's minimum operating level when that
-  is higher (engine ≥ 0.15.0, Q5).
+  is higher (engine ≥ 0.16.0, Q5).
 
 - **InOut** (one column per farm with "Has transfer? = Yes"): the net volume
   entering (+) or leaving (−) that farm. Each is a **hand-written formula**, for
@@ -529,7 +632,7 @@ storage to whole m³; the engine doesn't (R1).
 | Step | Quantity | Formula |
 | --- | --- | --- |
 | F | Crop water requirement | from §2.3 (`crop_requirement`) |
-| D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.15.0, N1). The workbook has no column: D = F there |
+| D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.16.0, N1). The workbook has no column: D = F there |
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
 | I | Farm runoff | fragmented natural flow (§2.5) |
 | J | Transfer in (+) / out (−) | from §2.6 |
@@ -538,14 +641,14 @@ storage to whole m³; the engine doesn't (R1).
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
-| A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.15.0, N2); the workbook has none |
-| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.15.0, Q5), up to the abstraction demand (N1) |
+| A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
+| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1) |
 | P | Interim storage | `store[t−1] + Pd − E − Sp + M + O + K + J − G` |
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
 | S | Below-dam flow not diverted | `L + N − O` |
-| T | Irrigation return flow | `β × (1 − e) × G`: the share β (`lossReturnFraction`) of the application losses (engine ≥ 0.15.0, N1; the workbook's `G × returnPct`) |
-| U | **Farm outflow** | `R + S + T + Sp` (seepage joins the outflow, engine ≥ 0.15.0) |
+| T | Irrigation return flow | `β × (1 − e) × G`: the share β (`lossReturnFraction`) of the application losses (engine ≥ 0.16.0, N1; the workbook's `G × returnPct`) |
+| U | **Farm outflow** | `R + S + T + Sp` (seepage joins the outflow, engine ≥ 0.16.0) |
 | V | Balance check | `(H+I+J+Pd) − (G − T) − E − (store[t] − store[t−1]) − U` must be 0 (the invariant tests check it on random networks) |
 | W | **Irrigation deficit** | `D − G` |
 | Y | Fragmented EWR | §2.5 |
@@ -555,7 +658,7 @@ storage to whole m³; the engine doesn't (R1).
 
 Initial storage = `initialPct × damCapacity` (workbook: `ROUND(initialPct × ROUND(damCapacity, 0), 0)`).
 
-**Minimum operating level (engine ≥ 0.15.0, [Q5](#3-workbook-quirks-and-suspected-bugs)).**
+**Minimum operating level (engine ≥ 0.16.0, [Q5](#3-workbook-quirks-and-suspected-bugs)).**
 `damMinPct` is the dam's dead storage: irrigation draws only what is above
 `damCapacity × damMinPct` (G above), and a transfer keeps the higher of its
 own minimum and this level in the source dam (§2.6). Storage can still sit
@@ -576,7 +679,7 @@ water to spare; the engine (≥ 0.4.0) doesn't ([audit G1](./engine-audit.md)). 
 catchment's simulated outflow that goes back into `[Flow data]` AG. That is
 compared with the full pragmatic EWR and the observed flow.
 
-**Irrigation efficiency and return flow (engine ≥ 0.15.0, [audit N1](./engine-audit.md)).**
+**Irrigation efficiency and return flow (engine ≥ 0.16.0, [audit N1](./engine-audit.md)).**
 Each farm has an application efficiency `e` (`irrigationEfficiency`,
 0 < e ≤ 1) and a loss return fraction `β` (`lossReturnFraction`, 0–1). Per
 day: abstraction demand `D = F / e`; `G = MIN(available, D)`; the crop gets
@@ -600,7 +703,7 @@ consumptive use (Q17) accounts for it. Decided on persona recommendation
 (simulated hydrologist and licensing-assessor reviews, 2026-09-24), pending
 the real hydrologist.
 
-### 2.7a Dam evaporation, rain on the dam and seepage (engine ≥ 0.15.0, [audit N2](./engine-audit.md))
+### 2.7a Dam evaporation, rain on the dam and seepage (engine ≥ 0.16.0, [audit N2](./engine-audit.md))
 
 A farm dam loses open-water evaporation and seepage and catches the rain on
 its surface. Each day, for a farm with a dam (capacity > 0), **before
@@ -651,7 +754,7 @@ R, U, W and Y–AB, each farm stores its working columns, so any day can be
 redone by hand from the farm's daily CSV: `gross_demand` and `effective_rain`
 (the two sides of F, §2.3; `effective_rain` is the rain *used* that day, and
 `soil_water` beside it the soil-water store at the end of the day in mm,
-engine ≥ 0.14.0), `crop_requirement` (F) and `demand` (D, engine ≥ 0.15.0),
+engine ≥ 0.14.0), `crop_requirement` (F) and `demand` (D, engine ≥ 0.16.0),
 `upstream_to_dam` (K), `upstream_below_dam` (L),
 `runoff_to_dam` (M), `runoff_below_dam` (N), `diverted_to_dam` (O),
 `interim_storage` (P), `below_dam_not_diverted` (S), `return_flow` (T) and
@@ -1010,11 +1113,12 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   record fitted to, the calibration window and exclusions, whether validation
   was asked for and against which independent record, every scored period
   (the in-sample fit, the split-sample and dry → wet tests, the independent
-  record), the evaporation forcing it ran under (`forcing`: `panCoefficient`
-  and `apanMm`, water-year months — absent on records made before it was
-  tracked), the WR2012 MAR penalty when it was on (§2.10c: its weight, the MAR
-  band when one was used, the simulated MAR ratio and the fit without it) and
-  the notes.
+  record), the forcing it ran under (`forcing`: `panCoefficient` and `apanMm`,
+  water-year months, and `chirpsBiasCorrection` — absent on records made
+  before `forcing` was tracked; `chirpsBiasCorrection` absent on a `forcing`
+  made before it was added to it), the WR2012 MAR penalty when it was on
+  (§2.10c: its weight, the MAR band when one was used, the simulated MAR ratio
+  and the fit without it) and the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
   `editedParams` lists fitted parameters whose value in the settings no
   longer matches the fit; the backend recomputes it on every save
@@ -1023,11 +1127,13 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   the mark. Each run snapshots the record in effect in `model_run.inputs`.
   `fitRecordStatus` also says when the runoff model, window, exclusions or
   flow record have changed since the fit — and, from `forcing`, when the pan
-  coefficient or A-pan evaporation has (`forcingChanged`): the pan coefficient
-  is fixed, never calibrated (§2.4a), because it trades off against X1/X3, so
-  a fit is only valid for the forcing it was fitted under and a later change
-  to either array marks the record stale, with a caveat naming the trade-off.
-  The record never changes a result.
+  coefficient, A-pan evaporation or CHIRPS bias correction has
+  (`forcingChanged`): the pan coefficient is fixed, never calibrated (§2.4a),
+  because it trades off against X1/X3, and CHIRPS bias correction changes the
+  rain GR4J sees on the days CHIRPS fills a gap (§2.4b), so a fit is only
+  valid for the forcing it was fitted under and a later change to any of them
+  marks the record stale, with a caveat naming the trade-off. The record never
+  changes a result.
 - **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
   elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
   about 70 s in Node. `onProgress` reports every run and returns true to cancel, which
@@ -1186,11 +1292,14 @@ column R) is the first *non-blank* of catchment rain, CHIRPS and forecast. A
 blank day falls back to CHIRPS; a **0 does not**, because a zero is a reading.
 So a stretch of missing data exported as zeros runs the catchment artificially
 dry, and natural flow, farm supply and the EWR results with it. Both warnings
-name the dates or water years and say that the zeros block the CHIRPS
-fallback. They are warnings only: the fallback is unchanged and zero stays a
-value. From engine 0.7.0 the water years they flag are also left out of the
-CHIRPS bias-correction fit (§2.4b). The fix is in the data (re-export the stretch as blank, or fill it from
-a trusted source), once the hydrologist or client confirms it is missing.
+name the dates or water years. Up to engine 0.14 they were warnings only.
+From engine 0.7.0 the water years they flag are also left out of the
+CHIRPS bias-correction fit (§2.4b). From engine 0.15.0 a run sets the flagged
+zero runs aside as missing by default, so corrected CHIRPS fills them, with
+per-project keep-dry and missing periods (§2.4c). The low-vs-CHIRPS check
+still only warns. The lasting fix is still in the data (re-export the stretch as
+blank, or fill it from a trusted source) once the hydrologist or client
+confirms it is missing.
 
 - *Zero runs: why the wet season, from the series itself.* A South African
   catchment may get its rain in winter (the south-western Cape) or summer
@@ -1323,7 +1432,7 @@ from the workbook.
 | Q2 | Blank `[Transfers]` | One "Draw From" column points at the source's **Spill** column (R) instead of **Storage** (Q) (`<Farm>!R6`). The client catchment's live transfer correctly uses Q. | Shows how fragile hand-written formulas are. Confirm that no other catchment workbook carries the R reference. |
 | Q3 | Transfers | A draw is capped by the source's *yesterday* storage and min %. It is **not** capped by the receiving dam's free space (the excess spills straight away), and irrigation at the source the same day can use the water first. | It is unclear whether the order (transfer vs irrigation) and the spill of transferred water are intended. |
 | Q4 | Farm sheet Z/AB | **Corrected 2026-09 (engine review):** earlier versions of this table said Z was only the farm's own fragment. The client catchment Element sheets have `Z = Y + Σ upstream Z` (e.g. `FarmC!Z17 = Y17+FarmA!Z17+FarmB!Z17`) and `AB = MIN(AA − Σ upstream AA, 0)`; farms with nothing upstream have `Z = Y`, `AB = MIN(AA, 0)`. The engine already did this. The open question is Q17. | Only the doc was wrong; results unchanged. |
-| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.15.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
+| Q5 | Farm sheet G | Irrigation can empty the dam completely. The **min dam %** only applies to transfers, not to irrigation. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** `damMinPct` is the dam's minimum operating level; irrigation draws only above `cap × damMinPct` and transfers keep `cap × MAX(rule min, damMinPct)`. Stored values were reset to 0 (they held the transfer minimum), so no result changes until a level is entered (§2.7). | Confirm the rule, and which dams keep a reserve. |
 | Q6 | Flow data R | The same thresholded rain drives both runoff and the effective-rain offset. Light rain (≤ 2 mm) never reduces demand. | Probably intended, but should be confirmed. The larger issue, rain offsetting only the day it falls on, is N3: engine 0.14.0 carries it over through a soil-water store (§2.3 step 4). |
 | Q7 | Flow data AB | When the rain model gives 0, natural flow falls back to **Pitman** flow if present. The trigger is "the model gave 0", not "no rain data": a day without rain data counts as dry and keeps receding, so the fallback mostly fires before the first rain when `BaseFlowInitial` is 0. | Mixed sources in one series. Engines 0.4.0–0.9.0 warned with the number of fallback days (audit W5); engine 0.10.0 removed the fallback and the Pitman input (audit P1). Days without rain data are still warned about (W2). |
 | Q8 | Farm spec | The Hi/Lo method uses Σ hi-areas and Σ lo-areas over the listed farms, not over the whole catchment. In the client catchment the Hi+Lo area sum differs slightly from the total area. The share sum is checked with a 0.0002 tolerance. | Small drift, but visible in the regression test. |
@@ -1519,7 +1628,7 @@ runoff coefficient, the GR4J store balance (AET, exchange, Δstorage and its
 residual in mm), and the network balance in m³: start storage + farm runoff +
 transfers + rain on dams = consumptive use (supplied − return flow) + dam
 evaporation + outflow + end storage + residual (the dam terms from engine
-0.15.0, §2.7a; seepage is inside the outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
+0.16.0, §2.7a; seepage is inside the outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
 so both are shown. The residual is float noise; anything else is a bug.
 
 The results page shows both (Self-checks panel, [ui.md](./ui.md#self-checks)),
@@ -1606,9 +1715,9 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
-| **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.15.0). |
+| **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |
-| **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.15.0). Abstraction demand = crop requirement ÷ efficiency. |
+| **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.16.0). Abstraction demand = crop requirement ÷ efficiency. |
 | **Return flow** | The part of the irrigation losses that runs back to the river the same day: loss return fraction × (1 − efficiency) × supplied. |
 | **Transfer** | Water moved from one farm's dam to another farm (pipeline or canal). |
 | **NSE** | Nash–Sutcliffe Efficiency = 1 − Σ(obs−sim)² / Σ(obs−mean obs)². 1 is perfect; ≤ 0 means no better than the mean. |

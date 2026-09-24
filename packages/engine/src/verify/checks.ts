@@ -65,7 +65,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		totIn += qPrev;
 		// Return flow: the share β of the application losses (1 − e)·G (audit N1).
 		const returnPerSupplied = n.lossReturnFraction * (1 - n.irrigationEfficiency);
-		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.15.0 have neither.
+		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.16.0 have neither.
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
 		const Sp = get.get(`${n.id}|dam_seepage`);

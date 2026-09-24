@@ -280,9 +280,15 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly' });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
+	});
+
+	it('records the CHIRPS bias correction mode the fit ran under too', () => {
+		const form = { ...defaultProjectSettings(), chirpsBiasCorrection: 'none' as const };
+		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
+		expect(rec.forcing!.chirpsBiasCorrection).toBe('none');
 	});
 
 	it('shows the fit time in UTC to the minute', () => {

@@ -43,7 +43,7 @@ describe('fitValidationRows', () => {
 		expect(row(rows, 'Dry → wet: wet years')).toMatchObject({ a: 'not run', b: 'not run' });
 		expect(row(rows, 'Parameters edited since fit')).toMatchObject({ a: 'no', b: 'yes (x1)' });
 		// No settings snapshot given (an older caller): can't say, rather than guessing.
-		expect(row(rows, 'Evaporation changed since fit')).toEqual({ label: 'Evaporation changed since fit', a: 'unknown', b: 'unknown' });
+		expect(row(rows, 'Forcing changed since fit')).toEqual({ label: 'Forcing changed since fit', a: 'unknown', b: 'unknown' });
 		expect(row(rows, 'WR2012 MAR penalty')).toMatchObject({ a: 'off', b: 'off' });
 		const penalised = record({ marPenalty: { weight: 0.5, targetMarMm3: 10, marLowMm3: null, marHighMm3: null, basis: 'whole', marRatio: 1.1, unpenalised: null } });
 		expect(row(fitValidationRows(penalised, null), 'WR2012 MAR penalty').a).toBe('weight 0.5, MAR 1.10 × WR2012');
@@ -65,7 +65,7 @@ describe('fitValidationRows', () => {
 		expect(fitValidationRows(null, null)).toBeNull();
 	});
 
-	it('says when a run’s own evaporation forcing has moved since its fit, given that run’s settings', () => {
+	it('says when a run’s own forcing has moved since its fit, given that run’s settings', () => {
 		const mono = (v: number): number[] => Array(12).fill(v);
 		const withForcing = record({
 			free: [],
@@ -74,7 +74,7 @@ describe('fitValidationRows', () => {
 			calibrationEnd: null,
 			exclusions: [],
 			flowKind: 'flow_observed_m3s',
-			forcing: { panCoefficient: mono(0.7), apanMm: mono(100) }
+			forcing: { panCoefficient: mono(0.7), apanMm: mono(100), chirpsBiasCorrection: 'monthly' }
 		});
 		const settings = {
 			runoffModel: 'gr4j',
@@ -83,12 +83,16 @@ describe('fitValidationRows', () => {
 			calibrationExclusions: [],
 			calibrationFlowKind: null,
 			panCoefficient: mono(0.7),
-			apanMm: mono(100)
+			apanMm: mono(100),
+			chirpsBiasCorrection: 'monthly'
 		} as unknown as Partial<ProjectSettings>;
 		const same = fitValidationRows(withForcing, null, settings, null);
-		expect(row(same, 'Evaporation changed since fit')).toEqual({ label: 'Evaporation changed since fit', a: 'no', b: '–' });
+		expect(row(same, 'Forcing changed since fit')).toEqual({ label: 'Forcing changed since fit', a: 'no', b: '–' });
 		const moved = fitValidationRows(withForcing, null, { ...settings, panCoefficient: mono(0.9) } as unknown as Partial<ProjectSettings>, null);
-		expect(row(moved, 'Evaporation changed since fit').a).toBe('yes');
+		expect(row(moved, 'Forcing changed since fit').a).toBe('yes');
+		// The CHIRPS bias correction mode alone can move it too.
+		const chirpsMoved = fitValidationRows(withForcing, null, { ...settings, chirpsBiasCorrection: 'none' } as unknown as Partial<ProjectSettings>, null);
+		expect(row(chirpsMoved, 'Forcing changed since fit').a).toBe('yes');
 	});
 });
 

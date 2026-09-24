@@ -82,7 +82,7 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
-- **Irrigation** group (engine ≥ 0.15.0, [engine-audit N1](./engine-audit.md)):
+- **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets an indicative efficiency (drip 90 %,
   micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
@@ -196,9 +196,16 @@ The settings are grouped by what they drive:
     input refuses values outside those bounds. The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
-    unticking it sets X2 back to 0. Then comes the monthly **pan
-    coefficient** row. A notice appears when A-pan × pan coefficient is 0 in
-    every month: the engine then refuses GR4J runs and fits.
+    unticking it sets X2 back to 0. Above the monthly **pan coefficient**
+    row, a **preset** picker (Generic, Winter rainfall (e.g. Western Cape),
+    Summer rainfall — indicative, from FAO-56 Table 5 climate classes, Allen
+    et al. 1998; model.md §2.4a) fills the row with a starting point; the row
+    stays editable after, and nothing is stored about which preset (or
+    whether one) was picked. A warning appears under the row when a month
+    sits outside FAO-56's usual 0.6–0.85 range for a Class A pan — a
+    plausibility check, not a hard limit, so a value further out still saves.
+    A separate notice appears when A-pan × pan coefficient is 0 in every
+    month: the engine then refuses GR4J runs and fits.
   - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
     window) fits the selected model's parameters in a Web Worker
     (`lib/calibration/`). It takes the objective, **Bounds** (a select: "Wide
@@ -241,16 +248,19 @@ The settings are grouped by what they drive:
     (`calibration/FitProvenance.svelte`) shows the record: model and time,
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
-    month, or "not recorded" for a fit made before this was tracked), the
-    exclusions, the fitted values, and a table with the in-sample
-    score ("Calibration period (in-sample)") next to each validation score,
-    plus the notes. Editing a fitted parameter by hand shows a **Parameters
-    edited since fit** badge and names the parameters at once; the server
-    records the same on save. A change of runoff model, window, exclusions or
-    flow series since the fit is called out too, and a change to the pan
-    coefficient or A-pan since the fit shows an **Evaporation changed since
-    fit** badge and a caveat explaining why (it trades off against X1/X3, so
-    the fit needs redoing).
+    month, or "not recorded" for a fit made before this was tracked) and the
+    CHIRPS bias correction mode it ran under (or "not recorded" for a `forcing`
+    made before that field was added to it), the exclusions, the fitted
+    values, and a table with the in-sample score ("Calibration period
+    (in-sample)") next to each validation score, plus the notes. Editing a
+    fitted parameter by hand shows a **Parameters edited since fit** badge and
+    names the parameters at once; the server records the same on save. A
+    change of runoff model, window, exclusions or flow series since the fit
+    is called out too, and a change to the pan coefficient, A-pan or CHIRPS
+    bias correction since the fit shows a **Forcing changed since fit** badge
+    and a caveat explaining why (evaporation trades off against X1/X3, and
+    CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
+    fit needs redoing).
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -326,7 +336,7 @@ The settings are grouped by what they drive:
   the first problem (farm name and date) under a failed one, and the largest
   daily balance check (column V). Second, the **water balance by water year**: rain,
   runoff coefficient, start storage, farm runoff, transfers, rain on dams,
-  consumptive use, dam evaporation (both engine ≥ 0.15.0, blank before),
+  consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
   outflow and end storage in Mm³, and the residual in m³, with a red residual
   if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
@@ -347,9 +357,9 @@ The settings are grouped by what they drive:
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
-  "Parameters edited since fit" badge when they were edited, and an
-  "Evaporation changed since fit" badge when this run's pan coefficient or
-  A-pan differs from what the fit was made under), or "No fit
+  "Parameters edited since fit" badge when they were edited, and a
+  "Forcing changed since fit" badge when this run's pan coefficient, A-pan or
+  CHIRPS bias correction differs from what the fit was made under), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

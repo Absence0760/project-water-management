@@ -162,7 +162,7 @@ def iso(d: Any) -> str:
 
 
 def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> dict[str, Any]:
-    """The node's operating-rule fields (engine >= 0.15.0, docs/engine-audit.md).
+    """The node's operating-rule fields (engine >= 0.16.0, docs/engine-audit.md).
 
     Q5: the app's damMinPct is the dam's minimum operating level (irrigation
     stops there). The workbook's [Farm spec] "min %" is the minimum for
