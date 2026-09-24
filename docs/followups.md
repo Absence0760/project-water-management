@@ -106,18 +106,72 @@ conditions come before any client numbers:
       catchment rain, especially in winter, so fallback years produce almost
       no flow under a water-conserving model. This is in progress on its own
       branch.
-- [ ] **Recalibrate on a long, trusted record.** The logger-only fit gives
-      X1 and X3 outside the typical GR4J ranges, and natural flow *below* the
-      impacted gauge, which is physically impossible.
+- [ ] **Make the logger fit identifiable, keeping the logger as the target.**
+      The logger-only fit gives X1 and X3 outside the typical GR4J ranges,
+      because a short record that is mostly drought can't pin them down.
 
-      ⚠ **Conflict to resolve with the hydrologist.** The persona recommends
-      calibrating on the long gauge record (water years 1981–2013, excluding
-      bad-rain years) and validating on the logger. But issue #1's research
-      found that the gauge column is a *neighbouring* river's gauge,
-      area-scaled from 2010, and "not a valid target for natural flow here".
-      The persona's case rests on the two records agreeing closely over their
-      overlap. The real hydrologist must decide whether the gauge may be used
-      for calibration before either advice is followed.
+      **Resolved (2026-09-24): don't recalibrate on the gauge.** The persona
+      suggested calibrating on the long gauge column and validating on the
+      logger. That was checked against the source hydrology report and the
+      data (full evidence in the gitignored
+      `data/client-catchment/gauge-vs-logger-resolution.md`), and it doesn't
+      hold:
+      - **The gauge is a different sub-catchment.** The DWS weir sits on a
+        neighbouring river about 10 km *upstream* of its confluence with the
+        modelled river, so none of the modelled catchment drains through it.
+      - **That sub-catchment is heavily developed**, with roughly six times
+        the irrigation demand upstream of the logger and large farm-dam
+        storage. The source report notes that early-season flows there go
+        into filling dams.
+      - **The workbook column mixes two scalings:** raw before 2010, and
+        area-scaled from 2010.
+      - **The close overlap agreement is one wet half-year.** The records
+        agree on volume only over the first, flood-dominated half water year
+        of their overlap. Their medians already differ, and the volume ratio
+        falls in every later year to near zero by 2018.
+      - **Two persona findings rested on treating the gauge as this river,
+        and are withdrawn:** that there is "probably other upstream use"
+        (Q3), and that natural flow below the gauge is "physically
+        impossible". Against the logger, GR4J's share of days below the EWR
+        is close to the observed share.
+
+      **Plan**, in order:
+      1. **Constrain the logger fit with information about *this*
+         catchment.** Switch on the Phase 8 WR2012 soft penalty on MAR for
+         the client catchment, and record its weight. The source report gives
+         both a scaled WR2012 and a quinary natural MAR at the logger, and
+         they differ by about 2×, so use the band between them, not one
+         value. Also run a fit bounded to Perrin's 80 % ranges. Report both
+         fits beside the free fit.
+      2. **Use the gauge as a regional wet/dry index only.** Use it to rank
+         water years for the dry→wet test design and the Phase 9 forcing,
+         never as a calibration or validation target for this river.
+      3. **The durable fix for wet-year uncertainty is a proxy-basin model.**
+         Build the gauged neighbour as its own project in the app, with its
+         own rain (the source report names the gauges), its farm dams and its
+         irrigation, and calibrate it on the *raw* gauge record. Then compare
+         its fitted X1–X4 with the logger fit: this is regionalisation by
+         spatial proximity (Oudin et al. 2008).
+         - If the neighbour's parameters are in the typical ranges and the
+           logger fit's aren't, use the neighbour's as a prior. That brings
+           30-plus years, wet years included, into the fit honestly.
+         - It needs the neighbour's rain record and development data, and it
+           depends on WP-1.21 (dam evaporation) and WP-1.33 (other water
+           users).
+      4. **Importer fix.** `scripts/wbt-import` always maps the workbook's
+         gauge column to `flow_observed_m3s`, so for this client the app
+         treats a neighbouring river as this catchment's observed flow (the
+         default calibration record, the EWR comparison). For other clients
+         that column may really be the catchment's own gauge, so don't change
+         it for everyone. Add an importer option to import it as a labelled
+         regional-reference series, with any known scaling undone, and use it
+         for this client.
+      5. **Confirm the modelled area.** The project's catchment area differs
+         by about 5 % from the source report's area at the logger. Ask the
+         hydrologist which is right.
+
+      The hydrologist still signs off the logger as the target (#1). This
+      plan doesn't need them to settle a conflict.
 - [ ] **Fix the monthly pan coefficient (A-pan → PET) before calibrating.**
       It trades off against X1 and X3, so it must never be calibrated. The
       EWR result is sensitive to it: re-run at 0.6 and 0.85.
@@ -134,10 +188,12 @@ the reports):
   Flag a simulated MAR that differs from WR2012 by more than 10 %, 25 % (or
   15 % wetter) or 50 %. Those bands are persona judgement for a CMA official
   to confirm. Phase 8 is being built to these criteria.
-- **Q3: other upstream use.** Probably yes. The models keep much more low
-  flow than the gauge records, and gauge runoff per mm of rain drops around
-  2009, before the instrument split. Do WP-1.33 (other water users) and
-  WP-1.21 (dam evaporation) before the final calibration.
+- **Q3: other upstream use.** The persona's "probably yes" was withdrawn:
+  it rested on the neighbouring gauge (see above). The question stays open
+  for the hydrologist, but no evidence now points to unmodelled use upstream
+  of the logger. Still do WP-1.21 (dam evaporation) and WP-1.33 (other water
+  users) before a final calibration, because they are real modelled
+  processes.
   - [ ] **Gap:** development (dams, abstraction) can't vary over time within
         a run.
 - **Q4: pan and lake factors.** These are two separate settings. PET uses a
