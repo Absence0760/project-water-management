@@ -35,6 +35,12 @@ Tick items off (or move them into an issue) as they are done.
 
 - [ ] **Calibration record:** gauge G1 vs logger A1 from 2014/15, tracked in
       [#1](https://github.com/Absence0760/project-water-management/issues/1).
+      Research done: the gauge column is a neighbouring river's gauge, and the
+      logger (already the project's calibration record) is the verified
+      target ([model.md §2.10](./model.md)). The code and doc items (plan 1–3:
+      no silent default pick, a neutral agreement warning, the findings in
+      model.md) have landed. Still open: the hydrologist's sign-off on the
+      logger, then replace the question in [plan.md](./plan.md) and close #1.
       The runoff-ratio check needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):

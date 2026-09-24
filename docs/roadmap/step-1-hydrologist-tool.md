@@ -235,8 +235,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** the engine never picks a calibration record silently, and the
   agreement warning doesn't assume an instrument fault. These are issue #1
-  plan items 1–3. Neither has landed: `pickObservedKind` in
-  `packages/engine/src/run.ts` still falls back to the gauge silently.
+  plan items 1–3. **Landed** (engine 0.5.1): `pickObservedKind` warns on a
+  default gauge pick, and model.md §2.10/§2.10a record the findings. The
+  agreement warning was already neutral after an earlier rewording, so it was
+  left as is. Closing the issue still waits for WP-1.1's sign-off.
 - **Changes:**
   - **engine:**
     - `pickObservedKind` pushes a warning when `calibrationFlowKind` is
@@ -246,7 +248,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - `agreementWarning` in `quality.ts` is reworded neutrally ("the two
       records disagree; check they measure the same reach and period").
     - These are warnings only, with no numeric change, but bump the patch
-      `ENGINE_VERSION` (0.4.1) because run warnings change.
+      `ENGINE_VERSION` because run warnings change (0.5.0 → 0.5.1 by the
+      time it landed).
   - **frontend:** none (warnings render already).
 - **Data model / API:** none. The client catchment's data and settings
   stay as given.
