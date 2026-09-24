@@ -2,7 +2,12 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
+	EXCLUSION_REASON_MAX,
+	exclusionError,
+	EXCLUSIONS_MAX,
 	GR4J_PARAMS,
+	OBJECTIVES,
+	resolveFitRecord,
 	RUNOFF_MODELS,
 	WR2012_MAX_PENALTY_WEIGHT,
 	WR2012_SCALINGS,
@@ -30,17 +35,23 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 	return out as unknown as ProjectSettings;
 }
 
+/** Settings replaced whole by a patch, never merged: a fit record describes one fit. */
+const REPLACED_WHOLE = new Set(['fitRecord']);
+
 /**
  * A settings patch applied over the stored settings: top-level keys replace,
  * and nested objects (gr4j, dataQuality, wr2012, …) merge one level deep, so
  * patching one field of a group never resets the group's other stored fields.
+ * The fit record is replaced whole, and its `editedParams` recomputed from the
+ * resulting parameters (a client can neither hide an edit nor invent one).
  */
 export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 	const current = mergeSettings(stored) as unknown as Json;
 	const out: Json = { ...current, ...patch };
 	for (const [k, v] of Object.entries(patch)) {
-		if (isObj(v) && isObj(current[k])) out[k] = { ...(current[k] as Json), ...v };
+		if (!REPLACED_WHOLE.has(k) && isObj(v) && isObj(current[k])) out[k] = { ...(current[k] as Json), ...v };
 	}
+	out.fitRecord = resolveFitRecord(out as Partial<ProjectSettings> & Json);
 	return out as unknown as ProjectSettings;
 }
 
@@ -80,6 +91,84 @@ const bounded = (key: string) => {
 };
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+const reason = z.string().trim().min(1, 'an exclusion needs a reason').max(EXCLUSION_REASON_MAX);
+
+/**
+ * A calibration exclusion: a whole water year, or a date range, each with a
+ * reason (engine calibrate/provenance.ts). The engine's own check (real
+ * dates, start ≤ end) runs too, so the two can't disagree.
+ */
+export const CalibrationExclusion = z
+	.union([
+		z.object({ waterYear: z.number().int().min(1800).max(2200), reason }).strict(),
+		z.object({ start: isoDate, end: isoDate, reason }).strict()
+	])
+	.superRefine((x, ctx) => {
+		const err = exclusionError(x);
+		if (err) ctx.addIssue({ code: 'custom', message: `calibration exclusion ${err}` });
+	});
+
+const scoreValue = z.number().finite().nullable();
+const ScoredPeriod = z
+	.object({
+		start: isoDate,
+		end: isoDate,
+		waterYears: z.array(z.number().int()).max(500),
+		scores: z.record(z.string().max(40), scoreValue).refine((o) => Object.keys(o).length <= 30, 'too many scores')
+	})
+	.strict();
+const params = z.record(z.string().max(40), z.number().finite()).refine((o) => Object.keys(o).length <= 30, 'too many parameters');
+const ValidationTest = z.object({ params, calibration: ScoredPeriod, validation: ScoredPeriod });
+const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
+
+/**
+ * The record of the fit whose parameters Apply wrote (engine FitRecord). The
+ * browser runs the fit, so this is what the client reports; `editedParams`
+ * is recomputed by the server on every save (routes.ts), whatever is sent,
+ * and the seed and engine version let anyone reproduce the fit.
+ */
+export const FitRecord = z
+	.object({
+		fittedAt: z.iso.datetime({ offset: true }),
+		engineVersion: z.string().max(40),
+		model: z.enum(RUNOFF_MODELS),
+		objective: z.enum(OBJECTIVES),
+		seed: z.number().int().min(0).max(2 ** 31 - 1),
+		budget: z.number().int().min(1).max(1_000_000),
+		evaluations: z.number().int().min(0),
+		cancelled: z.boolean(),
+		free: z.array(z.string().max(40)).min(1).max(30),
+		params,
+		startParams: params,
+		flowKind,
+		simulatedKey: z.enum(['natural_flow', 'simulated_outflow']),
+		calibrationStart: isoDate.nullable(),
+		calibrationEnd: isoDate.nullable(),
+		exclusions: z.array(CalibrationExclusion).max(EXCLUSIONS_MAX),
+		validate: z.boolean(),
+		validationRecord: flowKind.nullable(),
+		fit: ScoredPeriod,
+		before: ScoredPeriod,
+		splitSample: ValidationTest.strict().nullable(),
+		differential: ValidationTest.extend({
+			dryYears: z.array(z.number().int()).max(500),
+			wetYears: z.array(z.number().int()).max(500),
+			wetDryRatio: z.number().finite()
+		})
+			.strict()
+			.nullable(),
+		independentRecord: ValidationTest.extend({
+			flowKind,
+			simulatedKey: z.enum(['natural_flow', 'simulated_outflow']),
+			overlapDays: z.number().int().min(0)
+		})
+			.strict()
+			.nullable(),
+		notes: z.array(z.string().max(2000)).max(50),
+		editedParams: z.array(z.string().max(40)).max(30).default([])
+	})
+	.strict();
+
 /**
  * Validates the known fields; extra keys (e.g. calibration parameters the
  * engine adds later) pass through but the whole object is size-capped.
@@ -115,6 +204,8 @@ export const SettingsPatch = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
+		calibrationExclusions: z.array(CalibrationExclusion).max(EXCLUSIONS_MAX),
+		fitRecord: FitRecord.nullable(),
 		// Gauge-vs-logger thresholds (engine resolveDataQuality). Each bound is
 		// checked on its own (min ≤ 1 ≤ max), so any subset can be patched.
 		dataQuality: z

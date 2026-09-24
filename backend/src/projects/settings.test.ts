@@ -222,3 +222,114 @@ describe('SettingsPatch.calibrationFlowKind', () => {
 		expect(ok('rain_catchment_mm')).toBe(false);
 	});
 });
+
+describe('SettingsPatch.calibrationExclusions', () => {
+	const ok = (calibrationExclusions: unknown) => SettingsPatch.safeParse({ calibrationExclusions }).success;
+
+	it('accepts whole water years and date ranges, each with a reason, and none', () => {
+		expect(ok([])).toBe(true);
+		expect(ok([{ waterYear: 2015, reason: 'suspect rain year' }, { start: '2017-01-01', end: '2017-01-01', reason: 'gauge outage' }])).toBe(true);
+		const parsed = SettingsPatch.parse({ calibrationExclusions: [{ waterYear: 2015, reason: '  padded  ' }] });
+		expect(parsed.calibrationExclusions).toEqual([{ waterYear: 2015, reason: 'padded' }]);
+	});
+
+	it('rejects a missing or blank reason, fractional years, bad or reversed dates, extra keys and too many', () => {
+		for (const bad of [
+			[{ waterYear: 2015 }],
+			[{ waterYear: 2015, reason: '   ' }],
+			[{ waterYear: 2015, reason: 'x'.repeat(501) }],
+			[{ waterYear: 2015.5, reason: 'x' }],
+			[{ waterYear: '2015', reason: 'x' }],
+			[{ start: '2017-02-30', end: '2017-03-01', reason: 'x' }],
+			[{ start: '2017-03-01', end: '2017-02-01', reason: 'x' }],
+			[{ start: '2017-03-01', reason: 'x' }],
+			[{ waterYear: 2015, reason: 'x', note: 'y' }],
+			new Array(101).fill({ waterYear: 2015, reason: 'x' }),
+			{ waterYear: 2015, reason: 'x' },
+			null
+		]) {
+			expect(ok(bad), JSON.stringify(bad).slice(0, 80)).toBe(false);
+		}
+	});
+});
+
+describe('SettingsPatch.fitRecord', () => {
+	const period = { start: '2012-10-01', end: '2014-09-30', waterYears: [2012, 2013], scores: { days: 730, kgePrime: 0.8, kgeYearly: null } };
+	const record = {
+		fittedAt: '2026-09-24T10:00:00.000Z',
+		engineVersion: '0.6.0',
+		model: 'gr4j',
+		objective: 'kgePrime',
+		seed: 7,
+		budget: 300,
+		evaluations: 900,
+		cancelled: false,
+		free: ['x1', 'x3', 'x4'],
+		params: { x1: 512, x2: 0, x3: 61, x4: 2.2 },
+		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
+		flowKind: 'flow_logger_m3s',
+		simulatedKey: 'simulated_outflow',
+		calibrationStart: null,
+		calibrationEnd: null,
+		exclusions: [{ waterYear: 2015, reason: 'suspect rain' }],
+		validate: true,
+		validationRecord: 'flow_observed_m3s',
+		fit: period,
+		before: period,
+		splitSample: { params: { x1: 500 }, calibration: period, validation: period },
+		differential: { params: { x1: 500 }, calibration: period, validation: period, dryYears: [2012], wetYears: [2013], wetDryRatio: 1.8 },
+		independentRecord: {
+			params: { x1: 512 },
+			calibration: period,
+			validation: period,
+			flowKind: 'flow_observed_m3s',
+			simulatedKey: 'simulated_outflow',
+			overlapDays: 10
+		},
+		notes: ['A note.'],
+		editedParams: []
+	};
+	const ok = (fitRecord: unknown) => SettingsPatch.safeParse({ fitRecord }).success;
+
+	it('accepts a full record, and null (no fit)', () => {
+		expect(ok(record)).toBe(true);
+		expect(ok(null)).toBe(true);
+		expect(ok({ ...record, splitSample: null, differential: null, independentRecord: null, notes: [] })).toBe(true);
+	});
+
+	it('rejects a record missing its provenance, with an unknown objective or model, a bad time, or extra keys', () => {
+		const without = (k: string) => Object.fromEntries(Object.entries(record).filter(([key]) => key !== k));
+		for (const bad of [
+			without('seed'),
+			without('objective'),
+			without('fittedAt'),
+			without('engineVersion'),
+			without('exclusions'),
+			{ ...record, objective: 'rmse' },
+			{ ...record, model: 'pitman' },
+			{ ...record, seed: -1 },
+			{ ...record, seed: 1.5 },
+			{ ...record, fittedAt: 'yesterday' },
+			{ ...record, exclusions: [{ waterYear: 2015 }] },
+			{ ...record, fit: { ...period, scores: { kgePrime: 'high' } } },
+			{ ...record, extra: 1 }
+		]) {
+			expect(ok(bad), JSON.stringify(bad).slice(0, 60)).toBe(false);
+		}
+	});
+
+	it('patchSettings recomputes editedParams from the parameters, whatever the client sends', () => {
+		const stored = { runoffModel: 'gr4j', gr4j: { x1: 512, x2: 0, x3: 61, x4: 2.2, warmupDays: 365 } };
+		expect(patchSettings(stored, { fitRecord: { ...record, editedParams: ['x1'] } }).fitRecord).toMatchObject({ editedParams: [] });
+		const edited = patchSettings(stored, { fitRecord: record, gr4j: { x1: 600, x2: 0, x3: 61, x4: 2.2, warmupDays: 365 } });
+		expect(edited.fitRecord).toMatchObject({ editedParams: ['x1'] });
+		// An edit in a later save, with the record untouched, still marks it.
+		const later = patchSettings({ ...stored, fitRecord: record }, { gr4j: { x1: 512, x2: 0, x3: 70, x4: 2.2, warmupDays: 365 } });
+		expect(later.fitRecord).toMatchObject({ editedParams: ['x3'] });
+		expect(patchSettings(stored, {}).fitRecord).toBeNull();
+		// A new record replaces the stored one whole (never merged field by field).
+		const replaced = patchSettings({ ...stored, fitRecord: { ...record, seed: 1, oldKey: true } }, { fitRecord: record });
+		expect(replaced.fitRecord).not.toHaveProperty('oldKey');
+		expect(replaced.fitRecord!.seed).toBe(7);
+	});
+});

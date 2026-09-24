@@ -124,11 +124,25 @@ be recomputed exactly. For each series kind the snapshot keeps
 `{ startDate, length, valuesSha256 }`, where `valuesSha256` is the SHA-256 hex
 of `JSON.stringify(values)` (`backend/src/runs/execute.ts` `seriesHash`; it
 lives in the `inputs` jsonb, so no column or migration). Runs stored before it
-have no hash. `GET /compare/runs` is the only endpoint that returns the
-snapshot. Its "what changed" list (engine `diffInputs`, see
+have no hash. `GET /compare/runs` returns the whole snapshot, and
+`GET …/runs/:runId` its `settings`. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.
+
+**Calibration provenance lives in `project.settings`** (no table, column or
+migration; issue #4). `settings.calibrationExclusions` is the list of periods
+left out of every calibration score, each a whole water year or a date range
+with a required reason. `settings.fitRecord` is the record of the automatic fit
+whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
+in-sample and validation scores, notes, engine version and time
+([model.md §2.10b](./model.md)). The backend recomputes its `editedParams` on
+every settings save (`patchSettings` in `backend/src/projects/settings.ts`) and
+again when a run snapshots the settings (`executeRun`), so each
+`model_run.inputs.settings` carries the fit record as it stood for that run's
+parameters, marked when they were edited by hand after the fit. Both keys ride
+the existing `project` and `model_run` RLS (viewer reads, editor writes), so
+they add no policy. They are small: a fit record is a few KB.
 
 ## Access control
 

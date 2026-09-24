@@ -137,6 +137,23 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  `calibrationExclusions` (at most 100) lists periods left out of every
+  calibration score: `{ waterYear, reason }` (a whole water year, Oct–Sep,
+  by the year it starts in) or `{ start, end, reason }` (inclusive
+  `YYYY-MM-DD`, start ≤ end). `reason` is required (1–500 characters,
+  trimmed); an entry without one is a `400`.
+  `fitRecord` is the record of the automatic fit whose parameters Apply wrote
+  (`FitRecord` in `packages/engine/src/calibrate/provenance.ts`), or `null`:
+  `{ fittedAt (ISO timestamp), engineVersion, model, objective, seed, budget,
+  evaluations, cancelled, free, params, startParams, flowKind, simulatedKey,
+  calibrationStart, calibrationEnd, exclusions, validate, validationRecord,
+  fit, before, splitSample, differential, independentRecord, notes,
+  editedParams }`, each key required except `editedParams`, and no others.
+  The fit runs in the browser, so the record is what the client reports; the
+  seed and engine version let anyone reproduce it. **The server recomputes
+  `editedParams` on every `PATCH`** (fitted parameters whose value in the
+  saved settings differs from the fit), whatever the client sends, so a hand
+  edit after Apply always marks the record.
 
 ### Members
 
@@ -259,7 +276,7 @@ engine's `runModel`, stores the outputs, and returns the summary.
 | POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
-| GET | `/projects/:id/runs/:runId` | – | `{ run, series: { nodeId, key, label, unit }[] }` | viewer |
+| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
@@ -267,10 +284,19 @@ engine's `runModel`, stores the outputs, and returns the summary.
   run deletes the oldest beyond that, with their outputs.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
 - `run = RunMeta & { summary: RunSummary }`
+- `GET …/runs/:runId` also returns the run's **settings snapshot** (the
+  settings it ran with, from `model_run.inputs`), so the Runs page shows the
+  run's own provenance rather than today's settings: `settings.fitRecord` is
+  the fit record in effect when it ran, with `editedParams` recomputed at run
+  time, and `settings.calibrationExclusions` the exclusions it applied. Runs
+  saved before these existed have neither (treat as `null` / `[]`).
 - `RunSummary.calibration` (`CalibrationStats`) is scored over
   `settings.calibrationStart`…`calibrationEnd` against
   `settings.calibrationFlowKind`, and carries NSE, PBIAS, RMSE, KGE (r, α, β),
   R², log-NSE, volume error and the per-water-year `annualVolumes` table.
+  From engine 0.6.0 it skips `settings.calibrationExclusions` and, when any
+  are set, carries `exclusions` (`{ start, end, reason }[]`) and
+  `excludedDays` (observed days in the window they removed).
   `RunSummary.ewrCompliance` is the water-year × month EWR grid for the outlet
   and each farm (~40 KB for 44 years × 12 farms). Both are defined in
   `packages/engine/src/project.ts`; runs saved before engine 0.3.0 lack the

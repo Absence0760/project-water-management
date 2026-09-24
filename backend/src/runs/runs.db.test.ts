@@ -88,3 +88,104 @@ describe('GET /projects/:id/model-input', () => {
 		expect((await stranger.call('GET', `/projects/${projectId}/model-input`)).status).toBe(404);
 	});
 });
+
+describe('fit provenance and calibration exclusions (issue #4)', () => {
+	const period = { start: '2020-01-01', end: '2020-01-30', waterYears: [2019], scores: { days: 30, kgePrime: 0.7 } };
+	const record = {
+		fittedAt: '2026-09-24T10:00:00.000Z',
+		engineVersion: '0.6.0',
+		model: 'legacy',
+		objective: 'kgePrime',
+		seed: 42,
+		budget: 300,
+		evaluations: 900,
+		cancelled: false,
+		free: ['a', 'b'],
+		params: { a: 0.2, b: 1.4, summerFactor: 0.1, winterFactor: 1 },
+		startParams: { a: 0.09, b: 1.2, summerFactor: 0.1, winterFactor: 1 },
+		flowKind: 'flow_observed_m3s',
+		simulatedKey: 'simulated_outflow',
+		calibrationStart: null,
+		calibrationEnd: null,
+		exclusions: [{ waterYear: 2015, reason: 'suspect rain' }],
+		validate: true,
+		validationRecord: null,
+		fit: period,
+		before: period,
+		splitSample: { params: { a: 0.21, b: 1.3 }, calibration: period, validation: { ...period, scores: { days: 15, kgePrime: 0.4 } } },
+		differential: null,
+		independentRecord: null,
+		notes: ['The record has 0 water years…'],
+		editedParams: []
+	};
+	const exclusions = [{ waterYear: 2015, reason: 'suspect rain' }];
+
+	async function fitted(u: User) {
+		const projectId = await runnable(u);
+		const current = (await u.call('GET', `/projects/${projectId}`)).body.project.settings;
+		const res = await u.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibration: { ...current.calibration, a: 0.2, b: 1.4 }, calibrationExclusions: exclusions, fitRecord: record }
+		});
+		expect(res.status).toBe(200);
+		return { projectId, settings: res.body.project.settings };
+	}
+
+	it('stores the fit record and exclusions, snapshots them in each run, and marks a later hand edit', async () => {
+		const u = await signUp('Provenance');
+		const { projectId, settings } = await fitted(u);
+		expect(settings.fitRecord).toMatchObject({ seed: 42, objective: 'kgePrime', editedParams: [] });
+		expect(settings.calibrationExclusions).toEqual(exclusions);
+
+		const first = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'fitted' })).body.run.id;
+		const detail = (await u.call('GET', `/projects/${projectId}/runs/${first}`)).body.run;
+		expect(detail.settings.fitRecord).toMatchObject({ seed: 42, budget: 300, engineVersion: '0.6.0', editedParams: [] });
+		expect(detail.settings.fitRecord.splitSample.validation.scores.kgePrime).toBe(0.4);
+		expect(detail.settings.calibrationExclusions).toEqual(exclusions);
+
+		// Edit a fitted parameter by hand: the stored record is marked, not cleared.
+		const edited = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibration: { ...settings.calibration, b: 1.5 } } });
+		expect(edited.body.project.settings.fitRecord.editedParams).toEqual(['b']);
+		const second = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'edited' })).body.run.id;
+		expect((await u.call('GET', `/projects/${projectId}/runs/${second}`)).body.run.settings.fitRecord.editedParams).toEqual(['b']);
+		// The first run keeps the record as it was when it ran.
+		expect((await u.call('GET', `/projects/${projectId}/runs/${first}`)).body.run.settings.fitRecord.editedParams).toEqual([]);
+
+		const cmp = await u.call('GET', `/compare/runs?a=${projectId}:${first}&b=${projectId}:${second}`);
+		expect(cmp.status).toBe(200);
+		expect(cmp.body.changes.map((c: { text: string }) => c.text)).toContain('Fit record: parameters edited since the fit (b)');
+	});
+
+	it('a client cannot hide an edit by sending editedParams: []', async () => {
+		const u = await signUp('Hider');
+		const { projectId, settings } = await fitted(u);
+		const res = await u.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibration: { ...settings.calibration, a: 0.5 }, fitRecord: { ...record, editedParams: [] } }
+		});
+		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['a']);
+	});
+
+	it('rejects an exclusion without a reason, and a fit record without its seed', async () => {
+		const u = await signUp('Rejecter');
+		const projectId = await runnable(u);
+		const blank = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibrationExclusions: [{ waterYear: 2015, reason: '' }] } });
+		expect(blank.status).toBe(400);
+		const { seed: _seed, ...noSeed } = record;
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { fitRecord: noSeed } })).status).toBe(400);
+	});
+
+	it("a run's provenance is visible to a viewer and hidden (404) from anyone without access", async () => {
+		const owner = await signUp('Provowner');
+		const { projectId } = await fitted(owner);
+		const runId = (await owner.call('POST', `/projects/${projectId}/runs`, {})).body.run.id;
+		const viewer = await signUp('Provviewer');
+		const stranger = await signUp('Provstranger');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		const seen = await viewer.call('GET', `/projects/${projectId}/runs/${runId}`);
+		expect(seen.status).toBe(200);
+		expect(seen.body.run.settings.fitRecord.seed).toBe(42);
+		expect((await stranger.call('GET', `/projects/${projectId}/runs/${runId}`)).status).toBe(404);
+		// The snapshot is stored in model_run itself.
+		const rows = await asOwner(`SELECT inputs->'settings'->'fitRecord'->>'seed' AS seed FROM model_run WHERE id = $1`, [runId]);
+		expect(rows).toEqual([{ seed: '42' }]);
+	});
+});

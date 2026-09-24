@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { runModel, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
+import { resolveFitRecord, runModel, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
@@ -56,7 +56,9 @@ export async function executeRun(db: Db, projectId: string, label: string): Prom
 	const input = await loadModelInput(db, projectId);
 	const output = runModel(input);
 	const snapshot = {
-		settings: input.settings,
+		// The fit record as it stands for these parameters (edits since the
+		// fit marked), so the run shows which fit and validation produced them.
+		settings: { ...input.settings, fitRecord: resolveFitRecord(input.settings) },
 		model: input.model,
 		// Values aren't copied (they're large); a hash lets "what changed"
 		// catch values corrected within the same dates (compare.ts diffSeries).
