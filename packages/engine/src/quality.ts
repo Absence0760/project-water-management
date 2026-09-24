@@ -249,6 +249,58 @@ function quantileSorted(xs: Float64Array, q: number): number {
 	return xs[lo]! + (xs[hi]! - xs[lo]!) * (pos - lo);
 }
 
+export interface SeriesRowFlags {
+	/** Per-day: value < 0 (rain and flow can't be negative). */
+	negative: boolean[];
+	/** Per-day: value above the outlier threshold (see checkSeries). */
+	outlier: boolean[];
+	/** Per-day: inside a flat stretch (see checkSeries). */
+	flatline: boolean[];
+}
+
+/**
+ * Per-day negative / outlier / flat-line flags for a series — the exact same
+ * rules and constants (OUTLIER_FACTOR, OUTLIER_MIN_POSITIVE, FLATLINE_MIN_DAYS)
+ * checkSeries uses to build its (capped) run-warning examples, but returned
+ * one boolean per day instead, for row-level display (e.g. the Data tab's
+ * series preview table). Missing days are never flagged; a day can carry more
+ * than one flag.
+ */
+export function seriesRowFlags(kind: SeriesKind, s: DailySeries): SeriesRowFlags {
+	const n = s.values.length;
+	const negative = new Array<boolean>(n).fill(false);
+	const outlier = new Array<boolean>(n).fill(false);
+	const flatline = new Array<boolean>(n).fill(false);
+
+	s.values.forEach((v, i) => {
+		if (valid(v) && v < 0) negative[i] = true;
+	});
+
+	const positive = Float64Array.from(s.values.filter((v): v is number => valid(v) && v > 0)).sort();
+	if (positive.length >= OUTLIER_MIN_POSITIVE) {
+		const factor = kind.startsWith('rain_') ? OUTLIER_FACTOR.rain : OUTLIER_FACTOR.flow;
+		const limit = factor * quantileSorted(positive, 0.99);
+		s.values.forEach((v, i) => {
+			if (valid(v) && v > limit) outlier[i] = true;
+		});
+	}
+
+	const minRun = FLATLINE_MIN_DAYS[kind];
+	if (minRun) {
+		for (let i = 0; i < n; ) {
+			const v = s.values[i];
+			let j = i + 1;
+			if (valid(v) && v !== 0) {
+				while (j < n && s.values[j] === v) j++;
+				if (j - i >= minRun) for (let k = i; k < j; k++) flatline[k] = true;
+			}
+			i = j;
+		}
+	}
+
+	return { negative, outlier, flatline };
+}
+
 /** Checks for one daily series. Missing days are skipped, never counted as a value. */
 export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
 	const out: SeriesCheck[] = [];

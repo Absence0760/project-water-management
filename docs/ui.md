@@ -136,6 +136,32 @@ regional wet/dry index, but runs never read it, it is not in the gauge-vs-logger
 table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
 
+**Preview** (`series/SeriesPreviewDialog.svelte`, in a modal `Dialog.svelte`)
+opens a wide, searchable table of every loaded series' daily values side by
+side, one row per day across the union of their periods, plus columns for how
+the model actually used that day's data — not only what checkSeries flags.
+The card header's **Preview data** button opens it with every column shown; a
+row's own **Preview** button opens the same dialog with that series' column
+un-hidden, scrolled into view and highlighted. Alongside each series' own
+column (same label, unit and order as the table above, with its
+`checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
+picker** grouped into *Series* and *How the model used it*: a m³/day column
+for every flow series; **Rain used** and its source (catchment / CHIRPS /
+forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
+month and the **corrected CHIRPS** value (respecting Settings → *CHIRPS bias
+correction*); and **Excluded from calibration**, with its reason, for any day
+inside a Settings → *Calibration exclusions* period. The derived columns are
+computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
+(the same functions a run uses), not recomputed separately, so they are blank
+for any day outside the model's own run window. The search box takes a date
+prefix (`2015`, `2015-03-14`) or a value comparison (`> 20`, `= 0`); *Missing
+only* and *Flagged only* look only at the currently visible series columns.
+Rows are virtualised (fixed row height, only the rows near the scrollport are
+real `<tr>`s) so a multi-year daily record doesn't put thousands of rows in
+the DOM at once. This is a read-only view of what's already loaded; a CSV
+export of the same model-used columns is tracked separately
+([followups.md](./followups.md)).
+
 The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
 below their button or above it when there's no room
 (`lib/export/menuPosition.ts`), so a table's scroll box never clips them;
