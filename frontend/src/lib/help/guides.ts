@@ -11,6 +11,7 @@
 // Every reference must resolve (guarded by guides.test.ts).
 
 import { helpFor } from './content';
+import type { ShotId } from './pictures';
 
 export type GuideKind = 'start' | 'howto' | 'concept';
 
@@ -52,7 +53,22 @@ export type GuideBlock =
 	| { type: 'list'; items: string[] }
 	| { type: 'note'; tone: 'tip' | 'caution'; text: string }
 	| { type: 'formula'; text: string }
-	| { type: 'diagram'; id: DiagramId; caption: string };
+	| { type: 'diagram'; id: DiagramId; caption: string }
+	/** A close-up of the help illustration, with numbered stops on it. */
+	| { type: 'picture'; shot: ShotId; caption: string; stops: PictureStop[] };
+
+/** A numbered stop on an illustration (a guide picture, or the /help tour). */
+export interface PictureStop {
+	/** The feature's key in the shot's marker map ($lib/help/pictures.json). */
+	spot: string;
+	title: string;
+	/** Inline markup, like guide text. */
+	text: string;
+	/** The guide that explains it in full. */
+	guide?: string;
+	/** Opens in place under "Show more": key points, and a close-up or a diagram. */
+	more?: { points: string[]; shot?: ShotId; diagram?: DiagramId };
+}
 
 export interface GuideSection {
 	heading: string;
@@ -391,6 +407,14 @@ export const GUIDES: Guide[] = [
 				heading: 'What moves each day',
 				blocks: [
 					{
+						type: 'picture',
+						shot: 'transfer',
+						caption: 'A transfer pipeline on piers, crossing the river between two farm dams.',
+						stops: [
+							{ spot: 'pipe', title: 'The pipeline', text: 'Its capacity is the transfer’s [[transfer-rate|maximum rate]]; it only runs in the [[transfer-months|months]] you tick.' }
+						]
+					},
+					{
 						type: 'formula',
 						text: 'transfer = min( yesterday’s storage − capacity × min storage, rate × 86 400, daily cap )   in an active month, else 0'
 					},
@@ -430,6 +454,14 @@ export const GUIDES: Guide[] = [
 			{
 				heading: 'Where the EWR is checked',
 				blocks: [
+					{
+						type: 'picture',
+						shot: 'river',
+						caption: 'A reach of the river. The EWR is the flow that must stay in it, every day, for the ecosystem to hold its target condition.',
+						stops: [
+							{ spot: 'river', title: 'The river channel', text: 'Checked every day at the outlet against the [[pragmatic-ewr]]; each farm is also checked against its [[ewr-share|share]].' }
+						]
+					},
 					{
 						type: 'p',
 						text: 'The full [[pragmatic-ewr]] is checked every day at the outflow gauge. Each farm also gets a share of it (EWR × the farm’s flow share), so the results can say which farm causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
@@ -706,6 +738,26 @@ export const GUIDES: Guide[] = [
 		tab: 'network',
 		sections: [
 			{
+				heading: 'One farm, up close',
+				blocks: [
+					{
+						type: 'picture',
+						shot: 'farm',
+						caption: 'A farm on a tributary: its dam, the orchard it irrigates and the pipeline to a neighbour’s dam. Follow the numbers in the order the model works through a day.',
+						stops: [
+							{ spot: 'upstream', title: 'Inflow from upstream', text: 'The stream brings the outflow of the elements above. The [[upstream-to-dam|upstream share]] of it enters the dam.' },
+							{ spot: 'runoff', title: 'The farm’s own runoff', text: 'The farm’s [[flow-share|share]] of the catchment’s natural flow. Its [[runoff-to-dam|own-runoff share]] drains into the dam.' },
+							{ spot: 'storage', title: 'Dam storage', text: 'Yesterday’s storage plus today’s captured inflow, diversion and transfers, less irrigation, up to the [[dam-capacity|capacity]].' },
+							{ spot: 'spill', title: 'Spill over the wall', text: 'Water above capacity [[spill|spills]] and continues downstream the same day.' },
+							{ spot: 'irrigation', title: 'Irrigation draw', text: 'The dam supplies the crops’ [[irrigation-demand|net demand]], or what it holds if that is less.' },
+							{ spot: 'crops', title: 'The crops', text: 'Part of the water applied runs back to the river as [[return-flow|return flow]]; the rest is used.' },
+							{ spot: 'transfer', title: 'Transfer to a neighbour', text: 'A [[transfer]] can move water out of (or into) this dam in chosen months.' },
+							{ spot: 'outflow', title: 'Outflow', text: 'Spill, water that passed below the dam and return flow leave as the farm’s [[farm-outflow|outflow]], the next element’s inflow.' }
+						]
+					}
+				]
+			},
+			{
 				heading: 'Around the dam',
 				blocks: [
 					{
@@ -752,6 +804,23 @@ export const GUIDES: Guide[] = [
 		kind: 'concept',
 		tab: 'settings',
 		sections: [
+			{
+				heading: 'Under the ground',
+				blocks: [
+					{
+						type: 'picture',
+						shot: 'soil',
+						caption: 'The cut face of the catchment beside the river. GR4J is a conceptual model: its two stores stand roughly for the moist soil and the groundwater, not for measured layers.',
+						stops: [
+							{ spot: 'rain', title: 'Rain', text: 'Rain first meets evaporation. What is left is net rain.' },
+							{ spot: 'evaporation', title: 'Evaporation', text: 'Plants and soil return water to the air, up to the [[pan-coefficient|potential evaporation]].' },
+							{ spot: 'soil', title: 'The soil store (X1)', text: 'Net rain partly fills the production store. A larger X1 holds more rain back, so less of it becomes flow.' },
+							{ spot: 'groundwater', title: 'The routing store (X3)', text: 'Water that percolates on is released slowly. A larger X3 means slower, longer recessions between storms.' },
+							{ spot: 'river', title: 'Flow in the river', text: 'The routing store’s release plus a quick direct part is the [[natural-flow]]; X4 sets how many days a storm takes to arrive.' }
+						]
+					}
+				]
+			},
 			{
 				heading: 'The structure',
 				blocks: [
@@ -804,6 +873,16 @@ export const GUIDES: Guide[] = [
 			{
 				heading: 'What is scored',
 				blocks: [
+					{
+						type: 'picture',
+						shot: 'weir',
+						caption: 'The catchment outlet. The observed record comes from here; the model’s simulated outflow is its prediction of the same place.',
+						stops: [
+							{ spot: 'gauge', title: 'The gauging hut', text: 'A gauge or logger records the water level, turned into [[observed-flow|observed flow]] by a rating curve. High flows beyond the highest measurement are extrapolated, so they are the least certain.' },
+							{ spot: 'weir', title: 'The weir', text: 'A control that makes level and flow relate reliably. The model’s [[outflow-gauge]] stands for this point.' },
+							{ spot: 'reach', title: 'The river above it', text: 'What arrives here is the whole catchment’s outflow, farms and dams included, which is why the whole model is scored, not the runoff model alone.' }
+						]
+					},
 					{
 						type: 'p',
 						text: 'An observed gauge or logger measures the river as it is, with its farms and dams. So every candidate parameter set runs the **whole model** (runoff model, then the network) and scores the simulated outflow against the observed record. The fitted parameters describe the natural catchment; the network adds the impacts.'
@@ -1041,6 +1120,8 @@ function blockText(b: GuideBlock): string {
 			return b.items.map(plainText).join(' ');
 		case 'diagram':
 			return b.caption;
+		case 'picture':
+			return [b.caption, ...b.stops.map((s) => `${s.title} ${plainText(s.text)}`)].join(' ');
 		default:
 			return plainText(b.text);
 	}

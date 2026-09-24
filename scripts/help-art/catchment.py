@@ -1,4 +1,4 @@
-"""Illustrated catchment for the /help landing page, rendered with Blender.
+"""Illustrated catchment for the help pages, rendered with Blender.
 
 A diorama of one small invented catchment, cut out of the ground like a block:
 mountains with rain clouds at the back, a river down the valley, two farm dams
@@ -6,15 +6,21 @@ joined by a transfer pipeline, an orchard and a vineyard, a farmhouse, and the
 weir with its gauging hut at the outlet in front. Everything is procedural, so
 a run is reproducible and the scene can be changed in code.
 
-Besides the picture it writes the 2D position (as % of the image) of each
-labelled feature, projected through the same camera, so the page's numbered
-hotspots always sit on the thing they describe.
+One scene, several camera shots (SHOTS, at the end): the whole catchment for
+the /help landing page, and close-ups for the guides and help tips (one farm
+and its dam, the outlet weir, the soil layers on the block's cut face, the
+transfer pipeline, a reach of river). For each shot it also writes the 2D
+position (as % of the image) of each labelled feature, projected through that
+shot's camera, so the page's numbered markers always sit on what they
+describe.
 
 Run through bin/gen-help-art.sh (pnpm gen:help-art), or directly:
 
-    blender -b --factory-startup --python scripts/help-art/catchment.py -- \
-        --out /tmp/catchment.png --hotspots /tmp/hotspots.json \
-        [--width 1600] [--samples 96] [--device OPTIX|CUDA|CPU]
+    blender -b --factory-startup --python-exit-code 1 \
+        --python scripts/help-art/catchment.py -- --outdir /tmp/help-art \
+        [--only catchment,farm] [--samples 96] [--device OPTIX|CUDA|CPU]
+
+Writes <outdir>/<shot>.png and <outdir>/shots.json.
 """
 
 import argparse
@@ -34,10 +40,10 @@ from mathutils.noise import fractal
 # --------------------------------------------------------------------------
 argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
-ap.add_argument("--out", required=True)
-ap.add_argument("--hotspots", required=True)
-ap.add_argument("--width", type=int, default=1600)
+ap.add_argument("--outdir", required=True)
+ap.add_argument("--only", default="", help="comma-separated shot names; default all")
 ap.add_argument("--samples", type=int, default=96)
+ap.add_argument("--preview", action="store_true", help="half size; warn about markers off the picture instead of failing")
 ap.add_argument("--device", default="OPTIX")
 args = ap.parse_args(argv)
 
@@ -47,7 +53,7 @@ random.seed(7)
 # Terrain: one height function, reused to place everything on the ground
 # --------------------------------------------------------------------------
 X0, X1, Y0, Y1 = -6.0, 6.0, -4.0, 4.0  # block footprint (y+ = upstream)
-BASE = -1.1  # bottom of the diorama block
+BASE = -1.7  # bottom of the diorama block
 
 
 def river_x(y):
@@ -163,22 +169,49 @@ H = np.array([[height(x, y) for x in xs] for y in ys])
 verts = [(x, y, H[j, i]) for j, y in enumerate(ys) for i, x in enumerate(xs)]
 faces = [(j * N + i, j * N + i + 1, (j + 1) * N + i + 1, (j + 1) * N + i) for j in range(M - 1) for i in range(N - 1)]
 top = len(verts)
-# Skirt: the cut sides of the block, down to BASE.
+# Skirt: the cut sides of the block, down to BASE, drawn as soil layers that
+# follow the ground: topsoil, the moist soil zone (GR4J's production store),
+# then groundwater (its routing store). Each boundary is two rings at the same
+# depth with different colours, so the bands have crisp edges.
 ring = (
     [(0, i) for i in range(N)]
     + [(j, N - 1) for j in range(1, M)]
     + [(M - 1, i) for i in range(N - 2, -1, -1)]
     + [(j, 0) for j in range(M - 2, 0, -1)]
 )
-for j, i in ring:
-    verts.append((xs[i], ys[j], BASE))
 R = len(ring)
+TOPSOIL = np.array(srgb("#8a6a45"))
+MOIST = np.array(srgb("#5e4630"))
+GROUNDWATER = np.array(srgb("#4c6a80"))
+BEDROCK = np.array(srgb("#3b3a38"))
+# (depth below the surface, or None for the block's base; colour)
+LAYERS = [
+    (0.0, TOPSOIL), (0.1, TOPSOIL),
+    (0.1, MOIST), (0.42, MOIST),
+    (0.42, GROUNDWATER), (0.95, GROUNDWATER),
+    (0.95, BEDROCK), (None, BEDROCK),
+]
+SOIL_DEPTH, WATER_TABLE = 0.1, 0.42
+skirt_colour = []
+for layer, (depth, colour) in enumerate(LAYERS):
+    if layer == 0:
+        continue  # the surface ring is the terrain's own edge
+    for j, i in ring:
+        z = BASE if depth is None else max(H[j, i] - depth, BASE + 0.02)
+        verts.append((xs[i], ys[j], z))
+        skirt_colour.append(colour)
+
+
+def ring_vertex(layer, k):
+    return ring[k][0] * N + ring[k][1] if layer == 0 else top + (layer - 1) * R + k
+
+
 side_faces = []
-for k in range(R):
-    j0, i0 = ring[k]
-    j1, i1 = ring[(k + 1) % R]
-    side_faces.append((j0 * N + i0, top + k, top + (k + 1) % R, j1 * N + i1))
-bottom = [top + k for k in range(R)][::-1]
+for layer in range(len(LAYERS) - 1):
+    for k in range(R):
+        k1 = (k + 1) % R
+        side_faces.append((ring_vertex(layer, k), ring_vertex(layer + 1, k), ring_vertex(layer + 1, k1), ring_vertex(layer, k1)))
+bottom = [ring_vertex(len(LAYERS) - 1, k) for k in range(R)][::-1]
 
 GRASS = np.array(srgb("#7da04a"))
 DRY = np.array(srgb("#b7ab6a"))
@@ -206,38 +239,15 @@ gy, gx = np.gradient(H, ys, xs)
 slope = np.sqrt(gx**2 + gy**2) / 3.0
 land = mesh_object("Land", verts, faces + side_faces + [tuple(bottom)], material("land", (1, 1, 1), 0.9))
 ca = land.data.color_attributes.new("col", "FLOAT_COLOR", "POINT")
-SOIL_TOP = np.array(srgb("#6b4a2f"))
-SOIL_LOW = np.array(srgb("#3f2c1d"))
 for vi, (x, y, z) in enumerate(verts):
     if vi < top:
         j, i = divmod(vi, N)
         c = land_colour(x, y, z, slope[j, i])
     else:
-        c = SOIL_LOW
+        c = skirt_colour[vi - top]
     ca.data[vi].color = (*c, 1.0)
-# The cut sides: a soil gradient from the surface down, via a second material.
-soil = bpy.data.materials.new("soil")
-soil.use_nodes = True
-nt = soil.node_tree
-p = nt.nodes["Principled BSDF"]
-p.inputs["Roughness"].default_value = 0.95
-geo = nt.nodes.new("ShaderNodeNewGeometry")
-sep = nt.nodes.new("ShaderNodeSeparateXYZ")
-ramp = nt.nodes.new("ShaderNodeValToRGB")
-mapr = nt.nodes.new("ShaderNodeMapRange")
-mapr.inputs["From Min"].default_value = BASE
-mapr.inputs["From Max"].default_value = 1.0
-ramp.color_ramp.elements[0].color = (*SOIL_LOW, 1)
-ramp.color_ramp.elements[1].color = (*SOIL_TOP, 1)
-ramp.color_ramp.elements.new(0.62).color = (*srgb("#8a6a45"), 1)
-nt.links.new(geo.outputs["Position"], sep.inputs[0])
-nt.links.new(sep.outputs["Z"], mapr.inputs["Value"])
-nt.links.new(mapr.outputs["Result"], ramp.inputs["Fac"])
-nt.links.new(ramp.outputs["Color"], p.inputs["Base Color"])
-land.data.materials.append(soil)
 for poly in land.data.polygons:
     if poly.index >= len(faces):
-        poly.material_index = 1
         poly.use_smooth = False
 # Surface material reads the vertex colours.
 lm = land.data.materials[0]
@@ -550,11 +560,9 @@ sun = bpy.context.object
 sun.data.energy = 3.2
 sun.data.angle = math.radians(4)
 
-bpy.ops.object.camera_add(location=(10.2, -14.6, 10.6))
+bpy.ops.object.camera_add()
 cam = bpy.context.object
-cam.data.lens = 44
 target = bpy.data.objects.new("target", None)
-target.location = (0.1, 0.5, 0.9)
 scene.collection.objects.link(target)
 track = cam.constraints.new("TRACK_TO")
 track.target = target
@@ -565,9 +573,6 @@ scene.camera = cam
 scene.render.engine = "CYCLES"
 scene.cycles.samples = args.samples
 scene.cycles.use_denoising = True
-scene.render.film_transparent = True
-scene.render.resolution_x = args.width
-scene.render.resolution_y = round(args.width * 0.62)
 scene.render.resolution_percentage = 100
 scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGBA"
@@ -582,62 +587,153 @@ if args.device != "CPU":
     scene.cycles.device = "GPU"
 
 # --------------------------------------------------------------------------
-# Crop to the scene: project everything visible through the camera and render
-# only that box (plus a small margin), so the picture has no empty border.
-# The output keeps the requested width.
-# --------------------------------------------------------------------------
-bpy.context.view_layer.update()
-deps = bpy.context.evaluated_depsgraph_get()
-pts2d = []
-for ob in scene.objects:
-    if ob.hide_render or ob.type not in {"MESH", "CURVE", "META"}:
-        continue
-    if ob.name == "Land":
-        vs_ = ob.data.vertices
-        co = [ob.matrix_world @ vs_[i].co for i in range(0, len(vs_), 7)]
-    else:
-        co = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
-    pts2d += [world_to_camera_view(scene, cam, c) for c in co]
-M_ = 0.02
-bx0 = max(min(p2.x for p2 in pts2d) - M_, 0.0)
-bx1 = min(max(p2.x for p2 in pts2d) + M_, 1.0)
-by0 = max(min(p2.y for p2 in pts2d) - M_, 0.0)
-by1 = min(max(p2.y for p2 in pts2d) + M_, 1.0)
-full_w = round(args.width / (bx1 - bx0))
-scene.render.resolution_x = full_w
-scene.render.resolution_y = round(full_w * 0.62)
-scene.render.use_border = True
-scene.render.use_crop_to_border = True
-scene.render.border_min_x, scene.render.border_max_x = bx0, bx1
-scene.render.border_min_y, scene.render.border_max_y = by0, by1
-out_w = round(full_w * (bx1 - bx0))
-out_h = round(scene.render.resolution_y * (by1 - by0))
-
-# --------------------------------------------------------------------------
-# Hotspots: each labelled feature's position in the cropped image, in %
+# Shots
 # --------------------------------------------------------------------------
 mid_pipe = pts[len(pts) // 2]
-anchors = {
-    "rain": Vector((0.4, 3.1, 2.7)),
-    "evaporation": SUN_AT,
-    "runoff": ground(-4.4, 3.2, 0.05),
-    "dam": Vector((l_cx, l_cy, l_lvl)),
-    "irrigation": ground((ORCHARD[0] + ORCHARD[1]) / 2, (ORCHARD[2] + ORCHARD[3]) / 2, 0.2),
-    "transfer": mid_pipe,
-    "river": ground(river_x(-1.7), -1.7, 0.02),
-    "outlet": ground(wx, wy, 0.1),
-}
-spots = {}
-for key, co in anchors.items():
-    v = world_to_camera_view(scene, cam, co)
-    x = (v.x - bx0) / (bx1 - bx0)
-    y = (by1 - v.y) / (by1 - by0)
-    assert 0 < x < 1 and 0 < y < 1, f"hotspot {key} is outside the picture: {(x, y)}"
-    spots[key] = {"x": round(x * 100, 1), "y": round(y * 100, 1)}
-with open(args.hotspots, "w") as f:
-    json.dump({"width": out_w, "height": out_h, "spots": spots}, f, indent=1)
-    f.write("\n")
+face_x = river_x(Y0) + 0.75  # a spot on the front cut face beside the river
+face_z = height(face_x, Y0)
+r_wall = Vector((r_cx, r_cy - DAMS["right"][3] * 1.1, r_lvl + 0.05))
+l_wall = Vector((l_cx + 0.1, l_cy - DAMS["left"][3] * 1.1, l_lvl + 0.05))
 
-scene.render.filepath = args.out
-bpy.ops.render.render(write_still=True)
-print("rendered", args.out)
+
+def trib_point(y, lift=0.02):
+    return ground(trib(y), y, lift)
+
+
+# name: camera location, look-at target, lens (mm), output width, crop (True:
+# trim to the scene with a transparent background; False: fill the frame at
+# `aspect`), and the labelled features.
+SHOTS = {
+    "catchment": dict(
+        loc=(10.2, -14.6, 10.6), target=(0.1, 0.5, 0.9), lens=44, width=1600, crop=True,
+        anchors={
+            "rain": Vector((0.4, 3.1, 2.7)),
+            "evaporation": SUN_AT,
+            "runoff": ground(-4.4, 3.2, 0.05),
+            "dam": Vector((l_cx, l_cy, l_lvl)),
+            "irrigation": ground((ORCHARD[0] + ORCHARD[1]) / 2, (ORCHARD[2] + ORCHARD[3]) / 2, 0.2),
+            "transfer": mid_pipe,
+            "river": ground(river_x(-1.7), -1.7, 0.02),
+            "outlet": ground(wx, wy, 0.1),
+        },
+    ),
+    # One farm: the left dam on the tributary, its orchard and the pipes.
+    "farm": dict(
+        loc=(l_cx + 3.3, l_cy - 4.9, l_lvl + 3.4), target=(l_cx - 0.25, l_cy - 1.05, l_lvl - 0.35), lens=38, width=1200,
+        crop=False, aspect=0.62,
+        anchors={
+            "upstream": trib_point(2.62),
+            "runoff": ground(l_cx + 1.05, l_cy + 0.45, 0.04),
+            "storage": Vector((l_cx - 0.1, l_cy + 0.1, l_lvl)),
+            "spill": l_wall,
+            "irrigation": ground(-3.3, 0.55, 0.05),
+            "crops": ground(-3.3, -0.4, 0.2),
+            "transfer": pts[6],
+            "outflow": trib_point(0.75),
+        },
+    ),
+    # The outlet: weir, gauging hut and the last reach of river.
+    "weir": dict(
+        loc=(wx + 2.0, wy - 2.3, height(wx, wy) + 1.3), target=(wx + 0.15, wy + 0.45, height(wx, wy) - 0.05), lens=46, width=1200,
+        crop=False, aspect=0.62,
+        anchors={
+            "gauge": ground(gx0, gy0, 0.24),
+            "weir": ground(wx, wy, 0.1),
+            "reach": ground(river_x(wy + 1.35), wy + 1.35, 0.03),
+        },
+    ),
+    # The front cut face beside the river: soil layers under the ground.
+    "soil": dict(
+        loc=(face_x + 0.8, Y0 - 2.5, face_z + 0.5), target=(face_x - 0.15, Y0, face_z - 0.33), lens=34, width=1200,
+        crop=False, aspect=0.62,
+        anchors={
+            "rain": ground(face_x + 0.55, Y0 + 0.35, 0.02),
+            "evaporation": ground(face_x + 0.1, Y0 + 0.2, 0.1),
+            "soil": Vector((face_x, Y0, face_z - (SOIL_DEPTH + WATER_TABLE) / 2)),
+            "groundwater": Vector((face_x, Y0, face_z - 0.68)),
+            "river": ground(river_x(Y0 + 0.15), Y0 + 0.15, 0.03),
+        },
+    ),
+    # Help-tip close-ups.
+    "transfer": dict(
+        loc=(mid_pipe.x + 1.6, mid_pipe.y - 2.4, mid_pipe.z + 1.3), target=tuple(mid_pipe), lens=40, width=800,
+        crop=False, aspect=0.62, anchors={"pipe": mid_pipe},
+    ),
+    "river": dict(
+        loc=(river_x(-1.2) + 1.9, -3.4, height(river_x(-1.2), -1.2) + 1.3),
+        target=(river_x(-1.2), -1.2, height(river_x(-1.2), -1.2)), lens=40, width=800,
+        crop=False, aspect=0.62, anchors={"river": ground(river_x(-1.2), -1.2, 0.03)},
+    ),
+}
+
+
+def scene_crop():
+    """The box (camera-view coords) around everything visible, plus a margin."""
+    pts2d = []
+    for ob in scene.objects:
+        if ob.hide_render or ob.type not in {"MESH", "CURVE", "META"}:
+            continue
+        if ob.name == "Land":
+            vs_ = ob.data.vertices
+            co = [ob.matrix_world @ vs_[i].co for i in range(0, len(vs_), 7)]
+        else:
+            co = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+        pts2d += [world_to_camera_view(scene, cam, c) for c in co]
+    m = 0.02
+    return (
+        max(min(p2.x for p2 in pts2d) - m, 0.0),
+        min(max(p2.x for p2 in pts2d) + m, 1.0),
+        max(min(p2.y for p2 in pts2d) - m, 0.0),
+        min(max(p2.y for p2 in pts2d) + m, 1.0),
+    )
+
+
+only = {n for n in args.only.split(",") if n}
+report = {}
+for name, shot in SHOTS.items():
+    if only and name not in only:
+        continue
+    cam.location = shot["loc"]
+    target.location = shot["target"]
+    cam.data.lens = shot["lens"]
+    bpy.context.view_layer.update()
+    if shot["crop"]:
+        scene.render.film_transparent = True
+        scene.render.resolution_x = shot["width"]
+        scene.render.resolution_y = round(shot["width"] * 0.62)
+        bx0, bx1, by0, by1 = scene_crop()
+        full_w = round(shot["width"] / (bx1 - bx0))
+        scene.render.resolution_x = full_w
+        scene.render.resolution_y = round(full_w * 0.62)
+        scene.render.use_border = True
+        scene.render.use_crop_to_border = True
+        scene.render.border_min_x, scene.render.border_max_x = bx0, bx1
+        scene.render.border_min_y, scene.render.border_max_y = by0, by1
+    else:
+        # A close-up fills its frame, over a sky that matches the light.
+        scene.render.film_transparent = False
+        scene.render.use_border = False
+        scene.render.resolution_x = shot["width"]
+        scene.render.resolution_y = round(shot["width"] * shot["aspect"])
+        bx0, bx1, by0, by1 = 0.0, 1.0, 0.0, 1.0
+    scene.render.resolution_percentage = 50 if args.preview else 100
+    out_w = round(scene.render.resolution_x * (bx1 - bx0))
+    out_h = round(scene.render.resolution_y * (by1 - by0))
+    spots = {}
+    for key, co in shot["anchors"].items():
+        v = world_to_camera_view(scene, cam, co)
+        x = (v.x - bx0) / (bx1 - bx0)
+        y = (by1 - v.y) / (by1 - by0)
+        if not (0.02 < x < 0.98 and 0.02 < y < 0.98 and v.z > 0):
+            msg = f"{name}: marker {key} is outside the picture: {(x, y)}"
+            assert args.preview, msg
+            print("WARNING", msg)
+        spots[key] = {"x": round(x * 100, 1), "y": round(y * 100, 1)}
+    report[name] = {"width": out_w, "height": out_h, "spots": spots}
+    scene.render.filepath = f"{args.outdir}/{name}.png"
+    bpy.ops.render.render(write_still=True)
+    print("rendered", name, out_w, "x", out_h)
+
+with open(f"{args.outdir}/shots.json", "w") as f:
+    json.dump(report, f, indent=1)
+    f.write("\n")

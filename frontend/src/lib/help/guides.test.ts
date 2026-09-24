@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { helpFor } from './content';
+import { SHOTS } from './pictures';
 import {
 	DIAGRAM_IDS,
 	GUIDE_KIND_TITLES,
@@ -23,6 +24,8 @@ const texts = (b: GuideBlock): string[] => {
 			return b.items;
 		case 'diagram':
 			return [b.caption];
+		case 'picture':
+			return [b.caption, ...b.stops.map((st) => st.text)];
 		default:
 			return [b.text];
 	}
@@ -74,6 +77,17 @@ describe('guides', () => {
 		for (const t of allText) {
 			const plain = plainText(t);
 			expect(plain, t).not.toMatch(/\*\*|\[\[|\]\]/);
+		}
+	});
+
+	it('put every picture stop on a marker its shot has', () => {
+		for (const g of GUIDES) {
+			for (const b of g.sections.flatMap((sec) => sec.blocks)) {
+				if (b.type !== 'picture') continue;
+				const spots = b.stops.map((st) => st.spot);
+				expect(new Set(spots).size, g.id).toBe(spots.length);
+				for (const spot of spots) expect(SHOTS[b.shot].spots[spot], `${g.id}: ${b.shot}.${spot}`).toBeDefined();
+			}
 		}
 	});
 

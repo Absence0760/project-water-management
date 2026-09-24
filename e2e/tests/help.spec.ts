@@ -43,6 +43,10 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await expect(tip).toHaveAttribute('aria-expanded', 'true');
 	await expect(bubble).toBeVisible();
 	await expect(bubble.getByRole('link', { name: 'More in the glossary' })).toBeVisible();
+	// A farm term shows the farm close-up, loaded, and the bubble still fits on screen with it.
+	const pic = bubble.locator('img');
+	await expect(pic).toBeVisible();
+	await expect.poll(() => pic.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 	await expectOnTop(page, bubble);
 
 	await page.keyboard.press('Escape');
@@ -129,8 +133,43 @@ test('the catchment tour links each picture marker to its stop', async ({ page, 
 	await expect(irrigation).toHaveClass(/\bon\b/);
 	await expect(page.locator('.marker', { hasText: '5' })).toHaveClass(/\bon\b/);
 
+	// "Show more" opens a stop in place: its close-up and key points; "Show less" folds it.
+	const dam = stops.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Farm dams catch part of it' }) });
+	const more = page.getByRole('button', { name: 'Show more: Farm dams catch part of it' });
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(dam.getByRole('img', { name: /Close-up of one farm/ })).toBeHidden();
+	await more.click();
+	const less = page.getByRole('button', { name: 'Show less: Farm dams catch part of it' });
+	await expect(less).toHaveAttribute('aria-expanded', 'true');
+	await expect(dam.getByRole('img', { name: /Close-up of one farm/ })).toBeVisible();
+	await expect(dam.getByText('Every farm’s daily balance closes to the cubic metre.')).toBeVisible();
+	await less.click();
+	await expect(dam.getByRole('img', { name: /Close-up of one farm/ })).toBeHidden();
+
+	// The rain stop opens on a diagram instead of a close-up.
+	await page.getByRole('button', { name: 'Show more: Rain falls on the catchment' }).click();
+	await expect(page.getByRole('img', { name: /Each day takes the first series that has a value/ })).toBeVisible();
+
 	await irrigation.getByRole('link', { name: /Set up crops and irrigation demand/ }).click();
 	await expect(page).toHaveURL(/\/help\/guides\/set-up-crops-and-demand$/);
+});
+
+test('a guide shows a close-up of the catchment with its own numbered stops', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/guides/a-day-on-a-farm');
+	const figure = page.getByRole('figure').filter({ has: page.getByRole('img', { name: /Close-up of one farm/ }) });
+	await expect(figure.getByRole('img', { name: /Close-up of one farm/ })).toBeVisible();
+	await expect(figure.getByRole('heading', { level: 3 })).toHaveText([
+		'Inflow from upstream',
+		'The farm’s own runoff',
+		'Dam storage',
+		'Spill over the wall',
+		'Irrigation draw',
+		'The crops',
+		'Transfer to a neighbour',
+		'Outflow'
+	]);
+	await expect(page.locator('.marker')).toHaveCount(8);
 });
 
 test('a guide shows its diagrams and links into the glossary', async ({ page, owner }) => {

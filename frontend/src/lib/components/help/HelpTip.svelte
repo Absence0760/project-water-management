@@ -14,10 +14,15 @@
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { helpFor } from '$lib/help/content';
+	import { SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
 
 	let { key, label }: { key: string; label?: string } = $props();
 
 	const entry = $derived(helpFor(key));
+	// A close-up of that part of the help illustration, for terms that have
+	// one. Decorative (alt=""): the bubble is a live region, and its text
+	// already says what the picture shows.
+	const shot = $derived(entry ? TIP_PICTURES[entry.id] : undefined);
 	let open = $state(false);
 	let pos = $state({ top: 0, left: 0 });
 	let root: HTMLSpanElement | undefined = $state();
@@ -107,7 +112,16 @@
 		</button>
 		<span id={bubbleId} class="live" role="status" aria-live="polite">
 			{#if open}
-				<span class="bubble" popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
+				<span class="bubble" class:pictured={shot} popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
+					{#if shot}
+						<img
+							class="pic"
+							src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
+							width={SHOTS[shot].width / 2}
+							height={SHOTS[shot].height / 2}
+							alt=""
+						/>
+					{/if}
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
 					{#if entry.units}<span class="units">Units: {entry.units}</span>{/if}
@@ -164,6 +178,19 @@
 		text-align: left;
 		white-space: normal;
 		text-transform: none;
+	}
+	/* With a picture: a fixed width, so the picture and text wrap to it. */
+	.bubble.pictured {
+		width: min(20rem, calc(100vw - 2 * var(--gutter)));
+	}
+	.pic {
+		display: block;
+		width: calc(100% + 1.5rem);
+		max-width: none;
+		height: auto;
+		margin: -0.6rem -0.75rem 0.2rem;
+		border-radius: var(--radius) var(--radius) 0 0;
+		border-bottom: 1px solid var(--border);
 	}
 	/* Author styles beat the UA's popover hiding rule, so restate it. */
 	.bubble:not(:popover-open) {

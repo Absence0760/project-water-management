@@ -74,7 +74,7 @@ pnpm check:bundle           # frontend gzip budget (after build:frontend); ceili
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm test:guards            # node:test suites for scripts/guards and scripts/release
-pnpm gen:help-art           # re-render the /help illustration (optional: Blender 5 + ImageMagick 7; output is committed)
+pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 ```
 
 Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main

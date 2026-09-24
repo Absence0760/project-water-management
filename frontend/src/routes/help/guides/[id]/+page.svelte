@@ -6,8 +6,10 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import Diagram from '$lib/components/help/Diagram.svelte';
+	import PictureTour from '$lib/components/help/PictureTour.svelte';
+	import RichText from '$lib/components/help/RichText.svelte';
 	import { helpFor } from '$lib/help/content';
-	import { GUIDE_KIND_TITLES, GUIDES, TAB_TITLES, guideFor, inline, sectionId } from '$lib/help/guides';
+	import { GUIDE_KIND_TITLES, GUIDES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
 
 	const guide = $derived(guideFor(page.params.id ?? ''));
 	const index = $derived(guide ? GUIDES.indexOf(guide) : -1);
@@ -18,15 +20,6 @@
 </script>
 
 <svelte:head><title>{guide ? `${guide.title} · Help` : 'Guide not found'} · Water Management</title></svelte:head>
-
-{#snippet rich(text: string)}
-	{#each inline(text) as part, i (i)}
-		{#if part.kind === 'strong'}<strong>{part.text}</strong>
-		{:else if part.kind === 'term'}<a href="{base}/help/glossary#{part.id}">{part.text}</a>
-		{:else if part.kind === 'guide'}<a href="{base}/help/guides/{part.id}">{part.text}</a>
-		{:else}{part.text}{/if}
-	{/each}
-{/snippet}
 
 <article class="guide-page">
 	<nav aria-label="Breadcrumb" class="crumbs">
@@ -65,24 +58,29 @@
 				<h2 id={sectionId(s.heading)}>{s.heading}</h2>
 				{#each s.blocks as b, i (i)}
 					{#if b.type === 'p'}
-						<p>{@render rich(b.text)}</p>
+						<p><RichText text={b.text} /></p>
 					{:else if b.type === 'steps'}
 						<ol class="steps">
-							{#each b.items as item, j (j)}<li>{@render rich(item)}</li>{/each}
+							{#each b.items as item, j (j)}<li><RichText text={item} /></li>{/each}
 						</ol>
 					{:else if b.type === 'list'}
 						<ul class="list">
-							{#each b.items as item, j (j)}<li>{@render rich(item)}</li>{/each}
+							{#each b.items as item, j (j)}<li><RichText text={item} /></li>{/each}
 						</ul>
 					{:else if b.type === 'note'}
 						<aside class="note {b.tone}" aria-label={b.tone === 'tip' ? 'Tip' : 'Caution'}>
 							<strong class="tag">{b.tone === 'tip' ? 'Tip' : 'Caution'}</strong>
-							<p>{@render rich(b.text)}</p>
+							<p><RichText text={b.text} /></p>
 						</aside>
 					{:else if b.type === 'formula'}
 						<p class="formula mono">{b.text}</p>
 					{:else if b.type === 'diagram'}
 						<Diagram id={b.id} caption={b.caption} />
+					{:else if b.type === 'picture'}
+						<figure class="picture">
+							<figcaption>{b.caption}</figcaption>
+							<PictureTour shot={b.shot} stops={b.stops} sizes="(min-width: 64rem) 46rem, 100vw" />
+						</figure>
 					{/if}
 				{/each}
 			</section>
@@ -217,6 +215,14 @@
 	}
 	.note p {
 		margin: 0.2rem 0 0;
+	}
+	.picture {
+		margin: 1rem 0 1.5rem;
+	}
+	.picture figcaption {
+		margin-bottom: 0.6rem;
+		color: var(--text-2);
+		font-size: 0.875rem;
 	}
 	.formula {
 		margin: 0.75rem 0;

@@ -37,7 +37,7 @@
 	<div class="scroll" data-scroll-region data-scroll-label="Diagram">
 		<Body />
 	</div>
-	<figcaption>{caption}</figcaption>
+	{#if caption}<figcaption>{caption}</figcaption>{/if}
 </figure>
 
 <style>

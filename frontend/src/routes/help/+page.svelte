@@ -5,9 +5,10 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import CatchmentTour from '$lib/components/help/CatchmentTour.svelte';
+	import PictureTour from '$lib/components/help/PictureTour.svelte';
 	import { HELP, helpFor } from '$lib/help/content';
 	import { GUIDES, SETUP_STEPS, TAB_TITLES, guideFor } from '$lib/help/guides';
+	import { TOUR } from '$lib/help/tour';
 
 	const concepts = GUIDES.filter((g) => g.kind === 'concept');
 	const start = GUIDES.find((g) => g.kind === 'start')!;
@@ -27,14 +28,14 @@
 	<h1>How the catchment model works</h1>
 	<p class="lede">
 		Water Management follows a catchment’s water day by day: how much the rain produces, what each farm can
-		irrigate, and whether the river keeps its ecological Reserve. Pick a numbered stop to follow the water, then
-		a guide for the details.
+		irrigate, and whether the river keeps its ecological Reserve. Follow the numbered stops, open one to see that
+		part up close, or go on to its guide.
 	</p>
 </header>
 
 <section aria-labelledby="tour-h" class="block">
 	<h2 id="tour-h" class="visually-hidden">Follow the water</h2>
-	<CatchmentTour />
+	<PictureTour shot="catchment" stops={TOUR} />
 </section>
 
 <section aria-labelledby="setup-h" class="block">
