@@ -7,6 +7,7 @@
 // matched by id first (same project, catches renames) and then by name
 // (across copies). See docs/run-comparison.md.
 import { fromEpochDay, toEpochDay } from './calendar';
+import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
 import {
 	defaultProjectSettings,
 	type CalibrationStats,
@@ -120,6 +121,13 @@ export interface RunComparison {
 		rmseM3s: MetricDelta;
 		meanObservedM3s: MetricDelta;
 		meanSimulatedM3s: MetricDelta;
+	} | null;
+	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
+	wr2012: {
+		marRatioOverlap: MetricDelta;
+		marRatioWhole: MetricDelta;
+		lowFlowRatio: MetricDelta;
+		patternCorrelation: MetricDelta;
 	} | null;
 }
 
@@ -244,6 +252,8 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 	const eb = cb?.ewrAgreement && cb.ewrAgreement.days > 0 ? cb.ewrAgreement.overall : null;
 	const ka = cal(a.summary.calibration);
 	const kb = cal(b.summary.calibration);
+	const wa = a.summary.wr2012;
+	const wb = b.summary.wr2012;
 
 	return {
 		samePeriod: a.startDate === b.startDate && a.endDate === b.endDate,
@@ -286,6 +296,15 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 						rmseM3s: metricDelta(ka?.rmseM3s, kb?.rmseM3s),
 						meanObservedM3s: metricDelta(ka?.meanObservedM3s, kb?.meanObservedM3s),
 						meanSimulatedM3s: metricDelta(ka?.meanSimulatedM3s, kb?.meanSimulatedM3s)
+					}
+				: null,
+		wr2012:
+			wa || wb
+				? {
+						marRatioOverlap: metricDelta(wa?.overlap?.ratio, wb?.overlap?.ratio),
+						marRatioWhole: metricDelta(wa?.whole.ratio, wb?.whole.ratio),
+						lowFlowRatio: metricDelta(wa?.lowFlowRatio, wb?.lowFlowRatio),
+						patternCorrelation: metricDelta(wa?.patternCorrelation, wb?.patternCorrelation)
 					}
 				: null
 	};
@@ -431,7 +450,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
-		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) }
+		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) },
+		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) }
 	};
 }
 
@@ -478,14 +498,79 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 	for (const [k, label] of Object.entries(CALIBRATION_ARRAYS)) {
 		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
+	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
-	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality', 'gr4j']);
+	const known = new Set([...Object.keys(SETTINGS_FIELDS), ...Object.keys(SETTINGS_MONTHLY), 'hiLoSplit', 'calibration', 'dataQuality', 'gr4j', 'wr2012']);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
 	}
 	const knownCal = new Set([...Object.keys(CALIBRATION_FIELDS), ...Object.keys(CALIBRATION_ARRAYS), 'summerMonths']);
 	for (const k of new Set([...Object.keys(ka), ...Object.keys(kb)])) {
 		if (!knownCal.has(k) && !same(ka[k], kb[k])) push(`calibration.${k}`, `Calibration setting "${k}" changed`);
+	}
+	return out;
+}
+
+const WR2012_REFERENCE_FIELDS: Record<string, ScalarField> = {
+	quaternary: { label: 'quaternary', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
+	areaKm2: { label: 'quaternary area', fmt: withUnit('km²') },
+	marMm3: { label: 'naturalised MAR', fmt: withUnit('Mm³/a') },
+	mapMm: { label: 'quaternary MAP', fmt: (v) => (v === null || v === undefined ? 'not entered' : `${fmtValue(v)} mm`) },
+	periodStart: { label: 'reference period start', fmt: (v) => fmtWaterYear(v) },
+	periodEnd: { label: 'reference period end', fmt: (v) => fmtWaterYear(v) },
+	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') }
+};
+const WR2012_FLAG_FIELDS: Record<string, string> = {
+	notePct: 'note threshold',
+	queryPct: 'query threshold',
+	queryWetterPct: 'query-if-wetter threshold',
+	unusablePct: 'not-usable threshold'
+};
+const SCALING_LABEL: Record<string, string> = { area: 'area ratio', areaRain: 'area and rainfall ratio' };
+
+/** A water year labelled by the calendar year it starts in: 1990 → "1990/91". */
+function fmtWaterYear(v: unknown): string {
+	return typeof v === 'number' && Number.isInteger(v) ? `${v}/${String((v + 1) % 100).padStart(2, '0')}` : fmtValue(v);
+}
+
+/** Every WR2012 input: the reference (each field and month), scaling, dry-season months, thresholds and the calibration penalty. */
+function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Settings> | undefined): InputChange[] {
+	const out: InputChange[] = [];
+	const push = (kind: InputChange['kind'], subject: string, text: string) => out.push({ area: 'settings', kind, subject, text });
+	const ra = a?.reference ?? null;
+	const rb = b?.reference ?? null;
+	const describe = (r: Wr2012Reference) => `${r.quaternary}, MAR ${fmtValue(r.marMm3)} Mm³/a over ${fmtValue(r.areaKm2)} km², ${fmtWaterYear(r.periodStart)} – ${fmtWaterYear(r.periodEnd)}`;
+	if (!ra && rb) push('added', 'WR2012 reference', `WR2012 reference added (${describe(rb)})`);
+	else if (ra && !rb) push('removed', 'WR2012 reference', `WR2012 reference removed (was ${describe(ra)})`);
+	else if (ra && rb) {
+		const x = ra as unknown as Record<string, unknown>;
+		const y = rb as unknown as Record<string, unknown>;
+		for (const [k, f] of Object.entries(WR2012_REFERENCE_FIELDS)) {
+			if (!same(x[k] ?? null, y[k] ?? null)) push('changed', `WR2012 ${f.label}`, `WR2012 ${f.label}: ${f.fmt(x[k])} → ${f.fmt(y[k])}`);
+		}
+		const c = monthlyChange(ra.monthlyMm3, rb.monthlyMm3, 'Mm³');
+		if (c) push('changed', 'WR2012 monthly means', `WR2012 monthly means: ${c}`);
+	}
+	if (!same(a?.scaling, b?.scaling)) {
+		const f = (v: unknown) => SCALING_LABEL[String(v)] ?? String(v);
+		push('changed', 'WR2012 scaling', `WR2012 scaling: ${f(a?.scaling)} → ${f(b?.scaling)}`);
+	}
+	if (!same(a?.lowFlowMonths ? monthSet(a.lowFlowMonths) : null, b?.lowFlowMonths ? monthSet(b.lowFlowMonths) : null)) {
+		const f = (v: number[] | null | undefined) => (v?.length ? describeCalendarMonths(v) : 'from the run');
+		push('changed', 'WR2012 dry-season months', `WR2012 dry-season months: ${f(a?.lowFlowMonths)} → ${f(b?.lowFlowMonths)}`);
+	}
+	const fa = (a?.flags ?? {}) as Record<string, unknown>;
+	const fb = (b?.flags ?? {}) as Record<string, unknown>;
+	for (const [k, label] of Object.entries(WR2012_FLAG_FIELDS)) {
+		if (!same(fa[k], fb[k])) push('changed', `WR2012 ${label}`, `WR2012 ${label}: ${withUnit('%')(fa[k])} → ${withUnit('%')(fb[k])}`);
+	}
+	const pa = a?.calibrationPenalty;
+	const pb = b?.calibrationPenalty;
+	if (!same(pa?.enabled, pb?.enabled)) {
+		push('changed', 'WR2012 calibration penalty', `WR2012 calibration penalty: ${pa?.enabled ? 'on' : 'off'} → ${pb?.enabled ? 'on' : 'off'}`);
+	}
+	if (!same(pa?.weight, pb?.weight)) {
+		push('changed', 'WR2012 calibration penalty weight', `WR2012 calibration penalty weight: ${fmtValue(pa?.weight)} → ${fmtValue(pb?.weight)}`);
 	}
 	return out;
 }

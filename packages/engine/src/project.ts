@@ -5,6 +5,7 @@ import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
+import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -114,6 +115,12 @@ export interface ProjectSettings {
 	calibrationFlowKind: CalibrationFlowKind | null;
 	/** Thresholds of the input data-quality checks (./quality.ts). They never change model results. */
 	dataQuality: DataQualitySettings;
+	/**
+	 * Optional WR2012 check (./reference/wr2012.ts): the quaternary's
+	 * naturalised flow, entered by the user, compared with simulated natural
+	 * flow in every run. reference null = no check.
+	 */
+	wr2012: Wr2012Settings;
 }
 
 /**
@@ -194,7 +201,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationStart: null,
 		calibrationEnd: null,
 		calibrationFlowKind: null,
-		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 }
+		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 },
+		wr2012: defaultWr2012Settings()
 	};
 }
 
@@ -575,6 +583,11 @@ export interface RunSummary {
 	curtailment?: CurtailmentSummary;
 	/** EWR compliance grid; absent on runs saved by engines before 0.3.0. */
 	ewrCompliance?: EwrCompliance;
+	/**
+	 * Simulated natural flow against the entered WR2012 reference (engine ≥
+	 * 0.6.0); absent when the project has no reference, and on older runs.
+	 */
+	wr2012?: Wr2012Report;
 	/**
 	 * Input data-quality checks (engine ≥ 0.3.1). observedAgreement is null when
 	 * the project doesn't have both observed flow records. seriesChecks and

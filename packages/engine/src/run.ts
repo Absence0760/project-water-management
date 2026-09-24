@@ -26,6 +26,7 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
+import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
 import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	CALIBRATION_FLOW_KINDS,
@@ -72,6 +73,17 @@ export function runModelWith(
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
+	// WR2012 flows are naturalised: compare them with natural flow, never the outflow.
+	const wr2012 = wr2012Report(
+		{
+			settings: settings.wr2012,
+			startDate,
+			natural,
+			areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
+			rainMm: runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days)
+		},
+		warnings
+	);
 
 	// --- network ----------------------------------------------------------------
 	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings);
@@ -259,6 +271,7 @@ export function runModelWith(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
+			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas },
 			warnings
 		}
@@ -562,6 +575,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
 	s.panCoefficient = monthly(s.panCoefficient, 'pan coefficient', warnings);
 	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
+	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (s.calibrationFlowKind != null && !CALIBRATION_FLOW_KINDS.includes(s.calibrationFlowKind)) {

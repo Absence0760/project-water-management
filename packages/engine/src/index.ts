@@ -9,6 +9,7 @@ export * from './run';
 export * from './runoff';
 export * from './calibrate/calibrate';
 export * from './calibrate/objective';
+export * from './reference/wr2012';
 export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './calibrate/dds';
 export { Rng } from './random';
 export * from './quality';

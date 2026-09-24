@@ -158,6 +158,25 @@ describe('compareRuns', () => {
 		expect(c.onlyInB).toEqual([]);
 	});
 
+	it('compares the WR2012 ratios when either run has the check, else null', () => {
+		expect(compareRuns(run(summary([])), run(summary([]))).wr2012).toBeNull();
+		const w = (overlapRatio: number | null, whole: number) =>
+			({
+				overlap: overlapRatio === null ? null : { years: [2001], simulatedMarMm3: 1, ratio: overlapRatio },
+				whole: { days: 365, simulatedMarMm3: 1, ratio: whole },
+				lowFlowRatio: 0.8,
+				patternCorrelation: 0.9
+			}) as unknown as RunSummary['wr2012'];
+		const c = compareRuns(run(summary([], { wr2012: w(1.3, 1.25) })), run(summary([], { wr2012: w(1.05, 1.02) })));
+		expect(c.wr2012!.marRatioOverlap.a).toBe(1.3);
+		expect(c.wr2012!.marRatioOverlap.delta).toBeCloseTo(-0.25, 12);
+		expect(c.wr2012!.marRatioWhole.delta).toBeCloseTo(-0.23, 12);
+		expect(c.wr2012!.lowFlowRatio.delta).toBe(0);
+		const one = compareRuns(run(summary([])), run(summary([], { wr2012: w(null, 1.1) })));
+		expect(one.wr2012!.marRatioOverlap).toEqual({ a: null, b: null, delta: null });
+		expect(one.wr2012!.marRatioWhole).toEqual({ a: null, b: 1.1, delta: null });
+	});
+
 	it('lists farms present in only one run and totals over each run’s own farms', () => {
 		const a = run(summary([farm('1', 'Rooikloof'), farm('2', 'Old farm', { avgDemandM3Day: 500, avgSuppliedM3Day: 500, avgDeficitM3Day: 0, fractionSupplied: 1 })]));
 		const b = run(summary([farm('1', 'Rooikloof'), farm('3', 'New farm', { avgDemandM3Day: 2000, avgSuppliedM3Day: 1000, avgDeficitM3Day: 1000, fractionSupplied: 0.5 })]));
@@ -470,6 +489,67 @@ describe('diffInputs', () => {
 		// Different dates: only the date change (the hash can't isolate shared days).
 		const longer = snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 367, valuesSha256: 'cc' } } });
 		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)']);
+	});
+
+	it('describes every WR2012 input: the reference (each field and month), scaling, dry season, thresholds and penalty', () => {
+		const monthly = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+		const reference = {
+			quaternary: 'Z99A',
+			areaKm2: 100,
+			marMm3: 12,
+			monthlyMm3: monthly,
+			periodStart: 1990,
+			periodEnd: 2009,
+			mapMm: null,
+			source: 'Synthetic table 1'
+		};
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.wr2012 = { ...defaultProjectSettings().wr2012, reference };
+		expect(texts(a, b)).toEqual(['WR2012 reference added (Z99A, MAR 12 Mm³/a over 100 km², 1990/91 – 2009/10)']);
+		expect(texts(b, a)).toEqual(['WR2012 reference removed (was Z99A, MAR 12 Mm³/a over 100 km², 1990/91 – 2009/10)']);
+
+		const c = structuredClone(b);
+		c.settings.wr2012 = {
+			reference: {
+				quaternary: 'Z99B',
+				areaKm2: 120,
+				marMm3: 12.6,
+				monthlyMm3: [1.6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+				periodStart: 1995,
+				periodEnd: 2010,
+				mapMm: 650,
+				source: 'Synthetic table 2'
+			},
+			scaling: 'areaRain',
+			lowFlowMonths: [12, 1, 2],
+			flags: { notePct: 5, queryPct: 20, queryWetterPct: 10, unusablePct: 40 },
+			calibrationPenalty: { enabled: true, weight: 1 }
+		};
+		expect(texts(b, c)).toEqual([
+			'WR2012 quaternary: "Z99A" → "Z99B"',
+			'WR2012 quaternary area: 100 km² → 120 km²',
+			'WR2012 naturalised MAR: 12 Mm³/a → 12.6 Mm³/a',
+			'WR2012 quaternary MAP: not entered → 650 mm',
+			'WR2012 reference period start: 1990/91 → 1995/96',
+			'WR2012 reference period end: 2009/10 → 2010/11',
+			'WR2012 source: "Synthetic table 1" → "Synthetic table 2"',
+			'WR2012 monthly means: Oct 1 → 1.6 Mm³',
+			'WR2012 scaling: area ratio → area and rainfall ratio',
+			'WR2012 dry-season months: from the run → Dec–Feb',
+			'WR2012 note threshold: 10 % → 5 %',
+			'WR2012 query threshold: 25 % → 20 %',
+			'WR2012 query-if-wetter threshold: 15 % → 10 %',
+			'WR2012 not-usable threshold: 50 % → 40 %',
+			'WR2012 calibration penalty: off → on',
+			'WR2012 calibration penalty weight: 0.5 → 1'
+		]);
+		// Every change sits in the settings area.
+		expect(diffInputs(b, c).every((x) => x.area === 'settings')).toBe(true);
+		// A run saved before the WR2012 check existed reads as the defaults: no change.
+		const old = structuredClone(a);
+		delete (old.settings as Record<string, unknown>).wr2012;
+		expect(texts(old, a)).toEqual([]);
 	});
 
 	it('tolerates missing snapshots (runs stored before a field existed)', () => {
