@@ -1,7 +1,7 @@
 // Model entry point: runModel(input) → daily series + summary for a project.
 //
 // Pipeline (b023 sheet in brackets):
-//   1. natural flow from rain                     [Flow data]            → ./flow.ts
+//   1. natural flow from rain                     [Flow data]            → ./runoff (legacy: ./flow.ts)
 //   2. per-farm share of flow and EWR             [Fragmented flow/EWR]  → ./network/shares.ts
 //   3. daily net irrigation demand                [Irrigation Demand]    → ./demand.ts
 //   4. transfers + farm dams, routed downstream   [Transfers], Elements  → ./network/simulate.ts
@@ -19,13 +19,13 @@ import {
 } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { grossFarmDemandM3PerDay, netDailyDemandM3, type Crop } from './demand';
-import { computeNaturalFlow, recessionTableWarnings } from './flow';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { ewrCompliance } from './network/ewr';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
+import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	CALIBRATION_FLOW_KINDS,
 	defaultProjectSettings,
@@ -43,60 +43,17 @@ export const ENGINE_VERSION = '0.4.0';
 
 const SEC_PER_DAY = 86_400;
 
-/** Natural flow for the run window, plus any extra catchment series to report. */
-export interface NaturalFlowInput {
-	naturalFlowM3Day: ArrayLike<number>;
-	series?: { key: string; label: string; unit: string; values: number[] }[];
-	/** Problems found while producing the natural flow (added to the run's warnings). */
-	warnings?: string[];
-}
+export type { NaturalFlowInput, RunContext } from './runoff';
+export { resolveCatchmentAreaKm2 } from './runoff';
 
-/** Explicit catchment area, else the sum of the farm areas (the workbook's rFarmSpec_AreaTotal). */
-export function resolveCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }, input: ModelInput): number {
-	if (cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0) return cal.catchmentAreaKm2;
-	return input.model.nodes.filter((n) => n.kind === 'farm').reduce((sum, n) => sum + (n.areaKm2 || 0), 0);
-}
-
-function withCatchmentArea<T extends { catchmentAreaKm2: number | null }>(cal: T, input: ModelInput): T & { catchmentAreaKm2: number } {
-	const area = resolveCatchmentAreaKm2(cal, input);
-	if (!(area > 0)) throw new Error('catchment area is 0 — give the farms an area (km²) or set calibration.catchmentAreaKm2');
-	return { ...cal, catchmentAreaKm2: area };
-}
-
-/** Run the full model: natural flow from rain (./flow.ts), then the network. */
+/** Run the full model: natural flow from the selected runoff model (./runoff), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
-	return runModelWith(input, (ctx) => {
-		const nf = computeNaturalFlow(withCatchmentArea(ctx.settings.calibration, input), {
-			startDate: ctx.startDate,
-			days: ctx.days,
-			rainCatchmentMm: ctx.aligned('rain_catchment_mm'),
-			rainChirpsMm: ctx.aligned('rain_chirps_mm'),
-			rainForecastMm: ctx.aligned('rain_forecast_mm'),
-			flowPitmanM3s: ctx.aligned('flow_pitman_m3s')
-		});
-		const warnings = recessionTableWarnings(ctx.settings.calibration);
-		// [Flow data] AB falls back to Pitman whenever the rain model gives 0, so
-		// one series can mix two sources (quirk Q7, audit W5).
-		if (nf.pitmanDays > 0) {
-			warnings.push(
-				`${nf.pitmanDays} days of natural flow are Pitman flow: the rain model gave 0 on those days, so the series mixes two sources`
-			);
-		}
-		return { ...nf, warnings };
-	});
-}
-
-export interface RunContext {
-	settings: ProjectSettings;
-	startDate: string;
-	days: number;
-	/** A project series cut/padded to the run window (null where missing). */
-	aligned(kind: SeriesKind): (number | null)[];
+	return runModelWith(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx));
 }
 
 /**
  * Run the network with natural flow supplied by `naturalFlow` instead of the
- * rain model. runModel uses this with ./flow.ts; the workbook regression test
+ * rain model. runModel uses this with the selected runoff model; the workbook regression test
  * uses it to feed the workbook's own natural flow and so test the network on
  * its own.
  */
@@ -544,6 +501,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		warnings.push(`calibration window ${s.calibrationStart} … ${s.calibrationEnd} ends before it starts; scoring the whole record`);
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
+	}
+	if (!(RUNOFF_MODELS as readonly string[]).includes(s.runoffModel)) {
+		warnings.push(`unknown runoff model "${String(s.runoffModel)}"; using ${d.runoffModel}`);
+		s.runoffModel = d.runoffModel;
 	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);

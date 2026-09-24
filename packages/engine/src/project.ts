@@ -3,6 +3,7 @@
 // field maps onto the b023 workbook.
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
+import type { RunoffModelId } from './runoff/types';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -62,6 +63,12 @@ export interface ProjectSettings {
 	flowShareMethod: FlowShareMethod;
 	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
 	hiLoSplit: { hi: number; lo: number };
+	/**
+	 * Rain → natural-flow model (./runoff). 'legacy' = the b023 recession model
+	 * (./flow.ts), the default until the hydrologist signs off its replacement
+	 * (issue #4); then the setting is removed with the legacy model.
+	 */
+	runoffModel: RunoffModelId;
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
@@ -119,6 +126,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
+		runoffModel: 'legacy',
 		calibration: {
 			a: 0.09,
 			b: 1.2,

@@ -43,3 +43,17 @@ describe('mergeSettings', () => {
 		});
 	});
 });
+
+describe('SettingsPatch.runoffModel', () => {
+	const ok = (runoffModel: unknown) => SettingsPatch.safeParse({ runoffModel }).success;
+
+	it('accepts the models the engine has, and nothing else', () => {
+		expect(ok(defaultProjectSettings().runoffModel)).toBe(true);
+		expect(ok('legacy')).toBe(true);
+		for (const bad of ['pitman', '', null, 1]) expect(ok(bad), JSON.stringify(bad)).toBe(false);
+	});
+
+	it('defaults to legacy for settings stored before it existed', () => {
+		expect(mergeSettings({}).runoffModel).toBe('legacy');
+	});
+});

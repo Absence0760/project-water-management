@@ -1,4 +1,4 @@
-import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, type ProjectSettings } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, defaultProjectSettings, RUNOFF_MODELS, type ProjectSettings } from '@water-management/engine';
 import { z } from 'zod';
 
 type Json = Record<string, unknown>;
@@ -33,6 +33,7 @@ export const SettingsPatch = z
 		apanMm: monthly,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
+		runoffModel: z.enum(RUNOFF_MODELS),
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
 		simulationStart: isoDate.nullable(),

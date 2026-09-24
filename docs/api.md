@@ -112,6 +112,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   flow_pitman_m3s | null`. `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366); any subset may be sent.
+  `runoffModel` picks the rain → natural-flow model: `legacy` (the b023
+  recession model, the default). Issue #4 adds `gr4j`.
 
 ### Members
 

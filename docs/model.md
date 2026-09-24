@@ -130,8 +130,10 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
-This is the calibrated rain→runoff routine. One row runs per day, and each row
-reads the previous row. Parameters come from `[Flow Calibration Cfg]`. The
+This is the calibrated rain→runoff routine, the engine's `legacy` runoff model
+(`settings.runoffModel = 'legacy'`, the default; `packages/engine/src/runoff/`
+holds the seam every runoff model plugs into, and issue #4 replaces this one).
+One row runs per day, and each row reads the previous row. Parameters come from `[Flow Calibration Cfg]`. The
 defaults from the blank workbook are shown.
 
 | Parameter | Blank default | Meaning |

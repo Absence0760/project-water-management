@@ -551,6 +551,17 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Help (Calibration function; Flow Calibration Cfg)'
 	},
 	{
+		id: 'runoff-model',
+		term: 'Runoff model',
+		short: 'Which model turns rain into natural flow. Legacy is the b023 recession model; it stays the default until it is replaced.',
+		long: 'Legacy is the workbook’s empirical recession model, ported unchanged. The engine audit found that it does not conserve water: one small storm can return several times its own volume as flow (docs/engine-audit.md H1).\n\nThe setting only changes how rain becomes natural flow. Flow shares, farms, dams, transfers and the EWR are the same whichever model made the flow, so two runs that differ only in the runoff model compare directly.',
+		category: 'flow',
+		aliases: ['rain-runoff model', 'rainfall-runoff', 'legacy model'],
+		fields: ['settings.runoffModel'],
+		related: ['calibration', 'natural-flow'],
+		source: 'docs/model.md §2.4; issue #4'
+	},
+	{
 		id: 'catchment-area',
 		term: 'Catchment area (rain)',
 		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the farm areas.',

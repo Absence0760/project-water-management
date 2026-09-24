@@ -342,6 +342,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
+	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : String(v)) },
 	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
 	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
