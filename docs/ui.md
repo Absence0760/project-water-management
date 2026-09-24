@@ -97,12 +97,15 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
-- **Table layout**: the whole table, through the **In use** share and the ✕
-  column, fits a 1440px screen without sideways scrolling. Field headers wrap
-  (e.g. "Upstream inflow to dam" over three lines) instead of setting the
-  column width, cells are tighter, and the 0–100 % columns are narrower than
-  the area and volume columns. Narrower screens still scroll the table
-  sideways with the Name column pinned.
+- **Table layout**: sixteen fields (with dam evaporation, seepage and
+  irrigation efficiency) are wider than a laptop screen, so the table scrolls
+  sideways inside its own box, never the page. The **Name** column is pinned
+  on the left and the **✕** remove column on the right, so every row stays
+  named and removable at any scroll position. Field headers wrap (e.g.
+  "Upstream inflow to dam" over three lines) instead of setting the column
+  width, cells are tighter, and the 0–100 % columns (every cell of them,
+  not-used and footer cells included) are narrower than the area and volume
+  columns.
 - **One node layout**: the node picker (‹ select ›) is sticky under the app
   header, so the node being edited stays named and ‹ › stay in reach while
   scrolling a long farm form; **+ Add node** sits just below it and scrolls

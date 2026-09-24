@@ -180,7 +180,7 @@
 						{#each groupSpans as g (g.group)}
 							<th scope="colgroup" colspan={g.count + (g.group === 'share' ? 1 : 0)} class="grp">{GROUPS[g.group]}</th>
 						{/each}
-						{#if !readonly}<th scope="col" rowspan="2"><span class="visually-hidden">Remove</span></th>{/if}
+						{#if !readonly}<th scope="col" rowspan="2" class="rm"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
 					<tr>
 						{#each NODE_FIELDS as f (f.key)}
@@ -357,9 +357,9 @@
 		border-color: var(--accent);
 		color: var(--accent);
 	}
-	/* Fit the whole table (through "In use" and ✕) on a 1440px screen: field
-	   headers wrap instead of setting the column width, cells are tighter,
-	   and 0–100 % columns are narrower than the volume columns. */
+	/* Keep the table as narrow as it can readably be: field headers wrap
+	   instead of setting the column width, cells are tighter, and 0–100 %
+	   columns are narrower than the volume columns. */
 	.net thead th {
 		white-space: normal;
 	}
@@ -415,6 +415,21 @@
 	.net tr.sel {
 		background: var(--accent-soft);
 	}
+	/* Remove stays pinned on the right as the name is on the left: with sixteen
+	   fields the table scrolls sideways inside its box, and each row's action
+	   must stay in reach. */
+	.net .rm {
+		position: sticky;
+		right: 0;
+		z-index: 1;
+		background: var(--surface);
+		box-shadow: inset 1px 0 0 var(--border);
+	}
+	.net thead th.rm,
+	.net tfoot td.rm {
+		background: var(--surface-2);
+	}
+	.net tr.sel td.rm,
 	.net tr.sel th.sticky {
 		background: var(--accent-soft);
 	}
