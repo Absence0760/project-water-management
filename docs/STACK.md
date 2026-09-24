@@ -63,7 +63,7 @@ pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inve
 pnpm test:e2e               # Playwright, 48 specs incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
-pnpm seed:demo              # seed:examples + the Client Catchment client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
+pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
@@ -72,6 +72,7 @@ pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production ga
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
+pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm test:guards            # node:test suites for scripts/guards and scripts/release
 ```
 
@@ -91,7 +92,7 @@ pnpm setup
 pnpm dev
 ```
 
-The walkthrough, including how to import client catchment, is in
+The walkthrough, including how to import the client catchment, is in
 [run-locally.md](./run-locally.md). Personal overrides go in a gitignored
 `<workspace>/.env.development.local`. Never edit the committed file for those.
 

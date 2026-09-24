@@ -154,6 +154,19 @@ readable by anyone. The rules:
   fixtures are **synthetic**: made-up farm names, made-up numbers. Never paste
   real farm names, owners, dam sizes or series into fixtures, test names, code
   comments, commit messages or docs examples.
+- **Client terms guard.** The client's catchment, farm and workbook names
+  (and the gauge and quaternary codes that pinpoint it) are listed in
+  `../infra-secrets/water-management/client-terms.txt`, outside this repo,
+  because the list itself names the client. In the repo the client's model is
+  "the client catchment", its farms "Farm A…D", and the extracted fixtures
+  live in `data/client-catchment/`. `scripts/guards/check_client_terms.mjs`
+  checks against the list: pre-commit (staged changes) and commit-msg hooks
+  via `pre-commit install`, `pnpm check:terms` for every tracked file and
+  path, and `--history` for every ref. It is a no-op without the list (CI,
+  outside contributors) and never prints a term, only the file, line and
+  term number. Add a term to the list the moment a new client name turns up.
+  The history was rewritten once (2026-09, `git filter-repo --replace-text`)
+  to take the names out of every past commit.
 - **Local defaults only.** The committed `.env.development` files hold throwaway
   docker credentials and a dev-only JWT secret. That is safe because they grant
   nothing outside a local container. `pnpm check:env` (CI job
