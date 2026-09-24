@@ -1,13 +1,7 @@
 // The WR2012 check in Settings (issue #4 phase 8): an empty reference to fill
 // in, the checks that block Save (the engine's own plausibility rules, which
 // the backend applies too), and unit helpers for the form.
-import {
-	WR2012_MAX_PENALTY_WEIGHT,
-	wr2012FlagIssues,
-	wr2012ReferenceIssues,
-	type Wr2012Reference,
-	type Wr2012Settings
-} from '@water-management/engine';
+import { wr2012FlagIssues, wr2012PenaltyIssues, wr2012ReferenceIssues, type Wr2012Reference, type Wr2012Settings } from '@water-management/engine';
 
 /** A reference as the form edits it: numbers may still be blank (null). */
 export type Wr2012Draft = Omit<Wr2012Reference, 'areaKm2' | 'marMm3' | 'monthlyMm3' | 'periodStart' | 'periodEnd'> & {
@@ -55,10 +49,7 @@ export function wr2012Errors(ws: Wr2012Settings | { reference: Wr2012Draft | nul
 	}
 	if (ws.lowFlowMonths && ws.lowFlowMonths.length === 0) out.lowFlowMonths = 'Pick at least one dry-season month, or untick “Choose the dry-season months”.';
 	for (const i of wr2012FlagIssues(ws.flags)) out[i.field] ??= i.message;
-	const w = ws.calibrationPenalty.weight;
-	if (!(typeof w === 'number' && w >= 0 && w <= WR2012_MAX_PENALTY_WEIGHT)) {
-		out.weight = `The penalty weight must be from 0 to ${WR2012_MAX_PENALTY_WEIGHT}.`;
-	}
+	for (const i of wr2012PenaltyIssues(ws.calibrationPenalty)) out[i.field] ??= i.message;
 	return out;
 }
 

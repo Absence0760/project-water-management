@@ -29,11 +29,20 @@ export function fitValidationRows(ra: FitRecord | null, rb: FitRecord | null): F
 	return [
 		{ label: 'Fit', a: ra ? describeFitRecord(ra) : NONE, b: rb ? describeFitRecord(rb) : NONE },
 		{ label: 'Objective', ...both((r) => objectiveName(r.objective)) },
+		{ label: 'Bounds', ...both((r) => (r.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : 'wide')) },
 		{ label: 'Calibration period (in-sample)', ...both((r) => score(r.fit.scores[r.objective])) },
 		{ label: 'Split-sample: other half', ...both((r) => at(r, (x) => x.splitSample?.validation)) },
 		{ label: 'Dry → wet: wet years', ...both((r) => at(r, (x) => x.differential?.validation)) },
 		{ label: 'Independent record', ...both((r) => at(r, (x) => x.independentRecord?.validation)) },
-		{ label: 'WR2012 MAR penalty', ...both((r) => (r.marPenalty ? `weight ${r.marPenalty.weight}, MAR ${score(r.marPenalty.marRatio)} × WR2012` : 'off')) },
+		{
+			label: 'WR2012 MAR penalty',
+			...both((r) => {
+				const p = r.marPenalty;
+				if (!p) return 'off';
+				const target = p.marLowMm3 !== null && p.marHighMm3 !== null ? `${p.marLowMm3}–${p.marHighMm3} Mm³/a band` : 'WR2012';
+				return `weight ${p.weight}, MAR ${score(p.marRatio)} × ${target}`;
+			})
+		},
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) }
 	];
 }

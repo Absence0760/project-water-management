@@ -55,6 +55,7 @@
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
 			<div><dt>Objective</dt><dd>{objectiveName(record.objective)}</dd></div>
+			<div><dt>Bounds</dt><dd>{record.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : 'wide'}</dd></div>
 			<div><dt>Seed</dt><dd>{record.seed}</dd></div>
 			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>
@@ -69,10 +70,11 @@
 			</div>
 			{#if record.marPenalty}
 				{@const m = record.marPenalty}
+				{@const target = m.marLowMm3 !== null && m.marHighMm3 !== null ? `${fmtNum(m.marLowMm3, 3)}–${fmtNum(m.marHighMm3, 3)} Mm³/a band` : 'WR2012'}
 				<div>
 					<dt>WR2012 MAR penalty</dt>
 					<dd>
-						weight {fmtNum(m.weight, 2)}: simulated MAR {fmtNum(m.marRatio, 2)} × WR2012{m.unpenalised ? ` (${fmtNum(m.unpenalised.marRatio, 2)} × without the penalty)` : ''}
+						weight {fmtNum(m.weight, 2)}: simulated MAR {fmtNum(m.marRatio, 2)} × {target}{m.unpenalised ? ` (${fmtNum(m.unpenalised.marRatio, 2)} × without the penalty)` : ''}
 					</dd>
 				</div>
 			{/if}

@@ -6,10 +6,38 @@
 	the form and saves it.
 -->
 <script lang="ts">
-	import { OBJECTIVES, type CalibrationFlowKind, type CalibrationProgress, type CalibrationReport, type FitRecord, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
+	import {
+		CALIBRATION_BOUNDS,
+		OBJECTIVES,
+		type CalibrationBounds,
+		type CalibrationFlowKind,
+		type CalibrationProgress,
+		type CalibrationReport,
+		type FitRecord,
+		type ObjectiveId,
+		type ProjectModel,
+		type ProjectSettings,
+		type RunoffModelId
+	} from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { api } from '$lib/api';
-	import { fitInput, fitParams, fitRecordFor, marPenaltyOn, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, totalRuns, validationRecordOptions } from '$lib/calibration/fit';
+	import {
+		BOUNDS_LABEL,
+		boundsHint,
+		fitInput,
+		fitParams,
+		fitRecordFor,
+		marPenaltyOn,
+		objectiveName,
+		progressFraction,
+		SCORE_ROWS,
+		scoreColumns,
+		SEED_MAX,
+		seedError,
+		STAGE_LABEL,
+		totalRuns,
+		validationRecordOptions
+	} from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
@@ -48,6 +76,7 @@
 
 	const uid = $props.id();
 	let objective = $state<ObjectiveId>('kgePrime');
+	let bounds = $state<CalibrationBounds>('wide');
 	let budget = $state<number | null>(1500);
 	let validate = $state(true);
 	// Shown and recorded: the same seed, inputs and engine version reproduce the fit.
@@ -96,7 +125,7 @@
 			const input = fitInput(server, form, model?.());
 			const context = { settings: form, validate, validationRecord: chosenRecord };
 			status = 'running';
-			handle = startFit({ input, model: runoffModel, objective, budget, free, validate, seed, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
+			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
 			ran = context;
 			status = 'done';
@@ -143,6 +172,13 @@
 				<select id="{uid}-obj" bind:value={objective} disabled={status === 'running'}>
 					{#each OBJECTIVES as o (o)}<option value={o}>{objectiveName(o)}</option>{/each}
 				</select>
+			</div>
+			<div class="field">
+				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
+				<select id="{uid}-bounds" bind:value={bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
+				</select>
+				<span class="hint" id="{uid}-bounds-h">{boundsHint(bounds)}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-budget">Model runs per fit</label>
@@ -218,7 +254,7 @@
 			<div class="result" aria-live="polite">
 				<h4>Result</h4>
 				<p class="small muted">
-					{objectiveName(report.objective)} · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the {report.simulatedKey === 'natural_flow' ? 'natural flow' : 'simulated outflow'}
+					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the {report.simulatedKey === 'natural_flow' ? 'natural flow' : 'simulated outflow'}
 				</p>
 				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
 				{#if stale}<p class="alert alert-info small">This fit is for the other runoff model; switch back to apply it.</p>{/if}

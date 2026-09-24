@@ -26,6 +26,7 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 	return {
 		model: 'gr4j',
 		objective: 'kgePrime',
+		bounds: 'wide',
 		budget: 100,
 		seed: 1,
 		free: ['x1', 'x3', 'x4'],
@@ -89,10 +90,10 @@ describe('progress', () => {
 	it('the penalty applies only when switched on and a reference is entered', () => {
 		const s = defaultProjectSettings();
 		expect(marPenaltyOn(s)).toBe(false);
-		expect(marPenaltyOn({ wr2012: { ...s.wr2012, calibrationPenalty: { enabled: true, weight: 1 } } })).toBe(false);
+		expect(marPenaltyOn({ wr2012: { ...s.wr2012, calibrationPenalty: { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null } } })).toBe(false);
 		const reference = { quaternary: 'Z99A', areaKm2: 1, marMm3: 1, monthlyMm3: new Array(12).fill(1 / 12), periodStart: 1990, periodEnd: 2000, mapMm: null, source: 's' };
 		expect(marPenaltyOn({ wr2012: { ...s.wr2012, reference } })).toBe(false);
-		expect(marPenaltyOn({ wr2012: { ...s.wr2012, reference, calibrationPenalty: { enabled: true, weight: 1 } } })).toBe(true);
+		expect(marPenaltyOn({ wr2012: { ...s.wr2012, reference, calibrationPenalty: { enabled: true, weight: 1, marLowMm3: null, marHighMm3: null } } })).toBe(true);
 	});
 });
 

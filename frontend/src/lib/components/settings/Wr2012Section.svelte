@@ -33,6 +33,10 @@
 	const sum = $derived(ref ? monthlySum(ref.monthlyMm3) : null);
 	const areaFactor = $derived(ref?.areaKm2 ? modelAreaKm2 / ref.areaKm2 : null);
 	let ownMonths = $state(value.lowFlowMonths !== null);
+	let ownBand = $state(value.calibrationPenalty.marLowMm3 !== null || value.calibrationPenalty.marHighMm3 !== null);
+	// Both blank counts as "no band" (a single target) at the engine level, so it never blocks Save;
+	// this is just a nudge while the checkbox is ticked and nothing has been entered yet.
+	const bandBlank = $derived(ownBand && value.calibrationPenalty.marLowMm3 === null && value.calibrationPenalty.marHighMm3 === null);
 
 	$effect(() => {
 		const n = Object.keys(errors).length;
@@ -47,6 +51,14 @@
 	function setOwnMonths(on: boolean) {
 		ownMonths = on;
 		value.lowFlowMonths = on ? (value.lowFlowMonths ?? [12, 1, 2]) : null;
+	}
+
+	function setOwnBand(on: boolean) {
+		ownBand = on;
+		if (!on) {
+			value.calibrationPenalty.marLowMm3 = null;
+			value.calibrationPenalty.marHighMm3 = null;
+		}
 	}
 
 	const err = (k: string) => errors[k];
@@ -210,8 +222,46 @@
 				<div class="field weight">
 					<label for="{uid}-w">Penalty weight</label>
 					<NumberInput id="{uid}-w" min={0} max={10} step={0.1} disabled={readonly} bind:value={value.calibrationPenalty.weight} aria-describedby="{uid}-w-h" />
-					<span class="hint" id="{uid}-w-h">{#if err('weight')}<span class="err">{err('weight')}</span>{:else}Loss + weight × |ln(simulated MAR ÷ WR2012 MAR)|. Default 0.5.{/if}</span>
+					<span class="hint" id="{uid}-w-h">{#if err('weight')}<span class="err">{err('weight')}</span>{:else}Loss + weight × |ln(simulated MAR ÷ target)|. Default 0.5.{/if}</span>
 				</div>
+				<label class="check">
+					<input type="checkbox" disabled={readonly} checked={ownBand} onchange={(e) => setOwnBand(e.currentTarget.checked)} />
+					Use a MAR band instead of one target
+				</label>
+				{#if ownBand}
+					<div class="fields">
+						<div class="field">
+							<label for="{uid}-lo">Band low <span class="u">(Mm³/a)</span></label>
+							<NumberInput
+								id="{uid}-lo"
+								min={0}
+								nullable
+								disabled={readonly}
+								bind:value={value.calibrationPenalty.marLowMm3}
+								aria-invalid={err('marLowMm3') ? 'true' : undefined}
+								aria-describedby="{uid}-band-h"
+							/>
+						</div>
+						<div class="field">
+							<label for="{uid}-hi">Band high <span class="u">(Mm³/a)</span></label>
+							<NumberInput
+								id="{uid}-hi"
+								min={0}
+								nullable
+								disabled={readonly}
+								bind:value={value.calibrationPenalty.marHighMm3}
+								aria-invalid={err('marHighMm3') ? 'true' : undefined}
+								aria-describedby="{uid}-band-h"
+							/>
+						</div>
+					</div>
+					<span class="hint" id="{uid}-band-h">
+						{#if err('marLowMm3')}<span class="err">{err('marLowMm3')}</span>{:else if err('marHighMm3')}<span class="err">{err('marHighMm3')}</span
+							>{:else if bandBlank}<span class="err">Enter both bounds, or untick “Use a MAR band instead of one target”.</span
+							>{:else}Already scaled to the modelled catchment (not the quaternary's own figure): use this when two published natural-MAR estimates for this
+						catchment disagree. The penalty is zero inside the band, weight × |ln(simulated ÷ the nearer bound)| outside it.{/if}
+					</span>
+				{/if}
 			{/if}
 			<span class="hint">Off by default. The fit then also runs without it, so you can see what it changed.</span>
 		</fieldset>

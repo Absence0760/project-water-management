@@ -606,6 +606,16 @@ export const HELP: HelpEntry[] = [
 		source: 'Tolson & Shoemaker (2007); Klemeš (1986); Kling et al. (2012); docs/model.md §2.10b'
 	},
 	{
+		id: 'calibration-bounds',
+		term: 'Bounds (automatic calibration)',
+		short: 'How far the search may roam per parameter: wide (each parameter’s full calibration range) or typical (Perrin et al.’s published 80 % range).',
+		long: 'A short or drought-heavy record often can’t pin down X1 (production store) and X3 (routing store): the fit lands outside where GR4J parameters usually sit, because too little of the record constrains them. "Typical" restricts the search to Perrin et al.’s (2003) 80 % range over 429 catchments (X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9 days), which can make an under-constrained fit land somewhere plausible instead of at an extreme of the wide range. It is a constraint on the search, not evidence the catchment truly falls inside it: read the fit and validation scores either way, and prefer the wide range when the record constrains the parameters well. Recorded with the fit record.',
+		category: 'fit',
+		aliases: ['typical range', 'Perrin range', 'wide bounds', 'X1 range', 'X3 range'],
+		related: ['auto-calibration', 'gr4j', 'fit-record'],
+		source: 'Perrin, Michel & Andréassian (2003); issue #4 phase 6'
+	},
+	{
 		id: 'wr2012-check',
 		term: 'WR2012 check',
 		short: 'Compares simulated natural flow with the naturalised flow WR2012 publishes for the quaternary, scaled to the modelled catchment.',

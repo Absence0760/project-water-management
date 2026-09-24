@@ -13,6 +13,7 @@ self.onmessage = (e: MessageEvent<FitRequest>) => {
 		const report = calibrate(req.input, {
 			model: req.model,
 			objective: req.objective,
+			bounds: req.bounds,
 			budget: req.budget,
 			free: req.free,
 			validate: req.validate,

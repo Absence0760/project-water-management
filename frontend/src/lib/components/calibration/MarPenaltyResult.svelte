@@ -12,6 +12,7 @@
 
 	const uid = $props.id();
 	const obj = $derived(report.objective);
+	const hasBand = $derived(penalty.marLowMm3 !== null && penalty.marHighMm3 !== null);
 	const score = (v: number | null | undefined) => (v == null ? '–' : fmtNum(v, 2));
 	const ratio = (v: number) => `${fmtNum(v, 2)} (${v >= 1 ? '+' : '−'}${fmtNum(Math.abs(100 * (v - 1)), 0)} %)`;
 	const param = (v: number | undefined) => (v === undefined ? '–' : fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3));
@@ -36,7 +37,10 @@
 				<td class="num">{penalty.unpenalised ? score(penalty.unpenalised.fit.scores[obj]) : '–'}</td>
 			</tr>
 			<tr>
-				<th scope="row">Simulated natural MAR ÷ WR2012 ({fmtNum(penalty.targetMarMm3, 3)} Mm³/a)</th>
+				<th scope="row"
+					>{#if hasBand}Simulated natural MAR ÷ band ({fmtNum(penalty.marLowMm3!, 3)}–{fmtNum(penalty.marHighMm3!, 3)} Mm³/a){:else}Simulated
+					natural MAR ÷ WR2012 ({fmtNum(penalty.targetMarMm3, 3)} Mm³/a){/if}</th
+				>
 				<td class="num">{ratio(penalty.marRatio)}</td>
 				<td class="num">{penalty.unpenalised ? ratio(penalty.unpenalised.marRatio) : '–'}</td>
 			</tr>
@@ -51,7 +55,12 @@
 	</table>
 </div>
 <p class="muted small">
-	The penalty pulls the simulated natural MAR towards the scaled WR2012 MAR ({penalty.basis === 'overlap' ? 'over the years both cover' : 'over the simulated period'}).
+	{#if hasBand}
+		The penalty is zero once the simulated natural MAR is inside the band ({fmtNum(penalty.marLowMm3!, 3)}–{fmtNum(penalty.marHighMm3!, 3)} Mm³/a,
+		{penalty.basis === 'overlap' ? 'over the years both cover' : 'over the simulated period'}), and pulls it towards the nearer bound outside it.
+	{:else}
+		The penalty pulls the simulated natural MAR towards the scaled WR2012 MAR ({penalty.basis === 'overlap' ? 'over the years both cover' : 'over the simulated period'}).
+	{/if}
 	“Apply to form” uses the fit with the penalty. {#if !penalty.unpenalised}The fit without it didn’t run because the calibration was cancelled.{/if}
 </p>
 

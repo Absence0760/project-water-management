@@ -43,8 +43,17 @@ describe('fitValidationRows', () => {
 		expect(row(rows, 'Dry → wet: wet years')).toMatchObject({ a: 'not run', b: 'not run' });
 		expect(row(rows, 'Parameters edited since fit')).toMatchObject({ a: 'no', b: 'yes (x1)' });
 		expect(row(rows, 'WR2012 MAR penalty')).toMatchObject({ a: 'off', b: 'off' });
-		const penalised = record({ marPenalty: { weight: 0.5, targetMarMm3: 10, basis: 'whole', marRatio: 1.1, unpenalised: null } });
+		const penalised = record({ marPenalty: { weight: 0.5, targetMarMm3: 10, marLowMm3: null, marHighMm3: null, basis: 'whole', marRatio: 1.1, unpenalised: null } });
 		expect(row(fitValidationRows(penalised, null), 'WR2012 MAR penalty').a).toBe('weight 0.5, MAR 1.10 × WR2012');
+		const banded = record({
+			marPenalty: { weight: 2, targetMarMm3: 6, marLowMm3: 4, marHighMm3: 9, basis: 'overlap', marRatio: 0.95, unpenalised: null }
+		});
+		expect(row(fitValidationRows(banded, null), 'WR2012 MAR penalty').a).toBe('weight 2, MAR 0.95 × 4–9 Mm³/a band');
+	});
+
+	it('shows the bounds the fit searched', () => {
+		const rows = fitValidationRows(record({ bounds: 'wide' }), record({ bounds: 'typical' }));
+		expect(row(rows, 'Bounds')).toEqual({ label: 'Bounds', a: 'wide', b: 'typical (Perrin et al. 80 %)' });
 	});
 
 	it('says when a run has no fit record, and returns null when neither has', () => {

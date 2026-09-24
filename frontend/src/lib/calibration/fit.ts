@@ -7,6 +7,7 @@ import {
 	fitRecordFromReport,
 	OBJECTIVE_LABELS,
 	waterYearLabel,
+	type CalibrationBounds,
 	type FitRecord,
 	type CalibrationFlowKind,
 	type CalibrationProgress,
@@ -25,6 +26,8 @@ export interface FitRequest {
 	input: ModelInput;
 	model: RunoffModelId;
 	objective: ObjectiveId;
+	/** The box the search explores. Default 'wide' (each parameter's min/max). */
+	bounds?: CalibrationBounds;
 	budget: number;
 	free: string[];
 	validate: boolean;
@@ -32,6 +35,18 @@ export interface FitRequest {
 	/** A second observed record to validate the fit against; undefined = none. */
 	validationRecord?: CalibrationFlowKind;
 }
+
+/** The "Bounds" select's label for each option (issue #4 phase 6). */
+export const BOUNDS_LABEL: Record<CalibrationBounds, string> = {
+	wide: 'Wide (default)',
+	typical: 'Typical (Perrin et al. 80 %)'
+};
+
+/** The hint shown under the "Bounds" select. */
+export const boundsHint = (b: CalibrationBounds): string =>
+	b === 'typical'
+		? 'A tighter, published range — helps a short or drought-heavy record land on plausible values, at the cost of the fit if the catchment truly falls outside it.'
+		: 'Each parameter’s full calibration range.';
 
 export type WorkerMessage =
 	| { type: 'progress'; progress: CalibrationProgress }
