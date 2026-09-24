@@ -597,6 +597,62 @@ the suggested order (the IDs carry the detail):
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
 
+## Roles and what each member sees
+
+Today the workspace shows the same seven tabs to everyone. Owners and team
+admins see and change everything, which is right. Everyone else sees every
+modeller tab too: a viewer gets Network, Crops, Transfers, Data and Settings
+& calibration read-only, under a "View only" note (`routes/projects/[id]/+page.svelte`).
+Roles are `viewer` / `editor` / `owner` per project, and team `member`
+(→ editor) / `admin` (→ owner) (data-model.md § Roles, § Teams).
+
+Already planned, so not repeated here: the **`farmer`** role, with its own
+phone view at `/farm/:id` and farm-scoped RLS, which redirects a farmer away
+from the workspace entirely (roadmap step 2, WP-2.1 onward). Also planned:
+read-only **share links** for regulators, viewers opening on the published
+run, and help entries tagged by `audience`, all in step 2.
+
+Open gaps:
+
+- [ ] **No read-only team role.** Every team member becomes an editor on
+      every team project, so a WUA office clerk or a client reviewer added
+      to the team can change settings and run the model. Add a team role
+      `viewer` (→ project `viewer`). This needs a migration adding the enum
+      value, the `app_project_role()` mapping, team invites taking it, and
+      the team page. Tests: DB tests that a team viewer reads but can't
+      write, with a positive control that a team member can write.
+- [ ] **Tabs by role.** Viewers are shown tabs they can't act on and mostly
+      don't need. Build one pure function, `visibleTabs(role, prefs)`, that
+      the tab strip and the Overview checklist (whose steps link to tabs) both use:
+      - owner and editor: every tab, as now;
+      - viewer: Overview and Runs & results, plus Data (charts and
+        downloads); the model tabs (Network, Crops, Transfers, Settings &
+        calibration) sit behind a "Show model inputs" toggle.
+
+      **This is presentation, not access control.** RLS still lets a viewer
+      read every input, so a deep link (`?tab=settings`) keeps working, and
+      nothing gets hidden "for privacy" this way. Data a role must not see
+      needs RLS, as the farmer role has.
+- [ ] **Members choose their own tabs.** Let each user hide tabs they don't
+      use (within what their role can see), with a "Reset to default" option.
+      Store the choice in `app_user.preferences`, the jsonb column that
+      WP-1.26 (unit preferences) introduces and that isn't built yet. Build
+      that column first, or with this. Overview can't be hidden. A hidden tab
+      still opens from a deep link, and a "Hidden tabs (2)" menu brings it
+      back.
+
+Tests for the last two: unit tests for `visibleTabs` across role ×
+preference, including an owner who can't lose Overview. An e2e test that a
+viewer sees the short tab set, turns on "Show model inputs", and opens a
+deep link to a hidden tab. Route-auth is unchanged. Docs: ui.md (the tabs
+table), data-model.md § Teams, api.md (team roles, `preferences`).
+
+**Ask the client:** which people at the WUA and the client need which role,
+and whether viewers should see model inputs by default. **Trigger:** before
+the first non-modeller user is invited (WUA staff, a client reviewer), and
+with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
+role and not before it.
+
 ## Features left half-way
 
 - **Run comparison:**
