@@ -1,5 +1,6 @@
 import {
 	CALIBRATION_FLOW_KINDS,
+	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
 	GR4J_PARAMS,
 	RUNOFF_MODELS,
@@ -104,6 +105,7 @@ export const SettingsPatch = z
 			.partial()
 			.strict(),
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
+		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
 		simulationStart: isoDate.nullable(),

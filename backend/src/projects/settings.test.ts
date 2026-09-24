@@ -59,6 +59,21 @@ describe('SettingsPatch.runoffModel', () => {
 	});
 });
 
+describe('SettingsPatch.chirpsBiasCorrection', () => {
+	const ok = (chirpsBiasCorrection: unknown) => SettingsPatch.safeParse({ chirpsBiasCorrection }).success;
+
+	it('accepts monthly and none, and nothing else', () => {
+		expect(ok('monthly')).toBe(true);
+		expect(ok('none')).toBe(true);
+		for (const bad of ['yearly', '', null, true, 1]) expect(ok(bad), JSON.stringify(bad)).toBe(false);
+	});
+
+	it('defaults to monthly for settings stored before it existed', () => {
+		expect(mergeSettings({}).chirpsBiasCorrection).toBe('monthly');
+		expect(mergeSettings({ chirpsBiasCorrection: 'none' }).chirpsBiasCorrection).toBe('none');
+	});
+});
+
 describe('SettingsPatch.gr4j and panCoefficient', () => {
 	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
 

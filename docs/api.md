@@ -134,6 +134,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
   values, and each `wr2012` group, are replaced whole.
+  `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
+  for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
+  engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 
 ### Members
 
@@ -301,6 +304,14 @@ engine's `runModel`, stores the outputs, and returns the summary.
   whose area is more than 1 % off high + low MAP area). The last two are absent
   on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
+- `summary.chirpsCorrection` (engine ≥ 0.6.0) is the CHIRPS fallback bias
+  correction, `null` when the project has no CHIRPS series: `{ mode, minDays,
+  minMm, clampMin, clampMax, pooled: { days, catchmentMm, chirpsMm, ownFactor,
+  factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,
+  chirpsMm, ownFactor, factor, source: 'month' | 'pooled' | null, clamped,
+  fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
+  fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
+  lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 
 ## Compare runs
 
