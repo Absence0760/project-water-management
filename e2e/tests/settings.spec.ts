@@ -117,3 +117,20 @@ test('the data-quality ratios read as a short percentage, not the stored two thi
 	// Showing it rounded doesn't change the stored value: nothing to save.
 	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
 });
+
+test('the monthly rows fit a 1280px screen without sideways scrolling, six-digit values included', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 900 });
+	const project = await createProject(page.request, 'Settings monthly fit');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const jun = page.getByLabel('Pragmatic EWR, Jun, m³/day');
+	await jun.fill('108700');
+	const tables = page.locator('table.monthly');
+	await expect(tables.first()).toBeVisible();
+	for (const t of await tables.all()) {
+		expect(await t.evaluate((el) => el.parentElement!.scrollWidth - el.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
+	}
+	// The value shows in full, not clipped by its box.
+	expect(await jun.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
+	await expect(page.getByLabel('Pragmatic EWR, Sep, m³/day')).toBeInViewport();
+});

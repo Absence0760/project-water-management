@@ -333,8 +333,12 @@
 		background: var(--surface-2);
 		z-index: 3;
 	}
+	/* Twelve months plus the row label fit a 1280px screen: 78px holds a
+	   six-digit value (108700) with the input's own padding. */
 	.monthly td {
-		min-width: 92px;
+		min-width: 78px;
+		padding-left: 0.3rem;
+		padding-right: 0.3rem;
 	}
 	.derived td,
 	.derived th {

@@ -277,7 +277,11 @@ formula ([api.md § Export](./api.md)).
   the message), and that group's menu link gets a red dot ("has a problem").
   Each problem is also shown next to its field.
 
-The settings are grouped by what they drive:
+The settings are grouped by what they drive. Every 12-month row (A-pan, pan
+coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
+sideways scrolling: each month cell is at least 78px, room for a six-digit
+value such as 108700.
+
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
