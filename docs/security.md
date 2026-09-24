@@ -166,7 +166,9 @@ readable by anyone. The rules:
   outside contributors) and never prints a term, only the file, line and
   term number. Add a term to the list the moment a new client name turns up.
   The history was rewritten once (2026-09, `git filter-repo --replace-text`)
-  to take the names out of every past commit.
+  to take the names out of every past commit, and the GitHub repo recreated
+  from it, because GitHub keeps a PR's commits under `refs/pull/*` forever.
+  If a name slips in again, rewrite *before* anyone opens a PR on it.
 - **Local defaults only.** The committed `.env.development` files hold throwaway
   docker credentials and a dev-only JWT secret. That is safe because they grant
   nothing outside a local container. `pnpm check:env` (CI job
