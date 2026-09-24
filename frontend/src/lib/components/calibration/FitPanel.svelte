@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { OBJECTIVES, type CalibrationProgress, type CalibrationReport, type ObjectiveId, type ProjectModel, type ProjectSettings, type RunoffModelId } from '@water-management/engine';
+	import { untrack } from 'svelte';
 	import { api } from '$lib/api';
 	import { fitInput, fitParams, objectiveName, progressFraction, SCORE_ROWS, scoreColumns, STAGE_LABEL, totalRuns } from '$lib/calibration/fit';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
@@ -39,7 +40,8 @@
 	let objective = $state<ObjectiveId>('kgePrime');
 	let budget = $state<number | null>(1500);
 	let validate = $state(true);
-	let picked = $state<Record<string, boolean>>({});
+	// Seeded from the defaults up front, so the checkbox bindings never see a missing key.
+	let picked = $state<Record<string, boolean>>(untrack(() => Object.fromEntries(fitParams(runoffModel, x2Open).map((p) => [p.key, p.checked]))));
 	let status = $state<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
 	let progress = $state<CalibrationProgress | null>(null);
 	let report = $state.raw<CalibrationReport | null>(null);
@@ -47,9 +49,11 @@
 	let handle: FitHandle | null = null;
 
 	const params = $derived(fitParams(runoffModel, x2Open));
-	// Tick the defaults whenever the model (and so the parameter list) changes.
+	// Keep the user's ticks; a parameter new to the list (another model, or X2
+	// once exchange is on) starts at its default.
 	$effect(() => {
-		picked = Object.fromEntries(params.map((p) => [p.key, p.checked]));
+		const prev = untrack(() => picked);
+		picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
 	});
 	const free = $derived(params.filter((p) => picked[p.key]).map((p) => p.key));
 	const runs = $derived(totalRuns(budget ?? 0, validate));

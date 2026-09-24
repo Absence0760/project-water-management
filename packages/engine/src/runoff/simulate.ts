@@ -22,7 +22,11 @@ export interface RunoffTrace {
 	storageEndMm: number;
 }
 
-/** Days in the calendar month containing an epoch day. */
+/**
+ * Days in the calendar month containing an epoch day. Real calendar days, not
+ * settings.februaryDays (demand's 28.25): only then does each month's PET
+ * total exactly coefficient × A-pan.
+ */
 function daysInMonth(day: number): number {
 	const d = new Date(day * 86_400_000);
 	return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();

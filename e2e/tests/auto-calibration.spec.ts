@@ -40,6 +40,21 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 	await expect(x1).toHaveValue(applied);
 });
 
+test('turning groundwater exchange on offers X2 without resetting the other ticks', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Auto-calibration ticks');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	const x4 = fit.getByRole('checkbox', { name: /^Unit hydrograph time base X4/ });
+	await x4.uncheck();
+	await expect(fit.getByRole('checkbox', { name: /^Groundwater exchange X2/ })).toHaveCount(0);
+	await page.getByLabel('Let the catchment gain or lose groundwater').check();
+	await expect(fit.getByRole('checkbox', { name: /^Groundwater exchange X2/ })).not.toBeChecked();
+	await expect(x4).not.toBeChecked();
+	await expect(fit.getByRole('checkbox', { name: /^Production store capacity X1/ })).toBeChecked();
+});
+
 test('a fit can be cancelled, leaving the form untouched', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Auto-calibration cancel');
