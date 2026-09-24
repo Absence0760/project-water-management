@@ -107,7 +107,7 @@
 		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}
 		<p class="muted small">
-			Start storage + farm runoff + transfers = consumptive use + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
+			Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
 			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
 		</p>
 		<div class="table-wrap">
@@ -184,7 +184,7 @@
 		</div>
 		{#if closure}
 			<p class="closure small">
-				In (H + I + J) {fmtValue(closure.inflow)} − used (G − T) {fmtValue(closure.consumptive)} − stored (Q − Q[t−1]) {fmtValue(closure.storageChange)}
+				In (H + I + J + rain on dam) {fmtValue(closure.inflow)} − used (G − T) {fmtValue(closure.consumptive)} − evaporated {fmtValue(closure.evaporation)} − stored (Q − Q[t−1]) {fmtValue(closure.storageChange)}
 				− out (U) {fmtValue(closure.outflow)} = <strong>{fmtValue(closure.residual)}</strong> m³
 			</p>
 		{:else if day.kind === 'farm'}

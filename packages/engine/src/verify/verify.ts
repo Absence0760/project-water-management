@@ -5,14 +5,15 @@
 // - waterBalance: where the water went, per water year and over the run.
 // Pure: it reads only the model input and the output's own series.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type {
-	ModelInput,
-	ModelOutput,
-	RunVerification,
-	VerificationCheck,
-	VerificationCheckId,
-	WaterBalance,
-	WaterBalanceRow
+import {
+	upgradeLegacyModel,
+	type ModelInput,
+	type ModelOutput,
+	type RunVerification,
+	type VerificationCheck,
+	type VerificationCheckId,
+	type WaterBalance,
+	type WaterBalanceRow
 } from '../project';
 import { checkBalance, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
@@ -25,7 +26,9 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals]
 ];
 
-export function verifyRun(input: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
+export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
+	// Read the model as the run did (runModel upgrades a model saved by an older engine).
+	const input = { ...raw, model: upgradeLegacyModel(raw.model) };
 	const names = new Map(input.model.nodes.map((n) => [n.id, n.name]));
 	const d0 = toEpochDay(out.startDate);
 	// "<uuid> day 12" → "Farm A on 2001-10-13", so the detail points at something the user can open.
@@ -102,7 +105,9 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		}
 		return a;
 	};
-	const [fRunoff, fDemand, fSupplied, fReturn, fTransfer, fSpill, fStorage] = ['runoff', 'demand', 'supplied', 'return_flow', 'transfer', 'spill', 'dam_storage'].map(totals) as Float64Array[];
+	const [fRunoff, fDemand, fSupplied, fReturn, fTransfer, fSpill, fStorage, fRainOnDam, fEvap] = ['runoff', 'demand', 'supplied', 'return_flow', 'transfer', 'spill', 'dam_storage', 'rain_on_dam', 'dam_evaporation'].map(totals) as Float64Array[];
+	// Runs before engine 0.16.0 have no dam evaporation columns (audit N2).
+	const hasDamLosses = farms.some((n) => series.has(`${n.id}|dam_evaporation`));
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
 
@@ -110,7 +115,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0 };
+		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -124,6 +129,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.ret += fReturn![t]!;
 			r.transfer += fTransfer![t]!;
 			r.spill += fSpill![t]!;
+			r.rainOnDams += fRainOnDam![t]!;
+			r.evap += fEvap![t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -155,10 +162,11 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			returnFlowM3: r.ret,
 			consumptiveUseM3: consumptive,
 			transfersM3: r.transfer,
+			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: opening + r.runoff + r.transfer - consumptive - r.outflow - closing
+			residualM3: opening + r.runoff + r.transfer + r.rainOnDams - consumptive - r.evap - r.outflow - closing
 		};
 	};
 

@@ -1,11 +1,18 @@
-import type { ProjectModel } from '@water-management/engine';
+import { upgradeLegacyModel, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const frac = z.number().min(0).max(1);
 const nonNeg = z.number().finite().min(0);
 
-export const ModelBody = z.object({
+/**
+ * A project model as PUT /model and a project document carry it. A model from
+ * an older engine (a document exported before 0.16.0, a stale browser tab) is
+ * read as migration 006 stored the database: `returnFlowPct` becomes irrigation
+ * efficiency and loss return, missing dam fields get their defaults and a
+ * transfer without a priority gets its list position (upgradeLegacyModel).
+ */
+export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgradeLegacyModel(v as { nodes?: unknown }) : v), z.object({
 	nodes: z
 		.array(
 			z.object({
@@ -24,7 +31,13 @@ export const ModelBody = z.object({
 				damInitialPct: frac,
 				damMinPct: frac,
 				divertCapacityM3Day: nonNeg,
-				returnFlowPct: frac
+				// 0 < e ≤ 1: abstraction demand is the crop requirement ÷ e (audit N1).
+				irrigationEfficiency: z.number().gt(0).max(1),
+				lossReturnFraction: frac,
+				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
+				damAreaFullM2: nonNeg.nullable(),
+				damAreaExponent: z.number().gt(0).max(3),
+				damSeepagePerDay: frac
 			})
 		)
 		.max(500),
@@ -49,11 +62,13 @@ export const ModelBody = z.object({
 				maxRateM3s: nonNeg,
 				dailyCapM3: nonNeg.nullable(),
 				minStoragePct: frac,
-				enabled: z.boolean()
+				enabled: z.boolean(),
+				// Lower moves first; equal priorities share a source dam pro rata (audit Q18).
+				priority: z.number().int().min(-1_000_000).max(1_000_000)
 			})
 		)
 		.max(500)
-});
+}));
 
 /**
  * Structural rules zod can't express. Returns human-readable problems; empty

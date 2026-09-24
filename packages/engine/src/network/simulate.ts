@@ -38,8 +38,27 @@ export interface PlanNode {
 	damCapacityM3: number;
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
-	returnFlowPct: number;
-	/** Daily net irrigation demand (F); zeros for gauges. */
+	/**
+	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
+	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
+	 * transfers keep at least this much in the source dam.
+	 */
+	deadStorageM3: number;
+	/** Irrigation application efficiency e, 0 < e ≤ 1 (audit N1): abstraction demand D = F / e. */
+	irrigationEfficiency: number;
+	/** Share β of the application losses (1 − e)·G that returns to the river the same day (audit N1). */
+	lossReturnFraction: number;
+	/**
+	 * Dam surface area when full (m²), as entered or estimated (capacity ÷ 3 m
+	 * mean depth); the area on a day is A = full × (Q[t−1] / capacity)^b
+	 * (engine ≥ 0.16.0, audit N2). 0 for a node without a dam.
+	 */
+	damAreaFullM2: number;
+	/** Exponent b of the area–storage relation (Liebe et al. 2005: 0.7). */
+	damAreaExponent: number;
+	/** Seepage per day as a fraction of the storage at the start of the day (audit N2). */
+	damSeepagePerDay: number;
+	/** Daily crop water requirement (F, net irrigation need); zeros for gauges. */
 	demand: Float64Array;
 	/**
 	 * Gross demand before effective rain, the effective rain used against it
@@ -56,10 +75,15 @@ export interface PlanTransfer {
 	to: number;
 	/** activeMonth[m] for calendar month m (1–12). */
 	activeMonth: Uint8Array;
-	/** Source storage kept back: dam capacity × min storage %. */
+	/** Source storage kept back: dam capacity × MAX(min storage %, the dam's minimum operating level). */
 	reserveM3: number;
 	/** Most that can move in one day (m³). */
 	maxDailyM3: number;
+	/**
+	 * Lower moves first (engine ≥ 0.16.0, audit Q18). Rules of equal priority
+	 * share the water pro rata, so the list order never matters.
+	 */
+	priority: number;
 }
 
 export interface NetworkPlan {
@@ -79,11 +103,21 @@ export interface NetworkPlan {
 	naturalFlow: Float64Array;
 	/** Unfragmented pragmatic EWR at the outflow, m³/day. */
 	ewr: Float64Array;
+	/**
+	 * Open-water evaporation depth per day (mm): lake factor × A-pan for the
+	 * month ÷ days in the month (engine ≥ 0.16.0, audit N2). Absent = none.
+	 */
+	lakeEvapMmDay?: Float64Array;
+	/** Rain falling on a dam's surface per day (mm): the day's rain before any threshold (audit N2). Absent = none. */
+	damRainMm?: Float64Array;
 }
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
 export interface NodeResult {
-	demand: Float64Array; // F
+	/** Abstraction demand D = F / e (engine ≥ 0.16.0, audit N1). */
+	demand: Float64Array;
+	/** Crop water requirement F (net irrigation need). */
+	cropRequirement: Float64Array;
 	supplied: Float64Array; // G
 	inflowUpstream: Float64Array; // H
 	runoff: Float64Array; // I
@@ -114,8 +148,16 @@ export interface FarmWorkings {
 	divertedToDam: Float64Array; // O
 	interimStorage: Float64Array; // P
 	belowDamNotDiverted: Float64Array; // S
-	returnFlow: Float64Array; // T
-	/** V, signed: (H + I + J) − G·(1 − returnPct) − (Q[t] − Q[t−1]) − U. Float noise only. */
+	returnFlow: Float64Array; // T = β·(1 − e)·G
+	/** Dam surface area at the start of the day (m²), audit N2. */
+	damArea: Float64Array;
+	/** Open-water evaporation from the dam, after the clamp (m³/day). */
+	damEvaporation: Float64Array;
+	/** Rain falling on the dam's surface (m³/day). */
+	rainOnDam: Float64Array;
+	/** Seepage out of the dam, after the clamp (m³/day); it joins the outflow U. */
+	damSeepage: Float64Array;
+	/** V, signed: (H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U. Float noise only. */
 	balanceResidual: Float64Array;
 }
 
@@ -131,6 +173,7 @@ function allocNode(days: number): NodeResult {
 	const f = () => new Float64Array(days);
 	return {
 		demand: f(),
+		cropRequirement: f(),
 		supplied: f(),
 		inflowUpstream: f(),
 		runoff: f(),
@@ -160,38 +203,92 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 		interimStorage: f(),
 		belowDamNotDiverted: f(),
 		returnFlow: f(),
+		damArea: f(),
+		damEvaporation: f(),
+		rainOnDam: f(),
+		damSeepage: f(),
 		balanceResidual: f()
 	};
 }
 
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } = {}): NetworkResult {
-	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr } = plan;
+	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map(() => allocNode(days));
 	const work = opts.workings ? nodes.map((n) => (n.kind === 'farm' ? allocWorkings(n, days) : null)) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
-	// Volume already committed today by earlier transfers from each source dam.
+	// Volume already committed today by earlier transfers from each source dam,
+	// and already scheduled into each destination.
 	const drawnToday = new Float64Array(nodes.length);
+	const intoToday = new Float64Array(nodes.length);
+	// Transfer rules by priority, lowest first (audit Q18).
+	const levels = [...new Set(transfers.map((tr) => tr.priority))].sort((a, b) => a - b).map((p) => transfers.flatMap((tr, k) => (tr.priority === p ? [k] : [])));
+	const want = new Float64Array(transfers.length);
+	const sumBy = new Float64Array(nodes.length);
+	const freeBy = new Float64Array(nodes.length);
 
 	for (let t = 0; t < days; t++) {
-		// [Transfers] "Draw from dam": uses the source dam's storage at the end of
-		// the previous day (Q, row N-1), so all transfers can be settled first.
+		// [Transfers] "Draw from dam": uses the storage at the end of the
+		// previous day (Q, row N-1), so all transfers are settled before any farm
+		// irrigates, the source's own irrigation included (quirk Q3: the source
+		// doesn't irrigate first). Each rule moves
+		//   v = MAX(0, MIN(source free, destination room, max daily))
+		// with source free = Q_src[t−1] − drawn today − reserve and destination
+		// room = cap_dst − Q_dst[t−1] + D_dst[t] − scheduled into it today, so a
+		// transfer never pumps into a full dam only to spill, and one to a farm
+		// with no dam still serves its demand (audit N4). Rules run by priority,
+		// lowest first (Q18); within a priority, rules into one destination share
+		// its room and rules from one source share its free water, each pro rata
+		// to its own limit, so the result never depends on the list order.
 		jToday.fill(0);
 		drawnToday.fill(0);
-		for (let k = 0; k < transfers.length; k++) {
-			const tr = transfers[k]!;
-			if (!tr.activeMonth[month[t]!]) continue;
-			const prev = t === 0 ? nodes[tr.from]!.initialStorageM3 : res[tr.from]!.storage[t - 1]!;
-			// fGetTrfVolCapped: MIN(MAX(Qprev − cap × min%, 0), capMax), with Qprev
-			// reduced by what earlier rules already took from this dam today. The
-			// workbook caps each rule against the full Qprev, so two rules from one
-			// dam could overdraw it (docs/engine-review.md F1, quirk Q18); rules
-			// are served in document order. Identical for a single rule per dam.
-			const v = Math.min(Math.max(prev - drawnToday[tr.from]! - tr.reserveM3, 0), tr.maxDailyM3);
-			drawnToday[tr.from]! += v;
-			trOut[k]![t] = v;
-			jToday[tr.to]! += v;
-			jToday[tr.from]! -= v;
+		intoToday.fill(0);
+		const prevQ = (n: number) => (t === 0 ? nodes[n]!.initialStorageM3 : res[n]!.storage[t - 1]!);
+		for (const level of levels) {
+			// 1. Each active rule's own limit: its daily cap and its source's free water.
+			for (const k of level) {
+				const tr = transfers[k]!;
+				if (!tr.activeMonth[month[t]!]) {
+					want[k] = 0;
+					continue;
+				}
+				const free = prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3;
+				want[k] = Math.max(0, Math.min(free, tr.maxDailyM3));
+			}
+			// 2. Rules into one destination share its room, pro rata to their limits.
+			sumBy.fill(0);
+			for (const k of level) sumBy[transfers[k]!.to]! += want[k]!;
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const total = sumBy[tr.to]!;
+				const dst = nodes[tr.to]!;
+				const room = Math.max(0, dst.damCapacityM3 - prevQ(tr.to) + dst.demand[t]! / dst.irrigationEfficiency - intoToday[tr.to]!);
+				if (total > room) want[k] = (want[k]! * room) / total;
+			}
+			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
+			sumBy.fill(0);
+			freeBy.fill(0);
+			for (const k of level) {
+				const tr = transfers[k]!;
+				sumBy[tr.from]! += want[k]!;
+				if (tr.activeMonth[month[t]!]) freeBy[tr.from] = Math.max(freeBy[tr.from]!, prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3);
+			}
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const total = sumBy[tr.from]!;
+				const free = freeBy[tr.from]!;
+				if (total > free) want[k] = (want[k]! * free) / total;
+			}
+			// 4. Move the water.
+			for (const k of level) {
+				const tr = transfers[k]!;
+				const v = want[k]!;
+				trOut[k]![t] = v;
+				drawnToday[tr.from]! += v;
+				intoToday[tr.to]! += v;
+				jToday[tr.to]! += v;
+				jToday[tr.from]! -= v;
+			}
 		}
 
 		const nat = naturalFlow[t]!;
@@ -228,6 +325,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			}
 
 			const F = node.demand[t]!;
+			// Abstraction demand: the crop requirement plus the application losses (audit N1).
+			const D = F / node.irrigationEfficiency;
 			const H = sumU;
 			const I = nat * node.share;
 			const J = jToday[i]!;
@@ -243,15 +342,38 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const N = I - M;
 			const O = Math.min(node.divertCapacityM3Day, L + N);
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
-			const avail = qPrev + M + O + K + J;
-			const G = Math.min(avail, F);
-			const P = avail - G;
+			// Dam losses and gains before irrigation (audit N2). The surface area
+			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
+			// that surface is a gain, open-water evaporation and seepage losses.
+			// Evaporation takes at most what is there (yesterday's storage, the
+			// rain and today's net transfer, which was settled first), seepage at
+			// most what evaporation leaves, so storage stays ≥ 0.
 			const cap = node.damCapacityM3;
+			let A = 0;
+			let E = 0;
+			let Pd = 0;
+			let Sp = 0;
+			if (cap > 0 && qPrev > 0) {
+				A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), node.damAreaExponent);
+				Pd = damRainMm ? (damRainMm[t]! * A) / 1000 : 0;
+				// A transfer out never takes more than yesterday's storage, so this is ≥ 0 up to float noise.
+				const there = Math.max(qPrev + Pd + J, 0);
+				E = Math.min(lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0, there);
+				Sp = Math.min(node.damSeepagePerDay * qPrev, there - E);
+			}
+			const qStart = qPrev + Pd - E - Sp;
+			const avail = qStart + M + O + K + J;
+			// Irrigation draws only what is above the dam's minimum operating
+			// level (dead storage, audit Q5); a dam below it supplies nothing.
+			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), D);
+			const P = avail - G;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
-			const T = G * node.returnFlowPct;
-			const U = Rr + S + T;
+			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
+			const T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
+			// Seepage leaves the dam below the wall and joins the outflow the same day (N2).
+			const U = Rr + S + T + Sp;
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
@@ -260,7 +382,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const AA = shortfall(U, Z, scale);
 			const AB = shortfall(AA, sumAA, scale);
 
-			r.demand[t] = F;
+			r.demand[t] = D;
+			r.cropRequirement[t] = F;
 			r.supplied[t] = G;
 			r.inflowUpstream[t] = H;
 			r.runoff[t] = I;
@@ -268,7 +391,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			r.storage[t] = Q;
 			r.spill[t] = Rr;
 			r.outflow[t] = U;
-			r.deficit[t] = F - G;
+			r.deficit[t] = D - G;
 			r.ewr[t] = Y;
 			r.ewrCumulative[t] = Z;
 			r.ewrShortfall[t] = AA;
@@ -283,7 +406,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				w.interimStorage[t] = P;
 				w.belowDamNotDiverted[t] = S;
 				w.returnFlow[t] = T;
-				w.balanceResidual[t] = H + I + J - (G - T) - (Q - qPrev) - U;
+				w.damArea[t] = A;
+				w.damEvaporation[t] = E;
+				w.rainOnDam[t] = Pd;
+				w.damSeepage[t] = Sp;
+				w.balanceResidual[t] = H + I + J + Pd - (G - T) - E - (Q - qPrev) - U;
 			}
 		}
 	}

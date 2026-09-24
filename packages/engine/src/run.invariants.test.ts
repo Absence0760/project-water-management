@@ -6,9 +6,9 @@
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
-import type { ModelInput } from './project';
+import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput, shrink } from './testing/fuzz';
-import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits } from './testing/invariants';
+import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const CASES = Number(env.FUZZ_CASES ?? 400);
@@ -52,13 +52,16 @@ describe('engine invariants on random networks', () => {
 		expect(failures.join('\n\n')).toBe('');
 	}, TIMEOUT);
 
-	it('doubling crop areas can raise the supply fraction only through return flow (seed 2538)', () => {
-		// Why checkDoubledCropAreas zeroes return flows: with them, extra draw on
-		// stored water partly returns to the river and a starved farm downstream
-		// gains more than twice the water. That is physics, not an engine bug.
+	it('doubling crop areas can raise the supply fraction only through return flow (seed 25)', () => {
+		// Why checkDoubledCropAreas zeroes the loss return fractions: with return
+		// flow, extra draw on stored water partly returns to the river and a
+		// starved farm downstream gains more than twice the water. That is
+		// physics, not an engine bug (audit N1: bounded by G ≤ D).
 		// (Seed 4660 showed it until engine 0.9.0 turned the upstream-to-dam
-		// split round, model.md §3 Q1; 2538 is the first seed that shows it now.)
-		const input = randomInput(2538);
+		// split round, model.md §3 Q1; 2538 until N1 and the soil-water store's
+		// draws in the generator, then 2079 until dam evaporation (N2); 25 is
+		// the first seed that shows it now.)
+		const input = randomInput(25);
 		input.settings.runoffModel = 'legacy'; // found under legacy flow; the property is the network's, not the runoff model's
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
@@ -68,6 +71,20 @@ describe('engine invariants on random networks', () => {
 		for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
 		expect(frac(doubled)).toBeGreaterThan(frac(input));
 		expect(checkDoubledCropAreas(input)).toBeNull();
+	});
+
+	it('Q18: transfer rules sharing a dam give the same results in any list order (no exemption)', () => {
+		// Seeds whose enabled rules share a source dam, with tied priorities among them.
+		let tested = 0;
+		for (let seed = 1; seed < 400 && tested < 10; seed++) {
+			const input = randomInput(seed, { maxDays: 200 });
+			const on = input.model.transfers.filter((t) => t.enabled);
+			const shared = on.some((a, i) => on.some((b, j) => i !== j && a.fromNodeId === b.fromNodeId && a.priority === b.priority));
+			if (!shared) continue;
+			tested++;
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
+		expect(tested).toBeGreaterThan(0);
 	});
 
 	it('F8 regression: the seeds where display order changed EWR "days not met" are order-invariant', () => {
@@ -103,7 +120,11 @@ function smallCase(): ModelInput {
 		damInitialPct: 0.8,
 		damMinPct: 0,
 		divertCapacityM3Day: 500,
-		returnFlowPct: 0.1,
+		irrigationEfficiency: 0.8,
+		lossReturnFraction: 0.5,
+		damAreaFullM2: 0,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0,
 		...over
 	});
 	const days = 120;
@@ -116,7 +137,7 @@ function smallCase(): ModelInput {
 				{ nodeId: 'B', cropId: 'c', areaM2: 300_000 },
 				{ nodeId: 'C', cropId: 'c', areaM2: 200_000 }
 			],
-			transfers: [{ id: 't', fromNodeId: 'A', toNodeId: 'C', months: [1, 2], maxRateM3s: 0.005, dailyCapM3: null, minStoragePct: 0.25, enabled: true }]
+			transfers: [{ id: 't', fromNodeId: 'A', toNodeId: 'C', months: [1, 2], maxRateM3s: 0.005, dailyCapM3: null, minStoragePct: 0.25, enabled: true, priority: 0 }]
 		},
 		series: { rain_catchment_mm: { startDate: '2021-01-01', values: Array.from({ length: days }, (_, i) => (i % 9 === 0 ? 25 : 0)) } }
 	};
@@ -136,6 +157,41 @@ describe('the invariants reject broken results', () => {
 		expect(out.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values.some((v) => v > 0)).toBe(true);
 	});
 
+	it('catches irrigation below the minimum operating level (Q5)', () => {
+		// C alone, its dam draining to irrigation with no inflow; the run has no floor.
+		const x = structuredClone(input);
+		x.model.nodes = [{ ...x.model.nodes.find((n) => n.id === 'C')!, downstreamNodeId: null, damCapacityM3: 50_000, damInitialPct: 1, pctRunoffToDam: 0 }];
+		x.model.transfers = [];
+		x.model.cropAreas = x.model.cropAreas.filter((a) => a.nodeId === 'C');
+		const o = runModel(x);
+		expect(checkWorkings(x, o)).toBeNull();
+		// Checked against a 99 % floor, C drew dead storage.
+		x.model.nodes[0]!.damMinPct = 0.99;
+		expect(checkWorkings(x, o)).toMatch(/supplied .* dead storage/);
+	});
+
+	it('catches dam evaporation, rain on the dam or seepage that does not follow the dam (N2)', () => {
+		const x = structuredClone(input);
+		const a = x.model.nodes.find((n) => n.id === 'A')!;
+		a.damAreaFullM2 = 20_000;
+		a.damSeepagePerDay = 0.001;
+		const o = runModel(x);
+		expect(checkInvariants(x, o)).toBeNull();
+		expect(o.series.find((s) => s.nodeId === 'A' && s.key === 'dam_evaporation')!.values.some((v) => v > 0)).toBe(true);
+		const bump = (key: string) => {
+			const y = structuredClone(o);
+			const s = y.series.find((z) => z.nodeId === 'A' && z.key === key)!;
+			const t = s.values.findIndex((v) => v > 0);
+			s.values[t] = s.values[t]! * 2;
+			return y;
+		};
+		for (const key of ['dam_evaporation', 'rain_on_dam', 'dam_seepage']) expect(checkWorkings(x, bump(key)), key).toMatch(/rain on dam|evaporation|seepage|balance/);
+		// A dam checked against a different area: the surface doesn't follow the storage.
+		const smaller = structuredClone(x);
+		smaller.model.nodes.find((n) => n.id === 'A')!.damAreaFullM2 = 10_000;
+		expect(checkWorkings(smaller, o)).toMatch(/dam area/);
+	});
+
 	it('catches a broken farm balance, a negative storage and supply above demand', () => {
 		expect(checkInvariants(input, edit('outflow', 'B', (v) => (v[3]! += 1)))).toMatch(/balance|routed/);
 		expect(checkInvariants(input, edit('dam_storage', 'A', (v) => (v[0] = -1)))).toMatch(/storage|balance/);
@@ -152,11 +208,13 @@ describe('the invariants reject broken results', () => {
 		over.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[0] = -500;
 		over.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[0] = 500;
 		expect(checkTransferLimits(input, over)).toMatch(/sent 500 > MIN\(limit 432/);
-		// Held back: the rule could move 432 but only 100 moved.
+		// Held back: on a day the rule moved its full 432 (C's room, its demand, was larger) only 100 moved.
+		const full = out.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values.findIndex((v) => Math.abs(v - 432) < 1e-9);
+		expect(full).toBeGreaterThanOrEqual(0);
 		const held = structuredClone(out);
-		held.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[0] = -100;
-		held.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[0] = 100;
-		expect(checkTransferLimits(input, held)).toMatch(/sent only 100; the rules allowed 432/);
+		held.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[full] = -100;
+		held.series.find((s) => s.nodeId === 'C' && s.key === 'transfer')!.values[full] = 100;
+		expect(checkTransferLimits(input, held)).toMatch(/sent only 100; the rules and the destinations' room allowed 432/);
 		// Below the reserve: an almost empty source may not send anything.
 		const low = structuredClone(input);
 		low.model.nodes.find((n) => n.id === 'A')!.damInitialPct = 0.2; // 10 000 m³ < reserve 12 500
@@ -230,9 +288,12 @@ describe.skipIf(!dataDir)('engine invariants on the client catchment (needs data
 			model: ModelInput['model'];
 			series: { kind: string; startDate: string; values: (number | null)[] }[];
 		};
+		// As migration 006 stores an extracted project: return flow % → irrigation efficiency, dam minimum → 0.
+		const model = upgradeLegacyModel(project.model);
+		for (const n of model.nodes) n.damMinPct = 0;
 		const input: ModelInput = {
 			settings: project.settings,
-			model: project.model,
+			model,
 			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 		};
 		for (const seed of [1, 2, 3]) expect(checkAll(input, seed)).toBeNull();

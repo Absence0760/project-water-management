@@ -19,7 +19,11 @@ function node(id: string, name: string, down: string | null): NetworkNode {
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0
+		irrigationEfficiency: 1,
+		lossReturnFraction: 0,
+		damAreaFullM2: null,
+		damAreaExponent: 0.7,
+		damSeepagePerDay: 0
 	};
 }
 
@@ -76,7 +80,7 @@ describe('validateModel', () => {
 			crops: [{ id: 'c', name: 'Citrus', cropFactor: [1] }],
 			cropAreas: [{ nodeId: 'x', cropId: 'c', areaM2: 1 }],
 			transfers: [
-				{ id: 't', fromNodeId: 'g', toNodeId: 'g', months: [13], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true }
+				{ id: 't', fromNodeId: 'g', toNodeId: 'g', months: [13], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }
 			]
 		});
 		expect(validateModel(m).map((i) => i.area)).toEqual(['crops', 'crops', 'transfers', 'transfers']);
@@ -89,6 +93,34 @@ describe('validateModel', () => {
 		expect(messages(model([a]))).toEqual([
 			'"A": percentages must be between 0% and 100%.',
 			'"A": areas and capacities can\'t be negative.'
+		]);
+	});
+
+	it('needs an irrigation efficiency above 0% (abstraction = crop requirement ÷ efficiency, N1)', () => {
+		const a = node('a', 'A', null);
+		a.irrigationEfficiency = 0;
+		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
+	});
+
+	it('needs a whole-number transfer priority (Q18)', () => {
+		const g = node('g', 'G', null);
+		const f = node('f', 'F', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'g', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0.5 };
+		expect(messages(model([g, f], { transfers: [t] }))).toContain('Transfer 1: priority must be a whole number.');
+		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
+	});
+
+	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {
+		const a = node('a', 'A', null);
+		a.damAreaFullM2 = null;
+		expect(messages(model([a]))).toEqual([]);
+		a.damAreaFullM2 = -1;
+		a.damAreaExponent = 0;
+		a.damSeepagePerDay = 2;
+		expect(messages(model([a]))).toEqual([
+			'"A": percentages must be between 0% and 100%.',
+			'"A": the dam area exponent must be above 0 and at most 3.',
+			'"A": the dam area can\'t be negative.'
 		]);
 	});
 });

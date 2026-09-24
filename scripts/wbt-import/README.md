@@ -49,13 +49,23 @@ rows and columns don't break it.
 - **Nodes** come from [Network] and [Farm spec]. `downstreamNodeId` is the
   inverse of the "Upstream element" columns. `areaKm2` is the farm's total area
   (hi + lo). `flowShareManual` is the "External fragmentation" column.
-  `divertCapacityM3Day` is the m³/day column.
+  `divertCapacityM3Day` is the m³/day column. `damMinPct` (the dam's minimum
+  operating level, engine ≥ 0.16.0) is written as 0: the workbook's "min %"
+  is the transfer minimum, which each transfer rule carries, and a `note:`
+  names any farm that had one (docs/engine-audit.md Q5). The irrigation
+  return flow % r becomes `irrigationEfficiency` e = 1 − r with
+  `lossReturnFraction` 1 (r = 0: e = 1, 0), the same mapping as migration
+  006 (docs/engine-audit.md N1). The workbook has no dam surface areas:
+  `damAreaFullM2` is null (runs estimate capacity ÷ 3 m and warn, N2),
+  `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
-  from the rate. Month lists keep the months they name; the workbook's
+  from the rate. `priority` is the rule's position (0, 1, …), so rules from
+  one dam are served in the workbook's column order (docs/engine-audit.md
+  Q18). Month lists keep the months they name; the workbook's
   substring matching (which makes "11" also mean January) is a bug, and the
   script prints a `note:` when a list relied on it (quirk 2 in
   `packages/engine/src/network/README.md`, docs/engine-audit.md M1).

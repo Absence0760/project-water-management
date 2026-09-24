@@ -42,6 +42,7 @@
 						<th scope="col" class="num">Max rate <HelpTip key="transfer.maxRateM3s" /><br /><span class="u">m³/s</span></th>
 						<th scope="col" class="num">Daily cap<br /><span class="u">m³ (blank = none)</span></th>
 						<th scope="col" class="num">Min storage <HelpTip key="transfer.minStoragePct" /><br /><span class="u">% of source dam</span></th>
+						<th scope="col" class="num">Priority <HelpTip key="transfer.priority" /><br /><span class="u">lower first</span></th>
 						<th scope="col">Enabled</th>
 						{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
@@ -81,6 +82,10 @@
 							<td class="c-min">
 								<span class="cell-label">Min source storage, % <HelpTip key="transfer.minStoragePct" /></span>
 								<NumberInput label="Minimum source storage for {label}, %" min={0} max={100} scale={100} disabled={readonly} bind:value={t.minStoragePct} />
+							</td>
+							<td class="c-pri">
+								<span class="cell-label" aria-hidden="true">Priority</span>
+								<NumberInput label="Priority of {label} (lower moves first)" step={1} disabled={readonly} bind:value={t.priority} />
 							</td>
 							<td class="center c-on">
 								<label class="on-toggle">
@@ -164,7 +169,8 @@
 				'from to'
 				'months months'
 				'rate cap'
-				'min on';
+				'min pri'
+				'on on';
 			gap: 0.6rem 0.75rem;
 			padding: 0.75rem;
 			border-bottom: 1px solid var(--border);
@@ -175,7 +181,8 @@
 				'from to'
 				'months months'
 				'rate cap'
-				'min on';
+				'min pri'
+				'on on';
 		}
 		.rules tr:last-child {
 			border-bottom: none;
@@ -223,6 +230,9 @@
 		}
 		.c-min {
 			grid-area: min;
+		}
+		.c-pri {
+			grid-area: pri;
 		}
 		.c-on {
 			grid-area: on;

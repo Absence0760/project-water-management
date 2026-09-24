@@ -16,7 +16,8 @@ const farm = node('Upper', outlet.id, {
 	damInitialPct: 0.4,
 	pctRunoffToDam: 0.5,
 	pctUpstreamToDam: 0,
-	returnFlowPct: 0.1,
+	irrigationEfficiency: 0.8,
+	lossReturnFraction: 0.5,
 	divertCapacityM3Day: 50
 });
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
@@ -45,9 +46,21 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		const res = await day(viewer, '2020-01-06');
 		expect(res.status).toBe(200);
 		expect(res.body).toMatchObject({ date: '2020-01-06', nodeId: farm.id, name: 'Upper', kind: 'farm' });
-		expect(res.body.params).toEqual({ pctUpstreamToDam: 0, pctRunoffToDam: 0.5, divertCapacityM3Day: 50, damCapacityM3: 5_000, damInitialPct: 0.4, returnFlowPct: 0.1 });
+		expect(res.body.params).toEqual({
+			pctUpstreamToDam: 0,
+			pctRunoffToDam: 0.5,
+			divertCapacityM3Day: 50,
+			damCapacityM3: 5_000,
+			damInitialPct: 0.4,
+			damMinPct: 0.1,
+			irrigationEfficiency: 0.8,
+			lossReturnFraction: 0.5,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0
+		});
 		const keys = res.body.columns.map((c: { key: string }) => c.key);
-		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'demand', 'supplied', 'upstream_to_dam', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
+		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'dam_evaporation', 'rain_on_dam', 'dam_seepage', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
 		// Day index 5 of the stored series, and the day before's storage.
 		for (const key of ['supplied', 'dam_storage']) {
 			const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=${key}&nodeId=${farm.id}`);
@@ -58,7 +71,9 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(valueOf(res.body, 'effective_rain')).toBeGreaterThan(0);
 		// The day closes from the returned numbers alone.
 		const v = (k: string) => valueOf(res.body, k);
-		const closes = v('inflow_upstream') + v('runoff') + v('transfer') - (v('supplied') - v('return_flow')) - (v('dam_storage') - res.body.previousStorageM3) - v('outflow');
+		// Rain on the dam in, evaporation out (N2); seepage is part of the outflow.
+		const closes =
+			v('inflow_upstream') + v('runoff') + v('transfer') + v('rain_on_dam') - (v('supplied') - v('return_flow')) - v('dam_evaporation') - (v('dam_storage') - res.body.previousStorageM3) - v('outflow');
 		expect(Math.abs(closes)).toBeLessThan(1e-6);
 	});
 
@@ -78,16 +93,38 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		// A dry day: the rain used is what the store held (in m³ over 10 000 m²), up to the gross demand.
 		const v = (k: string) => valueOf(res.body, k);
 		expect(v('effective_rain')).toBeCloseTo(Math.min((res.body.previousSoilWaterMm * 10_000) / 1000, v('gross_demand')), 9);
-		expect(v('demand')).toBeCloseTo(v('gross_demand') - v('effective_rain'), 9);
+		expect(v('crop_requirement')).toBeCloseTo(v('gross_demand') - v('effective_rain'), 9);
+		// The farm abstracts the crop requirement ÷ its 80 % efficiency (N1, engine 0.16.0).
+		expect(v('demand')).toBeCloseTo(v('crop_requirement') / 0.8, 9);
 	});
 
 	it('takes the parameters from the run, not from the project as it is now', async () => {
-		const edited = { ...farm, name: 'Renamed', returnFlowPct: 0.9 };
+		const edited = { ...farm, name: 'Renamed', irrigationEfficiency: 0.5 };
 		const model = { nodes: [outlet, edited], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
 		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 		const res = await day(owner, '2020-01-02');
 		expect(res.body.name).toBe('Upper');
-		expect(res.body.params.returnFlowPct).toBe(0.1);
+		expect(res.body.params.irrigationEfficiency).toBe(0.8);
+	});
+
+	it('reads a run saved before engine 0.16.0 with its return flow % as migration 006 maps it', async () => {
+		// Rewrite the stored snapshot as an engine 0.14 run held it (as the owner role: runs are immutable to the app).
+		const pg = (await import('pg')).default;
+		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await db.connect();
+		try {
+			await db.query(
+				`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (
+					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'lossReturnFraction') || '{"returnFlowPct": 0.2}'::jsonb)
+					FROM jsonb_array_elements(inputs->'model'->'nodes') n)) WHERE id = $1`,
+				[runId]
+			);
+		} finally {
+			await db.end();
+		}
+		const res = await day(owner, '2020-01-02');
+		expect(res.body.params).toMatchObject({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		expect(res.body.params).not.toHaveProperty('returnFlowPct');
 	});
 
 	it('returns a gauge with its own columns and no storage', async () => {

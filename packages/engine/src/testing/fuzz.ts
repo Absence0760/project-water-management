@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import type { CropArea, CropDef, DailySeries, ModelInput, NetworkNode, ProjectSettings, SeriesKind, Transfer } from '../project';
+import { irrigationFromReturnFlow, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -77,6 +77,12 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  */
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
+	// Irrigation efficiency and loss return (engine ≥ 0.16.0) come from their own
+	// generator, so the rest of a seed's network is what it was before them.
+	const ops = new Rng(seed ^ 0x2c1b3c6d);
+	// Dam evaporation and seepage (N2) likewise, and transfer priorities (Q18).
+	const dl = new Rng(seed ^ 0x6a09e667);
+	const pr = new Rng(seed ^ 0x3c6ef372);
 	const maxNodes = opts.maxNodes ?? 25;
 	const maxDays = opts.maxDays ?? 1200;
 
@@ -115,7 +121,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			damInitialPct: rng.frac(),
 			damMinPct: rng.frac(),
 			divertCapacityM3Day: rng.bool(0.3) ? 0 : rng.bool(0.1) ? 1e9 : rng.bool(0.5) ? rng.logFloat(0.5, 1e5) : Math.round(rng.logFloat(1, 1e5)),
-			returnFlowPct: rng.bool(0.4) ? 0 : rng.frac(0, 0.05)
+			...irrigationOps(ops, rng.bool(0.4) ? 0 : rng.frac(0, 0.05)),
+			...damLossOps(dl)
 		});
 	}
 	const farms = nodes.filter((x) => x.kind === 'farm');
@@ -166,7 +173,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			maxRateM3s: rng.bool(0.1) ? 0 : rng.bool(0.1) ? 1e4 : rng.logFloat(1e-4, 2),
 			dailyCapM3: rng.bool(0.6) ? null : rng.bool(0.1) ? 0 : rng.logFloat(1, 1e5),
 			minStoragePct: rng.frac(0.3, 0.2),
-			enabled: rng.bool(0.9)
+			enabled: rng.bool(0.9),
+			// Ties are common on purpose: equal priorities share a dam pro rata.
+			priority: pr.pick([0, 0, 1, 2, k])
 		});
 	}
 
@@ -242,8 +251,38 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// endless. From its own stream, so a seed still builds the same network.
 	const sw = new Rng(seed ^ 0x2545f491);
 	settings.effectiveRainStoreMm = sw.pick([0, 25, 25, sw.float(0, 200), 1e6]);
+	// Dam evaporation (N2): the default, none, anything up to well above an open-water factor.
+	settings.lakeEvapFactor = dl.pick([0.75, 0.75, 0, dl.float(0, 2)]);
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+}
+
+/**
+ * A dam's evaporation and seepage parameters (audit N2): the area unknown
+ * (estimated from the capacity), none, or anything from a pond to a lake far
+ * bigger than its volume suggests; the exponent at its default, flat or
+ * steep; no seepage, a little, or a leaky dam losing it all in a day.
+ */
+function damLossOps(g: Rng): Pick<NetworkNode, 'damAreaFullM2' | 'damAreaExponent' | 'damSeepagePerDay'> {
+	return {
+		damAreaFullM2: g.pick([null, null, 0, g.logFloat(1, 1e6)]),
+		damAreaExponent: g.pick([0.7, 0.7, 3, g.float(0.05, 3)]),
+		damSeepagePerDay: g.pick([0, 0, 1, g.logFloat(1e-5, 0.2)])
+	};
+}
+
+/**
+ * A farm's irrigation efficiency and loss return (audit N1). Half the time the
+ * migration 006 mapping of the pre-0.15 return flow `r` the main generator
+ * drew (so e = 1 − r, β = 1, and r = 1 gives e = 0.01); otherwise drawn
+ * directly, with the edges e = 1 and β = 0 or 1 over-weighted.
+ */
+function irrigationOps(g: Rng, r: number): Pick<NetworkNode, 'irrigationEfficiency' | 'lossReturnFraction'> {
+	if (g.bool(0.5)) return irrigationFromReturnFlow(r);
+	return {
+		irrigationEfficiency: g.bool(0.2) ? 1 : g.bool(0.05) ? g.float(0.01, 0.1) : g.float(0.5, 1),
+		lossReturnFraction: g.frac(0.25, 0.25)
+	};
 }
 
 /** Rain-model parameters: mostly the defaults, sometimes pushed around. */

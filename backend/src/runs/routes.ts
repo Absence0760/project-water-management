@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay, upgradeLegacyModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
@@ -138,7 +138,8 @@ export const runRoutes = new Hono<AuthEnv>()
 				kind: node.kind,
 				previousStorageM3,
 				previousSoilWaterMm,
-				params: pick(node, ['pctUpstreamToDam', 'pctRunoffToDam', 'divertCapacityM3Day', 'damCapacityM3', 'damInitialPct', 'returnFlowPct']),
+				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
+				params: pick(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as Record<string, unknown>, DAY_PARAMS),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});
 		});
@@ -153,6 +154,21 @@ export const runRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		});
 	});
+
+/** The node parameters the day trace needs to redo the day (docs/api.md). */
+const DAY_PARAMS = [
+	'pctUpstreamToDam',
+	'pctRunoffToDam',
+	'divertCapacityM3Day',
+	'damCapacityM3',
+	'damInitialPct',
+	'damMinPct',
+	'irrigationEfficiency',
+	'lossReturnFraction',
+	'damAreaFullM2',
+	'damAreaExponent',
+	'damSeepagePerDay'
+] as const;
 
 const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]): Record<K, unknown> =>
 	Object.fromEntries(keys.map((k) => [k, o[k] ?? null])) as Record<K, unknown>;

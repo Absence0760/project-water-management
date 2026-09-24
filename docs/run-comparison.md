@@ -117,6 +117,10 @@ dates changed too, only the date change is listed (one hash can't say whether
 the shared days changed), and runs stored before the hash existed have none,
 so an in-place edit between them isn't visible. If the results changed and
 the list shows nothing, one of those is the likely reason.
+A model from a run saved before engine 0.16.0 is read as migration 006 stored
+it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
+1 − r with every loss returning), so a project that only went through the
+migration shows no network line; the engine version line flags the change.
 Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting
@@ -126,7 +130,10 @@ soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
 mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
 is what that run used; the same rule reads a snapshot without a runoff model
-as legacy. Month
+as legacy, and one without a dam evaporation factor (engine < 0.16.0) as 0,
+no dam evaporation. A dam's area when full, area exponent and seepage have
+their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
+(capacity ÷ 3 m)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range.

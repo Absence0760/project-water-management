@@ -32,10 +32,12 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'opening', label: 'Start storage', title: 'Σ dam storage at the start (Mm³)', value: (r) => r.openingStorageM3 * MM3 },
 	{ key: 'runoff', label: 'Farm runoff', title: 'Σ farm runoff (I), Mm³', value: (r) => r.farmRunoffM3 * MM3 },
 	{ key: 'transfers', label: 'Transfers', title: 'Net transfers across all farms; 0 up to float noise (Mm³)', value: (r) => r.transfersM3 * MM3 },
+	{ key: 'rainOnDams', label: 'Rain on dams', title: 'Rain falling on the dams’ surface (Mm³); blank for runs before engine 0.16.0', value: (r) => (r.rainOnDamsM3 === undefined ? null : r.rainOnDamsM3 * MM3) },
 	{ key: 'consumptive', label: 'Consumptive use', title: 'Irrigation supplied − return flow (Mm³)', value: (r) => r.consumptiveUseM3 * MM3 },
+	{ key: 'damEvaporation', label: 'Dam evaporation', title: 'Open-water evaporation from the dams (Mm³); seepage is part of the outflow. Blank for runs before engine 0.16.0', value: (r) => (r.damEvaporationM3 === undefined ? null : r.damEvaporationM3 * MM3) },
 	{ key: 'outflow', label: 'Outflow', title: 'Simulated outflow at the outlet (Mm³)', value: (r) => r.outflowM3 * MM3 },
 	{ key: 'closing', label: 'End storage', title: 'Σ dam storage at the end (Mm³)', value: (r) => r.closingStorageM3 * MM3 },
-	{ key: 'residual', label: 'Residual (m³)', title: 'Start + runoff + transfers − consumptive use − outflow − end; should be 0', value: (r) => r.residualM3 }
+	{ key: 'residual', label: 'Residual (m³)', title: 'Start + runoff + transfers + rain on dams − consumptive use − dam evaporation − outflow − end; should be 0', value: (r) => r.residualM3 }
 ];
 
 /** Years then the whole run, or nothing for a run without a water balance. */
@@ -95,15 +97,17 @@ export function traceRows(day: RunDay): TraceRow[] {
 }
 
 export interface Closure {
-	/** H + I + J */
+	/** H + I + J + rain on the dam (engine ≥ 0.16.0) */
 	inflow: number;
 	/** G − T */
 	consumptive: number;
+	/** Evaporation from the dam (engine ≥ 0.16.0; 0 for older runs). */
+	evaporation: number;
 	/** Q[t] − Q[t−1] */
 	storageChange: number;
 	/** U */
 	outflow: number;
-	/** inflow − consumptive − storageChange − outflow: 0 up to float noise. */
+	/** inflow − consumptive − evaporation − storageChange − outflow: 0 up to float noise. */
 	residual: number;
 }
 
@@ -117,9 +121,15 @@ export function dayClosure(day: RunDay): Closure | null {
 	// Return flow is a working column (engine ≥ 0.12.0); an older run has none.
 	const T = v.get('return_flow');
 	if (typeof T !== 'number') return null;
-	const inflow = g('inflow_upstream') + g('runoff') + g('transfer');
+	// Rain on the dam and evaporation from it (audit N2); a run before engine 0.16.0 has neither. Seepage is in U.
+	const num = (k: string) => {
+		const x = v.get(k);
+		return typeof x === 'number' ? x : 0;
+	};
+	const inflow = g('inflow_upstream') + g('runoff') + g('transfer') + num('rain_on_dam');
 	const consumptive = g('supplied') - T;
+	const evaporation = num('dam_evaporation');
 	const storageChange = g('dam_storage') - day.previousStorageM3;
 	const outflow = g('outflow');
-	return { inflow, consumptive, storageChange, outflow, residual: inflow - consumptive - storageChange - outflow };
+	return { inflow, consumptive, evaporation, storageChange, outflow, residual: inflow - consumptive - evaporation - storageChange - outflow };
 }

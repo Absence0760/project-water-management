@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import type { CropDef, NetworkNode, ProjectModel, Transfer } from '@water-management/engine';
+import { DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -28,7 +28,12 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		returnFlowPct: 0
+		// A typical mixed system with half its losses returning (audit N1).
+		...NEW_FARM_IRRIGATION,
+		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
+		damAreaFullM2: null,
+		damAreaExponent: DAM_AREA_EXPONENT,
+		damSeepagePerDay: 0
 	};
 }
 
@@ -45,7 +50,9 @@ export function newTransfer(fromNodeId: string, toNodeId: string): Transfer {
 		maxRateM3s: 0,
 		dailyCapM3: null,
 		minStoragePct: 0,
-		enabled: true
+		enabled: true,
+		// Equal priorities share a source dam pro rata (audit Q18); raise it to serve a rule later.
+		priority: 0
 	};
 }
 
@@ -141,6 +148,8 @@ export class ModelEditor {
 	addTransfer() {
 		const [a, b] = this.model.nodes;
 		const t = newTransfer(a?.id ?? '', b?.id ?? a?.id ?? '');
+		// Served after the rules already there, as a new rule was before priorities (Q18).
+		if (this.model.transfers.length) t.priority = Math.max(...this.model.transfers.map((x) => x.priority)) + 1;
 		this.model.transfers.push(t);
 		return t;
 	}

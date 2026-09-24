@@ -12,6 +12,7 @@ import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import {
 	defaultProjectSettings,
+	upgradeLegacyModel,
 	type CalibrationStats,
 	type CropDef,
 	type FarmSummary,
@@ -395,6 +396,7 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
+	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', fmt: plain },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	runoffModel: { label: 'Runoff model', fmt: (v) => (v === 'legacy' ? 'legacy (b023 recession)' : v === 'gr4j' ? 'GR4J' : String(v)) },
 	chirpsBiasCorrection: {
@@ -466,6 +468,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		// store size predates it (engine < 0.14.0) and carried no rain over.
 		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
 		zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [], ...((r.zeroRainRuns as object | undefined) ?? {}) },
+		// Likewise dams evaporated only from engine 0.16.0 (audit N2).
+		lakeEvapFactor: r.lakeEvapFactor ?? 0,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
@@ -683,16 +687,21 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pctRunoffToDam', 'own runoff to dam', pct],
 	['damCapacityM3', 'dam capacity', withUnit('m³', 0)],
 	['damInitialPct', 'dam initial level', pct],
-	['damMinPct', 'dam minimum level', pct],
+	['damMinPct', 'dam minimum operating level', pct],
+	['damAreaFullM2', 'dam area when full', (v) => (v === null || v === undefined ? 'estimated (capacity ÷ 3 m)' : `${fmtValue(v, 0)} m²`)],
+	['damAreaExponent', 'dam area exponent', plain],
+	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
-	['returnFlowPct', 'return flow', pct]
+	['irrigationEfficiency', 'irrigation efficiency', pct],
+	['lossReturnFraction', 'share of losses returning', pct]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
 
 function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): InputChange[] {
-	const a: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [], ...(ma ?? {}) };
-	const b: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [], ...(mb ?? {}) };
+	// A run saved by an older engine is compared as migration 006 stored its model (return flow % → efficiency).
+	const a: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(ma ?? {}) });
+	const b: ProjectModel = upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], ...(mb ?? {}) });
 	const out: InputChange[] = [];
 	const nameOf = (m: ProjectModel) => {
 		const nodes = new Map(m.nodes.map((n) => [n.id, n.name] as [string, string]));
@@ -803,6 +812,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.maxRateM3s !== y.maxRateM3s) parts.push(`max rate ${fmtValue(x.maxRateM3s)} → ${fmtValue(y.maxRateM3s)} m³/s`);
 		if (x.dailyCapM3 !== y.dailyCapM3) parts.push(`daily cap ${withUnit('m³', 0)(x.dailyCapM3)} → ${withUnit('m³', 0)(y.dailyCapM3)}`);
 		if (x.minStoragePct !== y.minStoragePct) parts.push(`minimum source storage ${pct(x.minStoragePct)} → ${pct(y.minStoragePct)}`);
+		if (x.priority !== y.priority) parts.push(`priority ${fmtValue(x.priority)} → ${fmtValue(y.priority)}`);
 		for (const p of parts) out.push({ area: 'transfers', kind: 'changed', subject: r, text: `Transfer ${r}: ${p}` });
 	}
 	return out;

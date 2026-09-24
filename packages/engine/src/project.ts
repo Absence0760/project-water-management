@@ -113,6 +113,15 @@ export interface ProjectSettings {
 	 * 19 and 22). 0 = no carry-over, the b023 workbook's rule.
 	 */
 	effectiveRainStoreMm: number;
+	/**
+	 * Open-water evaporation from a farm dam as a fraction of **A-pan**
+	 * evaporation (engine ≥ 0.16.0, docs/engine-audit.md N2): the dam loses
+	 * lakeEvapFactor × A-pan × its surface area each day. Default 0.75 (0.7–0.8
+	 * × Class-A pan, Linsley et al. 1982). The WR90 / WR2012 lake factors are
+	 * ratios to S-pan evaporation and must not be applied to A-pan directly.
+	 * 0 = no dam evaporation.
+	 */
+	lakeEvapFactor: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -219,6 +228,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
 		effectiveRainStoreMm: 25,
+		lakeEvapFactor: 0.75,
 		apanMm: zeros,
 		flowShareMethod: 'area',
 		hiLoSplit: { hi: 0.81, lo: 0.19 },
@@ -380,9 +390,106 @@ export interface NetworkNode {
 	pctRunoffToDam: number;
 	damCapacityM3: number;
 	damInitialPct: number;
+	/** Minimum operating level (dead storage), fraction of capacity: irrigation draws only above it (engine ≥ 0.16.0, audit Q5). */
 	damMinPct: number;
 	divertCapacityM3Day: number;
-	returnFlowPct: number;
+	/**
+	 * Irrigation application efficiency e, 0 < e ≤ 1 (engine ≥ 0.16.0, audit
+	 * N1): the share of the water abstracted that reaches the crop. Abstraction
+	 * demand = crop requirement ÷ e.
+	 */
+	irrigationEfficiency: number;
+	/**
+	 * Share β (0–1) of the application losses, (1 − e) × supplied, that
+	 * returns to the river below the farm the same day (engine ≥ 0.16.0). The
+	 * rest leaves the catchment (evaporation, deep percolation).
+	 */
+	lossReturnFraction: number;
+	/**
+	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
+	 * known: the run estimates capacity ÷ 3 m (ESTIMATED_DAM_DEPTH_M) and warns.
+	 */
+	damAreaFullM2: number | null;
+	/**
+	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b
+	 * (0 < b ≤ 3). Default 0.7 (Liebe et al. 2005, small reservoirs).
+	 */
+	damAreaExponent: number;
+	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
+	damSeepagePerDay: number;
+}
+
+/** Default exponent of the dam area–storage relation (Liebe et al. 2005). */
+export const DAM_AREA_EXPONENT = 0.7;
+
+/**
+ * Mean depth used to estimate a dam's full-supply area when none is entered:
+ * area = capacity ÷ 3 m, about the median mean depth of South African minor
+ * dams (Mantel & Hughes 2023). A run that uses it says so (warning W6).
+ */
+export const ESTIMATED_DAM_DEPTH_M = 3;
+
+/** Irrigation settings of a new farm (engine ≥ 0.16.0, audit N1): a typical mixed system, half of its losses returning. */
+export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.8, lossReturnFraction: 0.5 } as const;
+
+/**
+ * Indicative application efficiencies by irrigation system (audit N1), for
+ * the node form's helper. Typical values from the irrigation design
+ * literature; a scheme's own measurement is better.
+ */
+export const IRRIGATION_SYSTEMS = [
+	{ id: 'drip', label: 'Drip', efficiency: 0.9 },
+	{ id: 'micro', label: 'Micro-sprinkler', efficiency: 0.85 },
+	{ id: 'pivot', label: 'Centre pivot', efficiency: 0.85 },
+	{ id: 'sprinkler', label: 'Sprinkler (dragline, big gun)', efficiency: 0.75 },
+	{ id: 'flood', label: 'Flood / furrow', efficiency: 0.65 }
+] as const;
+
+/**
+ * The efficiency and loss return that replace an engine < 0.16.0 node's
+ * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
+ * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
+ * (consumptive use = supplied − return flow) is as before per unit supplied,
+ * and the crop is now fully supplied, at 1 / (1 − r) times the abstraction.
+ */
+export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; lossReturnFraction: number } {
+	if (!(r > 0)) return { irrigationEfficiency: 1, lossReturnFraction: 0 };
+	return { irrigationEfficiency: Math.max(1 - Math.min(r, 1), 0.01), lossReturnFraction: 1 };
+}
+
+/**
+ * A model saved by an older engine (a project document, a run's input
+ * snapshot, a workbook extract), brought to the current fields the way
+ * migration 006 brings the database: a node without `irrigationEfficiency`
+ * gets it from its `returnFlowPct` (irrigationFromReturnFlow), which is
+ * dropped; a node without the dam evaporation fields gets their defaults
+ * (area unknown, exponent 0.7, no seepage); a transfer without a priority
+ * gets its position in the list (the order it ran in). Fields already
+ * present are kept.
+ * Pure; returns a copy.
+ */
+export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unknown }>(model: M): M {
+	const nodes = Array.isArray(model.nodes)
+		? model.nodes.map((raw) => {
+				if (!raw || typeof raw !== 'object') return raw;
+				const { returnFlowPct, ...n } = raw as Record<string, unknown>;
+				if (n.irrigationEfficiency === undefined || n.lossReturnFraction === undefined) {
+					const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
+					n.irrigationEfficiency ??= up.irrigationEfficiency;
+					n.lossReturnFraction ??= up.lossReturnFraction;
+				}
+				// Dam evaporation and seepage (N2): unknown area, the default exponent, no seepage.
+				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;
+				n.damAreaExponent ??= DAM_AREA_EXPONENT;
+				n.damSeepagePerDay ??= 0;
+				return n;
+			})
+		: model.nodes;
+	// Transfer priority (Q18): the order the rules ran in before, as migration 006 sets it.
+	const transfers = Array.isArray(model.transfers)
+		? model.transfers.map((raw, i) => (raw && typeof raw === 'object' && (raw as { priority?: unknown }).priority === undefined ? { ...(raw as object), priority: i } : raw))
+		: model.transfers;
+	return { ...model, nodes, transfers };
 }
 
 export interface CropDef {
@@ -410,6 +517,12 @@ export interface Transfer {
 	dailyCapM3: number | null;
 	minStoragePct: number;
 	enabled: boolean;
+	/**
+	 * Integer, lower moves first (engine ≥ 0.16.0, audit Q18). Rules of equal
+	 * priority from one source dam share its water pro rata to their limits,
+	 * so the list order never matters.
+	 */
+	priority: number;
 }
 
 export interface ProjectModel {
@@ -461,11 +574,14 @@ export interface RunSeries {
 export interface FarmSummary {
 	nodeId: string;
 	name: string;
+	/** Mean abstraction demand D = crop requirement ÷ irrigation efficiency (engine ≥ 0.16.0; before, the crop requirement). */
 	avgDemandM3Day: number;
 	avgSuppliedM3Day: number;
 	avgDeficitM3Day: number;
-	/** 0–1 */
+	/** avg supplied / avg demand, 0–1: also the share of the crop requirement met (crop use = e × supplied). */
 	fractionSupplied: number;
+	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.16.0); absent on older runs. */
+	avgCropRequirementM3Day?: number;
 	avgEwrShortfallM3Day: number;
 	daysEwrNotMet: number;
 }
@@ -829,10 +945,14 @@ export interface WaterBalanceRow {
 	consumptiveUseM3: number;
 	/** Net transfers across all farms; 0 up to float noise. */
 	transfersM3: number;
+	/** Rain falling on the dams' surface (engine ≥ 0.16.0, audit N2); absent on older runs. */
+	rainOnDamsM3?: number;
+	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
+	damEvaporationM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers − consumptive use − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − outflow − closing. */
 	residualM3: number;
 }
 

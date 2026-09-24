@@ -161,6 +161,38 @@ def iso(d: Any) -> str:
     raise ValueError(f"not a date: {d!r}")
 
 
+def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> dict[str, Any]:
+    """The node's operating-rule fields (engine >= 0.16.0, docs/engine-audit.md).
+
+    Q5: the app's damMinPct is the dam's minimum operating level (irrigation
+    stops there). The workbook's [Farm spec] "min %" is the minimum for
+    transfers, which each transfer rule already carries as minStoragePct, so it
+    is not imported as an operating level: damMinPct is 0 (irrigation may empty
+    the dam, as in the workbook), with a note when the workbook had one.
+
+    N1: the workbook's irrigation return flow % r becomes an application
+    efficiency and a loss return fraction, as migration 006 maps it: r = 0 ->
+    e = 1, beta = 0; r > 0 -> e = 1 - r (at least 0.01), beta = 1. The balance
+    per unit supplied is the workbook's, and the crop is now fully supplied.
+
+    N2: the workbook has no dam surface areas, so damAreaFullM2 is None (the
+    run estimates capacity / 3 m and warns), with the default area exponent
+    0.7 and no seepage; the caller notes the dams once.
+    """
+    wb_min = num(spec.get("damMinPct"))
+    if wb_min:
+        notes.append(
+            f"farm {name}: [Farm spec] min dam % {wb_min:g} is the workbook's transfer minimum (each transfer rule "
+            "keeps its own); the dam's minimum operating level is left at 0 (docs/engine-audit.md Q5)"
+        )
+    r = num(spec.get("returnFlowPct"))
+    if r > 0:
+        irrigation = {"irrigationEfficiency": max(1 - min(r, 1), 0.01), "lossReturnFraction": 1}
+    else:
+        irrigation = {"irrigationEfficiency": 1, "lossReturnFraction": 0}
+    return {"damMinPct": 0, **irrigation, "damAreaFullM2": None, "damAreaExponent": 0.7, "damSeepagePerDay": 0}
+
+
 def month_list(v: Any) -> list[int]:
     """The months a b023 month-list cell ("1,2,11,12") names.
 
@@ -693,12 +725,17 @@ def extract(
                     "pctRunoffToDam": s.get("pctRunoffToDam", 0),
                     "damCapacityM3": s.get("damCapacityM3", 0),
                     "damInitialPct": s.get("damInitialPct", 0),
-                    "damMinPct": s.get("damMinPct", 0),
                     "divertCapacityM3Day": s.get("divertCapacityM3Day", 0),
-                    "returnFlowPct": s.get("returnFlowPct", 0),
+                    **farm_operating_rules(e["name"], s, wb.notes),
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}
+        dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
+        if dams:
+            wb.notes.append(
+                f"{len(dams)} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam "
+                "evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure"
+            )
 
         crop_defs = [{"id": uid(f"crop:{c['name']}"), "name": c["name"], "cropFactor": c["cropFactor"]} for c in crops]
         crop_id = {c["name"]: c["id"] for c in crop_defs}
@@ -730,6 +767,8 @@ def extract(
                     "dailyCapM3": None,
                     "minStoragePct": t["minStoragePct"],
                     "enabled": True,
+                    # The workbook's columns ran in order; equal priorities would share a dam (Q18).
+                    "priority": len(model_transfers),
                 }
             )
 
