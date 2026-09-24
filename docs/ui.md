@@ -97,6 +97,19 @@ pending invitations, the confirm-email banner) render through
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
+- **Table layout**: the whole table, through the **In use** share and the ✕
+  column, fits a 1440px screen without sideways scrolling. Field headers wrap
+  (e.g. "Upstream inflow to dam" over three lines) instead of setting the
+  column width, cells are tighter, and the 0–100 % columns are narrower than
+  the area and volume columns. Narrower screens still scroll the table
+  sideways with the Name column pinned.
+- **One node layout**: the node picker (‹ select ›) is sticky under the app
+  header, so the node being edited stays named and ‹ › stay in reach while
+  scrolling a long farm form; **+ Add node** sits just below it and scrolls
+  away. Controls reached by Tab stop below the picker, not under it. Tapping
+  a node on the schematic selects it and, when the form is below the lower
+  part of the screen (as on a phone, where the form sits under the drawing),
+  scrolls the picker to the top so the form is in view (`scroll.ts`).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The

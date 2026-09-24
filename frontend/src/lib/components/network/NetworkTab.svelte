@@ -11,6 +11,7 @@
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
+	import { formOffScreen } from './scroll';
 
 	let {
 		editor,
@@ -37,9 +38,17 @@
 	const selected = $derived(nodes.find((n) => n.id === selectedId) ?? nodes[0] ?? null);
 	const selectedIndex = $derived(selected ? nodes.indexOf(selected) : -1);
 
+	let pickerEl: HTMLDivElement | undefined = $state();
+
 	function select(id: string) {
 		selectedId = id;
-		if (view === 'table') {
+		if (view === 'detail') {
+			// The form sits below the schematic; on a phone a tapped node would
+			// otherwise change a form that is off-screen.
+			if (pickerEl && formOffScreen(pickerEl.getBoundingClientRect(), window.innerHeight)) {
+				pickerEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+			}
+		} else {
 			queueMicrotask(() => {
 				const row = document.getElementById(`node-row-${id}`);
 				row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -138,7 +147,7 @@
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
 
-<section class="panel" aria-labelledby="net-h">
+<section class="panel" class:one-node={view === 'detail'} aria-labelledby="net-h">
 	<div class="panel-head">
 		<h2 id="net-h">Network nodes</h2>
 		{#if nodes.length}
@@ -231,7 +240,7 @@
 								{#if f.farmOnly && node.kind !== 'farm'}
 									<td class="num na" title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
 								{:else}
-								<td>
+								<td class:pct={isPct(f)}>
 									<NumberInput
 										label={f.aria(label)}
 										min={0}
@@ -248,7 +257,7 @@
 							{/each}
 							<td class="num share">{share === null ? '–' : fmtPct(share, 2)}</td>
 							{#if !readonly}
-								<td>
+								<td class="rm">
 									<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove node" onclick={() => remove(node.id, label)}>✕</button>
 								</td>
 							{/if}
@@ -291,7 +300,9 @@
 			</dl>
 		</details>
 	{:else if selected}
-		<div class="picker">
+		<!-- Sticky under the app header, so the node being edited stays named
+		     (and ‹ › stay in reach) while scrolling a long farm form. -->
+		<div class="picker" bind:this={pickerEl}>
 			<label for="node-pick" class="visually-hidden">Node to edit</label>
 			<button type="button" class="btn" aria-label="Previous node" disabled={selectedIndex <= 0} onclick={() => (selectedId = nodes[selectedIndex - 1]!.id)}>‹</button>
 			<select id="node-pick" value={selected.id} onchange={(e) => (selectedId = e.currentTarget.value)}>
@@ -300,8 +311,10 @@
 				{/each}
 			</select>
 			<button type="button" class="btn" aria-label="Next node" disabled={selectedIndex >= nodes.length - 1} onclick={() => (selectedId = nodes[selectedIndex + 1]!.id)}>›</button>
-			{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add node</button>{/if}
 		</div>
+		{#if !readonly}
+			<div class="toolbar add-one"><button type="button" class="btn" onclick={add}>+ Add node</button></div>
+		{/if}
 		{#key selected.id}
 			<NodeDetail
 				node={selected}
@@ -344,8 +357,28 @@
 		border-color: var(--accent);
 		color: var(--accent);
 	}
+	/* Fit the whole table (through "In use" and ✕) on a 1440px screen: field
+	   headers wrap instead of setting the column width, cells are tighter,
+	   and 0–100 % columns are narrower than the volume columns. */
+	.net thead th {
+		white-space: normal;
+	}
+	.net th,
+	.net td {
+		padding-left: 0.35rem;
+		padding-right: 0.35rem;
+	}
 	.net td {
 		min-width: 84px;
+	}
+	.net td.pct {
+		min-width: 60px;
+	}
+	.net td.rm {
+		min-width: 0;
+	}
+	table.data.compact.net td :global(input) {
+		min-width: 0;
 	}
 	.net thead th.grp {
 		text-align: center;
@@ -372,7 +405,7 @@
 		min-width: 90px;
 	}
 	.net td:nth-child(3) {
-		min-width: 160px;
+		min-width: 150px;
 	}
 	.net td.na {
 		color: var(--text-muted);
@@ -393,6 +426,7 @@
 	}
 	.namecell input {
 		flex: 1;
+		width: 120px;
 		min-width: 120px;
 	}
 	.net tr.dragging {
@@ -439,8 +473,21 @@
 		display: flex;
 		gap: 0.4rem;
 		align-items: center;
-		flex-wrap: wrap;
-		margin-bottom: 0.75rem;
+		margin: 0 -0.5rem 0.5rem;
+		padding: 0.4rem 0.5rem;
+		position: sticky;
+		top: var(--header-h);
+		z-index: 4;
+		background: var(--surface);
+		border-bottom: 1px solid var(--border);
+	}
+	.add-one {
+		margin: 0 0 0.75rem;
+	}
+	/* A control scrolled to by Tab stops below the sticky picker too, not
+	   just below the app header (WCAG 2.4.11, focus not obscured). */
+	.one-node :global(:is(input, select, button, a, summary)) {
+		scroll-margin-top: 4.5rem;
 	}
 	.picker select {
 		flex: 1;
@@ -457,9 +504,6 @@
 		.picker .btn,
 		.seg .btn {
 			min-height: 44px;
-		}
-		.picker select {
-			flex-basis: calc(100% - 100px);
 		}
 	}
 	.empty {
