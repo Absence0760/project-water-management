@@ -166,3 +166,52 @@ test("a series' CSV menu opens in full, even on the table's last row", async ({ 
 	await page.keyboard.press('Escape');
 	await expect(item).toBeHidden();
 });
+
+test('on a phone each series row is a card: every column and button fits without scrolling sideways', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series phone');
+	await page.setViewportSize({ width: 390, height: 900 });
+
+	// Empty: the hint points at the upload form, which sits right under the series panel.
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await expect(page.getByText('No time series yet.')).toContainText('Upload CSV form below');
+	const upload = page.getByRole('region', { name: 'Upload CSV' });
+	const uses = page.getByRole('region', { name: 'What the model uses' });
+	expect((await upload.boundingBox())!.y).toBeLessThan((await uses.boundingBox())!.y);
+
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+	await page.reload();
+	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toBeVisible();
+
+	// Still a table to assistive tech: header cells and data cells keep their roles.
+	await expect(table.getByRole('columnheader', { name: 'Coverage by year' })).toHaveCount(1);
+	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-01');
+
+	// Nothing is hidden behind a sideways scroll, in the table's box or the page.
+	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
+	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	await expect(wrap).not.toHaveAttribute('tabindex'); // no sideways-scroll tab stop (a11y/scrollRegions.ts)
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	const del = flowRow.getByRole('button', { name: /^Delete/ });
+	await del.scrollIntoViewIfNeeded();
+	for (const b of [flowRow.getByRole('button', { name: 'View', exact: true }), flowRow.getByRole('button', { name: 'Preview', exact: true }), del]) {
+		await expect(b).toBeInViewport({ ratio: 1 });
+	}
+	// Each card shows its column labels.
+	const label = await flowRow.getByRole('cell').first().evaluate((el) => getComputedStyle(el, '::before').content);
+	expect(label).toContain('Period');
+});
+
+test('on a wide screen the upload form stays to the right of "What the model uses"', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series wide');
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const upload = (await page.getByRole('region', { name: 'Upload CSV' }).boundingBox())!;
+	const uses = (await page.getByRole('region', { name: 'What the model uses' }).boundingBox())!;
+	expect(upload.x).toBeGreaterThanOrEqual(uses.x + uses.width);
+	expect(Math.abs(upload.y - uses.y)).toBeLessThan(2);
+});
