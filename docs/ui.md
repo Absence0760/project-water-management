@@ -102,6 +102,27 @@ every crop and month with a factor above 1.0: a hint to check for an FAO Kc
 entered as it is, never a block on saving (`highCropFactors` in
 `components/crops/demand.ts`).
 
+On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
+into a card with visible labels: the crop name (with reorder and remove) on
+top, the twelve factors four to a row and the mean below; each farm's crops two
+to a row with its total, and a totals card last. Every field is on screen
+without scrolling the table sideways. The read-only demand preview stays a
+table that scrolls. With no farm or crop yet, the Planted areas note links to
+the Network tab.
+
+## Transfers
+
+One row per transfer rule: source and destination node, the months it runs
+(twelve toggles, water-year order, with **All**/**None**), a maximum rate
+(m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
+which it stops, and an enabled switch. The empty state says what a transfer
+is (most catchments have none); with fewer than two nodes it links to the
+Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
+its remove button on top, From and To side by side, the month toggles six to a
+row at tap size, then the numbers and an **Enabled** switch whose label is
+part of the tap target. The table's column headers and their ⓘ tips move into
+each card's field labels.
+
 ## Data
 
 Each series shows its role in the model, its period, its last date and age,

@@ -98,7 +98,7 @@
 		</div>
 	{:else}
 		<div class="table-wrap">
-			<table class="data compact factors">
+			<table class="data compact factors" class:editable={!readonly}>
 				<thead>
 					<tr>
 						<th scope="col" class="sticky">Crop</th>
@@ -122,6 +122,7 @@
 							</th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td>
+									<span class="cell-label" aria-hidden="true">{m}</span>
 									<NumberInput
 										label="{label} crop factor, {m}"
 										min={0}
@@ -131,9 +132,9 @@
 									/>
 								</td>
 							{/each}
-							<td class="num muted">{fmtNum(crop.cropFactor.reduce((s, f) => s + (f || 0), 0) / 12, 2)}</td>
+							<td class="num muted mean"><span class="cell-label">Mean{' '}</span>{fmtNum(crop.cropFactor.reduce((s, f) => s + (f || 0), 0) / 12, 2)}</td>
 							{#if !readonly}
-								<td><button type="button" class="btn btn-icon" aria-label="Remove {label}" title="Remove crop" onclick={() => remove(crop.id, label)}>✕</button></td>
+								<td class="rm"><button type="button" class="btn btn-icon" aria-label="Remove {label}" title="Remove crop" onclick={() => remove(crop.id, label)}>✕</button></td>
 							{/if}
 						</tr>
 					{/each}
@@ -157,7 +158,9 @@
 		<span class="muted small">Irrigated area per farm and crop, hectares · rows follow the network order</span>
 	</div>
 	{#if farms.length === 0 || crops.length === 0}
-		<p class="muted">Add at least one farm (Network tab) and one crop to enter planted areas.</p>
+		<p class="muted">
+			Add at least one farm (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
+		</p>
 	{:else}
 		<div class="table-wrap">
 			<table class="data compact areas">
@@ -182,6 +185,7 @@
 							</th>
 							{#each crops as c (c.id)}
 								<td>
+									<span class="cell-label" aria-hidden="true">{c.name || '(unnamed)'} <span class="u">ha</span></span>
 									<NumberInput
 										label="{c.name || 'crop'} on {f.name || 'farm'}, ha"
 										min={0}
@@ -193,7 +197,7 @@
 									/>
 								</td>
 							{/each}
-							<td class="num total">{ha(rowTotal(f.id))}</td>
+							<td class="num total"><span class="cell-label">Total{' '}</span>{ha(rowTotal(f.id))}<span class="cell-label">{' '}ha</span></td>
 						</tr>
 					{/each}
 				</tbody>
@@ -201,9 +205,9 @@
 					<tr>
 						<th scope="row" class="sticky">Total</th>
 						{#each crops as c (c.id)}
-							<td class="num">{ha(colTotal(c.id))} ha</td>
+							<td class="num"><span class="cell-label">{c.name || '(unnamed)'}{' '}</span>{ha(colTotal(c.id))} ha</td>
 						{/each}
-						<td class="num">{ha(grandTotal)} ha</td>
+						<td class="num"><span class="cell-label">All crops{' '}</span>{ha(grandTotal)} ha</td>
 					</tr>
 				</tfoot>
 			</table>
@@ -347,6 +351,109 @@
 	}
 	.after {
 		margin: 0.75rem 0 0;
+	}
+	/* Phones: each row of the crop-factor and planted-area tables becomes a card
+	   with visible field labels, instead of a sideways-scrolling table whose
+	   sticky name column leaves room for one month. */
+	.cell-label {
+		display: none;
+	}
+	@media (max-width: 640px) {
+		.factors thead,
+		.areas thead {
+			display: none;
+		}
+		.factors,
+		.factors tbody,
+		.areas,
+		.areas tbody,
+		.areas tfoot {
+			display: block;
+		}
+		.factors tr,
+		.areas tr {
+			display: grid;
+			gap: 0.5rem;
+			padding: 0.75rem;
+			border-bottom: 1px solid var(--border);
+		}
+		.factors tr:last-child,
+		.areas tbody tr:last-child {
+			border-bottom: none;
+		}
+		.factors tr > *,
+		.areas tr > * {
+			min-width: 0;
+			padding: 0;
+			border: 0;
+			text-align: left;
+		}
+		th.sticky {
+			position: static;
+			background: none;
+		}
+		.namecell input {
+			min-width: 0;
+		}
+		.factors td :global(input[type='number']),
+		.areas td :global(input[type='number']) {
+			min-width: 0;
+		}
+		.cell-label {
+			display: block;
+			font-size: 0.75rem;
+			font-weight: 600;
+			color: var(--text-2);
+			margin-bottom: 0.15rem;
+		}
+		/* Crop factors: name (and remove) on top, the months four to a row. */
+		.factors tr {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+		.factors th[scope='row'],
+		.factors .mean {
+			grid-column: 1 / -1;
+		}
+		.factors.editable th[scope='row'] {
+			grid-column: 1 / 4;
+			grid-row: 1;
+		}
+		.factors .rm {
+			grid-column: 4;
+			grid-row: 1;
+			justify-self: end;
+		}
+		/* Planted areas: farm name on top, crops two to a row, total last. */
+		.areas tr {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.areas th[scope='row'],
+		.areas .total {
+			grid-column: 1 / -1;
+		}
+		.areas tfoot tr {
+			background: var(--surface-2);
+			border-top: 2px solid var(--border-strong);
+		}
+		.areas tfoot tr > * {
+			background: none;
+		}
+		.factors .mean .cell-label,
+		.areas .total .cell-label,
+		.areas tfoot .cell-label {
+			display: inline;
+			margin: 0;
+		}
+		tr.drop-before > *,
+		tr.drop-after > * {
+			box-shadow: none;
+		}
+		tr.drop-before {
+			box-shadow: inset 0 2px 0 var(--accent);
+		}
+		tr.drop-after {
+			box-shadow: inset 0 -2px 0 var(--accent);
+		}
 	}
 	.empty {
 		padding: 1.5rem;
