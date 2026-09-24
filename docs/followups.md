@@ -52,19 +52,47 @@ Tick items off (or move them into an issue) as they are done.
       yes, then record it (dated) in plan.md and close #1.
       The runoff-ratio check needs the client workbook back in
       `../project-water-management-source/Original/`.
-- [ ] **Engine audit questions** ([engine-audit.md](./engine-audit.md)):
-      - H1: a storm resets base flow, so one storm returns about 4.9× its rain.
-      - N1: there's no irrigation efficiency.
-      - N2: dam evaporation and seepage are ignored.
-      - N3: rain only offsets demand on the day it falls.
-      - N4, Q3, Q18: transfer rules.
-      - Q17: how the EWR shortfall is attributed to farms.
-      - Q5, Q11, Q13: curtailment policy. (Q1 is resolved: the share goes
-        into the dam, engine 0.9.0.)
-- [ ] **Return flow and curtailment:** with return flow on, a farm upstream of
-      a starved neighbour can "help" it by drawing more, because part of the
-      extra draw returns to the river. Keep this in mind when reading
-      curtailment results (it relates to N1).
+- [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
+      Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
+      recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
+      **not** client sign-off. Put each to the hydrologist as "confirm or change":
+      - H1: legacy kept unchanged but labelled workbook comparison only, never
+        evidence (warning, badge, CSV comment); GR4J is the model of record.
+      - N3 (engine 0.14.0): a 25 mm soil-water store carries effective rain
+        over; 0 reproduces the workbook. Confirm the size per soil/root depth.
+      - Q5 (0.16.0): `damMinPct` is the dam's minimum operating level;
+        existing values were reset to 0 (they were the workbook's transfer
+        minimum).
+      - N1 (0.16.0): irrigation efficiency e and losses returning β replace
+        return flow %; backfilled so a crop is now fully supplied (r > 0 →
+        e = 1 − r, β = 1). Ask whether the client's crop factors already
+        include losses (then scale them by 1 − r to keep today's numbers).
+      - N2 (0.16.0): dam evaporation (lake factor 0.75 × A-pan), rain on the
+        dam and seepage; unknown areas use capacity ÷ 3 m (warning W6).
+        Needs each dam's area when full, and confirming the "Mantel & Hughes
+        2023" 3 m median depth reference (not verified). Rain on a dam is
+        partly double-counted with land runoff.
+      - N4/Q3/Q18 (0.16.0): transfers capped at the receiver's room; an
+        explicit priority, with equal priorities sharing pro rata.
+      - Q17/Q13/Q11 (0.17.0): EWR shortfall charged to upstream farms pro
+        rata to net impact at the outlet and every gauge (the rest reported
+        as natural), split into irrigation and storage parts; the old AB is
+        kept as "reach shortfall"; zero-demand farms get no irrigation cut;
+        "Demand left %" bounded, "—" under 1 m³/day; equitable share labelled
+        a fairness benchmark, not an allocation.
+- [ ] **Attribution follow-ons (Q17):** add the EWR site list to run
+      comparison's *What changed*; a per-gauge "is an EWR site" flag
+      (WP-3.7); the per-run attribution self-check is exact only where no
+      transfer crosses a site's catchment boundary, because per-rule transfer
+      volumes aren't stored as run series (the full invariants run in
+      `network/attribution.test.ts` and the fuzz suite).
+- [ ] **Client regression suite is thinner since N1.** Nearly every client
+      farm has return flow, which the new efficiency model can't reproduce,
+      so the replay skips those farms' balance columns and everything
+      downstream (listed under N1). It now checks the network mainly through
+      runoff, EWR and crop requirement. Durable fix: replay the workbook's
+      own G and T per farm into the network (as `[Shortfalls]` already is)
+      so the downstream columns are tested again.
 - [x] **Validation scores are saved with a run** (issue #4). Apply stores the
       fit record (seed, objective, window, exclusions, the in-sample and
       validation scores) with the parameters, each run snapshots it, and the
@@ -162,8 +190,8 @@ Tick items off (or move them into an issue) as they are done.
       double-mass check against CHIRPS follows as a separate step.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
-- [ ] **Curtailment "Demand left %"** shows extreme values for farms with tiny
-      demand (Q12/Q13). Decide how to show it once answered.
+- [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
+      demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
 
 ## Issue #4 Phase 6: simulated review findings (2026-09-24)
 
@@ -573,6 +601,12 @@ the suggested order (the IDs carry the detail):
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
       0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
+      A 2 000-case run on engine 0.17.0 (2026-09-24) found **seed 921
+      failing "doubling crop areas raised the supply fraction"**, the same on
+      0.16.0, so it came in with N1–N4 or earlier, not attribution. Bisect
+      over 0.13.0 → 0.16.0, find which rule lets more demand be supplied a
+      larger fraction (candidates: the transfer room cap using the
+      receiver's demand, or the soil-water store), and fix at the source.
 - [ ] **Excel audit workbook export** (the strongest independent check). The
       farm daily CSV has every column but the hydrologist still types the
       formulas. An `.xlsx` for one farm: inputs as values, each working column
