@@ -51,6 +51,8 @@ describe('guessSeries', () => {
 	it('falls back to keywords, using the only series of that kind', () => {
 		expect(guessSeries('rain-april.csv', '', list)).toEqual({ kind: 'rain_catchment_mm', name: 'Average Catchment Rainfall' });
 		expect(guessSeries('chirps.csv', '', list)).toEqual({ kind: 'rain_chirps_mm', name: '' });
+		expect(guessSeries('reference-gauge.csv', '', list)).toEqual({ kind: 'flow_reference_m3s', name: '' });
+		expect(guessSeries('gauge.csv', '', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow G1' });
 		expect(guessSeries('data.csv', 'date,value', list)).toBeNull();
 	});
 

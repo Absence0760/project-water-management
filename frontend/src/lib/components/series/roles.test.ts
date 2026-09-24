@@ -20,4 +20,10 @@ describe('seriesInUse', () => {
 		expect([...seriesInUse([meta('o', 'flow_observed_m3s'), meta('l', 'flow_logger_m3s')])]).toEqual(['o']);
 		expect([...seriesInUse([meta('l', 'flow_logger_m3s')])]).toEqual(['l']);
 	});
+
+	it('never counts a reference gauge (another catchment) as in use', () => {
+		expect([...seriesInUse([meta('r', 'flow_reference_m3s'), meta('l', 'flow_logger_m3s')])]).toEqual(['l']);
+		expect([...seriesInUse([meta('r', 'flow_reference_m3s')])]).toEqual([]);
+		expect(KIND_ROLES.flow_reference_m3s!.driver).toBe(false);
+	});
 });

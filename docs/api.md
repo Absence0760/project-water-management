@@ -240,8 +240,14 @@ overlapping days, the series extends in either direction, and any gap days
 between the old and new ranges become `null`. `413` if the merged series would
 exceed 60 000 days.
 
-`kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`). Max 60 000 values
-(~164 years).
+`kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
+`rain_chirps_mm`, `rain_forecast_mm`, `flow_pitman_m3s`, `flow_observed_m3s`,
+`flow_logger_m3s` and `flow_reference_m3s`. The last is a gauge on a different
+river (a regional wet/dry index): runs store it in their input snapshot but
+never read it, and it can't be a `calibrationFlowKind`
+([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)).
+The same list applies to the `series` of a project file imported with
+`pnpm import:project`. Max 60 000 values (~164 years).
 
 ## Runs
 

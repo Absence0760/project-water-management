@@ -209,3 +209,16 @@ describe('patchSettings', () => {
 		expect(patchSettings(stored, { wr2012: { reference: null } }).wr2012.reference).toBeNull();
 	});
 });
+
+describe('SettingsPatch.calibrationFlowKind', () => {
+	const ok = (calibrationFlowKind: unknown) => SettingsPatch.safeParse({ calibrationFlowKind }).success;
+
+	it('accepts the observed records and Pitman flow', () => {
+		for (const k of ['flow_observed_m3s', 'flow_logger_m3s', 'flow_pitman_m3s', null]) expect(ok(k), String(k)).toBe(true);
+	});
+
+	it('never accepts a reference gauge (another catchment) as the calibration record', () => {
+		expect(ok('flow_reference_m3s')).toBe(false);
+		expect(ok('rain_catchment_mm')).toBe(false);
+	});
+});

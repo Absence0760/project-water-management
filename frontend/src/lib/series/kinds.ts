@@ -6,7 +6,8 @@ const LABELS: Record<SeriesKind, string> = {
 	rain_forecast_mm: 'Rainfall — forecast',
 	flow_pitman_m3s: 'Flow — Pitman (WR2012)',
 	flow_observed_m3s: 'Flow — observed gauge',
-	flow_logger_m3s: 'Flow — logger'
+	flow_logger_m3s: 'Flow — logger',
+	flow_reference_m3s: 'Flow — reference gauge (other catchment)'
 };
 
 export function kindLabel(kind: string): string {

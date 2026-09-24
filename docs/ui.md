@@ -119,8 +119,12 @@ badge for water years far below the usual catchment / CHIRPS share (engine
 `rainVsChirps`, on the first catchment and first CHIRPS series by name, as a
 run reads them). These are the same checks a run reports as warnings; rules in
 [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
-"What the model uses" explains every kind. Each series can be downloaded as
-CSV.
+"What the model uses" explains every kind. A **reference gauge (other
+catchment)** series (`flow_reference_m3s`, e.g. imported with
+`--gauge-as-reference`) is badged *Reference only*: it can be charted here as a
+regional wet/dry index, but runs never read it, it is not in the gauge-vs-logger
+table and it can't be picked as the calibration record. Each series can be
+downloaded as CSV.
 
 ## Settings & calibration
 

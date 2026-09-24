@@ -225,14 +225,23 @@ export function defaultProjectSettings(): ProjectSettings {
 /** A b023 network element. A "farm" can also model a stand-alone dam or natural area. */
 export type NodeKind = 'farm' | 'gauge';
 
-/** Time-series kinds a project can hold. Values are daily, starting at `startDate`. */
+/**
+ * Time-series kinds a project can hold. Values are daily, starting at `startDate`.
+ *
+ * `flow_reference_m3s` is a gauge on a *different* river (a neighbouring
+ * sub-catchment), kept as a regional wet/dry index only. The engine never
+ * reads it: it is not a driver, not a calibration or validation record, not
+ * in the gauge-vs-logger agreement check and not in the EWR comparison, and
+ * it is deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10).
+ */
 export const SERIES_KINDS = [
 	'rain_catchment_mm',
 	'rain_chirps_mm',
 	'rain_forecast_mm',
 	'flow_pitman_m3s',
 	'flow_observed_m3s',
-	'flow_logger_m3s'
+	'flow_logger_m3s',
+	'flow_reference_m3s'
 ] as const;
 export type SeriesKind = (typeof SERIES_KINDS)[number];
 

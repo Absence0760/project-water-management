@@ -260,7 +260,7 @@
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
 								{#if role}
 									<span class="role" class:unused={!inUse.has(s.id)} title={role.help}>
-										{inUse.has(s.id)
+										{inUse.has(s.id) || s.kind === 'flow_reference_m3s'
 											? role.role
 											: s.kind === 'flow_logger_m3s' && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
 												? 'Calibration if chosen in settings'

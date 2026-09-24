@@ -3,7 +3,7 @@
 // `pnpm import:project` (scripts/import-project.ts) reads it, so a project
 // round-trips export → import. The Python workbook importer
 // (scripts/wbt-import) emits the same shape.
-import { ENGINE_VERSION, type ProjectModel } from '@water-management/engine';
+import { ENGINE_VERSION, SERIES_KINDS, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
@@ -23,7 +23,9 @@ export const ProjectFile = z.object({
 	series: z
 		.array(
 			z.object({
-				kind: z.string(),
+				// Same kinds as PUT /projects/:id/series, so a typo in a workbook
+				// import fails loudly instead of storing a series no run reads.
+				kind: z.enum(SERIES_KINDS),
 				name: z.string().default(''),
 				unit: z.string(),
 				startDate: z.string(),

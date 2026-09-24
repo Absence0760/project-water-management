@@ -51,6 +51,7 @@ const KEYWORDS: [RegExp, string][] = [
 	[/forecast|gfs|ecmwf/, 'rain_forecast_mm'],
 	[/pitman|wr2012|wr90|natural/, 'flow_pitman_m3s'],
 	[/logger/, 'flow_logger_m3s'],
+	[/reference|regional|neighbou?r/, 'flow_reference_m3s'],
 	[/rain|precip|\bmm\b/, 'rain_catchment_mm'],
 	[/flow|gauge|weir|discharge|m3\/s|m³\/s|cumec/, 'flow_observed_m3s']
 ];

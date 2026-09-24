@@ -894,6 +894,18 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Flow data'
 	},
 	{
+		id: 'reference-gauge',
+		term: 'Reference gauge (other catchment)',
+		short: 'A gauge on a different river, such as a neighbouring sub-catchment. A regional wet/dry index only; the model never reads it.',
+		long: 'Some workbooks hold a gauge column measured on a neighbouring river, sometimes scaled by catchment area for part of the record. That record is not observed flow for the modelled river, so it is kept as its own series kind: runs never calibrate or validate against it, never compare it with the logger and never use it in the EWR comparison. Use it to rank wet and dry years. The importer stores it this way with --gauge-as-reference.',
+		units: 'm³/s',
+		category: 'data',
+		aliases: ['regional gauge', 'neighbouring gauge', 'proxy gauge'],
+		fields: ['series.flow_reference_m3s'],
+		related: ['observed-flow', 'calibration'],
+		source: 'docs/model.md §2.10'
+	},
+	{
 		id: 'wr90',
 		term: 'WR90 / WR2012',
 		short: 'The Water Resources of South Africa studies (1990, 2012): A-pan, MAP and naturalised flow per quaternary catchment.',

@@ -40,18 +40,27 @@ export const KIND_ROLES: Record<string, KindRole> = {
 		role: 'Calibration (fallback)',
 		help: 'Logger flow at the outflow gauge (m³/s). Used for calibration only when there is no observed-gauge series.',
 		driver: false
+	},
+	flow_reference_m3s: {
+		role: 'Reference only',
+		help: 'A gauge on a different river, e.g. a neighbouring sub-catchment (m³/s). Shown on this tab as a regional wet/dry index only: runs never read it, calibrate against it or compare it with the EWR.',
+		driver: false
 	}
 };
+
+/** Kinds a run never reads, so no series of the kind is ever "in use". */
+const NEVER_READ = new Set(['flow_reference_m3s']);
 
 /**
  * Ids of the series a run actually reads: the first of each kind by name
  * (the backend's DISTINCT ON (kind) … ORDER BY kind, name), and the logger
- * only when there is no observed-gauge series.
+ * only when there is no observed-gauge series. A reference gauge is never in
+ * use: the engine ignores it.
  */
 export function seriesInUse(list: SeriesMeta[]): Set<string> {
 	const first = new Map<string, SeriesMeta>();
 	for (const s of [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))) {
-		if (!first.has(s.kind)) first.set(s.kind, s);
+		if (!first.has(s.kind) && !NEVER_READ.has(s.kind)) first.set(s.kind, s);
 	}
 	if (first.has('flow_observed_m3s')) first.delete('flow_logger_m3s');
 	return new Set([...first.values()].map((s) => s.id));

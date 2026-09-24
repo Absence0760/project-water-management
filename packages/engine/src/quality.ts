@@ -226,7 +226,8 @@ export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_chirps_mm: 5,
 	rain_forecast_mm: 5,
 	flow_observed_m3s: 14,
-	flow_logger_m3s: 14
+	flow_logger_m3s: 14,
+	flow_reference_m3s: 14
 };
 const MAX_EXAMPLES = 5;
 
@@ -236,7 +237,8 @@ const SERIES_NAME: Record<SeriesKind, string> = {
 	rain_forecast_mm: 'Rainfall (forecast)',
 	flow_pitman_m3s: 'Pitman flow',
 	flow_observed_m3s: 'Observed flow',
-	flow_logger_m3s: 'Logger flow'
+	flow_logger_m3s: 'Logger flow',
+	flow_reference_m3s: 'Reference gauge (other catchment)'
 };
 const unitOf = (k: SeriesKind) => (k.startsWith('rain_') ? 'mm' : 'm³/s');
 const fmt = (v: number) => String(+v.toPrecision(4));

@@ -109,6 +109,32 @@ describe('projects', () => {
 		}
 	});
 
+	it('stores a reference gauge (other catchment) that runs never calibrate against', async () => {
+		const u = await signUp('Ref');
+		const { projectId } = await projectWithModel(u);
+		const days = 60;
+		const put = (kind: string, values: number[]) =>
+			u.call('PUT', `/projects/${projectId}/series`, { kind, name: 'x', unit: 'm3/s', startDate: '2020-10-01', values });
+		expect((await put('rain_catchment_mm', new Array(days).fill(0))).status).toBe(200);
+		expect((await put('flow_reference_m3s', new Array(days).fill(5))).status).toBe(200);
+		expect((await put('flow_neighbour_m3s', new Array(days).fill(5))).status).toBe(400);
+		const listed = await u.call('GET', `/projects/${projectId}/series`);
+		expect(listed.body.series.map((s: { kind: string }) => s.kind)).toContain('flow_reference_m3s');
+		// It can't be chosen as the calibration record …
+		const pick = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibrationFlowKind: 'flow_reference_m3s' } });
+		expect(pick.status).toBe(400);
+		// … and a run with only it has no observed record.
+		const alone = await u.call('POST', `/projects/${projectId}/runs`, { label: 'reference only' });
+		expect(alone.status).toBe(201);
+		expect(alone.body.run.summary.calibration).toBeNull();
+		// Positive control: with a logger, the logger is the record, and the reference changes nothing.
+		expect((await put('flow_logger_m3s', new Array(days).fill(1))).status).toBe(200);
+		const withLogger = await u.call('POST', `/projects/${projectId}/runs`, { label: 'logger' });
+		expect(withLogger.status).toBe(201);
+		expect(withLogger.body.run.summary.calibration.flowKind).toBe('flow_logger_m3s');
+		expect(withLogger.body.run.summary.dataQuality.observedAgreement).toBeNull();
+	});
+
 	it('stores the gauge-vs-logger thresholds, rejects bad ones, and runs use them', async () => {
 		const u = await signUp('Q');
 		const { projectId } = await projectWithModel(u);
