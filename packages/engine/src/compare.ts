@@ -98,7 +98,7 @@ export interface RunComparison {
 		runoffCoefficient: MetricDelta;
 	};
 	/**
-	 * The outlet EWR test on each run's observed record (engine ≥ 0.5.2):
+	 * The outlet EWR test on each run's observed record (engine ≥ 0.5.3):
 	 * null when neither run has one. Each run's full tables stay in its
 	 * summary (summary.catchment.ewrAgreement).
 	 */

@@ -421,7 +421,7 @@ the Element sheets or `[EWR shortfalls]` (for example a farm whose daily AB is
 constant through a February shows a monthly sum that is not 28 × that value).
 Where the volumes are current, the running-total counts match exactly.
 
-### 2.9b EWR agreement with the observed record (engine ≥ 0.5.2, issue #4)
+### 2.9b EWR agreement with the observed record (engine ≥ 0.5.3, issue #4)
 
 The two runoff models can disagree strongly on how many days the EWR is not
 met at the outlet. The count alone can't say which is right, but the observed
@@ -463,7 +463,7 @@ wrong in the dry season shows up.
   naturalised, so it can't take the outlet test and the agreement is `null`,
   as it is when the project has no observed record.
 - **Where it lives.** `RunSummary.catchment.ewrAgreement`, next to
-  `ewrDaysNotMet`; absent on runs saved before 0.5.2. Run comparison carries
+  `ewrDaysNotMet`; absent on runs saved before 0.5.3. Run comparison carries
   the overall scores of both runs (`RunComparison.ewrAgreement`).
 - **How to use it.** Copy the project, set one copy to GR4J, run both, and
   compare: the model with frequency bias nearer 1, the higher hit rate and the

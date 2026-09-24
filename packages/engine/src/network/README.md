@@ -101,7 +101,7 @@ warning.
 - Catchment `ewr` = `settings.ewrPragmaticM3PerDay` for the day's water-year
   month; `ewr_shortfall` = MIN(simulated outflow − EWR, 0);
   `ewrDaysNotMet` counts days where it is negative ([Flow data] AJ/AK).
-- `ewrAgreement` (`ewrAgreement.ts`, engine ≥ 0.5.2): the same "below the
+- `ewrAgreement` (`ewrAgreement.ts`, engine ≥ 0.5.3): the same "below the
   EWR" test on the observed gauge/logger record vs the simulated outflow, as a
   2×2 table with hit rate, false-alarm ratio and frequency bias, overall, per
   month and per water year ([model.md §2.9b](../../../../docs/model.md)).

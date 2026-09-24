@@ -4,7 +4,7 @@
 	the observed flow was? A 2×2 table with its scores, then the same per
 	month and (collapsed) per water year. Used on the Runs page and twice,
 	side by side, in run comparison.
-	Input: a run summary (catchment.ewrAgreement, engine 0.5.2+).
+	Input: a run summary (catchment.ewrAgreement, engine 0.5.3+).
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';

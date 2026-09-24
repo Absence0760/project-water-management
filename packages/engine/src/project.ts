@@ -443,7 +443,7 @@ export interface EwrAgreementScores {
 }
 
 /**
- * Does the model fail the EWR on the days the river did (engine ≥ 0.5.2,
+ * Does the model fail the EWR on the days the river did (engine ≥ 0.5.3,
  * issue #4)? The outlet EWR test applied to the observed gauge/logger record
  * and to the simulated outflow on every day with an observation.
  */
@@ -561,7 +561,7 @@ export interface RunSummary {
 		ewrFractionDaysNotMet: number;
 		/**
 		 * The outlet EWR test on the observed record vs the simulated outflow
-		 * (engine ≥ 0.5.2). null when the run has no gauge or logger record
+		 * (engine ≥ 0.5.3). null when the run has no gauge or logger record
 		 * (Pitman flow is naturalised, so it can't take the outlet test); absent
 		 * on older runs.
 		 */

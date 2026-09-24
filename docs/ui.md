@@ -216,7 +216,7 @@ The settings are grouped by what they drive:
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, calibrated against Pitman flow, or saved
-  before engine 0.5.2 says why there is no table. Then farm detail (dam
+  before engine 0.5.3 says why there is no table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node.
 - Series are fetched one at a time when a chart needs them, and cached
