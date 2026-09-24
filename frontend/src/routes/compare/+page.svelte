@@ -10,6 +10,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import CompareChart from '$lib/components/compare/CompareChart.svelte';
+	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
@@ -259,6 +260,11 @@
 					<section class="panel" aria-labelledby="headline-h">
 						<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
 						<HeadlineDeltas comparison={data.comparison} />
+					</section>
+
+					<section class="panel" aria-labelledby="ewr-agreement-h">
+						<div class="panel-head"><h2 id="ewr-agreement-h">EWR test against observed flow</h2></div>
+						<EwrAgreementCompare {data} />
 					</section>
 
 					<section class="panel" aria-labelledby="farms-h">

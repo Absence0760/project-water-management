@@ -78,4 +78,15 @@ test('run comparison shows legacy against GR4J on a copy of the project', async 
 	await expect(page.getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
+	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (in-sample)' })).toBeVisible();
+
+	// The EWR test against the observed record, legacy and GR4J side by side (issue #4).
+	const ewr = page.getByRole('region', { name: 'EWR test against observed flow' });
+	await expect(ewr.getByRole('rowheader', { name: 'Frequency bias (1 ideal)' })).toBeVisible();
+	await expect(ewr.getByRole('row', { name: /^Observed days compared/ }).getByRole('cell').nth(1)).toHaveText('120');
+	for (const side of ['A: Legacy', 'B: GR4J']) {
+		const table = ewr.getByRole('region', { name: side });
+		await expect(table.getByRole('table', { name: 'Observed days by EWR result, model against observed' })).toBeVisible();
+		await expect(table.getByRole('table', { name: `${side}: by month` }).getByRole('rowheader')).toHaveCount(12);
+	}
 });

@@ -73,7 +73,12 @@
 	<div>
 		<h3>Calibration against observed flow</h3>
 		{#if calibration.length}
-			{@render table(calibration, 'Calibration statistics for both runs')}
+			<p class="muted small in-sample">
+				Calibration period (in-sample): each run is scored on the days its parameters were tuned on. Runs don't store
+				validation scores; see <a href="#ewr-agreement-h">the EWR test against observed flow</a> below for a check the fit
+				didn't optimise.
+			</p>
+			{@render table(calibration, 'Calibration statistics for both runs, calibration period (in-sample)')}
 		{:else}
 			<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
 		{/if}
@@ -95,5 +100,11 @@
 	.u {
 		color: var(--text-muted);
 		font-weight: 400;
+	}
+	.small {
+		font-size: 0.8rem;
+	}
+	.in-sample {
+		margin: 0 0 0.5rem;
 	}
 </style>

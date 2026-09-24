@@ -4,8 +4,8 @@
 import type { FarmDelta, MetricDelta } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
-/** Which way is good for a metric. 'neutral' = neither (e.g. demand). */
-export type Better = 'higher' | 'lower' | 'zero' | 'neutral';
+/** Which way is good for a metric. 'zero' / 'one' = closer to it; 'neutral' = neither (e.g. demand). */
+export type Better = 'higher' | 'lower' | 'zero' | 'one' | 'neutral';
 
 /** How a metric's value is shown. 'fraction' is 0–1 shown as %, deltas in percentage points. */
 export type Format = 'volume' | 'days' | 'fraction' | 'percent' | 'ratio' | 'count';
@@ -64,10 +64,12 @@ function toneOf(m: MetricDelta, better: Better): Tone {
 			return delta > 0 ? 'better' : 'worse';
 		case 'lower':
 			return delta < 0 ? 'better' : 'worse';
-		case 'zero': {
-			// e.g. percent bias: closer to 0 is better.
+		case 'zero':
+		case 'one': {
+			// e.g. percent bias: closer to 0 is better; a frequency bias: closer to 1.
 			if (m.a === null || m.b === null) return 'neutral';
-			const d = Math.abs(m.b) - Math.abs(m.a);
+			const target = better === 'one' ? 1 : 0;
+			const d = Math.abs(m.b - target) - Math.abs(m.a - target);
 			return d < 0 ? 'better' : d > 0 ? 'worse' : 'neutral';
 		}
 		default:

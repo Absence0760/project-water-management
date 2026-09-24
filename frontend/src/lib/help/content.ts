@@ -768,6 +768,18 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 EWR analysis'
 	},
 	{
+		id: 'ewr-agreement',
+		term: 'EWR test against observed flow',
+		short: "Does the model fall below the EWR on the days the observed river did? A 2×2 table of observed days, with scores.",
+		long: 'A gauge or logger measures the same river the outlet EWR test uses, so on each observed day the observed flow takes the test too. Hit rate: share of the river’s failures the model also has (1 ideal). False-alarm ratio: share of the model’s failures the river didn’t have (0 ideal). Frequency bias: the model’s share of days below the EWR ÷ the observed share (1 ideal). Use it to judge which runoff model’s EWR count to trust.',
+		units: 'days; ratios',
+		category: 'ewr',
+		aliases: ['EWR agreement', 'frequency bias', 'hit rate', 'false-alarm ratio', 'contingency table'],
+		fields: ['catchment.ewrAgreement'],
+		related: ['ewr-days-not-met'],
+		source: 'docs/model.md §2.9b'
+	},
+	{
 		id: 'desktop-reserve-model',
 		term: 'Desktop Reserve Model',
 		short: 'Software (“Desktop Version 2”) that produces monthly Reserve flow tables by percentile for a river’s ecological category.',

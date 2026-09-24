@@ -33,7 +33,7 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
-	ewrFractionDaysNotMet: true
+	ewrFractionDaysNotMet: true, ewrAgreement: true
 };
 const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,

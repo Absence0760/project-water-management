@@ -34,16 +34,30 @@ The page has these sections, top to bottom:
    supplied, farms below 95 % supplied, EWR days not met, mean outflow and
    natural flow, the runoff coefficient (natural flow ÷ rain), and the
    calibration statistics (KGE, NSE, percent bias, RMSE) for A and B side by
-   side, with the change. To judge the runoff models against each other, copy
+   side, with the change. The calibration table is labelled **calibration
+   period (in-sample)**: each run is scored on the days its parameters were
+   tuned on. Runs don't store validation scores, so none are shown
+   ([followups.md](./followups.md)). To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
    and compare them. The input diff then reads *"Runoff model: legacy (b023
    recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
    changes.
-4. **Farms.** One row per farm with run B's value and the change from A for
+4. **EWR test against observed flow** (issue #4). The two runoff models can
+   disagree strongly on how many days the EWR is not met; the observed record
+   settles it, because a gauge or logger measures the same outflow the EWR
+   test uses ([model.md §2.9b](./model.md)). A table gives both runs' overall
+   frequency bias (closer to 1 is better), hit rate (higher is better),
+   false-alarm ratio (lower is better), the model's and the observed share of
+   days below the EWR, and the number of observed days compared, with the
+   change (`RunComparison.ewrAgreement`). Below it, each run's full table (the
+   2×2 table of observed days, per month and per water year) sits side by
+   side, stacked on narrow screens. Compare runs over the same observed days:
+   if the day counts differ, part of the difference comes from the record.
+5. **Farms.** One row per farm with run B's value and the change from A for
    demand, supplied, deficit, % supplied, EWR shortfall and days EWR not met.
    Click a column heading to sort by that change. Farms that exist in only one
    run are listed underneath.
-5. **Hydrograph.** One catchment series (simulated outflow by default) from
+6. **Hydrograph.** One catchment series (simulated outflow by default) from
    both runs on the same chart.
 
 Every change is **B − A**. A change is shown with a sign and ▲/▼. Green means
@@ -51,7 +65,7 @@ better and red means worse (for example, less deficit or fewer EWR days not
 met). Grey means the change is neither: demand and flow are "just different".
 The better/worse judgement is also in the text read out by screen readers and
 in the tooltip, so colour is never the only cue. For percent bias, closer to 0
-is better. A change that rounds to zero is shown as plain "0".
+is better; for the EWR frequency bias, closer to 1. A change that rounds to zero is shown as plain "0".
 
 ## How runs are matched
 

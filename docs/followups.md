@@ -55,6 +55,17 @@ Tick items off (or move them into an issue) as they are done.
       a starved neighbour can "help" it by drawing more, because part of the
       extra draw returns to the river. Keep this in mind when reading
       curtailment results (it relates to N1).
+- [ ] **Validation scores are not saved with a run** (issue #4). The Runs page
+      and run comparison show only the whole-window, in-sample fit scores,
+      now labelled "calibration period (in-sample)". The automatic fit's
+      split-sample and wet/dry-year validation scores (`CalibrationReport`)
+      live only in the Settings → Fit automatically panel and are lost on
+      reload. Durable fix: persist the last fit's report (or its validation
+      periods) with the applied parameters, record it in the run's input
+      snapshot, and show the validation scores beside the in-sample ones.
+      Calibration exclusions are not saved either, so `runModel` can't pass
+      them to the EWR agreement (model.md §2.9b); persist them with the same
+      change. Another task owns this.
 - [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
       10× for flow; flat-lines are 5 days for rain and 14 for flow. The
       catchment-rain checks (issue #2) flag a zero run with 60+ days in the

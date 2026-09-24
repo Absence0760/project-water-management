@@ -53,6 +53,11 @@
 			Settings.
 		</p>
 	{:else}
+		<p class="note muted in-sample">
+			<strong>Calibration period (in-sample).</strong> These scores are for the same days the parameters were tuned on, so they
+			show how well the model fits, not how well it predicts. A run doesn't store validation scores; the split-sample and
+			wet/dry-year tests appear when you fit automatically in Settings.
+		</p>
 		<dl class="window">
 			<div>
 				<dt>Window</dt>

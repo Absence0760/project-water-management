@@ -7,7 +7,8 @@
 	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
-	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
+import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { downloads, runDownloadItems } from '$lib/export';
@@ -345,6 +346,9 @@
 							<h3>EWR compliance by month</h3>
 							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 						{/if}
+					</div>
+					<div class="panel" id="res-ewr-agreement">
+						<EwrAgreementTable {summary} />
 					</div>
 				{/snippet}
 			</RunCharts>

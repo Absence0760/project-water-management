@@ -100,11 +100,13 @@
 			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
 			{#if nse}<dd class="sub"><span class="rating {RATING_CLASS[nse]}">{nse}</span> · {fmtNum(cal.days)} days observed</dd>{/if}
+			<dd class="sub">calibration period (in-sample)</dd>
 		</div>
 		<div class="stat">
 			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
 			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
 			{#if pbias}<dd class="sub"><span class="rating {RATING_CLASS[pbias]}">{pbias}</span> {describePbias(cal.pbias)}</dd>{/if}
+			<dd class="sub">calibration period (in-sample)</dd>
 		</div>
 	{:else}
 		<div class="stat">

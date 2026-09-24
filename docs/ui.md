@@ -195,17 +195,28 @@ The settings are grouped by what they drive:
 - **Summary** (the "Run summary" region): headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met, irrigation
   supplied, and NSE and PBIAS with Moriasi (2007) ratings
-  (`runs/rating.ts`). Below them is the per-farm table: sortable, in network
+  (`runs/rating.ts`), labelled **calibration period (in-sample)**: they are
+  scored on the days the parameters were tuned on. Runs don't store
+  validation scores; the split-sample and wet/dry-year tests appear only in
+  Settings → Fit automatically ([followups.md](./followups.md)). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text.
 - Then come, in order: curtailment targets, the hydrograph (observed flow as
   dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
-  the full period), the calibration panel (plus the gauge vs logger table when
-  years disagree), the **runoff model** panel for GR4J runs (`RunoffPanel`:
+  the full period), the calibration panel (it opens with the same
+  in-sample note, and adds the gauge vs logger table when years disagree), the **runoff model** panel for GR4J runs (`RunoffPanel`:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
   `runs/runoff.ts`), and the production and routing stores through time),
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
-  EWR against outflow, the monthly EWR compliance grid, farm detail (dam
+  EWR against outflow, the monthly EWR compliance grid, the **EWR test
+  against observed flow** (`ewr/EwrAgreementTable.svelte`, `ewr/agreement.ts`;
+  [model.md §2.9b](./model.md)): a one-line verdict on the frequency bias, the
+  hit rate, false-alarm ratio and frequency bias, the 2×2 table of observed
+  days (model below / at or above the EWR × observed below / at or above, with
+  totals), a per-month table (Oct … Sep, every month listed, months without
+  observed days shown as dashes) and, collapsed, a per-water-year table. A run
+  without a gauge or logger record, calibrated against Pitman flow, or saved
+  before engine 0.5.2 says why there is no table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node.
 - Series are fetched one at a time when a chart needs them, and cached

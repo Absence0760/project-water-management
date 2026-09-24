@@ -29,6 +29,14 @@ describe('formatDelta', () => {
 		expect(formatDelta(metricDelta(3, -8), { format: 'percent', better: 'zero' }).tone).toBe('worse');
 	});
 
+	it('treats closer-to-one as better for a frequency bias', () => {
+		// Legacy fails the EWR 3× as often as the river, GR4J 0.9×: better.
+		expect(formatDelta(metricDelta(3, 0.9), { format: 'ratio', better: 'one', digits: 2 })).toMatchObject({ text: '−2.10', tone: 'better' });
+		expect(formatDelta(metricDelta(1.05, 0.5), { format: 'ratio', better: 'one', digits: 2 }).tone).toBe('worse');
+		expect(formatDelta(metricDelta(0.5, 1.5), { format: 'ratio', better: 'one', digits: 2 }).tone).toBe('neutral');
+		expect(formatDelta(metricDelta(null, 1), { format: 'ratio', better: 'one' }).tone).toBe('neutral');
+	});
+
 	it('shows fractions as percentage points', () => {
 		expect(formatDelta(metricDelta(0.9, 0.98), { format: 'fraction', better: 'higher' }).text).toBe('+8.0 pp');
 	});

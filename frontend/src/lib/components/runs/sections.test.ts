@@ -13,6 +13,7 @@ describe('resultSections', () => {
 			'res-fdc',
 			'res-ewr',
 			'res-ewr-grid',
+			'res-ewr-agreement',
 			'res-farm',
 			'res-explore'
 		]);

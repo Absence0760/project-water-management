@@ -28,6 +28,21 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.
 	await expect(calibration.getByRole('definition').filter({ hasText: 'Simulated outflow at the outlet' })).toBeVisible();
+	// The headline fit scores are labelled as in-sample (issue #4).
+	await expect(calibration.getByText('Calibration period (in-sample).', { exact: true })).toBeVisible();
+	await expect(summary.getByText('calibration period (in-sample)')).toHaveCount(2);
+
+	// The outlet EWR test on the observed record: the 2×2 table, the scores and a per-month breakdown.
+	const agreement = page.getByRole('region', { name: 'EWR test: model against observed flow' });
+	const matrix = agreement.getByRole('table', { name: 'Observed days by EWR result, model against observed' });
+	await expect(matrix.getByRole('rowheader', { name: 'Model below EWR' })).toBeVisible();
+	await expect(matrix.getByRole('columnheader', { name: 'Observed below EWR' })).toBeVisible();
+	// 120 observed days, every one inside the run.
+	await expect(matrix.getByRole('row', { name: /^Total/ }).getByRole('cell').last()).toHaveText('120');
+	await expect(agreement.getByRole('term').filter({ hasText: 'Frequency bias' })).toBeVisible();
+	const months = agreement.getByRole('table', { name: /by month$/ });
+	await expect(months.getByRole('rowheader')).toHaveText(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+	await expect(months.getByRole('row', { name: /^Oct/ }).getByRole('cell').first()).toHaveText('31');
 
 	const chart = page.getByRole('img', { name: /^Catchment · .*: line chart/ });
 	await expect(chart.locator('canvas')).toBeVisible();
@@ -79,6 +94,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Flow duration',
 		'EWR vs outflow',
 		'EWR by month',
+		'EWR vs observed',
 		'Farm detail',
 		'Explore outputs'
 	]);

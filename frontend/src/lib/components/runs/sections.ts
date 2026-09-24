@@ -17,7 +17,8 @@ export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff'>): R
 		...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 		{ id: 'res-fdc', label: 'Flow duration' },
 		{ id: 'res-ewr', label: 'EWR vs outflow' },
-		{ id: 'res-ewr-grid', label: 'EWR by month' }
+		{ id: 'res-ewr-grid', label: 'EWR by month' },
+		{ id: 'res-ewr-agreement', label: 'EWR vs observed' }
 	];
 	// Farm detail is only drawn when the run has farms.
 	if (summary.farms?.length) out.push({ id: 'res-farm', label: 'Farm detail' });
