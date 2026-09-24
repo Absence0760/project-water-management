@@ -839,13 +839,24 @@ export const HELP: HelpEntry[] = [
 		id: 'chirps',
 		term: 'CHIRPS rainfall',
 		short: 'Satellite-and-station daily rainfall (Climate Hazards Group). Used on days without catchment rainfall.',
-		long: 'Useful to fill gaps or extend a short gauge record. Check its bias against a local gauge before relying on it.',
+		long: 'Useful to fill gaps or extend a short gauge record. At catchment scale CHIRPS can read well below (or above) a local gauge, so by default the model scales it by a factor per calendar month, fitted where both records have a reading, on the days it fills in (see CHIRPS bias correction).',
 		units: 'mm/day',
 		category: 'data',
 		aliases: ['satellite rainfall'],
 		fields: ['series.rain_chirps_mm'],
-		related: ['rain-catchment'],
+		related: ['rain-catchment', 'chirps-bias'],
 		source: 'b023 Flow data; docs/model.md §7'
+	},
+	{
+		id: 'chirps-bias',
+		term: 'CHIRPS bias correction',
+		short: 'Scales CHIRPS rain, on days it fills in for blank catchment rain, by a catchment ÷ CHIRPS factor for the calendar month.',
+		long: 'For each calendar month the factor is the catchment rain divided by the CHIRPS rain, summed over the days both have a reading. Water years the rain checks flag (long zero runs, far below CHIRPS) are left out, because their catchment rain is suspect. A month with fewer than 90 shared days, or less than 50 mm of CHIRPS on them, uses the factor pooled over all months; with too little overlap for even that, CHIRPS is used as it is and the run says so. Factors are kept between 0.25 and 4.\n\nOnly CHIRPS that is actually used is scaled. Catchment rain and forecast rain are never changed. Each run lists the factors and the number of days corrected in its warnings.\n\nChoose "Raw CHIRPS" only if the CHIRPS series you loaded is already corrected to the catchment; otherwise it would be corrected twice. Not in the workbook, which used raw CHIRPS (docs/engine-audit.md B1).',
+		category: 'data',
+		aliases: ['bias correction', 'CHIRPS factor', 'rain scaling'],
+		fields: ['settings.chirpsBiasCorrection'],
+		related: ['chirps', 'rain-catchment'],
+		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
 	},
 	{
 		id: 'rain-forecast',

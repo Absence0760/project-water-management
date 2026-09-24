@@ -24,6 +24,7 @@
 		typicalRange
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
+	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 
@@ -152,6 +153,7 @@
 	];
 	const method = $derived(METHODS.find((m) => m.value === s.flowShareMethod));
 	const runoffOption = $derived(RUNOFF_MODEL_OPTIONS.find((o) => o.value === s.runoffModel));
+	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	const isGr4j = $derived(s.runoffModel === 'gr4j');
 	const apanMissing = $derived(s.apanMm.every((v) => !v));
 	const num = (k: string) => cal[k] as number;
@@ -222,6 +224,13 @@
 					{#each RUNOFF_MODEL_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 				</select>
 				<span class="hint" id="st-runoff-h">{runoffOption?.help}</span>
+			</div>
+			<div class="field">
+				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
+				<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
+					{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>

@@ -128,9 +128,14 @@ The settings are grouped by what they drive:
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, and days in February.
 - **Flow calibration**: the **runoff model** picker (Legacy or GR4J,
-  `settings.runoffModel`), the catchment area (blank = the sum of the farm
-  areas, which is shown), and the calibration window and flow series. The
-  rest depends on the model:
+  `settings.runoffModel`), the **CHIRPS bias correction** picker
+  (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
+  month, the default, or raw CHIRPS; it applies to both models and to
+  demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)), the
+  catchment area (blank = the sum of the farm areas, which is shown), and the
+  calibration window and flow series. A run that corrected CHIRPS lists the
+  monthly factors and the number of days in its warnings. The rest depends on
+  the model:
   - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
     months as toggles. **Advanced** holds the winter switch, the recession
     parameters and the 80-value recession tables.
