@@ -128,7 +128,8 @@ workbook-faithful extraction for the regression tests. The scaling is client
 data, so it's read from `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR`,
 set in the environment or in `$WBT_SOURCE_DIR/wbt-import.env` beside the
 workbooks, never in the repo. Set `WBT_GAUGE_AS_REFERENCE=0` to import the
-column as observed flow. The seed re-extracts when these options change.
+column as observed flow. The seed re-extracts when these options change, or
+when the importer (`extract_project.py`, `calibration.py`) does.
 
 - **Expected results** (`expected.json`): every Element sheet's daily
   columns, the [Flow data] catchment columns, and `shortfalls`: the
