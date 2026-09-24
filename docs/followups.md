@@ -180,8 +180,20 @@ conditions come before any client numbers:
          on the fit record too. Free / typical-bounds / band / both fits
          against the client logger record, with calibration and validation
          scores: `data/client-catchment/logger-fit-constrained.md`
-         (gitignored, local only — the repo is public). Items 2–4 below are
-         still open.
+         (gitignored, local only — the repo is public).
+
+         **What the fits show (qualitatively):**
+         - The logger record alone can't pin down X1 and X3: the in-sample
+           score barely moves across a wide range of both.
+         - The band alone changes little, because the free fit's MAR already
+           sits near the band's edge.
+         - Typical bounds give plausible parameters but hurt the dry→wet
+           validation. Typical bounds plus the band recover it, so they are
+           the best-balanced fit to put to the hydrologist.
+         - EWR days not met barely changes between the four fits.
+         - None of them validates well out of sample. The durable fix is
+           still item 3, the proxy-basin prior. Item 2 is still open; item 4
+           has landed.
       2. **Use the gauge as a regional wet/dry index only.** Use it to rank
          water years for the dry→wet test design and the Phase 9 forcing,
          never as a calibration or validation target for this river.
