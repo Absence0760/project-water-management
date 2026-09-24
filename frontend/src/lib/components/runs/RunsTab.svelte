@@ -552,9 +552,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			overflow-y: auto;
 			overscroll-behavior: contain;
 		}
-		/* A long runs list scrolls inside its panel, so the menu below stays in reach. */
+		/* A long runs list scrolls inside its panel, capped by the window height, so
+		   the menu below stays in view even on a laptop screen. */
 		.rail .runs {
-			max-height: 16rem;
+			max-height: min(16rem, 25vh);
 			overflow-y: auto;
 		}
 	}
@@ -659,7 +660,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	}
 	.sections a {
 		display: block;
-		padding: 0.3rem 0.6rem;
+		padding: 0.25rem 0.6rem;
 		border-left: 2px solid var(--border);
 		font-size: 0.85rem;
 		color: var(--text-2);

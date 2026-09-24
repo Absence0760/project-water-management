@@ -332,7 +332,9 @@ The settings are grouped by what they drive:
   `aria-current="location"` (scroll spy: `activeSectionId`, the last section
   whose top has passed under the sticky header, or the last one at the
   bottom of the page). A long runs list scrolls inside its panel so the menu
-  stays in reach. Narrower, the rail stacks above the results and the menu
+  stays in reach: its height is capped at `min(16rem, 25vh)`, so with 20
+  runs the rail still fits a 768px-tall window without clipping (below about
+  720px the rail scrolls on its own). Narrower, the rail stacks above the results and the menu
   becomes wrapping chips. Farm detail appears only when the run has farms,
   and Runoff model only for a GR4J run. The page's `scroll-padding-top`
   keeps a jumped-to section, or a focused control, clear of the sticky
