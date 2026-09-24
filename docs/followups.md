@@ -326,6 +326,23 @@ the reports):
   - auto re-run after new data;
   - forecast days flagged (plan.md §1e).
 - **Data quality:** gap filling.
+- **WR2012 check (issue #4 phase 8, model.md §2.10c):**
+  - [ ] **A written explanation per run.** An assessor wants the modeller's
+        reason next to a *query* or *not usable* flag (e.g. "the quaternary
+        includes an irrigated tributary outside the model"). Runs are
+        immutable today: `model_run` has no editable field besides the label
+        set at creation, and no `PATCH` route. The durable fix is a
+        `model_run.notes` text column (migration with its RLS: editor may
+        update only that column, via a column-level `GRANT UPDATE (notes)`),
+        `PATCH /projects/:id/runs/:runId { notes }`, shown and editable under
+        the WR2012 panel and carried into run comparison and the summary CSV.
+        Trigger: before the first licence-application use, or when the
+        licensing-assessor review asks for it.
+  - [ ] **Summary CSV export** (`backend/src/export/run-tables.ts`) doesn't
+        carry the WR2012 report yet; add a block (reference, scaling, MAR
+        ratios, monthly table, flag) with the explanation above.
+  - [ ] **SA-only help tag.** The WR2012 help entries are South African;
+        tag them when `HelpEntry.countries` lands (international.md WP-I.12).
 - **Workbook import in the browser.** It is the Python CLI only today.
 
 ## Pipelines

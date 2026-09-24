@@ -117,6 +117,23 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `gr4j` takes `x1` (10–3000 mm), `x2` (−5–3 mm/day), `x3` (1–1000 mm), `x4`
   (0.5–10 days) and `warmupDays` (whole days, 0–3650); any subset may be sent.
   `panCoefficient` is 12 monthly values, each 0–2, in water-year order.
+  `wr2012` (engine ≥ 0.6.0; model.md §2.10c) is the optional WR2012 check:
+  `reference` (`null`, the default, or the whole object `{ quaternary` 1–16
+  chars, `areaKm2` > 0, `marMm3` ≥ 0 (Mm³ a year), `monthlyMm3` 12 values ≥ 0
+  (Mm³ **per month**, Oct … Sep), `periodStart`, `periodEnd` (whole water
+  years, start ≤ end), `mapMm` (> 0 or `null`), `source` 1–500 chars `}`),
+  `scaling` (`area` | `areaRain`), `lowFlowMonths` (calendar months 1–12, at
+  least one, or `null` = from each run), `flags` (the whole `{ notePct,
+  queryPct, queryWetterPct, unusablePct }`, each 0–1 000 %, note ≤ query ≤
+  unusable and wetter ≤ query) and `calibrationPenalty` (`{ enabled, weight }`,
+  weight 0–10); any subset of these groups may be sent. The reference is also
+  checked for plausibility: with a MAP, the MAR can't exceed MAP × area ÷ 1 000
+  Mm³, and the monthly means must add up to the MAR within 5 %; otherwise
+  `400` naming the field.
+  A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `wr2012`,
+  `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
+  one field of a group keeps the group's other stored fields; top-level
+  values, and each `wr2012` group, are replaced whole.
 
 ### Members
 
@@ -262,6 +279,18 @@ engine's `runModel`, stores the outputs, and returns the summary.
   with rain − aet − flow + exchange = storageEnd − storageStart. GR4J runs also
   carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
   `uh_store` (mm), and `exchange` when X2 ≠ 0.
+- `summary.wr2012` (engine ≥ 0.6.0; only when the project has a WR2012
+  reference) compares simulated **natural** flow with the reference scaled to
+  the modelled catchment (`Wr2012Report` in
+  `packages/engine/src/reference/wr2012.ts`): `scaling { rule, requested,
+  factor, areaFactor, rainFactor, modelAreaKm2, referenceAreaKm2, modelMapMm,
+  referenceMapMm }`, `referenceMarMm3`, `scaledMarMm3`, `overlap { years,
+  simulatedMarMm3, ratio } | null`, `whole { days, simulatedMarMm3, ratio }`,
+  `monthlyBasis`, `months` (12, water-year order: `{ month, simulatedMm3,
+  referenceMm3, ratio, lowFlow }`), `lowFlowMonths`, `lowFlowSource`
+  (`setting` | `simulated`), `lowFlowRatio`, `patternCorrelation` and `flag {
+  level: ok | note | query | unusable, basis, deviationPct, thresholds, text }`.
+  A flag's `text` is also in `warnings`. Rules: [model.md §2.10c](./model.md#210c-wr2012-check-engine--060-issue-4-phase-8).
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
@@ -298,7 +327,10 @@ matched.
   `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run
   (`{ settings, model, series: { [kind]: { startDate, length, valuesSha256? } } }`;
   `valuesSha256` = SHA-256 hex of the values' JSON, absent on older runs). This is the
-  only endpoint that returns it.
+  only endpoint that returns it. The snapshot's settings include `wr2012`, so
+  every WR2012 input appears in `changes`, and `comparison.wr2012` (`null` when
+  neither run has the check) holds the deltas of `marRatioOverlap`,
+  `marRatioWhole`, `lowFlowRatio` and `patternCorrelation`.
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
   isn't `<projectId>:<runId>`.

@@ -922,6 +922,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > **UI done (phase 5):** Settings → Flow calibration → Fit automatically, in a
 > Web Worker (`frontend/src/lib/calibration/`), on `GET /projects/:id/model-input`;
 > Cancel terminates the worker at once. [ui.md § Settings](../ui.md).
+> **Done (phase 8, optional WR2012 check):** the user enters the quaternary's
+> WR2012 naturalised MAR and monthly means (never bundled); every run compares
+> its simulated natural flow with them, scaled to the catchment, with
+> deviation flags as run warnings, and calibration can add a soft MAR
+> penalty (off by default). `packages/engine/src/reference/wr2012.ts`;
+> [model.md §2.10c](../model.md). A per-run written explanation is a
+> follow-up ([followups.md](../followups.md)).
 
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the

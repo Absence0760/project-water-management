@@ -654,6 +654,90 @@ the fit: a few years mostly of drought constrain the parameters poorly. That is
 why the hydrologist's decision gate (issue #4 phase 6) weighs validation, not
 the fit. (Client results are never recorded here: the repo is public.)
 
+### 2.10c WR2012 check (engine ≥ 0.6.0, issue #4 phase 8)
+
+Optional. `settings.wr2012.reference` holds the naturalised flow WR2012 (*Water
+Resources of South Africa 2012*) publishes for the quaternary catchment the
+project lies in. The user **enters** it from the public study; the app never
+bundles WR2012 data. `packages/engine/src/reference/wr2012.ts` compares every
+run with it (`RunSummary.wr2012`). It never changes model results.
+
+- **Reference** (all required except the MAP):
+  - `quaternary`: the code, e.g. "A21B";
+  - `areaKm2`: the quaternary's area;
+  - `marMm3`: naturalised mean annual runoff, **Mm³ a year**;
+  - `monthlyMm3`: 12 mean monthly naturalised flows, **Mm³ per month**, in
+    water-year order (Oct … Sep), the unit of WR2012's naturalised flow
+    tables. Not m³/s: 1 m³/s for a 31-day month is 2.6784 Mm³;
+  - `periodStart` / `periodEnd`: the hydrological years the reference
+    covers, each labelled by the year it starts in (1920 = Oct 1920 – Sep 1921);
+  - `mapMm`: the quaternary's mean annual precipitation, optional;
+  - `source`: where the numbers come from.
+- **Plausibility** (`wr2012ReferenceIssues`; the backend's zod schema and the
+  Settings form apply the same function):
+  - with a MAP, the MAR can't exceed the rain on the quaternary,
+    MAP × area ÷ 1 000 Mm³ a year (1 mm on 1 km² is 1 000 m³);
+  - the 12 monthly means must add up to the MAR within
+    `WR2012_MONTHLY_SUM_TOLERANCE` = **5 %**, the rounding a published table
+    can carry. Monthly values typed in m³/s fail this check.
+
+  A stored reference that fails (older data, a hand-edited row) is skipped
+  with a run warning.
+- **What is compared: simulated natural flow, never the outflow.** WR2012 flows
+  are naturalised (no farms, dams or abstraction), so they compare with the
+  rain → flow model's output before the network takes water out, as Pitman
+  flow does in calibration (C1). A test fails if the outflow were used.
+- **Scaling** (`settings.wr2012.scaling`) to the modelled catchment
+  (`resolveCatchmentAreaKm2`):
+  - `area` (default): × modelled area ÷ quaternary area;
+  - `areaRain`: also × the run's mean annual rain ÷ the quaternary MAP. It
+    needs the MAP and at least a year of rain values covering 90 % of the
+    compared days; without them it falls back to area alone, with a warning.
+    Runoff isn't proportional to rain (its elasticity is usually above 1), so
+    this is a first estimate.
+
+  The report names the rule and the factor.
+- **Periods.** The MAR ratio is simulated ÷ scaled WR2012 MAR:
+  - over the **overlapping years**: the run's complete water years (1 Oct –
+    30 Sep all simulated) inside the reference period, their total ÷ their
+    number;
+  - over the **whole run**: mean daily flow × 365.25.
+
+  The 12 monthly means (mean daily flow of the month × its mean length,
+  February 28.25 days, in Mm³) use the overlapping years when there are any,
+  else the whole run.
+- **Report:** the two MAR ratios, the 12 monthly ratios, the ratio over the
+  dry-season months, and the Pearson correlation of the 12 monthly means
+  (the seasonal shape, whatever the volume). The dry season is
+  `settings.wr2012.lowFlowMonths` when set; otherwise the project's own
+  low-flow months: those whose simulated mean flow is below half the average
+  month (the lowest month when none is). Nothing is hard-coded, so winter- and
+  summer-rainfall catchments both get their own dry season.
+- **Deviation flags** (`settings.wr2012.flags`), on the MAR ratio over the
+  overlapping years (the whole run when none overlap). With d = ratio − 1:
+  - |d| ≥ `unusablePct` (default 50 %): *not usable for EWR findings* until
+    the difference is explained;
+  - |d| ≥ `queryPct` (25 %), or d > `queryWetterPct` (15 %, a wetter model
+    overstates the water available): *query*;
+  - |d| ≥ `notePct` (10 %): *note*.
+
+  Each flag is a plain-language run warning. The thresholds must rise
+  (note ≤ query ≤ not usable, wetter ≤ query).
+- **Other warnings:** no complete water year inside the reference period;
+  the scaled MAR larger than the rain on the modelled catchment.
+- **Calibration penalty** (`settings.wr2012.calibrationPenalty`, **off** by
+  default). When on, automatic calibration (§2.10b) adds
+  weight × |ln(simulated natural MAR ÷ scaled WR2012 MAR)| to the loss (1 −
+  score), in every stage. The MAR is taken over the complete water years inside
+  the reference period among the simulated days (else those days). The log
+  makes it symmetric: half is as bad as double. `CalibrationReport.marPenalty`
+  records the weight, the target, the MAR ratio of the fitted parameters, and
+  the **same fit without the penalty** (one more optimisation, stage
+  `unpenalised`, same seed), so its cost to the fit is visible. Default weight
+  0.5, at most 10.
+- **Deterministic:** the same inputs and engine version give an identical
+  report (tested).
+
 ### 2.10a Data quality: do the observed flow records agree?
 
 Not in the workbook — added after comparing the client catchment's two observed records.

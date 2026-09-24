@@ -42,6 +42,18 @@ The page has these sections, top to bottom:
    and compare them. The input diff then reads *"Runoff model: legacy (b023
    recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
    changes.
+
+   When either run has a **WR2012 check** (model.md §2.10c), another table,
+   *WR2012 check · simulated natural ÷ scaled WR2012*, gives the MAR ratio over
+   the overlapping years and over the whole run, the dry-season ratio and the
+   monthly pattern correlation for A and B. For the ratios, closer to 1 is
+   better; for the correlation, higher is. A run without the check shows "–".
+   Every WR2012 input is in *What changed*: the reference being added or
+   removed (*"WR2012 reference added (A21B, MAR 12 Mm³/a over 100 km²,
+   1990/91 – 2009/10)"*), each of its fields (quaternary, area, MAR, MAP,
+   period, source), the monthly means by month, the scaling rule, the
+   dry-season months, each deviation threshold, and the calibration penalty
+   and its weight.
 4. **EWR test against observed flow** (issue #4). The two runoff models can
    disagree strongly on how many days the EWR is not met; the observed record
    settles it, because a gauge or logger measures the same outflow the EWR
@@ -65,7 +77,7 @@ better and red means worse (for example, less deficit or fewer EWR days not
 met). Grey means the change is neither: demand and flow are "just different".
 The better/worse judgement is also in the text read out by screen readers and
 in the tooltip, so colour is never the only cue. For percent bias, closer to 0
-is better; for the EWR frequency bias, closer to 1. A change that rounds to zero is shown as plain "0".
+is better; for the EWR frequency bias and a ratio to WR2012, closer to 1. A change that rounds to zero is shown as plain "0".
 
 ## How runs are matched
 

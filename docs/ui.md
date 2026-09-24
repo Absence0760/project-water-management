@@ -172,6 +172,23 @@ The settings are grouped by what they drive:
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
+  - When the WR2012 MAR penalty is on (below) the panel says so, the fit runs
+    once more without it (stage "Fitting again without the WR2012 penalty"),
+    and the result adds a table (`calibration/MarPenaltyResult.svelte`) with
+    the weight: the objective score, simulated natural MAR ÷ WR2012 and the
+    fitted parameters, with and without the penalty.
+- **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
+  `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
+  naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,
+  optional), naturalised MAR (Mm³/a), the reference period (first and last
+  water year), the source, and a 12-month row of mean naturalised flow in
+  **Mm³ per month** with its sum and an m³/s equivalent row, so a unit slip
+  shows. Then the scaling (area, or area and rainfall; the current area ratio
+  is shown), the dry-season months (from each run, or chosen), the four
+  deviation thresholds (%), and the calibration penalty (off; weight 0.5).
+  Blank fields and the engine's plausibility checks (MAR above the rain on
+  the quaternary, monthly means more than 5 % off the MAR) show next to the
+  field and block Save, with a count beside the Save button.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, a bar chart, the annual volume, and the
   curtailment reporting window.
@@ -207,6 +224,12 @@ The settings are grouped by what they drive:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
   `runs/runoff.ts`), and the production and routing stores through time),
+  the **WR2012 check** when the project has a reference (`Wr2012Panel`,
+  `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
+  the deviation flag in words (not colour alone), the MAR table (overlapping
+  years and whole run: simulated, scaled WR2012, ratio), the 12-month table
+  (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
+  dry-season ratio and the monthly pattern correlation,
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, the monthly EWR compliance grid, the **EWR test
   against observed flow** (`ewr/EwrAgreementTable.svelte`, `ewr/agreement.ts`;
