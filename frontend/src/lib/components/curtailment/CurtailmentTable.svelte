@@ -98,6 +98,11 @@
 									<span class="badge badge-warn">{r.verdict}</span>
 								{:else if r.action === 'gain'}
 									<span class="badge badge-gain">{r.verdict}</span>
+								{:else if r.action === 'store'}
+									<span class="badge">{r.verdict}</span>
+								{/if}
+								{#if r.beyondShare}
+									<span class="badge badge-warn">EWR cut exceeds this farm's equitable share by {r.beyondShare} m³/day</span>
 								{/if}
 							</th>
 							<td class="num">{r.demand}</td>
@@ -117,7 +122,7 @@
 							<td class="num strong" class:neg={r.action === 'cut'} class:pos={r.action === 'gain'}>{r.totalChange}</td>
 							<td class="num" class:neg={r.totalChangeLs.startsWith('-')} class:pos={r.totalChangeLs.startsWith('+')}>{r.totalChangeLs}</td>
 							<td class="num">{r.volumeLeft}</td>
-							<td class="num">{r.demandLeftPct}</td>
+							<td class="num" title={r.demandLeftTitle ?? undefined}>{r.demandLeftPct}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -149,7 +154,9 @@
 		<p class="muted small note">
 			The fair share assumes water can move between any two farms. It ignores where a farm sits in the network, so a
 			“gain” may not be physically reachable. <em>Demand left</em> is volume left ÷ demand (the workbook labels
-			this column “reduction of demand required”).
+			this column “reduction of demand required”), as a whole %; “—” means demand under 1 m³/day, where a % is
+			not meaningful. {#if attributed}<em>Total change</em> and <em>volume left</em> count only the supply cut; the
+			volume left never goes below 0, and a farm whose EWR cut is larger than its equitable share is flagged.{/if}
 		</p>
 		{#if attributed}
 			<p class="muted small note">

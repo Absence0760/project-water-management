@@ -770,13 +770,25 @@ export interface CurtailmentFarm {
 	 * before 0.17.0: the average incremental shortfall (Element sheet AB).
 	 */
 	ewrShortfallM3Day: number;
-	/** [S] reduceGain + ewrShortfall. Negative = total cut needed to balance irrigation and meet the EWR. */
+	/**
+	 * [S] Negative = total cut in supply needed to balance irrigation and meet
+	 * the EWR. Engine ≥ 0.17.0 (audit Q13): reduceGain + ewrSupplyCut, so only
+	 * the part of the charge irrigation can meet; before: reduceGain + ewrShortfall.
+	 */
 	totalChangeM3Day: number;
 	/** [T] totalChangeM3Day / 86.4, l/s. */
 	totalChangeLs: number;
-	/** [U] target + ewrShortfall: irrigation volume left once balanced and the EWR is met. */
+	/**
+	 * [U] Irrigation volume left once balanced and the EWR is met. Engine ≥
+	 * 0.17.0 (audit Q13): MAX(target + ewrSupplyCut, 0), never below 0; before:
+	 * target + ewrShortfall, which could be negative.
+	 */
 	volumeLeftM3Day: number;
-	/** [V] volumeLeft / demand: share of demand that is left (the workbook labels it "reduction of demand required"). null when demand is 0. */
+	/**
+	 * [V] volumeLeft / demand: share of demand that is left (the workbook labels
+	 * it "reduction of demand required"), in 0–1 from engine 0.17.0. null when
+	 * demand is 0. Below DEMAND_PCT_FLOOR_M3_DAY of demand the UI shows "—".
+	 */
 	fractionOfDemandLeft: number | null;
 	/**
 	 * The part of R met by irrigating less (R_irr, ≤ 0; engine ≥ 0.17.0, audit
@@ -792,6 +804,8 @@ export interface CurtailmentFarm {
 	ewrSupplyCutLs?: number;
 	/** The EWR site (node id) that set most of the charge over the window; null when not charged. */
 	ewrBindingSiteId?: string | null;
+	/** MAX(ΔG − target, 0) ≥ 0: how far the EWR supply cut exceeds the farm's equitable share (audit Q13); flagged when > 0. */
+	ewrCutBeyondShareM3Day?: number;
 }
 
 /**
@@ -840,6 +854,7 @@ export interface CurtailmentSummary {
 		ewrChargeIrrigationM3Day?: number;
 		ewrChargeStorageM3Day?: number;
 		ewrSupplyCutM3Day?: number;
+		ewrCutBeyondShareM3Day?: number;
 		totalChangeM3Day: number;
 		volumeLeftM3Day: number;
 	};

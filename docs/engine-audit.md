@@ -58,7 +58,7 @@ engine 0.4.0.
 | Q9, Q10 | Settings; no engine change. |
 | Q11 equitable target ignores the network | **Needs hydrologist** (policy). Recommendation: present "gain" as a fairness target only, and later compute a feasible, network-aware redistribution (licences, planned-work). |
 | Q12 label | UI wording only; the engine field is `fractionOfDemandLeft`. |
-| Q13 EWR cut on a farm with no demand | **Needs hydrologist** (policy). |
+| Q13 EWR cut on a farm with no demand | **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0.** A licence condition must be something the user can comply with, so the farm's EWR charge (Q17) splits by channel: irrigation part `A·c/(c + MAX(o, 0))` (c = G − T consumptive irrigation, o = e − c storage gain and net export) and a *store less / pass inflow* part. Only the irrigation part is a supply cut, `ΔG = R_irr / (1 − β(1 − e))` (consumptive use = G(1 − β(1 − e)), N1), so a farm with no demand gets a supply cut of 0 and its charge reads as a release / bypass condition. Curtailment S = N − ΔG, U = `MAX(M − ΔG, 0)`, `fractionOfDemandLeft` in 0–1, and `ewrCutBeyondShareM3Day = MAX(ΔG − M, 0)` flags "EWR cut exceeds this farm's equitable share". "Demand left %" shows "no demand" (H = 0), "—" below `DEMAND_PCT_FLOOR_M3_DAY` = 1 m³/day, else a whole % with "<1%" / ">99%" at the ends; the CSV keeps the unrounded value plus `demand_pct_note`. Tests: `curtailment.test.ts` › "Q13: …", `run.test.ts` › "charges a short outlet …" (a damless farm with no irrigation: all storage), frontend `curtailment.test.ts` › "demand left % (Q13)", `run-tables.test.ts` › "Q13: …"; `checkReportTotals` asserts the identities on every run. |
 | Q14 K_tot from rounded averages | **Fixed (R1).** |
 | Q15 l/s truncated | **Fixed (R1).** |
 | Q16 | Workbook-only. |
@@ -237,6 +237,11 @@ workbook column by column, under a rule that names the finding:
   separate test runs the attribution on the client catchment: every site
   splits exactly into charged + natural and every self-check, including
   `checkEwrAttribution`, passes.
+- **Q13 (engine ≥ 0.17.0):** the volume left U is `MAX(M − ΔG, 0)` and S is
+  `N − ΔG`. With the replay's AB fed in as an all-irrigation charge and k = 1,
+  ΔG = −R, so S is still the sheet's `N + R`; U and V differ only where the
+  sheet's `M + R` is negative (the engine shows 0 and flags the cut beyond
+  the equitable share), and the replay checks `MAX(M + R, 0)` there.
 - `[Shortfalls]` and the EWR pivot are fed the workbook's own daily columns, so
   they test `curtailment.ts` and `ewr.ts` in isolation. The saved window's H,
   I, R are within the sheet's `ROUND` (±0.5), and the whole run is replayed
@@ -282,15 +287,20 @@ the bound.
    upstream pro rata to their net impact (at most what each took; the rest is
    natural), a farm under several sites carrying the largest charge. Are the
    gauges the right EWR sites, or should only designated sites count (WP-3.7)?
-7. **Q11, Q13:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
-8. **B2:** are the two flagged zero-rain runs on the client catchment missing
+7. **Q13 (confirm the decision):** engine 0.17.0 splits the EWR charge into
+   an irrigation part (a supply cut) and a *store less / pass inflow* part, so
+   a farm with no demand is never asked to irrigate less; the volume left is
+   never below 0 and a cut beyond the equitable share is flagged. Is the
+   storage part to be written as a release or bypass condition?
+8. **Q11:** curtailment policy, as listed. (Q1 is resolved: engine 0.9.0.)
+9. **B2:** are the two flagged zero-rain runs on the client catchment missing
    data (engine 0.15.0 fills them from CHIRPS by default) or real dry spells
    (list them as keep-dry)? Are there other bad stretches to list as missing
    ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client))?
-9. **Q5 (confirm the decision):** irrigation stops at the dam's minimum
-   operating level (dead storage), and transfers keep the higher of their own
-   minimum and that level (engine 0.16.0). Which dams keep a reserve, and how
-   much?
+10. **Q5 (confirm the decision):** irrigation stops at the dam's minimum
+    operating level (dead storage), and transfers keep the higher of their own
+    minimum and that level (engine 0.16.0). Which dams keep a reserve, and how
+    much?
 
 ## References
 

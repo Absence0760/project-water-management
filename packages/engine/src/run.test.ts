@@ -1880,7 +1880,8 @@ describe.skipIf(!dataDir)(
 				close(got.reduceGainLs, N / 86.4);
 				close(got.totalChangeM3Day, S);
 				close(got.totalChangeLs, S / 86.4);
-				close(got.volumeLeftM3Day, M + r.R);
+				// Q13 (engine ≥ 0.17.0): the volume left is never below 0; the sheet's M + R can be.
+				close(got.volumeLeftM3Day, Math.max(M + r.R, 0));
 			}
 			// Some farm must give water up and another may gain it.
 			expect(c.farms.some((f) => f.reduceGainM3Day < 0)).toBe(true);

@@ -1,6 +1,6 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
-import { FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
+import { demandPctNote, FARM_COLUMNS as FARM_DAILY_COLUMNS, GAUGE_COLUMNS, type RunSummary, type WaterBalanceRow } from '@water-management/engine';
 import { csvRow } from './csv.js';
 
 /**
@@ -278,7 +278,10 @@ const CURTAILMENT_COLUMNS: [header: string, value: (f: CurtailmentRow, siteName:
 	['Total change [S] (m³/day)', (f) => f.totalChangeM3Day],
 	['Total change [T] (l/s)', (f) => f.totalChangeLs],
 	['Volume left [U] (m³/day)', (f) => f.volumeLeftM3Day],
-	['Demand left [V] (%)', (f) => pct(f.fractionOfDemandLeft) as Cell]
+	['Demand left [V] (%)', (f) => pct(f.fractionOfDemandLeft) as Cell],
+	// Why V is empty or not meaningful (audit Q13): no_demand | below_floor (demand under DEMAND_PCT_FLOOR_M3_DAY) | empty.
+	['demand_pct_note', (f) => demandPctNote(f.demandM3Day)],
+	['EWR cut beyond equitable share (m³/day)', (f) => f.ewrCutBeyondShareM3Day ?? null]
 ];
 
 /**
@@ -326,7 +329,9 @@ export function* curtailmentLines(c: RunSummary['curtailment']): Generator<strin
 		t.totalChangeM3Day,
 		'',
 		t.volumeLeftM3Day,
-		''
+		'',
+		'',
+		t.ewrCutBeyondShareM3Day ?? null
 	]);
 }
 

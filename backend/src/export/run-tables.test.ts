@@ -152,6 +152,20 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines.at(-1)!.split(',')).toHaveLength(header.length);
 	});
 
+	it('Q13: keeps demand left unrounded and adds demand_pct_note and the cut beyond the equitable share', () => {
+		const rows = [
+			{ ...farm, name: 'None', demandM3Day: 0, fractionOfDemandLeft: null, ewrCutBeyondShareM3Day: 0 },
+			{ ...farm, name: 'Tiny', demandM3Day: 0.4, fractionOfDemandLeft: 0.123456789, ewrCutBeyondShareM3Day: 0 },
+			{ ...farm, name: 'Big', demandM3Day: 100, fractionOfDemandLeft: 0.004, ewrCutBeyondShareM3Day: 12.5 }
+		];
+		const lines = [...curtailmentLines({ ...c, farms: rows })];
+		const header = lines.find((l) => l.startsWith('Farm,'))!.split(',');
+		const cell = (name: string, h: string) => lines.find((l) => l.startsWith(`${name},`))!.split(',')[header.indexOf(h)];
+		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
+		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
+		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
 	it('lists every EWR site; charged + natural = shortfall', () => {
 		const lines = [...ewrSiteLines(c)];
 		expect(lines.slice(2)).toEqual(['Outlet,yes,1,10,-40,-30,-10', 'Weir,no,1,4,-30,-30,0']);

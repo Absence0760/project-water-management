@@ -240,7 +240,10 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
  *   0.17.0); I ≤ H and R ≤ 0; totals are
  *   the column sums; the equitable fraction is ΣI / ΣH; targets redistribute
  *   the supplied water (Σ M = Σ I) and never exceed demand; N = M − I,
- *   S = N + R, U = M + R and the l/s columns are m³/day ÷ 86.4.
+ *   the l/s columns are m³/day ÷ 86.4; from engine 0.17.0 (audit Q13)
+ *   R_irr + R_store = R, R ≤ R_irr ≤ 0, the supply cut −ΔG ≤ 0, S = N − ΔG,
+ *   U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and
+ *   demand left U / H lies in 0–1; before 0.17.0 S = N + R and U = M + R.
  * Tolerances are float noise only: 1e-12 of the operands' magnitude for single
  * operations, 1e-10 of Σ|x| for sums over a run.
  */
@@ -344,12 +347,25 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		if (row.ewrShortfallM3Day > 0 || row.suppliedM3Day > row.demandM3Day) return `${w}: shortfall ${row.ewrShortfallM3Day} > 0 or supplied ${row.suppliedM3Day} > demand ${row.demandM3Day}`;
 		if (row.targetM3Day > row.demandM3Day || row.targetM3Day < 0) return `${w}: target ${row.targetM3Day} outside [0, demand ${row.demandM3Day}]`;
 		const M = row.targetM3Day;
+		// Engine ≥ 0.17.0: −ΔG, the supply cut for the EWR (audit Q13).
+		const cut = row.ewrSupplyCutM3Day;
 		const id = (x: CurtailmentFarm, a: number, b: number, what: string, ...ops: number[]) =>
 			close(a, b, 1e-12, Math.max(Math.abs(a), Math.abs(b), ...ops.map(Math.abs))) ? null : `${w}: ${what} (${a} vs ${b}) in ${JSON.stringify(x)}`;
 		const e =
 			id(row, row.reduceGainM3Day, M - row.suppliedM3Day, 'N ≠ M − I', M, row.suppliedM3Day) ??
-			id(row, row.totalChangeM3Day, row.reduceGainM3Day + row.ewrShortfallM3Day, 'S ≠ N + R', row.reduceGainM3Day, row.ewrShortfallM3Day) ??
-			id(row, row.volumeLeftM3Day, M + row.ewrShortfallM3Day, 'U ≠ M + R', M, row.ewrShortfallM3Day) ??
+			(cut === undefined
+				? id(row, row.totalChangeM3Day, row.reduceGainM3Day + row.ewrShortfallM3Day, 'S ≠ N + R', row.reduceGainM3Day, row.ewrShortfallM3Day) ??
+					id(row, row.volumeLeftM3Day, M + row.ewrShortfallM3Day, 'U ≠ M + R', M, row.ewrShortfallM3Day)
+				: id(row, row.ewrChargeIrrigationM3Day! + row.ewrChargeStorageM3Day!, row.ewrShortfallM3Day, 'R_irr + R_store ≠ R', row.ewrChargeIrrigationM3Day!, row.ewrChargeStorageM3Day!) ??
+					id(row, row.totalChangeM3Day, row.reduceGainM3Day + cut, 'S ≠ N − ΔG', row.reduceGainM3Day, cut) ??
+					id(row, row.volumeLeftM3Day, Math.max(M + cut, 0), 'U ≠ MAX(M − ΔG, 0)', M, cut) ??
+					id(row, row.ewrCutBeyondShareM3Day ?? NaN, Math.max(-cut - M, 0), 'cut beyond share ≠ MAX(ΔG − M, 0)', M, cut) ??
+					(row.ewrChargeIrrigationM3Day! > 0 || row.ewrChargeIrrigationM3Day! < row.ewrShortfallM3Day - 1e-12 * Math.abs(row.ewrShortfallM3Day) || cut > 0
+						? `${w}: EWR charge ${row.ewrShortfallM3Day}, irrigation part ${row.ewrChargeIrrigationM3Day}, supply cut ${cut}`
+						: null) ??
+					(row.fractionOfDemandLeft !== null && (row.fractionOfDemandLeft < 0 || row.fractionOfDemandLeft > 1 + 1e-12)
+						? `${w}: demand left ${row.fractionOfDemandLeft} outside 0–1`
+						: null)) ??
 			id(row, row.reduceGainLs, row.reduceGainM3Day / 86.4, 'l/s ≠ m³/day ÷ 86.4') ??
 			id(row, row.totalChangeLs, row.totalChangeM3Day / 86.4, 'total l/s ≠ m³/day ÷ 86.4');
 		if (e) return e;

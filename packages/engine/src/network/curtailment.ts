@@ -16,6 +16,19 @@ import type { CurtailmentFarm, CurtailmentSummary, EwrSiteSummary } from '../pro
 /** m³/day → l/s: 1 m³/day = 1000 l / 86 400 s. The workbook divides by 86.4. */
 export const M3_PER_DAY_PER_LS = 86.4;
 
+/**
+ * Below this average demand (m³/day, ≈ 0.012 l/s, under any meter's
+ * resolution) "demand left %" is not meaningful: the UI shows "—" and the CSV
+ * notes it (audit Q13, engine ≥ 0.17.0). One constant for the UI and the CSV.
+ */
+export const DEMAND_PCT_FLOOR_M3_DAY = 1;
+
+/** The CSV's demand_pct_note for a farm's average demand H: why "demand left %" is empty or not meaningful. */
+export function demandPctNote(demandM3Day: number): 'no_demand' | 'below_floor' | '' {
+	if (!(demandM3Day > 0)) return 'no_demand';
+	return demandM3Day < DEMAND_PCT_FLOOR_M3_DAY ? 'below_floor' : '';
+}
+
 /** Daily farm series the report needs (engine RunSeries keys in brackets). */
 export interface CurtailmentInput {
 	nodeId: string;
@@ -90,12 +103,18 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 		// Target and supply agree whenever the farm already has its equitable
 		// share; don't report float cancellation noise (≈1e-16 m³/day) as a cut or gain.
 		const N = nz(Math.abs(M - I) <= 1e-12 * Math.max(Math.abs(M), Math.abs(I)) ? 0 : M - I);
-		const S = nz(N + R);
-		const U = nz(M + R);
 		// The supply cut that removes R_irr of consumptive use: consumptive = G·k,
-		// so ΔG = R_irr / k (k = 1 − β(1 − e) ≥ e > 0, audit N1).
+		// so ΔG = R_irr / k (k = 1 − β(1 − e) ≥ e > 0, audit N1). cut = −ΔG ≤ 0.
 		const k = f.consumptivePerSupplied ?? 1;
 		const cut = nz(Rirr / k);
+		// Engine ≥ 0.17.0 (audit Q13): the total change and the volume left count
+		// only what irrigation can deliver, the supply cut; the storage part of the
+		// charge is a store-less / pass-inflow condition, shown on its own. The
+		// volume left never goes below 0, and a cut beyond the equitable share is
+		// flagged instead.
+		const S = nz(N + cut);
+		const U = nz(Math.max(M + cut, 0));
+		const beyond = nz(Math.max(-cut - M, 0));
 		return {
 			nodeId: f.nodeId,
 			name: f.name,
@@ -116,7 +135,8 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			ewrChargeStorageM3Day: nz(R - Rirr),
 			ewrSupplyCutM3Day: cut,
 			ewrSupplyCutLs: nz(cut / M3_PER_DAY_PER_LS),
-			ewrBindingSiteId: f.ewrBindingSiteId ?? null
+			ewrBindingSiteId: f.ewrBindingSiteId ?? null,
+			ewrCutBeyondShareM3Day: beyond
 		};
 	});
 
@@ -155,6 +175,7 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			ewrChargeIrrigationM3Day: sum('ewrChargeIrrigationM3Day'),
 			ewrChargeStorageM3Day: sum('ewrChargeStorageM3Day'),
 			ewrSupplyCutM3Day: sum('ewrSupplyCutM3Day'),
+			ewrCutBeyondShareM3Day: sum('ewrCutBeyondShareM3Day'),
 			totalChangeM3Day: sum('totalChangeM3Day'),
 			volumeLeftM3Day: sum('volumeLeftM3Day')
 		}

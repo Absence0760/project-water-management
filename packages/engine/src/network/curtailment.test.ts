@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCurtailment, type CurtailmentInput } from './curtailment';
+import { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, demandPctNote, type CurtailmentInput } from './curtailment';
 import { excelRoundDown } from './round';
 import { resolveReportWindow } from '../run';
 import { toEpochDay } from '../calendar';
@@ -66,11 +66,14 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		close(a!.fractionOfDemandLeft, (200 / 3 - 5) / 100);
 		close(b!.totalChangeM3Day, 100 / 3);
 		close(b!.volumeLeftM3Day, 400 / 3);
-		// C: no demand, but the EWR shortfall it adds still counts against it.
+		// C: no demand, but a charge given as all irrigation (no split, the old AB way) still counts against it.
 		close(c!.totalChangeM3Day, -0.75);
 		close(c!.totalChangeLs, -0.75 / 86.4); // a small cut stays visible (the sheet shows 0)
-		close(c!.volumeLeftM3Day, -0.75);
+		// Volume left never goes below 0 (Q13, engine 0.17.0; the sheet shows −0.75); the excess is flagged.
+		expect(c!.volumeLeftM3Day).toBe(0);
+		close(c!.ewrCutBeyondShareM3Day, 0.75);
 		expect(c!.fractionOfDemandLeft).toBeNull();
+		expect(a!.ewrCutBeyondShareM3Day).toBe(0);
 	});
 
 	it('totals are plain sums of the farm columns; redistribution nets to 0', () => {
@@ -81,7 +84,7 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		close(t.reduceGainLs, 0);
 		close(t.ewrShortfallM3Day, -5.75);
 		close(t.totalChangeM3Day, -5.75);
-		close(t.volumeLeftM3Day, 194.25);
+		close(t.volumeLeftM3Day, 195);
 	});
 
 	it('uses only the days inside the window', () => {
@@ -94,7 +97,7 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 	it('with no demand anywhere the equitable fraction is null (workbook: #DIV/0!) and targets are 0', () => {
 		const dry = computeCurtailment([farm('X', [0, 0], [0, 0], [-4, -6])], win(0, 1));
 		expect(dry.equitableFraction).toBeNull();
-		expect(dry.farms[0]).toMatchObject({ targetM3Day: 0, reduceGainM3Day: 0, totalChangeM3Day: -5, volumeLeftM3Day: -5 });
+		expect(dry.farms[0]).toMatchObject({ targetM3Day: 0, reduceGainM3Day: 0, totalChangeM3Day: -5, volumeLeftM3Day: 0, ewrCutBeyondShareM3Day: 5 });
 	});
 
 	it('everyone fully supplied → no reductions except the EWR', () => {
@@ -141,6 +144,35 @@ describe('computeCurtailment — b023 [Shortfalls]', () => {
 		expect(k.ewrSites).toEqual([
 			{ nodeId: 'out', name: 'Outlet', isOutlet: true, farmCount: 3, daysNotMet: 1, shortfallM3Day: -5, chargedM3Day: -2, naturalM3Day: -3 }
 		]);
+	});
+
+	it('Q13: a farm with no demand gets no irrigation cut; its charge is store less / pass inflow', () => {
+		const z: CurtailmentInput = { ...farm('Z', [0, 0], [0, 0], [-10, -10]), ewrChargeIrrigation: [0, 0], consumptivePerSupplied: 0.8 };
+		const r = computeCurtailment([z, farm('W', [100, 100], [50, 50], [0, 0])], win(0, 1)).farms[0]!;
+		expect([r.ewrShortfallM3Day, r.ewrChargeIrrigationM3Day, r.ewrChargeStorageM3Day, r.ewrSupplyCutM3Day]).toEqual([-10, 0, -10, 0]);
+		// The total change and the volume left count only what irrigation can deliver.
+		expect([r.totalChangeM3Day, r.volumeLeftM3Day, r.ewrCutBeyondShareM3Day, r.fractionOfDemandLeft]).toEqual([0, 0, 0, null]);
+	});
+
+	it('Q13: volume left = MAX(target − supply cut, 0), demand left stays in 0–1, and a cut beyond the equitable share is flagged', () => {
+		// One farm: H 100, I 10 → target 10. Charge −40, all irrigation, k = 0.8 → ΔG = 50.
+		const f: CurtailmentInput = { ...farm('F', [100], [10], [-40]), ewrChargeIrrigation: [-40], consumptivePerSupplied: 0.8 };
+		const r = computeCurtailment([f], win(0, 0)).farms[0]!;
+		close(r.ewrSupplyCutM3Day, -50);
+		close(r.totalChangeM3Day, -50); // N 0 − ΔG
+		expect(r.volumeLeftM3Day).toBe(0);
+		close(r.ewrCutBeyondShareM3Day, 40);
+		expect(r.fractionOfDemandLeft).toBe(0);
+		// A cut within the share leaves target − ΔG.
+		const g = computeCurtailment([{ ...f, ewrCharge: [-4], ewrChargeIrrigation: [-4] }], win(0, 0)).farms[0]!;
+		close(g.volumeLeftM3Day, 5);
+		close(g.fractionOfDemandLeft, 0.05);
+		expect(g.ewrCutBeyondShareM3Day).toBe(0);
+	});
+
+	it('Q13: demand_pct_note marks no demand and demand below the 1 m³/day floor', () => {
+		expect(DEMAND_PCT_FLOOR_M3_DAY).toBe(1);
+		expect([demandPctNote(0), demandPctNote(0.4), demandPctNote(1), demandPctNote(250)]).toEqual(['no_demand', 'below_floor', '', '']);
 	});
 
 	it('rejects an empty window', () => {

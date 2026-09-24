@@ -489,7 +489,12 @@ The settings are grouped by what they drive:
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
   pass inflow*, the *Supply cut* (m³/day and l/s) and the *EWR site* setting
   the charge, with a note on the rule; older runs show the single "EWR
-  shortfall" column (AB). Below it, the **EWR sites** table (outlet first, then
+  shortfall" column (AB). *Total change* and *volume left* count only the
+  supply cut (Q13): a farm with no demand shows no cut, and a farm with only a
+  storage charge gets a "store less / pass inflow X m³/day" badge; a farm
+  whose EWR cut exceeds its equitable share gets a warning badge. *Demand left*
+  is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
+  demand, "<1%" / ">99%" at the ends. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges

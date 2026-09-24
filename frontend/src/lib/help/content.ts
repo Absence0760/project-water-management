@@ -943,6 +943,17 @@ export const HELP: HelpEntry[] = [
 		source: 'docs/model.md §2.7b and §2.11; docs/engine-audit.md Q13, Q17'
 	},
 	{
+		id: 'demand-left',
+		term: 'Demand left',
+		short: 'Share of a farm’s demand left to irrigate once supply is shared fairly and the EWR supply cut is made.',
+		long: 'Volume left ÷ demand, where the volume left is the equitable share minus the EWR supply cut, and never below 0. Shown as a whole %: “no demand” for a farm without demand, “—” when demand is under 1 m³/day (a % of almost nothing isn’t meaningful), and “<1%” or “>99%” at the ends so neither rounds to 0 or 100. The summary CSV keeps the exact value and a demand_pct_note column.\n\nWhen the EWR supply cut is larger than the farm’s equitable share, the volume left is 0 and the table flags “EWR cut exceeds this farm’s equitable share”. The workbook labels this column “reduction of demand required”, but it is the share left.',
+		units: '% of demand',
+		category: 'results',
+		aliases: ['volume left', 'reduction of demand required', 'demand_pct_note'],
+		related: ['ewr-charge-split', 'report-window'],
+		source: 'b023 Shortfalls columns U, V; docs/model.md §2.11; docs/engine-audit.md Q12, Q13'
+	},
+	{
 		id: 'reach-shortfall',
 		term: 'Reach shortfall (workbook AB)',
 		short: 'The workbook’s incremental shortfall: a farm’s shortfall minus those directly upstream. A diagnostic only.',
