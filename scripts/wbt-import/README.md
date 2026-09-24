@@ -65,6 +65,12 @@ rows and columns don't break it.
   module is missing). `calibrationStart/End` come from [Flow Calibration Cfg]
   `zCalibration_Date1/DateN`, and `calibrationFlowKind` from [Flow data]
   `rUseFlow` (left null, with a note, when that series has no values).
+- **Zero-rain runs** (issue #2): a `note:` lists runs of zero catchment rain
+  that look like missing data, by the engine's `zeroRainRuns` rule (60+ days
+  in the series' six wettest months, or 180+ days with under two years of
+  data; `docs/model.md` §2.10a). A zero blocks the CHIRPS fallback a blank day
+  gets. The values are imported unchanged. The low-vs-CHIRPS year check is
+  engine-only (it shows in every run and on the Time series tab).
 - **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
   month, farm, summed shortfall, days not met). A macro writes that table, so
   it can be stale; see `docs/model.md` §2.9.

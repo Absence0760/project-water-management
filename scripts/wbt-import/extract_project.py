@@ -379,6 +379,68 @@ def read_flow_data(wb: Workbook) -> dict[str, Any]:
     return {"dates": dates, "series": series, "calc": calc}
 
 
+# Zero-rain runs (issue #2): the engine's zeroRainRuns rule in
+# packages/engine/src/quality.ts (docs/model.md section 2.10a). Keep in step.
+ZERO_RUN_MIN_WET_DAYS = 60
+ZERO_RUN_PLAIN_DAYS = 180
+CLIMATOLOGY_MIN_DAYS_PER_MONTH = 56
+
+
+def zero_rain_runs(start_date: str, values: list[float | None]) -> tuple[list[int] | None, list[tuple[str, str, int]]]:
+    """(wet months, [(first day, last day, days)]) of the zero runs the engine warns about.
+
+    A run of consecutive exact zeros is flagged with 60+ days in the six
+    calendar months of highest mean daily rain in the series itself, or 180+
+    days in any season when some month has fewer than 56 valid days or the
+    series never rains. A blank, negative or non-zero day ends a run.
+    """
+    d0 = dt.date.fromisoformat(start_date)
+    months = [(d0 + dt.timedelta(days=i)).month for i in range(len(values))]
+    total, count = [0.0] * 13, [0] * 13
+    for m, v in zip(months, values):
+        if v is not None and v >= 0:
+            total[m] += v
+            count[m] += 1
+    wet_months: list[int] | None = None
+    if all(count[m] >= CLIMATOLOGY_MIN_DAYS_PER_MONTH for m in range(1, 13)) and any(total[1:]):
+        mean = {m: total[m] / count[m] for m in range(1, 13)}
+        wet_months = sorted(sorted(range(1, 13), key=lambda m: (-mean[m], m))[:6])
+    min_days = ZERO_RUN_MIN_WET_DAYS if wet_months else ZERO_RUN_PLAIN_DAYS
+    runs, i = [], 0
+    while i < len(values):
+        if values[i] != 0:
+            i += 1
+            continue
+        j = i
+        while j < len(values) and values[j] == 0:
+            j += 1
+        wet = sum(1 for m in months[i:j] if wet_months is None or m in wet_months)
+        if wet >= min_days:
+            runs.append((iso(d0 + dt.timedelta(days=i)), iso(d0 + dt.timedelta(days=j - 1)), j - i))
+        i = j
+    return wet_months, runs
+
+
+def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
+    """The importer's note for zero runs in the catchment rain, or None."""
+    rain = next((s for s in series if s["kind"] == "rain_catchment_mm"), None)
+    if rain is None:
+        return None
+    wet, runs = zero_rain_runs(rain["startDate"], rain["values"])
+    if not runs:
+        return None
+    rule = (
+        f"{ZERO_RUN_MIN_WET_DAYS}+ days in the wet season (months {','.join(map(str, wet))})"
+        if wet
+        else f"{ZERO_RUN_PLAIN_DAYS}+ days"
+    )
+    spans = "; ".join(f"{a} to {b} ({n} days)" for a, b, n in runs)
+    return (
+        f"[Flow data] catchment rain has {len(runs)} run(s) of zero rain covering {rule}: {spans}. "
+        "A zero blocks the CHIRPS fallback a blank day gets; if these are missing data, re-export them as blank"
+    )
+
+
 def read_element_sheet(wb: Workbook, name: str, kind: str, days: int, first_date: str) -> dict[str, list]:
     ws = wb.wb[name]
     cols = FARM_COLS if kind == "farm" else GAUGE_COLS
@@ -611,6 +673,9 @@ def extract(path: Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
 
         flow = read_flow_data(wb)
         dates = flow["dates"]
+        zero_note = zero_rain_note(flow["series"])
+        if zero_note:
+            wb.notes.append(zero_note)
         kind = settings["calibrationFlowKind"]
         if kind and kind not in {s["kind"] for s in flow["series"]}:
             wb.notes.append(f"[Flow data] rUseFlow picks {kind}, which has no values; calibrationFlowKind left unset")
