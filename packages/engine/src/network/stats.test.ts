@@ -196,9 +196,9 @@ describe('calibrationStats — exclusions', () => {
 		expect(c.annualVolumes!.map((y) => y.waterYear)).toEqual([2019]);
 	});
 
-	it("counts excluded days out of a year's window, so it reads as a part year", () => {
+	it("keeps excluded days in the year's window but not its scored days, so the year reads as a part year", () => {
 		const c = calibrationStats(sim, obs, { startDate: '2020-09-29', exclusions: [{ start: '2020-09-29', end: '2020-09-29', reason: 'x' }] });
-		expect(c.annualVolumes!.find((y) => y.waterYear === 2019)!.daysInWindow).toBe(1);
+		expect(c.annualVolumes!.find((y) => y.waterYear === 2019)).toMatchObject({ days: 1, daysInWindow: 2 });
 	});
 
 	it('is unchanged, with no exclusion fields, when there are none', () => {

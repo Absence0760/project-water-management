@@ -153,10 +153,8 @@ export function calibrationStats(
 		// Days of this water year inside the window (whether observed or not): flags part years.
 		const a = Math.max(d0! + from, toEpochDay(`${y.waterYear}-10-01`));
 		const b = Math.min(d0! + to, toEpochDay(`${y.waterYear + 1}-09-30`));
-		// Excluded days are outside the window too: a year with an exclusion reads as a part year.
-		let out = 0;
-		if (excluded) for (let e = a; e <= b; e++) out += excluded[e - d0!]!;
-		y.daysInWindow = b - a + 1 - out;
+		// Excluded days still count here but aren't scored, so a year with an exclusion reads as a part year.
+		y.daysInWindow = b - a + 1;
 		y.diffPct = y.observedMm3 !== 0 ? (100 * (y.simulatedMm3 - y.observedMm3)) / y.observedMm3 : null;
 	}
 

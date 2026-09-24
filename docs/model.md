@@ -623,10 +623,11 @@ lists periods left out of every calibration score: a whole water year
 (`{ waterYear: 2015, reason }` = 1 October 2015 to 30 September 2016) or a date
 range (`{ start, end, reason }`, inclusive). Each needs a reason, so an awkward
 period (a suspect rain year, the gauge after a known break) can't be dropped
-without leaving a record. The run's statistics skip excluded days, the annual
-table counts them out of each year's window (so a year with an exclusion reads
-as a part year), and `CalibrationStats.exclusions` / `excludedDays` record what
-was applied and how many observed days it removed. Automatic calibration
+without leaving a record. The run's statistics skip excluded days. The annual
+table leaves them out of each year's scored days but not its window days, so
+a year with more than a tenth excluded reads as a part year, and a wholly
+excluded year has no row. `CalibrationStats.exclusions` and `excludedDays`
+record what was applied and how many observed days it removed. Automatic calibration
 (§2.10b) always applies the same list. With none, every number is unchanged.
 Invalid stored entries are dropped with a run warning; the API rejects them on
 save. `calibrate/provenance.ts` holds the helpers.
