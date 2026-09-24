@@ -132,7 +132,15 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 This is the calibrated rain→runoff routine, the engine's `legacy` runoff model
 (`settings.runoffModel = 'legacy'`; GR4J, §2.4a, has been the default since
 engine 0.11.0. `packages/engine/src/runoff/` holds the seam every runoff model
-plugs into).
+plugs into). **Decided (persona recommendation, 2026-09-24; pending the
+hydrologist): legacy is kept exactly as it is — no numeric change — but every
+run it produces is labelled workbook comparison only, not evidence** ([audit
+H1](./engine-audit.md)): it doesn't conserve water at the event scale, so a
+run can't be relied on for a licence, Reserve or compliance assessment. Every
+legacy run's `summary.warnings` carries `LEGACY_NOT_EVIDENCE: …`
+(`packages/engine/src/run.ts`), the app shows an amber "Workbook comparison"
+badge on it, and its CSV exports start with a `# runoff_model=legacy; …`
+comment line. GR4J is the model of record.
 One row runs per day, and each row reads the previous row. Parameters come from `[Flow Calibration Cfg]`. The
 defaults from the blank workbook are shown.
 
@@ -179,11 +187,14 @@ The interpolated factor is clamped at 0, so an index below 1 (a pulse starting a
   gives back more water than fell on it, which is impossible over a whole
   record, so the run warns. The structure makes this easy to reach: a storm
   resets the base flow to the storm's peak, which then recedes along the slow
-  part of the curve (audit H1, a question for the hydrologist).
+  part of the curve (audit H1 — decided provisionally, pending the hydrologist).
 - **Days with no rainfall value** from any source are counted: the model treats
   them as dry (0 mm), for runoff and for demand.
 - **Recession table**: a factor outside 0–1, a curve that rises, or tables of
   different length.
+- **Not evidence**: every legacy run carries `LEGACY_NOT_EVIDENCE: …`
+  (audit H1) — the model doesn't conserve water at the event scale, so its
+  results are a workbook comparison only. GR4J never carries it.
 
 The same sheet also:
 

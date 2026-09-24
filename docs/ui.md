@@ -144,8 +144,13 @@ formula ([api.md § Export](./api.md)).
 The settings are grouped by what they drive:
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, and days in February.
-- **Flow calibration**: the **runoff model** picker (GR4J, the default, or Legacy,
-  `settings.runoffModel`), the **CHIRPS bias correction** picker
+- **Flow calibration**: the **runoff model** picker (GR4J, the default, or
+  "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
+  doesn't conserve water at the event scale (audit H1), so it's kept for
+  workbook comparison only, never evidence: a legacy run carries an amber
+  "Workbook comparison" badge on the Runs list and the run header, a matching
+  label on its CSV exports and on legacy fit records in FitProvenance, and
+  run comparison notes it when either side is legacy. Then the **CHIRPS bias correction** picker
   (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
   month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)), the

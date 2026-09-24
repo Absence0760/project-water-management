@@ -298,7 +298,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   potential evaporation (A-pan × pan coefficient 0 in every month).
 - A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
   run deletes the oldest beyond that, with their outputs.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy }` —
+  `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
+  saved before the setting existed), so the app can badge it without a second
+  fetch (audit H1, workbook comparison only — not evidence).
 - `run = RunMeta & { summary: RunSummary }`
 - `GET …/runs/:runId` also returns the run's **settings snapshot** (the
   settings it ran with, from `model_run.inputs`), so the Runs page shows the
@@ -418,7 +421,10 @@ routes (`401` signed out, `404` not a member). Responses carry
 `Content-Disposition: attachment; filename="<project-slug>_<parts>_<YYYY-MM-DD>.<ext>"`
 (ASCII slug, UTC date) and `Cache-Control: no-store`; CORS exposes
 `Content-Disposition` so the SPA can read the name when it downloads with
-`fetch`.
+`fetch`. `daily.csv` and `summary.csv` for a **legacy-runoff-model run** (audit
+H1) start with a leading comment line,
+`# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
+ahead of the usual header row.
 
 | Path | Query | Body |
 | --- | --- | --- |
