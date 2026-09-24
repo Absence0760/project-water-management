@@ -13,6 +13,7 @@ import {
 	rainVsChirpsCheck,
 	resolveDataQuality,
 	seriesChecks,
+	seriesRowFlags,
 	waterYearLabel,
 	ZERO_RUN_MIN_WET_DAYS,
 	ZERO_RUN_PLAIN_DAYS,
@@ -199,6 +200,65 @@ describe('checkSeries', () => {
 	it('seriesChecks runs every present series in kind order', () => {
 		const bad = { startDate: '2020-01-01', values: [-1] };
 		expect(seriesChecks({ flow_logger_m3s: bad, rain_catchment_mm: bad }).map((c) => c.seriesKind)).toEqual(['rain_catchment_mm', 'flow_logger_m3s']);
+	});
+});
+
+describe('seriesRowFlags', () => {
+	const rain = (days: number) => Array.from({ length: days }, (_, i) => (i % 3 === 0 ? 1 + ((i * 7) % 20) : 0));
+
+	it('returns all-false arrays of the series length for clean, empty or all-missing data', () => {
+		expect(seriesRowFlags('rain_catchment_mm', { startDate: '2020-01-01', values: rain(50) })).toEqual({
+			negative: new Array(50).fill(false),
+			outlier: new Array(50).fill(false),
+			flatline: new Array(50).fill(false)
+		});
+		expect(seriesRowFlags('flow_observed_m3s', { startDate: '2020-01-01', values: [] })).toEqual({ negative: [], outlier: [], flatline: [] });
+		const n = seriesRowFlags('flow_observed_m3s', constant('2020-01-01', 5, null));
+		expect(n.negative).toEqual(new Array(5).fill(false));
+	});
+
+	it('flags exactly the days checkSeries reports as negative', () => {
+		const v = rain(20);
+		v[4] = -2;
+		v[11] = -1;
+		const flags = seriesRowFlags('rain_catchment_mm', { startDate: '2020-02-27', values: v });
+		expect(flags.negative).toEqual(v.map((x) => x !== null && x < 0));
+		const [c] = checkSeries('rain_catchment_mm', { startDate: '2020-02-27', values: v });
+		expect(flags.negative.filter(Boolean).length).toBe(c!.days);
+	});
+
+	it('flags exactly the days checkSeries reports as outliers', () => {
+		const v: (number | null)[] = rain(1000);
+		v[10] = 900;
+		v[20] = 1200;
+		const flags = seriesRowFlags('rain_catchment_mm', { startDate: '2020-01-01', values: v });
+		expect(flags.outlier[10]).toBe(true);
+		expect(flags.outlier[20]).toBe(true);
+		expect(flags.outlier.filter(Boolean)).toHaveLength(2);
+		// Too few positive values to judge an outlier threshold: nothing flagged.
+		const short = seriesRowFlags('rain_catchment_mm', { startDate: '2020-01-01', values: [...rain(90), 5000] });
+		expect(short.outlier.some(Boolean)).toBe(false);
+	});
+
+	it('flags every day inside a qualifying flat stretch, and keeps adjacent different-value runs distinct', () => {
+		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
+		const v: (number | null)[] = [1, 2, ...new Array(n).fill(0.35), ...new Array(n).fill(0.5), ...new Array(200).fill(0), null, null];
+		const flags = seriesRowFlags('flow_logger_m3s', { startDate: '2021-01-01', values: v });
+		// Both runs qualify (each >= n days of one value), even though they sit back to back.
+		expect(flags.flatline.slice(2, 2 + n).every(Boolean)).toBe(true);
+		expect(flags.flatline.slice(2 + n, 2 + 2 * n).every(Boolean)).toBe(true);
+		expect(flags.flatline[0]).toBe(false); // the value '1' day, too short a run
+		expect(flags.flatline.slice(2 + 2 * n).every((f) => !f)).toBe(true); // the trailing zeros and missing days
+		const [c] = checkSeries('flow_logger_m3s', { startDate: '2021-01-01', values: v });
+		expect(flags.flatline.filter(Boolean)).toHaveLength(c!.days);
+	});
+
+	it('a day can carry more than one flag (a flat stretch of an impossible negative value)', () => {
+		const n = FLATLINE_MIN_DAYS.flow_logger_m3s!;
+		const v: (number | null)[] = new Array(n).fill(-0.5);
+		const flags = seriesRowFlags('flow_logger_m3s', { startDate: '2021-01-01', values: v });
+		expect(flags.negative.every(Boolean)).toBe(true);
+		expect(flags.flatline.every(Boolean)).toBe(true);
 	});
 });
 
