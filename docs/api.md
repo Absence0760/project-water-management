@@ -291,6 +291,10 @@ engine's `runModel`, stores the outputs, and returns the summary.
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
+- A run the engine can't make is a `400 { error: "model run failed: …" }`
+  with the engine's reason, and nothing is stored: no rainfall series, a
+  simulation end before its start, or (engine ≥ 0.11.1) a GR4J run with no
+  potential evaporation (A-pan × pan coefficient 0 in every month).
 - A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
   run deletes the oldest beyond that, with their outputs.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy }`

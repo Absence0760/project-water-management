@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, createRun, putModel, putSeries, register, sampleModel } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, putSeries, register, sampleModel, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const row = (page: Page, name: string) =>
@@ -111,6 +111,7 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	const series = (kind: string, unit: string) => ({ kind, unit, startDate: '2020-10-01', values: Array(days).fill(1) });
 	await putSeries(page.request, stale.id, series('rain_catchment_mm', 'mm'));
 	await putSeries(page.request, stale.id, series('flow_observed_m3s', 'm3/s'));
+	await updateSettings(page.request, stale.id, { apanMm: Array(12).fill(150) }); // GR4J refuses to run without it
 	await createRun(page.request, stale.id, 'baseline');
 
 	await page.goto('/');

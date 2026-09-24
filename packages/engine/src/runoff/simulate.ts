@@ -121,10 +121,21 @@ export function resolveWarmupDays(v: unknown, warnings: string[]): number {
 	return 365;
 }
 
+/** Some month has potential evaporation (A-pan × pan coefficient > 0): what GR4J needs to run. */
+export const hasPotentialEvaporation = (s: { apanMm: readonly number[]; panCoefficient: readonly number[] }): boolean =>
+	s.apanMm.some((v, m) => (v ?? 0) * (s.panCoefficient[m] ?? 0) > 0);
+
+/** Why a GR4J run is refused when potential evaporation is 0 in every month. */
+export const GR4J_NO_PET =
+	'GR4J needs potential evaporation: A-pan × pan coefficient is 0 in every month, so the catchment would never dry out. Enter A-pan evaporation (Settings → Demand), or choose the legacy runoff model.';
+
 const MM_KM2_TO_M3 = 1000; // 1 mm over 1 km² = 1 000 m³
 
 export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const warnings: string[] = [];
+	// With no evaporation the production store only fills, so nearly all rain
+	// becomes flow: refuse, as a run with no rainfall is refused.
+	if (!hasPotentialEvaporation(ctx.settings)) throw new Error(GR4J_NO_PET);
 	const areaKm2 = requireCatchmentAreaKm2(ctx.settings.calibration, input);
 	const p = resolveParams<Gr4jParams>(GR4J_PARAMS, ctx.settings.gr4j, 'GR4J', warnings);
 	const warmupDays = resolveWarmupDays(ctx.settings.gr4j?.warmupDays, warnings);
@@ -142,7 +153,6 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	if (p.x2 !== 0) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(tr.exchangeMm) });
 
 	const total = (a: Float64Array) => a.reduce((s, v) => s + v, 0);
-	if (!ctx.settings.apanMm.some((v) => v > 0)) warnings.push('A-pan evaporation is 0 for every month, so GR4J runs with no evaporation');
 	return {
 		naturalFlowM3Day,
 		series,

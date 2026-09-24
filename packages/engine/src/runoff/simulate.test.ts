@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type ModelInput } from '../project';
 import { ENGINE_VERSION, runModel } from '../run';
 import { gr4j } from './gr4j';
-import { resolveParams, runoffForcing, simulateRunoff } from './simulate';
+import { GR4J_NO_PET, hasPotentialEvaporation, resolveParams, runoffForcing, simulateRunoff } from './simulate';
 import { GR4J_PARAMS } from './gr4j';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
@@ -136,5 +136,25 @@ describe('runModel with GR4J', () => {
 
 	it('a legacy run has no runoff balance', () => {
 		expect(runModel(catchment(rain, { runoffModel: 'legacy' })).summary.runoff).toBeUndefined();
+	});
+
+	it('refuses to run with no potential evaporation, which would turn nearly all rain into flow', () => {
+		const zeros = new Array(12).fill(0) as never;
+		expect(() => runModel(catchment(rain, { apanMm: zeros }))).toThrow(GR4J_NO_PET);
+		// A-pan without a pan coefficient is no evaporation either.
+		expect(() => runModel(catchment(rain, { panCoefficient: zeros }))).toThrow(GR4J_NO_PET);
+		// One month with evaporation is enough to run (positive control).
+		const one = new Array(12).fill(0);
+		one[3] = 200;
+		expect(runModel(catchment(rain, { apanMm: one as never })).summary.runoff!.petMm).toBeGreaterThan(0);
+		// Legacy doesn't use evaporation, so it still runs.
+		expect(runModel(catchment(rain, { runoffModel: 'legacy', apanMm: zeros })).days).toBe(rain.length);
+	});
+
+	it('hasPotentialEvaporation needs A-pan × pan coefficient above 0 in some month', () => {
+		const k = new Array(12).fill(0.7);
+		expect(hasPotentialEvaporation({ apanMm: apan as never, panCoefficient: k as never })).toBe(true);
+		expect(hasPotentialEvaporation({ apanMm: new Array(12).fill(0) as never, panCoefficient: k as never })).toBe(false);
+		expect(hasPotentialEvaporation({ apanMm: apan as never, panCoefficient: new Array(12).fill(0) as never })).toBe(false);
 	});
 });

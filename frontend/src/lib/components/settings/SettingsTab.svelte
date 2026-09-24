@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { CALIBRATION_FLOW_KINDS, type CalibrationParams, type CalibrationReport, type FitRecord, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
+	import { CALIBRATION_FLOW_KINDS, hasPotentialEvaporation, type CalibrationParams, type CalibrationReport, type FitRecord, type FlowShareMethod, type ProjectSettings } from '@water-management/engine';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
@@ -158,7 +158,8 @@
 	const runoffOption = $derived(RUNOFF_MODEL_OPTIONS.find((o) => o.value === s.runoffModel));
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	const isGr4j = $derived(s.runoffModel === 'gr4j');
-	const apanMissing = $derived(s.apanMm.every((v) => !v));
+	// The engine refuses a GR4J run without it (runoff/simulate.ts).
+	const petMissing = $derived(!hasPotentialEvaporation(s));
 	const num = (k: string) => cal[k] as number;
 </script>
 
@@ -254,8 +255,11 @@
 			</div>
 		</div>
 		{#if isGr4j}
-			{#if apanMissing}
-				<p class="alert alert-warning" role="status">GR4J needs A-pan evaporation (Demand, above): with none, the catchment never dries out.</p>
+			{#if petMissing}
+				<p class="alert alert-warning" role="status">
+					GR4J needs A-pan evaporation (Demand, above) and a pan coefficient above 0 (below). Without them the catchment would never dry
+					out, so runs and fits are refused.
+				</p>
 			{/if}
 			<div class="fields">
 				{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}

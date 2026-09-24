@@ -93,3 +93,27 @@ test('run comparison shows legacy against GR4J on a copy of the project', async 
 		await expect(table.getByRole('table', { name: `${side}: by month` }).getByRole('rowheader')).toHaveCount(12);
 	}
 });
+
+test('GR4J without A-pan evaporation: Settings warns, and a run is refused with the reason', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'No A-pan');
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByLabel('Runoff model', { exact: true })).toHaveValue('gr4j');
+	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toBeVisible();
+
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByLabel(/^Run label/).fill('No evaporation');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(page.getByRole('alert')).toContainText('GR4J needs potential evaporation');
+
+	// Positive control: with A-pan the warning goes and the run goes through.
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(150) });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByLabel('Runoff model', { exact: true })).toHaveValue('gr4j');
+	await expect(page.getByRole('status').filter({ hasText: /GR4J needs A-pan evaporation/ })).toHaveCount(0);
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByLabel(/^Run label/).fill('With evaporation');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'With evaporation' })).toBeVisible();
+});

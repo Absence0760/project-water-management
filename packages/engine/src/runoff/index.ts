@@ -5,7 +5,7 @@ import type { NaturalFlowGenerator, RunoffModelId } from './types';
 export * from './types';
 export { resolveCatchmentAreaKm2 } from './area';
 export * from './gr4j';
-export { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
+export { GR4J_NO_PET, hasPotentialEvaporation, resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
 
 /** The natural-flow generator for settings.runoffModel. */
 export const NATURAL_FLOW: Record<RunoffModelId, NaturalFlowGenerator> = {

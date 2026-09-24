@@ -863,6 +863,7 @@ describe('runModel — end to end with the rain model', () => {
 		const rain = Array.from({ length: days }, (_, i) => (i % 10 === 0 ? 30 : 0));
 		const i = input({ nodes: [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge' })], natural: [] });
 		i.series = { rain_catchment_mm: { startDate: '2020-06-01', values: rain } };
+		i.settings.apanMm = [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110]; // GR4J needs evaporation
 		const out = runModel(i);
 		expect(out.days).toBe(days);
 		const nat = get(out, null, 'natural_flow');
@@ -1337,7 +1338,8 @@ describe.skipIf(!dataDir)(
 
 describe('runModel — soundness warnings (audit W1–W5)', () => {
 	const rainInput = (rain: (number | null)[], startDate = '2021-07-01', over: Partial<ProjectSettings> = {}): ModelInput => ({
-		settings: { ewrPragmaticM3PerDay: zeros, ...over },
+		// A-pan: GR4J (the default) refuses to run without evaporation. No crops, so no demand.
+		settings: { ewrPragmaticM3PerDay: zeros, apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ...over },
 		model: { nodes: [node('A', { areaKm2: 100, downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 })], crops: [], cropAreas: [], transfers: [] },
 		series: { rain_catchment_mm: { startDate, values: rain } }
 	});

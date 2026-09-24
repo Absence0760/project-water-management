@@ -102,7 +102,8 @@ describe('reference gauge (flow_reference_m3s) is never an observed record', () 
 	});
 
 	it('is not something automatic calibration can fit to', () => {
-		const i = input({ flow_reference_m3s: { startDate: START, values: reference } }, { runoffModel: 'gr4j' });
+		// With A-pan, so the only thing missing is an observed record.
+		const i = input({ flow_reference_m3s: { startDate: START, values: reference } }, { runoffModel: 'gr4j', apanMm: new Array(12).fill(150) as never });
 		expect(() => calibrate(i, { budget: 10, validate: false })).toThrow(/no observed flow series to calibrate against/);
 	});
 });

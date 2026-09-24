@@ -12,6 +12,8 @@ async function runnableProject(owner: User, name = 'Catchment C') {
 	const crop = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: monthly(0.7) };
 	const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 50_000 }], transfers: [] };
 	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+	// GR4J (the default runoff model) refuses to run without A-pan evaporation.
+	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const days = 60;
 	const rain = Array.from({ length: days }, (_, i) => (i % 7 === 0 ? 20 : 0));
 	expect(

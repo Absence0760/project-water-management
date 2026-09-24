@@ -4,7 +4,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
 import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
-import { runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { GR4J_NO_PET, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
 import { calibrate, prepareCalibration, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
@@ -315,6 +315,10 @@ describe('calibrate', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
 		const noObs = { ...input, series: { rain_catchment_mm: input.series.rain_catchment_mm } };
 		expect(() => calibrate(noObs)).toThrow(/no observed flow series/);
+		// GR4J with no evaporation is refused, as runModel refuses it; legacy doesn't need it.
+		const noPet = { ...input, settings: { ...input.settings, apanMm: new Array(12).fill(0) as never } };
+		expect(() => calibrate(noPet, { budget: 20, validate: false })).toThrow(GR4J_NO_PET);
+		expect(calibrate(noPet, { model: 'legacy', budget: 20, validate: false }).model).toBe('legacy');
 		const seen: string[] = [];
 		const report = calibrate(input, {
 			budget: 500,

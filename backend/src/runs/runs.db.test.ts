@@ -13,6 +13,8 @@ async function runnable(u: User) {
 	const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
 	const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
 	expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+	// GR4J (the default runoff model) refuses to run without A-pan evaporation.
+	expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const rain = Array.from({ length: 30 }, (_, i) => (i % 5 === 0 ? 10 : 0));
 	const series = { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain };
 	expect((await u.call('PUT', `/projects/${projectId}/series`, series)).status).toBe(200);
@@ -20,6 +22,22 @@ async function runnable(u: User) {
 }
 
 afterEach(() => vi.unstubAllEnvs());
+
+describe('POST /projects/:id/runs', () => {
+	it('refuses a GR4J run with no evaporation and says how to fix it; legacy still runs', async () => {
+		const u = await signUp('Nopan');
+		const projectId = await runnable(u);
+		const set = async (settings: object) => expect((await u.call('PATCH', `/projects/${projectId}`, { settings })).status).toBe(200);
+		await set({ apanMm: monthly(0) });
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'no pan' });
+		expect(res.status).toBe(400);
+		expect(res.body.error).toMatch(/GR4J needs potential evaporation.*Settings → Demand/);
+		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
+		// Positive control: the same project runs under legacy, which doesn't use evaporation.
+		await set({ runoffModel: 'legacy' });
+		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).status).toBe(201);
+	});
+});
 
 describe('run storage cap', () => {
 	it('keeps only the newest RUNS_KEPT_PER_PROJECT runs and says which were removed', async () => {

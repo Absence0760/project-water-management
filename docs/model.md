@@ -237,6 +237,13 @@ predates the setting, so run comparison reads it as legacy.
   A-pan. `settings.panCoefficient` is 0.7 in every month by default and is
   edited per month (question 4 for the hydrologist). It doesn't touch
   irrigation demand.
+- **No evaporation, no run** (engine ≥ 0.11.1). When A-pan × pan
+  coefficient is 0 in every month, GR4J is refused (`GR4J_NO_PET`), as a run
+  with no rainfall is. Without evaporation the production store only fills,
+  so nearly all rain becomes flow; before 0.11.1 this was only a warning,
+  which a new project (A-pan defaults to 0) met on its first run once GR4J
+  became the default. Settings shows the same check (`hasPotentialEvaporation`)
+  beside the model picker, and a fit is refused the same way.
 - **No Pitman fallback.** Flow is whatever the model produces.
 
 **One day** (P, E in mm):

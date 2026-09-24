@@ -14,6 +14,8 @@ async function projectWithModel(owner: Awaited<ReturnType<typeof signUp>>, name 
 	};
 	const saved = await owner.call('PUT', `/projects/${body.project.id}/model`, model);
 	expect(saved.status).toBe(200);
+	// GR4J (the default runoff model) refuses to run without A-pan evaporation.
+	expect((await owner.call('PATCH', `/projects/${body.project.id}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	return { projectId: body.project.id as string, model, outlet, farm, crop };
 }
 
