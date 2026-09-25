@@ -202,9 +202,11 @@ In short:
   tighter than and ahead of Lambda's 6 MB payload limit in production.
 - Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
   server never parses `.xlsm` files and no macro content is ever executed.
-  The later in-browser importer parses in the user's browser with SheetJS from
-  its official CDN tarball. Do not use the stale npm `xlsx` 0.18.5, which has
-  known advisories.
+  The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,
+  pinned in `frontend/package.json` to its official CDN tarball with the
+  integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
+  which has known advisories. Dependabot and `pnpm audit` don't track a URL
+  dependency, so check the SheetJS release notes and bump it by hand.
 - Svelte escapes output by default. Don't use `{@html}` with user-supplied names
   (farms, crops, projects).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are

@@ -24,7 +24,11 @@ sides share.
   engine's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
-  charts, vitest. Dev port `7777`. `frontend/.env.production` sets
+  charts, vitest. SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) reads and writes
+  spreadsheets, pinned as a URL dependency on its official CDN tarball
+  (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`, integrity hash in
+  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand
+  and only load it lazily (a worker or a lazy chunk), never in a page chunk. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
@@ -172,6 +176,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
   dependency-free CI/release guards under `scripts/` (and `e2e/support/*.test.ts`) use Node's built-in `node:test`
   (the estate pattern), since the root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.
-- Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
-  from its CDN tarball when the in-browser importer is built.
+- Don't add the npm `xlsx` package (stale, with known advisories). SheetJS
+  comes from its CDN tarball (see frontend above); keep the `package.json` URL
+  pin, never a registry version.
 - Don't call the DB or secret-bearing services from the frontend.
