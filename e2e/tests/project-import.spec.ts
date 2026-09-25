@@ -172,8 +172,13 @@ test.describe('phone', () => {
 		await expect(dialog.getByLabel('Name')).toHaveValue(example.name);
 		// Edge to edge but for the page gutter (16 px a side, plus the dialog's own border).
 		const box = (await dialog.boundingBox())!;
-		expect(box.x).toBeLessThanOrEqual(16 + 2);
-		expect(box.x + box.width).toBeGreaterThanOrEqual(390 - 16 - 2);
+		// The page's width, not the 390 px viewport: the page always reserves room for a scrollbar
+		// (app.css), 15 px in a desktop browser (a phone overlays it, so there the two are the same),
+		// and the modal is centred in what is left.
+		const pageWidth = await page.evaluate(() => document.body.getBoundingClientRect().width);
+		// The 16 px gutter on both sides, exactly (the browser's own dialog cap made it 17).
+		expect(Math.abs(box.x - 16)).toBeLessThanOrEqual(0.5);
+		expect(Math.abs(pageWidth - (box.x + box.width) - 16)).toBeLessThanOrEqual(0.5);
 		expect(await dialog.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 		await expectNoViolations(page);
 	});

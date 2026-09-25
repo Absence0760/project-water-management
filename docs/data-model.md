@@ -133,7 +133,10 @@ its `inputs` snapshot plus `engine_version`.
 - **Cap per project.** Each new run deletes the project's oldest runs beyond
   `RUNS_KEPT_PER_PROJECT` (default **20**; unset or invalid → 20), with their
   `run_series` (cascade). It runs in the same transaction as the new run, as
-  the signed-in editor, so RLS applies. `POST …/runs` returns the removed ids
+  the signed-in editor, so RLS applies. Trims run one at a time per project
+  (a transaction-scoped advisory lock, as the pin limit's trigger takes), so
+  two runs saved at the same moment can't each trim before the other commits
+  and leave the project over the cap. `POST …/runs` returns the removed ids
   (`removedRunIds`). A **kept** run is never trimmed and doesn't count
   against the cap: one an editor **pinned** (see **Pinned runs** below), or
   one the evidence history names (current or past nomination, see **Evidence
