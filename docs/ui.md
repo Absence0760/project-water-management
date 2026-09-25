@@ -292,7 +292,17 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. The derived columns are
+inside a Settings → *Calibration exclusions* period. Every column header,
+Date included, carries an ⓘ `HelpTip` saying where that number comes from, how
+it is derived and what it tells you: a raw series column reuses its kind's
+`series.<SeriesKind>` entry, and each derived column has its own
+`preview.<column>` entry (`preview.date`, `preview.flowM3Day`,
+`preview.rainUsed`, `preview.chirpsFactor`, `preview.chirpsCorrected`,
+`preview.excluded`), the key set per column in `series/preview.ts`. The bubble
+is a top-layer popover, so the sideways scroll and sticky header don't clip
+it, and Escape closes the tip without closing the dialog. A header shows its
+unit once: the m³/day columns name it in their label, so no second `(m³/day)`
+follows. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
 for any day outside the model's own run window. The search box takes a date
