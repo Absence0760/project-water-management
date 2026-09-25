@@ -57,8 +57,8 @@
 				<option value="">This project has no runs</option>
 			{:else}
 				{#if !runSelected}<option value="" disabled>Choose a run…</option>{/if}
-				{#each runs ?? [] as r (r.id)}
-					<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true))}{r.pinned ? ' · pinned' : ''}</option>
+				{#each runs ?? [] as r, i (r.id)}
+					<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>
 				{/each}
 			{/if}
 		</select>
