@@ -9,6 +9,8 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf } from '../network/boreholes';
+import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
+import { flowShares } from '../network/shares';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -739,6 +741,61 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 }
 
 /**
+ * Land-cover streamflow reductions (WP-1.35, docs/model.md §2.5a), from the
+ * run's own natural flow and the model's patches:
+ * - a farm with land cover: runoff I + reduction = natural flow × its share,
+ *   0 ≤ reduction ≤ that natural runoff, and the reduction is
+ *   lowFlow × MIN(I0, q) + mar × MAX(I0 − q, 0) with q = share × the natural
+ *   flow exceeded 75 % of the days;
+ * - the catchment `landcover_reduction` is the sum over the farms, and the
+ *   summary's mean and class split add up to it;
+ * - without land cover there is no reduction series or summary.
+ */
+export function checkLandCover(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const cover = resolveLandCover(input.model, []);
+	const total = get.get('null|landcover_reduction');
+	const any = cover.some(Boolean);
+	if (!any) return total || out.summary.landCover ? 'land-cover reduction reported without land cover' : null;
+	if (!total || !out.summary.landCover) return 'land-cover reduction series or summary missing';
+	const natural = get.get('null|natural_flow')!;
+	const d = defaultProjectSettings();
+	const method = ['area', 'hiLo', 'manual'].includes(String(input.settings.flowShareMethod)) ? (input.settings.flowShareMethod as 'area' | 'hiLo' | 'manual') : d.flowShareMethod;
+	const share = flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((input.settings.hiLoSplit as object | undefined) ?? {}) }).share;
+	const q0 = lowFlowThreshold(natural);
+	if (Math.abs(out.summary.landCover.lowFlowThresholdM3Day - q0) > tol(q0)) return `land-cover low-flow threshold ${out.summary.landCover.lowFlowThresholdM3Day} ≠ ${q0}`;
+	const sum = new Float64Array(out.days);
+	for (const [i, n] of input.model.nodes.entries()) {
+		const u = cover[i];
+		const red = get.get(`${n.id}|landcover_reduction`);
+		if (!u) {
+			if (red) return `${n.id}: land-cover reduction without land cover`;
+			continue;
+		}
+		if (!red) return `${n.id}: land-cover reduction series missing`;
+		const I = get.get(`${n.id}|runoff`)!;
+		for (let t = 0; t < out.days; t++) {
+			const where = `${n.id} day ${t}`;
+			const i0 = natural[t]! * share[i]!;
+			if (Math.abs(I[t]! + red[t]! - i0) > tol(i0)) return `${where}: runoff ${I[t]} + land-cover reduction ${red[t]} ≠ natural × share ${i0}`;
+			const want = landCoverReduction(i0, q0 * share[i]!, u);
+			if (red[t]! < 0 || red[t]! > i0 + tol(i0) || Math.abs(red[t]! - want) > tol(i0)) return `${where}: land-cover reduction ${red[t]} ≠ ${want}`;
+			sum[t]! += red[t]!;
+		}
+	}
+	let tot = 0;
+	for (let t = 0; t < out.days; t++) {
+		if (Math.abs(total[t]! - sum[t]!) > tol(sum[t]!)) return `day ${t}: catchment land-cover reduction ${total[t]} ≠ Σ farms ${sum[t]}`;
+		tot += total[t]!;
+	}
+	const lc = out.summary.landCover;
+	const mean = out.days ? tot / out.days : 0;
+	const byClass = lc.byClass.reduce((a, c) => a + c.reductionM3Day, 0);
+	if (Math.abs(lc.reductionM3Day - mean) > 1e-9 * Math.max(1, mean) || Math.abs(byClass - mean) > 1e-9 * Math.max(1, mean)) return `land-cover summary ${lc.reductionM3Day} (classes ${byClass}) ≠ the series mean ${mean}`;
+	return null;
+}
+
+/**
  * Each farm's soil-water store (N3, engine ≥ 0.14.0, ../demand.ts
  * farmDailyDemand), redone from the run's own rain (rain_final, zeroed at or
  * below the threshold) and settings, every day:
@@ -924,6 +981,7 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkTransferLimits(input, out) ??
 		checkReportTotals(input, out) ??
 		checkEwrAttribution(input, out) ??
-		checkGroundwater(input, out)
+		checkGroundwater(input, out) ??
+		checkLandCover(input, out)
 	);
 }

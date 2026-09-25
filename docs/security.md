@@ -119,7 +119,10 @@ In short:
 - A project you are not a member of returns **404**, never 403, so project
   existence doesn't leak.
 - **Same-project triggers** reject references to another project's nodes or
-  crops, even when the UUID is known.
+  crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
+  model tables' viewer/editor policies and a same-project trigger on its
+  `node_id`; `human-impacts.db.test.ts` checks a member sees its patches, a
+  non-member none, and a patch can't be attached to another project's farm.
 - A **last-owner guard** means a project can't be orphaned (and a
   last-admin guard, a team).
 - **Runs are immutable by privilege.** `water_app` may `UPDATE` only

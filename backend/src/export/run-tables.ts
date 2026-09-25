@@ -307,6 +307,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* curtailmentLines(summary.curtailment);
+	if (summary.landCover) {
+		yield '';
+		yield* landCoverLines(summary.landCover);
+	}
 	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
 		yield '';
 		yield* otherUserLines(summary);
@@ -480,6 +484,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
 	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
 	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],
+	['Runoff removed by land cover (m³)', (r) => r.landCoverReductionM3 ?? null, true],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
@@ -606,4 +611,18 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
 		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, r.ewrChargeM3Day, r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, r.uncurtailedChargeM3Day]);
 	}
 	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+}
+
+/**
+ * Land-cover streamflow reductions (engine ≥ 0.24.0, WP-1.35): the low-flow
+ * threshold, the total, and per class its condensed area, mean reduction and
+ * mm/yr over that area. Only in runs with land cover.
+ */
+export function* landCoverLines(lc: NonNullable<RunSummary['landCover']>): Generator<string> {
+	yield csvRow(['Land-cover streamflow reductions (invasive plants and forestry)']);
+	yield csvRow(['Low-flow threshold: natural flow exceeded 75 % of days (m³/day)', lc.lowFlowThresholdM3Day]);
+	yield csvRow(['Mean reduction (m³/day)', lc.reductionM3Day]);
+	yield csvRow(['Share of natural flow (%)', pct(lc.fractionOfNatural) as Cell]);
+	yield csvRow(['Cover class', 'Condensed area (km²)', 'Mean reduction (m³/day)', 'Reduction over the condensed area (mm/yr)']);
+	for (const c of lc.byClass) yield csvRow([c.coverClass, c.condensedKm2, c.reductionM3Day, c.mmPerYear]);
 }

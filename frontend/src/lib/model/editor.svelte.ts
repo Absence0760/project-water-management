@@ -1,14 +1,14 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 export function emptyModel(): ProjectModel {
-	return { nodes: [], crops: [], cropAreas: [], transfers: [] };
+	return { nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] };
 }
 
 export function newNode(sortOrder: number, downstreamNodeId: string | null): NetworkNode {
@@ -76,7 +76,9 @@ export class ModelEditor {
 			nodes: bySortOrder(m.nodes ?? []),
 			crops: bySortOrder(m.crops ?? []),
 			cropAreas: m.cropAreas ?? [],
-			transfers: m.transfers ?? []
+			transfers: m.transfers ?? [],
+			// Land cover (WP-1.35); an older API or document has none.
+			landCover: m.landCover ?? []
 		};
 		this.model = clone(normalised);
 		this.#saved = JSON.stringify(this.model);
@@ -132,6 +134,19 @@ export class ModelEditor {
 		m.nodes = m.nodes.filter((n) => n.id !== id);
 		m.cropAreas = m.cropAreas.filter((a) => a.nodeId !== id);
 		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
+		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
+	}
+
+	// --- land cover (WP-1.35) --------------------------------------------
+	/** A new patch on a farm: invasive trees at full condensed cover, no area yet. */
+	addLandCover(nodeId: string): LandCoverPatch {
+		const p: LandCoverPatch = { id: crypto.randomUUID(), nodeId, coverClass: 'invasive', areaKm2: 0, densityPct: 1, factors: null };
+		(this.model.landCover ??= []).push(p);
+		return p;
+	}
+
+	removeLandCover(id: string) {
+		this.model.landCover = (this.model.landCover ?? []).filter((p) => p.id !== id);
 	}
 
 	// --- crops ----------------------------------------------------------

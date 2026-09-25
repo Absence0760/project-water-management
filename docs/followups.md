@@ -72,6 +72,13 @@ Tick items off (or move them into an issue) as they are done.
         kernel) and the values; depletion the river can't give is dropped,
         not carried over. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
+        catchment (invasives, plantations, riparian stands) and their
+        condensed areas? The class reductions are indicative mature-stand
+        values (model.md §2.5a); confirm them, or supply the Scott & Smith /
+        Gush curves by age and site the CMA uses. Confirm the daily split
+        (low-flow share on each day's flow up to the Q75 natural flow, the
+        other share above it) and whether orchards and vineyards need a class.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),

@@ -4,6 +4,7 @@ import {
 	chirpsFactorLines,
 	curtailmentLines,
 	otherUserLines,
+	landCoverLines,
 	ewrSiteLines,
 	zeroRainLines,
 	doubleMassLines,
@@ -169,6 +170,13 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
 		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
+	it('WP-1.35: lists the land-cover reduction per class with mm/yr over the condensed area', () => {
+		const lines = [...landCoverLines({ lowFlowThresholdM3Day: 120, reductionM3Day: 50, fractionOfNatural: 0.029, byClass: [{ coverClass: 'invasive', condensedKm2: 1.5, reductionM3Day: 50, mmPerYear: 12.175 }] })];
+		expect(lines[0]).toBe('Land-cover streamflow reductions (invasive plants and forestry)');
+		expect(lines).toContain('Share of natural flow (%),2.9');
+		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
 	});
 
 	it('WP-1.33: lists other water users and whether each is curtailed', () => {

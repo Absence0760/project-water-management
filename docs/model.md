@@ -646,6 +646,87 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
+### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
+
+**Why.** Invasive alien trees and commercial forestry (a streamflow reduction
+activity under the National Water Act, s36) use more water than the natural
+vegetation they replaced. Le Maitre et al. (2016, Water SA 42(4)) put the
+national loss to invasive plants at 1 444 Mm³/yr, **2.9 % of the naturalised
+MAR**, about 970 m³/ha/yr (97 mm/yr) over the condensed invaded area. It is
+also what "clear the invasive trees and see what the river gets back" asks.
+**Off by default**: a project with no land-cover patches runs exactly as
+before.
+
+**Data** (`ProjectModel.landCover`, table `land_cover`, migration 013): per
+farm (the hydrological unit) a list of patches, each with a cover class, an
+area (km²), a condensed (canopy) cover 0–1 and optional reductions overriding
+the class's. A patch's share of its unit is `f = area × cover ÷ the farm's
+area` (patches covering more than the unit are scaled down to it, with a
+warning; patches on a gauge, a user or a farm without area are skipped, with
+a warning).
+
+**Classes** (`LAND_COVER_CLASSES`; reductions at full cover, **indicative**):
+
+| Class | Flows above the low-flow threshold (`mar`) | Low flows (`lowFlow`) |
+| --- | --- | --- |
+| Eucalyptus plantation (mature) | 75 % | 90 % |
+| Pine plantation (mature) | 40 % | 55 % |
+| Invasive alien trees, dryland | 50 % | 60 % |
+| Invasive alien trees, riparian | 75 % | 90 % |
+| Other | 0 % (enter its own) | 0 % |
+
+They follow the shape of the South African afforestation curves of Scott &
+Smith (1997), on which both WR2012's forestry module and Le Maitre et al.
+(2016) build: eucalypts reduce total flow more than pines (about 75 % against
+40 % in afforested grassland catchments at maturity), and low flows
+proportionally more than total flow. The invasive class sits between the two
+genera (wattles, the biggest national user, are fast-growing like eucalypts),
+and riparian invasions take 1.5 × the dryland reduction (Le Maitre et al.
+2016's factor outside grassland and savanna), capped at the eucalypt values.
+Age, site quality and rotation are not modelled: the numbers are mature-stand
+values and the hydrologist should confirm or override them per catchment
+(followups.md). As a check, `summary.landCover` reports each class's reduction
+in mm/yr over its condensed area, the figure Le Maitre et al. compare
+(≈ 97 mm/yr nationally).
+
+**Each day**, per farm with land cover (network/landcover.ts), with I0 = its
+natural runoff (natural flow × share) and q = share × the catchment's natural
+flow exceeded on 75 % of the run's days (its low-flow threshold):
+
+```
+MAR_u  = Σ_p f_p × mar_p          LOW_u = Σ_p f_p × lowFlow_p
+reduction = LOW_u × MIN(I0, q) + MAR_u × MAX(I0 − q, 0)      (never more than I0)
+I = I0 − reduction                                           (what the farm routes, §2.7)
+```
+
+The part of each day's flow up to the low-flow threshold loses the low-flow
+share and the part above it the other share, so the reduction is continuous
+and never larger on a smaller flow. This applies the Pitman/WR2012 idea
+(separate reductions to total and low flows, per unit, applied to the natural
+runoff before the users take water) to a daily flow; which daily split the
+hydrologist accepts is open (followups.md). The share of MAR removed is then
+close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
+
+- **Its own series**, never inside calibration: `landcover_reduction` per
+  farm and for the catchment, `summary.landCover` (mean, share of natural
+  flow, the threshold, per class), and the water balance's
+  `landCoverReductionM3`. `natural_flow` stays natural (natural vegetation),
+  as WR2012's naturalised flows are; farm runoff is natural less the
+  reduction.
+- **Calibration** runs the whole network, land cover included, so the fitted
+  GR4J parameters describe the catchment *without* the invasives: keep the
+  patches that were there while the record was measured in the project you
+  calibrate (the same baseline-relative rule as boreholes, §2.7d). Because
+  the threshold reads the whole run's natural flow, a calibration with land
+  cover simulates the whole run instead of stopping at the last scored day.
+- **Scenarios**: clearing a class is a copy of the project without its
+  patches, compared with the baseline (run comparison lists land cover added,
+  changed and removed per farm and class). Clearing every patch gives the
+  unreduced run back exactly (tested).
+- **Checks** (`checkLandCover`): runoff + reduction = natural × share,
+  0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
+  natural flow, and the catchment series and summary add up.
+
 ### 2.6 Transfers (`[Transfers]`)
 
 The workbook has two blocks of columns:
@@ -2075,6 +2156,7 @@ text:
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Drought borehole rules (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (seed 1450). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
+| `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
@@ -2222,6 +2304,7 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
+| **Condensed cover** | The area of a patch of trees as if its canopy were closed: area × canopy cover. Land-cover reductions scale with it (engine ≥ 0.24.0, §2.5a). |
 | **Stream depletion** | River flow a borehole's pumping captures: a share d of the pumping, lagged, taken from the river at the node (engine ≥ 0.23.0, §2.7d). |
 | **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a senior/junior priority (engine ≥ 0.22.0, §2.7c). |
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |

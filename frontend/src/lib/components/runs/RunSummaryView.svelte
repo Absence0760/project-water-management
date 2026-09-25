@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Headline numbers, calibration fit and the per-farm table of one run.
-	import type { RunSummary } from '@water-management/engine';
+	import { LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
@@ -179,6 +179,37 @@
 		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
 		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
 	</p>
+{/if}
+
+{#if summary.landCover}
+	{@const lc = summary.landCover}
+	<h3>Land cover</h3>
+	<p class="muted small">
+		Invasive plants and forestry took {fmtNum(lc.reductionM3Day)} m³/day of natural flow on average{lc.fractionOfNatural !== null ? ` (${fmtPct(lc.fractionOfNatural, 1)} of it)` : ''}
+		before it reached the farms. Low flows are the flow exceeded 75 % of the days ({fmtNum(lc.lowFlowThresholdM3Day)} m³/day).
+	</p>
+	<div class="table-wrap">
+		<table class="data land-cover">
+			<thead>
+				<tr>
+					<th scope="col">Cover class</th>
+					<th scope="col" class="num">Condensed area<br /><span class="u">km²</span></th>
+					<th scope="col" class="num">Reduction<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Over the condensed area<br /><span class="u">mm/yr</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each lc.byClass as c (c.coverClass)}
+					<tr>
+						<th scope="row">{LAND_COVER_CLASSES.find((x) => x.id === c.coverClass)?.label ?? c.coverClass}</th>
+						<td class="num">{fmtNum(c.condensedKm2, 2)}</td>
+						<td class="num">{fmtNum(c.reductionM3Day)}</td>
+						<td class="num">{c.mmPerYear === null ? '–' : fmtNum(c.mmPerYear, 0)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 {#if pumping.length}

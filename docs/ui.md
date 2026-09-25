@@ -193,6 +193,15 @@ personal copy (the Copy dialog says so).
   drought), drought trigger (%), stream depletion (%) and depletion lag
   (days). The client check refuses boreholes on a gauge and the drought rule
   without a farm dam.
+- **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
+  one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
+  **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
+  each patch has a **Cover class**, **Area** (km²), **Condensed cover** (%)
+  and **Own reductions**, which replaces the class's indicative reductions
+  (shown otherwise) with two editable %s. Below the patches: the condensed
+  share of the farm, flagged when above 100 % (the run scales it down). The
+  field guide points table users to the one-node layout. Removing a farm
+  removes its patches (the confirm says how many).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
@@ -601,6 +610,10 @@ value such as 108700.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
+  flow invasive plants and forestry took, its share of natural flow, the
+  low-flow threshold, and per class the condensed area, reduction and mm/yr
+  over that area (`RunSummaryView.svelte`).
 - **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
   a table of each one's mean pumping, its share of what was supplied, and the
   stream depletion it causes (`RunSummaryView.svelte`).

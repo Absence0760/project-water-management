@@ -1,4 +1,4 @@
-import { BOREHOLE_RULES, upgradeLegacyModel, USER_PRIORITIES, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_RULES, LAND_COVER_CLASSES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -77,7 +77,21 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				priority: z.number().int().min(-1_000_000).max(1_000_000)
 			})
 		)
-		.max(500)
+		.max(500),
+	// Land-cover patches (WP-1.35): part of the model document, like crop areas.
+	landCover: z
+		.array(
+			z.object({
+				id: uuid,
+				nodeId: uuid,
+				coverClass: z.enum(LAND_COVER_CLASSES.map((c) => c.id) as [LandCoverClass, ...LandCoverClass[]]),
+				areaKm2: nonNeg,
+				densityPct: frac,
+				factors: z.object({ mar: frac, lowFlow: frac }).nullable()
+			})
+		)
+		.max(5_000)
+		.default([])
 }));
 
 /**
@@ -97,6 +111,12 @@ export function modelProblems(m: ProjectModel): string[] {
 	for (const d of dupes(m.crops.map((c) => c.name.toLowerCase()))) problems.push(`duplicate crop name "${d}"`);
 	for (const d of dupes(m.transfers.map((t) => t.id))) problems.push(`duplicate transfer id ${d}`);
 	for (const d of dupes(m.cropAreas.map((a) => `${a.nodeId}/${a.cropId}`))) problems.push(`duplicate crop area ${d}`);
+	for (const d of dupes((m.landCover ?? []).map((p) => p.id))) problems.push(`duplicate land-cover id ${d}`);
+	for (const p of m.landCover ?? []) {
+		const n = byId.get(p.nodeId);
+		if (!n) problems.push(`land cover ${p.id} references an unknown node`);
+		else if (n.kind !== 'farm') problems.push(`land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
+	}
 
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !nodeIds.has(n.downstreamNodeId)) problems.push(`"${n.name}" drains into an unknown node`);

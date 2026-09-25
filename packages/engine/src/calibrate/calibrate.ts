@@ -321,7 +321,12 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		};
 	}
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
-	const simulator = (n: number) => {
+	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
+	// threshold is the flow exceeded 75 % of the days), so a run with land
+	// cover can't stop at the last scored day.
+	const wholeRun = plan.nodes.some((nd) => nd.landCover);
+	const simulator = (scoredTo: number) => {
+		const n = wholeRun ? days : scoredTo;
 		const shortPlan = { ...plan, days: n };
 		return (p: ParamSet): Float64Array => {
 			runoff(p, n);

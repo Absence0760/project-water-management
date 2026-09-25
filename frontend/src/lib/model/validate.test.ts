@@ -150,4 +150,12 @@ describe('validateModel', () => {
 			'"A": stream depletion and the drought trigger must be between 0% and 100%.'
 		]);
 	});
+
+	it('checks land cover as the API does (WP-1.35)', () => {
+		const g = node('g', 'Gauge', null);
+		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [p] }))).toEqual([]);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a farm, not a gauge.']);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, densityPct: 2 }] }))).toEqual(['Land cover on "A": area can\'t be negative, cover and reductions are 0–100%.']);
+	});
 });

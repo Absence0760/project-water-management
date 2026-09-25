@@ -365,6 +365,17 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists land cover added to, changed on and cleared from a farm, by farm and class (WP-1.35)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		b.model.landCover = [{ id: 'l', nodeId: 'copy-f1', coverClass: 'invasive', areaKm2: 2, densityPct: 0.5, factors: null }];
+		expect(texts(a, b)).toEqual(['Land cover "invasive" added to Rooikloof (1 km² condensed)']);
+		const c = structuredClone(b);
+		c.model.landCover![0]!.densityPct = 0.25;
+		expect(texts(b, c)).toEqual(['Rooikloof: land cover "invasive" 1 km² → 0.5 km² condensed']);
+		expect(texts(b, a)).toEqual(['Land cover "invasive" removed from Rooikloof (was 1 km² condensed)']);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

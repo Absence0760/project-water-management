@@ -1,12 +1,13 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type BoreholeRule, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
 	import { damHints, GROUPS, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
 	import UserFields from './UserFields.svelte';
+	import LandCoverFields from './LandCoverFields.svelte';
 
 	let {
 		node,
@@ -17,7 +18,10 @@
 		onmove,
 		canMoveUp = false,
 		canMoveDown = false,
-		onmakeoutlet
+		onmakeoutlet,
+		landCover = [],
+		onaddcover,
+		onremovecover
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -29,6 +33,10 @@
 		canMoveUp?: boolean;
 		canMoveDown?: boolean;
 		onmakeoutlet?: () => void;
+		/** This node's land-cover patches (WP-1.35; farms only). */
+		landCover?: LandCoverPatch[];
+		onaddcover?: () => void;
+		onremovecover?: (id: string) => void;
 	} = $props();
 
 	const groups = $derived.by(() => {
@@ -168,6 +176,13 @@
 			</div>
 		</fieldset>
 	{/each}
+
+	{#if node.kind === 'farm'}
+		<fieldset>
+			<legend>Land cover</legend>
+			<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+		</fieldset>
+	{/if}
 
 	{#if !readonly}
 		<div class="actions">

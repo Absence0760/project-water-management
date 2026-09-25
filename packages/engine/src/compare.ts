@@ -800,6 +800,35 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (c) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" crop factor: ${c}` });
 	}
 
+	// --- land cover (WP-1.35), keyed by (farm name, class) so copies line up ---
+	{
+		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
+		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
+		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string }>();
+			for (const p of m.landCover ?? []) {
+				const farm = farmOf(p.nodeId);
+				const k = key(farm, p.coverClass);
+				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '' };
+				cur.km2 += p.areaKm2;
+				cur.condensed += p.areaKm2 * p.densityPct;
+				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
+				g.set(k, cur);
+			}
+			return g;
+		};
+		const ga = group(a, (id) => nodeRenameLc.get(id) ?? na.node(id) ?? '');
+		const gb = group(b, (id) => nb.node(id) ?? '');
+		const km2 = (v: number) => `${fmtValue(v, 3)} km²`;
+		for (const [k, x] of ga) if (!gb.has(k)) out.push({ area: 'network', kind: 'removed', subject: x.farm, text: `Land cover "${x.cls}" removed from ${x.farm} (was ${km2(x.condensed)} condensed)` });
+		for (const [k, y] of gb) {
+			const x = ga.get(k);
+			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
+			else if (!same(x.condensed, y.condensed) || x.factors !== y.factors)
+				out.push({ area: 'network', kind: 'changed', subject: y.farm, text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${x.factors !== y.factors ? ', reductions changed' : ''}` });
+		}
+	}
+
 	// --- crop areas, keyed by (farm name, crop name) so copies line up ---
 	const areaKey = (farm: string | null, crop: string) => `${nameKey(farm ?? '')}\u0000${nameKey(crop)}`;
 	// Crop areas follow their node/crop through a rename: key B's rows by B's names,

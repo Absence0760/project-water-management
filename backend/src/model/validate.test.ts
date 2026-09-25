@@ -70,6 +70,23 @@ describe('boreholes (WP-1.34)', () => {
 	});
 });
 
+describe('land cover (WP-1.35)', () => {
+	it('defaults to none, accepts a patch on a farm, and refuses one on a gauge or an unknown node', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id);
+		expect(ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] }).landCover).toEqual([]);
+		const patch = { id: crypto.randomUUID(), nodeId: farm.id, coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
+		const m = { ...model([out, farm]), landCover: [patch] };
+		expect(modelProblems(m)).toEqual([]);
+		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: out.id }] }).join()).toMatch(/land cover lies on a farm/);
+		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }).join()).toMatch(/unknown node/);
+		expect(modelProblems({ ...m, landCover: [patch, patch] }).join()).toMatch(/duplicate land-cover id/);
+		for (const bad of [{ coverClass: 'bamboo' }, { densityPct: 2 }, { areaKm2: -1 }, { factors: { mar: 1.2, lowFlow: 0 } }]) {
+			expect(ModelBody.safeParse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [], landCover: [{ ...patch, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		}
+	});
+});
+
 describe('ModelBody (PUT /model, project documents)', () => {
 	const body = (nodes: Record<string, unknown>[]) => ({ nodes, crops: [], cropAreas: [], transfers: [] });
 

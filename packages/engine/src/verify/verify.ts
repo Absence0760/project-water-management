@@ -15,7 +15,7 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkBalance, checkEwrAttribution, checkGroundwater, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
+import { checkBalance, checkEwrAttribution, checkGroundwater, checkLandCover, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
@@ -25,7 +25,8 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['transfers', 'Transfers stay within their months, rates, daily caps and minimum storage', checkTransferLimits],
 	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals],
 	['ewrAttribution', 'Each EWR site’s shortfall splits exactly into the part charged to the farms upstream (pro rata to their net impact, never more than a farm took) and the natural part', checkEwrAttribution],
-	['groundwater', 'Boreholes pump within their capacity, and the stream depletion they cause is lagged without losing or making water and never takes the river below 0', checkGroundwater]
+	['groundwater', 'Boreholes pump within their capacity, and the stream depletion they cause is lagged without losing or making water and never takes the river below 0', checkGroundwater],
+	['landCover', 'Land cover removes no more than each farm’s natural runoff, by its low-flow and MAR reductions, and the catchment total adds up', checkLandCover]
 ];
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
@@ -130,6 +131,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			depOut[t]! += d[t] ?? 0;
 		}
 	}
+	// Land cover (WP-1.35): natural flow removed before it reached the farms.
+	const coverRed = cat('landcover_reduction');
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
 
@@ -137,7 +140,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0 };
+		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -156,6 +159,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.otherUse += userUse[t]!;
 			r.gw += gwIn[t]!;
 			r.dep += depOut[t]!;
+			r.cover += coverRed?.[t] ?? 0;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -190,6 +194,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
 			...(gwNodes.length ? { groundwaterM3: r.gw, streamDepletionM3: r.dep } : {}),
+			...(coverRed ? { landCoverReductionM3: r.cover } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,

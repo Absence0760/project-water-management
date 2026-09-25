@@ -603,6 +603,48 @@ export interface ProjectModel {
 	crops: CropDef[];
 	cropAreas: CropArea[];
 	transfers: Transfer[];
+	/** Land-cover patches that reduce runoff (engine ≥ 0.24.0, WP-1.35). Absent on older documents = none. */
+	landCover?: LandCoverPatch[];
+}
+
+/**
+ * Land cover that uses more water than the natural vegetation it replaced
+ * (engine ≥ 0.24.0, WP-1.35, docs/model.md §2.5a): invasive alien trees and
+ * commercial forestry (a streamflow reduction activity under the National
+ * Water Act). Each class's reductions are the share of the patch's runoff it
+ * removes at full (100 %) condensed cover: `lowFlow` on the part of each day's
+ * flow up to the unit's low-flow threshold (its natural flow exceeded 75 % of
+ * the days), `mar` on the part above it. The defaults are indicative, from the
+ * shape of the South African afforestation reduction curves at maturity
+ * (Scott & Smith 1997: eucalypts reduce total flow more than pines, and low
+ * flows proportionally more than total flow) and Le Maitre et al. (2016) for
+ * invasive plants (riparian invasions × 1.5 of the dryland reduction); the
+ * hydrologist confirms or overrides them per patch.
+ */
+export const LAND_COVER_CLASSES = [
+	{ id: 'eucalyptus', label: 'Eucalyptus plantation (mature)', mar: 0.75, lowFlow: 0.9 },
+	{ id: 'pine', label: 'Pine plantation (mature)', mar: 0.4, lowFlow: 0.55 },
+	{ id: 'invasive', label: 'Invasive alien trees, dryland (wattle, pine, eucalypt)', mar: 0.5, lowFlow: 0.6 },
+	{ id: 'invasiveRiparian', label: 'Invasive alien trees, riparian', mar: 0.75, lowFlow: 0.9 },
+	{ id: 'other', label: 'Other (enter its reductions)', mar: 0, lowFlow: 0 }
+] as const;
+export type LandCoverClass = (typeof LAND_COVER_CLASSES)[number]['id'];
+
+/** Where the indicative class reductions come from, shown next to them. */
+export const LAND_COVER_DEFAULTS_SOURCE =
+	'indicative, after Scott & Smith (1997) reduction curves at maturity and Le Maitre et al. (2016); confirm per catchment';
+
+export interface LandCoverPatch {
+	id: string;
+	/** The farm (hydrological unit) the patch lies in. */
+	nodeId: string;
+	coverClass: LandCoverClass;
+	/** Area of the patch, km². */
+	areaKm2: number;
+	/** Condensed (canopy) cover of the patch, 0–1: 1 = a closed stand. Its effective area is areaKm2 × density. */
+	densityPct: number;
+	/** Reductions overriding the class's (each 0–1 at full cover); null = the class defaults. */
+	factors: { mar: number; lowFlow: number } | null;
 }
 
 /** A daily series: values[i] is the value on startDate + i days; null = missing. */
@@ -721,6 +763,28 @@ export interface CurtailmentUser {
 	supplyCutLs: number;
 	/** The charge the cut does not remove, ≤ 0: all of it for a senior user, the part beyond what it took for a junior one. */
 	uncurtailedChargeM3Day: number;
+}
+
+/**
+ * What land cover took from the river over the run (engine ≥ 0.24.0, WP-1.35).
+ * mm per year over the condensed area is the figure Le Maitre et al. (2016)
+ * report (97 mm/yr nationally for invasive plants) to compare with.
+ */
+export interface LandCoverSummary {
+	/** The low-flow threshold: catchment natural flow exceeded 75 % of the days (m³/day). */
+	lowFlowThresholdM3Day: number;
+	/** Mean reduction, m³/day. */
+	reductionM3Day: number;
+	/** Σ reduction / Σ natural flow over the run (0–1); null without natural flow. */
+	fractionOfNatural: number | null;
+	byClass: {
+		coverClass: LandCoverClass;
+		/** Σ area × density of the patches, km². */
+		condensedKm2: number;
+		reductionM3Day: number;
+		/** Mean annual reduction over the condensed area, mm/yr (365.25 days). */
+		mmPerYear: number | null;
+	}[];
 }
 
 /** Observed vs simulated volume in one water year (paired days only). */
@@ -1020,6 +1084,8 @@ export interface RunSummary {
 	farms: FarmSummary[];
 	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
 	users?: UserSummary[];
+	/** Land-cover streamflow reductions (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
+	landCover?: LandCoverSummary;
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
 	catchment: {
@@ -1100,7 +1166,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;
@@ -1168,6 +1234,8 @@ export interface WaterBalanceRow {
 	groundwaterM3?: number;
 	/** Stream depletion taken from the river (WP-1.34); absent without boreholes. */
 	streamDepletionM3?: number;
+	/** Runoff removed by land cover before it reached the farms (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
+	landCoverReductionM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;

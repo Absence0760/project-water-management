@@ -137,6 +137,15 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		issues.push({ area: 'crops', message: "Crop areas can't be negative." });
 	}
 
+	// Land cover (WP-1.35), as the API checks it.
+	for (const lc of model.landCover ?? []) {
+		const n = nodes.find((x) => x.id === lc.nodeId);
+		if (!n) issues.push({ area: 'network', message: 'A land-cover patch refers to a deleted farm.' });
+		else if (n.kind !== 'farm') issues.push({ area: 'network', message: `"${nodeName(n.id)}": land cover lies on a farm, not a ${n.kind === 'user' ? 'user' : 'gauge'}.` });
+		if (!inRange(lc.areaKm2, 0, Infinity) || !inRange(lc.densityPct, 0, 1) || (lc.factors && (!inRange(lc.factors.mar, 0, 1) || !inRange(lc.factors.lowFlow, 0, 1))))
+			issues.push({ area: 'network', message: `Land cover on "${n ? nodeName(n.id) : '?'}": area can't be negative, cover and reductions are 0–100%.` });
+	}
+
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;

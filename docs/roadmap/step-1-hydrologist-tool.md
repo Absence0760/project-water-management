@@ -1717,6 +1717,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.35 Land-cover streamflow reductions (invasive plants, forestry)
 
+> **Built 2026-09-25 (engine 0.24.0, migration 013), off by default.** Patches
+> carry a low-flow and a MAR reduction per class rather than twelve monthly
+> fractions (the low-flow share applies to each day's flow up to the Q75
+> natural flow, the MAR share above it). They are part of the model document
+> (PUT /model), not separate CRUD routes, so the route inventory is unchanged.
+> The panel is in the one-node form. [model.md §2.5a](../model.md).
+
 - **Goal:** the rain-to-flow step accounts for land cover that uses more
   water than the natural vegetation it replaced: invasive alien trees,
   commercial forestry (a declared streamflow reduction activity under the

@@ -278,6 +278,7 @@ function remapIds(model: import('@water-management/engine').ProjectModel) {
 		nodes: model.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
 		crops: model.crops.map((c) => ({ ...c, id: id(c.id) })),
 		cropAreas: model.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
-		transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) }))
+		transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) })),
+		landCover: (model.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) }))
 	};
 }

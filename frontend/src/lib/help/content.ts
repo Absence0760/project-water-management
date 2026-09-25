@@ -254,6 +254,17 @@ export const HELP: HelpEntry[] = [
 		source: 'docs/model.md §2.7d; Jenkins (1968); Glover & Balmer (1954)'
 	},
 	{
+		id: 'land-cover',
+		term: 'Land cover (invasive plants, forestry)',
+		short: 'Invasive alien trees and plantations on a farm use more water than natural vegetation, so the farm passes on less runoff.',
+		long: 'Each patch has a cover class, an area and a condensed (canopy) cover: its share of the farm is area × cover ÷ the farm’s area. Each class removes a share of the runoff at full cover: one share of the low flows (the part of each day’s flow up to the flow exceeded 75 % of the days) and another of the rest, because trees take proportionally more of the dry-season flow.\n\nThe class values are indicative (after the South African afforestation reduction curves of Scott & Smith 1997, and Le Maitre et al. 2016 for invasive plants, who put the national loss to invasives at about 2.9 % of the mean annual runoff); confirm them for the catchment or enter a patch’s own.\n\nThe reduction is its own run series, never hidden in the calibration. To see what clearing a class gives back, copy the project, remove the patches and compare the two runs.',
+		category: 'network',
+		aliases: ['invasive alien plants', 'IAP', 'forestry', 'afforestation', 'plantation', 'streamflow reduction activity', 'wattle', 'eucalyptus', 'pine'],
+		fields: ['run.landcover_reduction'],
+		related: ['element-farm', 'natural-flow'],
+		source: 'docs/model.md §2.5a; Scott & Smith (1997); Le Maitre et al. (2016); roadmap WP-1.35'
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',

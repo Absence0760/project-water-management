@@ -62,6 +62,8 @@ const RUN_KEYS = [
 	'senior_requirement', 'passed_for_senior',
 	// Boreholes (engine 0.23.0, WP-1.34)
 	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store',
+	// Land cover (engine 0.24.0, WP-1.35)
+	'landcover_reduction',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];

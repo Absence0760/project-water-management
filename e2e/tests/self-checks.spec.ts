@@ -13,8 +13,8 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 8 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34)
-	await expect(checks.getByRole('listitem')).toHaveCount(8);
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 9 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35)
+	await expect(checks.getByRole('listitem')).toHaveCount(9);
 
 	// 120 days from 2021-10-01: one water year, then the whole run.
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });

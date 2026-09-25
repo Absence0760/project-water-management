@@ -37,6 +37,7 @@ import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf } from './network/boreholes';
+import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -51,6 +52,7 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_AREA_EXPONENT,
+	LAND_COVER_CLASSES,
 	defaultProjectSettings,
 	ESTIMATED_DAM_DEPTH_M,
 	panCoefficientOutOfRange,
@@ -61,6 +63,8 @@ import {
 	type DailySeries,
 	type FarmSummary,
 	type UserSummary,
+	type LandCoverClass,
+	type LandCoverSummary,
 	type ModelInput,
 	type NetworkNode,
 	type ModelOutput,
@@ -69,7 +73,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.23.0';
+export const ENGINE_VERSION = '0.24.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -163,6 +167,13 @@ export function runModelWith(
 	}
 
 	push(null, 'natural_flow', 'Natural flow', 'm³/day', natural);
+	// Land cover (WP-1.35): the catchment's total reduction, its own series so it is never hidden in calibration.
+	const hasCover = plan.nodes.some((n) => n.landCover);
+	const coverTotal = new Float64Array(hasCover ? days : 0);
+	if (hasCover) {
+		for (const r of sim.nodes) for (let t = 0; t < days; t++) coverTotal[t]! += r.landCoverReduction[t]!;
+		push(null, 'landcover_reduction', 'Natural flow removed by land cover (invasive plants, forestry)', 'm³/day', coverTotal);
+	}
 	push(null, 'simulated_outflow', 'Simulated outflow', 'm³/day', simOutflow);
 	if (observedKind) {
 		push(
@@ -261,6 +272,7 @@ export function runModelWith(
 			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
+		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.
 			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
@@ -464,6 +476,7 @@ export function runModelWith(
 		summary: {
 			farms,
 			...(users.length ? { users } : {}),
+			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days) } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
@@ -660,6 +673,7 @@ export function buildNetworkPlan(
 	}
 
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings);
+	const cover = resolveLandCover(model, warnings);
 
 	const plan: NetworkPlan = {
 		days,
@@ -694,6 +708,7 @@ export function buildNetworkPlan(
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, warnings),
+				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
 		})
@@ -702,6 +717,55 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * The land-cover summary (WP-1.35): the low-flow threshold, the mean and
+ * relative reduction, and per class its condensed area, mean reduction and
+ * mm per year over that area. The reduction is linear in the class weights,
+ * so each class's part is its own lowFlow × MIN(I0, q) + mar × (I0 − that),
+ * with I0 = the farm's runoff + its reduction (the natural runoff).
+ */
+function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float64Array, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, days: number): LandCoverSummary {
+	const cover = resolveLandCover(upgradeLegacyModel(input.model), []);
+	const qLow = lowFlowThreshold(natural);
+	const byClass = new Map<LandCoverClass, { condensedKm2: number; volume: number }>();
+	cover.forEach((u, i) => {
+		if (!u) return;
+		const r = sim.nodes[i]!;
+		const q = qLow * plan.nodes[i]!.share;
+		for (const [cls, w] of Object.entries(u.byClass) as [LandCoverClass, { mar: number; lowFlow: number }][]) {
+			let vol = 0;
+			for (let t = 0; t < days; t++) {
+				const i0 = r.runoff[t]! + r.landCoverReduction[t]!;
+				const low = Math.min(i0, Math.max(q, 0));
+				vol += w.lowFlow * low + w.mar * (i0 - low);
+			}
+			const c = byClass.get(cls) ?? { condensedKm2: 0, volume: 0 };
+			c.condensedKm2 += u.condensedKm2[cls] ?? 0;
+			c.volume += vol;
+			byClass.set(cls, c);
+		}
+	});
+	let sumNat = 0;
+	let sumRed = 0;
+	for (let t = 0; t < days; t++) {
+		sumNat += natural[t]!;
+		sumRed += total[t]!;
+	}
+	return {
+		lowFlowThresholdM3Day: qLow,
+		reductionM3Day: days ? sumRed / days : 0,
+		fractionOfNatural: sumNat > 0 ? sumRed / sumNat : null,
+		// In LAND_COVER_CLASSES order, whatever order the patches and nodes are listed in.
+		byClass: LAND_COVER_CLASSES.flatMap((k) => (byClass.has(k.id) ? [[k.id, byClass.get(k.id)!] as const] : [])).map(([coverClass, c]) => ({
+			coverClass,
+			condensedKm2: c.condensedKm2,
+			reductionM3Day: days ? c.volume / days : 0,
+			// m³ over km² → mm: ÷ (km² × 1000); per year: × 365.25 ÷ days.
+			mmPerYear: c.condensedKm2 > 0 && days ? ((c.volume / (c.condensedKm2 * 1000)) * 365.25) / days : null
+		}))
+	};
+}
 
 const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_observed_m3s || series.flow_logger_m3s);
 

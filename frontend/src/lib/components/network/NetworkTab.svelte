@@ -76,7 +76,8 @@
 	function remove(id: string, name: string) {
 		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
-		if ((refs || areas) && !confirm(`Remove "${name}"? Its ${areas} crop area(s) and ${refs} transfer(s) are removed too; nodes draining into it are re-routed downstream.`)) return;
+		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
+		if ((refs || areas || cover) && !confirm(`Remove "${name}"? Its ${areas} crop area(s), ${refs} transfer(s)${cover ? ` and ${cover} land-cover patch(es)` : ''} are removed too; nodes draining into it are re-routed downstream.`)) return;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 	}
@@ -316,6 +317,7 @@
 			<summary>Field guide</summary>
 			<dl>
 				<div><dt>Kind</dt><dd>A <strong>farm</strong> generates runoff, has irrigation demand and may have a dam (a stand-alone dam or natural area is also a farm). A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
+				<div><dt>Land cover</dt><dd>Invasive trees and forestry on a farm, which reduce its runoff: edit them in the <strong>One node</strong> layout, under "Land cover".</dd></div>
 				<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
 				{#each NODE_FIELDS as f (f.key)}
 					<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
@@ -352,6 +354,9 @@
 				canMoveUp={selectedIndex > 0}
 				canMoveDown={selectedIndex < nodes.length - 1}
 				onmakeoutlet={() => setOutlet(selected.id)}
+				landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === selected.id)}
+				onaddcover={() => editor.addLandCover(selected.id)}
+				onremovecover={(id) => editor.removeLandCover(id)}
 			/>
 		{/key}
 	{/if}

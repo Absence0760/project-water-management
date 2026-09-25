@@ -34,7 +34,12 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 			 FROM transfer WHERE project_id = $1 ORDER BY priority, id`,
 			[projectId]
 		);
-	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows };
+	const landCover = await db.query(
+		`SELECT id, node_id AS "nodeId", cover_class AS "coverClass", area_km2 AS "areaKm2", density_pct AS "densityPct", factors
+		 FROM land_cover WHERE project_id = $1 ORDER BY node_id, cover_class, id`,
+		[projectId]
+	);
+	return { nodes: nodes.rows, crops: crops.rows, cropAreas: cropAreas.rows, transfers: transfers.rows, landCover: landCover.rows };
 }
 
 /**
@@ -49,6 +54,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	const transferIds = m.transfers.map((t) => t.id);
 
 	await db.query('DELETE FROM transfer WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, transferIds]);
+	// Land cover (WP-1.35) is rewritten whole, like crop areas; nothing references its rows.
+	await db.query('DELETE FROM land_cover WHERE project_id = $1', [projectId]);
 	await db.query('DELETE FROM crop_area WHERE project_id = $1', [projectId]);
 	await db.query('DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))', [projectId, cropIds]);
 	// Clear topology first so node renames/reorders can't trip uniqueness or
@@ -131,6 +138,15 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			 WHERE transfer.project_id = EXCLUDED.project_id`,
 			[t.id, projectId, t.fromNodeId, t.toNodeId, t.months, t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority],
 			'transfer'
+		);
+	}
+	for (const p of m.landCover ?? []) {
+		await upserted(
+			`INSERT INTO land_cover (id, project_id, node_id, cover_class, area_km2, density_pct, factors)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (id) DO NOTHING`,
+			[p.id, projectId, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors === null ? null : JSON.stringify(p.factors)],
+			'land cover'
 		);
 	}
 	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);

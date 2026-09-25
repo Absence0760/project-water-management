@@ -4,6 +4,7 @@
 // see ./README.md for the full mapping and the workbook quirks we mirror.
 // Unlike the workbook nothing is rounded: every split conserves water exactly
 // (docs/engine-audit.md R1).
+import { landCoverReduction, lowFlowThreshold } from './landcover';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -79,6 +80,11 @@ export interface PlanNode {
 	 * at this node.
 	 */
 	borehole?: { capacityM3Day: number; rule: 0 | 1 | 2; triggerM3: number; depletionFrac: number; depletionAlpha: number };
+	/**
+	 * Land cover on this farm (WP-1.35, ./landcover.ts): the shares of its
+	 * runoff above and up to the low-flow threshold that it removes. Absent = none.
+	 */
+	landCover?: { mar: number; lowFlow: number };
 	/**
 	 * A farm's share of the senior users' demand below it, m³/day (WP-1.33):
 	 * Σ over senior users u downstream of D_u × share / Σ upstream shares of u,
@@ -171,6 +177,8 @@ export interface NodeResult {
 	depletionUnmet: Float64Array;
 	/** Depletion still to come at the end of the day: the lag reservoir's content (m³). */
 	depletionStore: Float64Array;
+	/** Natural runoff land cover removed before the farm got it (WP-1.35); I = natural × share − this. */
+	landCoverReduction: Float64Array;
 }
 
 /**
@@ -272,7 +280,8 @@ function allocNode(days: number): NodeResult {
 		groundwater: f(),
 		depletion: f(),
 		depletionUnmet: f(),
-		depletionStore: f()
+		depletionStore: f(),
+		landCoverReduction: f()
 	};
 }
 
@@ -333,6 +342,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 	const want = new Float64Array(transfers.length);
 	const sumBy = new Float64Array(nodes.length);
 	const freeBy = new Float64Array(nodes.length);
+
+	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
+	const qLow = nodes.some((n) => n.landCover) ? lowFlowThreshold(naturalFlow.subarray(0, days)) : 0;
 
 	for (let t = 0; t < days; t++) {
 		// [Transfers] "Draw from dam": uses the storage at the end of the
@@ -474,7 +486,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			// Abstraction demand: the crop requirement plus the application losses (audit N1).
 			const D = F / node.irrigationEfficiency;
 			const H = sumU;
-			const I = nat * node.share;
+			// Land cover removes part of the farm's natural runoff before it reaches the river or dam (WP-1.35).
+			const I0 = nat * node.share;
+			const lc = node.landCover ? landCoverReduction(I0, qLow * node.share, node.landCover) : 0;
+			const I = I0 - lc;
+			r.landCoverReduction[t] = lc;
 			const J = jToday[i]!;
 			// The percentage is the share of upstream inflow that enters the dam
 			// (K); the rest passes below it (L), where the diversion capacity (O)

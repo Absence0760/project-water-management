@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import { irrigationFromReturnFlow, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
+import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -269,7 +269,30 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		});
 	}
 
-	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
+	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
+	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}) }, series };
+}
+
+/**
+ * Land-cover patches (WP-1.35) in 30 % of seeds: on random nodes (gauges and
+ * users too, which the engine skips), any class, from a sliver to more than
+ * the unit (scaled down), any density, the class defaults or overrides at the
+ * edges 0 and 1.
+ */
+function randomLandCover(g: Rng, nodes: NetworkNode[]): LandCoverPatch[] {
+	if (!g.bool(0.3)) return [];
+	return Array.from({ length: g.int(1, 6) }, (_, k) => {
+		const n = g.pick(nodes);
+		return {
+			id: `lc${k}`,
+			nodeId: n.id,
+			coverClass: g.pick(LAND_COVER_CLASSES.map((c) => c.id)),
+			areaKm2: g.bool(0.1) ? 0 : g.bool(0.1) ? n.areaKm2 * 3 + 1 : g.float(0, Math.max(n.areaKm2, 0.1)),
+			densityPct: g.frac(0.1, 0.3),
+			factors: g.bool(0.6) ? null : { mar: g.frac(0.2, 0.2), lowFlow: g.frac(0.2, 0.2) }
+		};
+	});
 }
 
 /**
@@ -399,6 +422,7 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	m.crops.forEach((c) => (c.sortOrder = rng.int(-100, 100)));
 	rng.shuffle(m.cropAreas);
 	rng.shuffle(m.transfers);
+	if (m.landCover) rng.shuffle(m.landCover);
 	return x;
 }
 
@@ -412,6 +436,11 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 	for (let k = 0; k < m.transfers.length; k++) {
 		const x = cloneInput(input);
 		x.model.transfers.splice(k, 1);
+		yield x;
+	}
+	for (let k = 0; k < (m.landCover?.length ?? 0); k++) {
+		const x = cloneInput(input);
+		x.model.landCover!.splice(k, 1);
 		yield x;
 	}
 	const hasUpstream = new Set(m.nodes.map((nd) => nd.downstreamNodeId).filter((v): v is string => v !== null));
