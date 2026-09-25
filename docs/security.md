@@ -16,9 +16,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   only for plain-http local dev). JavaScript never sees the token.
 - **Same-origin in production.** CloudFront serves the site and proxies
   `/api/*`, so the cookie is first-party. Together with `SameSite=Lax`, this
-  blocks cross-site POSTs from carrying the session. The API accepts JSON bodies
-  only.
-- **Revocation:** every request re-reads `app_user.sessions_revoked_at`;
+  blocks cross-site POSTs from carrying the session. On top of that, CORS
+  allows only the `ALLOWED_ORIGINS` list (with credentials; `Content-Type` is
+  the only allowed request header), and Hono's `csrf` middleware rejects form
+  posts from any other origin with `403` (`backend/src/app.ts`). Handlers read
+  JSON bodies only.
+- **Revocation:** every signed-in request re-reads `app_user.sessions_revoked_at`;
   a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
   as is a session for an account that no longer exists. A password reset sets
   the watermark, so it signs out every device, including a thief's, and so
@@ -39,8 +42,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   a row lock, so parallel guesses can't slip past. Accepted trade-off: anyone
   can lock someone else's address for up to 15 minutes at a time (sessions
   already signed in are unaffected, and a password reset lifts it). The
-  WAF's per-IP rate limit is still the first line against spraying many
-  addresses.
+  WAF's per-IP rate limits (below) are still the first line against spraying
+  many addresses.
 
 ## Password reset, email verification and invites
 
@@ -89,7 +92,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Email content:** every user-controlled value (project/team names, display
   names) is HTML-escaped; subjects are stripped of CR/LF. Links use `SITE_URL`
   from config, never the request's Host header. The reset and verify pages
-  strip the token from the address bar and send `Referrer-Policy: no-referrer`.
+  strip the token from the address bar and set a `no-referrer` policy
+  (`<meta name="referrer">`; the invite sign-up page does the same).
 - **Transport:** SES via the Lambda's IAM role in production (no SMTP password
   to hold). The `log` transport refuses to print message bodies inside Lambda,
   so a misconfigured deploy can't write live links into CloudWatch.
@@ -109,11 +113,23 @@ In short:
   existence doesn't leak.
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known.
-- A **last-owner guard** means a project can't be orphaned.
+- A **last-owner guard** means a project can't be orphaned (and a
+  last-admin guard, a team).
 - The schema owner (`water`) is used only for migrations, never by the running
   API.
-- The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`.
+- The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
+  and its catalogue test (`backend/src/db/catalogue.db.test.ts`) checks that
+  every table has RLS and policies, `water_app` owns nothing and can't bypass
+  RLS, every function pins `search_path` and every foreign key is indexed.
   Treat a failing RLS test like a failing auth check: never skip it.
+- **Every route needs a session unless it is on the public allowlist**
+  (`/health`, register, login, logout, forgot/reset password, verify email,
+  invite info). `backend/src/routes.test.ts` (a unit test, no DB) walks every
+  registered route and fails if a non-public one answers an anonymous request
+  with anything but `401`.
+- **Errors never echo the database.** `backend/src/http/errors.ts` maps
+  Postgres error codes to fixed messages; anything else is a logged, generic
+  `500`.
 
 ## Input handling
 
@@ -121,8 +137,9 @@ In short:
   are parameterised (`pg`), and there is no string-built SQL.
 - Model documents are validated as a whole: references resolve inside the
   document, the network is a tree with one outflow, and names are unique.
-- Series are capped at 60 000 values. The Lambda's 6 MB payload limit bounds
-  request size in production.
+- Series are capped at 60 000 values, and every request body at 4 MB
+  (`bodyLimit`, `413`); the Lambda's 6 MB payload limit sits behind that in
+  production.
 - Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
   server never parses `.xlsm` files and no macro content is ever executed.
   The later in-browser importer parses in the user's browser with SheetJS from
@@ -194,9 +211,11 @@ readable by anyone. The rules:
   logged in CloudTrail. The key rotates yearly. Terraform's `carlpett/sops`
   provider decrypts in memory, so nothing is written to disk.
   See `../infra-secrets/README.md`.
-- This app's production secrets: `AUTH_JWT_SECRET`, the `water_app` DB
-  password, and the owner/migration DB password (or an RDS-managed secret). The
-  CloudFront shared secret is generated by Terraform.
+- This app's production secrets: `AUTH_JWT_SECRET` and the `water_app` DB
+  password. The owner (`water`) password is managed and rotated by RDS in
+  Secrets Manager (`manage_master_user_password`), read only by the migrate
+  Lambda at run time. The CloudFront shared secret is generated by Terraform
+  (`random_password`).
 - **Committed local defaults are non-sensitive by design.**
   `backend/.env.development` holds the docker-compose throwaway passwords
   (`water`/`water`, `water_app`/`water_app`) and a dev-only JWT secret. They
@@ -213,12 +232,15 @@ readable by anyone. The rules:
 - **Lambda Function URL**: the backend rejects any request without the
   CloudFront shared-secret header, so the WAF and CloudFront can't be bypassed
   by calling the Function URL directly.
-- **WAF:** a per-IP rate limit on CloudFront, covering both the site and
-  `/api/*`.
+- **WAF:** per-IP rate limits on CloudFront, covering both the site and
+  `/api/*`: 100 requests per 5 minutes on `/api/auth/*`, and
+  `waf_rate_limit_per_ip` (default 1 000 per 5 minutes) on everything
+  (`infra/waf.tf`).
 - **Response headers** (CloudFront, both behaviours): CSP (`default-src
   'self'`, `object-src 'none'`, `frame-ancestors 'none'`, no third-party
   origins; `default-src 'none'` on `/api/*`), HSTS 2 years, nosniff,
-  `X-Frame-Options: DENY`, Referrer-Policy, Permissions-Policy, COOP.
+  `X-Frame-Options: DENY`, Referrer-Policy (`no-referrer` on `/api/*`),
+  `X-XSS-Protection: 0`, Permissions-Policy, COOP (`infra/security_headers.tf`).
 - **Email (SES):** the API role may only `ses:SendEmail` as
   `no-reply@<domain>` through one identity and configuration set, over a VPC
   endpoint. DKIM + SPF-aligned MAIL FROM + DMARC; TLS required to the
@@ -226,16 +248,17 @@ readable by anyone. The rules:
 - **Deploy role trust:** the plan fails if the bootstrap role's trust policy
   is not pinned to this repo's `environment:production` subject
   (`infra/oidc.tf` postcondition, tested).
-- **Database (Phase 6):** private subnets or the Data API only, no public
-  endpoint, encryption at rest, TLS in transit, automated backups + PITR,
-  deletion protection.
+- **Database** (`infra/rds.tf`, not yet applied): RDS in private subnets, no
+  public endpoint, encryption at rest, TLS enforced (`rds.force_ssl`),
+  automated backups + PITR (7–35 days), deletion protection. Only the API and
+  migrate Lambdas' security groups can reach it.
 - **Blast radius:** Lambda reserved concurrency is capped. There is a budget
   alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
-- No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
-  rule. (Phase 7)
+- No app-level rate limit on `/auth/register` beyond the WAF's per-IP
+  `/api/auth/*` rule. (Phase 7)
 - No password change while signed in (use "Forgot password"), and no
   "Sign out everywhere" button in the UI yet — the endpoint exists
   (`POST /auth/logout-everywhere`). (Phase 7)

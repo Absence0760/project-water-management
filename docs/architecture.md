@@ -15,7 +15,7 @@ flowchart LR
     UI --- EB
   end
 
-  subgraph AWS["AWS (later — Phase 6)"]
+  subgraph AWS["AWS (Phase 6: in Terraform, not yet deployed)"]
     CF[CloudFront + WAF<br/>water-management.jaredhoward.com]
     S3[(S3<br/>static build)]
     L[Lambda · Hono<br/>Function URL]
@@ -30,7 +30,8 @@ flowchart LR
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
-(`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`. The
+(`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`
+(plus Mailpit, which catches all email). The
 browser calls the backend directly on `:3001` (CORS with credentials). In
 production, CloudFront serves the site and **proxies `/api/*` from the same
 origin**, so the session cookie is first-party.
@@ -40,12 +41,12 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, members, the model document, series, runs. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, members, the model document, series, runs. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801`. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
-| `infra` | none | Terraform: S3, CloudFront, WAF, Lambda + Function URL, ACM, Route 53, budget and alarms. The DB comes in Phase 6. |
+| `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL and the migrate Lambda (both in a VPC), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
 
 ## Why one engine in two places
 
@@ -63,24 +64,32 @@ The same `runModel` runs:
   summary and output series. Stored runs are what users share and compare.
 
 Because the engine is pure and deterministic, there is only one implementation
-to regression-test against the workbook, and the browser and the stored result
-can never drift apart. Every run records `ENGINE_VERSION`.
+to test (invariant tests, plus the client catchment regression suite with its
+documented departures from the workbook, [engine-audit.md](./engine-audit.md)),
+and the browser and the stored result can never drift apart. Every run records `ENGINE_VERSION`.
 
 ## Request lifecycle (backend)
 
 1. CloudFront adds `X-CloudFront-Shared-Secret`, and the backend rejects
-   requests without it (the check is off locally when the secret is empty).
-2. Session middleware verifies the `wm_session` JWT (HS256, jose), checks it
-   was issued after the user's `sessions_revoked_at` watermark (one indexed
-   `app_user` lookup), and sets `userId`.
-3. Project routes open **one transaction** on a pooled `pg` connection as
+   requests without it (`403`; the check is off locally when the secret is
+   empty).
+2. App-wide middleware: CORS (only `ALLOWED_ORIGINS`, with credentials),
+   Hono's CSRF check (cross-origin form posts get `403`) and a 4 MB body
+   limit (`413`).
+3. On every route except the public ones (`/health`, and the sign-in and
+   emailed-link `/auth/*` routes), `requireUser` verifies the `wm_session`
+   JWT (HS256, jose), checks it was issued after the user's
+   `sessions_revoked_at` watermark (one `app_user` lookup by primary key), and
+   sets `userId`. Otherwise `401`.
+4. Project routes open **one transaction** on a pooled `pg` connection as
    `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
-4. zod validates the input. The model document is saved in one transaction
+5. zod validates the input. The model document is saved in one transaction
    (rows missing from a `PUT` are deleted). Tree validation runs before the
    write.
-5. Errors map to `{ error, details? }` with 400/401/403/404/409
-   ([api.md](./api.md)).
+6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
+   and anything unexpected to a generic 500; raw database error text never
+   reaches the client ([api.md § Errors](./api.md#errors)).
 
 ## Data flow of a model run
 
@@ -92,11 +101,12 @@ sequenceDiagram
   B->>A: POST /projects/:id/runs
   A->>P: BEGIN; set app.current_user_id
   A->>P: SELECT project, nodes, crops, areas, transfers, series (RLS)
-  A->>A: runModel(input) ~20 ms
+  A->>A: runModelChecked(input) ~20 ms
   A->>P: INSERT model_run (inputs snapshot, summary)
   A->>P: INSERT run_series × N (double precision[])
+  A->>P: DELETE runs beyond the newest 20
   A->>P: COMMIT
-  A-->>B: 201 { run }
+  A-->>B: 201 { run, removedRunIds }
   B->>A: GET /runs/:runId/series?key=…&nodeId=…
   A-->>B: { startDate, values }  (one series per chart)
 ```
@@ -119,12 +129,12 @@ sequenceDiagram
 ```
 water-management/
 ├── package.json           Root scripts (setup / dev / db / build / check / test)
-├── docker-compose.yml     Postgres 17 on :5434
+├── docker-compose.yml     Postgres 17 on :5434, Mailpit (SMTP :1026, UI :8026)
 ├── dev/postgres/          First-boot SQL: water_app role, water_test DB
 ├── packages/engine/       Model + shared types (vitest)
 ├── backend/               Hono API, migrations/, scripts/migrate.ts (vitest: unit + db)
 ├── frontend/              SvelteKit static app (vitest)
-├── scripts/               check_root_scripts.mjs, wbt-import/ (Python)
+├── scripts/               check_root_scripts.mjs, guards/ + release/ (node:test), wbt-import/ (Python)
 ├── infra/                 Terraform
 ├── docs/                  This documentation
 ├── data/                 Generated client fixtures (gitignored; workbooks live outside the repo in ../project-water-management-source/)
