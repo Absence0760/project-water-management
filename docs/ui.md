@@ -71,10 +71,11 @@ shorter than the cap looks as before.
   input series. Click it for each series' end date. It turns amber when the
   newest data is more than 7 days old (`STALE_DAYS` in
   `series/freshness.ts`; a candidate for a project setting). Ages count
-  calendar days up to the viewer's **local** date (`localIsoDate`), the same
-  as the project list's badge, so the two never differ by a day around
-  midnight. Series dates are calendar days, so the UTC date would be wrong
-  for anyone east or west of UTC.
+  calendar days up to the viewer's **local** date (`localIsoDate`); the
+  project list's badge (`projects/freshness.ts`) counts the same way from its
+  own `daysSince`, so the two never differ by a day around midnight. Series
+  dates are calendar days, so the UTC date would be wrong for anyone east or
+  west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
   Dropping a CSV anywhere on the page opens it with that file.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
