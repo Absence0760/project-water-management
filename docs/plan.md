@@ -35,8 +35,10 @@ and [data-model.md](./data-model.md)):
 - Time series are stored as `double precision[]`, and run outputs as one array
   per series. Sessions use a JWT in an httpOnly cookie. Migrations are plain
   SQL. Charts use uPlot.
-- **Excel import:** a Python extractor (`scripts/wbt-import`) turns a workbook
-  into `project.json`. An in-browser importer (SheetJS) comes later.
+- **Excel import:** **Import b023 workbook** reads the workbook in the browser
+  (a TypeScript port of the Python extractor on SheetJS, in a Web Worker,
+  WP-1.31). The Python extractor (`scripts/wbt-import`) stays for the
+  regression fixtures and `pnpm seed:demo`; both give the same `project.json`.
 - **The repo is public.** No secret, client workbook or client-derived data is
   ever committed. The workbooks live outside the repo (`../project-water-management-source/`); `data/` and `*.xlsm`/`*.xlsx` are
   gitignored, and committed fixtures are synthetic, with no real farm names or
@@ -113,15 +115,20 @@ departure, and it lists each affected column with its finding ID.
   workbooks for a demo user.
 - ✅ **Import project file (.json)** on the project list (WP-1.8,
   `POST /projects/import`) takes the same `project.json`, or a project's own
-  download, into any account, including production. Still to come: reading
-  the `.xlsm` itself in the browser (WP-1.31).
-- 🚧 The importer reports whatever it could not map: hand-written transfer
-  formulas that don't fit the rule shape, or a Specific method with no values.
-  Done in the TypeScript port (`frontend/src/lib/spreadsheet/import/`, the
-  `unmapped` list: transfer formulas, a rule with no destination or no rate,
-  M1 month lists, blank Specific shares, unknown element types, number cells
-  holding text; [scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
-  Not built: showing it on the import review screen (WP-1.31).
+  download, into any account, including production.
+- ✅ **Import b023 workbook** on the project list (WP-1.31) reads the `.xlsm`
+  itself in the browser, with no Python: a Web Worker, progress per sheet,
+  Cancel, a review, then the same `POST /projects/import`
+  ([ui.md § Import a b023 workbook](./ui.md#import-a-b023-workbook)). For
+  the client workbook it gives the same `project.json` as the Python, and
+  the imported project's run summary is identical.
+- ✅ The importer reports whatever it could not map: hand-written transfer
+  formulas that don't fit the rule shape, a Specific method with no values,
+  a rule with no destination or no rate, M1 month lists, unknown element
+  types, number cells holding text (the TypeScript port's `unmapped` list,
+  [scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
+  The import review shows it as its own section, with sheet, cell and
+  element (WP-1.31).
 
 **Acceptance:** importing the client catchment gives a project whose run reproduces the
 workbook (as in 1a) with **no manual edits**.
@@ -260,9 +267,10 @@ writing, or gives a ranked change list.
   automatic calibration (Fit automatically, model.md §2.10b) and a fit record
   stored with the parameters and snapshotted by each run. Not built: a live
   preview while editing (roadmap WP-1.17).
-- ⬜ **In-browser Excel import** with SheetJS. Load it from its official CDN
-  tarball, because the npm `xlsx` 0.18.5 is stale and has known advisories. The
-  import then needs no Python.
+- ✅ **In-browser Excel import** with SheetJS (WP-1.31, 2026-09-25), loaded
+  from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
+  advisories), in a Web Worker. The import needs no Python. Left open: peak
+  memory on the largest workbooks ([followups.md](./followups.md)).
 - 🚧 An audit log per project: who changed what, and which run used which
   inputs. Done: each run snapshots its inputs with a content hash per input
   series. Not built: the change log (roadmap WP-2.4).
@@ -626,4 +634,4 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 | **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports for the client catchment are well under the limit. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
 | **Single developer / bus factor** | Stalls | Docs (this folder), tests as the spec, conventional commits. |
-| **Stale SheetJS on npm** | Security advisories | Use the official CDN tarball when the in-browser importer lands. The Python importer covers V1. |
+| **Stale SheetJS on npm** | Security advisories | The official CDN tarball (SheetJS CE 0.20.3), pinned with its integrity hash; bumped by hand, since Dependabot can't see a URL dependency. |

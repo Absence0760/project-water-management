@@ -244,7 +244,7 @@ path; the script runs in `backend/`).
 
 `frontend/src/lib/spreadsheet/import/` is a TypeScript port of
 `extract_project.py`'s project extraction and `calibration.py` on SheetJS, for
-the in-browser workbook import (roadmap WP-1.31): `readWorkbook(bytes)` then
+the in-browser workbook import (roadmap WP-1.31): `await readWorkbook(bytes)` then
 `extractProject(wb, { fileName, gaugeAsReference })` gives `{ project, notes,
 unmapped }`. Per decision D17 the **TypeScript port is the user path** (the
 import in the UI), and the Python scripts stay for the regression fixtures
@@ -270,6 +270,23 @@ the other way round. Two tests hold it:
   `python3`), and takes about 15 s per client-workbook variant, most of it the
   Python.
 
+**In the UI.** **Import b023 workbook** on the project list runs the port in a
+Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
+comes out, then the project, notes and unmapped report), shows the review,
+and posts the project to `POST /projects/import`, the same route and
+validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-b023-workbook)).
+The review's gauge option is `gaugeAsReference` (a date and factor for the
+scaling). Nothing from the workbook but the project reaches the server.
+
+**Acceptance (the client workbook).** `sourceWorkbooks.test.ts` shows the
+port's `project.json` equals the Python's, with and without the gauge
+options. The same `project.json` makes the same run: the import route is a
+function of the document alone, fresh ids keep the document's id order (the
+engine's summation and tie-break order), and the engine is deterministic.
+Checked end to end on 2026-09-25: both documents imported through the route's
+code with a run stored identical run summaries (a one-off local script
+outside the repo; no client data committed).
+
 What the port does beyond the Python:
 
 - **The unmapped report** (plan.md 1b): what it couldn't carry across as the
@@ -286,8 +303,18 @@ What the port does beyond the Python:
   unsupported build (AppSettings `zAppVer` other than b02x), a file over 150 MB
   or 250 sheets, and the Python's own stops (non-consecutive dates, an unknown
   upstream element …).
-- It parses only the sheets the named ranges point at, never the Element
-  sheets. The client workbook (about 90 MB) reads in about 2.5 s in Node.
+- It unpacks and parses only the parts the named ranges point at, never the
+  Element sheets. SheetJS's own zip reader inflates every part first (the
+  client workbook, about 90 MB on disk, unpacks to about 600 MB, most of it the
+  calculation chain and the Element sheets), so `readWorkbook` reads the zip
+  itself (`zip.ts`: capped, bounds-checked, only the needed parts, with the
+  platform's `DecompressionStream`) and hands SheetJS a small zip of just those
+  parts. That's why `readWorkbook` is async. Measured on the client workbook
+  with SheetJS on its browser code paths: peak memory down by about 40%, read
+  time from about 2.9 s to about 1.1 s. What's left is SheetJS parsing the
+  [Flow data] sheet itself ([followups.md](../../docs/followups.md)).
+- It uses SheetJS's mini build (`xlsx/dist/xlsx.mini.min`), which reads
+  `.xlsx` and `.xlsm` alike; both parity tests run through it.
 
 Differences no b023 workbook reaches: Python's `\d` also matches non-ASCII
 digits in a month list; a cell SheetJS reads as an ISO date (`t="d"`, which

@@ -87,10 +87,10 @@ describe('extractProject on a small synthetic workbook', () => {
 		expect(seen).toEqual(['1/7 Network', '2/7 Farm spec', '3/7 Crop demand', '4/7 Farm demand', '5/7 Transfers', '6/7 Flow Calibration Cfg', '7/7 Flow data']);
 	});
 
-	it('gives the same result from the saved file (dense sheets, only the b023 sheets parsed)', () => {
+	it('gives the same result from the saved file (dense sheets, only the b023 sheets parsed)', async () => {
 		const b = syntheticB023();
 		const direct = extractProject(b.build(), { fileName: FILE });
-		const fromFile = extractProject(readWorkbook(b.toFile()), { fileName: FILE });
+		const fromFile = extractProject(await readWorkbook(b.toFile()), { fileName: FILE });
 		expect(fromFile).toEqual(direct);
 	});
 
@@ -99,11 +99,11 @@ describe('extractProject on a small synthetic workbook', () => {
 		afterEach(() => {
 			process.env.TZ = tz;
 		});
-		it('turns Excel serial dates into the same ISO dates east and west of UTC', () => {
+		it('turns Excel serial dates into the same ISO dates east and west of UTC', async () => {
 			const file = syntheticB023({ start: '2011-12-30', rain: [0, 1, 2, 3, 4] }).toFile();
 			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Asia/Kathmandu', 'UTC']) {
 				process.env.TZ = zone;
-				const { project } = extractProject(readWorkbook(file), { fileName: FILE });
+				const { project } = extractProject(await readWorkbook(file), { fileName: FILE });
 				expect(project.series[0]!.startDate, zone).toBe('2011-12-30');
 				expect([project.settings.calibrationStart, project.settings.calibrationEnd], zone).toEqual(['2011-12-30', '2012-01-03']);
 			}

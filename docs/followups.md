@@ -1104,7 +1104,30 @@ role and not before it.
         MAR ratios, monthly table, flag) and the run notes (2026-09-24).
   - [ ] **SA-only help tag.** The WR2012 help entries are South African;
         tag them when `HelpEntry.countries` lands (international.md WP-I.12).
-- **Workbook import in the browser.** It is the Python CLI only today.
+- **Workbook import in the browser (WP-1.31).** Left open:
+  - [ ] **Peak memory on the largest workbooks.** `readWorkbook` now unpacks
+        only the parts it reads (`lib/spreadsheet/import/zip.ts`, 2026-09-25),
+        which took the client workbook's peak about 40% down and its read
+        time from about 2.9 s to 1.1 s (Node with SheetJS on its browser code
+        paths). What remains is SheetJS parsing the [Flow data] sheet (a
+        ~40 MB XML part for a 40-year record) into a string and one object
+        per cell, several hundred MB at the peak: fine on a laptop, marginal
+        on a phone. Durable fix: a streaming reader for the few sheets the
+        importer reads (a SAX pass over the sheet XML that keeps only the
+        named-range columns as numbers), with the parity tests as the guard.
+        Trigger: a user reports the import failing on a phone or low-memory
+        machine, or a workbook with a longer record than the client's. It
+        would also drop SheetJS from the import worker (101 KB gzip).
+  - [ ] **The notes and unmapped report aren't kept.** They are shown on the
+        import review only; once imported, the project has no record of what
+        the importer couldn't map. Durable fix: store them with the project
+        (a `project.import_report` jsonb, shown on the Overview until
+        dismissed). Trigger: the first workbook the client imports
+        themselves, since they won't have the Python output to go back to.
+  - [ ] **Measured in a real browser.** The memory figures above are Node
+        with SheetJS on its browser code paths; no one has profiled the
+        client workbook's import in Chrome or Safari, or on a phone. Trigger:
+        with the peak-memory item above.
 
 ## Pipelines
 

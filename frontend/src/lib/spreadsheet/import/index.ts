@@ -3,13 +3,14 @@
 // Pure parsing, no I/O and no DOM, so it runs in a Web Worker. Load it
 // lazily: it pulls in SheetJS.
 //
-//   const wb = readWorkbook(await file.arrayBuffer());
+//   const wb = await readWorkbook(await file.arrayBuffer());
 //   const { project, notes, unmapped } = extractProject(wb, { fileName: file.name });
 //
 // Parity with the Python importer is tested on the committed synthetic
 // workbook (scripts/wbt-import/fixtures/) and, when present locally, on the
 // real workbooks in ../project-water-management-source/Original/.
-export { readWorkbook, MAX_WORKBOOK_BYTES, MAX_WORKBOOK_SHEETS, REQUIRED_NAMES } from './workbook';
+export { readWorkbook, MAX_WORKBOOK_BYTES, MAX_WORKBOOK_SHEETS, REQUIRED_NAMES, type ReadOptions } from './workbook';
+export { ZIP_LIMITS } from './zip';
 export { extractProject, projectName, type ExtractOptions, type ImportResult, type ImportedSettings, type ProjectFile } from './extract';
 export type { ImportedSeries } from './flowData';
 export type { GaugeScaling } from './gauge';

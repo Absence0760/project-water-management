@@ -148,14 +148,33 @@ export async function importProjectFile(userId: string, data: ProjectFile, opts:
 	return { projectId, ...(opts.run ? await runImported(userId, projectId) : {}) };
 }
 
-/** Fresh ids for every model row, keeping internal references intact; `ids` maps old → new. */
+/** Plain code-unit order, as the engine compares ids (packages/engine/src/order.ts cmpStr). */
+const idOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Fresh ids for every model row, keeping internal references intact; `ids`
+ * maps old → new.
+ *
+ * The new ids are random but keep the old ids' order. The engine sums and
+ * breaks ties in id order (docs/model.md §6, "The ordering rule"), so ids
+ * that sorted differently would change the floating-point order of those
+ * sums, and on a real catchment that noise grows into different results at
+ * dam triggers and empties. With the order kept, importing the same document
+ * twice, or copying a project, runs exactly as the original.
+ */
 export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyMap<string, string> } {
-	const map = new Map<string, string>();
-	const id = (old: string) => {
-		let n = map.get(old);
-		if (!n) map.set(old, (n = crypto.randomUUID()));
-		return n;
-	};
+	const old = new Set<string>();
+	for (const n of m.nodes) old.add(n.id), n.downstreamNodeId && old.add(n.downstreamNodeId);
+	for (const c of m.crops) old.add(c.id);
+	for (const a of m.cropAreas) old.add(a.nodeId), old.add(a.cropId);
+	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), old.add(t.toNodeId);
+	for (const p of m.landCover ?? []) old.add(p.id), old.add(p.nodeId);
+	const sortedOld = [...old].sort(idOrder);
+	const fresh = new Set<string>();
+	while (fresh.size < sortedOld.length) fresh.add(crypto.randomUUID());
+	const sortedFresh = [...fresh].sort(idOrder);
+	const map = new Map(sortedOld.map((o, i) => [o, sortedFresh[i]!] as const));
+	const id = (o: string) => map.get(o)!;
 	return {
 		model: {
 			nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),

@@ -6,10 +6,17 @@
 // formula (SheetJS never does) or reads macros: the VBA project isn't
 // extracted (bookVBA false), formula text isn't kept (cellFormula false), and
 // a formula cell Excel saved without a value reads as blank, as in openpyxl.
-import * as XLSX from 'xlsx';
+// The VBA project isn't even unpacked (see readWorkbook()).
+//
+// SheetJS's mini build: it reads .xlsx and .xlsm (the same container) without
+// the legacy formats and codepages, which keeps the import worker small. The
+// parity tests run through it on both kinds.
+import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { type Cell, cellAddress, clean, columnIndex, isName, pyStrip } from './cells';
 import { fromExcelSerial, isDateFormat, isTimedeltaFormat, durationFromExcel } from './dates';
 import { InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, WorkbookTooLargeError } from './errors';
+import { packageParts, relsPathOf, sheetParts } from './ooxml';
+import { type StoredEntry, type ZipLimits, ZipArchive, storedZip } from './zip';
 
 /**
  * Largest file readWorkbook() accepts. A real catchment workbook with a
@@ -38,38 +45,94 @@ const READ_OPTIONS: XLSX.ParsingOptions = {
 	bookVBA: false
 };
 
+export interface ReadOptions extends ZipLimits {
+	/** Largest file accepted (default MAX_WORKBOOK_BYTES). */
+	maxBytes?: number;
+	/** Most sheets accepted (default MAX_WORKBOOK_SHEETS). */
+	maxSheets?: number;
+	/** Called before each sheet is parsed: (sheet, i, n), 1-based. */
+	onProgress?: (sheet: string, i: number, n: number) => void;
+}
+
 /**
  * Parse the workbook file for extractProject(). Only the sheets the b023
  * named ranges point at are parsed (the Element sheets of a large workbook
  * are most of its size and the project doesn't need them), so the result is
  * a partial WorkBook: SheetNames lists every sheet, Sheets holds those.
+ *
+ * SheetJS inflates every part of a zip it's handed, which for a client-size
+ * workbook peaked near a gigabyte. So this opens the zip itself (./zip.ts)
+ * and hands SheetJS only the parts the import reads: the content types and
+ * relationships, the workbook, its shared strings, styles and metadata, and
+ * those sheets. The Element sheets, the calculation chain, the VBA project,
+ * drawings and media are never inflated.
  */
-export function readWorkbook(
-	data: ArrayBuffer | Uint8Array,
-	limits: { maxBytes?: number; maxSheets?: number } = {}
-): XLSX.WorkBook {
-	const maxBytes = limits.maxBytes ?? MAX_WORKBOOK_BYTES;
-	const maxSheets = limits.maxSheets ?? MAX_WORKBOOK_SHEETS;
+export async function readWorkbook(data: ArrayBuffer | Uint8Array, opts: ReadOptions = {}): Promise<XLSX.WorkBook> {
+	const maxBytes = opts.maxBytes ?? MAX_WORKBOOK_BYTES;
+	const maxSheets = opts.maxSheets ?? MAX_WORKBOOK_SHEETS;
 	if (data.byteLength > maxBytes) throw new WorkbookTooLargeError('bytes', data.byteLength, maxBytes);
 	const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-	const read = (sheets: string[]) => {
+	const zip = ZipArchive.open(bytes, opts);
+
+	const parts = new Map<string, StoredEntry>();
+	/** Inflate one part (once), kept under its exact name in the zip; false when the zip lacks it. */
+	const load = async (name: string): Promise<boolean> => {
+		const exact = zip.find(name);
+		if (exact === undefined) return false;
+		if (!parts.has(exact)) parts.set(exact, { name: exact, data: await zip.read(exact), crc: zip.info(exact)!.crc });
+		return true;
+	};
+	const text = (name: string) => new TextDecoder().decode(parts.get(zip.find(name)!)!.data);
+
+	if (!(await load('[Content_Types].xml'))) throw new UnreadableWorkbookError('it has no [Content_Types].xml, so it is not an Office file');
+	const pkg = packageParts(text('[Content_Types].xml'));
+	const workbookPart = pkg.workbook ?? (zip.find('xl/workbook.xml') ?? null);
+	if (workbookPart === null || !(await load(workbookPart))) {
+		throw new UnreadableWorkbookError(
+			pkg.binary || zip.find('xl/workbook.bin') ? 'it is a binary .xlsb workbook; save it from Excel as .xlsm or .xlsx' : 'it has no workbook part'
+		);
+	}
+	await load('_rels/.rels');
+	const relsPart = zip.find(relsPathOf(workbookPart)) ?? 'xl/_rels/workbook.xml.rels';
+	const hasRels = await load(relsPart);
+	for (const p of pkg.support) await load(p);
+
+	const layout = sheetParts(workbookPart, text(workbookPart), hasRels ? text(relsPart) : '');
+	if (layout.names.length > maxSheets) throw new WorkbookTooLargeError('sheets', layout.names.length, maxSheets);
+
+	const read = (entries: StoredEntry[], sheets: string[]) => {
 		try {
-			return XLSX.read(bytes, { ...READ_OPTIONS, sheets });
+			return XLSX.read(storedZip(entries), { ...READ_OPTIONS, sheets });
 		} catch (e) {
 			throw new UnreadableWorkbookError(e instanceof Error ? e.message : String(e));
 		}
 	};
-	let wb = read(B023_SHEETS);
-	if (wb.SheetNames.length > maxSheets) throw new WorkbookTooLargeError('sheets', wb.SheetNames.length, maxSheets);
-	// A workbook whose named ranges point at other sheets (renamed or moved
-	// tables) gets a second pass with exactly those.
+	// No sheets first: the defined names, to see which sheets they point at.
+	const wb = read([...parts.values()], []);
 	const book = new B023Workbook(wb);
 	const wanted = new Set<string>();
 	for (const name of ALL_NAMES) {
 		const target = book.sheetOf(name);
 		if (target !== null && wb.SheetNames.includes(target)) wanted.add(target);
 	}
-	if ([...wanted].some((s) => !wb.Sheets[s])) wb = read([...wanted]);
+	// The usual b023 sheets, or exactly the named ranges' sheets when those
+	// lie elsewhere (renamed or moved tables). SheetJS matches sheet names
+	// case-insensitively; so does this.
+	const byLower = new Map(layout.names.map((n) => [n.toLowerCase(), n] as const));
+	const sheets = ([...wanted].every((s) => B023_SHEETS.includes(s)) ? B023_SHEETS : [...wanted])
+		.map((s) => byLower.get(s.toLowerCase()))
+		.filter((s): s is string => s !== undefined && zip.find(layout.parts.get(s) ?? '') !== undefined);
+	for (const s of pkg.strings) await load(s);
+	const shared = [...parts.values()];
+	parts.clear();
+	// Then one sheet at a time, so only one sheet's part and XML text is in
+	// memory at once, and the caller can show which sheet is being read.
+	for (const [i, s] of sheets.entries()) {
+		opts.onProgress?.(s, i + 1, sheets.length);
+		const part = zip.find(layout.parts.get(s)!)!;
+		const one = read([...shared, { name: part, data: await zip.read(part), crc: zip.info(part)!.crc }], [s]);
+		Object.assign(wb.Sheets, one.Sheets);
+	}
 	return wb;
 }
 

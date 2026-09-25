@@ -104,7 +104,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204` | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
-| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
+| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
 - `dataUntil` — the last day covered by any of the project's time series
@@ -257,8 +257,10 @@ into an environment with no database access, such as production (WP-1.8).
 - **Atomic:** validation, the project row, the model and every series go in
   one `withUser` transaction as you (RLS applies, and the existing trigger
   makes you owner). Any failure rolls it all back, so nothing partial is left.
-  Every row gets a fresh id, so one file can be imported any number of times;
-  settings that name a node (each EWR rule table's `siteNodeId`) follow the
+  Every row gets a fresh id, so one file can be imported any number of times.
+  The fresh ids are random but sort in the same order as the file's (the
+  engine sums and breaks ties in id order, model.md §6), so every import of
+  one file, and a copy of a project, runs to the same last bit; settings that name a node (each EWR rule table's `siteNodeId`) follow the
   new ids. Settings are stored as the file has them (a workbook import's
   partial settings keep tracking the defaults); a `fitRecord`'s
   `editedParams` is recomputed as on `PATCH`.
