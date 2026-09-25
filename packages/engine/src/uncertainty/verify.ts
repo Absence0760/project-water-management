@@ -7,7 +7,7 @@
 // only come from the stored sample. "Reproduce" in the app re-runs every
 // member the same way.
 import type { ModelInput } from '../project';
-import { runModel } from '../run';
+import { runModelWithoutChecks } from '../run';
 import {
 	ensembleContext,
 	ensembleHeader,
@@ -98,7 +98,7 @@ export function pairedMismatches(ctx: EnsembleContext, baselineKept: readonly En
 	});
 	for (const i of positions) {
 		const m = baselineKept[i]!;
-		const metrics: MemberMetrics = memberMetrics(ctx, runModel(memberInput(ctx, m)));
+		const metrics: MemberMetrics = memberMetrics(ctx, runModelWithoutChecks(memberInput(ctx, m)));
 		out.push(...valueDiffs(`pair ${i} metrics`, metrics, posted[i]!.metrics));
 	}
 	return out.slice(0, 20);
@@ -155,7 +155,7 @@ export function verifyPaired(
 ): { mismatches: string[]; header: EnsembleHeader | null } {
 	if (!baselineKept.length) return { mismatches: ['the baseline kept no members'], header: null };
 	const ctx = ensembleContext(other, options, false);
-	const header = pairedHeader(baselineHeader, runModel(memberInput(ctx, baselineKept[0]!)));
+	const header = pairedHeader(baselineHeader, runModelWithoutChecks(memberInput(ctx, baselineKept[0]!)));
 	const rest = pickCheckedMembers(
 		posted.slice(1).map(() => ({ accepted: true })),
 		k,

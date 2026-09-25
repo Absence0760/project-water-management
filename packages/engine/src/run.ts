@@ -100,6 +100,18 @@ export function runModel(input: ModelInput): ModelOutput {
 }
 
 /**
+ * runModel without the hydrologist plausibility checks: `summary.plausibility`
+ * is absent and their warnings aren't added; every other series and summary
+ * figure is identical. For the uncertainty ensemble, whose hundreds of member
+ * runs read none of it (ensemble.ts memberMetrics / memberScores). Nothing
+ * here references ./plausibility, so a bundle that only runs ensembles (the
+ * browser's calibration worker) leaves that code out.
+ */
+export function runModelWithoutChecks(input: ModelInput): ModelOutput {
+	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null);
+}
+
+/**
  * runModel, then the engine's checks on its own output (./verify): what a
  * saved run uses. The checks are a separate step so runModel stays within its
  * time budget and the tests that re-run the model don't pay for them.
@@ -130,6 +142,19 @@ export function withVerification(input: ModelInput, output: ModelOutput): ModelO
 export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
+): ModelOutput {
+	return runNetwork(input, naturalFlow, runPlausibility);
+}
+
+/**
+ * The model run itself. `plausibility` is the checks step (runPlausibility),
+ * passed in rather than called directly so that runModelWithoutChecks, which
+ * passes null, doesn't reference it and a bundler can drop it.
+ */
+function runNetwork(
+	input: ModelInput,
+	naturalFlow: (ctx: RunContext) => NaturalFlowInput,
+	plausibility: typeof runPlausibility | null
 ): ModelOutput {
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass } = prepareRun(input);
 
@@ -495,7 +520,7 @@ export function runModelWith(
 	);
 
 	// Hydrologist plausibility checks (engine ≥ 0.25.0, ./plausibility): report and warn only.
-	const plausibility = runPlausibility({
+	const checked = plausibility?.({
 		input,
 		settings,
 		start,
@@ -512,7 +537,7 @@ export function runModelWith(
 		ewrShort,
 		reserve: ewrAssurance.map((a) => a.report)
 	});
-	warnings.push(...plausibility.warnings);
+	if (checked) warnings.push(...checked.warnings);
 
 	return {
 		engineVersion: ENGINE_VERSION,
@@ -539,7 +564,7 @@ export function runModelWith(
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
-			plausibility: plausibility.checks,
+			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainAccumulation: accumulation?.info ?? null,

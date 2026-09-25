@@ -158,6 +158,16 @@
 //             the Runs chunk is 39 KB. The calibration worker is 55 KB, at its
 //             ceiling: the next thing the ensemble or the fit needs must come
 //             out of it first. No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 500 → 496 KB; calibration worker 54.5 → 50 KB (the
+//             check shows 51, rounding up), ceilings unchanged. The ensemble's
+//             members now run runModelWithoutChecks (engine run.ts): runModel
+//             less the hydrologist plausibility checks, which no member result
+//             reads. Nothing on the worker's import path references
+//             ./plausibility any more, so Rollup drops it (~12 KB minified);
+//             each member run is also 6–21 % faster on the example catchments.
+//             Ensemble results are byte-identical (same seed, same output
+//             hash). The ceiling stays at 55 KB so the next ensemble or fit
+//             feature has ~4 KB of room. Headroom ~7 KB total.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
