@@ -215,6 +215,19 @@ In short:
   (`backend/src/export/csv.ts`, OWASP "CSV injection"). Numbers are written as
   numbers. Export file names are ASCII slugs, so `Content-Disposition` can't be
   injected.
+- **The `.xlsx` workbook treats names the same way.** It is built in the
+  browser from the same API data (`frontend/src/lib/spreadsheet/export/`):
+  the summary sheets are the summary CSV's cells, already defused; names the
+  workbook writes itself (the EWR grid's sites, the Inputs sheet's nodes,
+  crops and references) go through `defuse` in `names.ts`, the same rule as
+  `textCell`. Every name is a **string cell** and the workbook never writes a
+  formula, so Excel shows `=cmd|…` as text; the apostrophe keeps it inert if
+  someone edits the cell or copies it into a CSV. Unit and e2e tests check
+  both (no cell in the file has a formula). Sheet names are cleaned to
+  Excel's rules (none of `[ ] : * ? / \`, at most 31 characters, unique), and
+  the file name is the summary CSV's server-made ASCII slug. The worker loads
+  from `'self'` only (`worker-src 'self'`), and SheetJS only writes here; it
+  never parses anything uploaded.
 
 ## Public repo hygiene
 

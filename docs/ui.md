@@ -357,6 +357,19 @@ balance check `[V]` next to outflow. The **summary CSV** adds the self-checks,
 the water balance per water year and a column guide giving each letter's
 formula ([api.md § Export](./api.md)).
 
+**Workbook (.xlsx)**, first in the run's Download menu, puts the whole run in
+one file: the summary, a daily sheet for the catchment and for every node in
+network order, curtailment, the EWR grid, Reserve compliance, annual volumes,
+the data checks, the inputs and the warnings, every number at full precision
+with a display format per column ([api.md § Export](./api.md#export)). It is
+built in the browser: picking it closes the menu and shows, under the button,
+a progress bar and "Fetching Upper farm (3 of 9)…" per node, then "Building
+the workbook…", with **Cancel**, which stops at once and saves nothing. A
+failed fetch shows "Workbook failed: …" with the server's reason (a `413`
+included) in the menu's status line. The phone layout keeps the same menu and
+progress, wrapped under the button. Leaving the tab stops an export still
+running. SheetJS loads only then, in a worker, never with the page.
+
 ## Settings & calibration
 
 - **On this page.** Under the intro, a **Settings sections** menu links to

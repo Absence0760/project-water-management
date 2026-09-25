@@ -715,6 +715,58 @@ with `= + - @`, a tab or a CR get a leading `'` so a spreadsheet never runs them
 `from`/`to` are inclusive ISO dates, clamped to the series; `400` if they are
 not real dates, `from > to`, or the window misses the series entirely.
 
+**Run workbook (`.xlsx`).** Not a server route: the Runs tab's Download menu
+builds it in the browser (`frontend/src/lib/spreadsheet/export/`, WP-1.28), in
+a Web Worker, from `GET …/runs/:runId` (summary, settings and model snapshot,
+series list), `…/export/summary.csv` and one [bulk request](#bulk-run-series)
+per node, so no workbook ever passes through Lambda's 6 MB limit. Sheets, in
+order:
+
+| Sheet | From | Content |
+| --- | --- | --- |
+| Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, WR2012, the column guide (a legacy run's `# runoff_model=legacy …` line first) |
+| Catchment, then one per node | bulk route | `date` + the daily CSV's columns and headers for the catchment, then each node with series in the run's network order (b023's element sheets) |
+| Curtailment | summary CSV | Curtailment targets, land cover, other users, EWR sites |
+| EWR grid | `summary.ewrCompliance` | Days simulated, then per site (the outlet, each farm) days not met and volume short (m³), water year × month (Oct … Sep) with a year total |
+| Reserve compliance | summary CSV | Reserve compliance by month (EWR rule tables) |
+| Annual volumes | summary CSV + `summary.calibration.annualVolumes` | The water balance per water year, then observed vs simulated volume per water year over the calibration window |
+| Data checks | summary CSV | CHIRPS factors, rain treated as missing, accumulations, double-mass, plausibility checks |
+| Inputs | `run.settings`, `run.model` | Every setting the run used (arrays across the row), then each part of the model snapshot as a table, references shown by name |
+| Warnings | summary CSV | Only when the run has warnings |
+
+The summary CSV's blocks are placed by their title
+(`lib/spreadsheet/export/summary.ts`); a block the CSV adds later stays on the
+sheet of the block before it, so every CSV row appears exactly once. Values
+equal the CSV exports: numbers are numeric cells holding the stored value at
+full precision (the unit tests and `e2e/tests/xlsx-export.spec.ts` compare
+every cell with the CSVs as text), missing days are empty cells, daily dates
+are real Excel dates shown `yyyy-mm-dd`, and user-controlled text (farm, crop,
+run names, notes) is a string cell, defused with a leading `'` exactly as in
+the CSV. Sheet names are made Excel-safe (at most 31 characters, none of
+`[ ] : * ? / \`, unique ignoring case: a farm called "Summary" becomes
+"Summary (2)").
+
+**Number formats (decision D11).** Each numeric cell carries a display format
+chosen from its column's unit (`lib/spreadsheet/export/formats.ts`): volumes
+and flows in m³ or m³/day `#,##0.00`, Mm³ and m³/s `#,##0.000`, mm `#,##0.0`,
+shares in % `0.0` (the exports write shares as 0–100, so not the `0.0%` code,
+which multiplies by 100), ratios `0.000`, other columns General. The rounding
+is visual only: the cell (and any formula over it) has the unrounded value.
+The codes use Excel's `,` and `.` placeholders, which Excel and LibreOffice
+draw with the **viewer's** locale separators ("1 234,56" in a South African
+or French locale, "1,234.56" in a US one), so the workbook doesn't prejudge
+D10, the app's own thousands separator, which is still open. The CSVs stay
+unformatted and ungrouped (machine-readable).
+
+The file is SheetJS output (CE 0.20.3, its mini build): SheetJS writes the
+workbook, and a daily sheet's rows are streamed into the sheet XML SheetJS
+wrote for a stub of it, in SheetJS's own cell markup, then zipped by SheetJS
+(a whole client-size run as SheetJS cell objects needs ~4 GB, past a browser
+tab). A unit test pins that a streamed sheet is byte-for-byte the sheet
+SheetJS writes from the same cells. For scale, a ~45-year, 13-node run builds
+in ~3 s and is a ~100 MB file (SheetJS's fixed-Huffman deflate;
+[followups.md](./followups.md) has the native-compression follow-up).
+
 **Project document** (`export.json`) is the shape `pnpm import:project`
 accepts (`ProjectFile` in `backend/src/projects/document.ts`), so a project
 round-trips export → import:

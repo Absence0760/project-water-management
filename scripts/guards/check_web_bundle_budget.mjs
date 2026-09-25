@@ -25,6 +25,15 @@
 //                   an uncertainty ensemble starts, never on navigation, so it
 //                   has its own ceiling instead of the page chunks'. It still
 //                   counts in totalCodeKb.
+//   largestSpreadsheetWorkerKb
+//                   the largest spreadsheet worker: `export.worker.ts` (the
+//                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
+//                   in-browser workbook import, WP-1.31) in
+//                   frontend/src/lib/spreadsheet/. They carry SheetJS, which
+//                   dwarfs the engine, and load only when someone asks for a
+//                   workbook, so they get a ceiling of their own rather than
+//                   lifting the calibration worker's. Still counted in
+//                   totalCodeKb; not in largestWorkerKb.
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
 //                   one favicon, one font weight at a time.
@@ -158,6 +167,22 @@
 //             the Runs chunk is 39 KB. The calibration worker is 55 KB, at its
 //             ceiling: the next thing the ensemble or the fit needs must come
 //             out of it first. No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 503 → 591 KB; new largestSpreadsheetWorkerKb 95 KB; the
+//             page ceiling (41 KB) and the calibration worker's (55 KB) are
+//             unchanged. The .xlsx run export (WP-1.28, issue #11): SheetJS
+//             CE 0.20.3 in its own module worker (workers/export.worker-*.js),
+//             loaded only when someone picks "Workbook (.xlsx)". Measured on
+//             the base fe150cb → this change: total 498 → 585 KB. The worker
+//             is 87 KB (112 KB with `import from 'xlsx'`; the export imports
+//             SheetJS's mini build, xlsx/dist/xlsx.mini.min, which reads and
+//             writes .xlsx without the legacy formats and codepages). Page
+//             code grows 1.0 KB: the Download menu's workbook item, progress
+//             and Cancel (+0.6 KB in its chunk) and the 0.5 KB lazy runner
+//             that starts the worker; no page chunk imports SheetJS (the
+//             largest chunk is still the Runs tab, 39 KB). The in-browser
+//             workbook import (WP-1.31) will share the 95 KB ceiling; it
+//             reads .xlsm, so it may need the full build: measure it then.
+//             Headroom ~6 KB total, ~8 KB on the spreadsheet worker.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -169,14 +194,17 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 503,
+	totalCodeKb: 591,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
+	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });
 
 /** A Web Worker bundle (Vite emits them under `workers/`). */
 const WORKER = /(^|\/)workers\//;
+/** A spreadsheet worker: lib/spreadsheet's export.worker.ts / import.worker.ts (Vite names the bundle after the source). */
+const SPREADSHEET_WORKER = /(^|\/)workers\/(export|import)\.worker-[^/]*$/;
 
 const CODE = /\.(m?js|css)$/;
 
@@ -191,12 +219,15 @@ export function measure(files) {
 	let codeCount = 0;
 	let largestChunk = { path: '', gzipBytes: 0 };
 	let largestWorker = { path: '', gzipBytes: 0 };
+	let largestSpreadsheetWorker = { path: '', gzipBytes: 0 };
 	let largestAsset = { path: '', gzipBytes: 0 };
 	for (const f of files) {
 		if (CODE.test(f.path)) {
 			codeBytes += f.gzipBytes;
 			codeCount += 1;
-			if (WORKER.test(f.path)) {
+			if (SPREADSHEET_WORKER.test(f.path)) {
+				if (f.gzipBytes > largestSpreadsheetWorker.gzipBytes) largestSpreadsheetWorker = f;
+			} else if (WORKER.test(f.path)) {
 				if (f.gzipBytes > largestWorker.gzipBytes) largestWorker = f;
 			} else if (f.gzipBytes > largestChunk.gzipBytes) largestChunk = f;
 		} else if (f.gzipBytes > largestAsset.gzipBytes) {
@@ -209,6 +240,7 @@ export function measure(files) {
 		totalCodeKb: kb(codeBytes),
 		largestChunk: { path: largestChunk.path, kb: kb(largestChunk.gzipBytes) },
 		largestWorker: { path: largestWorker.path, kb: kb(largestWorker.gzipBytes) },
+		largestSpreadsheetWorker: { path: largestSpreadsheetWorker.path, kb: kb(largestSpreadsheetWorker.gzipBytes) },
 		largestAsset: { path: largestAsset.path, kb: kb(largestAsset.gzipBytes) },
 	};
 }
@@ -237,6 +269,11 @@ export function violations(m, budget = BUDGET) {
 	if (m.largestWorker.kb > budget.largestWorkerKb) {
 		out.push(
 			`Web Worker ${m.largestWorker.path} is ${m.largestWorker.kb} KB, over the ${budget.largestWorkerKb} KB per-worker budget. A worker ships its own copy of what it imports; check a new import is needed there before raising the ceiling.`,
+		);
+	}
+	if (m.largestSpreadsheetWorker.kb > budget.largestSpreadsheetWorkerKb) {
+		out.push(
+			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. It carries SheetJS; check a new import (or the full SheetJS build) is needed before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
@@ -270,6 +307,7 @@ function main() {
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${BUDGET.totalCodeKb} KB`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${BUDGET.largestChunkKb} KB`],
 		[`Largest worker (${m.largestWorker.path || 'none'})`, `${m.largestWorker.kb} KB`, `${BUDGET.largestWorkerKb} KB`],
+		[`Largest spreadsheet worker (${m.largestSpreadsheetWorker.path || 'none'})`, `${m.largestSpreadsheetWorker.kb} KB`, `${BUDGET.largestSpreadsheetWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${BUDGET.largestAssetKb} KB`],
 	];
 	for (const [what, size, budget] of rows) console.log(`${what}: ${size} (budget ${budget})`);

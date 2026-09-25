@@ -12,9 +12,19 @@ export interface DailyWindow {
 export interface DownloadItem {
 	/** Menu text, e.g. "Daily series — Farm 1 (CSV)". */
 	label: string;
+	/** What to fetch; for a workbook, a unique key (it is built in the browser, not downloaded). */
 	url: string;
 	/** Optional second line under the label. */
 	hint?: string;
+	/** Build this run's .xlsx workbook in a Web Worker instead of fetching `url` ($lib/spreadsheet/export). */
+	workbook?: WorkbookRequest;
+}
+
+/** What the workbook export worker needs to fetch a run. */
+export interface WorkbookRequest {
+	apiBase: string;
+	projectId: string;
+	runId: string;
 }
 
 export function exportUrls(baseUrl: string) {
@@ -28,6 +38,13 @@ export function exportUrls(baseUrl: string) {
 		return s ? `?${s}` : '';
 	};
 	return {
+		/** The API base these URLs are built on (the workbook worker builds its own from it). */
+		apiBase: base,
+		/** A run with its summary, settings and model snapshot, and its series list. */
+		run: (projectId: string, runId: string) => `${p(projectId)}/runs/${enc(runId)}`,
+		/** Every series of one node (the catchment's when `nodeId` is null), from day `offset` (docs/api.md § Bulk run series). */
+		runBulk: (projectId: string, runId: string, nodeId: string | null = null, offset = 0) =>
+			`${p(projectId)}/runs/${enc(runId)}/series/bulk${query({ nodeId, offset: offset ? String(offset) : null })}`,
 		/** Every daily series of one node, or of the catchment when `nodeId` is null. */
 		runDaily: (projectId: string, runId: string, nodeId: string | null = null, w: DailyWindow = {}) =>
 			`${p(projectId)}/runs/${enc(runId)}/export/daily.csv${query({ nodeId, from: w.from, to: w.to })}`,
@@ -42,8 +59,9 @@ export function exportUrls(baseUrl: string) {
 export type ExportUrls = ReturnType<typeof exportUrls>;
 
 /**
- * Menu entries for one run: the summary sheet, the catchment table, then one
- * daily table per node (in the order given — pass them in network order).
+ * Menu entries for one run: the whole-run workbook, the summary sheet, the
+ * catchment table, then one daily table per node (in the order given — pass
+ * them in network order).
  */
 export function runDownloadItems(
 	urls: ExportUrls,
@@ -52,6 +70,12 @@ export function runDownloadItems(
 	nodes: readonly { id: string; name: string }[] = []
 ): DownloadItem[] {
 	return [
+		{
+			label: 'Workbook (.xlsx)',
+			url: `workbook:${urls.run(projectId, runId)}`,
+			hint: 'Every table in one file: summary, daily sheets per node, curtailment, EWR grid, inputs',
+			workbook: { apiBase: urls.apiBase, projectId, runId }
+		},
 		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-farm table, catchment and calibration' },
 		{ label: 'Daily series — catchment (CSV)', url: urls.runDaily(projectId, runId), hint: 'Natural flow, outflow, EWR, rain…' },
 		...nodes.map((n) => ({ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) }))

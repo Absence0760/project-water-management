@@ -14,6 +14,10 @@ describe('exportUrls', () => {
 		expect(urls.runSummary(P, R)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/export/summary.csv`);
 		expect(urls.series(P, 'abc')).toBe(`http://localhost:3001/projects/${P}/series/abc/export.csv`);
 		expect(urls.project(P)).toBe(`http://localhost:3001/projects/${P}/export.json`);
+		expect(urls.run(P, R)).toBe(`http://localhost:3001/projects/${P}/runs/${R}`);
+		expect(urls.runBulk(P, R)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/series/bulk`);
+		expect(urls.runBulk(P, R, N, 6225)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/series/bulk?nodeId=${N}&offset=6225`);
+		expect(urls.apiBase).toBe('http://localhost:3001');
 	});
 
 	it('adds only the window bounds that are set', () => {
@@ -28,18 +32,23 @@ describe('exportUrls', () => {
 });
 
 describe('runDownloadItems', () => {
-	it('lists summary, catchment and one entry per node in the given order', () => {
+	it('lists the workbook, summary, catchment and one entry per node in the given order', () => {
 		const items = runDownloadItems(exportUrls('/api'), P, R, [
 			{ id: N, name: 'Upper farm' },
 			{ id: 'n2', name: 'Gauge' }
 		]);
 		expect(items.map((i) => i.label)).toEqual([
+			'Workbook (.xlsx)',
 			'Run summary (CSV)',
 			'Daily series — catchment (CSV)',
 			'Daily series — Upper farm (CSV)',
 			'Daily series — Gauge (CSV)'
 		]);
-		expect(items[2]!.url).toContain(`nodeId=${N}`);
+		expect(items[3]!.url).toContain(`nodeId=${N}`);
+		// The workbook is built in the browser from the API, not downloaded.
+		expect(items[0]!.workbook).toEqual({ apiBase: '/api', projectId: P, runId: R });
+		expect(new Set(items.map((i) => i.url)).size).toBe(items.length);
+		expect(items.slice(1).every((i) => i.workbook === undefined)).toBe(true);
 	});
 });
 

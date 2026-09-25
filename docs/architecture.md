@@ -119,6 +119,23 @@ and then a catchment’s cold open grows by about 23 KB, because a shared
 chunk carries the code of all its importers. A one-off download when a fit
 starts costs less than that on every open.
 
+The `.xlsx` run export has a worker of its own
+(`lib/spreadsheet/export/export.worker.ts`, 87 KB gzip), because it carries
+SheetJS: a spreadsheet library in a page chunk would cost every visitor more
+than the whole workspace page. Nothing on a page imports it. The Download
+menu's "Workbook (.xlsx)" item dynamically imports a 0.5 KB runner
+(`lib/spreadsheet/export/runner.ts`), which starts the worker with
+`new Worker(new URL('./export.worker.ts', import.meta.url), { type: 'module' })`:
+a same-origin script, so the CSP's `worker-src 'self'` allows it (no `blob:`
+workers; `infra/scripts/check-csp.mjs` passes on the build). The worker does
+the fetching (one bulk request per node, [api.md § Bulk run
+series](./api.md#bulk-run-series)) and the building, posts progress per node,
+and transfers the finished file back; Cancel terminates it. It imports
+SheetJS's mini build (`xlsx/dist/xlsx.mini.min`: `.xlsx` without the legacy
+formats and codepages, 87 KB instead of 112 KB). The bundle guard gives
+spreadsheet workers (`export.worker`, and later the workbook import's
+`import.worker`) their own ceiling, apart from the calibration worker's.
+
 The trade-off: split chunks compress a little worse than one big chunk, so the
 total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
 catchment downloading about 85 KB (gzip) instead of about 300 KB. The bundle
