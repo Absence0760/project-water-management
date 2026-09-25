@@ -555,6 +555,15 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     measure the CMA wants, or % of time from daily flows as well? And should
     the daily EWR charge and curtailment follow the rule table's requirement
     instead of the pragmatic EWR?
+18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
+    criteria (engine 0.26.0, model.md §2.10d), defaults to confirm.* Is a
+    parameter set behavioural at KGE′ ≥ 0.5 on the first half of the record,
+    with a low-flow FDC bias within ±50 % and a WR2012 flag no worse than
+    *query*? Is ±0.1 the right spread for the monthly pan coefficient, and is
+    CHIRPS alone a fair second rain source for this catchment? Are 300
+    Latin-hypercube members enough, and should the ensemble sample the typical
+    or the wide bounds when the fit used wide ones? What coverage of the
+    held-out half would the CMA accept (the app warns below 70 %)?
 
 ### Product
 
