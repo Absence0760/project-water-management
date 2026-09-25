@@ -1,0 +1,130 @@
+// CHIRPS v3 daily rainfall and the CHIRPS-GEFS v3 16-day forecast, from the
+// UCSB Climate Hazards Center's public file server. Both are daily global
+// GeoTIFFs on the same 0.05° grid (sources/tiff.ts reads the few pixels a
+// feed needs with range requests).
+//
+// Layout, checked against https://data.chc.ucsb.edu/products/ (2026-09):
+//   CHIRPS final:   CHIRPS/v3.0/daily/final/sat/YYYY/chirps-v3.0.sat.YYYY.MM.DD.tif
+//                   (monthly, complete by about the third week of the next month)
+//   CHIRPS prelim:  CHIRPS/v3.0/daily/prelim/sat/YYYY/chirps-v3.0.prelim.YYYY.MM.DD.tif
+//                   (two days after each pentad ends)
+//   GEFS forecast:  CHIRPS-GEFS/v3/daily/global/YYYY/MM/DD/c3g_YYYY.MM.DD.tif
+//                   (the directory is the issue date, ~08:30 UTC; 16 files,
+//                   one per forecast day from the issue date)
+// "sat" is CHIRPS v3 disaggregated to days with IMERG, the only daily
+// preliminary product (the ERA5 "rnl" one lags 5–6 days and has no prelim).
+// Units are mm/day; the sea is -9999.
+import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { FeedFormatError } from '../errors.js';
+import type { FeedHttp } from '../http.js';
+import { openGrid, readPoints } from './tiff.js';
+
+export const CHC_BASE = 'https://data.chc.ucsb.edu/products';
+
+const dotted = (iso: string) => iso.replaceAll('-', '.');
+
+export const chirpsFinalUrl = (iso: string) => `${CHC_BASE}/CHIRPS/v3.0/daily/final/sat/${iso.slice(0, 4)}/chirps-v3.0.sat.${dotted(iso)}.tif`;
+export const chirpsPrelimUrl = (iso: string) => `${CHC_BASE}/CHIRPS/v3.0/daily/prelim/sat/${iso.slice(0, 4)}/chirps-v3.0.prelim.${dotted(iso)}.tif`;
+export const gefsUrl = (issued: string, day: string) =>
+	`${CHC_BASE}/CHIRPS-GEFS/v3/daily/global/${issued.slice(0, 4)}/${issued.slice(5, 7)}/${issued.slice(8, 10)}/c3g_${dotted(day)}.tif`;
+
+/** Forecast days per GEFS issue. */
+export const GEFS_DAYS = 16;
+
+export interface Cell {
+	lat: number;
+	lon: number;
+	weight: number;
+}
+
+/**
+ * The weighted mean over `cells` of one grid file, or null when the file
+ * isn't published (404). A cell over the sea, or outside the grid, is a
+ * configuration error and fails the fetch rather than skewing the mean.
+ */
+export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell[]): Promise<number | null> {
+	const read = (start: number, end: number) => http.range(url, start, end);
+	const grid = await openGrid(read);
+	if (!grid) return null;
+	const values = await readPoints(read, grid, cells);
+	let sum = 0;
+	let weights = 0;
+	values.forEach((v, i) => {
+		const c = cells[i]!;
+		if (v === null) throw new FeedFormatError(`the grid has no data at ${c.lat}, ${c.lon} (the sea, or outside the product’s coverage)`);
+		if (v < 0 || v > 2000) throw new FeedFormatError(`the grid has an implausible rainfall of ${v} mm at ${c.lat}, ${c.lon}`);
+		sum += v * c.weight;
+		weights += c.weight;
+	});
+	// Rainfall to 0.01 mm: the product's own precision is far coarser.
+	return Math.round((sum / weights) * 100) / 100;
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight, keeping order. */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
+	const out = new Array<R>(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const i = next++;
+			out[i] = await fn(items[i]!, i);
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+	return out;
+}
+
+export interface GridDays {
+	startDate: string;
+	values: (number | null)[];
+	/** Days read from the preliminary product (the rest are final). */
+	prelimDays: number;
+}
+
+/**
+ * CHIRPS for each day of [start, end]: the final value where it is out, else
+ * the preliminary one, else null. Trailing days with neither are dropped (not
+ * published yet); a day missing between published ones stays null.
+ */
+export async function fetchChirps(http: FeedHttp, cells: readonly Cell[], start: string, end: string, concurrency = 6): Promise<GridDays> {
+	const s = toEpochDay(start);
+	const days = Array.from({ length: Math.max(0, toEpochDay(end) - s + 1) }, (_, i) => fromEpochDay(s + i));
+	const got = await mapLimit(days, concurrency, async (day) => {
+		const final = await gridMean(http, chirpsFinalUrl(day), cells);
+		if (final !== null) return { v: final, prelim: false };
+		const prelim = await gridMean(http, chirpsPrelimUrl(day), cells);
+		return { v: prelim, prelim: prelim !== null };
+	});
+	let last = got.length - 1;
+	while (last >= 0 && got[last]!.v === null) last--;
+	const kept = got.slice(0, last + 1);
+	return { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length };
+}
+
+export interface Forecast {
+	issued: string;
+	startDate: string;
+	values: (number | null)[];
+}
+
+/**
+ * The newest CHIRPS-GEFS forecast issued on `today` or the day before (the
+ * day's issue appears around 08:30 UTC), or null when neither is out.
+ */
+export async function fetchGefs(http: FeedHttp, cells: readonly Cell[], today: string, concurrency = 6): Promise<Forecast | null> {
+	for (const back of [0, 1]) {
+		const issued = fromEpochDay(toEpochDay(today) - back);
+		const first = await gridMean(http, gefsUrl(issued, issued), cells);
+		if (first === null) continue;
+		const rest = await mapLimit(
+			Array.from({ length: GEFS_DAYS - 1 }, (_, i) => fromEpochDay(toEpochDay(issued) + i + 1)),
+			concurrency,
+			(day) => gridMean(http, gefsUrl(issued, day), cells)
+		);
+		// A partly published issue: keep the leading days that are out.
+		const values = [first, ...rest];
+		const cut = values.indexOf(null);
+		return { issued, startDate: issued, values: cut === -1 ? values : values.slice(0, cut) };
+	}
+	return null;
+}

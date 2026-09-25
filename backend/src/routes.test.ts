@@ -40,6 +40,15 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/runs/:runId/series/bulk')).toBe(false);
 	});
 
+	// The data feeds (WP-2.10): auth-gated like every project route.
+	it('inventories the feed routes as auth-gated', () => {
+		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now'];
+		for (const r of feeds) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { jobTransport, parseWorkerMessage, wakeMessage, wakeWorker } from './transport.js';
+import { feedFetcher, jobTransport, MAX_MESSAGE_BYTES, parseFetchRequest, parseWorkerMessage, sendToQueue, wakeMessage, wakeWorker } from './transport.js';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -31,6 +31,46 @@ describe('the SQS message shape', () => {
 		for (const body of ['not json', 'null', '{}', JSON.stringify({ v: 2, type: 'wake', jobId: id }), JSON.stringify({ v: 1, type: 'fetch', jobId: id }), JSON.stringify({ v: 1, type: 'wake', jobId: 7 })]) {
 			expect(parseWorkerMessage(body)).toBeNull();
 		}
+	});
+});
+
+describe('the data-feed messages (fetch-requests / ingest-results)', () => {
+	const ids = { fetchJobId: '00000000-0000-4000-8000-000000000002', feedId: '00000000-0000-4000-8000-000000000003', feedVersion: '2026-09-25T06:00:00.000000' };
+	const request = { source: 'dws', config: { station: 'X0H000' }, start: '2026-01-01', end: '2026-09-25', today: '2026-09-25' };
+
+	it('parses a fetch request, and refuses a malformed or mismatched one', () => {
+		const m = { v: 1, type: 'fetch', ...ids, request };
+		expect(parseFetchRequest(JSON.stringify(m))).toEqual(m);
+		for (const bad of [
+			{ ...m, v: 2 },
+			{ ...m, fetchJobId: 'x' },
+			{ ...m, request: { ...request, config: { cells: [] } } },
+			{ ...m, request: { ...request, start: '2026-13-01' } },
+			{ ...m, extra: 1 }
+		]) {
+			expect(parseFetchRequest(JSON.stringify(bad))).toBeNull();
+		}
+		expect(parseFetchRequest('garbage')).toBeNull();
+	});
+
+	it('the worker understands an ingest result (its result is validated later, by the job) and still drops the unknown', () => {
+		const m = { v: 1, type: 'ingest', ...ids, result: { ok: false, error: 'x' } };
+		expect(parseWorkerMessage(JSON.stringify(m))).toEqual(m);
+		expect(parseWorkerMessage(JSON.stringify({ ...m, feedId: 'not-a-uuid' }))).toBeNull();
+		expect(parseWorkerMessage(JSON.stringify({ ...m, type: 'fetch' }))).toBeNull();
+		// Over SQS's 256 KB: can't have come from SQS, never parsed.
+		expect(parseWorkerMessage(JSON.stringify({ ...m, result: 'x'.repeat(MAX_MESSAGE_BYTES) }))).toBeNull();
+	});
+
+	it('FEED_FETCHER defaults to inline (local-first) and knows only inline and sqs', () => {
+		expect(feedFetcher(undefined)).toBe('inline');
+		expect(feedFetcher('sqs')).toBe('sqs');
+		expect(() => feedFetcher('lambda')).toThrow(/unknown FEED_FETCHER/);
+	});
+
+	it('sendToQueue refuses without a queue URL, and a message over the SQS limit, before any AWS call', async () => {
+		await expect(sendToQueue(undefined, 'FETCH_REQUESTS_QUEUE_URL', {})).rejects.toThrow('FETCH_REQUESTS_QUEUE_URL is not set');
+		await expect(sendToQueue('https://sqs.example/q', 'Q', { x: 'y'.repeat(MAX_MESSAGE_BYTES) })).rejects.toThrow(/larger than SQS allows/);
 	});
 });
 

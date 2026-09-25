@@ -4,6 +4,8 @@ import type { TickResult } from './jobs/runner.js';
 const tick: TickResult = { purged: 1, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 } };
 const runTick = vi.fn(async (_o?: unknown) => tick);
 vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
+const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
+vi.mock('./feeds/schedule.js', () => ({ acceptIngestResult: (m: unknown) => acceptIngestResult(m) }));
 
 const { handler, metricLine, METRIC_NAMESPACE } = await import('./lambda-worker.js');
 
@@ -43,6 +45,34 @@ describe('handler', () => {
 		// Never less than 10 s of budget.
 		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000 });
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'job_message_ignored', messageId: 'm2' }));
+	});
+
+	it('queues each ingest-results message as a feed_ingest job before the tick, and logs one it drops', async () => {
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const msg = {
+			v: 1,
+			type: 'ingest',
+			fetchJobId: '00000000-0000-4000-8000-000000000002',
+			feedId: '00000000-0000-4000-8000-000000000003',
+			feedVersion: 'v1',
+			result: { ok: true, startDate: '2026-01-01', values: [1], meta: {} }
+		};
+		acceptIngestResult.mockResolvedValueOnce('queued').mockResolvedValueOnce('unknown_fetch');
+		await handler({ Records: [{ messageId: 'm1', body: JSON.stringify(msg) }, { messageId: 'm2', body: JSON.stringify(msg) }] } as never);
+		expect(acceptIngestResult).toHaveBeenCalledTimes(2);
+		expect(acceptIngestResult).toHaveBeenCalledWith(msg);
+		expect(runTick).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'feed_result_dropped', messageId: 'm2', reason: 'unknown_fetch' }));
+		acceptIngestResult.mockClear();
+	});
+
+	it('fails the batch when an ingest result can’t be queued (database down), so SQS retries it', async () => {
+		acceptIngestResult.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+		const body = JSON.stringify({ v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000002', feedId: '00000000-0000-4000-8000-000000000003', feedVersion: 'v1', result: {} });
+		await expect(handler({ Records: [{ messageId: 'm1', body }] } as never)).rejects.toThrow('ECONNREFUSED');
+		expect(runTick).not.toHaveBeenCalled();
+		acceptIngestResult.mockClear();
 	});
 
 	it('lets a failed tick throw, so SQS retries the batch (and dead-letters it after 5)', async () => {
