@@ -56,14 +56,15 @@ describe('runDownloadItems', () => {
 	it('adds the two all-farms fragmentation tables after the catchment when the run has farms', () => {
 		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], true);
 		expect(items.map((i) => i.label)).toEqual([
+			'Workbook (.xlsx)',
 			'Run summary (CSV)',
 			'Daily series — catchment (CSV)',
 			'Fragmented flow — all farms (CSV)',
 			'Fragmented EWR — all farms (CSV)',
 			'Daily series — Upper farm (CSV)'
 		]);
-		expect(items[2]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
-		expect(items[3]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`);
+		expect(items[3]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
+		expect(items[4]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`);
 	});
 });
 
