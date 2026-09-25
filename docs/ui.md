@@ -556,7 +556,16 @@ workbook's FarmTemplate order, the letter in each header
 balance check `[V]` next to outflow. **Fragmented flow — all farms** and
 **Fragmented EWR — all farms** (only when the run has farms) put one series
 of every farm side by side, a date column then a column per farm, like
-the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. The **summary CSV** adds the self-checks,
+the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. Each
+of the two has a **Preview** button beside it in the menu, which opens the
+table in a near full-screen dialog (`export/DailyTableDialog.svelte`, its own
+chunk): the dialog fetches the export and parses it (`lib/export/dailyTable.ts`),
+so it shows exactly the file, then **Download CSV** saves that same response.
+The header row and the date column stay in view, numbers are right-aligned
+under right-aligned headers (to the precision the charts use, `fmtReading`), a
+date prefix (2015, 2015-03) narrows the rows, and closing it returns focus to
+the Download button. Only the rows in view are rendered, as in the Data tab's
+preview. The **summary CSV** adds the self-checks,
 the water balance per water year and a column guide giving each letter's
 formula ([api.md § Export](./api.md)).
 

@@ -25,6 +25,17 @@ export function fmtNum(n: number | null | undefined, digits = 0, trim = false): 
 	return out === '-0' ? '0' : out;
 }
 
+/**
+ * One day's reading (a chart's hover value, a daily table's cell) with the
+ * decimals its size needs: 1234 → "1,234", 12.345 → "12.35", 0.0123 → "0.012",
+ * 0.00012 → "0.0001". Null/NaN → "–".
+ */
+export function fmtReading(v: number | null | undefined): string {
+	if (v == null || !Number.isFinite(v)) return '–';
+	const a = Math.abs(v);
+	return fmtNum(v, a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4);
+}
+
 /** 0.953 → "95.3%". */
 export function fmtPct(fraction: number | null | undefined, digits = 1): string {
 	if (fraction == null || !Number.isFinite(fraction)) return '–';

@@ -54,7 +54,7 @@ describe('runDownloadItems', () => {
 	});
 
 	it('adds the two all-farms fragmentation tables after the catchment when the run has farms', () => {
-		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], true);
+		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], {});
 		expect(items.map((i) => i.label)).toEqual([
 			'Workbook (.xlsx)',
 			'Run summary (CSV)',
@@ -65,6 +65,17 @@ describe('runDownloadItems', () => {
 		]);
 		expect(items[3]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
 		expect(items[4]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`);
+		// No preview hook, no Preview button.
+		expect(items.some((i) => i.preview)).toBe(false);
+	});
+
+	it('offers a preview on the two all-farms tables only, handing back which one', () => {
+		const asked: string[] = [];
+		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], { onPreview: (t) => asked.push(`${t.key} ${t.url}`) });
+		expect(items.filter((i) => i.preview).map((i) => i.label)).toEqual(['Fragmented flow — all farms (CSV)', 'Fragmented EWR — all farms (CSV)']);
+		items[4]!.preview!();
+		items[3]!.preview!();
+		expect(asked).toEqual([`ewr /api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`, `runoff /api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`]);
 	});
 });
 

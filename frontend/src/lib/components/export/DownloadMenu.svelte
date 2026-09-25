@@ -6,6 +6,10 @@
 	// An item with `workbook` builds the run's .xlsx in a Web Worker instead
 	// ($lib/spreadsheet/export, loaded on click so SheetJS never enters a page
 	// chunk), with progress per node and Cancel.
+	// An entry with `preview` also gets a Preview button beside it, which
+	// closes the menu and opens the in-page table (export/DailyTableDialog).
+	// Focus moves to the Download button first, so closing the dialog returns
+	// focus there rather than to a button inside the now-hidden list.
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { menuPlacement, placementStyle } from '$lib/export/menuPosition';
 	import type { DownloadItem, WorkbookRequest } from '$lib/export/urls';
@@ -153,11 +157,14 @@
 
 	<ul id={listId} class="list" hidden={!open} style={listStyle} bind:this={list}>
 		{#each items as item (item.url)}
-			<li>
+			<li class:has-preview={!!item.preview}>
 				<button type="button" class="item" onclick={() => get(item)} disabled={busy !== null} aria-busy={busy === item.url}>
 					<span class="label">{item.label}{busy === item.url ? ' — preparing…' : ''}</span>
 					{#if item.hint}<span class="hint">{item.hint}</span>{/if}
 				</button>
+				{#if item.preview}
+					<button type="button" class="btn btn-sm preview" aria-label="Preview {item.label}" onclick={() => (close(true), item.preview!())}>Preview</button>
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -213,6 +220,20 @@
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+	}
+	li.has-preview {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.preview {
+		flex: none;
+		margin-right: 0.25rem;
+	}
+	@media (max-width: 640px) {
+		.preview {
+			min-height: 44px;
+		}
 	}
 	.item:hover:not(:disabled),
 	.item:focus-visible {

@@ -13,7 +13,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import WaterStoryPanel from './WaterStoryPanel.svelte';
-	import { downloads, runDownloadItems } from '$lib/export';
+	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
@@ -37,6 +37,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
+	// The preview of an all-farms download (Download menu → Preview): its own chunk, fetched on first use.
+	const loadTableDialog = () => import('$lib/components/export/DailyTableDialog.svelte');
 
 	let {
 		projectId,
@@ -314,10 +316,17 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					projectId,
 					detail.run.id,
 					editor.model.nodes.map((n) => ({ id: n.id, name: n.name })),
-					detail.run.summary.farms.length > 0
+					detail.run.summary.farms.length > 0 ? { onPreview: previewFarmTable } : null
 				)
 			: []
 	);
+	// Download menu → Preview: the all-farms table in a dialog, mounted on first use and kept.
+	let tablePreview = $state<FarmTableItem | null>(null);
+	let tablePreviewOpen = $state(false);
+	function previewFarmTable(item: FarmTableItem) {
+		tablePreview = item;
+		tablePreviewOpen = true;
+	}
 </script>
 
 {#if canRun}
@@ -607,6 +616,19 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		{/if}
 	</div>
 </div>
+
+{#if tablePreview}
+	<Lazy load={loadTableDialog}>
+		{#snippet children(DailyTableDialog)}
+			<DailyTableDialog
+				bind:open={tablePreviewOpen}
+				title={tablePreview!.label.replace(/ \(CSV\)$/, '')}
+				url={tablePreview!.url}
+				description={tablePreview!.hint}
+			/>
+		{/snippet}
+	</Lazy>
+{/if}
 
 <style>
 	.evidence-line {
