@@ -4,7 +4,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { api, type Nomination, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
@@ -218,6 +218,18 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		onRunsChange?.(runs);
 	}
 
+	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
+	async function togglePin(r: RunMeta) {
+		actionError = null;
+		try {
+			const { pinned } = await api.runs.setPinned(projectId, r.id, !r.pinned);
+			runs = runs.map((x) => (x.id === r.id ? { ...x, pinned } : x));
+			onRunsChange?.(runs);
+		} catch (err) {
+			actionError = msg(err);
+		}
+	}
+
 	async function remove(r: RunMeta) {
 		if (!confirm(`Delete run "${r.label || fmtDate(r.createdAt, true)}"?`)) return;
 		actionError = null;
@@ -369,11 +381,22 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					{#each runs as r, i (r.id)}
 						<li class:active={r.id === selectedId}>
 							<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
-								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}{#if evidenceById.get(r.id) === 'current'}<span class="badge badge-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="badge" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}</span>
+								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}{#if evidenceById.get(r.id) === 'current'}<span class="badge badge-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="badge" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}{#if r.pinned}<span class="badge" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}</span>
 								<span class="meta">{r.startDate} → {r.endDate}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
 							</button>
-							{#if canRun && !evidenceById.has(r.id)}
+							{#if canRun}
+								<button
+									type="button"
+									class="btn btn-icon pin"
+									aria-pressed={!!r.pinned}
+									aria-label="Pin run {r.label || fmtDate(r.createdAt, true)}"
+									title={r.pinned ? 'Unpin: newer runs can push it out again' : `Pin: newer runs never push it out (at most ${PINNED_RUNS_MAX} per project)`}
+									onclick={() => togglePin(r)}
+									><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
+								>
+							{/if}
+							{#if canRun && !evidenceById.has(r.id) && !r.pinned}
 								<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
 							{/if}
 						</li>
@@ -765,6 +788,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	}
 	.runs .btn-icon {
 		margin: 0.45rem 0.3rem 0 0;
+	}
+	.pin svg {
+		fill: none;
+	}
+	.pin[aria-pressed='true'] {
+		color: var(--accent);
+	}
+	.pin[aria-pressed='true'] svg {
+		fill: currentColor;
 	}
 	.small {
 		font-size: 0.8rem;

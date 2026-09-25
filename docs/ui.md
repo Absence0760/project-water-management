@@ -661,6 +661,13 @@ value such as 250000.
   Viewing an older run, the header offers "go to latest".
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
+- **Pinned runs** (015_run_pinned). Each row has a pin toggle for editors
+  (`aria-pressed`, labelled "Pin run <label>"): a pinned run is badged
+  **Pinned**, is never pushed out by newer runs, and loses its ✕ until it is
+  unpinned. A project holds at most 10 pinned runs; pinning an 11th shows the
+  server's `409` reason in the tab's error. Viewers see the badge but no
+  toggle. The compare page's run pickers add "· pinned" to a pinned run's
+  option (read only).
 - **Summary** (the "Run summary" region): it opens with one to three plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve

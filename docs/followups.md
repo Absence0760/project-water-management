@@ -1048,7 +1048,10 @@ role and not before it.
   - per-node series overlay;
   - copies that remember their source nodes (renamed farms in a copy don't
     match);
-  - a value change is not isolated when the dates also changed.
+  - a value change is not isolated when the dates also changed;
+  - default side A to the newest pinned run (roadmap WP-1.11): the pickers
+    already mark pinned runs (015_run_pinned), but `compare/picker.ts`
+    `defaultPair` still takes the previous run.
 - **Export:**
   - `.xlsx` output, which needs a spreadsheet library (operator call; not the
     npm `xlsx` package);
@@ -1060,7 +1063,6 @@ role and not before it.
     account-squatting gap.
   - Is a 5-attempt, 1–15 min lockout acceptable, given anyone can lock another
     person's address that way?
-  - Should runs be pinnable, so a baseline survives the 20-run cap?
 - **Data ingestion:**
   - per-project API keys for logger feeds;
   - scheduled CHIRPS / DWS fetchers;

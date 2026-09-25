@@ -52,20 +52,31 @@ export function runsKeptPerProject(env: string | undefined = process.env.RUNS_KE
 	return env !== undefined && env.trim() !== '' && Number.isInteger(n) && n >= 1 ? n : DEFAULT_RUNS_KEPT;
 }
 
+/** Most pinned runs per project (the model_run_pin_limit trigger, 015_run_pinned.sql, enforces the same number). */
+export const PINNED_RUNS_PER_PROJECT_MAX = 10;
+
+/**
+ * True for a run the storage cap never trims and the DELETE route refuses, as
+ * a SQL expression over `model_run r`: one the evidence history names, now or
+ * before (010_run_nomination), or one an editor pinned (015_run_pinned). The
+ * single exemption path for both, so they can't drift apart.
+ */
+export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id))`;
+
 /**
  * Delete the project's oldest runs beyond the cap (run_series cascades).
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
  *
- * A run the evidence history names, now or before (010_run_nomination), is
- * never trimmed and doesn't count against the cap: the cap keeps the newest
- * `keep` runs that were never nominated.
+ * A kept run (RUN_KEPT_SQL: pinned, or nominated as evidence now or before)
+ * is never trimmed and doesn't count against the cap: the cap keeps the
+ * newest `keep` runs that are neither.
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
 			SELECT r.id FROM model_run r
-			WHERE r.project_id = $1 AND NOT EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id)
+			WHERE r.project_id = $1 AND NOT ${RUN_KEPT_SQL}
 			ORDER BY r.created_at DESC, r.id DESC OFFSET $2
 		) RETURNING id`,
 		[projectId, keep]
