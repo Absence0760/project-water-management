@@ -69,7 +69,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
-| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` |
+| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`) |
 | `network.tf` | VPC, 2 private subnets, security groups, Secrets Manager endpoint |
 | `rds.tf` | Subnet group, pg17 parameter group, log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
@@ -294,18 +294,20 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`** and `PUBLIC_SITE_URL`
-   as variables, and `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` as
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
+   `CLOUDFRONT_DOMAIN_NAME` (unused by the workflows) as variables, and
+   `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` (debugging only) as
    secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
-   to deploy while any of them is empty.
+   to deploy while any value that deploy reads is empty (`REQUIRED_CONFIG` in
+   each deploy workflow).
 9a. **Approval gate.** Confirm the `production` environment exists with you
    as a required reviewer:
    `gh api repos/Absence0760/project-water-management/environments/production --jq '.protection_rules'`.
    If not: `cd ~/github/templates && ./scripts/backfill-prod-environment.sh --apply`.
    Required reviewers need a **public** repo (or GitHub Pro/Team for a
    private one); the release preflight refuses to deploy without them.
-10. **First deploy:** backend first (it runs `001_init` and creates
-    `water_app`), then frontend, each by publishing a release
+10. **First deploy:** backend first (it applies every migration in
+    `backend/migrations` and creates `water_app`), then frontend, each by publishing a release
     ([docs/deployment.md § Releasing](../docs/deployment.md#releasing)):
     - `gh release create backend@0.1.0 --target main --title "Backend 0.1.0" --generate-notes`
     - once that deploy has finished: `gh release create web@0.1.0 --target main --title "Web 0.1.0" --generate-notes`
@@ -347,7 +349,7 @@ No AWS credentials are needed:
 That is `bin/check-infra.sh`: `terraform fmt -check -recursive`,
 `init -backend=false`, `validate`, and `terraform test`. CI runs the same
 script (`ci.yml` job `terraform`, which calls `terraform.yml`; part of the
-`CI gate`), plus a Trivy IaC scan. CI never plans against the real account;
+`CI gate`), plus an advisory Trivy IaC scan. CI never plans against the real account;
 [docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why. Terraform 1.15's
 `validate` checks the S3 backend's required `bucket`, so the script writes a
 gitignored `backend_override.tf` (local backend) for the run and deletes it
@@ -365,7 +367,9 @@ the least-privilege `ses:SendEmail` policy and the VPC endpoint; every alarm
 wired to SNS; the budget; the deploy policy having no wildcards; and the
 deploy role's trust postcondition, with negative runs for a branch subject, a
 `StringLike` wildcard and another repo (and a positive run for GitHub's
-immutable-claims subject).
+immutable-claims subject). Three more negative runs check that a short
+`auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
+`dmarc_policy` fail the plan.
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 
