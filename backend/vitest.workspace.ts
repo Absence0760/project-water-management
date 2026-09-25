@@ -1,9 +1,12 @@
 import { defineWorkspace } from 'vitest/config';
 
-// Two projects:
-//   unit — pure logic, no database (`pnpm test`).
+// Three projects:
+//   unit — pure logic, no database, no wall-clock assertions (`pnpm test`).
 //   db   — against real Postgres (`pnpm test:backend:db`, needs `pnpm dev:db:up`).
 //          globalSetup rebuilds the water_test database from migrations first.
+//   perf — timing budgets (`*.perf.test.ts`), run serially with a
+//          median-of-several sampling so a loaded machine doesn't produce a
+//          flake (`pnpm test:perf`, root `pnpm test:backend:perf`).
 export default defineWorkspace([
 	{
 		test: {
@@ -15,7 +18,7 @@ export default defineWorkspace([
 			// catchment, never asserting its figures); examples/catchments.test.ts
 			// holds the seeded example catchments to the current schema and engine.
 			include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
-			exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.test.ts']
+			exclude: ['node_modules/**', 'dist/**', 'src/**/*.db.test.ts', 'src/**/*.perf.test.ts']
 		}
 	},
 	{
@@ -26,6 +29,15 @@ export default defineWorkspace([
 			globalSetup: ['./src/__tests__/db-global-setup.ts'],
 			include: ['src/**/*.db.test.ts'],
 			// Tests share one database; run files serially.
+			fileParallelism: false
+		}
+	},
+	{
+		test: {
+			name: 'perf',
+			environment: 'node',
+			include: ['src/**/*.perf.test.ts'],
+			// Timing runs share the machine's CPU; don't let them race each other.
 			fileParallelism: false
 		}
 	}
