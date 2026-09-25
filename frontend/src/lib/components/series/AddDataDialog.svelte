@@ -83,7 +83,9 @@
 		background: var(--surface);
 		color: var(--text);
 		padding: 1.1rem 1.25rem 1.25rem;
-		width: min(560px, calc(100vw - 2 * var(--gutter)));
+		/* As Dialog.svelte: 100 % of the viewport, not 100vw (a classic scrollbar), and no browser cap. */
+		max-width: none;
+		width: min(560px, calc(100% - 2 * var(--gutter)));
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);

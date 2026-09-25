@@ -43,16 +43,22 @@
 		background: var(--surface);
 		color: var(--text);
 		padding: 1.25rem;
-		width: min(440px, calc(100vw - 2 * var(--gutter)));
+		/* 100 % of the viewport the modal sits in, not 100vw: vw includes a
+		   classic scrollbar (the page always shows one), so the dialog came
+		   out off-centre with uneven gutters. max-width: none drops the
+		   browser's own cap (calc(100% − 6px − 2em)), which made it narrower
+		   than the page gutter on a phone. */
+		max-width: none;
+		width: min(440px, calc(100% - 2 * var(--gutter)));
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
 	}
 	dialog.wide {
-		width: min(720px, calc(100vw - 2 * var(--gutter)));
+		width: min(720px, calc(100% - 2 * var(--gutter)));
 	}
 	dialog.full {
-		width: min(1600px, calc(100vw - 2 * var(--gutter)));
+		width: min(1600px, calc(100% - 2 * var(--gutter)));
 		height: calc(100vh - 2rem);
 		overflow: hidden;
 	}
