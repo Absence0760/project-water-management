@@ -172,6 +172,36 @@ personal copy (the Copy dialog says so).
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
   the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+- **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
+  **+ Add other user** (next to + Add node, in both layouts) adds a node of
+  kind *Other user* draining into the outlet, with no demand yet; any node's
+  Kind can also be switched to it. In the table a user's row shows "–" in
+  every farm column ("not used for an other water user"), and below the
+  network panel an **Other water users** panel lists each user (name, a
+  one-line summary: priority, mean demand, share returned, what it drains
+  into) with its **Priority** (senior: farms upstream pass its demand first;
+  junior: takes what reaches it), **Share returned** (%) and **demand per
+  month** (m³/day, Oct–Sep) with *Use October's demand for every month*
+  (`UserFields.svelte`, `users.ts`). The one-node form shows the same fields
+  under "Other water user" instead of the farm groups. The schematic draws a
+  user as an open diamond (legend "Other water user"). The client check
+  mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
+  return share in 0–100 %.
+- **Groundwater (boreholes)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
+  one-node form only (`detailOnly`), on farms and other users: borehole
+  capacity (m³/day, empty = none), **Borehole rule** (supplemental / primary /
+  drought), drought trigger (%), stream depletion (%) and depletion lag
+  (days). The client check refuses boreholes on a gauge and the drought rule
+  without a farm dam.
+- **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
+  one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
+  **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
+  each patch has a **Cover class**, **Area** (km²), **Condensed cover** (%)
+  and **Own reductions**, which replaces the class's indicative reductions
+  (shown otherwise) with two editable %s. Below the patches: the condensed
+  share of the farm, flagged when above 100 % (the run scales it down). The
+  field guide points table users to the one-node layout. Removing a farm
+  removes its patches (the confirm says how many).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
@@ -331,7 +361,7 @@ formula ([api.md § Export](./api.md)).
 
 - **On this page.** Under the intro, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
-  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-period`,
+  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
   `#set-quality`; listed by
   `settings/sections.ts`). It sticks under the app header down the long form
   and marks the group being read with `aria-current="location"`, using the
@@ -516,6 +546,34 @@ value such as 250000.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) a bar chart and the annual volume, and the
   curtailment reporting window.
+- **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
+  helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
+  Optional; with none, runs report days below the pragmatic EWR only. **Add a
+  rule table** starts one at the first EWR site without one (the outlet, then
+  each gauge in network order; a farm can't be a site); it is disabled once
+  every site has one, with a hint to add a gauge on the Network tab. Each
+  table (a group headed "Rule table at …") has the **EWR site**, the
+  required **Source**, what **the table covers** (total flow, or low flows
+  only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
+  **natural-flow percentile** comes from (the run's natural flow at the site,
+  the default, or the table's natural flows), a **scale** (1 unless the table
+  is for a different catchment size) and the **% points** (default 10, 20 …
+  90, 99; changing them keeps each value under its point and leaves a new
+  point blank). Then the **EWR** grid (Oct … Sep rows × one input per point,
+  each labelled "EWR, Oct, 10 %, Mm³"), and the **Natural flow** grid when the
+  table is the natural source. **Paste from a spreadsheet** takes the 12 month
+  rows copied from a spreadsheet (tabs), a CSV or a PDF (spaces), with or
+  without the heading row of % points (a range heading such as 0–10 is read as
+  its upper bound, and a note says so) and with or without month names in the
+  first column (any order; without them the rows are Oct … Sep); a comma
+  between digits in a tab- or semicolon-separated paste is a decimal comma.
+  **Fill the EWR values** / **Fill the natural flows** put it in the grid, and
+  a status line says what was read (or what is wrong: not 12 rows, a value
+  that isn't a number, a heading that doesn't match the rows). Plausibility
+  notes ("Check: the EWR rises with the % point in Jan …", an EWR above the
+  natural flow) show under the table without blocking Save; a missing source,
+  a bad point list or a blank cell, and two tables for one site, block Save
+  and the save bar links here. **Remove the rule table at …** deletes one.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
@@ -551,7 +609,11 @@ value such as 250000.
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Summary** (the "Run summary" region): headline cards give mean natural
-  flow and simulated outflow in m³/s and Mm³/a, EWR days not met, irrigation
+  flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
+  project has a Reserve rule table, a **Reserve rules met** card comes first:
+  the share of months met at the outlet, else the first site, with "X of Y
+  months", the longest run not met and a link to the panel; the days card is
+  then labelled "Days below the pragmatic EWR", the secondary measure), irrigation
   supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
   in plain words by `runs/rating.ts`), labelled **calibration period (in-sample)**: they are
   scored on the days the parameters were tuned on. When the parameters came
@@ -602,6 +664,17 @@ value such as 250000.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
+  flow invasive plants and forestry took, its share of natural flow, the
+  low-flow threshold, and per class the condensed area, reduction and mm/yr
+  over that area (`RunSummaryView.svelte`).
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
+  a table of each one's mean pumping, its share of what was supplied, and the
+  stream depletion it causes (`RunSummaryView.svelte`).
+- **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
+  under the farms with each user's priority, demand, taken, deficit, % of
+  demand supplied (flagged below 95 %), returned and EWR charge, whole-run
+  means (`RunSummaryView.svelte`).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -618,7 +691,11 @@ value such as 250000.
   storage charge gets a "store less / pass inflow X m³/day" badge; a farm
   whose EWR cut exceeds its equitable share gets a warning badge. *Demand left*
   is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
-  demand, "<1%" / ">99%" at the ends. Below it, the **EWR sites** table (outlet first, then
+  demand, "<1%" / ">99%" at the ends. When the run has other water users, an
+  **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
+  returned, EWR charge, the supply cut, and the charge left standing, with
+  "junior (curtailed)" or "senior (not curtailed)"; they are not in the
+  equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
@@ -689,7 +766,22 @@ value such as 250000.
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Then
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
-  EWR against outflow, the monthly EWR compliance grid (per farm, from engine
+  EWR against outflow, **Reserve compliance by month** when the run has a rule
+  table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
+  `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
+  when there are several, the method in one sentence and the table's source,
+  a verdict line ("Met in 18 of 24 months (75.0%); not met in 6.", with a
+  coloured edge and the words, never colour alone), a caution when a calendar
+  month has fewer than 10 years, four figures (months met, longest run not
+  met, deficit in Mm³ with the mean shortfall, the FDC check), a bar chart of
+  the share of months met per month of the year on a fixed 0–100 % axis with
+  each bar's value written above it, the same by month of the year as a table
+  (years, met, %, mean required and simulated flow in the table's unit, deficit,
+  FDC points met), and, collapsed, **Month by month**: every complete month's
+  natural flow, its condition (% exceedance, or wetter / drier than the table),
+  the requirement, the simulated flow, the share of the requirement and met or
+  not met (rows not met shaded). The daily requirement is the series
+  `ewr_rule` in the explorer and the daily CSV. Then the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the
   site picker), the **EWR test
   against observed flow** (`ewr/EwrAgreementTable.svelte`, `ewr/agreement.ts`;

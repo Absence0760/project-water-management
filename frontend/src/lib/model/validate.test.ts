@@ -123,4 +123,39 @@ describe('validateModel', () => {
 			'"A": the dam area can\'t be negative.'
 		]);
 	});
+
+	it('checks an other water user as the API does (WP-1.33)', () => {
+		const town: NetworkNode = { ...node('u', 'Town', 'g'), kind: 'user', userDemandM3Day: new Array(12).fill(10), userReturnPct: 0.5, userPriority: 'senior' };
+		expect(messages(model([node('g', 'Gauge', null), town, node('a', 'A', 'u')]))).toEqual([]);
+		const bad = model([node('g', 'Gauge', null), { ...town, userReturnPct: 2, userDemandM3Day: [1, -1] }, node('a', 'A', 'u')], {
+			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }],
+			cropAreas: [{ nodeId: 'u', cropId: 'c', areaM2: 100 }],
+			transfers: [{ id: 't', fromNodeId: 'a', toNodeId: 'u', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }]
+		});
+		expect(messages(bad)).toEqual([
+			'"Town": the share returned must be between 0% and 100%.',
+			'"Town": demand needs 12 monthly values, none negative.',
+			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
+			'"Town" is an other water user: transfers run between farm dams.'
+		]);
+	});
+
+	it('checks boreholes as the API does (WP-1.34)', () => {
+		const g = node('g', 'Gauge', null);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 100, streamDepletionFrac: 0.5 }]))).toEqual([]);
+		expect(messages(model([{ ...g, boreholeCapacityM3Day: 5 }, node('a', 'A', 'g')]))).toEqual(['"Gauge": a gauge can\'t have boreholes.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a farm dam to trigger on.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), streamDepletionFrac: 1.5, streamDepletionLagDays: -1 }]))).toEqual([
+			'"A": borehole capacity and depletion lag can\'t be negative.',
+			'"A": stream depletion and the drought trigger must be between 0% and 100%.'
+		]);
+	});
+
+	it('checks land cover as the API does (WP-1.35)', () => {
+		const g = node('g', 'Gauge', null);
+		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [p] }))).toEqual([]);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a farm, not a gauge.']);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, densityPct: 2 }] }))).toEqual(['Land cover on "A": area can\'t be negative, cover and reductions are 0–100%.']);
+	});
 });

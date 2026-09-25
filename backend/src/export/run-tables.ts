@@ -7,6 +7,7 @@ import {
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
 	GAUGE_COLUMNS,
+	USER_COLUMNS,
 	type RunSummary,
 	type WaterBalanceRow,
 	type Wr2012FlagLevel,
@@ -65,8 +66,8 @@ export function seriesKeyOrder(scope: 'catchment' | 'node') {
  * "Irrigation supplied [G] (m³/day)". The summary CSV's column guide gives
  * each letter's formula.
  */
-export function nodeColumnHeader(key: string, label: string, unit: string | null | undefined, kind: 'farm' | 'gauge'): string {
-	const letter = (kind === 'gauge' ? GAUGE_COLUMNS : FARM_DAILY_COLUMNS).find((c) => c.key === key)?.letter;
+export function nodeColumnHeader(key: string, label: string, unit: string | null | undefined, kind: 'farm' | 'gauge' | 'user'): string {
+	const letter = (kind === 'gauge' ? GAUGE_COLUMNS : kind === 'user' ? USER_COLUMNS : FARM_DAILY_COLUMNS).find((c) => c.key === key)?.letter;
 	const withLetter = letter ? `${label} [${letter}]` : label;
 	return unit ? `${withLetter} (${unit})` : withLetter;
 }
@@ -106,6 +107,12 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 	['avgEwrShortfallM3Day', 'Average EWR charge (m³/day)'],
 	['daysEwrNotMet', 'Days charged for the EWR']
 ];
+
+/** Farm summary columns only some runs have (a feature's own), labelled when present (WP-1.34). */
+const OPTIONAL_FARM_LABELS: Record<string, string> = {
+	avgGroundwaterM3Day: 'Average groundwater pumped (m³/day)',
+	avgBaseflowDepletionM3Day: 'Average stream depletion (m³/day)'
+};
 
 const CATCHMENT_ROWS: Record<string, string> = {
 	meanNaturalFlowM3Day: 'Mean natural flow (m³/day)',
@@ -327,7 +334,8 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
 
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
- * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
+ * details, the per-farm table, the catchment figures, the curtailment and EWR
+ * site tables, Reserve compliance, the CHIRPS bias factors,
  * the catchment rain treated as missing, the multi-day accumulations, the
  * double-mass check, calibration,
  * the WR2012 check, the column guide, warnings. The run details carry the run notes.
@@ -355,7 +363,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
 		(k) => !known.has(k) && farms.some((f) => scalar(f[k]) !== undefined)
 	);
-	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...extra]);
+	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)]);
 	for (const f of farms) {
 		yield csvRow([
 			String(f.name ?? ''),
@@ -370,9 +378,20 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* curtailmentLines(summary.curtailment);
+	if (summary.landCover) {
+		yield '';
+		yield* landCoverLines(summary.landCover);
+	}
+	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
+		yield '';
+		yield* otherUserLines(summary);
+	}
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
+	yield '';
+
+	yield* ewrAssuranceLines(summary.ewrAssurance);
 	yield '';
 
 	yield* waterBalanceLines(summary.waterBalance);
@@ -504,6 +523,70 @@ export function* ewrSiteLines(c: RunSummary['curtailment']): Generator<string> {
 	for (const s of c.ewrSites) yield csvRow([s.name, s.isOutlet ? 'yes' : 'no', s.farmCount, s.daysNotMet, s.shortfallM3Day, s.chargedM3Day, s.naturalM3Day]);
 }
 
+const RULE_UNIT_TEXT = { mcm: 'Mm³ per month', m3s: 'm³/s (mean over the month)' } as const;
+const RULE_UNIT_SHORT = { mcm: 'Mm³', m3s: 'm³/s' } as const;
+
+/**
+ * Monthly compliance with the Reserve's assurance rules at each EWR site with
+ * a rule table (engine ≥ 0.21.0, model.md §2.9c): the table's provenance and
+ * method, the headline (months met), the deficit and contiguity, the FDC
+ * check, then per month of the year and month by month. Flows are in the
+ * table's unit; deficits in m³.
+ */
+export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator<string> {
+	yield csvRow(['Reserve compliance by month (EWR rule tables)']);
+	if (!sites?.length) {
+		yield csvRow(['Not assessed: no EWR rule table in the settings the run used (or a run made before engine 0.21.0)']);
+		return;
+	}
+	for (const [i, r] of sites.entries()) {
+		if (i > 0) yield '';
+		const u = RULE_UNIT_SHORT[r.unit];
+		yield csvRow(['Site', r.name, r.isOutlet ? 'outlet' : 'gauge']);
+		yield csvRow(['Source', r.source]);
+		yield csvRow(['Covers', r.component === 'total' ? 'total flow (low and high flows)' : 'low flows only']);
+		yield csvRow(['Unit', RULE_UNIT_TEXT[r.unit]]);
+		yield csvRow(['Natural-flow percentile from', r.naturalSource === 'run' ? "the run's simulated natural flow at the site" : "the table's natural flows"]);
+		yield csvRow(['Scale applied to the table', r.scale]);
+		yield csvRow(['% points', ...r.points]);
+		const o = r.overall;
+		yield csvRow(['Months met', o.met, 'of', o.months, 'Met (%)', pct(o.rate) as Cell]);
+		yield csvRow(['Deficit over the run (m³)', o.deficitM3]);
+		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
+		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
+		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
+		yield csvRow(['Month', 'Complete years', 'Months met', 'Met (%)', 'Deficit (m³)', `Mean required (${u})`, `Mean simulated (${u})`, 'FDC points met']);
+		for (const m of r.byMonth) {
+			const fdcMet = m.fdc.filter((f) => f.met).length;
+			yield csvRow([
+				MONTH_NAMES[m.month - 1]!,
+				m.years,
+				m.met,
+				pct(m.rate) as Cell,
+				m.deficitM3,
+				m.meanRequired,
+				m.meanActual,
+				m.years ? `${fdcMet} of ${m.fdc.length}` : ''
+			]);
+		}
+		yield csvRow(['Year', 'Month', 'Water year', `Natural (${u})`, 'Natural condition (% exceedance)', 'Beyond the table', `Required (${u})`, `Simulated (${u})`, 'Met', 'Deficit (m³)']);
+		for (const m of r.months) {
+			yield csvRow([
+				m.year,
+				MONTH_NAMES[m.month - 1]!,
+				waterYearText(m.waterYear),
+				m.natural,
+				m.percentile,
+				m.beyond === 'wetter' ? 'wetter than the first point' : m.beyond === 'drier' ? 'drier than the last point' : '',
+				m.required,
+				m.actual,
+				m.met ? 'yes' : 'no',
+				m.deficitM3
+			]);
+		}
+	}
+}
+
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */
 export function* verificationLines(v: RunSummary['verification']): Generator<string> {
 	yield csvRow(['Self-checks']);
@@ -519,7 +602,8 @@ export function* verificationLines(v: RunSummary['verification']): Generator<str
 	}
 }
 
-const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | null][] = [
+/** A column marked optional appears only when some row has it (a term only some networks have, WP-1.33–1.35). */
+const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | null, optional?: true][] = [
 	['Days', (r) => r.days],
 	['Rain (mm)', (r) => r.rainMm],
 	['Natural flow (mm)', (r) => r.naturalFlowMm],
@@ -538,6 +622,10 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Transfers, net (m³)', (r) => r.transfersM3],
 	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
 	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
+	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
+	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
+	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],
+	['Runoff removed by land cover (m³)', (r) => r.landCoverReductionM3 ?? null, true],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
@@ -557,10 +645,12 @@ export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<st
 		return;
 	}
 	yield csvRow(['Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage + residual; the residual should be 0']);
-	yield csvRow(['Water year', ...BALANCE_COLUMNS.map(([h]) => h)]);
-	for (const r of [...wb.years, wb.total]) {
+	const rows = [...wb.years, wb.total];
+	const cols = BALANCE_COLUMNS.filter(([, f, optional]) => !optional || rows.some((r) => f(r) !== null));
+	yield csvRow(['Water year', ...cols.map(([h]) => h)]);
+	for (const r of rows) {
 		const year = r.waterYear === null ? 'Whole run' : `${r.waterYear}/${String((r.waterYear + 1) % 100).padStart(2, '0')}`;
-		yield csvRow([year, ...BALANCE_COLUMNS.map(([, f]) => f(r))]);
+		yield csvRow([year, ...cols.map(([, f]) => f(r))]);
 	}
 }
 
@@ -640,4 +730,40 @@ export function* columnGuideLines(): Generator<string> {
 	yield csvRow(['Farm daily columns (the daily CSV of a farm)']);
 	yield csvRow(['Column', 'Series', 'Formula']);
 	for (const c of FARM_DAILY_COLUMNS) yield csvRow([c.letter ?? '', c.key, c.formula]);
+}
+
+/**
+ * Other water users (engine ≥ 0.22.0, WP-1.33): the whole-run means, then the
+ * reporting window's EWR charge and whether it is curtailed (a senior user is
+ * not; docs/model.md §2.11). Only in runs that have users.
+ */
+export function* otherUserLines(summary: RunSummary): Generator<string> {
+	yield csvRow(['Other water users (whole run)']);
+	yield csvRow(['User', 'Priority', 'Average demand (m³/day)', 'Average taken (m³/day)', 'Average deficit (m³/day)', 'Demand supplied (%)', 'Average returned (m³/day)', 'Average EWR charge (m³/day)', 'Days charged for the EWR']);
+	for (const u of summary.users ?? []) {
+		yield csvRow([u.name, u.priority, u.avgDemandM3Day, u.avgSuppliedM3Day, u.avgDeficitM3Day, pct(u.fractionSupplied) as Cell, u.avgReturnedM3Day, u.avgEwrChargeM3Day, u.daysEwrNotMet]);
+	}
+	const rows = summary.curtailment?.otherUsers ?? [];
+	if (!rows.length) return;
+	yield '';
+	yield csvRow(['Other water users: EWR charge and curtailment (reporting window)']);
+	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day)']);
+	for (const r of rows) {
+		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, r.ewrChargeM3Day, r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, r.uncurtailedChargeM3Day]);
+	}
+	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
+}
+
+/**
+ * Land-cover streamflow reductions (engine ≥ 0.24.0, WP-1.35): the low-flow
+ * threshold, the total, and per class its condensed area, mean reduction and
+ * mm/yr over that area. Only in runs with land cover.
+ */
+export function* landCoverLines(lc: NonNullable<RunSummary['landCover']>): Generator<string> {
+	yield csvRow(['Land-cover streamflow reductions (invasive plants and forestry)']);
+	yield csvRow(['Low-flow threshold: natural flow exceeded 75 % of days (m³/day)', lc.lowFlowThresholdM3Day]);
+	yield csvRow(['Mean reduction (m³/day)', lc.reductionM3Day]);
+	yield csvRow(['Share of natural flow (%)', pct(lc.fractionOfNatural) as Cell]);
+	yield csvRow(['Cover class', 'Condensed area (km²)', 'Mean reduction (m³/day)', 'Reduction over the condensed area (mm/yr)']);
+	for (const c of lc.byClass) yield csvRow([c.coverClass, c.condensedKm2, c.reductionM3Day, c.mmPerYear]);
 }

@@ -10,6 +10,8 @@ import {
 } from './compare';
 import { defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary, type ZeroRainSettings } from './project';
 import { ewrAgreement } from './network/ewrAgreement';
+import { assessSite } from './reserve/assurance';
+import type { EwrRuleTable } from './reserve/rules';
 
 /** The accumulation fields as a run saved before engine 0.20.0 ran them: as recorded. */
 const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'asRecorded', keepReadings: [], addAccumulations: [] };
@@ -335,6 +337,48 @@ describe('diffInputs', () => {
 			'Rooikloof: dam seepage per day 0% → 0.2%',
 			'Dam evaporation factor (× A-pan): 0.75 → 0.6'
 		]);
+	});
+
+	it('lists an other water user added, and a change of its demand, return share and priority (WP-1.33)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const town = { ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), userReturnPct: 0.6, userPriority: 'senior' as const };
+		b.model.nodes.push(town);
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1,200 m³/day on average over the months, drains into Outlet)']);
+		const c = structuredClone(b);
+		const t = c.model.nodes.find((n) => n.name === 'Town')!;
+		t.userDemandM3Day![0] = 1500;
+		t.userReturnPct = 0.5;
+		t.userPriority = 'junior';
+		expect(texts(b, c)).toEqual(['Town: share returned 60% → 50%', 'Town: priority senior → junior', 'Town: demand Oct 1,200 → 1,500 m³/day']);
+		// A farm snapshot from before WP-1.33 (no user fields) diffs clean against one that has the defaults.
+		const d = structuredClone(a);
+		for (const n of d.model.nodes) Object.assign(n, { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+		expect(texts(a, d)).toEqual([]);
+	});
+
+	it('lists a farm’s boreholes added and their depletion changed (WP-1.34)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		Object.assign(f, { boreholeCapacityM3Day: 500, boreholeRule: 'primary', streamDepletionFrac: 0.4, streamDepletionLagDays: 10 });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: borehole capacity none → 500 m³/day',
+			'Rooikloof: borehole rule supplemental → primary',
+			'Rooikloof: stream depletion share 0% → 40%',
+			'Rooikloof: stream depletion lag 0 days → 10 days'
+		]);
+	});
+
+	it('lists land cover added to, changed on and cleared from a farm, by farm and class (WP-1.35)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		b.model.landCover = [{ id: 'l', nodeId: 'copy-f1', coverClass: 'invasive', areaKm2: 2, densityPct: 0.5, factors: null }];
+		expect(texts(a, b)).toEqual(['Land cover "invasive" added to Rooikloof (1 km² condensed)']);
+		const c = structuredClone(b);
+		c.model.landCover![0]!.densityPct = 0.25;
+		expect(texts(b, c)).toEqual(['Rooikloof: land cover "invasive" 1 km² → 0.5 km² condensed']);
+		expect(texts(b, a)).toEqual(['Land cover "invasive" removed from Rooikloof (was 1 km² condensed)']);
 	});
 
 	it('describes a dam raise on a copied project by farm name', () => {
@@ -778,5 +822,93 @@ describe('describeCalendarMonths', () => {
 		expect(describeCalendarMonths([1, 3, 4, 5])).toBe('Jan, Mar–May');
 		expect(describeCalendarMonths([])).toBe('no months');
 		expect(describeCalendarMonths([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe('all year');
+	});
+});
+
+describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
+	// Synthetic: two water years of flat natural flow at the 50 % point; B lets less through in the dry months.
+	const start = '2000-10-01';
+	const days = 366 + 365;
+	const rule = (over: Partial<EwrRuleTable> = {}): EwrRuleTable => ({
+		siteNodeId: null,
+		source: 'Synthetic',
+		component: 'total',
+		unit: 'mcm',
+		points: [10, 50, 90],
+		ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+		naturalSource: 'table',
+		natural: Array.from({ length: 12 }, () => [3, 2, 1]),
+		scale: 1,
+		...over
+	});
+	const site = (share: number, over: { nodeId?: string | null; name?: string; isOutlet?: boolean; table?: EwrRuleTable } = {}) => {
+		const d0 = Date.UTC(2000, 9, 1) / 86_400_000;
+		const natural = Float64Array.from({ length: days }, (_, t) => {
+			const d = new Date((d0 + t) * 86_400_000);
+			return 2e6 / new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+		});
+		const impacted = natural.map((v, t) => {
+			const m = new Date((d0 + t) * 86_400_000).getUTCMonth() + 1;
+			return [1, 2, 3].includes(m) ? v * share : v;
+		});
+		return assessSite(start, days, { table: over.table ?? rule(), nodeId: over.nodeId ?? null, name: over.name ?? 'Outlet', isOutlet: over.isOutlet ?? true, natural, impacted }).report;
+	};
+
+	it('is null when neither run has a rule table', () => {
+		expect(compareRuns(run(summary([])), run(summary([]))).ewrAssurance).toBeNull();
+	});
+
+	it('compares each site’s months met, deficit, contiguity and months of the year', () => {
+		// A: every month meets the 1 Mm³ requirement (all at 60 %); B: Jan–Mar at 40 %, so 6 months short.
+		const a = site(0.6);
+		const b = site(0.4);
+		const [row] = compareRuns(run(summary([], { ewrAssurance: [a] })), run(summary([], { ewrAssurance: [b] }))).ewrAssurance!;
+		expect(row).toMatchObject({ name: 'Outlet', isOutlet: true, onlyIn: null, tableChanged: false });
+		expect(row!.rate).toEqual({ a: 1, b: 18 / 24, delta: expect.closeTo(-0.25, 12) });
+		expect(row!.monthsNotMet).toEqual({ a: 0, b: 6, delta: 6 });
+		expect(row!.longestNotMetRun.b).toBe(3);
+		expect(row!.deficitM3.b).toBeCloseTo(6 * 0.2e6, 3);
+		// Jan is water-year month 3.
+		expect(row!.byMonth[3]).toEqual({ a: 1, b: 0, delta: -1 });
+		expect(row!.byMonth[0]).toEqual({ a: 1, b: 1, delta: 0 });
+	});
+
+	it('matches a gauge by id, then by name across a copy; flags a site in one run only and a changed table', () => {
+		const out = site(1);
+		const g = site(1, { nodeId: 'g1', name: 'Mid gauge', isOutlet: false });
+		const gCopy = site(0.4, { nodeId: 'copy-g1', name: 'Mid gauge', isOutlet: false, table: rule({ scale: 0.5 }) });
+		const rows = compareRuns(run(summary([], { ewrAssurance: [out, g] })), run(summary([], { ewrAssurance: [gCopy] }))).ewrAssurance!;
+		expect(rows.map((r) => [r.name, r.onlyIn, r.tableChanged])).toEqual([
+			['Outlet', 'a', false],
+			['Mid gauge', null, true]
+		]);
+		expect(rows[0]!.rate).toEqual({ a: 1, b: null, delta: null });
+	});
+
+	it('lists rule tables added, removed and changed in the inputs, by site name', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.ewrRules = [rule(), rule({ siteNodeId: 'g', source: 'Gauge table', naturalSource: 'run', natural: null })];
+		expect(texts(a, b)).toEqual([
+			'EWR rule table at the outlet added ("Synthetic", 3 % points, natural percentile from the table)',
+			'EWR rule table at Outlet added ("Gauge table", 3 % points, natural percentile from the run)'
+		]);
+		const c = structuredClone(b);
+		c.settings.ewrRules![0]!.ewr[3] = [1.4, 1, 0.5];
+		c.settings.ewrRules![0]!.natural![7] = [3, 2, 0.9];
+		c.settings.ewrRules![0]!.unit = 'm3s';
+		c.settings.ewrRules![0]!.scale = 2;
+		c.settings.ewrRules!.pop();
+		expect(texts(b, c)).toEqual([
+			'EWR rule table at Outlet removed (was "Gauge table")',
+			'EWR rule table at the outlet: unit Mm³ per month → m³/s',
+			'EWR rule table at the outlet: scale 1 → 2',
+			'EWR rule table at the outlet: EWR values changed in Jan',
+			'EWR rule table at the outlet: natural flows changed in May'
+		]);
+		// A run saved before rule tables (no key) compares like none.
+		const old = structuredClone(a);
+		delete (old.settings as Record<string, unknown>).ewrRules;
+		expect(texts(old, a)).toEqual([]);
 	});
 });

@@ -1,11 +1,13 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { IRRIGATION_SYSTEMS, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, isPct, NODE_FIELDS, systemOf, type NodeField } from './fields';
+	import { damHints, GROUPS, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import UserFields from './UserFields.svelte';
+	import LandCoverFields from './LandCoverFields.svelte';
 
 	let {
 		node,
@@ -16,7 +18,10 @@
 		onmove,
 		canMoveUp = false,
 		canMoveDown = false,
-		onmakeoutlet
+		onmakeoutlet,
+		landCover = [],
+		onaddcover,
+		onremovecover
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -28,18 +33,30 @@
 		canMoveUp?: boolean;
 		canMoveDown?: boolean;
 		onmakeoutlet?: () => void;
+		/** This node's land-cover patches (WP-1.35; farms only). */
+		landCover?: LandCoverPatch[];
+		onaddcover?: () => void;
+		onremovecover?: (id: string) => void;
 	} = $props();
 
 	const groups = $derived.by(() => {
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
 			if (f.farmOnly && node.kind !== 'farm') continue;
+			if (f.notGauge && node.kind === 'gauge') continue;
+			// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34).
+			if (node.kind === 'user' && f.group !== 'groundwater') continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
 		return [...out];
 	});
 	const id = (k: string) => `nd-${k}-${node.id}`;
+	const BOREHOLE_RULE_LABEL: Record<BoreholeRule, string> = {
+		supplemental: 'Supplemental: after the dam and river',
+		primary: 'Primary: first, the dam and river cover the rest',
+		drought: 'Drought: supplemental while the dam is below the trigger'
+	};
 	const hints = $derived(damHints(node));
 </script>
 
@@ -54,6 +71,7 @@
 			<select id={id('kind')} disabled={readonly} bind:value={node.kind}>
 				<option value={'farm' satisfies NodeKind}>Farm (or stand-alone dam)</option>
 				<option value={'gauge' satisfies NodeKind}>Gauge</option>
+				<option value={'user' satisfies NodeKind}>Other water user (town, industry, unlisted)</option>
 			</select>
 		</div>
 		<div class="field">
@@ -81,6 +99,14 @@
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
 		</p>
+	{:else if node.kind === 'user'}
+		<p class="hint gauge-note">
+			An other water user takes its demand from the river where it sits, with no land, dam or crops of its own.
+		</p>
+		<fieldset>
+			<legend>Other water user</legend>
+			<UserFields {node} {readonly} />
+		</fieldset>
 	{/if}
 
 	{#each groups as [g, fields] (g)}
@@ -100,7 +126,8 @@
 							placeholder={f.nullable ? 'not set' : undefined}
 							disabled={readonly}
 							aria-describedby="{id(f.key)}-h"
-							bind:value={node[f.key]}
+							value={node[f.key] ?? null}
+							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
 						<span class="hint" id="{id(f.key)}-h">{f.help}</span>
 					</div>
@@ -126,6 +153,14 @@
 						<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
 					</div>
 				{/if}
+				{#if g === 'groundwater'}
+					<div class="field">
+						<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
+						<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
+							{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
+						</select>
+					</div>
+				{/if}
 				{#if g === 'dam'}
 					{#each hints as h (h)}
 						<p class="hint dam-hint" role="note">{h}</p>
@@ -141,6 +176,13 @@
 			</div>
 		</fieldset>
 	{/each}
+
+	{#if node.kind === 'farm'}
+		<fieldset>
+			<legend>Land cover</legend>
+			<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+		</fieldset>
+	{/if}
 
 	{#if !readonly}
 		<div class="actions">

@@ -1,8 +1,11 @@
-import { EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	curtailmentLines,
+	ewrAssuranceLines,
+	otherUserLines,
+	landCoverLines,
 	ewrSiteLines,
 	zeroRainLines,
 	accumulationLines,
@@ -71,9 +74,9 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
-		// EWR sites, water balance, CHIRPS factors, rain treated as missing, multi-day accumulations,
+		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, multi-day accumulations,
 		// double-mass check, calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(14);
+		expect(lines.filter((l) => l === '').length).toBe(15);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -169,6 +172,25 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
 		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
+	it('WP-1.35: lists the land-cover reduction per class with mm/yr over the condensed area', () => {
+		const lines = [...landCoverLines({ lowFlowThresholdM3Day: 120, reductionM3Day: 50, fractionOfNatural: 0.029, byClass: [{ coverClass: 'invasive', condensedKm2: 1.5, reductionM3Day: 50, mmPerYear: 12.175 }] })];
+		expect(lines[0]).toBe('Land-cover streamflow reductions (invasive plants and forestry)');
+		expect(lines).toContain('Share of natural flow (%),2.9');
+		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
+	});
+
+	it('WP-1.33: lists other water users and whether each is curtailed', () => {
+		const users = [{ nodeId: 'u', name: 'Town', priority: 'senior' as const, avgDemandM3Day: 100, avgSuppliedM3Day: 90, avgDeficitM3Day: 10, fractionSupplied: 0.9, avgReturnedM3Day: 45, avgEwrChargeM3Day: 5, daysEwrNotMet: 3 }];
+		const otherUsers = [
+			{ nodeId: 'u', name: 'Town', priority: 'senior' as const, demandM3Day: 100, suppliedM3Day: 90, deficitM3Day: -10, fractionSupplied: 0.9, returnedM3Day: 45, ewrChargeM3Day: -5, curtailed: false, supplyCutM3Day: 0, supplyCutLs: 0, uncurtailedChargeM3Day: -5 }
+		];
+		const lines = [...otherUserLines({ users, curtailment: { ...c, otherUsers } } as unknown as RunSummary)];
+		expect(lines[0]).toBe('Other water users (whole run)');
+		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
+		expect(lines).toContain('Town,senior,100,90,45,-5,no (senior),0,0,-5');
+		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
@@ -410,7 +432,7 @@ describe('farm column guide', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
-		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise');
+		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)');
 	});
 });
 
@@ -616,5 +638,58 @@ describe('multi-day accumulations block (B4)', () => {
 		expect([...accumulationLines({ ...a, windows: [], skipped: [], spreadWindows: 0, spreadDays: 0, spreadMm: 0 })].at(-1)).toBe('None detected or listed');
 		expect([...accumulationLines(null)][1]).toBe('No catchment rain series');
 		expect([...accumulationLines(undefined)][1]).toMatch(/before engine 0\.20\.0/);
+	});
+});
+
+describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
+	// Synthetic: two Octobers of 1.5 Mm³ natural flow, 70 % on the table's natural curve, 0.75 Mm³ required.
+	const start = '2000-10-01';
+	const days = 366 + 365;
+	const natural = new Float64Array(days).fill(1.5e6 / 31);
+	const impacted = natural.map((v, t) => (t < 31 ? v * 0.4 : v));
+	const table = {
+		siteNodeId: null,
+		source: 'Synthetic, table 1',
+		component: 'lowFlow' as const,
+		unit: 'mcm' as const,
+		points: [10, 50, 90],
+		ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+		naturalSource: 'table' as const,
+		natural: Array.from({ length: 12 }, () => [3, 2, 1]),
+		scale: 1
+	};
+	const report = assessSite(start, days, { table, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
+
+	it('gives the provenance, the headline, the months of the year and each month', () => {
+		const lines = [...ewrAssuranceLines([report])];
+		expect(lines[0]).toBe('Reserve compliance by month (EWR rule tables)');
+		expect(lines).toContain('Site,Outlet gauge,outlet');
+		expect(lines).toContain('Source,"Synthetic, table 1"');
+		expect(lines).toContain('Covers,low flows only');
+		expect(lines).toContain("Natural-flow percentile from,the table's natural flows");
+		expect(lines).toContain('% points,10,50,90');
+		// 24 complete months; the first October (0.6 Mm³ < 0.75) is the only one short.
+		expect(lines).toContain(`Months met,23,of,24,Met (%),${Number(((23 / 24) * 100).toPrecision(12))}`);
+		expect(lines).toContain('Longest run of months not met,1');
+		const header = lines.indexOf('Month,Complete years,Months met,Met (%),Deficit (m³),Mean required (Mm³),Mean simulated (Mm³),FDC points met');
+		expect(header).toBeGreaterThan(0);
+		expect(lines.slice(header + 1, header + 13).map((l) => l.split(',')[0])).toEqual(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+		expect(lines[header + 1]!.split(',').slice(0, 4)).toEqual(['Oct', '2', '1', '50']);
+		const detail = lines.findIndex((l) => l.startsWith('Year,Month,Water year'));
+		const oct = lines[detail + 1]!.split(',');
+		expect(oct.slice(0, 3)).toEqual(['2000', 'Oct', '2000/01']);
+		expect(oct[8]).toBe('no');
+		expect(Number(oct[9])).toBeCloseTo(150_000, 3);
+		expect(lines.length).toBe(detail + 1 + 24);
+	});
+
+	it('says when nothing was assessed, and is part of the summary sheet', () => {
+		expect([...ewrAssuranceLines(undefined)]).toEqual([
+			'Reserve compliance by month (EWR rule tables)',
+			'Not assessed: no EWR rule table in the settings the run used (or a run made before engine 0.21.0)'
+		]);
+		const lines = [...summaryCsvLines(meta, { ...summary, ewrAssurance: [report] })];
+		expect(lines).toContain('Reserve compliance by month (EWR rule tables)');
+		expect(lines).toContain('Site,Outlet gauge,outlet');
 	});
 });

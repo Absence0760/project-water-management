@@ -61,7 +61,8 @@ function canonical(out: ModelOutput) {
 		summary: {
 			...s,
 			farms: byNode(s.farms),
-			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms) },
+			users: s.users && byNode(s.users),
+			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms), otherUsers: s.curtailment.otherUsers && byNode(s.curtailment.otherUsers) },
 			ewrCompliance: s.ewrCompliance && { ...s.ewrCompliance, farms: byNode(s.ewrCompliance.farms) },
 			dataQuality: s.dataQuality && { ...s.dataQuality, areaMismatches: s.dataQuality.areaMismatches && byNode(s.dataQuality.areaMismatches) },
 			// Warnings name elements in input order; compare them as a multiset of
@@ -115,6 +116,12 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * than twice the water (found by the soak, seed 4660: 25.43 % → 25.72 %).
  * Without return flow extra use upstream can only lower the water available
  * downstream on every later day, which is what the property relies on.
+ * Dam evaporation, rain on the dam and seepage stay on: a lower dam has a
+ * smaller surface and loses (and catches) less, but never so much less that
+ * it ends the day with more water, so they keep the law. (Seeds 4197, 7686,
+ * 15979 and 17277 broke it until engine 0.21.1, when the daily step did let
+ * a fuller, very shallow dam with b > 1 end the day emptier; fixed in the
+ * engine, network/simulate.ts damDay, not here.)
  * Demand is not rounded (R1), so it doubles exactly and the only slack is
  * float noise.
  */
@@ -148,6 +155,20 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	return c2 > c1 + slack ? `doubling crop areas raised the catchment supply fraction ${c1} → ${c2}` : null;
 }
 
+/**
+ * The same model with every drought borehole rule (WP-1.34) run as
+ * supplemental, for checkDoubledCropAreas. A drought rule pumps only while the
+ * dam is low, so more demand, which empties the dam sooner, switches the
+ * boreholes on earlier and can raise the supply fraction legitimately (fuzz
+ * seed 4623, GR4J: n24 0.963 → 0.978; seed 1450 before the generator drew EWR rule tables). The property is a law of the rest of
+ * the network, so it is checked with the trigger taken out.
+ */
+export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
+	const x = cloneInput(input);
+	for (const n of x.model.nodes) if (n.boreholeRule === 'drought') n.boreholeRule = 'supplemental';
+	return x;
+}
+
 /** runModel + every invariant, including the ones that re-run the model. */
 export function checkAll(input: ModelInput, seed = 1): string | null {
 	let out: ModelOutput;
@@ -159,5 +180,5 @@ export function checkAll(input: ModelInput, seed = 1): string | null {
 	const bad = checkInvariants(input, out);
 	if (bad) return bad;
 	if (JSON.stringify(runModel(input)) !== JSON.stringify(out)) return 'not deterministic';
-	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(input);
+	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(droughtBoreholesAsSupplemental(input));
 }

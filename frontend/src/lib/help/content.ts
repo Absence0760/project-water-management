@@ -221,6 +221,74 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Network sheet'
 	},
 	{
+		id: 'element-user',
+		term: 'Other water user',
+		short: 'A town, industry or unlisted irrigator that takes water from the river at its place in the network, with no land or dam of its own.',
+		long: 'Water taken by users that are not modelled farms would otherwise be handed to the farms and the EWR, over-stating both. An other user has a monthly demand (m³/day), a share of what it takes that comes back below it the same day (treated wastewater) and a priority.\n\nIt takes only from the river where it sits: what reaches it from upstream, after anything upstream has taken its share. It is charged for EWR shortfalls below it like a farm, by its net impact (what it takes less what it returns).\n\nOther users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR; a junior one is (Curtailment tab, "Other water users").',
+		category: 'network',
+		aliases: ['town', 'municipal', 'industry', 'unlisted user', 'abstraction'],
+		fields: ['node.userDemandM3Day', 'run.senior_requirement'],
+		related: ['user-priority', 'user-return', 'element-farm', 'ewr'],
+		source: 'docs/model.md §2.7c; roadmap WP-1.33'
+	},
+	{
+		id: 'user-priority',
+		term: 'User priority (senior / junior)',
+		short: 'Senior: farms and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		long: 'A senior user’s demand is a requirement every farm upstream of it passes before it fills its dam or irrigates, shared between those farms by flow share the way the EWR is (the farm diverts less, then lets inflow and its own runoff pass below the dam). A junior user upstream of a senior one leaves the senior demand in the river too.\n\nA junior user takes only what reaches it. Farms have no protected claim, so a junior user upstream of a farm still takes first: position in the river decides.\n\nA municipal allocation is usually senior, which is the default. Senior users are not curtailed for the EWR; their charge is reported and left standing.',
+		category: 'network',
+		aliases: ['seniority', 'senior', 'junior', 'priority'],
+		fields: ['node.userPriority', 'run.passed_for_senior'],
+		related: ['element-user'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
+		id: 'user-return',
+		term: 'Share returned (other user)',
+		short: 'Share of what an other water user takes that comes back to the river below it the same day, such as treated wastewater.',
+		long: 'A town returns part of what it abstracts through its wastewater works. That share joins the river directly below the user on the same day; the rest is consumed. 0 % means nothing comes back.',
+		units: '%',
+		category: 'network',
+		aliases: ['wastewater', 'return flow', 'effluent'],
+		fields: ['node.userReturnPct'],
+		related: ['element-user', 'return-flow'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
+		id: 'borehole',
+		term: 'Boreholes (groundwater)',
+		short: 'Groundwater a farm or other user pumps, up to a daily capacity, by a rule: supplemental, primary or drought.',
+		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Drought — supplemental, but only while the dam holds less than its trigger share of capacity at the start of the day (a farm with a dam only).\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',
+		units: 'm³/day',
+		category: 'network',
+		aliases: ['groundwater', 'borehole', 'well', 'aquifer', 'pumping'],
+		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'summary.avgGroundwaterM3Day'],
+		related: ['stream-depletion', 'element-farm', 'element-user'],
+		source: 'docs/model.md §2.7d; roadmap WP-1.34'
+	},
+	{
+		id: 'stream-depletion',
+		term: 'Stream depletion',
+		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
+		long: 'Pumping near a river lowers the dry-season base flow the EWR depends on. The model takes a share d of each day’s pumping from the flow leaving the node, delayed through a single linear store with time constant k days, so the river keeps losing water for a while after the pumps stop and, over a long run, loses d × the pumped volume in all.\n\nThe river never goes below 0: depletion due on a day with nothing left to take is reported as unmet (drawn from aquifer storage instead). A first estimate of k is the stream depletion factor, distance² × storativity ÷ transmissivity (Jenkins 1968).\n\nA gauge or logger record measured while the boreholes pumped already carries their depletion: keep them in the model when calibrating, so the fitted natural flow isn’t reduced twice.',
+		category: 'network',
+		aliases: ['base flow reduction', 'baseflow depletion', 'Glover', 'Jenkins', 'SDF'],
+		fields: ['node.streamDepletionFrac', 'node.streamDepletionLagDays', 'run.baseflow_depletion', 'run.depletion_unmet', 'run.depletion_store', 'summary.avgBaseflowDepletionM3Day'],
+		related: ['borehole', 'ewr'],
+		source: 'docs/model.md §2.7d; Jenkins (1968); Glover & Balmer (1954)'
+	},
+	{
+		id: 'land-cover',
+		term: 'Land cover (invasive plants, forestry)',
+		short: 'Invasive alien trees and plantations on a farm use more water than natural vegetation, so the farm passes on less runoff.',
+		long: 'Each patch has a cover class, an area and a condensed (canopy) cover: its share of the farm is area × cover ÷ the farm’s area. Each class removes a share of the runoff at full cover: one share of the low flows (the part of each day’s flow up to the flow exceeded 75 % of the days) and another of the rest, because trees take proportionally more of the dry-season flow.\n\nThe class values are indicative (after the South African afforestation reduction curves of Scott & Smith 1997, and Le Maitre et al. 2016 for invasive plants, who put the national loss to invasives at about 2.9 % of the mean annual runoff); confirm them for the catchment or enter a patch’s own.\n\nThe reduction is its own run series, never hidden in the calibration. To see what clearing a class gives back, copy the project, remove the patches and compare the two runs.',
+		category: 'network',
+		aliases: ['invasive alien plants', 'IAP', 'forestry', 'afforestation', 'plantation', 'streamflow reduction activity', 'wattle', 'eucalyptus', 'pine'],
+		fields: ['run.landcover_reduction'],
+		related: ['element-farm', 'natural-flow'],
+		source: 'docs/model.md §2.5a; Scott & Smith (1997); Le Maitre et al. (2016); roadmap WP-1.35'
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',
@@ -1010,6 +1078,30 @@ export const HELP: HelpEntry[] = [
 		fields: ['summary.daysEwrNotMet', 'catchment.ewrDaysNotMet', 'catchment.ewrFractionDaysNotMet'],
 		related: ['ewr-shortfall'],
 		source: 'b023 EWR analysis'
+	},
+	{
+		id: 'reserve-rules',
+		term: 'EWR rule table (the Reserve’s assurance rules)',
+		short: 'The Reserve’s EWR as a table: per month, the flow required at each assurance level, read at the natural flow’s percentile.',
+		long: 'A South African Reserve determination (the Desktop Reserve Model and its revised form) gives the ecological water requirement as a table: for each month, the flow required at each assurance level, or “% point” (10 %, 20 % … 90 %, 99 %). Assurance is the share of time the flow should be equalled or exceeded, so 10 % is the requirement in wet conditions and 99 % the drought flow. The gazette pairs it with the natural flow at the same points.\n\nEnter one table per EWR site: the outlet, or a gauge placed at the determination’s EWR site. Say where it comes from, the unit (Mm³ per month, or the month’s mean m³/s), whether it is the total flow or low flows only, and where the natural-flow percentile comes from: the run’s own natural flow at the site (ranked among the same month in every year of the run), or the table’s natural flows. The scale multiplies every value, for a table given for a larger or smaller catchment than the site.\n\nPaste the 12 month rows from a spreadsheet or a PDF, with the heading row of % points if you have it; month names in the first column put rows in order. The table adds a monthly compliance report. The pragmatic EWR still drives the daily EWR charge and curtailment.',
+		units: 'Mm³ per month or m³/s; % points 0–100',
+		category: 'ewr',
+		aliases: ['assurance rules', 'assurance table', 'rule curve', 'Reserve rule table', 'Reserve determination', 'maintenance low flows', 'drought flows'],
+		fields: ['settings.ewrRules'],
+		related: ['reserve-compliance', 'ewr', 'desktop-reserve-model', 'ewr-days-not-met'],
+		source: 'Hughes & Hannart (2003); Hughes et al. (2014); Pollard et al. (2011) WRC K8/881/2; docs/model.md §2.9c'
+	},
+	{
+		id: 'reserve-compliance',
+		term: 'Monthly compliance with the Reserve rules',
+		short: 'Share of months whose simulated flow met the Reserve rule table’s requirement for that month’s natural condition.',
+		long: 'For each complete calendar month, the month’s natural flow at the EWR site (the upstream farms’ runoff, before any dam or abstraction) is placed on that month’s natural flow duration curve. The EWR is read from the rule table at the same % point, interpolated between points, and the month is met when the simulated flow at the site is at least that. A naturally dry month is held to the drought flow; a wet one to more. The requirement depends only on natural flow, so more abstraction can only lose months.\n\nThe report gives the share of months met (the headline), per month of the year, the deficit volume, the longest run of consecutive months not met and the FDC check: whether the simulated flow duration curve of each month lies on or above the EWR curve at each % point. Days below the pragmatic EWR stay alongside as a second measure. With fewer than 10 years of a month the percentiles are coarse, and the run says so. The daily series ewr_rule is each month’s requirement per day.',
+		units: 'share of months; Mm³; months',
+		category: 'ewr',
+		aliases: ['Reserve compliance', 'assurance compliance', 'months met', 'contiguity', 'FDC check'],
+		fields: ['run.ewr_rule'],
+		related: ['reserve-rules', 'ewr-days-not-met', 'ewr-agreement'],
+		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
 	},
 	{
 		id: 'ewr-agreement',

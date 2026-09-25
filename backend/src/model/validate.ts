@@ -1,4 +1,4 @@
-import { upgradeLegacyModel, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_RULES, LAND_COVER_CLASSES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -18,7 +18,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				name: z.string().trim().min(1).max(100),
-				kind: z.enum(['farm', 'gauge']),
+				kind: z.enum(['farm', 'gauge', 'user']),
 				downstreamNodeId: uuid.nullable(),
 				sortOrder: z.number().int(),
 				areaKm2: nonNeg,
@@ -37,7 +37,17 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
 				damAreaFullM2: nonNeg.nullable(),
 				damAreaExponent: z.number().gt(0).max(3),
-				damSeepagePerDay: frac
+				damSeepagePerDay: frac,
+				// Other water users (WP-1.33): monthly demand (water-year months), return share, priority.
+				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				userReturnPct: frac.default(0),
+				userPriority: z.enum(USER_PRIORITIES).default('senior'),
+				// Boreholes (WP-1.34): capacity null = none; depletion share and lag of the river's loss.
+				boreholeCapacityM3Day: nonNeg.nullable().default(null),
+				boreholeRule: z.enum(BOREHOLE_RULES).default('supplemental'),
+				boreholeTriggerPct: frac.default(0.3),
+				streamDepletionFrac: frac.default(0),
+				streamDepletionLagDays: nonNeg.max(36_500).default(0)
 			})
 		)
 		.max(500),
@@ -67,7 +77,21 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				priority: z.number().int().min(-1_000_000).max(1_000_000)
 			})
 		)
-		.max(500)
+		.max(500),
+	// Land-cover patches (WP-1.35): part of the model document, like crop areas.
+	landCover: z
+		.array(
+			z.object({
+				id: uuid,
+				nodeId: uuid,
+				coverClass: z.enum(LAND_COVER_CLASSES.map((c) => c.id) as [LandCoverClass, ...LandCoverClass[]]),
+				areaKm2: nonNeg,
+				densityPct: frac,
+				factors: z.object({ mar: frac, lowFlow: frac }).nullable()
+			})
+		)
+		.max(5_000)
+		.default([])
 }));
 
 /**
@@ -78,6 +102,7 @@ export function modelProblems(m: ProjectModel): string[] {
 	const problems: string[] = [];
 	const nodeIds = new Set(m.nodes.map((n) => n.id));
 	const cropIds = new Set(m.crops.map((c) => c.id));
+	const byId = new Map(m.nodes.map((n) => [n.id, n]));
 
 	const dupes = (xs: string[]) => [...new Set(xs.filter((x, i) => xs.indexOf(x) !== i))];
 	for (const d of dupes(m.nodes.map((n) => n.id))) problems.push(`duplicate node id ${d}`);
@@ -86,17 +111,30 @@ export function modelProblems(m: ProjectModel): string[] {
 	for (const d of dupes(m.crops.map((c) => c.name.toLowerCase()))) problems.push(`duplicate crop name "${d}"`);
 	for (const d of dupes(m.transfers.map((t) => t.id))) problems.push(`duplicate transfer id ${d}`);
 	for (const d of dupes(m.cropAreas.map((a) => `${a.nodeId}/${a.cropId}`))) problems.push(`duplicate crop area ${d}`);
+	for (const d of dupes((m.landCover ?? []).map((p) => p.id))) problems.push(`duplicate land-cover id ${d}`);
+	for (const p of m.landCover ?? []) {
+		const n = byId.get(p.nodeId);
+		if (!n) problems.push(`land cover ${p.id} references an unknown node`);
+		else if (n.kind !== 'farm') problems.push(`land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
+	}
 
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !nodeIds.has(n.downstreamNodeId)) problems.push(`"${n.name}" drains into an unknown node`);
+		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.
+		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.kind === 'gauge') problems.push(`gauge "${n.name}" can't have boreholes`);
+		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
+			problems.push(`"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
 		if (n.downstreamNodeId === n.id) problems.push(`"${n.name}" drains into itself`);
 	}
 	for (const a of m.cropAreas) {
 		if (!nodeIds.has(a.nodeId)) problems.push(`crop area references unknown node ${a.nodeId}`);
+		if (byId.get(a.nodeId)?.kind === 'user') problems.push(`crop area on other water user "${byId.get(a.nodeId)!.name}": a user's demand is its monthly demand, not crops`);
 		if (!cropIds.has(a.cropId)) problems.push(`crop area references unknown crop ${a.cropId}`);
 	}
 	for (const t of m.transfers) {
 		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) problems.push(`transfer ${t.id} references an unknown node`);
+		// A user has no dam to send from or fill (WP-1.33).
+		if (byId.get(t.fromNodeId)?.kind === 'user' || byId.get(t.toNodeId)?.kind === 'user') problems.push(`transfer ${t.id} involves an other water user: transfers run between farm dams`);
 		if (t.fromNodeId === t.toNodeId) problems.push(`transfer ${t.id} goes from a node to itself`);
 	}
 

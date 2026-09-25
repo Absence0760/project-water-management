@@ -8,6 +8,8 @@
 // (across copies). See docs/run-comparison.md.
 import { fromEpochDay, toEpochDay } from './calendar';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
+import type { EwrRuleTable } from './reserve/rules';
+import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import {
@@ -140,6 +142,13 @@ export interface RunComparison {
 		excludedWaterYearsB: number[] | null;
 		changed: boolean;
 	} | null;
+	/**
+	 * Reserve compliance by month (engine ≥ 0.21.0, model.md §2.9c): one row
+	 * per EWR site with a rule table in either run, matched by site (the
+	 * outlet with the outlet, a gauge by id then name), outlet first. null when
+	 * neither run has one. Rates are 0–1, deltas in fraction points.
+	 */
+	ewrAssurance: EwrAssuranceDelta[] | null;
 	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
 	wr2012: {
 		marRatioOverlap: MetricDelta;
@@ -147,6 +156,25 @@ export interface RunComparison {
 		lowFlowRatio: MetricDelta;
 		patternCorrelation: MetricDelta;
 	} | null;
+}
+
+/** One EWR site's Reserve compliance in both runs (compareRuns). */
+export interface EwrAssuranceDelta {
+	/** Name in run B, else A. */
+	name: string;
+	isOutlet: boolean;
+	/** The site has a rule table in one run only. */
+	onlyIn: 'a' | 'b' | null;
+	/** The two runs' tables differ (source, points, values, unit, scale or natural source): the rates measure against different rules. */
+	tableChanged: boolean;
+	rate: MetricDelta;
+	monthsNotMet: MetricDelta;
+	months: MetricDelta;
+	deficitM3: MetricDelta;
+	longestNotMetRun: MetricDelta;
+	fdcRate: MetricDelta;
+	/** Months met ÷ complete years per calendar month, water-year order (Oct … Sep). */
+	byMonth: MetricDelta[];
 }
 
 export type InputChangeArea = 'settings' | 'network' | 'crops' | 'transfers' | 'series';
@@ -296,6 +324,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 			: null;
 
 	return {
+		ewrAssurance: compareAssurance(a.summary.ewrAssurance, b.summary.ewrAssurance),
 		samePeriod: a.startDate === b.startDate && a.endDate === b.endDate,
 		engineVersionChanged: a.engineVersion !== b.engineVersion,
 		farms,
@@ -349,6 +378,31 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 					}
 				: null
 	};
+}
+
+/** Pair each EWR site's Reserve compliance across the runs: the outlet with the outlet, gauges by id then name. */
+function compareAssurance(ra: EwrAssuranceSite[] | undefined, rb: EwrAssuranceSite[] | undefined): EwrAssuranceDelta[] | null {
+	const a = ra ?? [];
+	const b = rb ?? [];
+	if (!a.length && !b.length) return null;
+	const key = (s: EwrAssuranceSite) => (s.isOutlet ? '(outlet)' : (s.nodeId ?? ''));
+	const m = matchByIdThenName(a, b, key, (s) => (s.isOutlet ? '(outlet)' : s.name));
+	const tableOf = (s: EwrAssuranceSite) => ({ source: s.source, component: s.component, unit: s.unit, naturalSource: s.naturalSource, scale: s.scale, points: s.points, ewr: s.byMonth.map((x) => x.fdc.map((f) => f.required)) });
+	const row = (x: EwrAssuranceSite | null, y: EwrAssuranceSite | null): EwrAssuranceDelta => ({
+		name: (y ?? x)!.name,
+		isOutlet: (y ?? x)!.isOutlet,
+		onlyIn: x && y ? null : x ? 'a' : 'b',
+		tableChanged: !!x && !!y && !same(tableOf(x), tableOf(y)),
+		rate: metricDelta(x?.overall.rate, y?.overall.rate),
+		monthsNotMet: metricDelta(x ? x.overall.months - x.overall.met : null, y ? y.overall.months - y.overall.met : null),
+		months: metricDelta(x?.overall.months, y?.overall.months),
+		deficitM3: metricDelta(x?.overall.deficitM3, y?.overall.deficitM3),
+		longestNotMetRun: metricDelta(x?.overall.longestNotMetRun, y?.overall.longestNotMetRun),
+		fdcRate: metricDelta(x?.fdc.rate, y?.fdc.rate),
+		byMonth: Array.from({ length: 12 }, (_, i) => metricDelta(x?.byMonth[i]?.rate, y?.byMonth[i]?.rate))
+	});
+	const rows = [...m.pairs.map(([x, y]) => row(x, y)), ...m.onlyA.map((x) => row(x, null)), ...m.onlyB.map((y) => row(null, y))];
+	return rows.sort((p, q) => Number(q.isOutlet) - Number(p.isOutlet));
 }
 
 // ---------------------------------------------------------------------------
@@ -526,7 +580,11 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 	};
 }
 
-function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInputsSnapshot['settings'] | undefined): InputChange[] {
+function diffSettings(
+	ra: RunInputsSnapshot['settings'] | undefined,
+	rb: RunInputsSnapshot['settings'] | undefined,
+	siteName: (id: string | null) => string = (id) => (id === null ? 'the outlet' : id)
+): InputChange[] {
 	const a = effectiveSettings(ra);
 	const b = effectiveSettings(rb);
 	const out: InputChange[] = [];
@@ -570,6 +628,7 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
 	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
+	out.push(...diffEwrRules(a.ewrRules, b.ewrRules, siteName));
 	out.push(...diffExclusions(a.calibrationExclusions, b.calibrationExclusions));
 	const za = a.zeroRainRuns as Record<string, unknown>;
 	const zb = b.zeroRainRuns as Record<string, unknown>;
@@ -593,6 +652,7 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 		'dataQuality',
 		'gr4j',
 		'wr2012',
+		'ewrRules',
 		'calibrationExclusions',
 		'zeroRainRuns',
 		'fitRecord'
@@ -675,6 +735,45 @@ function diffWr2012(a: Partial<Wr2012Settings> | undefined, b: Partial<Wr2012Set
 	return out;
 }
 
+const RULE_FIELDS: Record<string, ScalarField> = {
+	source: { label: 'source', fmt: (v) => (v ? `"${String(v)}"` : 'none') },
+	component: { label: 'covers', fmt: (v) => (v === 'lowFlow' ? 'low flows' : v === 'total' ? 'total flow' : String(v)) },
+	unit: { label: 'unit', fmt: (v) => (v === 'mcm' ? 'Mm³ per month' : v === 'm3s' ? 'm³/s' : String(v)) },
+	naturalSource: { label: 'natural percentile from', fmt: (v) => (v === 'run' ? 'the run' : v === 'table' ? 'the table' : String(v)) },
+	scale: { label: 'scale', fmt: (v) => fmtValue(v) },
+	points: { label: '% points', fmt: (v) => (Array.isArray(v) ? v.join(', ') : String(v)) }
+};
+
+/** Reserve rule tables (engine ≥ 0.21.0) added, removed or changed, per EWR site. */
+function diffEwrRules(ra: unknown, rb: unknown, siteName: (id: string | null) => string): InputChange[] {
+	const list = (v: unknown) => (Array.isArray(v) ? (v as EwrRuleTable[]).filter((x) => x && typeof x === 'object') : []);
+	const a = new Map(list(ra).map((t) => [t.siteNodeId ?? null, t]));
+	const b = new Map(list(rb).map((t) => [t.siteNodeId ?? null, t]));
+	const out: InputChange[] = [];
+	const subject = (id: string | null) => `EWR rule table at ${siteName(id)}`;
+	for (const [id, x] of a) if (!b.has(id)) out.push({ area: 'settings', kind: 'removed', subject: subject(id), text: `${subject(id)} removed (was ${RULE_FIELDS.source!.fmt(x.source)})` });
+	for (const [id, y] of b) {
+		const x = a.get(id);
+		if (!x) {
+			out.push({ area: 'settings', kind: 'added', subject: subject(id), text: `${subject(id)} added (${RULE_FIELDS.source!.fmt(y.source)}, ${y.points?.length ?? 0} % points, natural percentile from ${RULE_FIELDS.naturalSource!.fmt(y.naturalSource)})` });
+			continue;
+		}
+		const xr = x as unknown as Record<string, unknown>;
+		const yr = y as unknown as Record<string, unknown>;
+		for (const [k, f] of Object.entries(RULE_FIELDS)) {
+			if (!same(xr[k] ?? null, yr[k] ?? null)) out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} ${f.label}`, text: `${subject(id)}: ${f.label} ${f.fmt(xr[k])} → ${f.fmt(yr[k])}` });
+		}
+		const months = (g: unknown, h: unknown) => WY_MONTHS.filter((_, m) => !same((g as unknown[] | null)?.[m] ?? null, (h as unknown[] | null)?.[m] ?? null));
+		const ew = months(x.ewr, y.ewr);
+		if (ew.length) out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} EWR values`, text: `${subject(id)}: EWR values changed in ${ew.join(', ')}` });
+		const nat = months(x.natural, y.natural);
+		if (nat.length && (x.naturalSource === 'table' || y.naturalSource === 'table')) {
+			out.push({ area: 'settings', kind: 'changed', subject: `${subject(id)} natural flows`, text: `${subject(id)}: natural flows changed in ${nat.join(', ')}` });
+		}
+	}
+	return out;
+}
+
 /** Calibration exclusions added, removed, or given another reason (matched by their period). */
 function diffExclusions(ra: unknown, rb: unknown, noun = 'Calibration exclusion'): InputChange[] {
 	const list = (v: unknown) => (Array.isArray(v) ? (v as CalibrationExclusion[]).filter((x) => x && typeof x === 'object') : []);
@@ -747,7 +846,16 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
-	['lossReturnFraction', 'share of losses returning', pct]
+	['lossReturnFraction', 'share of losses returning', pct],
+	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
+	['userReturnPct', 'share returned', pct],
+	['userPriority', 'priority', plain],
+	// Boreholes (WP-1.34).
+	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
+	['boreholeRule', 'borehole rule', plain],
+	['boreholeTriggerPct', 'borehole drought trigger', pct],
+	['streamDepletionFrac', 'stream depletion share', pct],
+	['streamDepletionLagDays', 'stream depletion lag', withUnit('days')]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
@@ -775,7 +883,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			area: 'network',
 			kind: 'added',
 			subject: n.name,
-			text: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
+			text:
+				n.kind === 'user'
+					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${into ? `, drains into ${into}` : ''})`
+					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}
 	for (const [x, y] of nodes.pairs) {
@@ -783,6 +894,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) parts.push(`renamed from "${x.name}"`);
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
+		}
+		if (x.kind === 'user' || y.kind === 'user') {
+			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
+			if (d) parts.push(`demand ${d}`);
 		}
 		const da = na.node(x.downstreamNodeId);
 		const db = nb.node(y.downstreamNodeId);
@@ -798,6 +913,35 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" renamed from "${x.name}"` });
 		const c = monthlyChange((x as CropDef).cropFactor, (y as CropDef).cropFactor, '');
 		if (c) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" crop factor: ${c}` });
+	}
+
+	// --- land cover (WP-1.35), keyed by (farm name, class) so copies line up ---
+	{
+		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
+		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
+		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string }>();
+			for (const p of m.landCover ?? []) {
+				const farm = farmOf(p.nodeId);
+				const k = key(farm, p.coverClass);
+				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '' };
+				cur.km2 += p.areaKm2;
+				cur.condensed += p.areaKm2 * p.densityPct;
+				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
+				g.set(k, cur);
+			}
+			return g;
+		};
+		const ga = group(a, (id) => nodeRenameLc.get(id) ?? na.node(id) ?? '');
+		const gb = group(b, (id) => nb.node(id) ?? '');
+		const km2 = (v: number) => `${fmtValue(v, 3)} km²`;
+		for (const [k, x] of ga) if (!gb.has(k)) out.push({ area: 'network', kind: 'removed', subject: x.farm, text: `Land cover "${x.cls}" removed from ${x.farm} (was ${km2(x.condensed)} condensed)` });
+		for (const [k, y] of gb) {
+			const x = ga.get(k);
+			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
+			else if (!same(x.condensed, y.condensed) || x.factors !== y.factors)
+				out.push({ area: 'network', kind: 'changed', subject: y.farm, text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${x.factors !== y.factors ? ', reductions changed' : ''}` });
+		}
 	}
 
 	// --- crop areas, keyed by (farm name, crop name) so copies line up ---
@@ -873,6 +1017,8 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 }
 
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+/** Mean of a monthly table (0 without one). */
+const meanOf = (v: readonly number[] | null | undefined) => (v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0);
 
 const SERIES_LABELS: Record<string, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',
@@ -938,9 +1084,13 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
  * changed, only the date change is reported.
  */
 export function diffInputs(a: RunInputsSnapshot | null | undefined, b: RunInputsSnapshot | null | undefined): InputChange[] {
+	// Rule tables name their site by node id: show the node's name (run B's, else A's).
+	const names = new Map<string, string>();
+	for (const m of [a?.model, b?.model]) for (const n of m?.nodes ?? []) names.set(n.id, n.name);
+	const siteName = (id: string | null) => (id === null ? 'the outlet' : (names.get(id) ?? id));
 	return [
 		...diffModel(a?.model, b?.model),
-		...diffSettings(a?.settings, b?.settings),
+		...diffSettings(a?.settings, b?.settings, siteName),
 		...diffSeries(a?.series, b?.series)
 	];
 }

@@ -56,6 +56,25 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
 			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });
 		}
+		// Boreholes (WP-1.34), as the API checks them.
+		if ((n.boreholeCapacityM3Day ?? 0) > 0) {
+			if (n.kind === 'gauge') issues.push({ area: 'network', message: `${label}: a gauge can't have boreholes.` });
+			else if (n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
+				issues.push({ area: 'network', message: `${label}: the drought borehole rule needs a farm dam to trigger on.` });
+		}
+		if (!inRange(n.boreholeCapacityM3Day ?? 0, 0, Infinity) || !inRange(n.streamDepletionLagDays ?? 0, 0, 36_500))
+			issues.push({ area: 'network', message: `${label}: borehole capacity and depletion lag can't be negative.` });
+		if (!inRange(n.streamDepletionFrac ?? 0, 0, 1) || !inRange(n.boreholeTriggerPct ?? 0.3, 0, 1))
+			issues.push({ area: 'network', message: `${label}: stream depletion and the drought trigger must be between 0% and 100%.` });
+		// Other water users (WP-1.33), as the API checks them.
+		if (n.kind === 'user') {
+			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });
+			if (n.userDemandM3Day && (n.userDemandM3Day.length !== 12 || n.userDemandM3Day.some((v) => !inRange(v, 0, Infinity))))
+				issues.push({ area: 'network', message: `${label}: demand needs 12 monthly values, none negative.` });
+			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });
+			if (transfers.some((t) => t.fromNodeId === n.id || t.toNodeId === n.id))
+				issues.push({ area: 'transfers', message: `${label} is an other water user: transfers run between farm dams.` });
+		}
 	}
 
 	// Exactly one outlet (unless empty)
@@ -116,6 +135,15 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	}
 	if (cropAreas.some((a) => !inRange(a.areaM2, 0, Infinity))) {
 		issues.push({ area: 'crops', message: "Crop areas can't be negative." });
+	}
+
+	// Land cover (WP-1.35), as the API checks it.
+	for (const lc of model.landCover ?? []) {
+		const n = nodes.find((x) => x.id === lc.nodeId);
+		if (!n) issues.push({ area: 'network', message: 'A land-cover patch refers to a deleted farm.' });
+		else if (n.kind !== 'farm') issues.push({ area: 'network', message: `"${nodeName(n.id)}": land cover lies on a farm, not a ${n.kind === 'user' ? 'user' : 'gauge'}.` });
+		if (!inRange(lc.areaKm2, 0, Infinity) || !inRange(lc.densityPct, 0, 1) || (lc.factors && (!inRange(lc.factors.mar, 0, 1) || !inRange(lc.factors.lowFlow, 0, 1))))
+			issues.push({ area: 'network', message: `Land cover on "${n ? nodeName(n.id) : '?'}": area can't be negative, cover and reductions are 0–100%.` });
 	}
 
 	// Transfers

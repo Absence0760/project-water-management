@@ -10,6 +10,8 @@ import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
+import type { EwrRuleTable } from './reserve/rules';
+import type { EwrAssuranceSite } from './reserve/assurance';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -183,6 +185,15 @@ export interface ProjectSettings {
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
+	/**
+	 * The Reserve's assurance rules per EWR site (engine ≥ 0.21.0, hydrologist
+	 * Q6; ./reserve/rules.ts): at most one table per site (the outlet, or a
+	 * gauge). Each run then judges monthly compliance against them
+	 * (summary.ewrAssurance, docs/model.md §2.9c). Empty (the default) = none;
+	 * the daily pragmatic EWR above still drives the shortfall charge and
+	 * curtailment either way.
+	 */
+	ewrRules: EwrRuleTable[];
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
@@ -302,6 +313,7 @@ export function defaultProjectSettings(): ProjectSettings {
 			]
 		},
 		ewrPragmaticM3PerDay: zeros,
+		ewrRules: [],
 		simulationStart: null,
 		simulationEnd: null,
 		reportStart: null,
@@ -369,8 +381,26 @@ export const PAN_COEFFICIENT_PRESETS: PanCoefficientPreset[] = [
 	}
 ];
 
-/** A b023 network element. A "farm" can also model a stand-alone dam or natural area. */
-export type NodeKind = 'farm' | 'gauge';
+/**
+ * A b023 network element. A "farm" can also model a stand-alone dam or natural
+ * area. A "user" (engine ≥ 0.22.0, WP-1.33) is any other abstraction from the
+ * river: a town or municipal scheme, industry, an unlisted irrigator. It has a
+ * monthly demand, a share returned downstream and a priority, and no land,
+ * dam, crops or rain of its own (docs/model.md §2.7c).
+ */
+export type NodeKind = 'farm' | 'gauge' | 'user';
+
+/**
+ * An other water user's priority against the farms (WP-1.33, docs/model.md
+ * §2.7c). 'senior' (the default: a municipal allocation is usually senior):
+ * its demand is a requirement every farm and junior user upstream of it must
+ * pass before filling its dam or taking water, fragmented to the farms by flow
+ * share like the EWR; it is not curtailed for the EWR. 'junior': it takes only
+ * what reaches it after the senior requirements below it, and its EWR charge
+ * is curtailed like a farm's.
+ */
+export const USER_PRIORITIES = ['senior', 'junior'] as const;
+export type UserPriority = (typeof USER_PRIORITIES)[number];
 
 /**
  * Time-series kinds a project can hold. Values are daily, starting at `startDate`.
@@ -442,7 +472,51 @@ export interface NetworkNode {
 	damAreaExponent: number;
 	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
 	damSeepagePerDay: number;
+	/**
+	 * kind 'user' only (engine ≥ 0.22.0, WP-1.33): demand from the river, m³/day
+	 * per water-year month (Oct–Sep). null / absent = no demand.
+	 */
+	userDemandM3Day?: number[] | null;
+	/** kind 'user' only: share (0–1) of what it takes that returns below it the same day (treated wastewater). Default 0. */
+	userReturnPct?: number;
+	/** kind 'user' only: priority against the farms. Default 'senior'. */
+	userPriority?: UserPriority;
+	/**
+	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
+	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
+	 * boreholes, and the other borehole fields are inert.
+	 */
+	boreholeCapacityM3Day?: number | null;
+	/** When the boreholes run. Default 'supplemental'. */
+	boreholeRule?: BoreholeRule;
+	/** 'drought' only: they run while the dam holds less than this fraction of its capacity (start of the day). Default 0.3. */
+	boreholeTriggerPct?: number;
+	/** Share d (0–1) of the pumped volume that is eventually taken from the river's flow at this node (stream depletion). Default 0. */
+	streamDepletionFrac?: number;
+	/** Time constant k (days, ≥ 0) of the linear-reservoir lag between pumping and depletion; 0 = the same day. Default 0. */
+	streamDepletionLagDays?: number;
 }
+
+/**
+ * When a node's boreholes run (WP-1.34, docs/model.md §2.7d):
+ * 'supplemental' — only for the demand dam and river leave unmet;
+ * 'primary' — first, the dam and river cover the rest;
+ * 'drought' — supplemental, but only while the dam is below its trigger (farms with a dam only).
+ */
+export const BOREHOLE_RULES = ['supplemental', 'primary', 'drought'] as const;
+export type BoreholeRule = (typeof BOREHOLE_RULES)[number];
+
+/** What a node without the borehole fields runs as: no boreholes (WP-1.34). */
+export const BOREHOLE_DEFAULTS = {
+	boreholeCapacityM3Day: null,
+	boreholeRule: 'supplemental',
+	boreholeTriggerPct: 0.3,
+	streamDepletionFrac: 0,
+	streamDepletionLagDays: 0
+} as const;
+
+/** What a user node without the fields runs as (WP-1.33). */
+export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
 
 /** Default exponent of the dam area–storage relation (Liebe et al. 2005). */
 export const DAM_AREA_EXPONENT = 0.7;
@@ -507,6 +581,16 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;
 				n.damAreaExponent ??= DAM_AREA_EXPONENT;
 				n.damSeepagePerDay ??= 0;
+				// Other water users (WP-1.33): off unless set.
+				if (n.userDemandM3Day === undefined) n.userDemandM3Day = USER_DEFAULTS.userDemandM3Day;
+				n.userReturnPct ??= USER_DEFAULTS.userReturnPct;
+				n.userPriority ??= USER_DEFAULTS.userPriority;
+				// Boreholes (WP-1.34): none unless set.
+				if (n.boreholeCapacityM3Day === undefined) n.boreholeCapacityM3Day = BOREHOLE_DEFAULTS.boreholeCapacityM3Day;
+				n.boreholeRule ??= BOREHOLE_DEFAULTS.boreholeRule;
+				n.boreholeTriggerPct ??= BOREHOLE_DEFAULTS.boreholeTriggerPct;
+				n.streamDepletionFrac ??= BOREHOLE_DEFAULTS.streamDepletionFrac;
+				n.streamDepletionLagDays ??= BOREHOLE_DEFAULTS.streamDepletionLagDays;
 				return n;
 			})
 		: model.nodes;
@@ -555,6 +639,48 @@ export interface ProjectModel {
 	crops: CropDef[];
 	cropAreas: CropArea[];
 	transfers: Transfer[];
+	/** Land-cover patches that reduce runoff (engine ≥ 0.24.0, WP-1.35). Absent on older documents = none. */
+	landCover?: LandCoverPatch[];
+}
+
+/**
+ * Land cover that uses more water than the natural vegetation it replaced
+ * (engine ≥ 0.24.0, WP-1.35, docs/model.md §2.5a): invasive alien trees and
+ * commercial forestry (a streamflow reduction activity under the National
+ * Water Act). Each class's reductions are the share of the patch's runoff it
+ * removes at full (100 %) condensed cover: `lowFlow` on the part of each day's
+ * flow up to the unit's low-flow threshold (its natural flow exceeded 75 % of
+ * the days), `mar` on the part above it. The defaults are indicative, from the
+ * shape of the South African afforestation reduction curves at maturity
+ * (Scott & Smith 1997: eucalypts reduce total flow more than pines, and low
+ * flows proportionally more than total flow) and Le Maitre et al. (2016) for
+ * invasive plants (riparian invasions × 1.5 of the dryland reduction); the
+ * hydrologist confirms or overrides them per patch.
+ */
+export const LAND_COVER_CLASSES = [
+	{ id: 'eucalyptus', label: 'Eucalyptus plantation (mature)', mar: 0.75, lowFlow: 0.9 },
+	{ id: 'pine', label: 'Pine plantation (mature)', mar: 0.4, lowFlow: 0.55 },
+	{ id: 'invasive', label: 'Invasive alien trees, dryland (wattle, pine, eucalypt)', mar: 0.5, lowFlow: 0.6 },
+	{ id: 'invasiveRiparian', label: 'Invasive alien trees, riparian', mar: 0.75, lowFlow: 0.9 },
+	{ id: 'other', label: 'Other (enter its reductions)', mar: 0, lowFlow: 0 }
+] as const;
+export type LandCoverClass = (typeof LAND_COVER_CLASSES)[number]['id'];
+
+/** Where the indicative class reductions come from, shown next to them. */
+export const LAND_COVER_DEFAULTS_SOURCE =
+	'indicative, after Scott & Smith (1997) reduction curves at maturity and Le Maitre et al. (2016); confirm per catchment';
+
+export interface LandCoverPatch {
+	id: string;
+	/** The farm (hydrological unit) the patch lies in. */
+	nodeId: string;
+	coverClass: LandCoverClass;
+	/** Area of the patch, km². */
+	areaKm2: number;
+	/** Condensed (canopy) cover of the patch, 0–1: 1 = a closed stand. Its effective area is areaKm2 × density. */
+	densityPct: number;
+	/** Reductions overriding the class's (each 0–1 at full cover); null = the class defaults. */
+	factors: { mar: number; lowFlow: number } | null;
 }
 
 /** A daily series: values[i] is the value on startDate + i days; null = missing. */
@@ -615,6 +741,86 @@ export interface FarmSummary {
 	avgEwrShortfallM3Day: number;
 	/** Days the farm was charged (engine ≥ 0.17.0); before, days its AB was below 0. */
 	daysEwrNotMet: number;
+	/** Mean groundwater pumped, part of supplied (engine ≥ 0.23.0, WP-1.34); only for a node with boreholes. */
+	avgGroundwaterM3Day?: number;
+	/** Mean stream depletion taken from the river below it (WP-1.34); only for a node with boreholes. */
+	avgBaseflowDepletionM3Day?: number;
+}
+
+/**
+ * An other water user over the whole run (engine ≥ 0.22.0, WP-1.33), m³/day
+ * means like FarmSummary.
+ */
+export interface UserSummary {
+	nodeId: string;
+	name: string;
+	priority: UserPriority;
+	avgDemandM3Day: number;
+	/** Taken from the river. */
+	avgSuppliedM3Day: number;
+	avgDeficitM3Day: number;
+	/** avg supplied / avg demand, 0–1 (1 without demand). */
+	fractionSupplied: number;
+	/** Returned below it (treated wastewater). */
+	avgReturnedM3Day: number;
+	/** Mean EWR charge (positive): its share of the shortfall at the EWR sites below it, net-impact pro rata like a farm's. */
+	avgEwrChargeM3Day: number;
+	daysEwrNotMet: number;
+	/** Mean groundwater pumped, part of supplied (WP-1.34); only with boreholes. */
+	avgGroundwaterM3Day?: number;
+	/** Mean stream depletion taken from the river below it (WP-1.34); only with boreholes. */
+	avgBaseflowDepletionM3Day?: number;
+}
+
+/**
+ * An other water user's row of the curtailment report (engine ≥ 0.22.0,
+ * WP-1.33, docs/model.md §2.11). Other users are outside the irrigation
+ * equitable-share benchmark (their demand is not irrigation). A junior user
+ * is curtailed for its EWR charge like a farm (supply cut = charge ÷ its
+ * consumptive share, never more than it took); a senior one is not: its
+ * charge is reported and left standing. Window means, m³/day; ≤ 0 = reduce.
+ */
+export interface CurtailmentUser {
+	nodeId: string;
+	name: string;
+	priority: UserPriority;
+	demandM3Day: number;
+	suppliedM3Day: number;
+	/** supplied − demand, ≤ 0. */
+	deficitM3Day: number;
+	fractionSupplied: number | null;
+	returnedM3Day: number;
+	/** Mean EWR charge, ≤ 0. */
+	ewrChargeM3Day: number;
+	/** Junior users only. */
+	curtailed: boolean;
+	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user). */
+	supplyCutM3Day: number;
+	supplyCutLs: number;
+	/** The charge the cut does not remove, ≤ 0: all of it for a senior user, the part beyond what it took for a junior one. */
+	uncurtailedChargeM3Day: number;
+}
+
+/**
+ * What land cover took from the river over the run (engine ≥ 0.24.0, WP-1.35).
+ * mm per year over the condensed area is the figure Le Maitre et al. (2016)
+ * report (97 mm/yr nationally for invasive plants) to compare with.
+ */
+export interface LandCoverSummary {
+	/** The low-flow threshold: catchment natural flow exceeded 75 % of the days (m³/day). */
+	lowFlowThresholdM3Day: number;
+	/** Mean reduction, m³/day. */
+	reductionM3Day: number;
+	/** Σ reduction / Σ natural flow over the run (0–1); null without natural flow. */
+	fractionOfNatural: number | null;
+	byClass: {
+		coverClass: LandCoverClass;
+		/** Σ area × density of the patches, km². */
+		condensedKm2: number;
+		reductionM3Day: number;
+		/** Mean annual reduction over the condensed area, mm/yr (365.25 days). */
+		mmPerYear: number | null;
+	}[];
 }
 
 /** Observed vs simulated volume in one water year (paired days only). */
@@ -867,6 +1073,8 @@ export interface CurtailmentSummary {
 	ewrAttribution?: 'netImpactProRata';
 	/** The EWR sites (outlet first, then gauges by node id) over the window; absent on older runs. */
 	ewrSites?: EwrSiteSummary[];
+	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. Not in the totals row. */
+	otherUsers?: CurtailmentUser[];
 	/** The workbook's totals row: plain sums of the farm columns. */
 	totals: {
 		demandM3Day: number;
@@ -910,6 +1118,10 @@ export interface RunoffBalance {
 
 export interface RunSummary {
 	farms: FarmSummary[];
+	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
+	users?: UserSummary[];
+	/** Land-cover streamflow reductions (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
+	landCover?: LandCoverSummary;
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
 	catchment: {
@@ -938,6 +1150,13 @@ export interface RunSummary {
 	curtailment?: CurtailmentSummary;
 	/** EWR compliance grid; absent on runs saved by engines before 0.3.0. */
 	ewrCompliance?: EwrCompliance;
+	/**
+	 * Monthly compliance with the Reserve's assurance rules at each EWR site
+	 * that has a rule table (engine ≥ 0.21.0, ./reserve/assurance.ts), outlet
+	 * first then gauges in node-id order. Absent when the project has no table,
+	 * and on older runs.
+	 */
+	ewrAssurance?: EwrAssuranceSite[];
 	/**
 	 * Simulated natural flow against the entered WR2012 reference (engine ≥
 	 * 0.6.0); absent when the project has no reference, and on older runs.
@@ -997,7 +1216,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;
@@ -1059,10 +1278,18 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
+	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
+	otherUseM3?: number;
+	/** Groundwater pumped into supply, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
+	groundwaterM3?: number;
+	/** Stream depletion taken from the river (WP-1.34); absent without boreholes. */
+	streamDepletionM3?: number;
+	/** Runoff removed by land cover before it reached the farms (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
+	landCoverReductionM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater − consumptive use − dam evaporation − other use − stream depletion − outflow − closing. */
 	residualM3: number;
 }
 

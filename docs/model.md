@@ -771,6 +771,87 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
+### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
+
+**Why.** Invasive alien trees and commercial forestry (a streamflow reduction
+activity under the National Water Act, s36) use more water than the natural
+vegetation they replaced. Le Maitre et al. (2016, Water SA 42(4)) put the
+national loss to invasive plants at 1 444 Mm³/yr, **2.9 % of the naturalised
+MAR**, about 970 m³/ha/yr (97 mm/yr) over the condensed invaded area. It is
+also what "clear the invasive trees and see what the river gets back" asks.
+**Off by default**: a project with no land-cover patches runs exactly as
+before.
+
+**Data** (`ProjectModel.landCover`, table `land_cover`, migration 013): per
+farm (the hydrological unit) a list of patches, each with a cover class, an
+area (km²), a condensed (canopy) cover 0–1 and optional reductions overriding
+the class's. A patch's share of its unit is `f = area × cover ÷ the farm's
+area` (patches covering more than the unit are scaled down to it, with a
+warning; patches on a gauge, a user or a farm without area are skipped, with
+a warning).
+
+**Classes** (`LAND_COVER_CLASSES`; reductions at full cover, **indicative**):
+
+| Class | Flows above the low-flow threshold (`mar`) | Low flows (`lowFlow`) |
+| --- | --- | --- |
+| Eucalyptus plantation (mature) | 75 % | 90 % |
+| Pine plantation (mature) | 40 % | 55 % |
+| Invasive alien trees, dryland | 50 % | 60 % |
+| Invasive alien trees, riparian | 75 % | 90 % |
+| Other | 0 % (enter its own) | 0 % |
+
+They follow the shape of the South African afforestation curves of Scott &
+Smith (1997), on which both WR2012's forestry module and Le Maitre et al.
+(2016) build: eucalypts reduce total flow more than pines (about 75 % against
+40 % in afforested grassland catchments at maturity), and low flows
+proportionally more than total flow. The invasive class sits between the two
+genera (wattles, the biggest national user, are fast-growing like eucalypts),
+and riparian invasions take 1.5 × the dryland reduction (Le Maitre et al.
+2016's factor outside grassland and savanna), capped at the eucalypt values.
+Age, site quality and rotation are not modelled: the numbers are mature-stand
+values and the hydrologist should confirm or override them per catchment
+(followups.md). As a check, `summary.landCover` reports each class's reduction
+in mm/yr over its condensed area, the figure Le Maitre et al. compare
+(≈ 97 mm/yr nationally).
+
+**Each day**, per farm with land cover (network/landcover.ts), with I0 = its
+natural runoff (natural flow × share) and q = share × the catchment's natural
+flow exceeded on 75 % of the run's days (its low-flow threshold):
+
+```
+MAR_u  = Σ_p f_p × mar_p          LOW_u = Σ_p f_p × lowFlow_p
+reduction = LOW_u × MIN(I0, q) + MAR_u × MAX(I0 − q, 0)      (never more than I0)
+I = I0 − reduction                                           (what the farm routes, §2.7)
+```
+
+The part of each day's flow up to the low-flow threshold loses the low-flow
+share and the part above it the other share, so the reduction is continuous
+and never larger on a smaller flow. This applies the Pitman/WR2012 idea
+(separate reductions to total and low flows, per unit, applied to the natural
+runoff before the users take water) to a daily flow; which daily split the
+hydrologist accepts is open (followups.md). The share of MAR removed is then
+close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
+
+- **Its own series**, never inside calibration: `landcover_reduction` per
+  farm and for the catchment, `summary.landCover` (mean, share of natural
+  flow, the threshold, per class), and the water balance's
+  `landCoverReductionM3`. `natural_flow` stays natural (natural vegetation),
+  as WR2012's naturalised flows are; farm runoff is natural less the
+  reduction.
+- **Calibration** runs the whole network, land cover included, so the fitted
+  GR4J parameters describe the catchment *without* the invasives: keep the
+  patches that were there while the record was measured in the project you
+  calibrate (the same baseline-relative rule as boreholes, §2.7d). Because
+  the threshold reads the whole run's natural flow, a calibration with land
+  cover simulates the whole run instead of stopping at the last scored day.
+- **Scenarios**: clearing a class is a copy of the project without its
+  patches, compared with the baseline (run comparison lists land cover added,
+  changed and removed per farm and class). Clearing every patch gives the
+  unreduced run back exactly (tested).
+- **Checks** (`checkLandCover`): runoff + reduction = natural × share,
+  0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
+  natural flow, and the catchment series and summary add up.
+
 ### 2.6 Transfers (`[Transfers]`)
 
 The workbook has two blocks of columns:
@@ -913,6 +994,7 @@ irrigation** and after the day's transfers are settled (§2.6):
 A  = A_full × (store[t−1] / capacity)^b          surface area (m²); 0 when the dam is empty
 Pd = rain[t] × A / 1000                           rain on the dam (m³); rain before any threshold
 E  = MIN(k_lake × Apan[month] / daysInMonth[month] / 1000 × A,  store[t−1] + Pd + J)
+     and, when b > 1, E ≤ (1 − seepage) × store[t−1] / b           (engine ≥ 0.21.1)
 Sp = MIN(seepage × store[t−1],  store[t−1] + Pd + J − E)
 start of the day = store[t−1] + Pd − E − Sp       (G, P and Q follow from it; J, M, O, K add to it)
 ```
@@ -927,6 +1009,27 @@ binds, the transfer brings enough that neither MIN bites.
   (and their names) that used the estimate.
 - `b` is `node.damAreaExponent`, default **0.7** (Liebe et al. 2005, small
   reservoirs); allowed 0 < b ≤ 3.
+- **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
+  start-of-day surface to the whole day. When the surface grows faster than
+  the volume (b > 1) and a day's evaporation is more than 1/b of the dam
+  (a very shallow dam: mean depth below b × the day's evaporation depth),
+  `store[t−1] − E − Sp` *falls* as `store[t−1]` rises, so a fuller dam
+  ended the day with less water than a lower one (fuzz seed 15979: 149 m³
+  all evaporated, 144 m³ kept 3 m³). The real process cannot do that: a
+  dam evaporating as its surface shrinks through the day is a one-variable
+  system, dV/dt = f(V), whose solutions never cross. The cap is the largest
+  loss for which the daily step keeps that order (d(store − E − Sp)/d store ≥ 0;
+  rain on the dam only adds to it). It is a limiter, not physics: it leaves
+  at least (1 − seepage)(1 − 1/b) of the dam, which on an extremely shallow
+  dam (a day's evaporation many times its contents) understates the
+  evaporation the exact solution gives (b = 3, ten times the contents: the
+  exact solution keeps 22 %, the cap 67 %), and the uncapped step, which kept
+  0 %, overstated it. It never binds for b ≤ 1, where the clamped step
+  already keeps the order, so default dams are unchanged. A single power law
+  with b > 1 is not a real basin shape (any area–stage power law gives
+  b = m/(m + 1) < 1; published small-reservoir fits give b ≈ 0.65–0.85), so
+  the allowed range is due to narrow to b ≤ 1 ([followups.md](./followups.md),
+  "Dam area exponent above 1").
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
@@ -1008,7 +1111,7 @@ D_s     = MAX(Z_s − U_s, 0)                         the site's shortfall (nois
 F_s     = the farms whose outflow reaches s (the site's own node when it is a farm)
 e_f,s   = H + I + J_int − U                         net impact of farm f ∈ F_s
           J_int counts only the transfers with BOTH ends in F_s
-e⁺      = MAX(e, 0)                                 (noise = 0: below 1e-12 of the farm's flows, or ~45 ulp (1e-14) of its dam storage and upstream flows, from 0.19.2)
+e⁺      = MAX(e, 0)                                 (noise = 0: below 1e-12 of the farm's flows, or ~45 ulp (1e-14) of its dam storage, upstream flows (0.19.2) and the dams at both ends of its transfers (0.21.1))
 E_s     = Σ_{f ∈ F_s} e⁺_f,s
 D*_s    = MIN(D_s, E_s)                             charged to farms   (series ewr_charged = −D*)
 N_s     = D_s − D*_s                                natural            (series ewr_natural = −N)
@@ -1078,6 +1181,190 @@ invariance. The per-run check recomputes a site exactly where no transfer
 crosses its catchment boundary (always the outlet), because per-rule transfer
 volumes are not run series.
 
+### 2.7c Other water users (engine ≥ 0.22.0, roadmap WP-1.33)
+
+**Why.** b023 has only farms and gauges, so water a town, industry or an
+unlisted irrigator takes from the river stays in the model and is handed to
+the listed farms and to the EWR, over-stating both. The logger measures the
+impacted river, so a missing user also biases calibration (issue #4,
+question 3 for the hydrologist). **Off by default**: a network with no node of
+kind `user` runs exactly as before (no new series or summary fields).
+
+**The element.** A node of kind `user` (`NetworkNode.kind = 'user'`) has:
+
+| Field | Meaning |
+| --- | --- |
+| `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
+| `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
+| `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+
+It has no area, flow share, dam, crops, transfers or EWR share; the API
+refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+
+**Each day** (network/simulate.ts), with H = Σ upstream outflow and Zs_in =
+Σ upstream senior requirement (below):
+
+```
+G  = MIN(D, H)                    senior
+G  = MIN(D, MAX(0, H − Zs_in))    junior: leaves the senior users' water in the river
+T  = r × G                        returned below it
+U  = H − G + T
+deficit = D − G
+Z  = Σ upstream Z                 (no EWR share of its own; its shortfall MIN(U − Z, 0) is shown like a gauge's)
+```
+
+**Priority against the farms: the senior requirement.** The network is
+solved upstream first, so without a rule a user below a farm could only have
+what the farm leaves. A senior user's demand is instead a requirement the
+farms upstream of it must pass, fragmented to them by flow share the way the
+pragmatic EWR is (§2.5):
+
+```
+Y_f  = Σ over senior users u downstream of f of D_u × share_f / Σ_{g upstream of u} share_g
+Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
+Zs   = MAX(0, Σ upstream Zs − D_u)      below a senior user; junior users and gauges pass it on
+```
+
+A farm then keeps MIN(Zs, H + I) below its dam before it fills the dam:
+it diverts less first (O), then takes less of the upstream inflow and its own
+runoff into the dam (K, M) pro rata, so the below-dam flow S = L + N − O is
+at least MIN(Zs, H + I) (working column `passed_for_senior` = what was kept
+out). This is the usual "pass inflow up to the downstream requirement"
+condition on a dam, and for a dam-less farm it is real-time curtailment of its
+river take. It never breaks the farm balance: only the split between the dam
+and the river below it changes. It does not make a farm release stored water,
+so a senior user can still be short when the farms upstream are dry. A senior
+user with no farm flow share upstream of it can't be protected this way: it
+takes what reaches it, and the run warns. Several senior users in series are
+served by position (the upstream one first). A junior user upstream of a farm
+still takes first: farms have no protected claim, the same as the EWR, which
+the model reports rather than protects.
+
+**EWR attribution (net impact).** Users are charged for EWR shortfalls
+exactly like farms (§2.7b): their net impact is `e = H − U = G − T` (what they
+take less what they return), so a site's charged part is split between farms
+and users pro rata. A user's whole charge is met by taking less (no storage
+part). The EWR sites table's "farms upstream" and "charged" include the users.
+
+**Curtailment (decided, pending the hydrologist).** Other users are **outside
+the irrigation equitable-share benchmark** (§2.11): their demand is not
+irrigation, and the benchmark's totals and fraction stay farms only. They get
+their own rows (`CurtailmentSummary.otherUsers`):
+
+- a **junior** user is curtailed for its EWR charge like a farm: supply cut
+  −ΔG = MAX(R ÷ (1 − r), −supplied) (taking ΔG less removes (1 − r)·ΔG of
+  use), and whatever the cut can't remove stands;
+- a **senior** user is **not** curtailed: its charge is reported and left
+  standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
+  which would charge irrigators for the town's use.
+
+**Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
+`inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
+`ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any senior user's
+demand is passed down, at every node, with the farms' `passed_for_senior`).
+`summary.users` has the whole-run means; the water balance gains
+`otherUseM3` = Σ (taken − returned) and closes with it (§6).
+
+**Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
+U = H − G + T, deficit, shortfall), the farm keeps MIN(Zs, H + I) below its
+dam and holds nothing back without a requirement, Zs never grows past a user,
+the attribution check counts users as contributors, and the summaries and
+curtailment rows are the means of the series. The fuzz generator adds up to
+three users (senior or junior, any return share, demand from none to far more
+than the river) to 30 % of networks.
+
+### 2.7d Groundwater abstraction and stream depletion (engine ≥ 0.23.0, roadmap WP-1.34, audit N5)
+
+**Why.** Many farms supplement from boreholes, and pumping near a river
+lowers the dry-season base flow the EWR depends on. Without it a farm with
+boreholes shows its full deficit and the river never feels the pumping.
+**Off by default**: a node without a borehole capacity runs exactly as before.
+
+**Fields** (farms and other users, not gauges; migration 012):
+
+| Field | Meaning |
+| --- | --- |
+| `boreholeCapacityM3Day` | most that can be pumped per day; null / 0 = no boreholes |
+| `boreholeRule` | `supplemental` (default): only what the dam and river leave unmet; `primary`: pumped first, the dam and river cover the rest; `drought`: supplemental while the dam holds less than `boreholeTriggerPct` × capacity at the start of the day (farms with a dam only) |
+| `boreholeTriggerPct` | the drought trigger, 0–1 of dam capacity (default 0.3) |
+| `streamDepletionFrac` d | share of the pumped volume the river eventually loses (0–1, default 0) |
+| `streamDepletionLagDays` k | time constant of the lag between pumping and depletion (days, default 0 = the same day) |
+
+**Each day**, with *surface* = what the dam and river can give (a farm:
+MAX(avail − dead storage, 0), §2.7; a user: its river take, §2.7c):
+
+```
+supplemental:  Gs = MIN(surface, D)          GW = MIN(cap, D − Gs)
+primary:       GW = MIN(cap, D)              Gs = MIN(surface, D − GW)
+drought:       as supplemental while Q[t−1] < trigger × dam capacity, else GW = 0
+G  = Gs + GW                                 (supplied; the dam or river gives only Gs, so P = avail − Gs)
+T  = β(1 − e) × G                            (the losses of pumped water return too)
+Sd = Sd[t−1] + d × GW;   due = α × Sd;   Sd ← Sd − due,   α = 1 − e^(−1/k)  (α = 1 when k = 0)
+Dep = MIN(due, R + S + T + seepage)          taken from the flow leaving the node
+unmet = due − Dep                            reported (series depletion_unmet) and warned about
+U  = R + S + T + seepage − Dep
+```
+
+The farm balance gains groundwater in and depletion out:
+`(H + I + J + Pd + GW) − (G − T) − E − ΔQ − U − Dep = 0` (column V).
+
+**Method: a lagged, linear-reservoir draw on the river at the borehole's
+node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
+
+- *Analytical stream depletion* (Theis 1941; Glover & Balmer 1954; Jenkins
+  1968; Hunt 1999 with a streambed conductance) needs the aquifer's
+  transmissivity and storativity, the borehole's distance from the river and,
+  for Hunt, the streambed leakance. Those are rarely known for South African
+  farm boreholes, and a daily convolution of the Glover response over a
+  multi-decade run is costly in calibration's thousands of runs. The two
+  parameters used here span the same behaviour: d is the long-run capture
+  share (1 for a well-connected alluvial aquifer, where Glover's depletion
+  tends to the whole pumping rate; lower where pumping captures evaporation
+  or regional outflow instead), and k is the response time. A first estimate
+  of k is Jenkins' stream depletion factor SDF = a²S/T (a the distance, S the
+  storativity, T the transmissivity): the Glover response to a step reaches
+  about half the pumping rate at t ≈ SDF. The exponential kernel is a
+  simplification of that response (it front-loads the depletion slightly);
+  the hydrologist can replace it with a Glover or Hunt kernel per borehole
+  when aquifer data exist.
+- *The GR4J routing store* is catchment-wide and belongs to the natural-flow
+  model: drawing on it would put a human impact inside the runoff model's
+  balance (§2.4a) and could not say which reach loses the water. The legacy
+  model has no store to draw on at all. Taking the depletion from the river at
+  the node works identically for both runoff models, keeps natural flow
+  natural, and puts the loss where the EWR is checked.
+- *Volume is conserved.* Over the run d × Σ GW = Σ Dep + Σ unmet + Sd at the
+  end: depletion keeps going for a while after pumping stops, and the store's
+  content at the end is depletion still to come. `checkGroundwater` asserts
+  this and every day's recursion.
+- *The river never goes negative.* Depletion due on a day with no flow left
+  at the node is unmet: in reality the aquifer's storage (or a losing reach)
+  supplies it. It is not carried over, which slightly understates depletion
+  in a dry spell; the run warns with the volume and the nodes.
+
+**Double counting and calibration.** A gauge or logger record measured while
+the boreholes pumped already carries their depletion. Because calibration
+scores the whole run, network included (§2.10b), the fitted GR4J parameters
+describe natural flow **only if the boreholes (and their depletion) are in the
+model while calibrating**, as they were during the record. The app therefore
+handles it baseline-relative: keep the historical pumping in the project you
+calibrate, and model a change (more boreholes, less pumping) as a copy whose
+run is compared with the baseline (run comparison, docs/run-comparison.md).
+Every run whose project has an observed record and depleting boreholes warns
+about this. Development can't vary within a run, so a record that spans the
+drilling of the boreholes is only approximately represented (followups.md).
+
+**EWR and curtailment.** Depletion lowers the node's outflow, so it is part
+of the node's net impact (e = H + I + J − U, §2.7b) and of any EWR charge.
+`supplied` includes groundwater, so the fraction supplied, the equitable
+share (§2.11) and the curtailment supply cut count it too.
+
+**Outputs** (only on nodes with boreholes): `groundwater_used`,
+`baseflow_depletion`, `depletion_unmet`, `depletion_store` (m³);
+`FarmSummary` / `UserSummary` `avgGroundwaterM3Day` and
+`avgBaseflowDepletionM3Day`; the water balance's `groundwaterM3` and
+`streamDepletionM3`.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
@@ -1086,6 +1373,7 @@ volumes are not run series.
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
+| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table | `RunSummary.ewrAssurance` + the Reserve compliance panel, headline and CSV block (§2.9c, engine ≥ 0.21.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -1170,6 +1458,173 @@ wrong in the dry season shows up.
   lower false-alarm ratio reproduces the river's EWR failures better. Note that
   on days inside the calibration window the scores are partly in-sample: the
   same days were used to fit the flows.
+
+### 2.9c EWR compliance by the Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6)
+
+The pragmatic EWR (§2.5) is one fixed flow per month, and the headline it
+gives is a count of days below it. A South African Reserve determination
+states the requirement differently, and judges compliance differently:
+
+- **The rule table.** The Desktop Reserve Model (Hughes & Hannart 2003) and
+  its revised form (Hughes et al. 2014) give the EWR as a set of monthly
+  flows at fixed **assurance levels**, the "% points" 10 %, 20 % … 90 %, 99 %.
+  Assurance is the share of time a flow should be equalled or exceeded
+  (Hughes & Hannart 2003), so the low points are the requirement in wet
+  conditions and the high points the drought flows. A gazetted table pairs it
+  with the site's natural flow at the same points (the natural flow duration
+  curve), usually in Mm³ per month or in m³/s, as maintenance low flows,
+  drought low flows or the total with high flows (Pollard et al. 2011, Table 4).
+- **The EWR follows the natural flow.** The requirement in a given month is
+  read at the point the month's *natural* flow sits at on that month's natural
+  duration curve: a naturally dry month asks for the drought flow, a wet one
+  for more (Hughes & Münster 2000; Hughes & Mallory 2008; Sawunyama & Hughes
+  2010, who call the natural percentile a drought severity index). So
+  compliance needs an estimate of natural flow at the site, which this model
+  makes anyway.
+- **Compliance is monthly.** Retrospective Reserve compliance compares the
+  flow in each month with that month's requirement, and reports the share of
+  months (or of time) not met, per month of the year and by season, the
+  magnitude, and how many months in a row fail (contiguity) (Pollard et al.
+  2011; Riddell et al. 2014).
+
+**Settings.** `settings.ewrRules` holds at most one table per EWR site (§2.7b:
+the outlet, `siteNodeId: null`, or a gauge), at most 20
+(`packages/engine/src/reserve/rules.ts`). Each has the % points (2–20, rising,
+in (0, 100], default the ten DRM points), a 12 × points EWR grid (water-year
+rows Oct … Sep), the unit (`mcm` Mm³ per month or `m3s` the month's mean
+flow), what it covers (`total` or `lowFlow`, a label only), a required
+`source`, a `scale` (default 1; multiplies every value, for a table given for
+a larger or smaller catchment, e.g. site area ÷ table area), and where the
+natural percentile comes from (`naturalSource`):
+
+- `run` (default): the month's natural flow ranked among the same calendar
+  month in every complete year of the run. The natural curve at the points is
+  the run's own, at Weibull plotting positions i / (n + 1), linear between
+  and held at the ends. It needs no gazetted natural curve, and a model that
+  is wet or dry overall doesn't shift every month into wetter or drier
+  conditions. Its weakness is a short run: with fewer than 10 years of a
+  calendar month the run warns that the percentiles are coarse.
+- `table`: the natural flow at the points as entered from the gazette (each
+  row's running minimum, since a duration curve can't rise). This is the
+  determination's own curve, so the requirement is the gazette's for a given
+  natural flow, but a model biased against that curve shifts the conditions.
+
+No table: nothing changes. The pragmatic EWR stays the daily EWR everywhere
+(the shortfall charge, curtailment, days not met), with or without tables; the
+rule tables add a report, they don't replace the daily EWR.
+
+**Per site, per complete calendar month** (a part month at either end of the
+run is not assessed; `packages/engine/src/reserve/assurance.ts`):
+
+```
+V  = the month's natural flow at the site = Σ runoff I of the farms upstream   (table unit)
+A  = the month's simulated flow at the site (outlet: simulated outflow; gauge: its flow)
+N  = that calendar month's natural curve at the points (run or table, × scale)
+T  = that calendar month's EWR row (× scale)
+k  = the first point with N_k ≤ V
+     k = first:  p = P_1,               R = T_1                (V at or above the wettest point)
+     between:    w = (N_k−1 − V) / (N_k−1 − N_k)
+                 p = P_k−1 + w (P_k − P_k−1),  R = T_k−1 + w (T_k − T_k−1)
+     none:       p = P_last,            R = T_last × V / N_last  (drier than the driest point)
+met      = A ≥ R        (relative float tolerance 1e-9)
+deficit  = MAX(R − A, 0) as m³
+```
+
+- **Units.** Everything is compared in the table's unit: Mm³ over the month,
+  or the mean m³/s over the month's actual days (so a leap February is 29
+  days).
+- **Interpolation.** Linear between points, in both the % and the flow,
+  with the same weight, as Pollard et al. (2011) interpolate a requirement
+  between the 80th and 90th percentiles. Sawunyama & Hughes (2010) describe
+  log interpolation in their operating model; linear is kept because a gazette
+  table has zeros (log of 0) and because the same weights make the invariant
+  below exact. The choice is a question for the hydrologist.
+- **Flat stretches.** Where the natural curve is flat at V, the wettest point
+  of the stretch is taken (the strictest requirement).
+- **Below the table.** Drier than the driest point, the requirement scales
+  with the flow (T_last × V / N_last: the table's EWR-to-natural ratio at its
+  driest point, applied to the flow), rather than asking a river with less
+  than its driest natural flow for the full drought flow.
+- **Above the table.** Wetter than the wettest point, the requirement stays
+  T_1: the rule table does not ask for more than its wettest flow.
+
+**Report** (`RunSummary.ewrAssurance`, outlet first, then gauges by node id):
+each month (natural, percentile, whether it was beyond the table, required,
+actual, met, deficit), and per site:
+
+| Measure | What it is |
+| --- | --- |
+| Months met | met ÷ complete months: the headline |
+| By month of the year | the same per calendar month (water-year order), with the deficit volume and mean required and actual flow |
+| Deficit | Σ deficit, m³ |
+| Longest run not met | consecutive months not met (contiguity, Riddell et al. 2014) |
+| Mean shortfall | mean (R − A) ÷ R over the months not met |
+| FDC check | per calendar month and % point: the simulated flow duration curve (Weibull) against the EWR curve T; the share of month × point cells met |
+
+The **FDC check** is the other reading of an assurance rule: the flow the
+rule gives at p % should be equalled or exceeded at least p % of the time, so
+the simulated duration curve should lie on or above the EWR curve at every
+point (Pollard et al. 2011, Fig. 4). It needs no natural flow; the monthly
+test needs it. The run also stores each site's requirement as a daily series,
+`ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
+complete months), so it can be charted and downloaded beside the flow.
+
+**Warnings.** A table that isn't usable (validation below) is skipped; so is
+one whose site is missing or isn't the outlet or a gauge. When a site has
+two usable tables (the API refuses that; stored settings can still carry it),
+**neither** is used, from engine 0.24.1: keeping the first made the result depend
+on the list's order. **Order invariance** (engine ≥ 0.24.1): a site's natural
+flow is summed over its farms in node-id order, and a natural flow within 1e-12
+of a curve point counts as reaching it, so a one-ulp difference can't move the
+percentile across a flat stretch of the curve (equal natural flow at several %
+points). Plausibility notes don't block a table but are repeated as
+run warnings: an EWR row that rises with the % point, a natural row that rises
+(its running minimum is used), and an EWR above the natural flow at a point
+(`table` source), which even natural flow can't meet. A calendar month the
+run has no complete year of is named, and so is a record shorter than 10
+years of a calendar month.
+
+**Invariants (tested, `reserve/assurance.test.ts`).**
+- **Natural flow meets its own rules.** When every EWR value is at most the
+  natural curve it is read against (T ≤ N at every point), natural flow meets
+  the requirement in every month, because R interpolates T with the weights
+  that return V from N (and T_last V / N_last ≤ V, T_1 ≤ N_1 ≤ V). Tested on
+  random series for both natural sources, and on random undeveloped networks
+  (no crops, dams, diversions or transfers) at every site.
+- **More abstraction can only lose months.** R depends only on natural flow,
+  so less simulated flow keeps the requirement and the percentile, never
+  meets a month that was not met, never shrinks a deficit and never passes
+  more FDC cells. Tested on random series and on random networks with three
+  times the crop area (return flow off, as `checkDoubledCropAreas`).
+- **The summaries add up**: the months of the year sum to the whole, and
+  rates are met ÷ months.
+- The fuzz generator gives rule tables to 30 % of its random projects, so the
+  order-invariance and finiteness checks cover them too.
+
+**Surfaces.** The results headline shows the monthly compliance at the outlet
+(else the first site) when a table exists, with days not met beside it as the
+secondary measure; the Reserve compliance panel has the per-month-of-year
+table and chart; the summary CSV has a block per site; run comparison compares
+each site's rates (docs/ui.md, docs/run-comparison.md).
+
+**Pending the hydrologist.** The method is from the literature above, not
+from the client's hydrologist: which table applies at which site (and
+whether total or low-flow), whether the percentile should come from the run
+or the gazette's natural curve, linear or log interpolation, and whether the
+requirement below the driest point should scale or hold.
+
+**Sources.** Full references are in
+[calibration-research.md § References](./calibration-research.md#references).
+Hughes & Hannart 2003, *J. Hydrol.* 270:167 (the DRM and its assurance
+rules) · Hughes & Münster 2000, WRC TT 137/00 (natural flow → EWR time
+series) · Hughes & Mallory 2008, *River Res. Appl.* 24:852 (EWRs in real-time
+operation) · Hughes, Desai, Birkhead & Louw 2014, *HSJ* 59:673 (the revised
+DRM) · Sawunyama & Hughes 2010, *Water SA* 36(4) (the natural percentile as a
+drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
+2011, WRC K8/881/2 (rule tables in Mm³ or m³/s against the natural curve; FDC
+and monthly compliance; interpolating a requirement between points) ·
+Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
+months, seasonality, magnitude, contiguity).
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
@@ -1824,11 +2279,17 @@ volume per user category (the way DWS gazettes restrictions), and a re-run of
 the network would check it is feasible; it would ship as a new, separately
 labelled table, not a silent redefinition of M.
 
+**Other water users (engine ≥ 0.22.0, WP-1.33).** Users are not rows of this
+table and not in its totals or equitable fraction. `CurtailmentSummary.otherUsers`
+lists each over the same window: demand, taken, returned, the mean EWR charge,
+whether it is curtailed (junior) and its supply cut and the charge left
+standing (§2.7c).
+
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
 N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store, −ΔG and the cut
 beyond the equitable share).
 `CurtailmentSummary.ewrSites` lists each EWR site over the same window (outlet
-first, then gauges by node id): farms upstream, days not met, and the mean
+first, then gauges by node id): farms (and, from engine 0.22.0, other water users) upstream, days not met, and the mean
 shortfall, charged and natural parts (≤ 0; charged + natural = shortfall);
 `ewrAttribution` names the rule (`netImpactProRata`). (The sheet's l/s total is the sum of the *truncated* farm
 values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
@@ -2003,14 +2464,16 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow; rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow; rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
-| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
+| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
+| `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
+| `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
@@ -2059,8 +2522,12 @@ and over the run, the catchment rain (`rain_final`), natural flow as depth and
 runoff coefficient, the GR4J store balance (AET, exchange, Δstorage and its
 residual in mm), and the network balance in m³: start storage + farm runoff +
 transfers + rain on dams = consumptive use (supplied − return flow) + dam
-evaporation + outflow + end storage + residual (the dam terms from engine
-0.16.0, §2.7a; seepage is inside the outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
+evaporation + other users' use (taken − returned, engine ≥ 0.22.0, §2.7c,
+`otherUseM3`, only when the network has users) − groundwater pumped +
+stream depletion (engine ≥ 0.23.0, §2.7d, `groundwaterM3` /
+`streamDepletionM3`, only with boreholes) + outflow + end storage +
+residual (the dam terms from engine 0.16.0, §2.7a; seepage is inside the
+outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
 so both are shown. The residual is float noise; anything else is a bug.
 
 The results page shows both (Self-checks panel, [ui.md](./ui.md#self-checks)),
@@ -2104,7 +2571,12 @@ roughly 12 minutes):
 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
 FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/runoff/gr4j.test.ts src/run.invariants.test.ts -t GR4J   # GR4J only
+FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts -t "random cases"   # diagnostic: list every failing seed
 ```
+
+Each random-cases test stops after `FUZZ_MAX_FAILURES` failing seeds
+(default 3, since each failure is shrunk, which is slow); a diagnostic soak
+raises it so one run lists every failing seed.
 
 Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
 Write a new property as a physical statement ("storage never exceeds
@@ -2155,6 +2627,9 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
+| **Condensed cover** | The area of a patch of trees as if its canopy were closed: area × canopy cover. Land-cover reductions scale with it (engine ≥ 0.24.0, §2.5a). |
+| **Stream depletion** | River flow a borehole's pumping captures: a share d of the pumping, lagged, taken from the river at the node (engine ≥ 0.23.0, §2.7d). |
+| **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a senior/junior priority (engine ≥ 0.22.0, §2.7c). |
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |
 | **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.16.0). Abstraction demand = crop requirement ÷ efficiency. |
