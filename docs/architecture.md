@@ -52,8 +52,8 @@ origin**, so the session cookie is first-party.
 
 The same `runModel` runs:
 
-- **in the browser**, for instant feedback while editing (a full client catchment run,
-  16k days × 13 elements, takes about 18 ms). Nothing is saved. Automatic
+- **in the browser**, for instant feedback while editing (a full run of a multi-decade,
+  multi-farm catchment takes milliseconds). Nothing is saved. Automatic
   calibration (`engine/src/calibrate`) runs there too, in a Web Worker
   (`frontend/src/lib/calibration/autocal.worker.ts`): about a minute of model
   runs on the input from `GET /projects/:id/model-input`, with the unsaved
@@ -129,7 +129,7 @@ sequenceDiagram
   B->>A: POST /projects/:id/runs
   A->>P: BEGIN; set app.current_user_id
   A->>P: SELECT project, nodes, crops, areas, transfers, series (RLS)
-  A->>A: runModelChecked(input) ~20 ms
+  A->>A: runModelChecked(input)
   A->>P: INSERT model_run (inputs snapshot, summary)
   A->>P: INSERT run_series × N (double precision[])
   A->>P: DELETE runs beyond the newest 20
@@ -144,12 +144,12 @@ sequenceDiagram
 | Choice | Why |
 | --- | --- |
 | **Postgres, with RLS** rather than app-only checks | Per-project sharing is the core of multi-tenancy. RLS makes a forgotten `WHERE` clause fail closed. The runtime role can't bypass it. |
-| **`double precision[]` per series** | 16k values is one row, not 16k rows. The engine and the charts always want whole series ([data-model.md](./data-model.md#time-series-storage)). |
+| **`double precision[]` per series** | A decades-long daily series is one row, not one row per day. The engine and the charts always want whole series ([data-model.md](./data-model.md#time-series-storage)). |
 | **JWT in an httpOnly cookie** | No token in JS-readable storage. Same-origin behind CloudFront, so `SameSite=Lax` works. |
 | **Plain SQL migrations** | The schema is mostly RLS policies and triggers, which an ORM would hide. |
-| **uPlot** | Draws 16k-point time series quickly, and it's small. |
+| **uPlot** | Draws decades-long daily series quickly, and it's small. |
 | **Static frontend** | Cheap hosting on S3 + CloudFront, and no server-side rendering to secure. |
-| **Python importer first** | openpyxl reads the 87 MB `.xlsm` reliably in read-only mode. An in-browser SheetJS importer comes later ([plan.md](./plan.md)). |
+| **Python importer first** | openpyxl reads a large `.xlsm` reliably in read-only mode. An in-browser SheetJS importer comes later ([plan.md](./plan.md)). |
 | **Lambda + RDS PostgreSQL 17 (t4g.micro)** | Low, predictable cost for a low-traffic expert tool. Always warm, and the same `pg` code path as local. Trade-offs in [plan.md 6b](./plan.md#6b-terraform-additions-infra). |
 
 ## Repo layout

@@ -5,13 +5,12 @@ demand, transfers, farm dams, routing, EWR shortfalls and calibration
 statistics. Natural flow itself comes from the selected runoff model in `../runoff/` (legacy: `../flow.ts`). Entry point:
 `runModel` in `../run.ts`.
 
-Up to engine 0.3.1 `run.test.ts` reproduced every daily value on all 13
-Element sheets of the client catchment b023 workbook (1981-01-01 to 2025-03-31,
-16 161 days) exactly. From 0.4.0 the engine deliberately differs where the
+Up to engine 0.3.1 `run.test.ts` reproduced every daily value on every
+Element sheet of the client catchment b023 workbook, over its whole record,
+exactly. From 0.4.0 the engine deliberately differs where the
 workbook's algorithm is unsound ([docs/engine-audit.md](../../../../docs/engine-audit.md)):
 the regression test keeps an explicit, commented deviation list per column,
-each entry naming the audit finding. A full `runModel` for the client catchment takes
-about 160 ms.
+each entry naming the audit finding.
 
 **No rounding.** The workbook rounds fragmented flows, dam splits, return flow,
 capacity, storage and demand to fixed precisions; the engine keeps full
@@ -185,8 +184,8 @@ What we mirror, and what we don't:
    February. **Not mirrored** (audit M1): the importer keeps the months a list
    names and prints a note when the workbook would have added others; the
    engine does a plain membership test. It makes no difference to either
-   sample workbook: the client catchment's transfer is "5,6,7,8,9,10", and lists with 11
-   or 12 there already include 1 and 2.
+   sample workbook: their lists either have no 11 or 12, or already include
+   1 and 2.
 3. **Blank template's sample transfer reads spill, not storage.** In
    `Blank_WBT_b023_v001.xlsm` [Transfers] P7 is
    `fGetTrfVolCapped(FarmB!R6, …)`: column R (spill) where every other
