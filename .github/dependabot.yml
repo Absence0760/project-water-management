@@ -22,8 +22,13 @@ updates:
       minor-and-patch:
         update-types: ["minor", "patch"]
 
+  # The repo's Python lives in subfolders, each with its own pinned
+  # requirements.txt; "/" has none, so list the folders (a new Python tool
+  # adds its folder here).
   - package-ecosystem: pip
-    directory: "/"
+    directories:
+      - "/brand"
+      - "/scripts/wbt-import"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
