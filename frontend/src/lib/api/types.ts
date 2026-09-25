@@ -213,6 +213,12 @@ export interface Run extends RunMeta {
 	 * calibration exclusions are the provenance of its parameters and scores.
 	 */
 	settings?: Partial<ProjectSettings> & Record<string, unknown>;
+	/**
+	 * The model as the run used it (GET …/runs/:runId only): nodes, crops,
+	 * crop areas, transfers, … The .xlsx workbook names its node sheets and
+	 * fills its Inputs sheet from it. Absent from an older API.
+	 */
+	model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown>;
 }
 
 /** One output series available for a run (values fetched separately). */
