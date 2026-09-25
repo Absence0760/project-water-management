@@ -225,8 +225,8 @@ a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
 that series in the chart below. Editors can **Delete** a series (after a
 confirm; runs already stored are not affected). Below 640px wide each row becomes a card
-(series and role on top, then labelled Period / Data up to / Missing /
-Typical, the coverage strip, and the buttons wrapping underneath), so a phone
+(series and role on top, then labelled Period / Data up to / Missing (% of
+days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. For editors the
 **Upload CSV** form follows the series panels in reading order, so on a phone
