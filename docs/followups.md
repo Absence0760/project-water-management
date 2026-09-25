@@ -1088,18 +1088,17 @@ role and not before it.
   - ~~`.xlsx` output~~ **landed (WP-1.28, 2026-09-25)**: the run workbook,
     built in the browser from the bulk series route (api.md § Export). Left
     open:
-    - **Open it in Excel and LibreOffice by hand** once: the tests read it
-      back with SheetJS (and pin each streamed sheet byte-for-byte to
-      SheetJS's own output), but no one has opened a generated file in Excel
-      or LibreOffice yet to confirm there is no repair prompt (LibreOffice
-      isn't installed on the dev machine, so no headless smoke test either).
-      A second implementation does read it: on 2026-09-25 two synthetic
-      workbooks from `buildWorkbook` (the unit test's input, and a 3-year,
-      2-farm synthetic run) passed Python's `zipfile.testzip()` (every CRC)
-      and opened in openpyxl 3.1.5 with no warnings, keeping full-precision
-      values, real dates and the `#,##0.00` display formats. Excel's repair
-      check is stricter than either, so the manual open stays open.
-      Trigger: before the first client handover of a workbook.
+    - [x] **Opened in Excel** (2026-09-25). Three synthetic workbooks from
+      `buildWorkbook` (the unit test's input with the awkward names
+      `=Upper farm`, `Summary`, and a long one with `[ ] : / * ?`; a 3-year,
+      2-farm run; a 20-year, 8-farm run, 19 MB) were opened in Excel 16.113
+      for Mac by the operator, who saw no repair prompt. The same files pass
+      Python's `zipfile.testzip()` and open in openpyxl 3.1.5 with no
+      warnings; every tab keeps its unit headers, real dates, full-precision
+      values and `#,##0.00` display formats. Not scripted (macOS blocks the
+      terminal from driving Excel), so a real client-size run (~41 MB) and
+      LibreOffice (not installed) are unchecked; worth one more look at the
+      first client handover.
     - [x] **Smaller files** (2026-09-25): the workbook is zipped with the
       platform's `CompressionStream('deflate-raw')` (`zip.ts`) instead of
       SheetJS's fixed-Huffman deflate; a ~45-year, 13-node run 100.8 →
