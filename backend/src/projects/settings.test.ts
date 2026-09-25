@@ -1,6 +1,6 @@
 import { defaultProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -529,5 +529,20 @@ describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 		const stored = { ewrRules: [table(), table({ siteNodeId: 'g1' })] };
 		expect(patchSettings(stored, { ewrRules: [table({ siteNodeId: 'g2' })] }).ewrRules).toEqual([table({ siteNodeId: 'g2' })]);
 		expect(patchSettings(stored, { ewrRules: [] }).ewrRules).toEqual([]);
+	});
+});
+
+describe('remapSettingNodeIds (project copy)', () => {
+	it('moves each rule table to its node’s new id, keeps the outlet and unknown sites, and changes nothing else', () => {
+		const ids = new Map([
+			['g1', 'new-g1'],
+			['f1', 'new-f1']
+		]);
+		const stored = { effectiveRainFraction: 0.5, ewrRules: [{ siteNodeId: null, source: 'a' }, { siteNodeId: 'g1', source: 'b' }, { siteNodeId: 'gone', source: 'c' }] };
+		const out = remapSettingNodeIds(stored, ids);
+		expect(out).toEqual({ effectiveRainFraction: 0.5, ewrRules: [{ siteNodeId: null, source: 'a' }, { siteNodeId: 'new-g1', source: 'b' }, { siteNodeId: 'gone', source: 'c' }] });
+		expect(stored.ewrRules[1]!.siteNodeId).toBe('g1');
+		expect(remapSettingNodeIds({ apanMm: [1] }, ids)).toEqual({ apanMm: [1] });
+		expect(remapSettingNodeIds(null, ids)).toEqual({});
 	});
 });

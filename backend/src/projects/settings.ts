@@ -50,6 +50,22 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 	return out as unknown as ProjectSettings;
 }
 
+/**
+ * Stored settings for a copy whose nodes got fresh ids (POST /projects/:id/copy,
+ * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) follows its
+ * node. A site not in the map (already dangling) is left as it was, so the
+ * copy's runs warn about it as the original's do. Anything else is unchanged.
+ */
+export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, string>): Json {
+	const s: Json = isObj(stored) ? { ...stored } : {};
+	if (Array.isArray(s.ewrRules)) {
+		s.ewrRules = s.ewrRules.map((t: unknown) =>
+			isObj(t) && typeof t.siteNodeId === 'string' && ids.has(t.siteNodeId) ? { ...t, siteNodeId: ids.get(t.siteNodeId) } : t
+		);
+	}
+	return s;
+}
+
 /** Settings replaced whole by a patch, never merged: a fit record describes one fit. */
 const REPLACED_WHOLE = new Set(['fitRecord']);
 

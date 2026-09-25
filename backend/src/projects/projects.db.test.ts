@@ -234,6 +234,38 @@ describe('projects', () => {
 		const full = await a.call('GET', `/projects/${copy.body.project.id}/series/${series[0].id}`);
 		expect(full.body.values).toEqual([0, 1.5, null, 3]);
 	});
+
+	it('points a copied EWR rule table at the copy’s node, and keeps the outlet table (engine ≥ 0.21.0)', async () => {
+		const a = await signUp('CopyRule');
+		const { projectId, outlet } = await projectWithModel(a);
+		// Synthetic table: round numbers.
+		const table = (siteNodeId: string | null) => ({
+			siteNodeId,
+			source: 'Synthetic table',
+			component: 'total',
+			unit: 'mcm',
+			points: [10, 50, 90],
+			ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+			naturalSource: 'run',
+			natural: null,
+			scale: 1
+		});
+		const patched = await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(outlet.id)] } });
+		expect(patched.status).toBe(200);
+		expect(patched.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, outlet.id]);
+		// Two tables for one site are refused.
+		expect((await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(null)] } })).status).toBe(400);
+
+		const copy = await a.call('POST', `/projects/${projectId}/copy`, { name: 'Catchment E' });
+		expect(copy.status).toBe(201);
+		const dup = (await a.call('GET', `/projects/${copy.body.project.id}/model`)).body;
+		const gauge = dup.nodes.find((n: { name: string }) => n.name === 'Gauge');
+		expect(gauge.id).not.toBe(outlet.id);
+		expect(copy.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, gauge.id]);
+		// The original is untouched.
+		const orig = (await a.call('GET', `/projects/${projectId}`)).body.project;
+		expect(orig.settings.ewrRules[1].siteNodeId).toBe(outlet.id);
+	});
 });
 
 describe('members and roles', () => {
@@ -336,4 +368,3 @@ describe('display order', () => {
 		expect(again.body.crops.map((c: { name: string }) => c.name)).toEqual(['Citrus', 'Apples', 'Zucchini']);
 	});
 });
-
