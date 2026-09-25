@@ -256,8 +256,10 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 test('a run past the cap drops the oldest run from the list straight away', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs cap');
-	// RUNS_KEPT_PER_PROJECT is 20 (backend/.env.development).
-	for (let i = 1; i <= 20; i++) await createRun(page.request, project.id, `Old ${String(i).padStart(2, '0')}`);
+	// RUNS_KEPT_PER_PROJECT is 20 (backend/.env.development). Old 01 first, so it is the oldest;
+	// the other 19 together (one API process serves the whole local suite, see the next test).
+	await createRun(page.request, project.id, 'Old 01');
+	await Promise.all(Array.from({ length: 19 }, (_, i) => createRun(page.request, project.id, `Old ${String(i + 2).padStart(2, '0')}`)));
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
 	await expect(list.getByRole('button', { name: /^Old 01/ })).toBeVisible();
@@ -272,8 +274,10 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 test('with a long runs list the whole results menu stays in view on a laptop screen', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs rail');
-	// RUNS_KEPT_PER_PROJECT is 20, the most a project can hold.
-	for (let i = 1; i <= 20; i++) await createRun(page.request, project.id, `Run ${String(i).padStart(2, '0')}`);
+	// RUNS_KEPT_PER_PROJECT is 20, the most a project can hold. Sent together: the full local
+	// suite shares one API process, and 20 requests awaited one by one each queue behind the other
+	// workers' heavy runs (this setup alone reached the 30 s test timeout). Nothing here needs an order.
+	await Promise.all(Array.from({ length: 20 }, (_, i) => createRun(page.request, project.id, `Run ${String(i + 1).padStart(2, '0')}`)));
 	await page.setViewportSize({ width: 1280, height: 768 });
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
