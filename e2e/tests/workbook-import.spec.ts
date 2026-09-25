@@ -54,6 +54,23 @@ async function review(dialog: Locator, file: { name: string; mimeType: string; b
 	await expect(dialog.getByLabel('Name')).toHaveValue(expectedName);
 }
 
+/**
+ * The synthetic workbook's notes and unmapped report as the review renders
+ * them: the count sentences, the severity badges, and the table's columns.
+ */
+async function expectReportLists(notes: Locator, unmapped: Locator) {
+	await expect(notes.getByRole('heading', { level: 3 })).toHaveText('Importer notes');
+	await expect(notes.getByRole('paragraph').first()).toHaveText('12 notes. Read them before relying on a run.');
+	await expect(notes.getByText('Warning', { exact: true })).toHaveCount(0);
+	await expect(notes.getByText('Note', { exact: true })).toHaveCount(12);
+	await expect(unmapped.getByRole('heading', { level: 3 })).toHaveText('Unmapped report: not carried across as the workbook meant');
+	await expect(unmapped.getByRole('columnheader')).toHaveText(['Where', 'Element', 'What', 'In the workbook']);
+	await expect(unmapped.getByRole('row')).toHaveCount(1 + 8);
+	await expect(unmapped.getByRole('paragraph').first()).toHaveText(
+		"The importer couldn't map these 8 items onto the app's model exactly. It never changes a value on its own: check each against the workbook, and fix the project after importing if needed."
+	);
+}
+
 async function expectNoViolations(page: Page) {
 	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
 	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
@@ -81,6 +98,8 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	const echo = unmapped.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Echo Farm', exact: true }) }).filter({ hasText: '=S7*0.9-V7' });
 	await expect(echo).toHaveCount(1);
 	await expect(echo.getByRole('code')).toHaveText('=S7*0.9-V7');
+	// How the two lists render (pinned before they were shared with the Overview's import panel).
+	await expectReportLists(notes, unmapped);
 
 	// The gauge option re-reads the workbook already in the worker: a warning appears, no new file needed.
 	await dialog.getByLabel("It's a gauge on another river: import it as a reference gauge").check();
