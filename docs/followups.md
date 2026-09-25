@@ -1053,7 +1053,14 @@ role and not before it.
   - `.xlsx` output, which needs a spreadsheet library (operator call; not the
     npm `xlsx` package);
   - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
-    plus a local MinIO equivalent).
+    plus a local MinIO equivalent). **Now a real limit, not a hypothetical
+    one** (measured 2026-09-25 for WP-1.28): a farm's daily CSV has ~32
+    full-precision columns, ≈ 400 KB a year, so a record longer than about
+    30 years gets the `413` (a ~45-year farm is ≈ 6.5 MB). The
+    workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
+    bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
+    response streaming with a 50 MB cap (roadmap step 1). Trigger: before the
+    first production release that the client catchment will be exported from.
 - **Accounts:**
   - Should sign-in require a verified email?
   - Should sign-up be invite-only, or email-first? Email-first closes the last

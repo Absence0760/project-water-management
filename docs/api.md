@@ -394,8 +394,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | POST | `/projects/:id/runs` | `{ label? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
-| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
+| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
+| GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model: `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes }` | `200 { run: RunMeta }` with the new note and its stamp. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` only ([data-model.md § Run notes](./data-model.md)) | editor |
@@ -736,13 +737,49 @@ gives every row a fresh id.
 response mode, which fails any response over **6 MB**. Every export body is
 built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
 once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
-a full node over a multi-decade record is well under the cap, and so is the
-catchment table, so real catchments fit; a 60 000-day
-series is ≈ 1 MB. The durable fix if exports grow (many long series, multi-node
+a 60 000-day series is ≈ 1 MB, and the catchment table fits, but a **farm's
+daily CSV over a multi-decade record does not**: a farm has ~32 columns at
+full precision (≈ 12–13 bytes a value on average), so a ~45-year record
+(≈ 16 400 days) is ≈ 6.5 MB and gets the 413; download it in windows of about
+30 years or less, or take the `.xlsx` workbook, whose bulk fetch pages under the
+cap ([below](#bulk-run-series)). WP-1.29 (Lambda response streaming) removes
+the limit for the CSVs ([followups.md](./followups.md)). The durable fix if exports grow (many long series, multi-node
 workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or
 writing the file to S3 and returning a pre-signed URL. Gzip is not a clean win
 here: a gzipped body is binary, so the Lambda adapter base64-encodes it (+33 %),
 and CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress either.
+
+### Bulk run series
+
+`GET /projects/:id/runs/:runId/series/bulk?nodeId=<uuid>&offset=<day>` (viewer;
+`401` signed out, `404` for a non-member, another project's run, or a node the
+run has no series for) returns every stored series of one node, or the
+catchment's when `nodeId` is omitted, so the browser builds the `.xlsx`
+workbook with one request per node instead of one per series:
+
+```jsonc
+{
+  "nodeId": "…" /* null for the catchment */, "name": "Upper farm" /* "catchment" */,
+  "kind": "farm",            // "catchment" | "farm" | "gauge" | "user"
+  "startDate": "2021-10-01", "days": 16437,   // the run's first day and length
+  "offset": 0, "count": 6225, "next": 6225,   // this page; next = null on the last
+  "series": [{ "key": "demand_gross", "label": "…", "unit": "m³/day",
+               "header": "… (m³/day)", "values": [0.25, null /* … count values */] }]
+}
+```
+
+- `series` is in the daily CSV's column order and `header` is the daily CSV's
+  header (`loadDailyScope` in `backend/src/export/daily-columns.ts` serves
+  both), and the values are the stored full-precision numbers, so a workbook
+  built from it equals the CSV export. `name` follows the CSV too: the node's
+  current name, or the run's for a node deleted since.
+- **Paging.** A page carries at most ⌊(5 MB − 256 KB) ÷ 25⌋ ≈ 199 000 values
+  (25 bytes is the longest JSON a double or `null` takes with its comma), so
+  `count` = that ÷ the number of series and no page can pass the 5 MB cap
+  whatever the values. A farm (~32 series) gets ~6 200 days a page: one
+  request up to ~17 years, three for ~45 years. Follow `next` until it is
+  `null`. `offset` defaults to 0; `400` when it is negative, not an integer,
+  or past the run's end, or when `nodeId` isn't a UUID.
 
 ## Health
 

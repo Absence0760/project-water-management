@@ -22,7 +22,8 @@ import {
 	withLegacyComment,
 	type DailyColumn
 } from './csv.js';
-import { nodeColumnHeader, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
+import { loadDailyScope } from './daily-columns.js';
+import { summaryCsvLines } from './run-tables.js';
 
 /** A real calendar date: 2024-02-31 is rejected (Date.parse would roll it over). */
 const isoDate = z
@@ -91,29 +92,11 @@ export const exportRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
 			const name = await projectName(db, id);
-			const { rows } = await db.query<{ key: string; label: string | null; unit: string | null; values: (number | null)[] }>(
-				`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit, "values"
-				 FROM run_series WHERE run_id = $1 AND node_id IS NOT DISTINCT FROM $2::uuid`,
-				[runId, q.nodeId ?? null]
-			);
-			if (!rows.length) throw new ApiError(404, 'not found');
-			const order = seriesKeyOrder(q.nodeId ? 'node' : 'catchment');
-			rows.sort((a, b) => order(a.key, b.key));
-
-			let scope = 'catchment';
-			let kind: 'farm' | 'gauge' | 'user' = 'farm';
-			if (q.nodeId) {
-				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' | 'user' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
-				const fromSummary = run.summary.farms.find((f) => f.nodeId === q.nodeId)?.name;
-				scope = n[0]?.name ?? fromSummary ?? 'node';
-				// A deleted node: a farm has a demand series, a gauge doesn't.
-				kind = n[0]?.kind ?? (rows.some((r) => r.key === 'demand') ? 'farm' : 'gauge');
-			}
-			const columns: DailyColumn[] = rows.map((r) => ({
-				header: q.nodeId ? nodeColumnHeader(r.key, r.label ?? r.key, r.unit, kind) : seriesHeader(r.label ?? r.key, r.unit),
-				values: r.values
-			}));
-			const length = Math.max(...rows.map((r) => r.values.length));
+			const daily = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
+			if (!daily) throw new ApiError(404, 'not found');
+			const scope = daily.name;
+			const columns: DailyColumn[] = daily.series.map((s) => ({ header: s.header, values: s.values }));
+			const length = Math.max(...daily.series.map((s) => s.values.length));
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
