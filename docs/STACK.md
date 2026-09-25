@@ -42,7 +42,7 @@ sides share.
   Route 53 + ACM + budget/alarms. The database is added in Phase 6
   ([plan.md](./plan.md)).
 
-pnpm monorepo with three workspaces (`frontend`, `backend`, `packages/*`).
+pnpm monorepo with four workspaces (`frontend`, `backend`, `packages/*`, `e2e`).
 Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 
 ## Commands (run from repo root)
@@ -59,16 +59,18 @@ pnpm dev:db:status | dev:db:logs
 pnpm dev:db:migrate         # apply backend/migrations as `water`
 pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local data)
 pnpm dev:db:psql            # psql as the schema owner
-pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026, dev:mail:open)
+pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026)
+pnpm dev:mail:down | dev:mail:status | dev:mail:logs | dev:mail:open
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
+pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend
 pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
+pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
