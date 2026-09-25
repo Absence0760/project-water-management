@@ -89,6 +89,9 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 	// B2 (engine ≥ 0.15.0): flagged zero-rain runs are treated as missing and
 	// CHIRPS fills them; the workbook runs them dry. The replay keeps them as
 	// recorded; the B2 test below runs the default.
+	// B4 (engine ≥ 0.20.0): a multi-day accumulation's total is spread over the
+	// days it covers; the workbook keeps it on the reading day. The replay
+	// keeps it as recorded; the B4 test below runs the default.
 	// Q5 (engine ≥ 0.16.0): a dam's minimum operating level stops irrigation.
 	// The workbook's "min %" column is the transfer minimum, which each
 	// transfer rule already carries; migration 006 sets every stored value to
@@ -103,7 +106,7 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 			...project.settings,
 			runoffModel: 'legacy',
 			effectiveRainStoreMm: 0,
-			zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] }
+			zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [], accumulationMode: 'asRecorded', keepReadings: [], addAccumulations: [] }
 		},
 		model: {
 			...project.model,

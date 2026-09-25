@@ -6,6 +6,7 @@ import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
+import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
@@ -32,6 +33,16 @@ export const ZERO_RAIN_MODES = ['missing', 'asRecorded'] as const;
 export type ZeroRainMode = (typeof ZERO_RAIN_MODES)[number];
 
 /**
+ * What a run does with untagged multi-day accumulations in the catchment rain
+ * (settings.zeroRainRuns.accumulationMode, engine ≥ 0.20.0, ./accumulation.ts,
+ * audit B4): 'spread' keeps the recorded total and spreads it over the days it
+ * covers in proportion to bias-corrected CHIRPS; 'asRecorded' leaves the
+ * reading on its day, as up to 0.19 and as the workbook does.
+ */
+export const ACCUMULATION_MODES = ['spread', 'asRecorded'] as const;
+export type AccumulationMode = (typeof ACCUMULATION_MODES)[number];
+
+/**
  * settings.zeroRainRuns (engine ≥ 0.15.0). Periods use the calibration
  * exclusions' shape: a water year or a date range, each with a reason.
  */
@@ -42,9 +53,22 @@ export interface ZeroRainSettings {
 	keepDry: CalibrationExclusion[];
 	/** Extra periods whose catchment rain is treated as missing whatever it reads, in either mode. */
 	missing: CalibrationExclusion[];
+	/** For detected multi-day accumulations (engine ≥ 0.20.0). Default 'spread'. */
+	accumulationMode: AccumulationMode;
+	/** Detected accumulations confirmed as real one-day rain (e.g. a storm CHIRPS missed): a detection whose reading day falls in one stays as recorded. */
+	keepReadings: CalibrationExclusion[];
+	/** Accumulation windows listed by hand (the reading is the period's last day): spread like a detected one, in 'spread' mode. */
+	addAccumulations: CalibrationExclusion[];
 }
 
-export const defaultZeroRainSettings = (): ZeroRainSettings => ({ mode: 'missing', keepDry: [], missing: [] });
+export const defaultZeroRainSettings = (): ZeroRainSettings => ({
+	mode: 'missing',
+	keepDry: [],
+	missing: [],
+	accumulationMode: 'spread',
+	keepReadings: [],
+	addAccumulations: []
+});
 
 /**
  * Rain → natural-flow calibration (b023 [Flow Calibration Cfg]); consumed by
@@ -954,6 +978,13 @@ export interface RunSummary {
 	 * the project has no catchment rain; absent on older runs.
 	 */
 	zeroRainInfill?: ZeroRainInfill | null;
+	/**
+	 * Untagged multi-day accumulations in the catchment rain (engine ≥ 0.20.0,
+	 * ./accumulation.ts, audit B4): the windows detected or listed, what the
+	 * run did with each, and the days spread. null when the project has no
+	 * catchment rain; absent on older runs.
+	 */
+	rainAccumulation?: RainAccumulationInfo | null;
 	/**
 	 * The engine's self-checks on this run's own output (engine ≥ 0.12.0,
 	 * ./verify): the invariants the test suite asserts on random networks,

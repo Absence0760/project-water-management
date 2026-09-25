@@ -441,7 +441,16 @@ models. Correcting the fallback was the first condition for adopting GR4J.
     tells the fit exactly which days are bad, so the rest of its water year
     is good data and stays in. In `'asRecorded'` mode every flagged day is
     left out this way: that mode runs them dry as a blanket choice, not
-    because anyone confirmed them.
+    because anyone confirmed them;
+  - the days of every **multi-day accumulation window** (§2.4d; engine ≥
+    0.20.0), one by one, in either accumulation mode, except a reading kept
+    as recorded. Their recorded days are wrong (zeros, then the lot on one
+    day), and their spread days are CHIRPS-shaped, so fitting on either
+    would be circular. Keeping the windows' totals in instead would not be
+    neutral either: the detected windows read well under the usual
+    catchment / CHIRPS ratio (an unread gauge loses water, and the detection
+    test itself prefers windows CHIRPS reads a lot over), so they would drag
+    the factors down.
 
   **Kept-dry days stay in**, as confirmed readings. Leaving out real dry
   spells would be selection bias: they are the days when the catchment reads
@@ -525,6 +534,7 @@ and the series explorer:
 | `rain_chirps_corrected` | CHIRPS × its calendar month's factor on **every** day it has a value, not only the fallback days, so it can be read against catchment rain on the days both exist. A month without a factor keeps its raw value. Only output when the setting is `'monthly'` and some month has a factor | NaN |
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
+| `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -590,7 +600,12 @@ recorded rain exactly.
 A period is a whole water year (`{ waterYear, reason }`) or a date range
 (`{ start, end, reason }`), always with a reason, as for calibration
 exclusions (§2.10b). A day in two periods counts once: a flagged run claims
-its days first.
+its days first. **A multi-day accumulation window (§2.4d) takes precedence
+over a flagged run** for its days, in accumulation mode `'spread'`: the
+window's own recorded total covers them, so they are not filled from CHIRPS
+as well (engine ≥ 0.20.0; up to 0.19 a flagged run that ended in an
+accumulation reading was filled *and* the reading kept, counting that rain
+twice). A listed missing period wins over a window.
 
 **Not changed.** The data checks (§2.10a) still report the flagged runs,
 because the data is still suspect. The low-vs-CHIRPS check never blanks a
@@ -624,7 +639,117 @@ mode and to both period lists. A run saved before 0.15.0 compares as
 catchment suite replays with `'asRecorded'`. Its "B2:" test checks that the
 default sets aside exactly the flagged runs, changes catchment rain on no
 other day, finds CHIRPS for every day it sets aside, and passes the
-self-checks.
+self-checks. It runs with multi-day accumulations as recorded, so B2 is
+judged on its own; the "B4:" test (§2.4d) runs both defaults.
+
+### 2.4d Multi-day rainfall accumulations
+
+Engine ≥ 0.20.0, [audit B4](./engine-audit.md), issue #2,
+`packages/engine/src/accumulation.ts`. Settings: the accumulation fields of
+`settings.zeroRainRuns`.
+
+**Why.** When nobody reads a manual rain gauge for some days (a weekend, a
+holiday, an observer away), the unread days are often entered as 0 or left
+blank, and the whole accumulated total goes on the day the gauge was read.
+Viney & Bates (2004, "It never rains on Sunday", *Int. J. Climatol.* 24)
+found these *untagged* accumulations throughout the Australian high-quality
+daily record; they are the classic fault of manually read stations. The
+total is right and the days are wrong: the model sees a dry spell and then
+one storm several times bigger than any day really was. Both runoff models
+respond to daily rain non-linearly (the legacy model's a·Rain^b peak,
+GR4J's production store), so one 150 mm day makes far more quick flow, and
+carries far less soil moisture forward, than 150 mm over three weeks.
+Worse, when the unread days form a flagged zero run (§2.4c), engine
+0.15–0.19 filled them from CHIRPS and kept the reading too, counting that
+rain twice.
+
+**Detection** (`detectAccumulations`). Over the whole stored record, a
+catchment reading is an accumulation when:
+
+| Test | Value (`accumulation.ts`) | Why |
+| --- | --- | --- |
+| The reading is large | ≥ 20 mm (`ACC_MIN_MM`) | Spreading a few millimetres changes little, and small readings are where a storm CHIRPS missed is most likely |
+| It follows days of 0 or blank | ≥ 3 days (`ACC_MIN_RUN_DAYS`) | A weekend is the shortest common gap. Blank days count like zeros: the total covers a tagged-missing day just as well |
+| CHIRPS saw little rain on the reading day | bias-corrected CHIRPS on the day before, the day and the day after < 25 % of the reading (`ACC_READING_DAY_SHARE`) | If CHIRPS rained then, the reading is most likely that day's storm. The ±1 day is timing slop: a gauge read at 08:00 books the previous day's rain, and CHIRPS's day boundary differs |
+| CHIRPS saw rain over the days before | bias-corrected CHIRPS over the run, leaving out the day just before the reading, ≥ 50 % of the reading (`ACC_RUN_SHARE`) | This separates an accumulation from a convective storm CHIRPS missed after a real dry spell: then CHIRPS is dry over the run too. The day before is left out so a storm CHIRPS booked a day early is not mistaken for rain in the run |
+| Window length | the run, at most its last 92 days (`ACC_MAX_RUN_DAYS`), plus the reading day | About a season: a gauge left longer would have overflowed or lost its catch to evaporation |
+
+CHIRPS is judged × the §2.4b monthly factors fitted before any accumulation
+is left out. The detection compares amounts, so it uses the factors in
+either CHIRPS mode (raw CHIRPS for a month without a factor). A day with no
+CHIRPS value counts as 0, except that the reading day must have one.
+Windows never overlap: each run ends at the reading before the next.
+
+**Treatment** (`accumulationMode`, default `'spread'`). The window's recorded
+total *T* (the reading plus any other readings in it) is kept and spread
+over its days in proportion to bias-corrected CHIRPS there (× the month's
+factor in CHIRPS mode `'monthly'`, raw in `'none'`):
+
+  rain(d) = T × CHIRPS(d) / Σ CHIRPS over the window,
+
+with the reading day taking what is left after the other days, so the
+window adds up to *T*. This is Viney & Bates's disaggregation, with CHIRPS
+as the reference series. If CHIRPS reads no rain over a window at all (only
+possible for a window listed by hand), its total stays on the reading day,
+the other days run as 0, and the run warns. **The stored series is never
+changed.**
+
+- **Precedence.** The window's days are not also set aside as a flagged zero
+  run (§2.4c): its total covers them. A run longer than 92 days is split: the
+  window takes its last 92 days, and the zero-run fill the rest. A detection
+  is dropped when its window touches a period listed as missing, or (in
+  zero-run mode `'missing'`) a keep-dry period: the hydrologist has already
+  said what those days are.
+- **The CHIRPS fit.** Window days are left out of the §2.4b fit day by day,
+  in either mode (§2.4b says why), and the spread uses the factors fitted
+  without them, so spread rain never feeds its own factors. A reading kept
+  as recorded stays in, as a confirmed reading.
+- **Mode `'asRecorded'`** leaves every reading on its day, as up to 0.19 and
+  as the workbook does. Its windows are still reported and still left out of
+  the fit, and the run warns when one ends a flagged zero run that CHIRPS
+  fills, because that rain is then counted twice.
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `accumulationMode` | `'spread'` (default), `'asRecorded'` | What to do with detected and listed windows |
+| `keepReadings` | periods | Detections the hydrologist confirms as one day's rain (e.g. a thunderstorm CHIRPS missed): a detection whose reading day is inside one stays as recorded, and counts in the CHIRPS fit |
+| `addAccumulations` | periods | Windows the check misses, listed by hand; the period's last day is the reading day. A listed window wins over a detection it overlaps; one that overlaps a missing period or an earlier listed window is skipped with a warning |
+
+Periods are shaped like the zero-run ones: a water year or a date range,
+each with a reason. The Data tab shades the windows a run would spread.
+
+**Why these thresholds, and their limits.** They are engineering judgement,
+tuned on synthetic cases and checked against the client record, open for the
+hydrologist to confirm ([followups.md](./followups.md)). A false positive
+costs little: the gauge's own total is kept, only its timing changes. What
+the check can't tell apart: a storm CHIRPS missed that fell just after
+CHIRPS reported rain the gauge didn't catch (list it under `keepReadings`),
+and an accumulation whose run CHIRPS also missed (list it under
+`addAccumulations`). Some detected windows read far less than CHIRPS over
+them. An unread gauge loses water to evaporation and overflow, so such a
+total may be low, but the run keeps the gauge's total rather than guess a
+correction.
+
+**Output.** `summary.rainAccumulation` has the mode, the thresholds
+(`criteria`), each window touching the run (dates, source, reason, what the
+run did with it, the recorded total and reading, the detection figures, the
+CHIRPS it was spread by, and the rain used from it), listed windows skipped,
+and totals. `summary.chirpsCorrection.accumulationDaysLeftOut` counts the
+window days the fit left out. The run warns for the windows spread, those
+left on the reading day, those kept, those run as recorded, and listed
+windows skipped. The `rain_catchment_spread` column (§2.4b table) marks each
+day. The summary CSV has a *Multi-day rain accumulations* block
+(`accumulationLines` in `backend/src/export/run-tables.ts`). Run comparison
+lists changes to the mode and both lists; a run saved before 0.20.0 compares
+as `'asRecorded'`. A fit record's `forcing.zeroRainRuns` carries the fields,
+so changing them flags "Forcing changed since fit" (a record made before
+0.20.0 has nothing to compare them with).
+
+**Workbook regression.** The workbook keeps the readings as recorded, so the
+client catchment suite replays with `accumulationMode: 'asRecorded'`. Its
+"B4:" test runs the defaults: each window wholly inside the run adds up to
+its recorded total, no window day is also filled as a zero run, catchment
+rain changes on no other day, and every self-check passes.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -2023,6 +2148,7 @@ step when a definition changes.
 | **Ecological category** | A–F class of river condition that the EWR aims to maintain. |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
+| **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with 0 or blank on the unread days and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d). |
 | **Water year** | Oct–Sep in South African hydrology. The workbook orders monthly tables this way. |
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |

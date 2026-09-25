@@ -180,8 +180,10 @@ export interface FitRecord {
 	 * under too. Absent on records made before `forcing` existed;
 	 * `chirpsBiasCorrection` absent on a `forcing` made before it was tracked.
 	 * `settings.zeroRainRuns` (engine ≥ 0.15.0) is recorded too: it decides
-	 * which zero-rain days CHIRPS fills, so it changes the rain the fit saw;
-	 * absent on a `forcing` made before it.
+	 * which zero-rain days CHIRPS fills, and (engine ≥ 0.20.0, its
+	 * accumulation fields) which multi-day accumulations are spread, so it
+	 * changes the rain the fit saw; absent on a `forcing` made before it, and
+	 * the accumulation fields absent on one made before 0.20.0.
 	 */
 	forcing?: { panCoefficient: number[]; apanMm: number[]; chirpsBiasCorrection?: ChirpsBiasMode; zeroRainRuns?: ZeroRainSettings };
 	splitSample: ValidationTest | null;
@@ -315,7 +317,20 @@ const closeArray = (a: readonly number[] | null | undefined, b: readonly number[
 	!!a && !!b && a.length === b.length && a.every((v, i) => close(v, b[i]));
 
 /** Settings without zeroRainRuns predate it (engine < 0.15.0): flagged zero runs ran as recorded. */
-const zeroRainOf = (s: Partial<ProjectSettings>): ZeroRainSettings => ({ mode: 'asRecorded', keepDry: [], missing: [], ...(s.zeroRainRuns ?? {}) });
+const zeroRainOf = (s: Partial<ProjectSettings>) => {
+	const z = { mode: 'asRecorded', keepDry: [], missing: [], ...(s.zeroRainRuns ?? {}) } as Partial<ZeroRainSettings>;
+	return { mode: z.mode, keepDry: z.keepDry, missing: z.missing };
+};
+/**
+ * The accumulation fields (engine ≥ 0.20.0), absent ones as the engine runs
+ * them today ('spread', no periods). Compared only when the fit recorded them:
+ * a forcing made before them has nothing to compare against.
+ */
+const accumulationOf = (z: Partial<ZeroRainSettings> | undefined) => ({
+	accumulationMode: z?.accumulationMode ?? 'spread',
+	keepReadings: z?.keepReadings ?? [],
+	addAccumulations: z?.addAccumulations ?? []
+});
 
 /** Which of a fit's recorded forcing fields differ from the settings, or null when there is nothing recorded to compare. */
 function forcingDiff(
@@ -328,7 +343,11 @@ function forcingDiff(
 		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm),
 		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
 		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection,
-		zeroRainRuns: record.forcing.zeroRainRuns !== undefined && !sameJson(zeroRainOf(settings), zeroRainOf({ zeroRainRuns: record.forcing.zeroRainRuns }))
+		zeroRainRuns:
+			record.forcing.zeroRainRuns !== undefined &&
+			(!sameJson(zeroRainOf(settings), zeroRainOf({ zeroRainRuns: record.forcing.zeroRainRuns })) ||
+				(record.forcing.zeroRainRuns.accumulationMode !== undefined &&
+					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns))))
 	};
 }
 

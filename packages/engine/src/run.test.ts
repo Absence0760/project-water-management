@@ -9,6 +9,7 @@ import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
 import { zeroRainRuns } from './quality';
+import { ACC_MIN_MM } from './accumulation';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
 import { checkTransferLimits } from './verify/checks';
@@ -1631,8 +1632,8 @@ describe.skipIf(!clientCatchmentFixture)(
 
 		it('B2: sets aside exactly the flagged zero runs, fills them from CHIRPS, and changes no other day', () => {
 			const recorded = prepareRun(modelInput);
-			const settings = { ...modelInput.settings } as Record<string, unknown>;
-			delete settings.zeroRainRuns; // the default
+			// The default zero-run handling, with accumulations as recorded so B2 is judged alone (B4 below runs both).
+			const settings = { ...modelInput.settings, zeroRainRuns: { ...defaultProjectSettings().zeroRainRuns, accumulationMode: 'asRecorded' as const } };
 			const filled = prepareRun({ ...modelInput, settings });
 			const z = filled.zeroRain!.infill;
 			const catchmentSeries = modelInput.series.rain_catchment_mm!;
@@ -1661,6 +1662,50 @@ describe.skipIf(!clientCatchmentFixture)(
 			const input = { ...modelInput, settings };
 			const full = withVerification(input, runModel(input));
 			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
+		});
+
+		it('B4: spreads each detected accumulation over its window, keeping its total, and the zero-run fill leaves those days alone', () => {
+			const recorded = prepareRun(modelInput);
+			const settings = { ...modelInput.settings } as Record<string, unknown>;
+			delete settings.zeroRainRuns; // the default: zero runs missing, accumulations spread
+			const run = prepareRun({ ...modelInput, settings });
+			const acc = run.accumulation!;
+			expect(acc.info.mode).toBe('spread');
+			const spread = acc.info.windows.filter((w) => w.status === 'spread');
+			expect(spread.length).toBeGreaterThan(0);
+			expect(spread.every((w) => w.source === 'detected' && w.totalMm >= w.readingMm && w.readingMm >= ACC_MIN_MM)).toBe(true);
+			const d0 = toEpochDay(run.startDate);
+			const a = run.aligned('rain_catchment_mm');
+			const b = recorded.aligned('rain_catchment_mm');
+			const inWindow = new Uint8Array(run.days);
+			for (const w of spread) {
+				const from = toEpochDay(w.start);
+				const to = toEpochDay(w.end);
+				let sum = 0;
+				for (let day = from; day <= to; day++) {
+					if (day < d0 || day >= d0 + run.days) continue;
+					inWindow[day - d0] = 1;
+					sum += a[day - d0]!;
+				}
+				// A window wholly inside the run adds up to what the gauge recorded over it: nothing lost, nothing added.
+				if (w.daysInRun === to - from + 1) expect(sum).toBeCloseTo(w.totalMm, 9);
+			}
+			expect(Array.from(acc.mask)).toEqual(Array.from(inWindow));
+			// No window day is also set aside as a zero run (the 0.19 double count), and outside the windows
+			// and the zero-run days the catchment rain is as recorded.
+			const bad: number[] = [];
+			for (let t = 0; t < run.days; t++) {
+				if (inWindow[t] && run.zeroRain!.mask[t]) bad.push(t);
+				if (!inWindow[t] && !run.zeroRain!.mask[t] && a[t] !== b[t]) bad.push(t);
+			}
+			expect(bad.slice(0, 5)).toEqual([]);
+			// The windows are left out of the CHIRPS factor fit, day by day.
+			expect(run.chirpsCorrection!.accumulationDaysLeftOut).toBeGreaterThan(0);
+			// The model still conserves water with both on.
+			const input = { ...modelInput, settings };
+			const full = withVerification(input, runModel(input));
+			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
+			expect(full.summary.rainAccumulation!.spreadDays).toBe(inWindow.reduce((x, v) => x + v, 0));
 		});
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only

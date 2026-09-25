@@ -32,7 +32,17 @@
 import { monthOfEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import { waterYearOf } from './network/stats';
-import { defaultZeroRainSettings, ZERO_RAIN_MODES, type ChirpsBiasMode, type DailySeries, type SeriesKind, type ZeroRainMode, type ZeroRainSettings } from './project';
+import {
+	ACCUMULATION_MODES,
+	defaultZeroRainSettings,
+	ZERO_RAIN_MODES,
+	type AccumulationMode,
+	type ChirpsBiasMode,
+	type DailySeries,
+	type SeriesKind,
+	type ZeroRainMode,
+	type ZeroRainSettings
+} from './project';
 import { rainVsChirps, usualAnnualRainMm, waterYearLabel, zeroRainRuns } from './quality';
 
 /** A calendar month's own factor needs this many days where both series have a reading … */
@@ -103,6 +113,8 @@ export interface ChirpsCorrection {
 	missingDaysLeftOut?: number;
 	/** Days of flagged zero runs kept dry that stay in the fit as confirmed readings (engine ≥ 0.18.0). */
 	keptDryDaysInFit?: number;
+	/** Days of multi-day accumulation windows left out of the fit one by one (engine ≥ 0.20.0, ./accumulation.ts). */
+	accumulationDaysLeftOut?: number;
 	/** Calendar months 1–12, in order. */
 	months: ChirpsMonthFactor[];
 	/** Run days where CHIRPS stood in for blank catchment rain. */
@@ -128,8 +140,15 @@ const enough = (days: number, chirpsMm: number) => days >= CHIRPS_FACTOR_MIN_DAY
 export const KEEP_DRY_DOUBT_MIN_MM = 50;
 export const KEEP_DRY_DOUBT_ANNUAL_SHARE = 0.25;
 
-/** How a catchment-rain day counts as suspect: listed missing, a flagged zero run, or a flagged run kept dry. */
-export type SuspectRainDay = 'missing' | 'flagged' | 'keptDry';
+/**
+ * How a catchment-rain day counts as suspect: listed missing, in a multi-day
+ * accumulation window (engine ≥ 0.20.0), a flagged zero run, or a flagged run
+ * kept dry.
+ */
+export type SuspectRainDay = 'missing' | 'accumulation' | 'flagged' | 'keptDry';
+
+/** Epoch-day spans (inclusive) of accumulation windows, as the fit leaves them out (./accumulation.ts fitExcludedWindows). */
+export type AccumulationSpans = readonly { from: number; to: number }[];
 
 export interface SuspectRainDays {
 	/** The status of an epoch day, or null for an ordinary day. */
@@ -145,9 +164,10 @@ export interface SuspectRainDays {
  * issue #2 check flags is 'keptDry' when the mode is 'missing' and a keep-dry
  * period holds it, and 'flagged' when not. In 'asRecorded' mode every flagged
  * day is 'flagged': that mode runs them dry as a blanket choice, not as a
- * confirmed reading.
+ * confirmed reading. A day of an accumulation window in `accumulations` is
+ * 'accumulation', unless it is listed missing.
  */
-export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRainSettings): SuspectRainDays {
+export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRainSettings, accumulations: AccumulationSpans = []): SuspectRainDays {
 	const runs = catchment
 		? zeroRainRuns(catchment).runs.map((r) => ({ start: r.startDate, end: r.endDate, from: toEpochDay(r.startDate), to: toEpochDay(r.endDate) }))
 		: [];
@@ -159,6 +179,7 @@ export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRain
 		runs,
 		status: (day) => {
 			if (within(missing, day)) return 'missing';
+			if (accumulations.some((w) => day >= w.from && day <= w.to)) return 'accumulation';
 			if (!runs.some((r) => day >= r.from && day <= r.to)) return null;
 			return within(keep, day) ? 'keptDry' : 'flagged';
 		}
@@ -213,18 +234,21 @@ function factorsFrom(t: MonthSums): { pooled: ChirpsCorrection['pooled']; months
  * of a kept-dry stretch that bias-corrected CHIRPS contradicts (the keep-dry
  * guard). Other kept-dry days stay in: they are confirmed readings. The guard
  * judges a stretch with factors fitted without any flagged-run day, so the
- * verdict doesn't lean on the keep-dry it is judging.
+ * verdict doesn't lean on the keep-dry it is judging. The days of
+ * `accumulations` (engine ≥ 0.20.0) are left out one by one too: their
+ * recorded days are wrong, and their spread days are CHIRPS-shaped.
  */
 export function chirpsBiasFactors(
 	series: Partial<Record<SeriesKind, DailySeries>>,
 	mode: ChirpsBiasMode,
-	zeroRain: ZeroRainSettings = defaultZeroRainSettings()
+	zeroRain: ZeroRainSettings = defaultZeroRainSettings(),
+	accumulations: AccumulationSpans = []
 ): ChirpsCorrection | null {
 	const sb = series.rain_chirps_mm;
 	if (!sb) return null;
 	const sa = series.rain_catchment_mm;
 	const lowYears = sa ? (rainVsChirps(series)?.flaggedYears ?? []) : [];
-	const suspect = suspectRainDays(sa, zeroRain);
+	const suspect = suspectRainDays(sa, zeroRain, accumulations);
 	const b0 = toEpochDay(sb.startDate);
 
 	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their status.
@@ -281,12 +305,14 @@ export function chirpsBiasFactors(
 	let flaggedDaysLeftOut = 0;
 	let missingDaysLeftOut = 0;
 	let keptDryDaysInFit = 0;
+	let accumulationDaysLeftOut = 0;
 	const fit = factorsFrom(
 		sums((d) => {
 			if (doubtYears.has(waterYearOf(d.day))) return false;
 			if (d.status === 'missing') missingDaysLeftOut++;
 			else if (d.status === 'flagged') flaggedDaysLeftOut++;
 			else if (d.status === 'keptDry') keptDryDaysInFit++;
+			else if (d.status === 'accumulation') accumulationDaysLeftOut++;
 			return d.status === null || d.status === 'keptDry';
 		})
 	);
@@ -303,6 +329,7 @@ export function chirpsBiasFactors(
 		flaggedDaysLeftOut,
 		missingDaysLeftOut,
 		keptDryDaysInFit,
+		accumulationDaysLeftOut,
 		months: fit.months,
 		fallbackDays: 0,
 		correctedDays: 0,
@@ -355,6 +382,7 @@ export function fitExclusionText(c: ChirpsCorrection): string {
 	if (doubt.length) parts.push(`water years of kept-dry runs that CHIRPS contradicts (${doubt.map(waterYearLabel).join(', ')})`);
 	if (c.flaggedDaysLeftOut) parts.push(`${plural(c.flaggedDaysLeftOut, 'day')} of flagged zero runs treated as missing`);
 	if (c.missingDaysLeftOut) parts.push(`${plural(c.missingDaysLeftOut, 'day')} listed as missing`);
+	if (c.accumulationDaysLeftOut) parts.push(`${plural(c.accumulationDaysLeftOut, 'day')} of multi-day accumulation windows`);
 	const kept = c.keptDryDaysInFit ? ` ${plural(c.keptDryDaysInFit, 'kept-dry day')} stay in the fit as confirmed readings.` : '';
 	return (parts.length ? ` Left out of the fit as suspect catchment rain: ${parts.join('; ')}.` : '') + kept;
 }
@@ -417,10 +445,18 @@ export function resolveZeroRain(raw: unknown, warnings: string[]): ZeroRainSetti
 		if ((ZERO_RAIN_MODES as readonly unknown[]).includes(o.mode)) mode = o.mode as ZeroRainMode;
 		else warnings.push(`unknown zero-rain run mode "${String(o.mode)}"; using ${d.mode}`);
 	}
+	let accumulationMode: AccumulationMode = d.accumulationMode;
+	if (o.accumulationMode != null) {
+		if ((ACCUMULATION_MODES as readonly unknown[]).includes(o.accumulationMode)) accumulationMode = o.accumulationMode as AccumulationMode;
+		else warnings.push(`unknown accumulation mode "${String(o.accumulationMode)}"; using ${d.accumulationMode}`);
+	}
 	return {
 		mode,
 		keepDry: sanitizeExclusions(o.keepDry, warnings, 'keep-dry period'),
-		missing: sanitizeExclusions(o.missing, warnings, 'missing-rain period')
+		missing: sanitizeExclusions(o.missing, warnings, 'missing-rain period'),
+		accumulationMode,
+		keepReadings: sanitizeExclusions(o.keepReadings, warnings, 'keep-reading period'),
+		addAccumulations: sanitizeExclusions(o.addAccumulations, warnings, 'listed accumulation')
 	};
 }
 
@@ -480,9 +516,17 @@ export interface ZeroRainMask {
  * Which run days' catchment rain to treat as missing. Flagged zero runs come
  * from the whole stored record, as the data checks see them. null without a
  * catchment rain series. filledMm / unfilledDays stay 0 until
- * finishZeroRainInfill has the rain used.
+ * finishZeroRainInfill has the rain used. A day `claimed(day)` says is an
+ * accumulation window's (engine ≥ 0.20.0, ./accumulation.ts) is not set aside
+ * as part of a flagged run: the window's own total covers it.
  */
-export function zeroRainMask(catchment: DailySeries | undefined, zr: ZeroRainSettings, start: number, days: number): ZeroRainMask | null {
+export function zeroRainMask(
+	catchment: DailySeries | undefined,
+	zr: ZeroRainSettings,
+	start: number,
+	days: number,
+	claimed: (day: number) => boolean = () => false
+): ZeroRainMask | null {
 	if (!catchment) return null;
 	const c0 = toEpochDay(catchment.startDate);
 	const reading = (day: number) => {
@@ -517,10 +561,11 @@ export function zeroRainMask(catchment: DailySeries | undefined, zr: ZeroRainSet
 		const span = inRun(toEpochDay(run.startDate), toEpochDay(run.endDate));
 		if (!span) continue;
 		if (zr.mode === 'asRecorded') {
-			asRecordedDays += span[1] - span[0] + 1;
+			for (let day = span[0]; day <= span[1]; day++) if (!claimed(day)) asRecordedDays++;
 			continue;
 		}
 		const keptBy = (day: number) => {
+			if (claimed(day)) return true;
 			const k = keepDry.findIndex((r) => day >= toEpochDay(r.start) && day <= toEpochDay(r.end));
 			if (k >= 0) keptDry[k]!.days++;
 			return k >= 0;
