@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
-import { fromEpochDay, toEpochDay, upgradeLegacyModel, type RunoffBalance } from '@water-management/engine';
+import { fromEpochDay, toEpochDay, upgradeLegacyModel, type RunoffBalance, type RunSummary } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { loadDailyScope } from '../export/daily-columns.js';
+import { bulkPage } from './bulk.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { executeRun, loadModelInput, trimRuns } from './execute.js';
 
@@ -76,8 +78,10 @@ export const runRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 			// The run's own settings snapshot: its fit record and calibration
-			// exclusions are the provenance of its parameters and scores.
-			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings ${FROM_RUN} WHERE r.project_id = $1 AND r.id = $2`, [
+			// exclusions are the provenance of its parameters and scores. Its
+			// model snapshot (nodes, crops, transfers as they were when it ran)
+			// names its nodes and fills the workbook's Inputs sheet.
+			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model ${FROM_RUN} WHERE r.project_id = $1 AND r.id = $2`, [
 				id,
 				runId
 			]);
@@ -104,6 +108,32 @@ export const runRoutes = new Hono<AuthEnv>()
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			return c.json(rows[0]);
+		});
+	})
+	// Every stored series of one node (the catchment's without nodeId), in the
+	// daily CSV's column order and with its headers: what the browser-built
+	// .xlsx workbook fetches, one request per node (docs/api.md § Export).
+	// Paged by `offset` so no response passes the 5 MB export cap; a node over
+	// a record of up to ~6 000 days (32 columns) fits in one page.
+	.get('/:id/runs/:runId/series/bulk', async (c) => {
+		const { id, runId } = c.req.param();
+		const q = z
+			.object({ nodeId: z.string().uuid().optional(), offset: z.coerce.number().int().min(0).max(1_000_000).default(0) })
+			.parse(c.req.query());
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			const { rows } = await db.query<{ startDate: string; summary: RunSummary }>(
+				'SELECT start_date AS "startDate", summary FROM model_run WHERE project_id = $1 AND id = $2',
+				[id, runId]
+			);
+			const run = rows[0];
+			if (!run) throw new ApiError(404, 'not found');
+			const scope = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
+			if (!scope) throw new ApiError(404, 'not found');
+			const page = bulkPage(scope, q.nodeId ?? null, run.startDate, q.offset);
+			if (!page) throw new ApiError(400, 'offset is past the end of the run');
+			return c.json(page);
 		});
 	})
 	// One node's every column on one day, with the day before's storage and the

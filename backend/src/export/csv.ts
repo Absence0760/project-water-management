@@ -6,10 +6,11 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine';
  * Largest export body we build. Lambda's buffered (non-streaming) responses
  * are capped at 6 MB, and the API runs behind `hono/aws-lambda`'s buffered
  * `handle`, so anything bigger would fail in production with an opaque 502.
- * 5 MB leaves headroom for headers. One node over a 45-year daily record
- * (16 437 days × 13 series) is under 2 MB, so real catchments fit; the cap only bites on very
- * long records or many user series, and the 413 tells the caller how to
- * narrow the request (`from` / `to`). See docs/api.md § Export.
+ * 5 MB leaves headroom for headers. The catchment table fits real records,
+ * but a farm's daily CSV (~32 full-precision columns, ≈ 150 KB a year) passes
+ * the cap beyond about 30 years, and the 413 tells the caller how to narrow
+ * the request (`from` / `to`). The bulk series route pages under it instead
+ * (runs/bulk.ts); WP-1.29 (streaming) lifts it. See docs/api.md § Export.
  */
 export const MAX_EXPORT_BYTES = 5 * 1024 * 1024;
 

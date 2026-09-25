@@ -1413,6 +1413,19 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.28 Spreadsheet library and `.xlsx` export
 
+- **Status: landed (2026-09-25, issue #11).** The Runs tab's "Workbook
+  (.xlsx)" builds the workbook in `lib/spreadsheet/export/export.worker.ts`
+  (SheetJS CE mini build, 87 KB gzip, its own bundle ceiling) from
+  `GET …/series/bulk` (api.md § Bulk run series). Two departures from the
+  plan below: a client-size farm node is **not** under the 5 MB cap (~32
+  columns × ~45 years ≈ 6.5 MB of JSON), so the bulk route pages by day
+  window (one request up to ~17 years, three for ~45); and daily rows are
+  streamed into SheetJS's sheet XML, because SheetJS's cell objects for a
+  client-size run need ~4 GB. A ~45-year, 13-node run builds in ~3 s
+  (~100 MB file). Open in followups.md § Features left half-way: opening a
+  file in Excel by hand, and smaller files through native compression.
+  CSV values and the workbook are compared cell for cell in
+  `e2e/tests/xlsx-export.spec.ts`.
 - **Goal:** download a run as a workbook (summary, catchment daily, one
   sheet per farm like b023's element sheets, curtailment, EWR grid, annual
   volumes, warnings, inputs).

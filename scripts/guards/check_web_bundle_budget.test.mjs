@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BUDGET, kb, measure, violations } from './check_web_bundle_budget.mjs';
 
-const budget = { totalCodeKb: 20, largestChunkKb: 5, largestWorkerKb: 8, largestAssetKb: 3 };
+const budget = { totalCodeKb: 30, largestChunkKb: 5, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3 };
 
 test('kb rounds up once, not per file', () => {
 	assert.equal(kb(0), 0);
@@ -46,8 +46,8 @@ test('a build under every ceiling passes', () => {
 });
 
 test('each ceiling fails on its own', () => {
-	const total = measure(Array.from({ length: 6 }, (_, i) => ({ path: `${i}.js`, gzipBytes: 4 * 1024 })));
-	assert.match(violations(total, budget).join('\n'), /Total gzipped JS\+CSS is 24 KB/);
+	const total = measure(Array.from({ length: 8 }, (_, i) => ({ path: `${i}.js`, gzipBytes: 4 * 1024 })));
+	assert.match(violations(total, budget).join('\n'), /Total gzipped JS\+CSS is 32 KB/);
 
 	const chunk = measure([{ path: 'big.js', gzipBytes: 6 * 1024 }]);
 	const v = violations(chunk, budget);
@@ -78,6 +78,23 @@ test('a Web Worker has its own ceiling, and still counts in the total', () => {
 	assert.equal(measure([{ path: '_app/immutable/chunks/workers.js', gzipBytes: 1024 }]).largestWorker.kb, 0);
 });
 
+test('a spreadsheet worker has its own ceiling, apart from the calibration worker', () => {
+	const m = measure([
+		{ path: '_app/immutable/workers/export.worker-abc.js', gzipBytes: 11 * 1024 },
+		{ path: '_app/immutable/workers/import.worker-def.js', gzipBytes: 10 * 1024 },
+		{ path: '_app/immutable/workers/autocal.worker-x.js', gzipBytes: 7 * 1024 },
+	]);
+	assert.deepEqual(m.largestSpreadsheetWorker, { path: '_app/immutable/workers/export.worker-abc.js', kb: 11 });
+	assert.deepEqual(m.largestWorker, { path: '_app/immutable/workers/autocal.worker-x.js', kb: 7 });
+	assert.equal(m.totalCodeKb, 28);
+	assert.deepEqual(violations(m, budget), [], 'an 11 KB spreadsheet worker is over the 8 KB worker ceiling but under its own 12 KB');
+	const big = violations(measure([{ path: '_app/immutable/workers/import.worker-z.js', gzipBytes: 13 * 1024 }]), budget);
+	assert.equal(big.length, 1);
+	assert.match(big[0], /Spreadsheet worker _app\/immutable\/workers\/import\.worker-z\.js is 13 KB, over the 12 KB spreadsheet-worker budget/);
+	// Another worker named "…export…" is not a spreadsheet worker.
+	assert.equal(measure([{ path: '_app/immutable/workers/csvexport.worker-z.js', gzipBytes: 1024 }]).largestSpreadsheetWorker.kb, 0);
+});
+
 test('an empty build is a failure, not a pass', () => {
 	const v = violations(measure([{ path: 'index.html', gzipBytes: 10 }]), budget);
 	assert.equal(v.length, 1);
@@ -87,5 +104,6 @@ test('an empty build is a failure, not a pass', () => {
 test('the committed budget is internally sane', () => {
 	assert.ok(BUDGET.largestChunkKb < BUDGET.totalCodeKb);
 	assert.ok(BUDGET.largestWorkerKb < BUDGET.totalCodeKb);
+	assert.ok(BUDGET.largestSpreadsheetWorkerKb < BUDGET.totalCodeKb);
 	assert.ok(Object.isFrozen(BUDGET));
 });

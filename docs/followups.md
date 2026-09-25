@@ -1050,10 +1050,32 @@ role and not before it.
     match);
   - a value change is not isolated when the dates also changed.
 - **Export:**
-  - `.xlsx` output, which needs a spreadsheet library (operator call; not the
-    npm `xlsx` package);
+  - ~~`.xlsx` output~~ **landed (WP-1.28, 2026-09-25)**: the run workbook,
+    built in the browser from the bulk series route (api.md § Export). Left
+    open:
+    - **Open it in Excel and LibreOffice by hand** once: the tests read it
+      back with SheetJS (and pin each streamed sheet byte-for-byte to
+      SheetJS's own output), but no one has opened a generated file in Excel
+      yet to confirm there is no repair prompt. Trigger: before the first
+      client handover of a workbook.
+    - **Smaller files.** SheetJS zips with a fixed-Huffman deflate: a ~45-year,
+      13-node run is ~100 MB, where zlib level 6 makes the same parts ~41 MB.
+      Durable fix: write the zip in the worker with the browser's native
+      `CompressionStream('deflate-raw')` (every browser the app supports has
+      it), keeping SheetJS's parts, with a test that the output reads back
+      identically. Trigger: a user sharing a workbook by email, or a download
+      complaint on a client-size run.
+    - No frozen header row or live formulas (SheetJS CE doesn't write panes;
+      the formula audit workbook is the separate item in § Verification).
   - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
-    plus a local MinIO equivalent).
+    plus a local MinIO equivalent). **Now a real limit, not a hypothetical
+    one** (measured 2026-09-25 for WP-1.28): a farm's daily CSV has ~32
+    full-precision columns, ≈ 400 KB a year, so a record longer than about
+    30 years gets the `413` (a ~45-year farm is ≈ 6.5 MB). The
+    workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
+    bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
+    response streaming with a 50 MB cap (roadmap step 1). Trigger: before the
+    first production release that the client catchment will be exported from.
 - **Accounts:**
   - Should sign-in require a verified email?
   - Should sign-up be invite-only, or email-first? Email-first closes the last
