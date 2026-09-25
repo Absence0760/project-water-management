@@ -197,7 +197,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Editors change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project.'
+						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project.'
 					}
 				]
 			}
@@ -675,7 +675,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on. A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model (badged **Workbook comparison**) can’t be nominated.'
+						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on ([[evidence-run]]). A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model (badged **Workbook comparison**) can’t be nominated.'
 					},
 					{
 						type: 'note',
