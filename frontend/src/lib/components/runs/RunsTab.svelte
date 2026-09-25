@@ -30,6 +30,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { activeSectionId, resultSections } from './sections';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
+	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
+	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
 
 	let {
 		projectId,
@@ -472,6 +474,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<Wr2012Panel report={summary.wr2012} />
 						</div>
 					{/if}
+					<div class="panel" id="res-uncertainty">
+						<Lazy load={loadUncertaintyPanel}>
+							{#snippet children(UncertaintyPanel)}
+								{#key shownRunId}
+									<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
+								{/key}
+							{/snippet}
+						</Lazy>
+					</div>
 					<div class="panel" id="res-notes">
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />

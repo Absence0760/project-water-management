@@ -726,8 +726,9 @@ export interface EnsembleBands {
 	annual: { waterYear: number; days: number; natural: Band; outflow: Band }[];
 	curtailment: { nodeId: string; name: string; band: Band }[];
 	reserve: { key: string; name: string; band: Band }[];
-	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order. */
+	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order, at `fdcPoints` exceedance %. */
 	fdc: { month: number; ewrM3Day: number; points: Band[] }[];
+	fdcPoints: number[];
 }
 
 export interface EnsembleSummary {
@@ -739,6 +740,8 @@ export interface EnsembleSummary {
 	gated: boolean;
 	/** Whether the run's own parameters passed. */
 	referenceAccepted: boolean;
+	/** Member 0's outputs (the run itself), to read against its bands; null when it failed the rule. */
+	reference: MemberMetrics | null;
 	rejected: Record<RejectReason, number>;
 	bands: EnsembleBands;
 	coverage: RecordCoverage[];
@@ -788,7 +791,8 @@ export function summariseEnsemble(r: Pick<EnsembleResult, 'options' | 'header' |
 		annual: h.waterYears.map((y, i) => ({ ...y, natural: b((x) => x.annualNaturalMm3[i]), outflow: b((x) => x.annualOutflowMm3[i]) })),
 		curtailment: h.farms.map((f) => ({ ...f, band: b((x) => x.curtailmentM3Day[f.nodeId]) })),
 		reserve: h.reserveSites.map((s) => ({ ...s, band: b((x) => x.reserveRate[s.key]) })),
-		fdc: h.ewrByMonthM3Day.map((ewrM3Day, i) => ({ month: calendarMonthOf(i), ewrM3Day, points: h.fdcPoints.map((_, j) => b((x) => x.fdcM3Day[i]?.[j])) }))
+		fdc: h.ewrByMonthM3Day.map((ewrM3Day, i) => ({ month: calendarMonthOf(i), ewrM3Day, points: h.fdcPoints.map((_, j) => b((x) => x.fdcM3Day[i]?.[j])) })),
+		fdcPoints: [...h.fdcPoints]
 	};
 	const gated = kept.length < o.minMembers;
 	const reference = r.members.find((m) => m.reference);
@@ -815,6 +819,7 @@ export function summariseEnsemble(r: Pick<EnsembleResult, 'options' | 'header' |
 		accepted: kept.length,
 		gated,
 		referenceAccepted: !!reference?.accepted,
+		reference: reference?.accepted ? reference.metrics : null,
 		rejected,
 		bands,
 		coverage: r.coverage,

@@ -1,7 +1,9 @@
-// Starts a fit in a Web Worker. cancel() terminates it at once (the engine
-// loop is synchronous, so the worker can't be asked to stop; nothing it found
-// is kept, and nothing is ever saved by a fit).
-import type { CalibrationProgress, CalibrationReport } from '@water-management/engine';
+// Starts a fit, or an uncertainty ensemble, in a Web Worker. cancel()
+// terminates it at once (the engine loop is synchronous, so the worker can't
+// be asked to stop; nothing it found is kept, and the worker itself never
+// saves anything).
+import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult } from '@water-management/engine';
+import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
 
 export interface FitHandle {
@@ -15,19 +17,23 @@ export class FitCancelled extends Error {
 	}
 }
 
-export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) => void): FitHandle {
+/** One job in a fresh worker: its messages go to `onMessage`, which settles the result through `done`. */
+function startWorker<T, M extends { type: string }>(req: unknown, onMessage: (m: M, done: (v: T) => void) => void): { result: Promise<T>; cancel(): void } {
 	const worker = new Worker(new URL('./autocal.worker.ts', import.meta.url), { type: 'module' });
 	let settle: { reject(e: Error): void } | null = null;
-	const result = new Promise<CalibrationReport>((resolve, reject) => {
+	const result = new Promise<T>((resolve, reject) => {
 		settle = { reject };
-		worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+		worker.onmessage = (e: MessageEvent<M>) => {
 			const m = e.data;
-			if (m.type === 'progress') onProgress(m.progress);
-			else {
+			if (m.type === 'error') {
 				worker.terminate();
-				if (m.type === 'done') resolve(m.report);
-				else reject(new Error(m.message));
+				reject(new Error((m as unknown as { message: string }).message));
+				return;
 			}
+			onMessage(m, (v) => {
+				worker.terminate();
+				resolve(v);
+			});
 		};
 		worker.onerror = (e) => {
 			worker.terminate();
@@ -42,4 +48,26 @@ export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) =
 			settle?.reject(new FitCancelled());
 		}
 	};
+}
+
+export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) => void): FitHandle {
+	return startWorker<CalibrationReport, WorkerMessage>(req, (m, done) => {
+		if (m.type === 'progress') onProgress(m.progress);
+		else if (m.type === 'done') done(m.report);
+	});
+}
+
+export interface EnsembleHandle<R> {
+	result: Promise<R>;
+	cancel(): void;
+}
+
+/** Run an uncertainty ensemble, or a paired one, in the calibration worker. */
+export function startEnsemble(job: Extract<EnsembleJob, { kind: 'ensemble' }>, onProgress: (p: EnsembleProgress) => void): EnsembleHandle<EnsembleResult>;
+export function startEnsemble(job: Extract<EnsembleJob, { kind: 'paired' }>, onProgress: (p: EnsembleProgress) => void): EnsembleHandle<PairedResult>;
+export function startEnsemble(job: EnsembleJob, onProgress: (p: EnsembleProgress) => void): EnsembleHandle<EnsembleResult | PairedResult> {
+	return startWorker<EnsembleResult | PairedResult, EnsembleWorkerMessage>(job, (m, done) => {
+		if (m.type === 'ensemble-progress') onProgress(m.progress);
+		else if (m.type === 'ensemble-done') done(m.result);
+	});
 }

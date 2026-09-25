@@ -714,6 +714,40 @@ value such as 250000.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
+  then **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9);
+  `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
+  shown, `#res-uncertainty`, menu entry **Uncertainty**, helpers in
+  `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
+  **decision rule** in a box above every band (thresholds, split date,
+  percentiles, the 30-set gate, coverage test, sample), a line with the
+  options (sets, seed, bounds, pan shift, rain sources, records, model, who
+  stored it), **Parameter sets kept** (with the rejections by reason) and
+  whether the run's own parameters pass, the **held-out coverage** per record
+  (a warning, in words, below 70 %), then the tables: 5 %, median, 95 % and
+  this run's own value for EWR days not met, the shortfall, natural and
+  outflow MAR and the Reserve compliance rate per site with a rule table; EWR
+  days not met by month (Oct … Sep); curtailment per farm (m³/day, negative =
+  cut); annual natural and outflow volumes per water year (collapsed); and
+  the **monthly flow-duration curve** of simulated outflow as a shaded 5–95 %
+  band with its median against the dashed EWR line, one month at a time from
+  a select (`uncertainty/BandFdcChart.svelte`, log flow axis; the chart's
+  title says at how many exceedance points the median falls below the EWR).
+  With fewer than 30 sets kept no percentiles are shown, only the note why.
+  An ensemble run on a newer engine than the run says so. **Reproduce in
+  this browser** re-runs the stored ensemble from its seed and options and
+  reports "Reproduced: the same … members, verdicts, outputs and coverage" or
+  the first differences. Below, **Every ensemble of this run** lists each one
+  ever started, newest first (who, when, stored or "started, never stored",
+  seed, sets, kept), each with how its rule differs from the shown one, and a
+  line counts the starts never stored. Editors get **Run an ensemble**: sets
+  (30–1 000, default 300), bounds (the fit's, typical or wide), lowest skill
+  kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
+  coefficient shift; **Run ensemble** asks the server to fix the rule and
+  draw the seed, runs every member in the calibration worker with a live
+  count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
+  server checks and stores it. A cancelled one stays in the list as never
+  stored,
   then **Run notes** under it on every run (`runs/RunNotes.svelte`,
   `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
   explanation of the run, the one thing about a run that can change after it

@@ -310,6 +310,7 @@ describe('runEnsemble on a synthetic catchment', () => {
 		const ctx = ensembleContext(input, options);
 		expect(ref.metrics).toEqual(memberMetrics(ctx, runModel(input)));
 		expect(ref.metrics!.ewrDaysNotMet).toBe(runModel(input).summary.catchment.ewrDaysNotMet);
+		expect(summary.reference).toEqual(ref.metrics);
 	});
 
 	it('invariant: the best-fit run lies within [min, max] of the ensemble when it passes acceptance', () => {

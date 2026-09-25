@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import CompareChart from '$lib/components/compare/CompareChart.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
@@ -21,6 +22,10 @@
 	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { fmtDate } from '$lib/format/number';
+
+	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
+	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
+	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
 	type Side = 'a' | 'b';
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -303,6 +308,22 @@
 							settingsA={data.a.run.inputs.settings}
 							settingsB={data.b.run.inputs.settings}
 						/>
+					</section>
+
+					<section class="panel" aria-label="Uncertainty">
+						<Lazy load={loadPairedUncertainty}>
+							{#snippet children(PairedUncertaintyPanel)}
+								<PairedUncertaintyPanel
+									projectA={data!.a.project.id}
+									runA={data!.a.run.id}
+									projectB={data!.b.project.id}
+									runB={data!.b.run.id}
+									modelA={runoffModelOf(data!.a)}
+									modelB={runoffModelOf(data!.b)}
+									canEdit={(projects.find((p) => p.id === data!.b.project.id)?.role ?? 'viewer') !== 'viewer'}
+								/>
+							{/snippet}
+						</Lazy>
 					</section>
 
 					{#if data.comparison.ewrAssurance?.length}
