@@ -201,7 +201,7 @@ defaults from the blank workbook are shown.
 | `RainThreshold` | 2 mm | Rain at or below this produces no flow and does not offset demand |
 | `a`, `b` | 0.09, 1.2 | Peak flow = `a · rain^b` |
 | `RainToM3` | total farm area km² × 1000 | Converts mm over the catchment to m³ |
-| `SummerMths` | 1,2,3,4,5,11,12 (blank); 10–3 in the engine defaults | Calendar months that are always "summer" |
+| `SummerMths` | 1,2,3,4,5,11,12 (blank; the engine default is the same) | Calendar months that are always "summer" |
 | `FactorSummer` / `FactorWinter` | 0.1 / 1 | Seasonal response factor |
 | `WinterTodayThresh` / `WinterNextDayThresh` | 35 mm / 9 mm | Rain that flips a non-summer month into winter response |
 | `MinFlowRatioToResetBase` | 1.5 | Rain pulse / base flow ratio above which base flow resets |
@@ -218,7 +218,7 @@ Per day *t*, with the workbook column letters:
 | R | **Rain used** | The first non-blank of catchment rain, CHIRPS or forecast, set to 0 if it is ≤ threshold. From engine 0.7.0, CHIRPS used here is **bias-corrected** per calendar month first (§2.4b, audit B1); the workbook used it raw |
 | N | **Season** (1 = summer, 0 = winter) | Summer month → 1. Otherwise: if yesterday was winter → 0. Otherwise → 0 if `rain[t] ≥ 35` or `rain[t−1] ≥ 9`, else 1. In non-summer months "summer" response carries on until a big enough rain opens the winter. |
 | V | **Rain-added flow** | `a · R^b · RainToM3 · seasonFactor` if R > 0, else 0 (workbook: `INT(…)`) |
-| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB`. (Workbook: rounded to 0 dp.) |
+| S | **Base flow** | `FB` = yesterday's base receded by yesterday's base index. The day before the run is a steady base-flow state: base = resultant = `BaseFlowInitial`, at that flow's own recession index (engine ≥ 0.4.0, [audit E1](./engine-audit.md); the workbook left the index blank, so day 1 receded at the extrapolated factor `2·f1 − f2`). If `V / FB > 1.5` the base resets to `V`, else it stays `FB` (the engine resets on any `V > 0` when `FB` is 0, where the workbook divides by 0; engine review F6). (Workbook: rounded to 0 dp.) |
 | T | **Base recession index** | Where S sits on the recession curve, interpolated linearly and clamped to `[1, DaysMax]` (workbook: 4 dp) |
 | U | **Response flow (start)** | Yesterday's resultant response receded by yesterday's resultant index |
 | W | **Pulse index** | For a new pulse (V > 0): `Lo + (Hi − Lo)(1 − V/Amplitude)`, not below `Lo`. If that is above the base index, use `max(1, baseIndex − 0.2)`. With no pulse: yesterday's index + 1. Capped at `DaysMax` (workbook: 4 dp). The workbook used the base index when yesterday's was blank, which only happens on day 1, so a first-day storm lost its pulse index; the engine seeds the day before the run (E1). |
@@ -259,11 +259,13 @@ The same sheet also:
 - Reports mean annual runoff and mean daily runoff (all days and summer only)
   for observed and simulated flow.
 
-> The engine's `CalibrationParams` currently holds `a`, `b`, the threshold, the
-> seasonal factors, summer months and the initial base flow. The recession
-> curve, shift-peak indices, reset ratio and winter thresholds also have to be
-> in project settings for a number-for-number match. The importer reads them
-> from the workbook's named ranges (`rCalibration_*`).
+> The engine's `CalibrationParams` (`settings.calibration`) holds every
+> parameter above: `a`, `b`, the threshold, the seasonal factors, summer
+> months, the initial base flow, the reset ratio, the winter thresholds, the
+> shift-peak indices, the amplitude, `DaysMax`, the recession curve and
+> factors, and an optional catchment-area override (`catchmentAreaKm2`, null =
+> the sum of the farm areas). The importer reads them from the workbook's
+> named ranges (`rCalibration_*`).
 
 ### 2.4a Rain to flow: GR4J (engine ≥ 0.5.0, issue #4)
 
@@ -444,7 +446,7 @@ models. Correcting the fallback was the first condition for adopting GR4J.
   **Kept-dry days stay in**, as confirmed readings. Leaving out real dry
   spells would be selection bias: they are the days when the catchment reads
   0 and CHIRPS its false-positive drizzle, so dropping them pushes every
-  factor up. Up to engine 0.16 the fit dropped every water year a flagged
+  factor up. Up to engine 0.17 the fit dropped every water year a flagged
   run touched, kept dry or not.
 
   **Keep-dry guard.** A keep-dry is a claim the fit can check: in a real dry
@@ -599,7 +601,7 @@ the hydrologist lists the bad days as `missing`.
 flagged run that is treated as missing, and a listed missing period, are
 left out of the factor fit day by day; a kept-dry run stays in as a
 confirmed reading, unless bias-corrected CHIRPS contradicts it (the keep-dry
-guard), and then its water years stay out and the run warns. Up to 0.16 the
+guard), and then its water years stay out and the run warns. Up to 0.17 the
 fit left out every water year a flagged run touched, even one kept dry.
 Because `keepDry` now changes the factors as well as the kept days, a fit
 record's `forcing.zeroRainRuns` (fit provenance, §2.10b) still flags
@@ -1646,7 +1648,7 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 
 | Col | Engine field (`CurtailmentFarm`) | Workbook label | Formula |
 | --- | --- | --- | --- |
-| H | `demandM3Day` | Average demand (m³/day) | `AVERAGE(F over W)` [sheet: `ROUND(…, 0)`], where F is the Element sheet's net demand |
+| H | `demandM3Day` | Average demand (m³/day) | `AVERAGE(F over W)` [sheet: `ROUND(…, 0)`], where F is the Element sheet's net demand. Engine ≥ 0.16.0: the average abstraction demand D = F / e (§2.3 step 5, N1) |
 | I | `suppliedM3Day` | Average supply (m³/day) | `AVERAGE(G over W)` [sheet: `ROUND(…, 0)`], where G is irrigation supplied |
 | J | `deficitM3Day` | Average deficit (m³/day) | `I − H` (≤ 0) |
 | K | `fractionSupplied` | %Supply | `IF(H = 0, "-", I / H)` (not rounded) |
@@ -1697,7 +1699,8 @@ the network would check it is feasible; it would ship as a new, separately
 labelled table, not a silent redefinition of M.
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
-N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store and −ΔG).
+N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store, −ΔG and the cut
+beyond the equitable share).
 `CurtailmentSummary.ewrSites` lists each EWR site over the same window (outlet
 first, then gauges by node id): farms upstream, days not met, and the mean
 shortfall, charged and natural parts (≤ 0; charged + natural = shortfall);
@@ -1744,7 +1747,7 @@ from the workbook.
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. | Confirm the rule and the site list (a per-gauge EWR-site flag and gazetted tables are WP-3.7). It changes every farm's curtailment. |
-| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment has only one transfer, so no result is affected. **Mirrored for now.** The engine should split the available volume in rule order, which makes no difference when the draws fit. That is an engine change for a later round (see docs/engine-review.md F1). **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
+| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment has only one transfer, so no result is affected. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
 
 ---
 
@@ -1852,7 +1855,7 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
    Where the workbook's rounding or a corrected algorithm makes the engine
    differ, the difference is listed and explained
    ([engine-audit.md § Regression suite](./engine-audit.md)); elsewhere the
-   target is < 1e-9 relative difference.
+   match is exact (within 1e-6 m³/day or mm).
 4. **Performance budget:** a full client catchment run (16k days × 13 elements) takes
    about **18 ms** in Node, which is fast enough to run in the browser as you
    type and in Lambda on request.
