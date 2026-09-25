@@ -829,6 +829,16 @@ simulator records them only for a saved run (`simulateNetwork(plan, {
 workings: true })`), so calibration's thousands of runs don't pay for them.
 Runs saved before 0.12.0 don't have them.
 
+The runoff side has its own catalogue in the same file: `GR4J_COLUMNS` (P, E,
+AET, S, UH, F, R, Q, with the GR4J step's equations) and
+`LEGACY_RUNOFF_COLUMNS` (the [Flow data] columns R, N, V, S, X, Y, AB). The
+results' day trace reads them to show the catchment's day, and for GR4J it
+closes the day's store balance: stores the day before + P + F − AET − Q =
+stores at the end of the day, in mm over the catchment. Only the stores'
+total is recorded at the start of a run (after the warm-up), so on a run's
+first day the balance uses the total and each store's starting value is
+unknown.
+
 ### 2.7b EWR attribution: who is charged for a shortfall (engine ≥ 0.17.0, audit Q17)
 
 **Decided on a simulated CMA-assessor recommendation (2026-09-24), pending

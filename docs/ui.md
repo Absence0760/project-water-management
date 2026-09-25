@@ -519,9 +519,21 @@ value such as 108700.
   (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
   day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J +
   rain on dam) − used (G − T) − evaporated − stored (Q − Q[t−1]) − out (U). Parameters and names come from
-  the run's input snapshot, not today's model. A run saved before 0.12.0 says
+  the run's input snapshot, not today's model. The picker's first option,
+  **Catchment (rain to natural flow)**, traces the runoff model's day instead
+  (`GET …/runs/:runId/day` without a `nodeId`): for GR4J, rain used P, PET E,
+  AET, each store (production S, unit-hydrograph water in transit UH, routing
+  R) the day before and at the end of the day, the groundwater exchange F
+  (shown as 0 when X2 = 0 stored none), natural flow Q in m³/day and as mm
+  over the catchment, each with its formula from `GR4J_COLUMNS`; then the
+  store balance, stores before + P + F − AET − Q − stores after, with its
+  residual in mm. On a run's first day each store's starting value is shown
+  as – (only their total after the warm-up is recorded) and the balance uses
+  the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
+  and says it keeps no stores, so there is no store balance to close.
+  A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
-  Not yet: a trace of the runoff model's day, an Excel audit workbook, and
+  Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm

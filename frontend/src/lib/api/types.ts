@@ -159,6 +159,25 @@ export interface RunDay {
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
 }
 
+/** GET …/runs/:runId/day without a nodeId: the catchment's runoff-model day (docs/api.md). */
+export interface RunCatchmentDay {
+	date: string;
+	nodeId: null;
+	name: string;
+	kind: 'catchment';
+	/** 'legacy' for a run without a runoff balance (no stores to trace). */
+	runoffModel: string;
+	/** Area the mm are spread over; null for a legacy run. */
+	areaKm2: number | null;
+	/** The runoff model's parameters as the run used them (GR4J: x1 … x4, warmupDays); null for a legacy run. */
+	params: Record<string, number> | null;
+	/** Σ stores at the end of the day before (the storage after the warm-up on the run's first day), mm. */
+	previousStorageMm: number | null;
+	/** Each store at the end of the day before, mm; each null on the run's first day. Null for a legacy run. */
+	previousStores: Record<string, number | null> | null;
+	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+}
+
 /** One side of GET /compare/runs. */
 export interface CompareSide {
 	project: { id: string; name: string };
