@@ -428,8 +428,8 @@ the reports):
         the calibration panel lists them instead for now).
 - **Q6: uncertainty.** SA Reserve practice uses confidence ratings and
   assurance rules, not a numeric band. Show monthly compliance against the
-  EWR assurance rules, not a raw count of days below the EWR. Phase 9
-  criteria are below.
+  EWR assurance rules, not a raw count of days below the EWR (done, engine
+  0.21.0, below). Phase 9 criteria are below.
 
 **Open items (not yet started):**
 - [ ] **Phase 9: uncertainty bands.** Build to these criteria (assessor):
@@ -451,8 +451,23 @@ the reports):
       - Seed, method, thresholds, the kept parameter sets and the
         percentiles are stored and reproducible.
       - The decision rule is printed next to the band.
-- [ ] **EWR compliance by the Reserve's assurance rules**, monthly, as the
-      headline instead of raw days-not-met (hydrologist Q6).
+- [x] **EWR compliance by the Reserve's assurance rules**, monthly, as the
+      headline instead of raw days-not-met (hydrologist Q6). Done 2026-09-25,
+      engine 0.21.0 ([model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)):
+      an optional rule table per EWR site (Settings, paste from a
+      spreadsheet), monthly compliance at the requirement the month's natural
+      flow selects, the FDC check, the headline card, the Reserve compliance
+      panel, a summary CSV block and run comparison. The method choices are
+      plan.md question 16 for the hydrologist.
+      - [ ] **Daily charge from the rule table.** The EWR charge and
+            curtailment still follow the daily pragmatic EWR. If the
+            hydrologist and the assessor want the rule table to drive them
+            (plan.md question 16), the durable fix is a daily EWR series per
+            site from the month's requirement (`ewr_rule`, already stored),
+            fed to attribution in place of the pragmatic EWR, with a new
+            engine version and a regression note. Trigger: their answer.
+      - [ ] **Uncertainty on compliance.** Phase 9's bands should include the
+            monthly Reserve compliance rate beside days not met.
 - [ ] **Nominated evidence run.** Record which run and which model an
       applicant nominated as evidence, so they can't pick whichever model is
       kindest after the fact. The assessor rated this Medium.
