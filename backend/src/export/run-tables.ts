@@ -51,7 +51,7 @@ const CATCHMENT_ORDER = [
 // A farm's columns in FarmTemplate order (F … AB), intermediate ones included
 // (engine ≥ 0.12.0), so the file reads left to right like the formulas.
 const NODE_ORDER = FARM_DAILY_COLUMNS.map((c) => c.key);
-/** The series keys a farm can have: what the all-farms export (`farms.csv?key=`) accepts. */
+/** The series keys a farm can have, the optional ones included (land cover, boreholes, senior users): what the all-farms export (`farms.csv?key=`) accepts. */
 export const FARM_SERIES_KEYS: ReadonlySet<string> = new Set(NODE_ORDER);
 const rank = (keys: string[]) => new Map(keys.map((k, i) => [k, i]));
 const RANK = { catchment: rank(CATCHMENT_ORDER), node: rank(NODE_ORDER) };

@@ -924,7 +924,8 @@ storage to whole m³; the engine doesn't (R1).
 | F | Crop water requirement | from §2.3 (`crop_requirement`) |
 | D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.16.0, N1). The workbook has no column: D = F there |
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
-| I | Farm runoff | fragmented natural flow (§2.5) |
+| I | Farm runoff | fragmented natural flow (§2.5), less the land-cover reduction when the farm has land cover (§2.5a) |
+| – | Runoff removed by land cover | `landcover_reduction`, only for a farm with land cover (§2.5a): I + this = natural flow × share. The daily CSV puts it right after I |
 | J | Transfer in (+) / out (−) | from §2.6 |
 | K | Upstream inflow "above dam" (into the dam) | `H × pctUpstreamToDam` (engine ≥ 0.9.0; the workbook computed L this way, see quirk Q1) |
 | L | Upstream inflow "below dam" | `H − K` |
