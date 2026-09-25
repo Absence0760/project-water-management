@@ -6,23 +6,25 @@ import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
-import { executeRun, loadModelInput, trimRuns } from './execute.js';
+import { executeRun, loadModelInput, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
-// `evidence` is the run's place in the evidence history (010_run_nomination).
+// `evidence` is the run's place in the evidence history (010_run_nomination);
+// `pinned` keeps it past the storage cap (015_run_pinned).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
 	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
-	${EVIDENCE_STATUS_SQL} AS evidence`;
+	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
 
 /** Longest run note, in characters (007_run_notes.sql CHECK). */
 export const RUN_NOTES_MAX = 4000;
-const NotesBody = z
+/** PATCH …/runs/:runId: the note, the pin, or both; nothing else about a run may change. */
+const RunPatchBody = z
 	.object({
 		notes: z
 			.string()
@@ -30,8 +32,11 @@ const NotesBody = z
 			.max(RUN_NOTES_MAX)
 			// Postgres text can't hold NUL; refuse it here rather than surface a database error.
 			.refine((s) => !s.includes('\u0000'), 'notes cannot contain NUL characters')
+			.optional(),
+		pinned: z.boolean().optional()
 	})
-	.strict();
+	.strict()
+	.refine((b) => b.notes !== undefined || b.pinned !== undefined, 'send notes, pinned or both');
 
 export const runRoutes = new Hono<AuthEnv>()
 	.post('/:id/runs', async (c) => {
@@ -164,17 +169,34 @@ export const runRoutes = new Hono<AuthEnv>()
 			});
 		});
 	})
-	// The run's written explanation (007_run_notes): the one thing about a run
-	// that may change after it is made. The column grant makes every other
-	// column read-only to the app, whatever this handler does.
+	// The run's written explanation (007_run_notes) and its pin (015_run_pinned):
+	// the only things about a run that may change after it is made. The column
+	// grants make every other column read-only to the app, whatever this
+	// handler does.
 	.patch('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
-		const body = NotesBody.parse(await c.req.json().catch(() => ({})));
+		const body = RunPatchBody.parse(await c.req.json().catch(() => ({})));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			const { rowCount } = await db.query('UPDATE model_run SET notes = $3 WHERE project_id = $1 AND id = $2', [id, runId, body.notes]);
-			if (!rowCount) throw new ApiError(404, 'not found');
+			const { rows: found } = await db.query<{ pinned: boolean }>('SELECT pinned FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
+			if (!found[0]) throw new ApiError(404, 'not found');
+			if (body.pinned && !found[0].pinned) {
+				// The friendly answer; the model_run_pin_limit trigger enforces it again, race-free.
+				const { rows: n } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM model_run WHERE project_id = $1 AND pinned', [id]);
+				if (n[0]!.n >= PINNED_RUNS_PER_PROJECT_MAX) throw pinLimit();
+			}
+			// Only the columns sent: a pin leaves the note (and its stamp) alone, and the other way round.
+			const set = Object.entries({ notes: body.notes, pinned: body.pinned }).filter(([, v]) => v !== undefined);
+			await db
+				.query(`UPDATE model_run SET ${set.map(([k], i) => `${k} = $${i + 3}`).join(', ')} WHERE project_id = $1 AND id = $2`, [
+					id,
+					runId,
+					...set.map(([, v]) => v)
+				])
+				.catch((err: { code?: string }) => {
+					throw err.code === '23514' && body.pinned ? pinLimit() : err;
+				});
 			const { rows } = await db.query(`SELECT ${RUN_META} ${FROM_RUN} WHERE r.id = $1`, [runId]);
 			return c.json({ run: rows[0] });
 		});
@@ -184,14 +206,22 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			// A run the evidence history names is kept for good (the foreign key refuses it too).
-			const { rowCount: cited } = await db.query('SELECT 1 FROM run_nomination WHERE project_id = $1 AND run_id = $2 LIMIT 1', [id, runId]);
-			if (cited) throw new ApiError(409, 'this run is or was nominated as evidence, so it is kept');
+			// A kept run (RUN_KEPT_SQL) isn't deleted: one the evidence history names
+			// is kept for good (the foreign key refuses it too); a pinned one until it is unpinned.
+			const { rows: kept } = await db.query<{ pinned: boolean; kept: boolean }>(
+				`SELECT r.pinned, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+				[id, runId]
+			);
+			if (kept[0]?.kept)
+				throw new ApiError(409, kept[0].pinned ? 'this run is pinned; unpin it before deleting it' : 'this run is or was nominated as evidence, so it is kept');
 			const { rowCount } = await db.query('DELETE FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
 			if (!rowCount) throw new ApiError(404, 'not found');
 			return c.body(null, 204);
 		});
 	});
+
+const pinLimit = () =>
+	new ApiError(409, `this project already has ${PINNED_RUNS_PER_PROJECT_MAX} pinned runs, the most it can keep; unpin one first`);
 
 /** The runoff model's stores, as run_series keys (engine runoff/gr4j.ts STORES). */
 const RUNOFF_STORES = ['production_store', 'routing_store', 'uh_store'] as const;

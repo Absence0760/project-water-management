@@ -8,11 +8,11 @@ const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
 const NO_RLS = new Set(['app_user', 'schema_migrations']);
 /**
  * Tables water_app may UPDATE only column by column, and the only columns it
- * may update. A run is evidence: everything but its note is immutable
- * (007_run_notes.sql).
+ * may update. A run is evidence: everything but its note (007_run_notes.sql)
+ * and its pin (015_run_pinned.sql) is immutable.
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
-	model_run: ['notes'],
+	model_run: ['notes', 'pinned'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary']
 };
@@ -81,7 +81,7 @@ describe('schema catalogue', () => {
 		expect(owned).toEqual([]);
 	});
 
-	it('limits water_app UPDATE to the listed columns on column-only tables (model_run: notes)', async () => {
+	it('limits water_app UPDATE to the listed columns on column-only tables (model_run: notes, pinned)', async () => {
 		for (const [table, allowed] of Object.entries(COLUMN_ONLY_UPDATE)) {
 			const { rows: tableLevel } = await db.query<{ ok: boolean }>(
 				`SELECT EXISTS (SELECT 1 FROM information_schema.table_privileges
