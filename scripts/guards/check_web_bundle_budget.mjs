@@ -29,11 +29,13 @@
 //                   the largest spreadsheet worker: `export.worker.ts` (the
 //                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
 //                   in-browser workbook import, WP-1.31) in
-//                   frontend/src/lib/spreadsheet/. They carry SheetJS, which
-//                   dwarfs the engine, and load only when someone asks for a
-//                   workbook, so they get a ceiling of their own rather than
-//                   lifting the calibration worker's. Still counted in
-//                   totalCodeKb; not in largestWorkerKb.
+//                   frontend/src/lib/spreadsheet/. The export worker carries
+//                   SheetJS, which dwarfs the engine (the import worker has
+//                   read workbooks with its own streaming reader since
+//                   2026-09-25 and is far smaller); both load only when
+//                   someone asks for a workbook, so they get a ceiling of
+//                   their own rather than lifting the calibration worker's.
+//                   Still counted in totalCodeKb; not in largestWorkerKb.
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
 //                   one favicon, one font weight at a time.
@@ -241,6 +243,19 @@
 //             its own ceiling; together they measure 706 KB. No new
 //             dependency; the largest page chunk is 39 KB, both workers are
 //             unchanged. Headroom ~6 KB.
+// 2026-09-25  total 712 → 637 KB, spreadsheet worker 107 → 95 KB (both
+//             down); the other ceilings unchanged. The b023 import worker no
+//             longer carries SheetJS: it reads the workbook with its own
+//             streaming OOXML reader (frontend/src/lib/spreadsheet/import/
+//             xml.ts, sheet.ts, sharedStrings.ts, workbookParts.ts; the
+//             followups.md WP-1.31 peak-memory item). workers/import.
+//             worker-*.js 101 → 25 KB; the total measures 631 KB on this
+//             change over main @ 97c9e29 (706 KB in the entry above: the
+//             ~76 KB is the import worker's SheetJS). The largest spreadsheet worker is
+//             now the .xlsx export's (88 KB, SheetJS's mini build), so the
+//             ceiling goes back to the 95 KB it had before the import
+//             landed, ~7 KB over it. Page code unchanged (largest chunk
+//             39 KB). Headroom ~6 KB on the total.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -252,10 +267,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 712,
+	totalCodeKb: 637,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
-	largestSpreadsheetWorkerKb: 107,
+	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });
 
@@ -331,7 +346,7 @@ export function violations(m, budget = BUDGET) {
 	}
 	if (m.largestSpreadsheetWorker.kb > budget.largestSpreadsheetWorkerKb) {
 		out.push(
-			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. It carries SheetJS; check a new import (or the full SheetJS build) is needed before raising the ceiling.`,
+			`Spreadsheet worker ${m.largestSpreadsheetWorker.path} is ${m.largestSpreadsheetWorker.kb} KB, over the ${budget.largestSpreadsheetWorkerKb} KB spreadsheet-worker budget. The export worker carries SheetJS (the import worker must not: it has its own reader); check a new import (or the full SheetJS build) is needed before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
