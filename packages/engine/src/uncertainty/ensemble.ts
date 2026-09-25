@@ -1,4 +1,4 @@
-// Uncertainty bands (issue #4 phase 9, docs/model.md §2.10d): a behavioural
+// Uncertainty bands (issue #4 phase 9, docs/model.md §2.10e): a behavioural
 // ensemble in the GLUE sense (Beven & Binley 1992), built to the assessor's
 // criteria in docs/followups.md:
 //

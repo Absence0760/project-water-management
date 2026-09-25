@@ -28,7 +28,7 @@ describe('engine performance on the example catchments', () => {
 	});
 
 	it('an uncertainty ensemble costs one model run per member, and the server check a handful (issue #4 phase 9)', () => {
-		// 60 sampled sets + the run's own: ~25–55 ms each on the examples (docs/model.md §2.10d), so well under 6 s;
+		// 60 sampled sets + the run's own: ~25–55 ms each on the examples (docs/model.md §2.10e), so well under 6 s;
 		// the server's check (the sample, member 0 and three more) well under a second.
 		const input = inputOf(examples[0]!);
 		const { options } = resolveEnsembleOptions(input, { members: 60 });

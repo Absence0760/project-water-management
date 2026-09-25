@@ -1,5 +1,5 @@
 -- 014_run_uncertainty — uncertainty bands per run (issue #4 phase 9, engine
--- 0.26.0, docs/model.md §2.10d, docs/data-model.md § Uncertainty bands,
+-- 0.26.0, docs/model.md §2.10e, docs/data-model.md § Uncertainty bands,
 -- docs/security.md § Authorization).
 --
 -- One row per ensemble a run's editor starts: the resolved options (the

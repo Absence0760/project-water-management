@@ -1,4 +1,4 @@
-// Percentile bands over an ensemble's accepted members (docs/model.md §2.10d).
+// Percentile bands over an ensemble's accepted members (docs/model.md §2.10e).
 // A band has no percentiles below MIN_BAND_MEMBERS members: with fewer, the
 // 5th and 95th percentiles are set by one or two members and read as far
 // more certain than they are.

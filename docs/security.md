@@ -151,7 +151,7 @@ In short:
     grants. A nomination proves what the project said and when, not that the
     run is right: that is the assessor's review.
 - **Uncertainty bands can't be cherry-picked or forged** (014_run_uncertainty,
-  [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9)).
+  [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)).
   An applicant could otherwise run an ensemble again and again, with other
   seeds or looser thresholds, and keep only the kindest band, or post a band
   the model never produced:

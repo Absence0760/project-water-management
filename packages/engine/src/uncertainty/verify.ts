@@ -1,4 +1,4 @@
-// Checking an ensemble someone else ran (docs/model.md §2.10d, docs/security.md
+// Checking an ensemble someone else ran (docs/model.md §2.10e, docs/security.md
 // § Uncertainty bands). The browser runs the ensemble; the server stores it
 // only after (1) regenerating the whole sample from the stored seed and
 // options and finding the same members, and (2) re-running a few members it

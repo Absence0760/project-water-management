@@ -1501,7 +1501,7 @@ must build WP-2.15 Phase B.
 
 > **Uncertainty bands, built (engine 0.26.0, issue #4 phase 9; context for
 > the evidence-report design, issue #15).** A pack's bands come from
-> `run_uncertainty` ([data-model.md](../data-model.md), [model.md §2.10d](../model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9)),
+> `run_uncertainty` ([data-model.md](../data-model.md), [model.md §2.10e](../model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)),
 > which is already un-cherry-pickable: the **database draws the seed** when
 > an ensemble is started, so an applicant can't try seeds until one is
 > kind; the resolved options and **thresholds are stored before anything

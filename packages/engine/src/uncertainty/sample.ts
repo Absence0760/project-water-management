@@ -1,5 +1,5 @@
 // Seeded Latin hypercube sampling (McKay, Beckman & Conover 1979) for the
-// uncertainty ensemble (docs/model.md §2.10d). Each of the n members falls in
+// uncertainty ensemble (docs/model.md §2.10e). Each of the n members falls in
 // a different one of n equal strata of every dimension, so even a few hundred
 // members cover each parameter's whole range, and a categorical dimension
 // split into k values gets n ÷ k members each (± 1). Deterministic for a seed.

@@ -223,7 +223,7 @@ B on … because …". A run can be nominated again later (A, B, A).
   every unapplied file in name order, so 010 applying first is harmless.
 
 **Uncertainty bands (014_run_uncertainty.sql).** One row per ensemble a
-run's editor starts ([model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9)):
+run's editor starts ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)):
 `project_id`, `run_id` (→ `model_run`, cascade), `baseline_id` (→ another
 `run_uncertainty` row, cascade; set for a **paired** band, which re-runs that
 baseline's kept members on this run), `runoff_model`, `engine_version`,

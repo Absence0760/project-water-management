@@ -556,7 +556,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     the daily EWR charge and curtailment follow the rule table's requirement
     instead of the pragmatic EWR?
 18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
-    criteria (engine 0.26.0, model.md §2.10d), defaults to confirm.* Is a
+    criteria (engine 0.26.0, model.md §2.10e), defaults to confirm.* Is a
     parameter set behavioural at KGE′ ≥ 0.5 on the first half of the record,
     with a low-flow FDC bias within ±50 % and a WR2012 flag no worse than
     *query*? Is ±0.1 the right spread for the monthly pan coefficient, and is

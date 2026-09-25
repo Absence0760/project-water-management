@@ -125,7 +125,7 @@ The page has these sections, top to bottom:
 6. **Hydrograph.** One catchment series (simulated outflow by default) from
    both runs on the same chart.
 
-**Uncertainty** (engine ≥ 0.26.0, issue #4 phase 9, [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9);
+**Uncertainty** (engine ≥ 0.26.0, issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
 `uncertainty/PairedUncertaintyPanel.svelte`, its own chunk), after the
 headline results, for two runs of **one project**:
 

@@ -1,5 +1,5 @@
 // What the calibration worker is given for an uncertainty ensemble (issue #4
-// phase 9, docs/model.md §2.10d), and what it posts back. The options are
+// phase 9, docs/model.md §2.10e), and what it posts back. The options are
 // always the server's resolved ones (with the seed the database drew): the
 // browser runs exactly the ensemble the server will check.
 import type { EnsembleHeader, EnsembleProgress, EnsembleResult, MemberResult, ModelInput, PairedResult, ResolvedEnsembleOptions } from '@water-management/engine';

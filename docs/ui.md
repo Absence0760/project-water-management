@@ -738,7 +738,7 @@ value such as 250000.
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
   and (placed in the calibration panel, under the fit record) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
-  [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9);
+  [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
   `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
   shown, `#res-uncertainty`, inside the calibration panel below the fit
   record, whose menu entry is **Calibration & uncertainty** so the rail still

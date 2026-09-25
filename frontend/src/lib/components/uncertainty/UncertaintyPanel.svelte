@@ -1,6 +1,6 @@
 <!--
 	A run's uncertainty bands (issue #4 phase 9, docs/ui.md § Uncertainty bands,
-	docs/model.md §2.10d). Its own chunk: RunsTab loads it lazily.
+	docs/model.md §2.10e). Its own chunk: RunsTab loads it lazily.
 
 	Shows the run's newest stored ensemble: the decision rule next to the
 	bands, how many parameter sets passed, the held-out coverage, and 5–95 %

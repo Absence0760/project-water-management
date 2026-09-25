@@ -1,5 +1,5 @@
 // Paired bands on the difference between a run and its baseline (issue #4
-// phase 9, docs/model.md §2.10d, docs/run-comparison.md): an application's
+// phase 9, docs/model.md §2.10e, docs/run-comparison.md): an application's
 // extra impact, with its uncertainty.
 //
 // Every member the baseline's ensemble kept is run again, unchanged (same

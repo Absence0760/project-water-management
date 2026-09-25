@@ -499,7 +499,7 @@ the reports):
 
 **Open items (not yet started):**
 - [x] **Phase 9: uncertainty bands.** Done 2026-09-25, engine 0.26.0,
-      migration 014 ([model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9),
+      migration 014 ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9),
       [ui.md](./ui.md), [run-comparison.md](./run-comparison.md)). A seeded
       Latin hypercube over the free parameters (log-uniform across a
       decade or more), a ±0.1 pan-coefficient shift, station-with-infill vs

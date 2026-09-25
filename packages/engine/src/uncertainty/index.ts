@@ -1,4 +1,4 @@
-// Uncertainty bands (issue #4 phase 9, docs/model.md §2.10d).
+// Uncertainty bands (issue #4 phase 9, docs/model.md §2.10e).
 export * from './bands';
 export * from './ensemble';
 export * from './paired';

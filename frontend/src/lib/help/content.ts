@@ -813,7 +813,7 @@ export const HELP: HelpEntry[] = [
 		category: 'fit',
 		aliases: ['GLUE', 'uncertainty', 'ensemble', 'Latin hypercube', 'behavioural', 'confidence band', 'coverage'],
 		related: ['auto-calibration', 'wr2012-check', 'calibration-bounds'],
-		source: 'Beven & Binley (1992); McKay et al. (1979); docs/model.md §2.10d; issue #4 phase 9'
+		source: 'Beven & Binley (1992); McKay et al. (1979); docs/model.md §2.10e; issue #4 phase 9'
 	},
 	{
 		id: 'calibration-bounds',
