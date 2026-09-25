@@ -913,6 +913,7 @@ irrigation** and after the day's transfers are settled (§2.6):
 A  = A_full × (store[t−1] / capacity)^b          surface area (m²); 0 when the dam is empty
 Pd = rain[t] × A / 1000                           rain on the dam (m³); rain before any threshold
 E  = MIN(k_lake × Apan[month] / daysInMonth[month] / 1000 × A,  store[t−1] + Pd + J)
+     and, when b > 1, E ≤ (1 − seepage) × store[t−1] / b           (engine ≥ 0.21.1)
 Sp = MIN(seepage × store[t−1],  store[t−1] + Pd + J − E)
 start of the day = store[t−1] + Pd − E − Sp       (G, P and Q follow from it; J, M, O, K add to it)
 ```
@@ -927,6 +928,27 @@ binds, the transfer brings enough that neither MIN bites.
   (and their names) that used the estimate.
 - `b` is `node.damAreaExponent`, default **0.7** (Liebe et al. 2005, small
   reservoirs); allowed 0 < b ≤ 3.
+- **The b > 1 limiter (engine ≥ 0.21.1).** The daily step applies the
+  start-of-day surface to the whole day. When the surface grows faster than
+  the volume (b > 1) and a day's evaporation is more than 1/b of the dam
+  (a very shallow dam: mean depth below b × the day's evaporation depth),
+  `store[t−1] − E − Sp` *falls* as `store[t−1]` rises, so a fuller dam
+  ended the day with less water than a lower one (fuzz seed 15979: 149 m³
+  all evaporated, 144 m³ kept 3 m³). The real process cannot do that: a
+  dam evaporating as its surface shrinks through the day is a one-variable
+  system, dV/dt = f(V), whose solutions never cross. The cap is the largest
+  loss for which the daily step keeps that order (d(store − E − Sp)/d store ≥ 0;
+  rain on the dam only adds to it). It is a limiter, not physics: it leaves
+  at least (1 − seepage)(1 − 1/b) of the dam, which on an extremely shallow
+  dam (a day's evaporation many times its contents) understates the
+  evaporation the exact solution gives (b = 3, ten times the contents: the
+  exact solution keeps 22 %, the cap 67 %), and the uncapped step, which kept
+  0 %, overstated it. It never binds for b ≤ 1, where the clamped step
+  already keeps the order, so default dams are unchanged. A single power law
+  with b > 1 is not a real basin shape (any area–stage power law gives
+  b = m/(m + 1) < 1; published small-reservoir fits give b ≈ 0.65–0.85), so
+  the allowed range is due to narrow to b ≤ 1 ([followups.md](./followups.md),
+  "Dam area exponent above 1").
 - `k_lake` is `settings.lakeEvapFactor`, default **0.75**, an **A-pan**
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
@@ -1008,7 +1030,7 @@ D_s     = MAX(Z_s − U_s, 0)                         the site's shortfall (nois
 F_s     = the farms whose outflow reaches s (the site's own node when it is a farm)
 e_f,s   = H + I + J_int − U                         net impact of farm f ∈ F_s
           J_int counts only the transfers with BOTH ends in F_s
-e⁺      = MAX(e, 0)                                 (noise = 0: below 1e-12 of the farm's flows, or ~45 ulp (1e-14) of its dam storage and upstream flows, from 0.19.2)
+e⁺      = MAX(e, 0)                                 (noise = 0: below 1e-12 of the farm's flows, or ~45 ulp (1e-14) of its dam storage, upstream flows (0.19.2) and the dams at both ends of its transfers (0.21.1))
 E_s     = Σ_{f ∈ F_s} e⁺_f,s
 D*_s    = MIN(D_s, E_s)                             charged to farms   (series ewr_charged = −D*)
 N_s     = D_s − D*_s                                natural            (series ewr_natural = −N)
@@ -2172,7 +2194,7 @@ text:
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
@@ -2266,7 +2288,12 @@ roughly 12 minutes):
 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts
 FUZZ_SEED=20001 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts   # the next range
 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/runoff/gr4j.test.ts src/run.invariants.test.ts -t GR4J   # GR4J only
+FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts -t "random cases"   # diagnostic: list every failing seed
 ```
+
+Each random-cases test stops after `FUZZ_MAX_FAILURES` failing seeds
+(default 3, since each failure is shrunk, which is slow); a diagnostic soak
+raises it so one run lists every failing seed.
 
 Seeds are reproducible: `randomInput(seed)` is a pure function of the seed.
 Write a new property as a physical statement ("storage never exceeds

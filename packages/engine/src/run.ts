@@ -79,7 +79,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.21.0';
+export const ENGINE_VERSION = '0.21.1';
 
 const SEC_PER_DAY = 86_400;
 

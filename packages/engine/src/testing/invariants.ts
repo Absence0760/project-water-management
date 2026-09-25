@@ -115,6 +115,12 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * than twice the water (found by the soak, seed 4660: 25.43 % → 25.72 %).
  * Without return flow extra use upstream can only lower the water available
  * downstream on every later day, which is what the property relies on.
+ * Dam evaporation, rain on the dam and seepage stay on: a lower dam has a
+ * smaller surface and loses (and catches) less, but never so much less that
+ * it ends the day with more water, so they keep the law. (Seeds 4197, 7686,
+ * 15979 and 17277 broke it until engine 0.21.1, when the daily step did let
+ * a fuller, very shallow dam with b > 1 end the day emptier; fixed in the
+ * engine, network/simulate.ts damDay, not here.)
  * Demand is not rounded (R1), so it doubles exactly and the only slack is
  * float noise.
  */

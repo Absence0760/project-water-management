@@ -145,7 +145,8 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 				const e = inW - U;
 				// A difference of volumes that cancels exactly in real arithmetic is float noise, not an
 				// impact. Judged against the farm's own flows (SHORTFALL_NOISE) and, at the tighter
-				// RESIDUE, its dam storage and the nodes draining into it (engine 0.19.2). Otherwise a full dam spilling its
+				// RESIDUE, its dam storage, the nodes draining into it (engine 0.19.2) and the dams at both ends
+				// of its transfers (0.21.1). Otherwise a full dam spilling its
 				// runoff (e = I − spill, a cancellation at the scale of the storage), or an empty farm below
 				// one whose outflow carries a 1e-13 residue, passes the test on flows alone and is charged
 				// for a day in one node order and not in another.
@@ -155,6 +156,12 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 				for (let u = 0; u < ups.length; u++) {
 					const j = ups[u]!;
 					far = Math.max(far, Math.abs(inflow[j]![t]!) + Math.abs(runoff[j]![t]!), Math.abs(outflow[j]![t]!), dam(j, t));
+				}
+				// A transfer's volume is computed next to its source dam's storage (free = Q − reserve), so a
+				// source sitting at its reserve can send a one-ulp residue in one node order and 0 in another
+				// (fuzz seed 14313). Size the noise by the dams at both ends of the day's transfers too.
+				for (const tr of transfers) {
+					if (tr.to === f || tr.from === f) far = Math.max(far, dam(tr.from, t), dam(tr.to, t));
 				}
 				eRaw[f] = e;
 				ePlus[f] = e > Math.max(SHORTFALL_NOISE * s, RESIDUE * far) ? e : 0;

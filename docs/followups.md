@@ -733,7 +733,9 @@ the suggested order (the IDs carry the detail):
       models.
       **20 000-case soak on 0.19.0 (2026-09-24) failed**, stopping at the
       3-failure cap per model (legacy scanned seeds 1–8984, GR4J 1–17277),
-      so later seeds are unscanned. Repro any seed with
+      so later seeds are unscanned. **20 000-case soak on 0.21.1
+      (2026-09-25, `FUZZ_MAX_FAILURES=100`, seeds 1–20 000):** GR4J passed;
+      legacy failed on one seed, 14313 (order invariance, below). Repro any seed with
       `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
 - [x] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
       9681).** Fixed in engine 0.19.1 (2026-09-25). The cause was not the
@@ -756,16 +758,60 @@ the suggested order (the IDs carry the detail):
       `RESIDUE` = 1e-14 (~45 ulp), the size of the residues actually seen. Tests: `attribution.test.ts` › "a float residue at the scale
       of a dam or an upstream flow is not an impact", `run.invariants.test.ts`
       › "engine 0.19.1: …" pins the three seeds.
-- [ ] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
-      7686, 15979, 17277; 15979 new in the 2026-09-25 soak, 0.84 → 0.87).** Not the room-cap bug: rain captured on a farm dam's
-      own surface (steep area–storage curve, exponent up to 3) and farms
-      sitting at a high dead-storage level, where a slightly different
-      storage path shifts threshold days. Same size as the accepted seed
-      4660 (return flow, which the check already neutralises). A policy
-      call: accept and document them, or neutralise dam-surface rain /
-      dead storage in `checkDoubledCropAreas` too. Ask
-      `persona-hydrologist` first. Also raise the test's 3-failure cap for
-      diagnostic soaks so one run covers every seed.
+- [x] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
+      7686, 15979, 17277).** Fixed in engine 0.21.1 (2026-09-25); an engine
+      bug, not hydrology, so `checkDoubledCropAreas` is unchanged. The
+      earlier guess (rain on the dam, dead-storage threshold days) was the
+      symptom: in all four the doubled run's dam was *fuller* than the base
+      run's on some days. Ablation: every seed passes with dam evaporation
+      off, with no dam surface, or with every b = 0.7; each had a dam with
+      b > 1 (3, 2.34, 3, 3) and a mean depth of 0.5–32 mm. The daily step
+      applies the start-of-day surface to the whole day, so for b > 1
+      `Q[t−1] − E − Sp` falls as `Q[t−1]` rises once a day's evaporation
+      exceeds 1/b of the dam: seed 15979's base dam (149 m³, b = 3, 1.6 mm
+      deep when full) evaporated entirely while the doubled run's slightly
+      lower one (144 m³, 10 % less surface) kept 3 m³, and over ~20 days the
+      farm got more than twice the water (0.838 → 0.870). Rain on the dam had
+      the right sign throughout (a lower dam caught less, until the
+      inversion made it the fuller one). The real process, a dam evaporating
+      as its surface shrinks, is order-preserving for any b, so this is the
+      scheme's artefact. Fix: for b > 1, E ≤ (1 − seepage) × Q[t−1] / b
+      (`network/simulate.ts` `damDay`, `verify/checks.ts`, the day-trace
+      formula; model.md §2.7a, engine-audit.md N2); never binds for b ≤ 1.
+      `persona-hydrologist` (simulated, 2026-09-25) agreed it is an artefact,
+      rejected neutralising it in the check, called the cap defensible as a
+      documented limiter (it understates evaporation on extremely shallow
+      dams; the uncapped step overstated it), and recommended narrowing the
+      range to b ≤ 1 (next item). Tests: `run.test.ts` › "engine 0.21.1:
+      with b > 1 a fuller dam never ends the day with less water",
+      `run.invariants.test.ts` › "engine 0.21.1: doubling crop areas …".
+      The random-cases tests' failure cap is now `FUZZ_MAX_FAILURES`
+      (default 3; model.md §6).
+- [x] **Order invariance: a transfer source at its reserve (legacy seed
+      14313).** Found by the 20 000-case soak (2026-09-25; the earlier soak
+      stopped at seed 8984). The only rule into a farm drew from a dam sitting
+      exactly at its reserve, so `free = Q_src[t−1] − reserve` came out as 0
+      or as one ulp depending on node order, and attribution charged that
+      residue to the receiving farm. **Fixed in engine 0.21.1:**
+      `network/attribution.ts` sizes the noise by the dams at both ends of the
+      day's transfers too, the same `RESIDUE` rule as 0.19.2. Pinned in
+      `run.invariants.test.ts` beside the 0.19.1–0.19.2 seeds.
+- [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
+      (migration 006's check, `backend/src/model/validate.ts`,
+      `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,
+      `verify/checks.ts`), but a single area–storage power law with b > 1 is
+      not a real basin: any area–stage power law A ∝ hᵐ gives b = m/(m + 1)
+      < 1, and published small-reservoir fits give b ≈ 0.65–0.85 (Liebe et
+      al. 2005: 0.70). b > 1 happens only locally (a flat shelf at the top),
+      which a power law can't represent anyway; that needs a stage–area–volume
+      table. The persona hydrologist recommends narrowing to 0 < b ≤ 1: a new
+      forward-only migration adding the tighter check `NOT VALID`, reporting
+      or clamping rows above 1, then `VALIDATE`; the same bound in zod, the
+      frontend, `damLosses` (warning) and the fuzz generator; the 0.21.1
+      limiter stays for runs saved before. Deferred because it narrows what
+      users may enter, so it is the real hydrologist's call. Trigger: the
+      hydrologist review of N2 (engine-audit.md), or the first real dam
+      entered with b > 1.
 - [ ] **Excel audit workbook export** (the strongest independent check). The
       farm daily CSV has every column but the hydrologist still types the
       formulas. An `.xlsx` for one farm: inputs as values, each working column

@@ -13,6 +13,10 @@ import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const CASES = Number(env.FUZZ_CASES ?? 400);
 const SEED0 = Number(env.FUZZ_SEED ?? 1);
+// Stop after this many failing seeds (each is shrunk, which is slow). A
+// diagnostic soak raises it so one run lists every failing seed:
+//   FUZZ_MAX_FAILURES=100 FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts -t "random cases"
+const MAX_FAILURES = Number(env.FUZZ_MAX_FAILURES ?? 3);
 // ~25 ms per case (four model runs each); leave generous headroom for a soak.
 const TIMEOUT = Math.max(120_000, CASES * 200);
 
@@ -22,7 +26,7 @@ const ruleOf = (msg: string) => msg.split(':')[0]!.replace(/n\d+ day \d+|day \d+
 describe('engine invariants on random networks', () => {
 	it(`${CASES} random cases from seed ${SEED0}`, () => {
 		const failures: string[] = [];
-		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
+		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < MAX_FAILURES; seed++) {
 			const input = randomInput(seed);
 			const bad = checkAll(input, seed);
 			if (!bad) continue;
@@ -38,7 +42,7 @@ describe('engine invariants on random networks', () => {
 
 	it(`${CASES} random cases from seed ${SEED0}, GR4J runoff`, () => {
 		const failures: string[] = [];
-		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < 3; seed++) {
+		for (let seed = SEED0; seed < SEED0 + CASES && failures.length < MAX_FAILURES; seed++) {
 			const input = randomInput(seed, { runoffModel: 'gr4j' });
 			const bad = checkAll(input, seed);
 			if (!bad) continue;
@@ -84,6 +88,19 @@ describe('engine invariants on random networks', () => {
 		}
 	});
 
+	it('engine 0.21.1: doubling crop areas never raises the supply fraction below a steep, shallow dam (seeds 4197, 7686, 15979, 17277)', () => {
+		// Each had a dam with b > 1 (3, 2.34, 3, 3) and a mean depth of 0.5–32 mm, so a day's
+		// evaporation took more than 1/b of it. The daily step then turned order round: the
+		// doubled run's lower dam, with a smaller surface, kept water the base run's fuller dam
+		// lost entirely (seed 15979: 149 m³ all evaporated, 144 m³ kept 3 m³), and the farm's
+		// supply fraction rose 0.838 → 0.870. Evaporation is now capped at (1 − seepage) × Q[t−1] / b
+		// for b > 1 (network/simulate.ts damDay); the check itself is unchanged.
+		for (const [seed, runoffModel] of [[4197, 'gr4j'], [7686, 'legacy'], [15979, 'legacy'], [17277, 'gr4j']] as const) {
+			expect(checkDoubledCropAreas(randomInput(seed, { runoffModel })), `seed ${seed}`).toBeNull();
+			expect(checkAll(randomInput(seed, { runoffModel }), seed), `seed ${seed}`).toBeNull();
+		}
+	});
+
 	it('Q18: transfer rules sharing a dam give the same results in any list order (no exemption)', () => {
 		// Seeds whose enabled rules share a source dam, with tied priorities among them.
 		let tested = 0;
@@ -120,6 +137,8 @@ describe('engine invariants on random networks', () => {
 			const input = randomInput(seed, opts);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
+		// 0.21.1: a transfer source at its reserve sends a one-ulp residue in one node order (seed 14313).
+		expect(checkOrderInvariance(randomInput(14313), runModel(randomInput(14313)), 14313), 'seed 14313').toBeNull();
 		for (const [seed, opts] of [[9051, {}], [11240, { runoffModel: 'gr4j' as const }], [15426, { runoffModel: 'gr4j' as const }]] as const) {
 			const input = randomInput(seed, opts);
 			expect(checkEwrAttribution(input, runModel(input)), `seed ${seed}`).toBeNull();
