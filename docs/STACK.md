@@ -11,7 +11,7 @@ sides share.
 - **packages/engine**: `@water-management/engine`. Pure TypeScript model
   (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest,
   two projects: `unit` (`pnpm test`) and `perf` (`*.perf.test.ts`, wall-clock
-  budgets, `pnpm test:perf` — median of several runs, run serially and alone,
+  budgets, `pnpm test:engine:perf` — median of several runs, run serially and alone,
   not part of `pnpm test`/CI since a loaded machine trips a hard budget).
   Imported as source by frontend and backend.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function

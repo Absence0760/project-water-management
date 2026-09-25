@@ -631,20 +631,25 @@ the suggested order (the IDs carry the detail):
       failed, then passed when rerun alone. Neither touches the runs page;
       if either fails alone, look for a missing readiness signal on reload
       rather than a longer timeout.
-- [ ] **Wall-clock test flakes under load.** "a GR4J run of an example
-      catchment takes under 50 ms" failed once (2026-09-24), and "runs 13
-      nodes × 16k days well under a second" (`run.test.ts`, client
-      catchment, < 1 000 ms) failed twice on 2026-09-24 in a full parallel
-      `pnpm test`, passing alone while all three
-      workspaces' tests ran at once; it normally takes about 21 ms. The
-      durable fix: move the timing check to a separate `bench` / soak target,
-      or take the median of several runs against a budget measured on the
-      machine running it, so the unit suite asserts nothing about wall-clock
-      time.
-- [ ] **Frontend bundle ceilings were raised** to 295 KB total and 105 KB
-      for the project page (2026-09-24, fit provenance). Look for code to
-      split, such as lazy-loading the calibration and WR2012 panels, before
-      the next raise.
+- [x] **Wall-clock test flakes under load** (2026-09-24): the timing
+      checks moved out of the unit suite into `*.perf.test.ts` vitest
+      `perf` projects (median of 7 after a warm-up, serial), run with
+      `pnpm test:engine:perf` / `pnpm test:backend:perf`, not by
+      `pnpm test` or CI. The backend's 50 ms example-catchment budget
+      still fails when the machine is busy; run it alone.
+- [x] **Frontend bundle split by tab** (2026-09-24): the catchment
+      workspace loads each tab (and the Add data / series preview dialogs)
+      on demand (`common/Lazy.svelte`, architecture.md § Code splitting).
+      Largest chunk 130 → 37 KB (ceiling 41 KB); opening a catchment ~298
+      → ~89 KB. The total was already 383 KB against a 295 KB ceiling on
+      main (help centre, new tabs' code, engine code), so its ceiling went
+      *up* to 411 KB (405 KB measured).
+- [ ] **Bring the total bundle down** (6 KB of headroom left). Options,
+      measured by the split's author: stop shipping the engine twice (page
+      and calibration worker, 25 KB for the worker); load help tooltip text
+      on demand (25 KB help chunk on any page with a tooltip); Rollup
+      `experimentalMinChunkSize` (~4 KB, changes grouping app-wide).
+      Trigger: the next feature that hits the 411 KB ceiling.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
@@ -657,7 +662,30 @@ the suggested order (the IDs carry the detail):
       `cap − (Q[t−1] + Pd − E − Sp) + D − scheduled` (model.md §2.6),
       `checkTransferLimits` reads it the same way, and a named seed-921
       test pins it. A 2 000-case soak on 0.19.0 passed for both runoff
-      models; the 20 000-case soak is still owed.
+      models.
+      **20 000-case soak on 0.19.0 (2026-09-24) failed**, stopping at the
+      3-failure cap per model (legacy scanned seeds 1–8984, GR4J 1–17277),
+      so later seeds are unscanned. Repro any seed with
+      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+- [ ] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
+      9681).** The F8 class of float noise at a new site:
+      `network/attribution.ts`'s per-farm charge
+      `A = min(D* × e⁺_f / E, e⁺_f)` leaves a residual of about −1e-13 whose
+      sign depends on node order. Flooring `A` against `SHORTFALL_NOISE`
+      fixed the seeds but broke `checkEwrAttribution` (Σ charges < D*), so
+      it was reverted. Durable fix: accumulate `E` (and the charges) in a
+      canonical order (by node id), as F8 did, with the three seeds as
+      regression tests; `ENGINE_VERSION` 0.19.1 if any output moves.
+- [ ] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
+      7686, 17277).** Not the room-cap bug: rain captured on a farm dam's
+      own surface (steep area–storage curve, exponent up to 3) and farms
+      sitting at a high dead-storage level, where a slightly different
+      storage path shifts threshold days. Same size as the accepted seed
+      4660 (return flow, which the check already neutralises). A policy
+      call: accept and document them, or neutralise dam-surface rain /
+      dead storage in `checkDoubledCropAreas` too. Ask
+      `persona-hydrologist` first. Also raise the test's 3-failure cap for
+      diagnostic soaks so one run covers every seed.
 - [ ] **Excel audit workbook export** (the strongest independent check). The
       farm daily CSV has every column but the hydrologist still types the
       formulas. An `.xlsx` for one farm: inputs as values, each working column
@@ -733,13 +761,11 @@ run, and help entries tagged by `audience`, all in step 2.
 
 Open gaps:
 
-- [ ] **No read-only team role.** Every team member becomes an editor on
-      every team project, so a WUA office clerk or a client reviewer added
-      to the team can change settings and run the model. Add a team role
-      `viewer` (→ project `viewer`). This needs a migration adding the enum
-      value, the `app_project_role()` mapping, team invites taking it, and
-      the team page. Tests: DB tests that a team viewer reads but can't
-      write, with a positive control that a team member can write.
+- [x] **Read-only team role** (2026-09-24): team `viewer` → project
+      `viewer` (migration 008). `app_project_role()` maps each team role
+      explicitly (unknown grants nothing); creating or moving a project
+      into a team needs team member or admin; a viewer's copy is personal
+      (data-model.md § Teams, ui.md § Teams).
 - [ ] **Tabs by role.** Viewers are shown tabs they can't act on and mostly
       don't need. Build one pure function, `visibleTabs(role, prefs)`, that
       the tab strip and the Overview checklist (whose steps link to tabs) both use:
