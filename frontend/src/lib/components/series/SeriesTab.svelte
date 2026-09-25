@@ -1,3 +1,7 @@
+<script module lang="ts">
+	const loadPreviewDialog = () => import('./SeriesPreviewDialog.svelte');
+</script>
+
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -20,6 +24,8 @@
 	} from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -31,7 +37,6 @@
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
-	import SeriesPreviewDialog from './SeriesPreviewDialog.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
 	import { KIND_ROLES, seriesInUse } from './roles';
@@ -77,15 +82,21 @@
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
 
 	let previewOpen = $state(false);
+	// The preview dialog is its own chunk (preview.ts pulls in the engine's
+	// run preparation): fetched on first open, warmed on hover/focus, then kept.
+	let previewMounted = $state(false);
+	const warmPreview = () => prefetch(loadPreviewDialog);
 	let previewFocusSeriesId = $state<string | null>(null);
 	/** The card header's "Preview data": every column, nothing highlighted. */
 	function openPreviewAll() {
 		previewFocusSeriesId = null;
+		previewMounted = true;
 		previewOpen = true;
 	}
 	/** A row's own "Preview": that series' column un-hidden, scrolled to and highlighted. */
 	function openPreviewSeries(id: string) {
 		previewFocusSeriesId = id;
+		previewMounted = true;
 		previewOpen = true;
 	}
 
@@ -269,7 +280,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small">Daily values · {list.length} series{newestDate ? ` · data up to ${newestDate} (${describeAge(daysBetween(newestDate, today))})` : ''}</span>
-			<button type="button" class="btn btn-sm" onclick={openPreviewAll}>Preview data</button>
+			<button type="button" class="btn btn-sm" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview data</button>
 		{/if}
 	</div>
 	<LoadState
@@ -339,7 +350,7 @@
 							<td role="cell" class="act">
 								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => (selectedId = s.id)}>View</button>
-								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)}>Preview</button>
+								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
 								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
@@ -441,7 +452,13 @@
 	</section>
 </div>
 
-<SeriesPreviewDialog bind:open={previewOpen} {list} {values} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
+{#if previewMounted}
+	<Lazy load={loadPreviewDialog}>
+		{#snippet children(SeriesPreviewDialog)}
+			<SeriesPreviewDialog bind:open={previewOpen} {list} {values} {settings} focusSeriesId={previewFocusSeriesId} onRetry={loadValues} />
+		{/snippet}
+	</Lazy>
+{/if}
 
 <style>
 	.small {
