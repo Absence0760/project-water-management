@@ -233,6 +233,23 @@ every crop and month with a factor above 1.0: a hint to check for an FAO Kc
 entered as it is, never a block on saving (`highCropFactors` in
 `components/crops/demand.ts`).
 
+Under Planted areas, a muted note names every farm whose planted area adds up
+to zero ("Farm 5, Farm 6 and Farm 8 have no planted area, so their irrigation
+demand counts as zero."), at most five names then "and N more"
+(`noPlantedAreaNote`). Like the rest of the tab it follows unsaved edits.
+
+Above the demand table, a compact stacked bar chart shows the catchment's
+gross demand per water-year month (Oct → Sep, m³/day), one part per crop
+(`MonthlyBars` in stacked mode). The parts come from the same per-farm
+computation as the table: `farmDemands` splits each farm's engine demand by
+crop, `catchmentDemand` gives the footer totals and `cropStacks` the chart's
+parts, which sum to them. Colours are theme tokens (`--series-1…3`,
+`--brand-node`, `--warning`, `--accent`), so they follow light and dark mode;
+with more than six crops the five largest by annual demand keep a colour and
+the rest are grouped as "Other" in grey. The chart is an image whose label
+names the crops and the peak month; the table stays the accessible data
+source. It is hidden while there is no demand (no A-pan, crops or areas).
+
 On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
 top, the twelve factors four to a row and the mean below; each farm's crops two
