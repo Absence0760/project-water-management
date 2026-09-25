@@ -15,21 +15,29 @@ These agents and commands were derived from a real working web app (SvelteKit + 
 - **`repo-security-auditor.md`** — read-only security auditor. The "trust boundaries" section needs rewriting per project — the example boundaries (frontend ↔ user, backend ↔ caller, backend ↔ <CMS>, backend ↔ <payment-processor>) reflect one specific stack shape, not a universal map.
 - **`compliance-auditor.md`** — read-only privacy / legal / accessibility auditor. Backs the GDPR, cookie-consent, data-export, account-deletion, third-party-data-flows, and accessibility audit commands. Knows enough about GDPR / ePrivacy / CCPA / WCAG to flag the obvious gaps; the operator still owns the final policy / legal call.
 - **`migration-coordinator.md`** — DB schema-change coordinator. Applies a migration locally, verifies RLS coverage on tenant tables, surfaces manual type-sync edits, proposes smoke-test additions. Pairs with `/safe-migration`.
-- **`persona-*.md`** — bug-hunting personas. Each adopts a real-world point of view (`new-user`, `power-user`, `admin`, `international-user`, `accessibility-user`, `integrator`, `adversary`, `data-subject`) and walks the app the way that person would, finding logic / UX / domain bugs a code review misses. Read-only; each writes a living report to `reviews/<persona>.md` (git-ignored). Stack-agnostic — they discover the app first. Protocol + how to add project-specific domain personas (an invoicing app's approver/CFO/accountant, a marketplace's buyer/seller, …): `personas/README.md`. Run via `/persona`.
+- **`persona-*.md`** — bug-hunting personas. Each adopts a real-world point of view (`new-user`, `power-user`, `admin`, `international-user`, `accessibility-user`, `integrator`, `adversary`, `data-subject`) and walks the app the way that person would, finding logic / UX / domain bugs a code review misses. Read-only; each writes a living report to `reviews/<persona>.md` (git-ignored). Stack-agnostic — they discover the app first. Protocol + how to add project-specific domain personas (an invoicing app's approver/CFO/accountant, a marketplace's buyer/seller, …): `personas/README.md`. Run via `/persona`. This project's domain pack: `hydrologist`, `environmentalist`, `licence-applicant`, `licensing-authority`, `wua-manager`, `farmer`.
 
 ### Commands (`commands/`)
 
-- **`check.md`** — run typecheck + tests + format + lint and report.
+- **`check.md`** — pre-commit gate: runs `code-reviewer`, `test-gap-checker` and `doc-hygiene-checker` in parallel over the working diff. Advisory; applies nothing.
 - **`safe-edit.md`** — workflow for edits to security-sensitive or load-bearing files.
 - **`safe-migration.md`** — DB-schema-change workflow with `migration-coordinator` in the loop.
 - **`polish-ui.md`** — orchestrates the `ui-polisher` agent against a target surface.
 - **`persona.md`** — runs one, several, or all of the `persona-*` bug-hunting auditors in parallel and consolidates their reports.
 - **`release-readiness.md`** — go/no-go checklist before tagging a release.
+- **`endpoint-inventory.md`** — builds the HTTP-route inventory from the router source.
+- **Hunt / fix loops** (each commits path-scoped, never pushes): `bug-hunt.md`, `ux-hunt.md`, `perf-hunt.md`, `a11y-hunt.md`, `coverage-hunt.md`, `audit-and-fix.md`, `improve-round.md`, `fix-ci.md`.
 - **`audit/`** — directory of focused audits. Each command delegates to `repo-security-auditor` (security surfaces) or `compliance-auditor` (privacy / legal / a11y surfaces):
   - Security: `secrets.md`, `infra.md`, `deps.md`, `xss.md`, `cost-controls.md`, `auth.md` (route gating + tenant-context discipline)
   - Privacy / compliance: `gdpr.md`, `cookie-consent.md`, `data-export-completeness.md`, `account-deletion-completeness.md`, `third-party-data-flows.md`
   - Quality: `accessibility.md`
-  - `all.md` runs them all in sequence; `README.md` is the index
+  - Only for stacks that have them: `llm-endpoint.md`, `websocket-hub.md`
+  - `all.md` runs five of them in parallel (secrets, xss, deps, infra, cost-controls); `README.md` is the index
+
+### Hooks (`hooks/`, wired in `settings.json`)
+
+- **`git-scope-guard.py`** (PreToolUse on Bash) — blocks whole-tree git commands (`git add .`, bare `git commit`, `git stash`, …) so sessions sharing one checkout don't sweep up each other's work. Tests: `git-scope-guard.test.py`.
+- **`unmerged-worktree-check.sh`** (SessionStart) — warns when a branch holds commits not on `main` (e.g. a forgotten worktree branch).
 
 ## Adapting these for a new project
 

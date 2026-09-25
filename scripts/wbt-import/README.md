@@ -9,7 +9,7 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 | --- | --- |
 | `extract_project.py WORKBOOK OUTDIR [--gauge-as-reference …]` | `OUTDIR/project.json` holds a project: `{ name, description, settings, model, series }`, with `settings` = `ProjectSettings`, `model` = `ProjectModel` and `series` = `[{ kind, name, unit, startDate, values }]` (see `packages/engine/src/project.ts`). `OUTDIR/expected.json` holds the workbook's own daily results per Element sheet plus the catchment columns, for the engine regression test. |
 | `calibration.py WORKBOOK` | Prints the [Flow Calibration Cfg] parameters. `extract_project.py` uses it for `settings.calibration`. |
-| `extract_flow_fixture.py` | The rain-model fixture for `packages/engine/src/flow.test.ts`. |
+| `extract_flow_fixture.py WORKBOOK OUT.json` | The rain-model fixture for `packages/engine/src/flow.test.ts`, which reads `data/fixtures/client-catchment-flow.json`. |
 
 ## Setup
 

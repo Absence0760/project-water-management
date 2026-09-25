@@ -18,7 +18,7 @@ sides share.
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
   (needs Postgres).
-- **frontend/**: SvelteKit 5 **SPA** (`adapter-static` with a fallback
+- **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
   charts, vitest. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
@@ -34,17 +34,18 @@ sides share.
   bound by RLS. The `water_test` database is for DB tests.
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored.
-- **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda +
-  Route 53 + ACM + budget/alarms. The database is added in Phase 6
-  ([plan.md](./plan.md)).
+- **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
+  (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`) + RDS Postgres 17
+  in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
+  ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
-pnpm monorepo with three workspaces (`frontend`, `backend`, `packages/*`).
+pnpm monorepo with four workspaces (`frontend`, `backend`, `packages/*`, `e2e`).
 Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, start Mailpit (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up)
 pnpm dev:run:frontend       # one side only
 pnpm dev:run:backend
@@ -56,17 +57,20 @@ pnpm dev:db:migrate         # apply backend/migrations as `water`
 pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local data)
 pnpm dev:db:psql            # psql as the schema owner
 pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026, dev:mail:open)
+pnpm dev:mail:down | dev:mail:status | dev:mail:logs
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
+pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB)
 pnpm test:engine | test:frontend | test:backend
 pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
+pnpm test:e2e:install       # once: download Playwright's Chromium
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
-pnpm import:project <project.json> --email you@example.com [--name …]
+pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run]
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
                              # GR4J at a few pan-coefficient choices, fixed vs refitted (no DB; model.md §2.4a)
 pnpm test:scripts           # guard: root scripts point at real targets
@@ -107,12 +111,14 @@ Deploying (only when the client is ready for it) is covered in
 ## Where to look
 
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
+- `docs/engine-audit.md`: where and why the engine departs from the workbook (finding IDs); `docs/engine-review.md`: the earlier faithfulness review
 - `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
+- `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/roadmap/`: the four-step growth plan (hydrologist tool → shared catchment → licensing → platform), one build plan per step
 - `docs/architecture.md`: system diagram, workspaces, request/run lifecycle
 - `docs/run-locally.md`, `docs/deployment.md`, `docs/security.md`

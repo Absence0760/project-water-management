@@ -67,14 +67,25 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `tests/auth.spec.ts` | Register, sign out and in, wrong password, deep link → login → back, open-redirect guard; "Forgot password?" → request acknowledged; reset link → new password works (also opened while signed in; spent link); confirm-email banner cleared by the link, and the link working signed out |
 | `tests/projects.spec.ts` | Create several projects, copy one (with its model), delete, roles in the list; data-freshness badge, last run and the editors-only "Add data" link (`?add=data`); the list and the workspace header count the same local days under a UTC+14 clock |
 | `tests/sharing.spec.ts` | Owner shares with a viewer (read-only everywhere, unshared project → not found); editor rights; inviting an address with no account (pending list, re-send throttle, revoke); signing up through an invite link lands in the project; a dead invite link falls back to plain sign-up; an invite link opened while signed in (another account: sign out and accept; own unconfirmed address: confirm first; dead link) |
-| `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard; thousands separators in the one-node form and the view-only table |
+| `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard; thousands separators in the one-node form and the view-only table; the node table's layout at 1440 px, narrower and on a phone |
+| `tests/model-phone.spec.ts` | Crop factors, planted areas and transfer rules as cards on a phone; the tables keep their column headers on a desktop |
 | `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard; date validation |
-| `tests/series.spec.ts` | Upload rainfall + observed-flow CSVs, preview, chart; malformed CSV |
+| `tests/series.spec.ts` | Upload rainfall + observed-flow CSVs, preview, chart; malformed CSV; a later file appends; US month/day dates; the CSV menu; phone cards and the wide-screen layout |
+| `tests/series-preview.spec.ts` | The daily-table preview from a row and from the card header: search, column picker, Escape returns focus |
+| `tests/data-quality.spec.ts` | Gauge-vs-logger thresholds as a project setting; zero-rain runs and water years far below CHIRPS flagged on the Time series tab, shaded as missing until Settings keeps them dry |
+| `tests/chirps-bias.spec.ts` | A run lists the CHIRPS factors it applied, and Settings can turn the correction off |
+| `tests/runoff-model.spec.ts` | GR4J is the default and its parameters save; the runoff balance on a run; a legacy run has no runoff panel; comparing legacy against GR4J; GR4J without A-pan is refused with the reason |
+| `tests/auto-calibration.spec.ts` | Fitting GR4J fills the form and only Save stores it; groundwater exchange (X2); cancel; a viewer can fit but not apply; validating against the other flow record |
+| `tests/fit-provenance.spec.ts` | An applied fit is saved with its record and shown on the run; a hand edit marks it edited; a calibration exclusion needs a reason |
+| `tests/wr2012.spec.ts` | WR2012 reference data is checked, saved and reported by every run; run comparison lists the WR2012 inputs that changed |
+| `tests/self-checks.spec.ts` | A run shows its self-checks, its water balance and a traced day that closes |
 | `tests/runs.spec.ts` | Run the model: run listed, farm summary table, charts, persisted; the result-sections menu lands each panel below the sticky header |
 | `tests/overview.spec.ts` | Overview checklist and headline counts (fresh and complete projects), counts updating after "Add data" on the tab, a long member email wrapping at its break points on a phone |
 | `tests/auth-layout.spec.ts` | The split sign-in / register layout beside a classic 15 px scrollbar (`html { overflow-y: scroll }`), desktop and phone, light and dark: no sideways overflow, full-height brand panel, gutter in the form's colour; saves a screenshot of each |
 | `tests/examples.spec.ts` | Seeds the invented example catchments (`backend/scripts/seed-examples.ts`, once per run) and checks both demo users' lists and roles (owned, team-shared, directly shared) and a read-only shared example with its seeded run |
 | `tests/teams.spec.ts` | A team owns catchments together (add a colleague, create in the team, both lists, filters); the last admin can't leave; inviting an address with no account and revoking it |
+| `tests/help.spec.ts` | Help tips (open on top, each with its own close-up), the help sidebar and search, the catchment tour, guides with diagrams and glossary links, old `/help#term` links, an unknown guide |
+| `tests/escape.spec.ts` | The "Data up to" dropdown and the Add data dialog close on Escape (Add data asks first when a read file isn't uploaded) |
 | `tests/repeated-loads.spec.ts` | Six full loads of the Settings tab in a row, with no failed request or page error (the dev-server resource-exhaustion regression) |
 | `tests/a11y.spec.ts` | axe WCAG 2.2 A/AA scan of every page (sign-in pages, emailed-link dead states, project list, teams, a team, help, compare), every workspace tab, dialogs, save bar, one-node form, view-only workspace and a signed-in invitation, in light and dark; every tab again at phone width; sideways-scrolling boxes take focus and scroll by keyboard |
 

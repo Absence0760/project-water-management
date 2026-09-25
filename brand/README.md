@@ -21,10 +21,11 @@ display text only; UI text stays the system sans.
 - `src/mark.svg` — editable master mark. `src/mark-small.svg` — ≤ 48 px favicon
   variant on a navy tile (three nodes, heavier lines, one ripple).
 - `fonts/Outfit-Variable.ttf` — upstream variable font (google/fonts, OFL).
-- `dist/` — generated lockups (`logo.svg`, `logo-reversed.svg`, wordmark as outlines).
+- `dist/` — generated lockups (`logo.svg`, `logo-reversed.svg`, wordmark as outlines;
+  `mark.svg`). Gitignored: `build.py` writes it.
 - Generated into `frontend/static/`: `favicon.svg/.ico`, `apple-touch-icon.png`,
   `icon-192/512.png`, `icon-maskable-512.png`, `site.webmanifest`,
-  `fonts/outfit-600.woff2` (Latin subset).
+  `fonts/outfit-600.woff2` (Latin subset) with a copy of `fonts/OFL.txt`.
 - `frontend/src/lib/components/layout/BrandMark.svelte` inlines the mark for the UI
   (theme-aware colours) — keep it in step with `src/mark.svg`.
 

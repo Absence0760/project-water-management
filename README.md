@@ -23,7 +23,7 @@ users as viewer, editor or owner.
 Needs Node 24, pnpm 10 (Corepack) and Docker.
 
 ```bash
-pnpm setup      # install deps, start Postgres 17 (docker, :5434), run migrations
+pnpm setup      # install deps, start Postgres 17 (docker, :5434), run migrations, start Mailpit
 pnpm dev        # frontend http://localhost:7777 + API http://localhost:3001
 ```
 
@@ -46,12 +46,14 @@ gitignored) and imports it for a local demo user. Step by step:
 ## How it's built
 
 - **packages/engine**: the model, in pure TypeScript. The same code runs in the
-  browser (instant what-ifs) and on the server (stored runs). It is
-  regression-tested against the client workbook.
+  browser (instant what-ifs) and on the server (stored runs). Its correctness
+  is judged by documented hydrology and invariant tests; a regression suite
+  against the client workbook lists every intended departure
+  ([docs/engine-audit.md](./docs/engine-audit.md)).
 - **backend**: Hono API (Node locally, AWS Lambda in production) on
   **Postgres**. Per-project access is enforced with row-level security.
 - **frontend**: SvelteKit static site with uPlot charts.
-- **infra**: Terraform for S3 + CloudFront + Lambda (+ Postgres when deployed).
+- **infra**: Terraform for S3 + CloudFront + Lambda + RDS Postgres + SES (not deployed yet).
 
 Details: [docs/architecture.md](./docs/architecture.md) ·
 [docs/STACK.md](./docs/STACK.md).
@@ -64,6 +66,7 @@ pnpm dev:db:up | dev:db:down | dev:db:migrate | dev:db:reset | dev:db:psql
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (no DB)
 pnpm test:backend:db        # API + RLS tests (needs dev:db:up)
+pnpm test:e2e               # Playwright end-to-end (needs dev:db:up)
 pnpm build                  # static site + Lambda bundle
 ```
 
@@ -76,6 +79,8 @@ The full list is in [docs/STACK.md](./docs/STACK.md#commands-run-from-repo-root)
 | [docs/plan.md](./docs/plan.md) | Roadmap from V1 to a deployed product, acceptance criteria, **questions for the client**, risks |
 | [docs/planned-work.md](./docs/planned-work.md) | Feature backlog beyond V1 — gaps from the workbooks, hydrologist needs, multi-catchment team features (Now / Next / Later) |
 | [docs/model.md](./docs/model.md) | The water-balance model step by step, the AI modules, workbook quirks to confirm, glossary |
+| [docs/engine-audit.md](./docs/engine-audit.md) | Where and why the engine departs from the workbook |
+| [docs/ui.md](./docs/ui.md) | The catchment workspace: tabs, Add data, schematic, results dashboard |
 | [docs/data-model.md](./docs/data-model.md) | Tables, mapping to the workbook's sheets, roles and RLS, time-series storage |
 | [docs/api.md](./docs/api.md) | HTTP API contract |
 | [docs/architecture.md](./docs/architecture.md) | System diagram, workspaces, request and run lifecycle |
