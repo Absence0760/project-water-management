@@ -181,8 +181,22 @@ It's the same code path as `import:project` (`POST /projects/import`,
 [api.md § Import a project file](./api.md#import-a-project-file)), and it's
 how a catchment gets into production ([deployment.md](./deployment.md#getting-a-catchment-into-production)).
 
-The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's
-read-only mode, so memory stays bounded.
+**Or import the workbook itself in the UI**, with no Python at all: choose
+**Import b023 workbook** on the project list and pick the `.xlsm` (or
+`.xlsx`). It's read in the browser, in a Web Worker, with progress per sheet
+and Cancel; then the review shows what's in it, the importer's notes (with
+warnings marked), the **unmapped report** (what couldn't be carried across as
+the workbook meant, with sheet, cell and element), and, if the workbook has a
+gauge column, the gauge-as-reference option with its optional scaling date
+and factor (the same as the Python's `--gauge-as-reference`,
+`--gauge-scaling-from` and `--gauge-scale-factor`). Import, optionally with a
+first run, and open the project. The TypeScript and Python importers give the
+same `project.json` for the same workbook and options
+([scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
+The client workbook reads in a couple of seconds.
+
+The 87 MB workbook takes a minute or so to read with the Python script. It uses
+openpyxl's read-only mode, so memory stays bounded.
 
 ## Multiple projects and teams
 

@@ -193,6 +193,25 @@
 //             +0.8 KB, page code unchanged (+0.1 KB, hash noise). Measured
 //             591 KB, at the old ceiling; raised by the usual ~6 KB so the
 //             next change is measured rather than failing on the merge.
+// 2026-09-25  total 597 → 702 KB; spreadsheet worker 95 → 107 KB; the page
+//             ceiling (41 KB) and the calibration worker's (55 KB) are
+//             unchanged. The in-browser b023 workbook import (WP-1.31, issue
+//             #11). Measured on the base 02b6f1e → this change: total 591 →
+//             696 KB. New: workers/import.worker-*.js, 101 KB, loaded only
+//             when someone picks a workbook in "Import b023 workbook". It is
+//             SheetJS's mini build (the same ~80 KB the export worker
+//             carries; mini reads .xlsm as well as .xlsx, measured on both by
+//             the parity tests) plus the parser (the TypeScript port of
+//             extract_project.py and calibration.py) and the capped zip
+//             reader, ~20 KB between them. Two workers can't share SheetJS
+//             (each worker bundle carries its own copy), and no page chunk
+//             imports it. Page code grows ~4 KB: the dialog's workbook
+//             branch (progress, Cancel, errors), the review's gauge option,
+//             notes and unmapped report, and the lazy runner that starts the
+//             worker; the largest page chunk is unchanged (39 KB). Headroom
+//             ~6 KB on both. The durable way down is the streaming sheet
+//             reader in followups.md (WP-1.31 peak memory): it would drop
+//             SheetJS from this worker altogether.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -204,10 +223,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 597,
+	totalCodeKb: 702,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
-	largestSpreadsheetWorkerKb: 95,
+	largestSpreadsheetWorkerKb: 107,
 	largestAssetKb: 100,
 });
 

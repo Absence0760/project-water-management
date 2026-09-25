@@ -1,7 +1,10 @@
 <script lang="ts">
 	// The import dialog's preview step: what the file holds, the importer's
 	// notes, and the choices (name, team, run after import). Source-agnostic:
-	// it takes an already-parsed document, whichever file it came from.
+	// it takes an already-parsed document, whichever file it came from. A
+	// source with more to show (a workbook's notes and unmapped report) passes
+	// it as `extra`, rendered after the contents and before the run choice.
+	import type { Snippet } from 'svelte';
 	import type { Team } from '$lib/api';
 	import { kindLabel } from '$lib/series/kinds';
 	import { summarizeImport, type ParsedImport } from './projectFile';
@@ -12,7 +15,9 @@
 		name = $bindable(),
 		teamId = $bindable(),
 		run = $bindable(),
-		disabled = false
+		disabled = false,
+		fileLabel = 'In this file',
+		extra
 	}: {
 		parsed: ParsedImport;
 		/** Teams the user may add projects to (member or admin). */
@@ -22,6 +27,9 @@
 		teamId: string;
 		run: boolean;
 		disabled?: boolean;
+		/** The contents section's heading. */
+		fileLabel?: string;
+		extra?: Snippet;
 	} = $props();
 
 	const summary = $derived(summarizeImport(parsed.file));
@@ -61,7 +69,7 @@
 {/if}
 
 <section class="contents" aria-labelledby="imp-contents-h">
-	<h3 id="imp-contents-h">In this file</h3>
+	<h3 id="imp-contents-h">{fileLabel}</h3>
 	<dl>
 		<div><dt>Network</dt><dd>{nodeText}</dd></div>
 		<div><dt>Crops</dt><dd>{plural(summary.crops, 'crop')}, {plural(summary.cropAreas, 'planted area')}</dd></div>
@@ -87,6 +95,8 @@
 	{/if}
 	<p class="hint muted">Model runs aren't part of a project file. Everything gets new ids, so the same file can be imported again.</p>
 </section>
+
+{@render extra?.()}
 
 <label class="check">
 	<input type="checkbox" bind:checked={run} {disabled} aria-describedby="imp-run-hint" />

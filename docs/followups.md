@@ -1116,7 +1116,18 @@ role and not before it.
         importer reads (a SAX pass over the sheet XML that keeps only the
         named-range columns as numbers), with the parity tests as the guard.
         Trigger: a user reports the import failing on a phone or low-memory
-        machine, or a workbook with a longer record than the client's.
+        machine, or a workbook with a longer record than the client's. It
+        would also drop SheetJS from the import worker (101 KB gzip).
+  - [ ] **The notes and unmapped report aren't kept.** They are shown on the
+        import review only; once imported, the project has no record of what
+        the importer couldn't map. Durable fix: store them with the project
+        (a `project.import_report` jsonb, shown on the Overview until
+        dismissed). Trigger: the first workbook the client imports
+        themselves, since they won't have the Python output to go back to.
+  - [ ] **Measured in a real browser.** The memory figures above are Node
+        with SheetJS on its browser code paths; no one has profiled the
+        client workbook's import in Chrome or Safari, or on a phone. Trigger:
+        with the peak-memory item above.
 
 ## Pipelines
 

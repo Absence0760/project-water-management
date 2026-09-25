@@ -33,6 +33,12 @@
 	let creating = $state(false);
 
 	let importOpen = $state(false);
+	/** Which import button opened the dialog: its wording and file picker follow. */
+	let importSource = $state<'project' | 'workbook'>('project');
+	function openImport(source: 'project' | 'workbook') {
+		importSource = source;
+		importOpen = true;
+	}
 
 	let copyOpen = $state(false);
 	let copySource = $state<ProjectSummary | null>(null);
@@ -167,7 +173,8 @@
 			<p class="muted sub">Each project models one catchment: its river network, farms, dams and data.</p>
 		</div>
 		<div class="head-actions">
-			<button type="button" class="btn" onclick={() => (importOpen = true)}>Import project file (.json)</button>
+			<button type="button" class="btn" onclick={() => openImport('workbook')}>Import b023 workbook</button>
+			<button type="button" class="btn" onclick={() => openImport('project')}>Import project file (.json)</button>
 			<button type="button" class="btn btn-primary" onclick={openCreate}>New project</button>
 		</div>
 	</div>
@@ -318,6 +325,7 @@
 
 <ImportProjectDialog
 	bind:open={importOpen}
+	source={importSource}
 	teams={addableTeams}
 	defaultTeamId={canAddTo(selectedTeam?.id) ? selectedTeam!.id : ''}
 	onimported={() => load()}

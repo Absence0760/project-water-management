@@ -270,6 +270,23 @@ the other way round. Two tests hold it:
   `python3`), and takes about 15 s per client-workbook variant, most of it the
   Python.
 
+**In the UI.** **Import b023 workbook** on the project list runs the port in a
+Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
+comes out, then the project, notes and unmapped report), shows the review,
+and posts the project to `POST /projects/import`, the same route and
+validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-b023-workbook)).
+The review's gauge option is `gaugeAsReference` (a date and factor for the
+scaling). Nothing from the workbook but the project reaches the server.
+
+**Acceptance (the client workbook).** `sourceWorkbooks.test.ts` shows the
+port's `project.json` equals the Python's, with and without the gauge
+options. The same `project.json` makes the same run: the import route is a
+function of the document alone, fresh ids keep the document's id order (the
+engine's summation and tie-break order), and the engine is deterministic.
+Checked end to end on 2026-09-25: both documents imported through the route's
+code with a run stored identical run summaries (a one-off local script
+outside the repo; no client data committed).
+
 What the port does beyond the Python:
 
 - **The unmapped report** (plan.md 1b): what it couldn't carry across as the

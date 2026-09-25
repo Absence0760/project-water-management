@@ -103,7 +103,13 @@ pending invitations, the confirm-email banner) render through
 
 `/` lists your projects, grouped by owner (personal, each team, shared with
 you), with a search box, an owner filter and a sort, all kept in the URL. Its
-header has **New project** and **Import project file (.json)**.
+header has **Import b023 workbook**, **Import project file (.json)** and
+**New project**. Both import buttons open the same dialog; the button only
+sets its wording and what the file picker offers, and the picked file's type
+decides how it's read, so a workbook picked from the JSON button still works.
+Two buttons rather than one "Import…": the client looks for a named workbook
+import, and the two sources explain themselves differently (a workbook's
+review has options and reports a `.json` file doesn't).
 
 ### Import a project file
 
@@ -133,8 +139,61 @@ turns a project document into a new project through `POST /projects/import`:
 
 The dialog is the wide variant: full width less the page gutter on a phone.
 Its preview and submit steps take an already-parsed document
-(`ParsedImport = { file, notes }`), so a second source (the in-browser b023
-workbook import, WP-1.31) only has to produce one.
+(`ParsedImport = { file, notes }`), so a second source only has to produce
+one; `ImportPreview`'s `extra` snippet takes whatever else that source shows.
+
+### Import a b023 workbook
+
+**Import b023 workbook** (WP-1.31) turns a Water Balance Tool b023 `.xlsm` or
+`.xlsx` into a project with no Python. The workbook never leaves the browser:
+it's read in a Web Worker (`lib/spreadsheet/import/import.worker.ts`, loaded
+only now; [architecture.md § Code splitting](./architecture.md#code-splitting-frontend)),
+and only the extracted project is sent to `POST /projects/import`, like a
+`.json` file. The view logic is `import/workbookFile.ts`; the review's
+workbook part is `WorkbookReview.svelte`.
+
+1. **Pick** the workbook (up to 150 MB).
+2. **Reading:** a progress bar and "Reading sheet *Flow data* (7 of 9)…" per
+   sheet the importer parses (then "Building the project: …"), and
+   **Cancel**, which stops the worker at once and returns to the picker.
+   Failures come back here, each with its own headline and the importer's
+   message:
+   - *not a b023 workbook*: the named ranges it lacks (the first eight, then
+     "and N more");
+   - *unsupported build* (AppSettings `zAppVer` isn't b02x);
+   - *too large* (the file, the sheet count, or the parts it reads unpacking
+     past their caps, which a real workbook never does);
+   - *couldn't be opened* (not a zip, an old `.xls` or a password-protected
+     file, `.xlsb`, a damaged or encrypted archive);
+   - *a problem the importer can't get past* (a table header it can't find,
+     dates that jump …), with the sheet and cell.
+3. **Review:** the preview as for a `.json` file (name prefilled from the file
+   name up to `_WBT`, team, "In this workbook" counts and series table, *Run
+   the model after importing*), plus:
+   - **Gauge column** (only when the workbook has one): *It's a gauge on
+     another river: import it as a reference gauge*, and then an optional
+     *Scaling starts on* date and *Scale factor* to undo a known scaling. A
+     change re-extracts from the workbook the worker still holds (no second
+     read) and updates the counts, notes and report in place; a date without
+     a factor (or the other way round) or a non-positive factor is flagged
+     and blocks Import.
+   - **Importer notes**, each marked *Note* or *Warning*, with its sheet and
+     cell: the Python importer's `note:` / `WARNING:` lines, same text.
+   - **Unmapped report**, its own section and table (*Where*, *Element*,
+     *What*, *In the workbook*): what couldn't be carried across as the
+     workbook meant, such as a hand-written [Transfers] InOut formula (shown
+     verbatim), a draw rule with no destination, a blank Specific share, M1
+     month lists, number cells holding text. The importer never changes a
+     value on its own; "Nothing: everything in the workbook was mapped" when
+     empty.
+4. **Importing, Done, Failed:** as for a `.json` file (the server's 400 and
+   413 messages included). *Open project* goes to it, and a first run's
+   result is on the Runs tab.
+
+Everything from the file (farm and sheet names, notes, formula text, error
+messages) is rendered as text, never `{@html}`
+([security.md § Input handling](./security.md#input-handling)). Closing the
+dialog, Cancel and a finished import terminate the worker.
 
 ## Teams
 

@@ -226,8 +226,14 @@ In short:
     engine, `cellFormula: false`, `bookVBA: false`), and the one place formula
     text matters (hand-written [Transfers] rules) reads the plain-text copy
     b023 keeps, matched against a fixed rule shape, never executed;
-  - error messages quote sheet and farm names from the file, so they are
-    plain text for the UI.
+  - error messages, notes and the unmapped report quote sheet and farm names
+    and formula text from the file, so the import dialog renders all of it as
+    text (plain Svelte interpolation, never `{@html}`); an e2e test imports a
+    workbook whose farm is named `<img src=x onerror=…>` and checks it shows
+    literally and runs nothing;
+  - it all runs in a module worker from `'self'` (`worker-src 'self'`), and
+    only the extracted project reaches the server, through the same
+    validation as any `.json` import.
 - The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,
   pinned in `frontend/package.json` to its official CDN tarball with the
   integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
