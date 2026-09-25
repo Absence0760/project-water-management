@@ -40,20 +40,20 @@ describe('newDataSinceRun', () => {
 describe('guessSeries', () => {
 	const list = [
 		meta('a', 'rain_catchment_mm', 'Average Catchment Rainfall', '2020-01-01', 1),
-		meta('b', 'flow_observed_m3s', 'Flow G1', '2020-01-01', 1),
-		meta('c', 'flow_logger_m3s', 'Logger A1', '2020-01-01', 1)
+		meta('b', 'flow_observed_m3s', 'Flow W7', '2020-01-01', 1),
+		meta('c', 'flow_logger_m3s', 'Logger L3', '2020-01-01', 1)
 	];
 
 	it('prefers an existing series named in the file or header', () => {
-		expect(guessSeries('export.csv', 'date,Flow G1', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow G1' });
-		expect(guessSeries('logger_a1_2025.csv', '', list)).toEqual({ kind: 'flow_logger_m3s', name: 'Logger A1' });
+		expect(guessSeries('export.csv', 'date,Flow W7', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow W7' });
+		expect(guessSeries('logger_l3_2025.csv', '', list)).toEqual({ kind: 'flow_logger_m3s', name: 'Logger L3' });
 	});
 
 	it('falls back to keywords, using the only series of that kind', () => {
 		expect(guessSeries('rain-april.csv', '', list)).toEqual({ kind: 'rain_catchment_mm', name: 'Average Catchment Rainfall' });
 		expect(guessSeries('chirps.csv', '', list)).toEqual({ kind: 'rain_chirps_mm', name: '' });
 		expect(guessSeries('reference-gauge.csv', '', list)).toEqual({ kind: 'flow_reference_m3s', name: '' });
-		expect(guessSeries('gauge.csv', '', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow G1' });
+		expect(guessSeries('gauge.csv', '', list)).toEqual({ kind: 'flow_observed_m3s', name: 'Flow W7' });
 		expect(guessSeries('data.csv', 'date,value', list)).toBeNull();
 	});
 

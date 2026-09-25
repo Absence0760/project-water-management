@@ -109,7 +109,7 @@ export function windowError(start: string | null, end: string | null): string | 
 	return null;
 }
 
-/** "2010-10-01 – 2018-09-30", "from 2010-10-01", "whole record". */
+/** "2005-10-01 – 2012-09-30", "from 2005-10-01", "whole record". */
 export function describeWindow(start: string | null | undefined, end: string | null | undefined): string {
 	if (start && end) return `${start} – ${end}`;
 	if (start) return `from ${start}`;

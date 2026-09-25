@@ -1665,10 +1665,9 @@ describe.skipIf(!clientCatchmentFixture)(
 
 		// The pivot table is written by a VBA macro, not by formulas, so it is only
 		// as fresh as the last time someone ran it. In the client workbook
-		// about a quarter of the farm-months hold volumes from an earlier model
-		// state (e.g. one farm's Feb 1981 is 28 × its daily AB value in the Element
-		// sheet *and* the [EWR shortfalls] sheet, but the pivot has a different
-		// sum). So: every farm-month whose volume is current must match exactly,
+		// some farm-months hold volumes from an earlier model state (a month's
+		// volume is days × its daily AB value in the Element sheet *and* the
+		// [EWR shortfalls] sheet, but the pivot has a different sum). So: every farm-month whose volume is current must match exactly,
 		// counts included under the running-total rule, and most must be current.
 		// The grid is fed the workbook's own daily AB, so this tests ewr.ts alone
 		// (the engine's AB differs from the workbook's by R1).
@@ -1929,6 +1928,6 @@ describe('catchment area', () => {
 		const input = { model: { nodes } } as unknown as Parameters<typeof resolveCatchmentAreaKm2>[1];
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: null }, input)).toBe(50.5);
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 0 }, input)).toBe(50.5);
-		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 205.1 }, input)).toBe(205.1);
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, input)).toBe(150);
 	});
 });

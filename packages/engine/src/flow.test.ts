@@ -14,8 +14,8 @@ import { excelRound } from './network/round';
 
 const cal = (over: Partial<CalibrationParams> = {}): CalibrationParams => ({
 	...defaultProjectSettings().calibration,
-	// Fixture area (the blank workbook's farm total); the real default is null = summed farm areas.
-	catchmentAreaKm2: 205.1,
+	// A synthetic fixture area; the real default is null = summed farm areas.
+	catchmentAreaKm2: 150,
 	...over
 });
 
@@ -62,8 +62,8 @@ describe('recession helpers', () => {
 	});
 
 	it('rainToFlow = a · rain^b · area·1000 · season factor (the workbook takes INT)', () => {
-		expect(rainToFlow(c, 10, false)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 1, 9);
-		expect(rainToFlow(c, 10, true)).toBeCloseTo(0.09 * 10 ** 1.2 * 205100 * 0.1, 9);
+		expect(rainToFlow(c, 10, false)).toBeCloseTo(0.09 * 10 ** 1.2 * 150000 * 1, 9);
+		expect(rainToFlow(c, 10, true)).toBeCloseTo(0.09 * 10 ** 1.2 * 150000 * 0.1, 9);
 		expect(rainToFlow(c, 0, false)).toBe(0);
 	});
 });
@@ -128,7 +128,7 @@ describe('no rounding in the model state (audit R1)', () => {
 	});
 
 	it('rain-added flow is a·R^b·area·factor, not floored to whole m³', () => {
-		expect(rainToFlow(cal(), 3, true)).toBeCloseTo(0.09 * 3 ** 1.2 * 205_100 * 0.1, 9);
+		expect(rainToFlow(cal(), 3, true)).toBeCloseTo(0.09 * 3 ** 1.2 * 150_000 * 0.1, 9);
 	});
 });
 
@@ -233,7 +233,7 @@ if (!fixture) {
 //   isSummer, rainUsedMm        exact: unchanged, and no rounding. (isSummer
 //                               relies on the summer-month list naming every
 //                               summer month: M1 no longer expands "11" to
-//                               January; the client catchment's list needs no expansion.)
+//                               January; the fixture's list must need no expansion.)
 //   rainFlow (V)                0 ≤ engine − workbook < 1 m³/day: R1 drops INT.
 //   baseFlow … resultantIndex   not compared day by day: E1 (day-1 state) and
 //                               R1 (no ROUND, no 4-dp indices) change the state,
@@ -242,8 +242,8 @@ if (!fixture) {
 //                               workbook's rounding floor 0.5 / (1 − f_max) + 1):
 //                               the floor is what R1 stops adding on dry days.
 //                               P1: no Pitman fallback, so AB also differs on
-//                               any day the workbook took its Pitman column;
-//                               the client catchment's column is empty.
+//                               any day the workbook took its Pitman column,
+//                               so the fixture's Pitman column must be empty.
 const EXACT: (keyof FlowColumns)[] = ['isSummer', 'rainUsedMm'];
 
 describe.skipIf(!fixture)(`workbook regression (${FIXTURE_REL})`, () => {

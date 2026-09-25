@@ -578,9 +578,10 @@ describe('quality checks do not depend on the local time zone', () => {
 	});
 });
 
-// The client catchment: the gauge (G1) reads a fraction of the logger (A1) from
-// 2014/15 — the case this check exists for (docs/plan.md, first hydrologist
-// question). Skipped when the gitignored client data is absent.
+// The client catchment: the gauge reads a fraction of the logger for part of
+// the record — the case this check exists for (docs/plan.md, first hydrologist
+// question). Skipped when the gitignored client data is absent. Structural
+// only: which years and what ratios are client data, so none is asserted.
 type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
 const fsSpecifier = 'node:fs';
 const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
@@ -590,15 +591,17 @@ const dataDir = ['data/client-catchment', '../data/client-catchment', '../../dat
 	.find((p) => fs.existsSync(`${p}/project.json`));
 
 describe.skipIf(!dataDir)('observedAgreement on the client catchment (needs data/client-catchment)', () => {
-	it('flags the gauge-vs-logger divergence from 2014/15', () => {
+	it('flags the gauge-vs-logger divergence after an early stretch where they agree', () => {
 		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as {
 			series: { kind: string; startDate: string; values: (number | null)[] }[];
 		};
 		const series = Object.fromEntries(project.series.map((s) => [s.kind, s]));
 		const ag = observedAgreement(series)!;
-		expect(ag.years.find((y) => y.waterYear === 2013)!.flagged).toBe(false); // 83 %
-		expect(ag.flaggedYears).toEqual(expect.arrayContaining([2014, 2015, 2016]));
-		expect(Math.round(ag.years.find((y) => y.waterYear === 2016)!.ratio! * 100)).toBe(8);
+		// Some year is flagged with the gauge reading low against the logger,
+		// and the record starts with at least one year where the two agree.
+		expect(ag.years.some((y) => y.flagged && y.ratio !== null && y.ratio < ag.minRatio)).toBe(true);
+		const firstFlagged = Math.min(...ag.flaggedYears);
+		expect(ag.years.some((y) => !y.flagged && y.waterYear < firstFlagged)).toBe(true);
 	});
 
 	// Issue #2: the catchment rain has zero-filled stretches that suppress the

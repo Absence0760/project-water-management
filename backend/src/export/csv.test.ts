@@ -109,10 +109,10 @@ describe('collectCsv', () => {
 		expect(pulled).toBeLessThan(20); // stops early instead of building everything
 	});
 
-	it('sizes a full Client Catchment node export well under the cap', () => {
-		// 16 161 days × 13 series of 7-digit volumes: the documented worst realistic case.
-		const cols = Array.from({ length: 13 }, (_, i) => ({ header: `Series ${i} (m³/day)`, values: new Array(16_161).fill(1234567) }));
-		const body = collectCsv(dailyCsvLines('1981-01-01', cols, { offset: 0, days: 16_161 }));
+	it('sizes a full node export over a long record well under the cap', () => {
+		// 45 years (16 437 days) × 13 series of 7-digit volumes: the documented worst realistic case.
+		const cols = Array.from({ length: 13 }, (_, i) => ({ header: `Series ${i} (m³/day)`, values: new Array(16_437).fill(1234567) }));
+		const body = collectCsv(dailyCsvLines('1980-01-01', cols, { offset: 0, days: 16_437 }));
 		expect(body).not.toBeNull();
 		expect(Buffer.byteLength(body!, 'utf8')).toBeLessThan(2 * 1024 * 1024);
 	});

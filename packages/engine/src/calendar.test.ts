@@ -15,10 +15,10 @@ describe('waterYearIndex', () => {
 
 describe('epoch days', () => {
 	it('round-trips ISO dates', () => {
-		for (const d of ['1981-01-01', '2000-02-29', '2025-03-31']) {
+		for (const d of ['1972-01-01', '2000-02-29', '2031-12-31']) {
 			expect(fromEpochDay(toEpochDay(d))).toBe(d);
 		}
 		expect(toEpochDay('1970-01-02')).toBe(1);
-		expect(monthOfEpochDay(toEpochDay('2013-04-24'))).toBe(4);
+		expect(monthOfEpochDay(toEpochDay('2002-04-24'))).toBe(4);
 	});
 });

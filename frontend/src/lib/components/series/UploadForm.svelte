@@ -195,7 +195,7 @@
 			<li>Separators: comma, semicolon or tab.</li>
 			<li>Blank, NA or - = no reading (stored as a gap).</li>
 			<li>Units: rainfall in mm per day; flow as the daily mean in m³/s.</li>
-			<li>Name the file after the series (e.g. <span class="mono">G1 flow.csv</span>) and it is picked for you.</li>
+			<li>Name the file after the series (e.g. <span class="mono">Weir flow.csv</span>) and it is picked for you.</li>
 		</ul>
 	</details>
 	<div class="field">
