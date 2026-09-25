@@ -7,9 +7,13 @@
 		title,
 		// A wider dialog (720px), for content like a data table that doesn't fit the default 440px.
 		wide = false,
+		// Near full-viewport, for a big data table: the body becomes a flex column so a child
+		// with `flex: 1; min-height: 0` takes the remaining height and scrolls on its own.
+		full = false,
 		children,
 		actions
-	}: { open?: boolean; title: string; wide?: boolean; children: Snippet; actions: Snippet } = $props();
+	}: { open?: boolean; title: string; wide?: boolean; full?: boolean; children: Snippet; actions: Snippet } =
+		$props();
 
 	let el: HTMLDialogElement | undefined = $state();
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
@@ -21,7 +25,7 @@
 	});
 </script>
 
-<dialog bind:this={el} class:wide aria-labelledby={titleId} onclose={() => (open = false)}>
+<dialog bind:this={el} class:wide class:full aria-labelledby={titleId} onclose={() => (open = false)}>
 	<h2 id={titleId}>{title}</h2>
 	<div class="body">{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
@@ -41,6 +45,21 @@
 	}
 	dialog.wide {
 		width: min(720px, calc(100vw - 2 * var(--gutter)));
+	}
+	dialog.full {
+		width: min(1600px, calc(100vw - 2 * var(--gutter)));
+		height: calc(100vh - 2rem);
+		overflow: hidden;
+	}
+	dialog.full[open] {
+		display: flex;
+		flex-direction: column;
+	}
+	dialog.full .body {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
 	}
 	dialog::backdrop {
 		background: rgb(0 0 0 / 0.35);

@@ -93,3 +93,30 @@ test('the card header’s "Preview data" opens with every column, the column pic
 	await expect(dialog).toBeHidden();
 	await expect(openButton).toBeFocused();
 });
+
+test('the preview fills the viewport and renders rows to the bottom of its taller scroll box', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview size');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: previewValues(731) });
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await page.getByRole('button', { name: 'Preview data' }).click();
+
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await expect(dialog).toContainText('731 of 731 days shown');
+	const box = await dialog.boundingBox();
+	expect(box?.width).toBeGreaterThan(1400);
+	expect(box?.height).toBeGreaterThan(900);
+
+	// Scroll to the middle: the row windowing must follow the measured height, so
+	// the cell just above the scroll box's bottom edge is a real date, not a spacer.
+	const scroller = dialog.locator('.scroll');
+	await scroller.evaluate((el) => (el.scrollTop = 300 * 28));
+	await expect(dialog.getByRole('row').filter({ hasText: '2020-10-27' })).toBeVisible();
+	const bottomCell = await scroller.evaluate((el) => {
+		const r = el.getBoundingClientRect();
+		const hit = document.elementFromPoint(r.left + 40, r.bottom - 20);
+		return hit?.closest('tr')?.querySelector('th, td')?.textContent?.trim() ?? '';
+	});
+	expect(bottomCell).toMatch(/^2020-\d\d-\d\d$/);
+});

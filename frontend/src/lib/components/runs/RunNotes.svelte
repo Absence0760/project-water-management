@@ -88,7 +88,7 @@
 		<p class="muted">No notes on this run.</p>
 	{/if}
 	{#if stored && run.notesUpdatedAt}
-		<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{#if run.notesUpdatedBy} by {run.notesUpdatedBy}{/if}.</p>
+		<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>
 	{/if}
 </section>
 

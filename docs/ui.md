@@ -257,8 +257,10 @@ table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
 
 **Preview** (`series/SeriesPreviewDialog.svelte`, in a modal `Dialog.svelte`)
-opens a wide, searchable table of every loaded series' daily values side by
-side, one row per day across the union of their periods, plus columns for how
+opens a searchable table of every loaded series' daily values side by
+side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
+and the window's height, with the table filling what's left and only the rows
+in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
 The card header's **Preview data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column

@@ -146,7 +146,11 @@
 					</button>
 				</li>
 			</ul>
-			<p class="visually-hidden" role="status" aria-live="polite">{signingOut ? 'Signing out…' : ''}</p>
+			<!-- Only while the menu is open (so it exists before a sign-out starts and can announce
+			     it): an always-present empty status region would sit on every page. -->
+			{#if menuOpen || signingOut}
+				<p class="visually-hidden" role="status" aria-live="polite">{signingOut ? 'Signing out…' : ''}</p>
+			{/if}
 		</div>
 	</header>
 {/if}
