@@ -10,14 +10,15 @@
 # Local dev only — the demo password is not a secret and the user only exists
 # in your docker Postgres.
 #
-# The client workbook's gauge column is a neighbouring river's gauge, so it is
-# imported with --gauge-as-reference (a flow_reference_m3s series, never a
-# calibration record; docs/model.md §2.10) into data/client-catchment-app/.
-# data/client-catchment/ stays the workbook-faithful extraction the engine's
-# regression tests read. The column is area-scaled for part of the record; to
-# undo that, set WBT_GAUGE_SCALING_FROM (YYYY-MM-DD) and WBT_GAUGE_SCALE_FACTOR,
-# in the environment or in $WBT_SOURCE_DIR/wbt-import.env (outside the repo,
-# because the factor is client data). Set WBT_GAUGE_AS_REFERENCE=0 to import the
+# By default the workbook's gauge column is imported with --gauge-as-reference
+# (a flow_reference_m3s series, never a calibration record; docs/model.md
+# §2.10), for a workbook whose gauge sits on a neighbouring river, into
+# data/client-catchment-app/. data/client-catchment/ stays the
+# workbook-faithful extraction the engine's regression tests read. If the
+# column is area-scaled for part of the record, undo that with
+# WBT_GAUGE_SCALING_FROM (YYYY-MM-DD) and WBT_GAUGE_SCALE_FACTOR, in the
+# environment or in $WBT_SOURCE_DIR/wbt-import.env (outside the repo, because
+# the factor is client data). Set WBT_GAUGE_AS_REFERENCE=0 to import the
 # column as observed flow instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."

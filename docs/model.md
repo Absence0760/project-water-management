@@ -44,9 +44,9 @@ Source workbooks (kept locally outside the repo in `../project-water-management-
 | Workbook | What it is | Status |
 | --- | --- | --- |
 | `Blank_WBT_b023_v001.xlsm` | The b023 template with sample data | Reference for formulas |
-| the client workbook (`<client>_WBT_b023_v001_…WORKING 007.xlsm`) | Real catchment: 1981-01-01 … 2025-03-31 (16 161 days), 12 farms + 1 outflow gauge, 9 crops, 1 transfer | **Regression target** for V1 |
-| `AI/WBT_NodeBased_v004_DEV.xlsm` | An experimental 16-node daily ledger with pump scenarios and stress classes | Unfinished; later phase |
-| `AI/WBT_Runoff_Module_DEV_003.xlsm` | An experimental bucket rainfall-runoff model with 12 hydrological units | Unfinished; later, as an alternative flow generator |
+| the client workbook (`<client>_WBT_b023_v001_…WORKING 007.xlsm`) | Real catchment: a multi-decade daily record, a network of farms draining to one outflow gauge, several crops and a transfer (details in the private source repo) | **Regression target** for V1 |
+| `AI/WBT_NodeBased_v004_DEV.xlsm` | An experimental node-based daily ledger with pump scenarios and stress classes | Unfinished; later phase |
+| `AI/WBT_Runoff_Module_DEV_003.xlsm` | An experimental bucket rainfall-runoff model with one hydrological unit per farm | Unfinished; later, as an alternative flow generator |
 
 ---
 
@@ -813,8 +813,8 @@ The workbook has two blocks of columns:
   entering (+) or leaving (−) that farm. Each is a **hand-written formula**, for
   example `<source farm> = −draw₁`, `<receiving farm> = +draw₁`.
 
-The client catchment has one transfer: one farm dam to another, in six months of the
-year, capped by a maximum rate and a minimum level kept in the source dam.
+The client catchment's transfer is of this kind: one farm dam to another, in some
+months of the year, capped by a maximum rate and a minimum level kept in the source dam.
 
 The app replaces the free-form formulas with structured rules
 (`transfer` table: from, to, months, max rate, optional daily cap, min storage %,
@@ -1117,7 +1117,7 @@ either end of the run is out of the days actually simulated.
 
 **The workbook's pivot is stale.** It is written by a macro, not by formulas,
 so it reflects the model as it was when someone last ran the macro. In the
-client workbook about 23% of farm-months hold volumes that no longer match
+client workbook a sizeable share of farm-months hold volumes that no longer match
 the Element sheets or `[EWR shortfalls]` (for example a farm whose daily AB is
 constant through a February shows a monthly sum that is not 28 × that value).
 Where the volumes are current, the running-total counts match exactly.
@@ -1174,10 +1174,10 @@ wrong in the dry season shows up.
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:
-`zCalibration_Date1`…`zCalibration_DateN` (the client catchment: 2010-10-01 to
-2018-09-30), against the flow record `rUseFlow` picks in `[Flow data]`
-(1 = Pitman, 2 = the G1 gauge, 3 = the A1 logger; client catchment uses the
-logger, which only has data from 2013-04-15). The importer copies both into
+`zCalibration_Date1`…`zCalibration_DateN` (the client catchment's workbook sets
+one), against the flow record `rUseFlow` picks in `[Flow data]`
+(1 = Pitman, 2 = the gauge, 3 = the logger; the client catchment uses the
+logger, whose record starts partway through that window). The importer copies both into
 `settings.calibrationStart/End` and `settings.calibrationFlowKind`. With no
 window the whole overlap is scored; with no flow kind the engine uses the gauge
 series if present, else the logger. From engine 0.5.1 that default is never
@@ -1279,17 +1279,17 @@ The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow
 > 0. The engine skips blank days and keeps observed zeros.
 
-**The client catchment (engine 0.3.0, end to end from rain).** Whole record against the
-G1 gauge (V1's behaviour): NSE −0.70, PBIAS −23%. The workbook's window
-against the G1 gauge: NSE −0.34, PBIAS −116%, KGE −0.28. The workbook's
-window against the logger it actually calibrates to (1 803 days, 2013-04-15 to
-2018-03-22): **NSE 0.29, KGE 0.57 (r 0.69, α 1.11, β 1.28), R² 0.48, log-NSE
-0.49, PBIAS −28%**. β = 1.278 equals the workbook's own "Calibration / Logger"
-volume ratio (`[Flow Calibration Cfg]` K27 = 1.2783). The gauge and the logger
-disagree badly from 2014 to 2017 (in one water year the gauge records less than
-a tenth of the logger's volume). As above, the gauge is on a different river,
-so the gap says nothing about either instrument, and the scores against the
-gauge are not a measure of fit (issue #1; sign-off pending).
+**The client catchment (engine 0.3.0, end to end from rain).** Against the
+gauge, over the whole record (V1's behaviour) and over the workbook's window,
+the scores were poor (NSE below 0, a large volume bias). Over the workbook's
+window against the logger it actually calibrates to, the fit was moderate, with
+the model too wet in volume; the engine's β matches the workbook's own
+"Calibration / Logger" volume ratio (`[Flow Calibration Cfg]` K27). The gauge
+and the logger disagree badly in several water years (in one the gauge records
+a small fraction of the logger's volume). As above, the gauge is on a different
+river, so the gap says nothing about either instrument, and the scores against
+the gauge are not a measure of fit (issue #1; sign-off pending). Figures are in
+the private source repo.
 
 ### 2.10b Automatic calibration (engine ≥ 0.5.0, issue #4 phase 4)
 
@@ -1392,7 +1392,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     interleave, so the two sets' first and last days overlap even though no
     year is in both. Every `ScoredPeriod` therefore carries the `waterYears`
     it scored, and the report shows this test by those years
-    ("WY 2014/15, 2016/17"), never as a date range.
+    ("WY 2001/02, 2003/04"), never as a date range.
   - **Independent record** (optional, `validationRecord`): the parameters
     fitted to the calibration record, scored against a second observed
     record, for example the logger when the fit used the DWS gauge. It is
@@ -1450,9 +1450,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   valid for the forcing it was fitted under and a later change to any of them
   marks the record stale, with a caveat naming the trade-off. The record never
   changes a result.
-- **Cost.** About 20 ms per model run on a 44-year catchment with a dozen
-  elements, so 1 500 runs per fit and three fits (full, split, dry → wet) take
-  about 70 s in Node. `onProgress` reports every run and returns true to cancel, which
+- **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
+  three fits (full, split, dry → wet) take on the order of a minute in Node on
+  a multi-decade catchment. `onProgress` reports every run and returns true to cancel, which
   keeps the best found so far.
 
 On a short logger record, expect the validation columns to score well below
@@ -1550,7 +1550,7 @@ run with it (`RunSummary.wr2012`). It never changes model results.
     the modelled catchment by area/rain), the band bounds are entered
     **already at the modelled catchment's scale**: use it when two published
     natural-MAR estimates for *this* catchment disagree (e.g. a scaled WR2012
-    figure and a quinary estimate, about 2× apart for the client catchment),
+    figure and a quinary estimate that differ widely),
     so there is a range to pull towards instead of one number picked between
     them. Both-or-neither and low ≤ high are validated (`wr2012PenaltyIssues`,
     shared by the engine, the backend's zod schema and the Settings form); an
@@ -1569,8 +1569,8 @@ run with it (`RunSummary.wr2012`). It never changes model results.
 ### 2.10a Data quality: do the observed flow records agree?
 
 Not in the workbook — added after comparing the client catchment's two observed records.
-When a project has both an observed gauge series (`flow_observed_m3s`, e.g.
-G1) and a logger series (`flow_logger_m3s`, e.g. A1), every run compares
+When a project has both an observed gauge series (`flow_observed_m3s`)
+and a logger series (`flow_logger_m3s`), every run compares
 them per water year on the days **both** have a reading
 (`observedAgreement`, `packages/engine/src/quality.ts`): volume of each in
 Mm³, and the ratio gauge / logger. A year is **flagged** when the ratio falls
@@ -1731,8 +1731,9 @@ mean the two records **do not measure the same reach or period**: a workbook
 catchment area for part of the record (§2.10). Check where and when each
 record was measured before choosing one; calibrating to the wrong record skews
 every farm's supply and EWR result.
-The client catchment: 95 % (2012/13), 83 % (2013/14), then **13 %, 33 %, 8 %** for
-2014/15–2016/17 → flagged. Here the records are two different rivers, so the
+On the client catchment the two records roughly agree in the early shared
+years, then several consecutive years fall far below the lower limit and are
+flagged (figures in the private source repo). Here the records are two different rivers, so the
 flag is expected and is not evidence of a fault in either; the logger is the
 calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and the
 first hydrologist question in
@@ -1872,19 +1873,19 @@ from the workbook.
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client catchment `M32`, `M33` and `M42` (Farm B, Farm C, Farm D) are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. The client catchment uses Area, so nothing changes today, but switching the workbook to Hi/Lo or Specific would give those three farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. | Confirm the rule and the site list (a per-gauge EWR-site flag and gazetted tables are WP-3.7). It changes every farm's curtailment. |
-| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment has only one transfer, so no result is affected. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
+| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. No dam in the client catchment feeds more than one transfer, so no result is affected. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Confirm the priority rule. |
 
 ---
 
 ## 4. The AI node-based model (v004 DEV)
 
-This is an experimental rewrite of the ledger as a **16-node daily table**
-(`Daily_Node_Ledger`) for the client catchment, running 2013-04-24 … 2018-12-31. It is not
+This is an experimental rewrite of the ledger as a **node-based daily table**
+(`Daily_Node_Ledger`) for the client catchment, over part of its record. It is not
 ported in V1. It shapes the later data model: the app's `node` table is already
 general enough to hold these nodes.
 
 - **Nodes:** headwaters, dam/bypass nodes, farms, a run-of-river node, a natural
-  node, a confluence and the A1 gauge outlet. Each node has an upstream (up to
+  node, a confluence and the outlet gauge. Each node has an upstream (up to
   2), a downstream, a calculation order, a local flow share, a dam-capture
   fraction, a river-abstraction fraction, a pump capacity (m³/day, computed as pumps ×
   m³/h × 24 h), pump trigger/stop %, pool storage, and flags
@@ -1907,10 +1908,10 @@ general enough to hold these nodes.
 
 - Every farm shows 100% met. Naturalisation adds demand back into the flow that
   then supplies that same demand, which makes the result circular.
-- Opening storage uses `OFFSET(…, −16, 0)` to find the same node's previous day.
-  It only works while the table is sorted by date then node and has exactly 16
-  nodes.
-- Parameters are defined but unused, and `LocalFlowShare` sums to **1.01**.
+- Opening storage uses `OFFSET(…, −N, 0)`, N a hard-coded node count, to find
+  the same node's previous day. It only works while the table is sorted by date
+  then node and has exactly that many nodes.
+- Parameters are defined but unused, and `LocalFlowShare` doesn't sum to 1.
 - Some node names are spelled differently from b023, so matching by name
   between the two workbooks fails.
 
@@ -1922,18 +1923,19 @@ This is an experimental **bucket rainfall-runoff model**, meant to replace the
 b023 rain→flow recession routine as a *natural flow generator*. It uses Power
 Query and table formulas.
 
-- **12 hydrological units** (one per client catchment farm). Each has an area, a MAP
+- **Hydrological units**, one per client catchment farm. Each has an area, a MAP
   and a reference rain gauge. At present every unit uses the same single gauge.
-- **16 routing nodes** that match the node-based model.
-- **Per unit per day:** a soil store (`SoilMax` 80 mm) and a constant ET loss
-  (1.5 mm/day). Runoff starts above a threshold. A quickflow store and a
+- **Routing nodes** that match the node-based model.
+- **Per unit per day:** a soil store (capacity `SoilMax`) and a constant daily
+  ET loss. Runoff starts above a threshold. A quickflow store and a
   baseflow store each drain with their own coefficients. Unit runoff is then
   routed through the nodes to the outlet.
-- **Calibration at the outlet gauge:** NSE **0.624**, PBIAS **−7.7%**.
+- **Calibration at the outlet gauge:** NSE and PBIAS are reported, but they
+  can't be trusted while the water balance leaks (below).
 
 **Known issues found in review:**
 
-- About **56% of effective rain is untracked**: it leaves the soil bucket
+- **A large share of effective rain is untracked**: it leaves the soil bucket
   without being counted as ET, runoff or storage, so the water balance does not
   close.
 - `RainfallFactor` is defined but not used in the formulas.
@@ -1976,14 +1978,14 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
    cover the same code paths.
 3. **Stage by stage:** natural flow (§2.4) → demand (§2.3) → fragmentation
    (§2.5) → farm balance and transfers (§2.6–2.7) → EWR and outputs (§2.8).
-   Each stage is compared with the workbook's column for all 16 161 days.
+   Each stage is compared with the workbook's column for every day of the record.
    Where the workbook's rounding or a corrected algorithm makes the engine
    differ, the difference is listed and explained
    ([engine-audit.md § Regression suite](./engine-audit.md)); elsewhere the
    match is exact (within 1e-6 m³/day or mm).
-4. **Performance budget:** a full client catchment run (16k days × 13 elements) takes
-   about **18 ms** in Node, which is fast enough to run in the browser as you
-   type and in Lambda on request.
+4. **Performance budget:** a full run of a multi-decade catchment takes tens of
+   milliseconds in Node (budgets on the example catchments below), which is
+   fast enough to run in the browser as you type and in Lambda on request.
 5. **Every run records `engine_version`** and a snapshot of its inputs, so an
    old result can always be explained after the model or the project changes.
 
@@ -2143,7 +2145,7 @@ step when a definition changes.
 | **Fragmentation** | Splitting catchment flow (or EWR) into per-farm shares. |
 | **EWR** | Environmental Water Requirement: the flow that must stay in the river for the ecosystem. |
 | **IFR / Reserve** | Instream Flow Requirement or Ecological Reserve, the South African legal terms for the EWR. |
-| **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. category B, W. Cape wet). |
+| **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. by ecological category and regional hydrological type). |
 | **Pragmatic EWR** | b023's simplification: one fixed m³/day per month instead of a flow-dependent requirement, so farmers can plan for it. |
 | **Ecological category** | A–F class of river condition that the EWR aims to maintain. |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
@@ -2162,7 +2164,7 @@ step when a definition changes.
 | **PBIAS** | Percent bias = 100 × Σ(obs−sim) / Σobs (the engine's sign). Positive means the model under-predicts volume. |
 | **KGE** | Kling–Gupta Efficiency (Gupta et al. 2009): 1 − distance from perfect correlation, variability ratio and bias ratio. |
 | **Log-NSE** | NSE on the logarithm of flow, which weights low flows. |
-| **Calibration window** | The period the fit is scored over (the workbook's 2010–2018 for the client catchment). |
+| **Calibration window** | The period the fit is scored over (set in the workbook for the client catchment). |
 | **Water year** label | The app labels a water year by the year its October falls in: 2010 = Oct 2010 – Sep 2011, shown as 2010/11. |
 | **RMSE** | Root-mean-square error. |
 | **Hydrological unit (HU)** | A sub-catchment with its own area, MAP and rain gauge (runoff module). |

@@ -10,8 +10,15 @@ Tick items off (or move them into an issue) as they are done.
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and
       logger volumes (commit 4f931bb onward). The tree no longer has them,
-      but history does. Scrub them (`git filter-repo --replace-text`, as for
-      WP-1.7) before the repo is made public.
+      but history does. On 2026-09-25 a wider sweep also took out of the tree
+      the calibration window and logger dates, fit scores on client data, the
+      gauge and logger site labels, record lengths, farm/node/transfer counts,
+      run timings and sizes, workbook cell values and the blank workbook's
+      catchment area (docs, test fixtures, help text). History still has all
+      of it. Scrub it (`git filter-repo --replace-text`, as for WP-1.7, with
+      the value list kept in `infra-secrets/water-management/`) before the
+      repo is made public. `pnpm check:terms` is a no-op until that terms
+      list exists.
 
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
@@ -39,11 +46,11 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Hydrologist
 
-- [x] **Calibration record:** gauge G1 vs logger A1 from 2014/15,
+- [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
       validation target, and the gauge column (a neighbouring river's gauge,
-      area-scaled from 2010) is a regional wet/dry index only
+      partly area-scaled) is a regional wet/dry index only
       ([model.md §2.10](./model.md), [plan.md § Questions](./plan.md#model-and-hydrology-for-the-hydrologist)).
       The hydrologist's agreement was assumed by the operator, not given in
       writing; reopen #1 if they disagree. Plan items 1–3 (no silent default
@@ -183,8 +190,8 @@ Tick items off (or move them into an issue) as they are done.
       answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
-      catchment the check flags exactly two runs, one in the 1991 wet season
-      and one covering all of 2000, and none of the long dry summers. Both
+      catchment the check flags exactly two runs, one within a wet season
+      and one covering a whole year, and none of the long dry summers. Both
       runs sit in the wet season, and CHIRPS recorded substantial rain on
       each. The plan:
       1. **Engine:** when picking rain used (model.md §2.4, column R), a day
@@ -290,18 +297,18 @@ conditions come before any client numbers:
       `data/client-catchment/gauge-vs-logger-resolution.md`), and it doesn't
       hold:
       - **The gauge is a different sub-catchment.** The DWS weir sits on a
-        neighbouring river about 10 km *upstream* of its confluence with the
+        neighbouring river *upstream* of its confluence with the
         modelled river, so none of the modelled catchment drains through it.
-      - **That sub-catchment is heavily developed**, with roughly six times
+      - **That sub-catchment is heavily developed**, with several times
         the irrigation demand upstream of the logger and large farm-dam
         storage. The source report notes that early-season flows there go
         into filling dams.
-      - **The workbook column mixes two scalings:** raw before 2010, and
-        area-scaled from 2010.
+      - **The workbook column mixes two scalings:** raw for the earlier part
+        of the record, and area-scaled for the later part.
       - **The close overlap agreement is one wet half-year.** The records
         agree on volume only over the first, flood-dominated half water year
         of their overlap. Their medians already differ, and the volume ratio
-        falls in every later year to near zero by 2018.
+        falls in every later year to near zero.
       - **Two persona findings rested on treating the gauge as this river,
         and are withdrawn:** that there is "probably other upstream use"
         (Q3), and that natural flow below the gauge is "physically
@@ -313,7 +320,7 @@ conditions come before any client numbers:
          catchment.** Switch on the Phase 8 WR2012 soft penalty on MAR for
          the client catchment, and record its weight. The source report gives
          both a scaled WR2012 and a quinary natural MAR at the logger, and
-         they differ by about 2×, so use the band between them, not one
+         they differ substantially, so use the band between them, not one
          value. Also run a fit bounded to Perrin's 80 % ranges. Report both
          fits beside the free fit.
 
@@ -372,11 +379,11 @@ conditions come before any client numbers:
          ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)).
          `pnpm seed:demo` uses it for this client, taking the scaling from
          `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR` outside the repo.
-         Checked on the client workbook: the scaled stretch starts on 1 January
-         2010, and after unscaling every value is back to whole thousandths
-         of m³/s, as published.
+         Checked on the client workbook: the scaled stretch starts cleanly on
+         one date, and after unscaling every value is back to whole
+         thousandths of m³/s, as published.
       5. **Confirm the modelled area.** The project's catchment area differs
-         by about 5 % from the source report's area at the logger. Ask the
+         from the source report's area at the logger. Ask the
          hydrologist which is right.
 
       The hydrologist still signs off the logger as the target (#1). This
@@ -391,8 +398,8 @@ conditions come before any client numbers:
       at 0.60 / 0.70 / 0.85 and the winter preset, fixed and refitted. On the
       client catchment (table in gitignored
       `data/client-catchment/pan-sensitivity.md`):
-      - with parameters fixed, 0.60 → 0.85 lowers MAR by roughly 10–15 % and
-        raises EWR days not met by roughly a tenth;
+      - with parameters fixed, 0.60 → 0.85 lowers MAR noticeably and
+        raises EWR days not met;
       - refitting does **not** absorb it: EWR days not met is, if anything,
         more sensitive after refitting;
       - refits score better at flat 0.70 and the winter preset than at the
@@ -401,8 +408,7 @@ conditions come before any client numbers:
 - [ ] **The stored GR4J parameters don't fit the logger.** The same
       sensitivity run found the client catchment's current GR4J parameters
       score a negative NSE against the logger at every pan coefficient;
-      refitting gives positive NSE/KGE and cuts simulated MAR by roughly a
-      third to a half. Refit (typical bounds + the WR2012 MAR band, the fit
+      refitting gives positive NSE/KGE and cuts simulated MAR substantially. Refit (typical bounds + the WR2012 MAR band, the fit
       recommended above) once the pan coefficient is chosen, and before any
       client numbers are shown.
 
@@ -621,7 +627,7 @@ the suggested order (the IDs carry the detail):
       was float noise, and 2 000 sampled farm-days plus a wet, spill, deficit,
       transfer and diversion day recomputed independently from the Network,
       Crops and Settings inputs agreed with the model to float precision. One
-      water year shows a runoff coefficient near 0.9: its catchment rain is a
+      water year shows an implausibly high runoff coefficient: its catchment rain is a
       long run of zeros (missing data recorded as 0, issue #2), which the
       run's data checks already flag, while flow comes from the stores
       draining. That is an input question for the hydrologist, not a

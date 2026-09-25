@@ -207,7 +207,7 @@ readable by anyone. The rules:
   (and the gauge and quaternary codes that pinpoint it) are listed in
   `../infra-secrets/water-management/client-terms.txt`, outside this repo,
   because the list itself names the client. In the repo the client's model is
-  "the client catchment", its farms "Farm A…D", and the extracted fixtures
+  "the client catchment", its farms "Farm A", "Farm B" and so on, and the extracted fixtures
   live in `data/client-catchment/`. `scripts/guards/check_client_terms.mjs`
   checks against the list: pre-commit (staged changes) and commit-msg hooks
   via `pre-commit install`, `pnpm check:terms` for every tracked file and

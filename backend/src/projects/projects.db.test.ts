@@ -102,11 +102,11 @@ describe('projects', () => {
 		const id = body.project.id;
 		expect(body.project.settings).toMatchObject({ calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null });
 		const ok = await u.call('PATCH', `/projects/${id}`, {
-			settings: { calibrationStart: '2010-10-01', calibrationEnd: '2018-09-30', calibrationFlowKind: 'flow_logger_m3s' }
+			settings: { calibrationStart: '2005-10-01', calibrationEnd: '2012-09-30', calibrationFlowKind: 'flow_logger_m3s' }
 		});
 		expect(ok.status).toBe(200);
-		expect(ok.body.project.settings).toMatchObject({ calibrationStart: '2010-10-01', calibrationFlowKind: 'flow_logger_m3s' });
-		for (const settings of [{ calibrationStart: '1/10/2010' }, { calibrationEnd: 20180930 }, { calibrationFlowKind: 'rain_catchment_mm' }]) {
+		expect(ok.body.project.settings).toMatchObject({ calibrationStart: '2005-10-01', calibrationFlowKind: 'flow_logger_m3s' });
+		for (const settings of [{ calibrationStart: '1/10/2005' }, { calibrationEnd: 20120930 }, { calibrationFlowKind: 'rain_catchment_mm' }]) {
 			expect((await u.call('PATCH', `/projects/${id}`, { settings })).status, JSON.stringify(settings)).toBe(400);
 		}
 	});
@@ -287,7 +287,7 @@ describe('time series', () => {
 		const u = await signUp('TS');
 		const { projectId } = await projectWithModel(u);
 		const put = (values: unknown[]) =>
-			u.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2013-04-15', values });
+			u.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2002-04-15', values });
 		expect((await put([1, 2])).body.length).toBe(2);
 		expect((await put([1, 2, 3])).body.length).toBe(3);
 		expect((await u.call('GET', `/projects/${projectId}/series`)).body.series).toHaveLength(1);

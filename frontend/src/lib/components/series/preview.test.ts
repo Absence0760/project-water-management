@@ -23,13 +23,13 @@ const meta = (over: Partial<SeriesMeta>): SeriesMeta => ({
 describe('buildPreviewColumns', () => {
 	const list: SeriesMeta[] = [
 		meta({ id: 'a', kind: 'rain_catchment_mm', unit: 'mm' }),
-		meta({ id: 'b', kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm³/s' })
+		meta({ id: 'b', kind: 'flow_observed_m3s', name: 'Gauge W7', unit: 'm³/s' })
 	];
 
 	it('has one column per series, in the same order, before the derived columns', () => {
 		const cols = buildPreviewColumns(list);
 		expect(cols[0]).toMatchObject({ id: seriesColumnId('a'), label: 'Rainfall — catchment', unit: 'mm', group: 'series', seriesId: 'a' });
-		expect(cols[1]).toMatchObject({ id: seriesColumnId('b'), label: 'Flow — observed gauge · Gauge G1', unit: 'm³/s', group: 'series', seriesId: 'b' });
+		expect(cols[1]).toMatchObject({ id: seriesColumnId('b'), label: 'Flow — observed gauge · Gauge W7', unit: 'm³/s', group: 'series', seriesId: 'b' });
 	});
 
 	it('adds a m³/day column for each flow series, none for rain', () => {

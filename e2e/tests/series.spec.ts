@@ -41,17 +41,17 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(summary.nth(1)).toHaveText('92');
 	await expect(summary.nth(2)).toHaveText('91');
 	await expect(summary.nth(3)).toHaveText('1');
-	await form.getByLabel(/^Name/).fill('Gauge G1');
+	await form.getByLabel(/^Name/).fill('Gauge W7');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 92 days to “Gauge G1”.');
-	const flowChart = page.getByRole('img', { name: /^Flow — observed gauge · Gauge G1: line chart/ });
+	await expect(form.getByRole('status')).toHaveText('Uploaded 92 days to “Gauge W7”.');
+	const flowChart = page.getByRole('img', { name: /^Flow — observed gauge · Gauge W7: line chart/ });
 	await expect(flowChart.locator('canvas')).toBeVisible();
 
 	// Both are listed, and survive a reload.
 	await page.reload();
 	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
 	await expect(table.getByRole('row')).toHaveCount(3);
-	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 	await expect(flowRow).toContainText('Flow — observed gauge');
 	await expect(flowRow).toContainText('2021-10-01');
 	await expect(flowRow).toContainText('2021-12-31');
@@ -107,11 +107,11 @@ test('clicking anywhere on a series row shows it in the chart; its buttons keep 
 	void owner;
 	const project = await createProject(page.request, 'Series row click');
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
-	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge W7', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
 	const rainRow = table.getByRole('row').filter({ hasText: 'Rainfall — catchment' });
-	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 
 	await flowRow.getByRole('cell').first().click();
 	await expect(page.getByRole('img', { name: /^Flow — observed gauge.*: line chart/ }).locator('canvas')).toBeVisible();
@@ -180,10 +180,10 @@ test('on a phone each series row is a card: every column and button fits without
 	expect((await upload.boundingBox())!.y).toBeLessThan((await uses.boundingBox())!.y);
 
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
-	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge G1', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge W7', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
 	await page.reload();
 	const table = page.getByRole('region', { name: 'Input time series' }).getByRole('table');
-	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge G1' });
+	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toBeVisible();
 
 	// Still a table to assistive tech: header cells and data cells keep their roles.

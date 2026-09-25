@@ -6,8 +6,8 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine';
  * Largest export body we build. Lambda's buffered (non-streaming) responses
  * are capped at 6 MB, and the API runs behind `hono/aws-lambda`'s buffered
  * `handle`, so anything bigger would fail in production with an opaque 502.
- * 5 MB leaves headroom for headers. A full Client Catchment node (16 161 days ×
- * 13 series) is ~1.5 MB, so real catchments fit; the cap only bites on very
+ * 5 MB leaves headroom for headers. One node over a 45-year daily record
+ * (16 437 days × 13 series) is under 2 MB, so real catchments fit; the cap only bites on very
  * long records or many user series, and the 413 tells the caller how to
  * narrow the request (`from` / `to`). See docs/api.md § Export.
  */

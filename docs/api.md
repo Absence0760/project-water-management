@@ -409,7 +409,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   are set, carries `exclusions` (`{ start, end, reason }[]`) and
   `excludedDays` (observed days in the window they removed).
   `RunSummary.ewrCompliance` is the water-year × month EWR grid for the outlet
-  and each farm (~40 KB for 44 years × 12 farms). Both are defined in
+  and each farm (tens of KB even for a multi-decade, multi-farm run). Both are defined in
   `packages/engine/src/project.ts`; runs saved before engine 0.3.0 lack the
   newer fields, so clients treat them as optional.
 
@@ -615,7 +615,7 @@ round-trips export → import:
   "name": "…", "description": "…",
   "settings": { /* stored settings merged over the defaults */ },
   "model": { "nodes": [], "crops": [], "cropAreas": [], "transfers": [] },
-  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "1981-01-01", "values": [0.4, null] }]
+  "series": [{ "kind": "rain_catchment_mm", "name": "", "unit": "mm", "startDate": "2001-10-01", "values": [0.4, null] }]
 }
 ```
 
@@ -626,8 +626,8 @@ gives every row a fresh id.
 response mode, which fails any response over **6 MB**. Every export body is
 built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
 once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
-a full client catchment node (16 161 days × 13 series) is ≈ 1.5–2 MB and the
-catchment table (11 series) is similar, so real catchments fit; a 60 000-day
+a full node over a multi-decade record is well under the cap, and so is the
+catchment table, so real catchments fit; a 60 000-day
 series is ≈ 1 MB. The durable fix if exports grow (many long series, multi-node
 workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or
 writing the file to S3 and returning a pre-signed URL. Gzip is not a clean win

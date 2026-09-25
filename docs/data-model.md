@@ -93,10 +93,10 @@ elements mean "no reading".
 
 Why arrays and not one row per day:
 
-- **Size and speed.** The client catchment has 16 161 days. One row per day would be
-  16k rows per input series and, for outputs, 16k × (nodes × keys) rows per run
+- **Size and speed.** A multi-decade daily record is well over ten thousand days. One row per day would be
+  that many rows per input series and, for outputs, days × (nodes × keys) rows per run
   (millions of rows per run, each with ~24 bytes of tuple overhead). An array is
-  one TOASTed value (~128 KB raw, compressed on disk). It loads with one index
+  one TOASTed value (8 bytes a day raw, compressed on disk). It loads with one index
   lookup and goes straight into a `Float64Array` in the engine.
 - **The access pattern is whole-series.** The engine always needs a full series,
   and a chart fetches one series at a time. Nothing queries "flow on 3 March
@@ -109,8 +109,8 @@ inputs are uploaded in bulk), and SQL date-range aggregates need `unnest … WIT
 ORDINALITY` (fine for occasional reports).
 
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
-(nodes × keys, ~128 KB each before compression), so a client catchment run is a few
-MB to ~25 MB. The engine is deterministic, so any run can be recomputed from
+(nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
+MB to a few tens of MB. The engine is deterministic, so any run can be recomputed from
 its `inputs` snapshot plus `engine_version`.
 
 - **Cap per project.** Each new run deletes the project's oldest runs beyond

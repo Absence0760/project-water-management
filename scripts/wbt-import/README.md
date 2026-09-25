@@ -32,7 +32,7 @@ python3 -m venv .venv && .venv/bin/pip install openpyxl
 .venv/bin/python scripts/wbt-import/extract_project.py ../project-water-management-source/Original/Blank_WBT_b023_v001.xlsm data/blank
 ```
 
-The 87 MB client catchment workbook takes about 20 s. The script prints a summary and
+A large client workbook takes some seconds. The script prints a summary and
 any `note:` lines about things it had to interpret. Then run the engine tests:
 `pnpm -C packages/engine test`. The client catchment regression in `run.test.ts` runs
 when `data/client-catchment/expected.json` exists and is skipped otherwise.
@@ -87,7 +87,7 @@ rows and columns don't break it.
 - **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
   month, farm, summed shortfall, days not met). A macro writes that table, so
   it can be stale; see `docs/model.md` §2.9.
-- **Series** are [Flow data] columns G–K: observed flow (G1), logger,
+- **Series** are [Flow data] columns G–K: observed flow (the gauge), logger,
   catchment rain, CHIRPS rain and forecast rain. A column with no values is
   skipped. Blank cells become `null`. Column F (Pitman flow) is never
   imported, because the app has no Pitman input (`docs/engine-audit.md` P1): a

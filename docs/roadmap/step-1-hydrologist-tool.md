@@ -202,8 +202,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Changes:**
   - **scripts / docs:** a one-page question sheet built from:
     - engine-audit.md "Open questions" 1–7;
-    - issue #1 "To close this issue" (confirm A1; who applied the area scaling; the
-      A1-b rating; who ran A1 after mid-2015; the June 2016 peak);
+    - issue #1 "To close this issue" (confirm the logger; who applied the area
+      scaling; the logger's rating; who ran the logger in its later years; the
+      largest unmeasured peak);
     - issue #2 (are the zero runs missing data?);
     - human impacts b023 leaves out (WP-1.33–1.35): are there towns or
       unlisted users on the river, and what do they take; do farms pump
@@ -281,8 +282,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** let the hydrologist exclude date ranges of the observed record
   from calibration. Uses: a drowned sensor, "above rating" peaks, or a gauge
-  period if #1 goes that way. Build it even if #1 stays "A1 only": A1's
-  unmeasured high flows (above 1.73 m³/s) are the obvious first use.
+  period if #1 goes that way. Build it even if #1 stays "logger only": the
+  logger's unmeasured high flows (above its highest field gauging) are the obvious
+  first use.
 - **Landed** (engine 0.8.0, issue #4 assessor review, with fit provenance),
   with these departures from the plan below, reasoned in model.md §2.10:
   - an entry is a whole water year *or* a date range, and its `reason` is
@@ -332,7 +334,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Docs to update:** model.md §2.10, api.md, ui.md § Settings,
   run-comparison.md (settings lines).
 - **Acceptance criteria:**
-  - excluding the June 2016 peak changes NSE and KGE;
+  - excluding one unmeasured peak changes NSE and KGE;
   - it leaves every other output bit-identical;
   - "What changed" in compare lists the exclusion.
 - **Size:** S.
@@ -391,7 +393,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - **e2e:** extend `data-quality.spec.ts`.
 - **Docs to update:** model.md §2.10a, ui.md § Data, followups.md, issue #2.
 - **Acceptance criteria:**
-  - a synthetic 1999/00-style year is flagged, and a dry summer is not;
+  - a synthetic year-long wet-season zero run is flagged, and a dry summer is not;
   - the thresholds are editable;
   - results are unchanged.
 - **Size:** S.
@@ -896,7 +898,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.17 Instant in-browser preview
 
 - **Goal:** change a parameter and see its effect before saving. The engine
-  already runs in the browser (about 18 ms in Node for the client catchment).
+  already runs in the browser, fast enough on the client catchment for live preview.
 - **Changes:**
   - **engine:** move input assembly into a pure
     `buildModelInput(settings, model, seriesByKind)` in
@@ -1288,7 +1290,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   model.md §5 (relation to the bucket module).
 - **Acceptance criteria:**
   - coefficient ≤ 1 for every fuzz case;
-  - after recalibration (WP-1.25), KGE on A1 is at least that of the current
+  - after recalibration (WP-1.25), KGE on the logger is at least that of the current
     structure, or the hydrologist accepts the difference in writing.
 - **Size:** L (3–5 weeks, including the model choice).
 - **Depends on:** WP-1.1 (the H1 answer), WP-1.18.
@@ -1301,7 +1303,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - **engine:** consolidate the version (e.g. `1.0.0` when signed off);
     remove the temporary `flowGenerator` switch if D3 chose it.
   - Re-run the client catchment regression and record the final deviation list.
-  - With the hydrologist: recalibrate the client catchment against A1 with auto-fit
+  - With the hydrologist: recalibrate the client catchment against the logger with auto-fit
     plus a manual review, using the exclusions for unmeasured peaks.
   - Pin the baseline run (WP-1.11); compare it with the 0.4.0 baseline and
     export the comparison for the sign-off record.
@@ -1419,8 +1421,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     entirely. It's a lazy chunk, so the workspace page isn't affected; add
     a worker ceiling to `check_web_bundle_budget.mjs` and log it.
   - **backend:** `GET /projects/:id/runs/:runId/series/bulk?nodeId=` returns
-    every key of one node (≈ 2 MB for a client catchment node, under the 5 MB
-    cap), so a workbook takes about 14 requests instead of about 170.
+    every key of one node (well under the 5 MB cap for a client catchment
+    node), so a workbook takes one request per node instead of one per series.
   - Number format per D11: full-precision values, with a display format per
     column.
   - CSP: a module worker from `'self'` passes the current policy (no
@@ -1895,7 +1897,7 @@ Questions for the hydrologist: the WP-1.1 pack.
 
 | # | Decision | Options | Recommendation | Who |
 | --- | --- | --- | --- | --- |
-| D1 | Calibration record (issue #1) | A1 logger; G1 gauge; A1 with excluded periods | A1 (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
+| D1 | Calibration record (issue #1) | The logger; the gauge; the logger with excluded periods | The logger (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
 | D2 | Audit questions H1, N1–N4, Q1, Q3, Q5, Q7, Q11–Q13, Q17, Q18 | Per engine-audit.md | Per engine-audit.md recommendations; N1 backfill e = 1 − `return_flow_pct` | Hydrologist |
 | D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term). **Taken that way:** `settings.runoffModel`, GR4J by default since engine 0.11.0, legacy for workbook comparison only (WP-1.24) | Operator + hydrologist |
 | D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6) | Operator |
@@ -1918,7 +1920,7 @@ Questions for the hydrologist: the WP-1.1 pack.
 | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- |
 | The hydrologist is slow to answer, or unavailable | High | Sign-off (the gate) slips; A-track WPs idle | One structured session (WP-1.1); B and C tracks proceed meanwhile; "accepted as is" is a valid answer. |
-| H1 recalibration gives a worse fit on A1's short, dry record | Medium | Hydrologist rejects the new structure | Temporary generator switch (D3); year-balanced KGE and split-sample validation (WP-1.18); run comparison of both. |
+| H1 recalibration gives a worse fit on the logger's short, dry record | Medium | Hydrologist rejects the new structure | Temporary generator switch (D3); year-balanced KGE and split-sample validation (WP-1.18); run comparison of both. |
 | Stacked engine changes move every result, and the client loses trust | Medium | Adoption | Pinned 0.4.0 baseline; each change listed in engine-audit.md § Effect on results; one signed-off release (WP-1.25). |
 | Client terms found in git history; rewrite disrupts concurrent sessions | Medium | Delays going public | Check early (WP-1.7); stop other sessions and worktrees first; the squashed fresh repo option. |
 | af-south-1 lacks something at apply time (RDS pg17 t4g, SES endpoint) | Low | Region change late | Read-only checks before the plan (WP-1.14, infra step 4a). |

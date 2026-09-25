@@ -629,13 +629,13 @@ run in parallel after WP-4.1.
 - **Cost model** (af-south-1 list prices, Sept 2026, [AWS price list API]):
   - Standard storage $0.0274/GB-month. PUT $0.006 per 1,000. GET $0.004 per
     10,000.
-  - A client catchment run is ~11 MB raw ([planned-work.md]), about 3 MB
-    compressed (estimate; measure on the synthetic examples).
+  - Assume a run is about 3 MB compressed (an estimate; measure on the
+    synthetic examples).
   - Example: 100 orgs × 10 catchments × 20 runs kept = 20,000 runs ≈ 60 GB ≈
     **$1.64/month**.
   - Writes at 30,000 runs/month: one object per run = 30,000 PUTs = **$0.18**.
-    One object per series (~150 each) would be 4.5 M PUTs = **$27**, 16× the
-    storage bill. Hence one object per run.
+    One object per series (100+ each) would be millions of PUTs, many times
+    the storage bill. Hence one object per run.
   - **No IA/Glacier tiering.** Standard-IA and Glacier IR bill a 128 KB
     minimum object and add retrieval fees
     ([S3 Glacier storage classes]). Runs are recomputable and the working
@@ -772,8 +772,8 @@ run in parallel after WP-4.1.
     curves, and p5/p50/p95 bands for chosen keys.
 - **Backend.** `POST /projects/:id/ensembles { baseRunId?, transforms,
   members ≤ plan limit, seed }` puts a job on Step 2's queue. The worker runs
-  members in chunks of 50. The engine takes ~20 ms per 44-year run
-  (architecture.md), so 500 members ≈ 10 s CPU ≈ **$0.0002 per ensemble** in
+  members in chunks of 50. The engine takes tens of milliseconds per multi-decade run
+  (architecture.md), so 500 members is seconds of CPU, **a fraction of a cent per ensemble** in
   Lambda (af-south-1 arm $0.00001768/GB-s, [AWS price list API]). Only the
   **statistics and bands** are stored (in the run object, WP-4.9), never
   every member. Members are reproducible from the seed.
@@ -809,7 +809,7 @@ run in parallel after WP-4.1.
   its water balance closes**.
 - **Engine.** `packages/engine/src/flow/bucket.ts`, `FlowGenerator = (rain,
   params, topology) → naturalFlowPerNode`. Fix the four known faults first:
-  - the ~56% of effective rain that is untracked;
+  - the large share of effective rain that is untracked;
   - drainage that isn't limited by the store (it creates water);
   - the unused `RainfallFactor`;
   - the hard-coded outlet (take it from `buildTopology`).
@@ -1353,7 +1353,6 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 [Standard Webhooks]: https://www.standardwebhooks.com/
 [RFC 9745]: https://www.rfc-editor.org/rfc/rfc9745
 [RFC 8594]: https://www.rfc-editor.org/rfc/rfc8594
-[planned-work.md]: ../planned-work.md
 [feohledger docs/multi-tenancy.md]: ../../../feohledger/docs/multi-tenancy.md
 [feohledger docs/white-label.md]: ../../../feohledger/docs/white-label.md
 [feohledger docs/data-residency.md]: ../../../feohledger/docs/data-residency.md

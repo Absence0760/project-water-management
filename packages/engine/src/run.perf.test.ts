@@ -36,7 +36,7 @@ describe.skipIf(!fixture)('runModel performance: client catchment (needs data/cl
 	}
 	const { modelInput, natural } = fixture;
 
-	it('runs 13 nodes × 16k days well under a second (median of 7)', () => {
+	it('runs the full catchment record well under a second (median of 7)', () => {
 		const ms = medianMs(7, () => {
 			runModelWith(modelInput, () => ({ naturalFlowM3Day: natural }));
 		});

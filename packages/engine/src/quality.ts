@@ -1,13 +1,13 @@
 // Input data-quality checks that don't depend on a model run's results.
 //
-// observedAgreement: when a catchment has two observed flow records (the
-// G1-style gauge and an A1-style logger), compare their volumes per water
+// observedAgreement: when a catchment has two observed flow records (a gauge
+// and a logger), compare their volumes per water
 // year on the days both have a reading. Two instruments on the same river
 // should agree roughly; a year where one reads a small fraction of the other
 // usually means something physical at one of them (weir damage, siltation, a
 // rating change, bypass, zero-filled gaps) — and calibrating to the wrong one
-// skews every result. The client catchment: the gauge reads 8–33 % of the logger from
-// 2014/15 (docs/plan.md, first hydrologist question).
+// skews every result. The client catchment's gauge reads a small fraction of
+// its logger for part of the record (docs/plan.md, first hydrologist question).
 //
 // seriesChecks: negative values, outliers and flat-lines (a stuck logger, a
 // filled-in gap) in each input series, plus two catchment-rain checks for
