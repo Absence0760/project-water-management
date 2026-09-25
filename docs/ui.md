@@ -56,7 +56,7 @@ button), so a scrolling table or a sticky header can't clip or cover them.
 
 ## Header: data freshness and "Add data"
 
-- **Data up to 31 Mar 2025 · 12 days ago**: the latest end date across the
+- **Data up to 14 Jun 2026 · 12 days ago**: the latest end date across the
   input series. Click it for each series' end date. It turns amber when the
   newest data is more than 7 days old (`STALE_DAYS` in
   `series/freshness.ts`; a candidate for a project setting). Ages count
@@ -141,7 +141,7 @@ personal copy (the Copy dialog says so).
   (e.g. "Upstream inflow to dam" over three lines) instead of setting the
   column width, cells are tighter, the short area and 0–100 % columns are
   narrow, and the volume columns (m³, m³/day; `isVolume`) keep room for a
-  seven-digit value such as 1430000, so a dam capacity is never clipped.
+  seven-digit value such as 1500000, so a dam capacity is never clipped.
   Every cell of a column carries its width class, not-used and footer cells
   included. Every field header is the label (hyphens don't break,
   so "High-MAP" stays whole) over one line with the unit and its ⓘ, all
@@ -338,7 +338,7 @@ formula ([api.md § Export](./api.md)).
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
 sideways scrolling: each month cell is at least 78px, room for a six-digit
-value such as 108700.
+value such as 250000.
 
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
@@ -438,7 +438,7 @@ value such as 108700.
     test's fitted part and validation part, then the independent record if
     one was chosen; the validation columns are shaded. Each column header
     gives its period: a date range, except for the dry → wet test, whose
-    years interleave and are listed ("WY 2014/15, 2016/17"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
+    years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
@@ -654,8 +654,8 @@ value such as 108700.
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
 - Series are fetched one at a time when a chart needs them, and cached
-  (`runs/cache.ts`). A run stores about 170 series of about 16 000 values
-  (more since engine 0.12.0: each farm adds 11 working columns).
+  (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
+  on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
   Large arrays live in `$state.raw` and are replaced, never mutated.
 
 ## Help (`/help`)
