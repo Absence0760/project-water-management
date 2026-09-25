@@ -1,4 +1,5 @@
 import {
+	ACCUMULATION_MODES,
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
@@ -234,7 +235,15 @@ export const FitRecord = z
 				chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES).optional(),
 				// Engine ≥ 0.15.0 (CR-20): which zero-rain days CHIRPS fills. Optional, as above.
 				zeroRainRuns: z
-					.object({ mode: z.enum(ZERO_RAIN_MODES), keepDry: periodList('keep-dry period'), missing: periodList('missing-rain period') })
+					.object({
+						mode: z.enum(ZERO_RAIN_MODES),
+						keepDry: periodList('keep-dry period'),
+						missing: periodList('missing-rain period'),
+						// Engine ≥ 0.20.0 (audit B4): multi-day accumulations. Optional, so a record made before them still validates.
+						accumulationMode: z.enum(ACCUMULATION_MODES).optional(),
+						keepReadings: periodList('keep-reading period').optional(),
+						addAccumulations: periodList('listed accumulation').optional()
+					})
 					.strict()
 					.optional()
 			})
@@ -281,7 +290,11 @@ export const SettingsPatch = z
 			.object({
 				mode: z.enum(ZERO_RAIN_MODES),
 				keepDry: periodList('keep-dry period'),
-				missing: periodList('missing-rain period')
+				missing: periodList('missing-rain period'),
+				// Multi-day accumulations (engine accumulation.ts, audit B4).
+				accumulationMode: z.enum(ACCUMULATION_MODES),
+				keepReadings: periodList('keep-reading period'),
+				addAccumulations: periodList('listed accumulation')
 			})
 			.partial()
 			.strict(),

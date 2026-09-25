@@ -155,6 +155,8 @@ interface CatchmentSpec {
 		blank?: Period[];
 		/** Days wrongly recorded as 0 mm. */
 		zeros?: Period[];
+		/** Gauge not read: 0 mm on every day but the last, which holds the whole period's rain (an untagged accumulation, audit B4). */
+		accumulations?: Period[];
 	};
 	/** CHIRPS as catchment rain × this per calendar month (Jan … Dec), with noise. */
 	chirpsBias?: number[];
@@ -268,6 +270,14 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 	const rain: (number | null)[] = truthRain.slice();
 	for (const [a, b] of spec.rainFaults?.blank ?? []) for (let i = dayOf(a); i <= dayOf(b); i++) rain[i] = null;
 	for (const [a, b] of spec.rainFaults?.zeros ?? []) for (let i = dayOf(a); i <= dayOf(b); i++) rain[i] = 0;
+	for (const [a, b] of spec.rainFaults?.accumulations ?? []) {
+		let total = 0;
+		for (let i = dayOf(a); i <= dayOf(b); i++) {
+			total += truthRain[i] ?? 0;
+			rain[i] = 0;
+		}
+		rain[dayOf(b)] = Math.round(total * 10) / 10;
+	}
 
 	const observed = observedFrom(simulated, spec.seed + 1);
 	if (spec.observedCap) {
@@ -372,7 +382,8 @@ const ha = (o: Record<string, number>) => o;
  * priority, mixed fruit on drip and micro. Its rain gauge has the faults a
  * real record has — a stolen gauge (blank), a logger fault exported as zeros
  * (a flagged zero run) and a fortnight entered as 0 (a listed period) — which
- * bias-corrected CHIRPS fills. Its weir drowned in one flood year, which is
+ * bias-corrected CHIRPS fills, and three weeks read in one go (a multi-day
+ * accumulation) that the run spreads back by CHIRPS. Its weir drowned in one flood year, which is
  * excluded from calibration, and GR4J is fitted to the record.
  */
 const KLEINBERG: CatchmentSpec = {
@@ -391,7 +402,10 @@ const KLEINBERG: CatchmentSpec = {
 		zeroRainRuns: {
 			mode: 'missing',
 			keepDry: [],
-			missing: [{ start: '2021-07-05', end: '2021-07-18', reason: 'Observer on leave: the fortnight was entered as 0 mm' }]
+			missing: [{ start: '2021-07-05', end: '2021-07-18', reason: 'Observer on leave: the fortnight was entered as 0 mm' }],
+			accumulationMode: 'spread',
+			keepReadings: [],
+			addAccumulations: []
 		},
 		calibrationExclusions: [{ waterYear: 2013, reason: 'Weir drowned in the winter floods: peaks above its rating were not recorded' }]
 	},
@@ -402,7 +416,9 @@ const KLEINBERG: CatchmentSpec = {
 		zeros: [
 			['2019-06-01', '2019-08-15'],
 			['2021-07-05', '2021-07-18']
-		]
+		],
+		// Three winter weeks read in one go: spread back over them (B4).
+		accumulations: [['2017-06-05', '2017-06-26']]
 	},
 	// CHIRPS reads the orographic winter rain low (Jan … Dec).
 	chirpsBias: [0.95, 0.95, 0.9, 0.8, 0.7, 0.65, 0.65, 0.65, 0.7, 0.8, 0.9, 0.95],

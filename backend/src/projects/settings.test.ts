@@ -302,11 +302,39 @@ describe('SettingsPatch.zeroRainRuns (CR-20)', () => {
 	it('merges one level deep: patching the mode keeps the stored lists', () => {
 		const stored = { zeroRainRuns: { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real' }], missing: [] } };
 		expect(patchSettings(stored, { zeroRainRuns: { mode: 'asRecorded' } }).zeroRainRuns).toEqual({
+			...defaultProjectSettings().zeroRainRuns,
 			mode: 'asRecorded',
 			keepDry: [{ waterYear: 2003, reason: 'real' }],
 			missing: []
 		});
-		expect(mergeSettings({}).zeroRainRuns).toEqual({ mode: 'missing', keepDry: [], missing: [] });
+		expect(mergeSettings({}).zeroRainRuns).toEqual(defaultProjectSettings().zeroRainRuns);
+		// Settings stored before engine 0.20.0 get the accumulation defaults merged in.
+		expect(mergeSettings({ zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] } }).zeroRainRuns).toMatchObject({
+			mode: 'asRecorded',
+			accumulationMode: 'spread',
+			keepReadings: [],
+			addAccumulations: []
+		});
+	});
+
+	it('accepts the accumulation fields (engine ≥ 0.20.0, B4) and validates their periods like the others', () => {
+		expect(ok({ accumulationMode: 'asRecorded' })).toBe(true);
+		expect(ok({ keepReadings: [{ start: '2003-06-10', end: '2003-06-10', reason: 'thunderstorm, farm records agree' }] })).toBe(true);
+		expect(ok({ addAccumulations: [{ start: '2003-07-01', end: '2003-07-09', reason: 'observer away' }] })).toBe(true);
+		for (const bad of [
+			{ accumulationMode: 'smear' },
+			{ keepReadings: [{ start: '2003-06-10', end: '2003-06-10' }] },
+			{ addAccumulations: [{ start: '2003-07-09', end: '2003-07-01', reason: 'x' }] },
+			{ addAccumulations: [{ waterYear: 2003, reason: 'a' }, { waterYear: 2003, reason: 'b' }] }
+		]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+		const r = SettingsPatch.safeParse({ zeroRainRuns: { addAccumulations: [{ start: '2003-07-01', end: '2003-07-09', reason: ' ' }] } });
+		expect(JSON.stringify(r.error!.issues)).toContain('a listed accumulation needs a reason');
+		expect(patchSettings({}, { zeroRainRuns: { accumulationMode: 'asRecorded' } }).zeroRainRuns).toEqual({
+			...defaultProjectSettings().zeroRainRuns,
+			accumulationMode: 'asRecorded'
+		});
 	});
 });
 
@@ -392,6 +420,9 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: zr } })).toBe(true);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing' } } })).toBe(false); // recorded whole
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, mode: 'sometimes' } } })).toBe(false);
+		// The accumulation fields (engine ≥ 0.20.0) are optional there, so a record made before them still validates.
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing', keepDry: [], missing: [] } } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, accumulationMode: 'smear' } } })).toBe(false);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: ' ' }] } } })).toBe(false);
 	});
 

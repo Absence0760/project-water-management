@@ -26,6 +26,8 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		/^CHIRPS rain bias-corrected on \d+ days where catchment rain is blank/,
 		/^Catchment rain treated as missing on 90 days: 2019-06-01 to 2019-08-15 \(76 days, flagged zero run\); 2021-07-05 to 2021-07-18 \(14 days, listed: /,
 		/^Rainfall \(catchment\): 1 run of zero rain .*2019-06-01 to 2019-08-15/,
+		// Three weeks read in one go (B4); the gauge's own dry days before them join the window.
+		/^Catchment rain accumulations spread over the days they cover: 1 window, \d+ run days: 2017-0[56]-\d\d to 2017-06-26 /,
 		// The drowned weir's flat top in the excluded water year.
 		/^Observed flow: 1 flat stretch of 14 or more days with the same value \(2014-/
 	],
@@ -116,6 +118,14 @@ describe('example catchments: showcase the current features', () => {
 		expect(s.chirpsCorrection?.correctedDays).toBeGreaterThan(0);
 		expect(s.zeroRainInfill?.periods.map((p) => p.source)).toEqual(['flagged', 'listed']);
 		expect(s.zeroRainInfill?.unfilledDays).toBe(0);
+	});
+
+	it('Kleinberg: the three weeks read in one go are detected as an accumulation and spread back by CHIRPS (B4)', () => {
+		const a = runOf('Kleinberg').summary.rainAccumulation!;
+		const w = a.windows.find((x) => x.end === '2017-06-26');
+		expect(w).toMatchObject({ source: 'detected', status: 'spread' });
+		expect(w!.usedMm).toBeCloseTo(w!.totalMm, 6);
+		expect(a.spreadDays).toBeGreaterThanOrEqual(22);
 	});
 
 	it('Kleinberg: an excluded water year and a stored GR4J fit that describes the settings', () => {

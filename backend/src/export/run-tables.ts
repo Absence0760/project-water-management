@@ -34,6 +34,8 @@ const CATCHMENT_ORDER = [
 	'rain_chirps',
 	'rain_chirps_corrected',
 	'chirps_factor',
+	'rain_catchment_missing',
+	'rain_catchment_spread',
 	'is_summer',
 	'rain_flow',
 	'base_flow',
@@ -237,10 +239,78 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 	for (const k of z.keptDry) yield csvRow(['Kept as recorded (dry)', k.start, k.end, k.reason, k.days]);
 }
 
+const ACCUMULATION_STATUS: Record<string, string> = {
+	spread: 'spread by CHIRPS',
+	noChirps: 'left on the reading day (no CHIRPS rain)',
+	asRecorded: 'run as recorded',
+	kept: 'kept as recorded (settings)',
+	noReading: 'nothing to spread'
+};
+
+/** Multi-day accumulations in the catchment rain (engine ≥ 0.20.0, model.md §2.4d, audit B4), one row per window. */
+export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator<string> {
+	yield csvRow(['Multi-day rain accumulations']);
+	if (a === undefined) {
+		yield csvRow(['Run made before engine 0.20.0: accumulations ran as recorded']);
+		return;
+	}
+	if (a === null) {
+		yield csvRow(['No catchment rain series']);
+		return;
+	}
+	yield csvRow(['Accumulations', a.mode === 'spread' ? 'spread over the days they cover' : 'run as recorded']);
+	const c = a.criteria;
+	yield csvRow([
+		'Detected when',
+		`reading ≥ ${c.minMm} mm after ≥ ${c.minRunDays} days of 0 or blank; CHIRPS ±1 day < ${c.readingDayShare * 100} % of it; CHIRPS over the run ≥ ${c.runShare * 100} % of it; window ≤ ${c.maxRunDays} days + the reading day`
+	]);
+	if (a.windows.length) {
+		yield csvRow([
+			'Start',
+			'End (reading day)',
+			'Source',
+			'Reason',
+			'What the run did',
+			'Days in the run',
+			'Recorded total (mm)',
+			'Reading (mm)',
+			'Zero or blank days before',
+			'CHIRPS around the reading (mm)',
+			'CHIRPS over the run (mm)',
+			'CHIRPS over the window (mm)',
+			'Rain used from it (mm)'
+		]);
+		for (const w of a.windows) {
+			yield csvRow([
+				w.start,
+				w.end,
+				w.source === 'detected' ? 'detected' : 'listed in settings',
+				w.reason ?? w.keptReason ?? '',
+				ACCUMULATION_STATUS[w.status] ?? w.status,
+				w.daysInRun,
+				w.totalMm,
+				w.readingMm,
+				w.runDays,
+				w.nearChirpsMm,
+				w.runChirpsMm,
+				w.chirpsMm,
+				w.usedMm
+			]);
+		}
+		yield csvRow(['Windows spread', a.spreadWindows]);
+		yield csvRow(['Run days from a window', a.spreadDays]);
+		yield csvRow(['Rain on them (mm)', a.spreadMm]);
+	} else {
+		yield csvRow(['None detected or listed']);
+	}
+	for (const x of a.skipped) yield csvRow([x]);
+}
+
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
  * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
- * the catchment rain treated as missing, the double-mass check, calibration,
+ * the catchment rain treated as missing, the multi-day accumulations, the
+ * double-mass check, calibration,
  * the WR2012 check, the column guide, warnings. The run details carry the run notes.
  * Fields the engine adds to the summary later still appear (under their key).
  */
@@ -292,6 +362,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* zeroRainLines(summary.zeroRainInfill);
+	yield '';
+
+	yield* accumulationLines(summary.rainAccumulation);
 	yield '';
 
 	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
