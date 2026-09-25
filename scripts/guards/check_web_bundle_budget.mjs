@@ -241,6 +241,15 @@
 //             its own ceiling; together they measure 706 KB. No new
 //             dependency; the largest page chunk is 39 KB, both workers are
 //             unchanged. Headroom ~6 KB.
+// 2026-09-25  total 712 → 720 KB; other ceilings unchanged. The preview of
+//             the run's all-farms downloads (Download menu → Preview beside
+//             Fragmented flow / EWR): main @ 4bd52a2 measures 710 KB, with it
+//             714. Its dialog (export/DailyTableDialog.svelte plus the CSV
+//             parser lib/export/dailyTable.ts) is a 2.9 KB chunk of its own,
+//             fetched only when a Preview is clicked, so no page's first load
+//             grows; the menu's Preview button and the RunsTab hook add
+//             ~0.3 KB. No new dependency; the largest page chunk is 40 KB.
+//             Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -252,7 +261,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 712,
+	totalCodeKb: 720,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 107,
