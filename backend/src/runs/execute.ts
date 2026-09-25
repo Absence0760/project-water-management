@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { resolveFitRecord, runModelChecked, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind } from '@water-management/engine';
+import { resolveFitRecord, runModelChecked, type DailySeries, type ModelInput, type ModelOutput, type RunVerification, type SeriesKind } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
@@ -20,6 +20,22 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 	const series: Partial<Record<SeriesKind, DailySeries>> = {};
 	for (const r of s) series[r.kind] = { startDate: r.start_date, values: r.values };
 	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
+}
+
+/**
+ * Log a structured JSON line CloudWatch's self-check metric filter matches
+ * (infra/alarms.tf, `aws_cloudwatch_log_metric_filter.self_check_failed`) when
+ * a saved run fails one of the engine's own self-checks — a model bug, not a
+ * user error (docs/followups.md "Alert on a failed self-check in production").
+ * Only failed check ids go in the line: no user data, no farm names or
+ * values, nothing that could identify the client. A run with no failed
+ * checks (including one from an engine too old to carry `verification`)
+ * logs nothing.
+ */
+export function logSelfCheckFailure(projectId: string, runId: string, output: { summary: { verification?: RunVerification } }): void {
+	const checks = output.summary.verification?.checks.filter((c) => !c.passed).map((c) => c.id) ?? [];
+	if (checks.length === 0) return;
+	console.error(JSON.stringify({ event: 'self_check_failed', projectId, runId, checks }));
 }
 
 /** Default for RUNS_KEPT_PER_PROJECT. */
@@ -88,5 +104,6 @@ export async function executeRun(db: Db, projectId: string, label: string): Prom
 		});
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
+	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };
 }
