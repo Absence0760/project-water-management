@@ -290,6 +290,48 @@ describe('all-farms export after the network changed', () => {
 	});
 });
 
+describe('land cover in the farm exports (WP-1.35)', () => {
+	it('puts the land-cover reduction beside runoff I, which adds back to natural × share, and the all-farms table accepts it', async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Invaded' });
+		const pid = body.project.id;
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		// Equal areas, so equal shares: the clear farm's runoff is natural flow × that share.
+		const out = node('Outlet', null);
+		const invaded = node('Invaded farm', out.id, { areaKm2: 10 });
+		const clear = node('Clear farm', out.id, { areaKm2: 10 });
+		const patch = { id: crypto.randomUUID(), nodeId: invaded.id, coverClass: 'invasive', areaKm2: 3, densityPct: 0.6, factors: null };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [out, invaded, clear], crops: [], cropAreas: [], transfers: [], landCover: [patch] })).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Invaded' });
+		expect(run.status).toBe(201);
+		const base = `/projects/${pid}/runs/${run.body.run.id}/export`;
+
+		// The daily CSV: the reduction right after I.
+		const rows = lines((await download(owner, `${base}/daily.csv?nodeId=${invaded.id}`)).text);
+		// Header cells, RFC 4180: the land-cover label has a comma, so it is quoted. Data rows are plain numbers.
+		const cols = [...rows[0]!.matchAll(/("(?:[^"]|"")*"|[^,]*)(,|$)/g)].map((m) => m[1]!.replace(/^"|"$/g, '').replace(/""/g, '"')).slice(0, -1);
+		const i = cols.indexOf('Farm runoff [I] (m³/day)');
+		expect(cols[i + 1]).toBe('Runoff removed by land cover (invasive plants, forestry) (m³/day)');
+		const all = lines((await download(owner, `${base}/farms.csv?key=runoff`)).text);
+		const clearCol = all[0]!.split(',').indexOf('Clear farm [I] (m³/day)');
+		expect(clearCol).toBeGreaterThan(0);
+		const clearRunoff = all.slice(1).map((r) => Number(r.split(',')[clearCol]));
+		let removed = 0;
+		rows.slice(1).forEach((r, d) => {
+			const [I, red] = [Number(r.split(',')[i]), Number(r.split(',')[i + 1])];
+			expect(I + red).toBeCloseTo(clearRunoff[d]!, 6);
+			removed += red;
+		});
+		expect(removed).toBeGreaterThan(0); // positive control: the cover did remove runoff
+
+		// The all-farms table takes the reduction too; only the farm with land cover has the series.
+		const cover = await download(owner, `${base}/farms.csv?key=landcover_reduction`);
+		expect(cover.status).toBe(200);
+		expect(lines(cover.text)[0]).toBe('date,Invaded farm (m³/day)');
+		expect(lines(cover.text)).toHaveLength(rain.length + 1);
+	});
+});
+
 describe('input series export', () => {
 	it('exports one series as date,value with empty cells for missing days', async () => {
 		const res = await download(viewer, `/projects/${projectId}/series/${rainId}/export.csv`);
