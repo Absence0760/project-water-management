@@ -62,6 +62,27 @@
 //             the guard deliberately counts every lazy chunk. Headroom ~6 KB
 //             on the total and ~4 KB on the chunk, so a tab's code sliding
 //             back into the page chunk, or the next feature, fails here.
+// 2026-09-25  total 411 → 407 KB (down; issue #9). main @ 657e39e measured
+//             407 KB. Vite's build.target is now es2022 (frontend/
+//             vite.config.ts): the default target down-levelled Svelte 5's
+//             class fields into defineProperty/WeakMap helpers. 401 KB total,
+//             and every page's cold load ~3 KB lighter (a catchment 88 → 85 KB,
+//             sign-in 56 → 53). HelpTip now fetches the help text (a 26 KB
+//             chunk) off the critical path instead of importing it, which
+//             doesn't move the total (the chunk is still shipped and counted)
+//             but takes it out of every page and tab with a tooltip: the
+//             Network tab 51 → 25 KB on top of the page, Crops 40 → 14,
+//             Transfers 36 → 11, Data and Settings −26 each, compare 144 →
+//             116 KB cold. Measured and rejected: sharing the engine between
+//             the page and the calibration worker (the worker importing the
+//             page's calibrate chunk by URL). With Rollup's own grouping the
+//             worker drags in app chunks (Svelte runtime, help text) and the
+//             fit fails ("window is not defined"); with the engine forced into
+//             chunks of its own (the only safe way) the total drops 13 KB but a
+//             catchment's cold load grows 88 → 111 KB and compare's 144 → 159,
+//             since a shared chunk carries what every importer needs.
+//             experimentalMinChunkSize: 1–4 KB off the total for 1–2 KB more
+//             on cold loads, not worth it. Headroom ~6 KB, as before.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -73,7 +94,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 411,
+	totalCodeKb: 407,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });

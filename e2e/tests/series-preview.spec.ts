@@ -49,6 +49,28 @@ test('a row’s Preview opens the daily table, a search narrows the row count, a
 	await expect(previewButton).toBeFocused();
 });
 
+test('opened while the values still load, the preview focuses its search once they arrive', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview slow');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: [1, 2, 3] });
+	// Hold back the series' values until the dialog is open and showing its loading state.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route(/\/series\/[^/?]+$/, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		await held;
+		await route.fallback();
+	});
+	await page.goto(`/projects/${project.id}?tab=series`);
+
+	await page.getByRole('button', { name: 'Preview data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await expect(dialog.getByRole('status').filter({ hasText: 'Loading…' })).toBeVisible();
+	release();
+	await expect(dialog).toContainText('3 of 3 days shown');
+	await expect(dialog.getByLabel('Search by date or value')).toBeFocused();
+});
+
 test('the card header’s "Preview data" opens with every column, the column picker can hide one, and Escape returns focus to the header button', async ({
 	page,
 	owner

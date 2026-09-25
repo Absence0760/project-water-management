@@ -674,12 +674,21 @@ the suggested order (the IDs carry the detail):
       → ~89 KB. The total was already 383 KB against a 295 KB ceiling on
       main (help centre, new tabs' code, engine code), so its ceiling went
       *up* to 411 KB (405 KB measured).
-- [ ] **Bring the total bundle down** (6 KB of headroom left). Options,
-      measured by the split's author: stop shipping the engine twice (page
-      and calibration worker, 25 KB for the worker); load help tooltip text
-      on demand (25 KB help chunk on any page with a tooltip); Rollup
-      `experimentalMinChunkSize` (~4 KB, changes grouping app-wide).
-      Trigger: the next feature that hits the 411 KB ceiling.
+- [x] **Bring the total bundle down** (issue #9, 2026-09-25): 407 → 401 KB
+      and the ceiling 411 → 407 KB, from `build.target: 'es2022'`. Help tips
+      load the help text off the critical path (−26 KB on each tab with a
+      tooltip; the total doesn't move). Measured and rejected, with the numbers
+      in the guard's change log: sharing the engine with the calibration
+      worker (−13 KB total but +23 KB on a catchment's cold open) and
+      `experimentalMinChunkSize` (1–4 KB, cold loads grow).
+- [ ] **The Runs tab still carries the whole help text** (26 KB gzip on top of
+      the page). `WaterStoryPanel` → `PictureTour` → `lib/help/guides.ts` →
+      `lib/help/content.ts`: PictureTour only needs a guide's title for its
+      stop links, but importing `guideFor` pulls in every guide and, through
+      them, the glossary. Durable fix: a small generated `id → title` map for
+      guide links (kept in sync by `guides.test.ts`), so PictureTour stops
+      importing `guides.ts`. Trigger: the next change to the Runs tab or
+      PictureTour, or the Runs tab's cold cost becoming the one to cut.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

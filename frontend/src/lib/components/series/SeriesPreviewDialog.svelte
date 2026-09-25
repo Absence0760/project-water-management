@@ -113,6 +113,17 @@
 	const numText = (v: number | null) => fmtNum(v, v == null ? 0 : digitsFor(v));
 	const flagList = (flags: PreviewFlag[]) => flags.map((f) => FLAG_LABEL[f]).join(', ');
 
+	// Focus the search when it appears. `autofocus` alone only works if the
+	// search is there when the dialog opens: Svelte applies it only while focus
+	// is on <body>. Opened while the values still load, the dialog puts focus
+	// on its Close button, and the search, mounting later, never got it. Leave
+	// focus alone if the user has already moved into a field.
+	function focusSearch(input: HTMLInputElement) {
+		const active = document.activeElement;
+		const dialog = input.closest('dialog');
+		if (!active || active === document.body || active === dialog || (dialog?.contains(active) && active.tagName === 'BUTTON')) input.focus();
+	}
+
 	function onScroll(e: Event) {
 		scrollTop = (e.currentTarget as HTMLDivElement).scrollTop;
 	}
@@ -143,6 +154,7 @@
 					id="{uid}-q"
 					type="search"
 					autofocus
+					{@attach focusSearch}
 					autocomplete="off"
 					placeholder="Date prefix (2015 or 2015-03-14) or value (&gt; 20, = 0)"
 					bind:value={query}
