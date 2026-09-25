@@ -94,7 +94,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Hydrograph',
 		'Calibration',
 		'Runoff model',
-		'Run notes',
+		'Notes & evidence',
 		'Flow duration',
 		'EWR vs outflow',
 		'EWR by month',

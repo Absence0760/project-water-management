@@ -121,10 +121,46 @@ export interface RunMeta {
 	/** When and by whom (display name) the notes last changed; null = never written. */
 	notesUpdatedAt?: string | null;
 	notesUpdatedBy?: string | null;
+	/** settings.runoffModel the run used ('gr4j', 'legacy', …; absent → legacy). Absent from an older API. */
+	runoffModel?: string;
+	/**
+	 * The run's place in the evidence history (010_run_nomination): 'current'
+	 * is the project's nominated evidence run, 'past' was nominated and since
+	 * replaced, null never nominated. Absent from an older API.
+	 */
+	evidence?: EvidenceStatus | null;
 }
 
 /** Longest run note, in characters (backend RUN_NOTES_MAX, 007_run_notes.sql). */
 export const RUN_NOTES_MAX = 4000;
+
+export type EvidenceStatus = 'current' | 'past';
+
+/** One row of a project's evidence history (GET …/evidence, oldest first; the last is current). */
+export interface Nomination {
+	id: string;
+	runId: string;
+	runLabel: string;
+	runCreatedAt: string;
+	/** Copied from the run when it was nominated. */
+	runoffModel: string;
+	engineVersion: string;
+	reason: string;
+	nominatedAt: string;
+	nominatedBy: string | null;
+}
+
+/** Longest nomination reason, in characters (backend NOMINATION_REASON_MAX, 010_run_nomination.sql). */
+export const NOMINATION_REASON_MAX = 2000;
+
+/** One run's place in the evidence history, as compare returns it for each side. */
+export interface RunEvidence {
+	status: EvidenceStatus;
+	nominatedAt: string;
+	nominatedBy: string | null;
+	reason: string;
+	replacedBy: { runId: string; runLabel: string; nominatedAt: string; nominatedBy: string | null; reason: string } | null;
+}
 
 export interface Run extends RunMeta {
 	summary: RunSummary;
@@ -196,7 +232,8 @@ export interface RunCatchmentDay {
 /** One side of GET /compare/runs. */
 export interface CompareSide {
 	project: { id: string; name: string };
-	run: Run & { inputs: RunInputsSnapshot };
+	/** `evidence` is null when the run was never nominated, absent from an older API. */
+	run: Omit<Run, 'evidence'> & { inputs: RunInputsSnapshot; evidence?: RunEvidence | null };
 }
 
 /** GET /compare/runs response (docs/api.md § Compare runs). Deltas are b − a. */

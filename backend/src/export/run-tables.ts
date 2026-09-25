@@ -12,6 +12,7 @@ import {
 	type Wr2012FlagLevel,
 	type Wr2012Scaling
 } from '@water-management/engine';
+import type { RunEvidence } from '../runs/evidence.js';
 import { csvRow } from './csv.js';
 
 /**
@@ -80,6 +81,8 @@ export interface SummaryMeta {
 	/** When and by whom the notes last changed (ISO timestamp, display name). */
 	notesUpdatedAt?: string | null;
 	notesUpdatedBy?: string | null;
+	/** The run's place in the evidence history (010_run_nomination); null or absent = never nominated. */
+	evidence?: RunEvidence | null;
 }
 
 /**
@@ -238,6 +241,22 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 }
 
 /**
+ * Whether the run is the project's nominated evidence run (010_run_nomination):
+ * always a status row, then this run's nomination (when, who, why) and, for a
+ * replaced one, what replaced it. A reader of the sheet alone can tell a run
+ * the project stands behind from one it has moved away from.
+ */
+export function* evidenceLines(e: RunEvidence | null): Generator<string> {
+	if (!e) {
+		yield csvRow(['Evidence nomination', 'not nominated']);
+		return;
+	}
+	yield csvRow(['Evidence nomination', e.status === 'current' ? 'the nominated evidence run' : 'nominated before, since replaced']);
+	yield csvRow(['Nominated', e.nominatedAt, e.nominatedBy ?? '', e.reason]);
+	if (e.replacedBy) yield csvRow(['Replaced by', e.replacedBy.runLabel || 'Untitled run', e.replacedBy.nominatedAt, e.replacedBy.nominatedBy ?? '', e.replacedBy.reason]);
+}
+
+/**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
  * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
  * the catchment rain treated as missing, the double-mass check, calibration,
@@ -254,6 +273,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	// Always written, so the row is there (empty) for a reader looking for it.
 	yield csvRow(['Run notes', meta.notes ?? '']);
 	if (meta.notes && meta.notesUpdatedAt) yield csvRow(['Notes last changed', meta.notesUpdatedAt, meta.notesUpdatedBy ?? '']);
+	yield* evidenceLines(meta.evidence ?? null);
 	yield '';
 
 	yield* verificationLines(summary.verification);

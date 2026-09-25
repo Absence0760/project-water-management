@@ -126,6 +126,27 @@ In short:
   `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
   rewrite a run's inputs, outputs or label after the fact; who last changed
   the note is stamped by a trigger. The catalogue test pins that column list.
+- **Tamper evidence for the nominated evidence run** (010_run_nomination).
+  Which run, and so which runoff model, a project stands behind is kept as an
+  append-only history, so an applicant can't quietly switch to whichever model
+  is kindest and pretend it was the choice all along:
+  - `water_app` has `SELECT` and `INSERT` on `run_nomination` and nothing
+    else, with no update or delete policy: changing the nomination adds a
+    row, and no API bug or direct SQL as the app can rewrite or remove an
+    earlier one (the catalogue test's `APPEND_ONLY` guard pins it).
+  - Who, when, the runoff model and the engine version are stamped by a
+    `SECURITY DEFINER` trigger from the session and the run itself, so they
+    can't be forged; the reason is required.
+  - The runs the history names are kept: the foreign key refuses their
+    deletion, the run cap skips them, and the delete route answers `409`.
+  - The history shows everywhere a reader weighs results: the Runs tab, the
+    run header, compare, the summary CSV; a later run of another runoff model
+    raises a warning.
+  - Limits: the project owner can still delete the **whole project**, history
+    included; an issued, hashed evidence pack that survives that is roadmap
+    WP-3.14. The schema owner (`water`, migrations only) is not bound by the
+    grants. A nomination proves what the project said and when, not that the
+    run is right: that is the assessor's review.
 - The schema owner (`water`) is used only for migrations, never by the running
   API.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,

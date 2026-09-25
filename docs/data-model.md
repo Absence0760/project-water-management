@@ -30,6 +30,8 @@ erDiagram
   project  ||--o{ time_series : has
   project  ||--o{ model_run : has
   model_run ||--o{ run_series : outputs
+  project  ||--o{ run_nomination : "evidence history"
+  model_run ||--o{ run_nomination : "nominated as"
   node     |o--o{ run_series : "per node (null = catchment)"
 ```
 
@@ -116,7 +118,9 @@ its `inputs` snapshot plus `engine_version`.
   `run_series` (cascade). It runs in the same transaction as the new run, as
   the signed-in editor, so RLS applies. `POST …/runs` returns the removed ids
   (`removedRunIds`). There is no pinning yet: a labelled baseline is trimmed
-  like any other run once 20 newer ones exist.
+  like any other run once 20 newer ones exist. The exception is a run the
+  evidence history names (current or past nomination, see **Evidence
+  nomination** below): it is never trimmed and doesn't count against the cap.
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -163,6 +167,48 @@ editor-on-both-sides rule) limits even that to editors and owners; a viewer's
 `UPDATE` matches no row. `PATCH /projects/:id/runs/:runId` is the only writer
 ([api.md](./api.md#runs)); the catalogue test pins `model_run`'s updatable
 columns to exactly `notes`.
+
+**Evidence nomination (010_run_nomination.sql).** Which run, and so which
+runoff model, the project stands behind as evidence, so an applicant can't
+pick whichever model is kindest after the fact (the licensing assessor's
+concern, [followups.md](./followups.md), roadmap WP-3.1 "cited runs").
+`run_nomination` is an **append-only history**, one row per nomination:
+`project_id`, `run_id` (→ `model_run`), `runoff_model` and `engine_version`
+(copied from the run), `reason` (required, trimmed, at most 2 000 characters
+by `CHECK`), `nominated_by` (→ `app_user`) and `nominated_at`. The newest row
+(by `nominated_at`, unique per project) is the **current** nomination; every
+older row is kept, so the history reads "nominated A on …, then replaced by
+B on … because …". A run can be nominated again later (A, B, A).
+
+- **Append-only by privilege.** `water_app` has `SELECT` and `INSERT` only: no
+  `UPDATE`, `DELETE` or `TRUNCATE`, and the table has no update or delete
+  policy. The catalogue test pins this (`APPEND_ONLY`).
+- **Unforgeable stamps.** The `run_nomination_stamp` BEFORE INSERT trigger
+  (`SECURITY DEFINER`, `search_path` pinned) sets `nominated_by` from
+  `app.current_user_id`, `nominated_at` from `clock_timestamp()`, and
+  `runoff_model` / `engine_version` from the run itself, whatever the `INSERT`
+  says. Runs are immutable except `notes`, so the copy can't drift.
+- **Rules the trigger enforces** (the API checks them first for a clear `409`):
+  the run belongs to the same project (`foreign_key_violation`); it is not a
+  legacy-model run, which is workbook comparison only (audit H1); it is not
+  already the current nomination; the project has fewer than **50**
+  nominations. The trigger takes a per-project advisory lock, so two
+  nominations can't race past these checks or share a timestamp.
+- **RLS:** viewers read, editors and owners insert (`run_nomination_select`,
+  `run_nomination_insert`).
+- **A nominated run is kept for good**, current or past. The foreign key is
+  `NO ACTION`, so deleting the run fails (`DELETE …/runs/:runId` answers `409`
+  first); `trimRuns` skips it, and it does not count against
+  `RUNS_KEPT_PER_PROJECT` (the cap keeps the newest 20 runs that were never
+  nominated). `NO ACTION` rather than `RESTRICT` is checked at the end of the
+  statement, so deleting the whole project (owner only) still cascades to
+  both tables. The 50-nomination limit bounds how many runs can be kept this
+  way.
+- No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
+  is no account deletion yet. When there is, it must keep the history (for
+  example a tombstone user), not cascade it away.
+- Migration 009 is reserved for pinned runs (issue #7). The runner applies
+  every unapplied file in name order, so 010 applying first is harmless.
 
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
@@ -254,6 +300,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   SELECT needs `viewer`; INSERT/UPDATE/DELETE on model data and project UPDATE
   need `editor`; member management and project delete need `owner`. Creating a
   project needs only `created_by` = the current user.
+- `run_nomination` (the evidence history): SELECT needs `viewer`, INSERT
+  `editor`; there is no UPDATE or DELETE for anyone (see § Evidence nomination
+  above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

@@ -26,7 +26,13 @@ The page has these sections, top to bottom:
 1. **Runs compared.** Label, project, period and time of each run, and
    under each its **run notes** when it has any: the modeller's written
    explanation (e.g. why a WR2012 query stands), so a reviewer comparing
-   two runs reads each one's reason with it. A note says when both sides
+   two runs reads each one's reason with it. When either side is, or was,
+   its project's **nominated evidence run** (`run.evidence`,
+   [data-model.md](./data-model.md)), a note says so with the nomination's
+   date, who and reason ("Run B is the nominated evidence run, nominated on
+   … by … (“…”)"), and for a replaced one what replaced it and why ("Run A
+   was the evidence run, …, then replaced by “B” on … because “…”";
+   `runs/evidence.ts` `compareEvidenceNote`). A note says when both sides
    are the same run. There is a
    warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
