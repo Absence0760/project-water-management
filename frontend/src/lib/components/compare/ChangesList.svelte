@@ -20,8 +20,8 @@
 
 {#if changes.length === 0}
 	<p class="muted">
-		No differences in the saved model, settings or series date ranges. Series values aren't stored with a run, so an
-		edit that kept a series' dates won't show here.
+		No differences in the saved model, settings or series. Runs saved before series values were fingerprinted only
+		record each series' dates, so an edit that kept the dates won't show for those.
 	</p>
 {:else}
 	<div class="groups">
