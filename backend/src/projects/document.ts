@@ -3,12 +3,12 @@
 // `POST /projects/import` / `pnpm import:project` read it (projects/import.ts),
 // so a project round-trips export → import. The Python workbook importer
 // (scripts/wbt-import) emits the same shape.
-import { ENGINE_VERSION, fromEpochDay, SERIES_KINDS, toEpochDay, type ProjectModel } from '@water-management/engine';
+import { ENGINE_VERSION, SERIES_KINDS, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
-import { MAX_SERIES_VALUES } from '../series/routes.js';
+import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
@@ -30,12 +30,7 @@ export const ProjectFile = z.object({
 				// store a series the series routes would refuse.
 				name: z.string().trim().max(100).default(''),
 				unit: z.string().trim().min(1).max(20),
-				// A real calendar date: 2021-02-30 would otherwise reach Postgres
-				// and fail there as a 500.
-				startDate: z
-					.string()
-					.regex(/^\d{4}-\d{2}-\d{2}$/)
-					.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a calendar date'),
+				startDate: SeriesStartDate,
 				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES)
 			})
 		)

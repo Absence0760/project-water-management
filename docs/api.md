@@ -415,6 +415,8 @@ tree (no cycles) with exactly one node whose `downstreamNodeId` is `null`
 ## Time series
 
 Daily series, `values[i]` = value on `startDate + i` days, `null` = missing.
+`startDate` is a real calendar date, `YYYY-MM-DD` (`2021-02-30` is a `400`
+naming `startDate`, not a server error).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |

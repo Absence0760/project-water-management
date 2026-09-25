@@ -1,4 +1,4 @@
-import { SERIES_KINDS } from '@water-management/engine';
+import { fromEpochDay, SERIES_KINDS, toEpochDay } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -10,11 +10,21 @@ import { readJson } from '../http/body.js';
 
 export const MAX_SERIES_VALUES = 60_000;
 
+/**
+ * A series' first day: a real calendar date. The regex alone lets 2021-02-30
+ * through to Postgres, which fails it as a 500. Shared with the project
+ * document (projects/document.ts).
+ */
+export const SeriesStartDate = z
+	.string()
+	.regex(/^\d{4}-\d{2}-\d{2}$/)
+	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a calendar date');
+
 const PutBody = z.object({
 	kind: z.enum(SERIES_KINDS),
 	name: z.string().trim().max(100).default(''),
 	unit: z.string().trim().min(1).max(20),
-	startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+	startDate: SeriesStartDate,
 	values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES)
 });
 
