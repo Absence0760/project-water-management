@@ -961,6 +961,7 @@ volumes are not run series.
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
+| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table | `RunSummary.ewrAssurance` + the Reserve compliance panel, headline and CSV block (§2.9c, engine ≥ 0.21.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -1045,6 +1046,167 @@ wrong in the dry season shows up.
   lower false-alarm ratio reproduces the river's EWR failures better. Note that
   on days inside the calibration window the scores are partly in-sample: the
   same days were used to fit the flows.
+
+### 2.9c EWR compliance by the Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6)
+
+The pragmatic EWR (§2.5) is one fixed flow per month, and the headline it
+gives is a count of days below it. A South African Reserve determination
+states the requirement differently, and judges compliance differently:
+
+- **The rule table.** The Desktop Reserve Model (Hughes & Hannart 2003) and
+  its revised form (Hughes et al. 2014) give the EWR as a set of monthly
+  flows at fixed **assurance levels**, the "% points" 10 %, 20 % … 90 %, 99 %.
+  Assurance is the share of time a flow should be equalled or exceeded
+  (Hughes & Hannart 2003), so the low points are the requirement in wet
+  conditions and the high points the drought flows. A gazetted table pairs it
+  with the site's natural flow at the same points (the natural flow duration
+  curve), usually in Mm³ per month or in m³/s, as maintenance low flows,
+  drought low flows or the total with high flows (Pollard et al. 2011, Table 4).
+- **The EWR follows the natural flow.** The requirement in a given month is
+  read at the point the month's *natural* flow sits at on that month's natural
+  duration curve: a naturally dry month asks for the drought flow, a wet one
+  for more (Hughes & Münster 2000; Hughes & Mallory 2008; Sawunyama & Hughes
+  2010, who call the natural percentile a drought severity index). So
+  compliance needs an estimate of natural flow at the site, which this model
+  makes anyway.
+- **Compliance is monthly.** Retrospective Reserve compliance compares the
+  flow in each month with that month's requirement, and reports the share of
+  months (or of time) not met, per month of the year and by season, the
+  magnitude, and how many months in a row fail (contiguity) (Pollard et al.
+  2011; Riddell et al. 2014).
+
+**Settings.** `settings.ewrRules` holds at most one table per EWR site (§2.7b:
+the outlet, `siteNodeId: null`, or a gauge), at most 20
+(`packages/engine/src/reserve/rules.ts`). Each has the % points (2–20, rising,
+in (0, 100], default the ten DRM points), a 12 × points EWR grid (water-year
+rows Oct … Sep), the unit (`mcm` Mm³ per month or `m3s` the month's mean
+flow), what it covers (`total` or `lowFlow`, a label only), a required
+`source`, a `scale` (default 1; multiplies every value, for a table given for
+a larger or smaller catchment, e.g. site area ÷ table area), and where the
+natural percentile comes from (`naturalSource`):
+
+- `run` (default): the month's natural flow ranked among the same calendar
+  month in every complete year of the run. The natural curve at the points is
+  the run's own, at Weibull plotting positions i / (n + 1), linear between
+  and held at the ends. It needs no gazetted natural curve, and a model that
+  is wet or dry overall doesn't shift every month into wetter or drier
+  conditions. Its weakness is a short run: with fewer than 10 years of a
+  calendar month the run warns that the percentiles are coarse.
+- `table`: the natural flow at the points as entered from the gazette (each
+  row's running minimum, since a duration curve can't rise). This is the
+  determination's own curve, so the requirement is the gazette's for a given
+  natural flow, but a model biased against that curve shifts the conditions.
+
+No table: nothing changes. The pragmatic EWR stays the daily EWR everywhere
+(the shortfall charge, curtailment, days not met), with or without tables; the
+rule tables add a report, they don't replace the daily EWR.
+
+**Per site, per complete calendar month** (a part month at either end of the
+run is not assessed; `packages/engine/src/reserve/assurance.ts`):
+
+```
+V  = the month's natural flow at the site = Σ runoff I of the farms upstream   (table unit)
+A  = the month's simulated flow at the site (outlet: simulated outflow; gauge: its flow)
+N  = that calendar month's natural curve at the points (run or table, × scale)
+T  = that calendar month's EWR row (× scale)
+k  = the first point with N_k ≤ V
+     k = first:  p = P_1,               R = T_1                (V at or above the wettest point)
+     between:    w = (N_k−1 − V) / (N_k−1 − N_k)
+                 p = P_k−1 + w (P_k − P_k−1),  R = T_k−1 + w (T_k − T_k−1)
+     none:       p = P_last,            R = T_last × V / N_last  (drier than the driest point)
+met      = A ≥ R        (relative float tolerance 1e-9)
+deficit  = MAX(R − A, 0) as m³
+```
+
+- **Units.** Everything is compared in the table's unit: Mm³ over the month,
+  or the mean m³/s over the month's actual days (so a leap February is 29
+  days).
+- **Interpolation.** Linear between points, in both the % and the flow,
+  with the same weight, as Pollard et al. (2011) interpolate a requirement
+  between the 80th and 90th percentiles. Sawunyama & Hughes (2010) describe
+  log interpolation in their operating model; linear is kept because a gazette
+  table has zeros (log of 0) and because the same weights make the invariant
+  below exact. The choice is a question for the hydrologist.
+- **Flat stretches.** Where the natural curve is flat at V, the wettest point
+  of the stretch is taken (the strictest requirement).
+- **Below the table.** Drier than the driest point, the requirement scales
+  with the flow (T_last × V / N_last: the table's EWR-to-natural ratio at its
+  driest point, applied to the flow), rather than asking a river with less
+  than its driest natural flow for the full drought flow.
+- **Above the table.** Wetter than the wettest point, the requirement stays
+  T_1: the rule table does not ask for more than its wettest flow.
+
+**Report** (`RunSummary.ewrAssurance`, outlet first, then gauges by node id):
+each month (natural, percentile, whether it was beyond the table, required,
+actual, met, deficit), and per site:
+
+| Measure | What it is |
+| --- | --- |
+| Months met | met ÷ complete months: the headline |
+| By month of the year | the same per calendar month (water-year order), with the deficit volume and mean required and actual flow |
+| Deficit | Σ deficit, m³ |
+| Longest run not met | consecutive months not met (contiguity, Riddell et al. 2014) |
+| Mean shortfall | mean (R − A) ÷ R over the months not met |
+| FDC check | per calendar month and % point: the simulated flow duration curve (Weibull) against the EWR curve T; the share of month × point cells met |
+
+The **FDC check** is the other reading of an assurance rule: the flow the
+rule gives at p % should be equalled or exceeded at least p % of the time, so
+the simulated duration curve should lie on or above the EWR curve at every
+point (Pollard et al. 2011, Fig. 4). It needs no natural flow; the monthly
+test needs it. The run also stores each site's requirement as a daily series,
+`ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
+complete months), so it can be charted and downloaded beside the flow.
+
+**Warnings.** A table that isn't usable (validation below) is skipped; so is
+one whose site is missing or isn't the outlet or a gauge, and a second table
+for the same site. Plausibility notes don't block a table but are repeated as
+run warnings: an EWR row that rises with the % point, a natural row that rises
+(its running minimum is used), and an EWR above the natural flow at a point
+(`table` source), which even natural flow can't meet. A calendar month the
+run has no complete year of is named, and so is a record shorter than 10
+years of a calendar month.
+
+**Invariants (tested, `reserve/assurance.test.ts`).**
+- **Natural flow meets its own rules.** When every EWR value is at most the
+  natural curve it is read against (T ≤ N at every point), natural flow meets
+  the requirement in every month, because R interpolates T with the weights
+  that return V from N (and T_last V / N_last ≤ V, T_1 ≤ N_1 ≤ V). Tested on
+  random series for both natural sources, and on random undeveloped networks
+  (no crops, dams, diversions or transfers) at every site.
+- **More abstraction can only lose months.** R depends only on natural flow,
+  so less simulated flow keeps the requirement and the percentile, never
+  meets a month that was not met, never shrinks a deficit and never passes
+  more FDC cells. Tested on random series and on random networks with three
+  times the crop area (return flow off, as `checkDoubledCropAreas`).
+- **The summaries add up**: the months of the year sum to the whole, and
+  rates are met ÷ months.
+- The fuzz generator gives rule tables to 30 % of its random projects, so the
+  order-invariance and finiteness checks cover them too.
+
+**Surfaces.** The results headline shows the monthly compliance at the outlet
+(else the first site) when a table exists, with days not met beside it as the
+secondary measure; the Reserve compliance panel has the per-month-of-year
+table and chart; the summary CSV has a block per site; run comparison compares
+each site's rates (docs/ui.md, docs/run-comparison.md).
+
+**Pending the hydrologist.** The method is from the literature above, not
+from the client's hydrologist: which table applies at which site (and
+whether total or low-flow), whether the percentile should come from the run
+or the gazette's natural curve, linear or log interpolation, and whether the
+requirement below the driest point should scale or hold.
+
+**Sources.** Full references are in
+[calibration-research.md § References](./calibration-research.md#references).
+Hughes & Hannart 2003, *J. Hydrol.* 270:167 (the DRM and its assurance
+rules) · Hughes & Münster 2000, WRC TT 137/00 (natural flow → EWR time
+series) · Hughes & Mallory 2008, *River Res. Appl.* 24:852 (EWRs in real-time
+operation) · Hughes, Desai, Birkhead & Louw 2014, *HSJ* 59:673 (the revised
+DRM) · Sawunyama & Hughes 2010, *Water SA* 36(4) (the natural percentile as a
+drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
+2011, WRC K8/881/2 (rule tables in Mm³ or m³/s against the natural curve; FDC
+and monthly compliance; interpolating a requirement between points) ·
+Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
+months, seasonality, magnitude, contiguity).
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 

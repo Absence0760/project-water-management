@@ -160,8 +160,8 @@ planned.
 | ID | Change | Why | Effort | Priority |
 | --- | --- | --- | --- | --- |
 | CR-28 | **The WR2012 five-statistic table.** MAR, the mean of log annual flows, the SD, the log SD and the seasonal index, on monthly aggregates of observed and simulated flow, each with its % difference and "good fit" band. Show it beside KGE′/NSE. | WR2012 practice (Bailey & Pitman 2016; Ndiritu 2009). The good-fit thresholds were seen only in a consultant report citing WR2012; confirm them in WRC TT 689/690 first. | 1–2 d | P1 |
-| CR-29 | **Compliance reported as the gazette and CMAs do.** % of time and volume not met per month, from daily data with monthly shown alongside; monthly FDC overlays of natural, present-day and scenario flow on the EWR; and the EWR as %nMAR. | Pollard et al. 2011; Riddell et al. 2014; gazetted Reserve in %nMAR. | 2–3 d | P1 |
-| CR-30 | **The EWR as a DRM/RDRM assurance table**: 12 months × assurance levels, for maintenance and drought low flows plus high flows. The day's EWR comes from where simulated natural flow sits on its monthly duration curve. Keep the 12-value pragmatic EWR as a labelled simplification. Needs the hydrologist. | Hughes & Hannart 2003; Hughes & Mallory 2008; Hughes et al. 2014; Sawunyama & Hughes 2010. | 1–2 wk | P2 |
+| CR-29 | **Compliance reported as the gazette and CMAs do.** % of time and volume not met per month, from daily data with monthly shown alongside; monthly FDC overlays of natural, present-day and scenario flow on the EWR; and the EWR as %nMAR. | Pollard et al. 2011; Riddell et al. 2014; gazetted Reserve in %nMAR. **Part built (engine 0.21.0, model.md §2.9c):** monthly compliance against a rule table per month of the year, deficit volume, contiguity and the monthly FDC check against the EWR curve. Still open: % of time from daily data, FDC overlays of scenario flow, the EWR as %nMAR. | 2–3 d | P1 |
+| CR-30 | **The EWR as a DRM/RDRM assurance table**: 12 months × assurance levels, for maintenance and drought low flows plus high flows. The day's EWR comes from where simulated natural flow sits on its monthly duration curve. Keep the 12-value pragmatic EWR as a labelled simplification. Needs the hydrologist. | Hughes & Hannart 2003; Hughes & Mallory 2008; Hughes et al. 2014; Sawunyama & Hughes 2010. **Built as a report (engine 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)):** an optional rule table per EWR site judges each month against the requirement its natural flow selects, beside the pragmatic EWR, which still sets the daily charge and curtailment. The table's values, and whether it should also drive the daily EWR, need the hydrologist. | 1–2 wk | P2 |
 | CR-31 | **Licence-scenario report** in the shape of a WULA hydrology section. Compare baseline against proposal on: change in outlet MAR, change in % zero-flow days, change in EWR compliance by season, the applicant's assurance of supply, the effect on downstream users, and the Reserve bookkeeping (nMAR − EWR − registered use). | Dabrowski 2025 as the de facto benchmark; roadmap step 3. | 1–2 wk | P2 |
 | CR-32 | **Clear dam and abstraction assumptions.** Record the fraction of catchment above each dam, the area–volume exponent (default about 0.6, editable), the evaporation source and factor, and abstraction entered as registered volume, SAPWAT crop × area, or metered, with the range between them run as a sensitivity. | Hughes & Mantel 2010 (abstraction is the largest farm-dam uncertainty); Glenday et al. 2022; WP-1.21 (dam evaporation). Partly done (engine 0.16.0, audit N2): each dam's area–storage exponent (default 0.7) and seepage, and the project's A-pan lake-evaporation factor, are editable; the abstraction options and their sensitivity are not built. | 3–5 d | P2 |
 | CR-33 | **Seasonal reporting.** Report the winter storage season and the summer low-flow season separately, and add an optional "winter surplus only" abstraction rule. | CMA strategy practice in winter-rainfall catchments. | 2 d | P2 |
@@ -184,7 +184,9 @@ CR-30 and CR-31 are the larger licensing features in roadmap step 3.
    2026-09-24).
 2. **EWR form (CR-30).** Is the 12-value pragmatic EWR acceptable for the
    client's purpose? Or does the CMA expect the assurance-table form from the
-   gazetted Reserve study for this reach?
+   gazetted Reserve study for this reach? The app can now take that table and
+   report monthly compliance with it (model.md §2.9c); which table, and the
+   method choices listed there, are for the hydrologist.
 3. **Rating (CR-18).** What is the highest field gauging at the logger, and
    which rating curve was used? This decides which days are flagged as
    extrapolated.
@@ -305,7 +307,8 @@ GN R267 of 2017, WULA regulations; GA GN 538 of 2016 (verified) ·
 GN 2428 of 2022, Reserve for the Breede-Gouritz WMA (verified) ·
 Hughes 2013, *J. Hydrol.* 501:111 (verified) ·
 Hughes & Hannart 2003, *J. Hydrol.* 270:167 (verified) ·
-Hughes & Mallory 2008, *River Res. Appl.* 24:852 ·
+Hughes & Mallory 2008, *River Res. Appl.* 24:852 (verified 2026-09-25) ·
+Hughes & Münster 2000, WRC TT 137/00, hydrological information and techniques for the water quantity component of the Reserve (cited in Pollard et al. 2011; primary not reached) ·
 Hughes & Mantel 2010, *HSJ* 55:578, doi:10.1080/02626667.2010.484903 (verified) ·
 Hughes, Kapangaziwiri & Sawunyama 2010, *J. Hydrol.* 387:221 (verified) ·
 Hughes, Desai, Birkhead & Louw 2014, *HSJ* 59:673, doi:10.1080/02626667.2013.818220 (verified) ·

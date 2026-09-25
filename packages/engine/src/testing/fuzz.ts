@@ -11,6 +11,7 @@ import { irrigationFromReturnFlow, type CropArea, type CropDef, type DailySeries
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
+import { DEFAULT_ASSURANCE_POINTS } from '../reserve/rules';
 import type { RunoffModelId } from '../runoff/types';
 
 export { Rng };
@@ -264,6 +265,37 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 				: { start: iso(a), end: iso(a + cx.int(0, 400)), reason: 'fuzz' };
 		});
 	}
+	// EWR rule tables (engine ≥ 0.21.0): at the outlet, gauges, now and then a
+	// farm or a missing node (both skipped), with any points, units, natural
+	// source and scale, rows that need not fall. Their own stream too.
+	const er = new Rng(seed ^ 0x9b05688c);
+	if (er.bool(0.3)) {
+		const gauges = nodes.filter((nd) => nd.kind === 'gauge').map((nd) => nd.id);
+		const sites = [null, ...gauges, ...(er.bool(0.1) ? ['n1', 'missing'] : [])].filter(() => er.bool(0.7));
+		settings.ewrRules = sites.map((siteNodeId) => {
+			const points = er.bool(0.7) ? [...DEFAULT_ASSURANCE_POINTS] : [...new Set(Array.from({ length: er.int(2, 12) }, () => er.int(1, 100)))].sort((a, b) => a - b);
+			const size = er.pick([0.001, 1, 100, 1e5]);
+			const grid = () =>
+				Array.from({ length: 12 }, () => {
+					const row = points.map(() => (er.bool(0.1) ? 0 : er.logFloat(1e-6, 1) * size)).sort((a, b) => b - a);
+					// Now and then a row that rises somewhere (a typo in a pasted table).
+					if (er.bool(0.1)) row.reverse();
+					return row;
+				});
+			const naturalSource = er.pick(['run', 'run', 'table'] as const);
+			return {
+				siteNodeId,
+				source: 'fuzz',
+				component: er.pick(['total', 'lowFlow'] as const),
+				unit: er.pick(['mcm', 'm3s'] as const),
+				points,
+				ewr: grid(),
+				naturalSource,
+				natural: naturalSource === 'table' ? grid() : null,
+				scale: er.pick([1, 1, er.logFloat(0.01, 100)])
+			};
+		});
+	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
 }
@@ -330,6 +362,8 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	m.crops.forEach((c) => (c.sortOrder = rng.int(-100, 100)));
 	rng.shuffle(m.cropAreas);
 	rng.shuffle(m.transfers);
+	// Rule tables (engine ≥ 0.21.0) are assessed outlet first, then by site id, whatever their order.
+	if (Array.isArray(x.settings.ewrRules)) rng.shuffle(x.settings.ewrRules);
 	return x;
 }
 
