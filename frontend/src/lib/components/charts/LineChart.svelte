@@ -8,7 +8,7 @@
 	import uPlot from 'uplot';
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum } from '$lib/format/number';
-	import { alignDaily, fmtCompact, type ChartSeries } from './series';
+	import { alignDaily, fmtCompact, isolatedIndices, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -50,6 +50,9 @@
 	let plot: uPlot | null = null;
 	let width = $state(0);
 	let themeTick = $state(0);
+	// Legend clicks, by series label, so a rebuild (log scale, units, theme)
+	// keeps what the user switched on or off rather than resetting to `hidden`.
+	const shownByLabel = new Map<string, boolean>();
 
 	const isTime = $derived(!xy);
 	const aligned = $derived(xy ?? alignDaily(series));
@@ -89,8 +92,10 @@
 			label: unit ? `${s.label} (${unit})` : s.label,
 			stroke,
 			width: s.width ?? 1.5,
+			show: shownByLabel.get(s.label) ?? !s.hidden,
 			spanGaps: false,
-			points: { show: false },
+			// Gaps stay gaps; a lone reading between two gets a dot so it isn't lost.
+			points: { show: false, filter: isolatedIndices(plotted[i] ?? []), size: 4, width: 0, fill: stroke },
 			value: (_u: uPlot, v: number | null) => (v == null ? '–' : fmtNum(v, digitsFor(v)))
 		};
 		if (s.style === 'points') {
@@ -119,7 +124,14 @@
 			height,
 			tzDate: utc,
 			cursor: { drag: { x: true, y: false }, points: { size: 7 } },
-			hooks: isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {},
+			hooks: {
+				...(isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {}),
+				setSeries: [
+					(u: uPlot, idx: number | null, o: uPlot.Series) => {
+						if (idx != null && idx > 0 && o.show != null) shownByLabel.set(series[idx - 1]!.label, o.show);
+					}
+				]
+			},
 			scales: {
 				x: isTime ? { time: true } : { time: false },
 				y: log ? { distr: 3, log: 10 } : {}

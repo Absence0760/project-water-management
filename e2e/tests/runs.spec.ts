@@ -80,6 +80,30 @@ test('the results dashboard renders long records without locking the page', asyn
 	}
 });
 
+test('the hydrograph starts with natural flow hidden and keeps a legend toggle across a rebuild', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Hydrograph legend');
+	const days = 2 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Legend');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	await expect(chart.locator('canvas')).toBeVisible();
+	const entry = (name: RegExp) => chart.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: name }) });
+	await expect(entry(/^Natural/)).toHaveClass(/u-off/);
+	await expect(entry(/^Observed/)).not.toHaveClass(/u-off/);
+	await expect(entry(/^Simulated outflow/)).not.toHaveClass(/u-off/);
+
+	await entry(/^Natural/).click();
+	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
+	// Log scale rebuilds the chart; the user's choice survives it.
+	await chart.getByRole('button', { name: 'Log scale' }).click();
+	await expect(chart.getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
+});
+
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');

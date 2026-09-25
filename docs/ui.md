@@ -623,9 +623,12 @@ value such as 250000.
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* Then
-  the hydrograph (observed flow as
-  dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
-  the full period), the calibration panel (it opens with the same
+  the hydrograph (observed flow as a line
+  under simulated outflow, broken on every day without a reading and never
+  bridged, a lone reading between gaps shown as a dot; natural flow starts
+  hidden and its legend entry shows it, and a legend toggle survives the log
+  scale and unit switches; m³/s or m³/day, log scale, last 3 years or the full
+  period), the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in

@@ -13,6 +13,21 @@ export interface ChartSeries extends DailyInput {
 	/** CSS custom property holding the colour, e.g. '--series-2'. */
 	color?: string;
 	width?: number;
+	/** Starts switched off; clicking its legend entry shows it. */
+	hidden?: boolean;
+}
+
+/**
+ * Indices of values with no value either side. A line needs two points, so
+ * a lone reading between gaps would draw nothing; the chart marks these with
+ * a dot instead. Gaps are never bridged.
+ */
+export function isolatedIndices(ys: readonly (number | null)[]): number[] {
+	const out: number[] = [];
+	for (let i = 0; i < ys.length; i++) {
+		if (ys[i] != null && ys[i - 1] == null && ys[i + 1] == null) out.push(i);
+	}
+	return out;
 }
 
 /**
