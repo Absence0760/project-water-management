@@ -52,7 +52,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 
 ```bash
 pnpm setup                  # install, start Postgres, apply migrations, start Mailpit (one-time)
-pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up)
+pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up; the backend applies pending migrations first)
 pnpm dev:run:frontend       # one side only
 pnpm dev:run:backend
 
