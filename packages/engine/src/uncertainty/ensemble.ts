@@ -374,7 +374,8 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 export function ensembleMembers(options: ResolvedEnsembleOptions, startParams: ParamSet): EnsembleMember[] {
 	const rows = latinHypercube(options.members, options.dimensions.length, options.seed);
 	const out: EnsembleMember[] = [
-		{ index: 0, reference: true, params: { ...startParams }, panOffset: 0, rain: options.rainSources[0]!, record: options.records[0]! }
+		// The run itself: its own rain whatever sources are sampled, judged on the first record sampled (the primary one unless left out).
+		{ index: 0, reference: true, params: { ...startParams }, panOffset: 0, rain: 'recorded', record: options.records[0]! }
 	];
 	rows.forEach((u, i) => {
 		const m: EnsembleMember = { index: i + 1, reference: false, params: { ...startParams }, panOffset: 0, rain: options.rainSources[0]!, record: options.records[0]! };

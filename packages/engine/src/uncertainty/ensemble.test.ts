@@ -196,6 +196,13 @@ describe('the sample', () => {
 		expect(members.slice(1).every((m) => m.params.x2 === 0)).toBe(true);
 	});
 
+	it('keeps member 0 on the run’s own rain even when only CHIRPS is sampled', () => {
+		const only = resolveEnsembleOptions(input, { members: 30, rainSources: ['chirps'] }).options;
+		const m = ensembleMembers(only, ctx.startParams);
+		expect(m[0]!.rain).toBe('recorded');
+		expect(m.slice(1).every((x) => x.rain === 'chirps')).toBe(true);
+	});
+
 	it('is the same for the same seed and differs for another', () => {
 		expect(ensembleMembers(options, ctx.startParams)).toEqual(members);
 		expect(ensembleMembers({ ...options, seed: 2 }, ctx.startParams)).not.toEqual(members);
