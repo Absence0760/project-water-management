@@ -405,12 +405,25 @@ conditions come before any client numbers:
       - refits score better at flat 0.70 and the winter preset than at the
         extremes, a mild hint that the true forcing sits mid-range.
       Still open: the hydrologist picks the monthly values (Q4 below).
-- [ ] **The stored GR4J parameters don't fit the logger.** The same
-      sensitivity run found the client catchment's current GR4J parameters
-      score a negative NSE against the logger at every pan coefficient;
-      refitting gives positive NSE/KGE and cuts simulated MAR substantially. Refit (typical bounds + the WR2012 MAR band, the fit
-      recommended above) once the pan coefficient is chosen, and before any
-      client numbers are shown.
+- [x] **The stored GR4J parameters don't fit the logger.** The client
+      project never had fitted GR4J parameters (it ran on the defaults).
+      **Refitted 2026-09-25 on engine 0.20.0** (after the rain fixes of
+      issue #2), results in the private repo's `Research/`:
+      - **Pan coefficient: the winter-rainfall preset** (operator decision,
+        hydrologist agreement assumed). The record can't tell it from a flat
+        0.70 (the fits score the same), so it rests on physics: the
+        catchment's rain is strongly winter-dominated, and FAO-56 Table 5
+        gives a lower Class A pan coefficient in dry, windy summers and a
+        higher one in humid winters.
+      - **Wide bounds, not typical.** Under Perrin's typical bounds X1 sits
+        on its upper bound and the simulated MAR leaves the WR2012 band; the
+        wide-bounds fit is better, keeps MAR inside the band (so the soft
+        penalty doesn't bind), and all five starts agree. X1 lands far above
+        the typical range, consistent with the rain-level question in #12.
+      - **Validation is weak** (split-sample and dry → wet well below the
+        fitted score): any client figure needs its uncertainty (Phase 9).
+      Applied to the local project only; the workbook's A-pan level is
+      questioned in #13 and would change the fit if corrected.
 
 **Answers to put to the hydrologist and the CMA** (the full reasoning is in
 the reports):
