@@ -1,48 +1,50 @@
 import type { FarmSummary, RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, resultSections } from './sections';
+import { activeSectionId, resultGroups, resultSections } from './sections';
 
-describe('resultSections', () => {
-	it('lists every panel in page order, with farm detail only when there are farms', () => {
+describe('resultGroups', () => {
+	it('groups the panels by the question they answer, in page order', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
-		expect(resultSections({ farms: [farm] }).map((s) => s.id)).toEqual([
-			'res-summary',
-			'res-water',
-			'res-checks',
-			'res-curtailment',
-			'res-hydrograph',
-			'res-calibration',
-			'res-notes',
-			'res-fdc',
-			'res-ewr',
-			'res-ewr-grid',
-			'res-ewr-agreement',
-			'res-farm',
-			'res-explore'
+		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
+			[null, ['res-summary', 'res-notes']],
+			['River & Reserve', ['res-ewr', 'res-ewr-grid']],
+			['Farms & users', ['res-curtailment', 'res-farm']],
+			['Model quality', ['res-hydrograph', 'res-calibration', 'res-ewr-agreement']],
+			['Dig deeper', ['res-checks', 'res-explore']]
 		]);
+	});
+
+	it('flattens the groups for the scroll spy', () => {
+		const summary = { farms: [{ nodeId: 'f' } as FarmSummary] };
+		expect(resultSections(summary)).toEqual(resultGroups(summary).flatMap((g) => g.sections));
+	});
+
+	it('shows farm detail only when there are farms', () => {
 		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-farm');
-		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-runoff');
 	});
 
-	it('adds the runoff model panel after calibration for a GR4J run', () => {
-		const ids = resultSections({ farms: [], runoff: { model: 'gr4j' } as RunSummary['runoff'] }).map((s) => s.id);
-		expect(ids.slice(ids.indexOf('res-calibration'), ids.indexOf('res-calibration') + 3)).toEqual(['res-calibration', 'res-runoff', 'res-notes']);
+	it('adds the optional model-quality panels in order: runoff model (GR4J), WR2012, then plausibility after EWR vs observed', () => {
+		const model = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
+		expect(model({ farms: [] })).not.toContain('res-runoff');
+		expect(model({ farms: [] })).not.toContain('res-wr2012');
+		expect(model({ farms: [] })).not.toContain('res-plausibility');
+		expect(
+			model({
+				farms: [],
+				runoff: { model: 'gr4j' } as RunSummary['runoff'],
+				wr2012: {} as RunSummary['wr2012'],
+				plausibility: {} as RunSummary['plausibility']
+			})
+		).toEqual(['res-hydrograph', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
-	it('adds the WR2012 check after the runoff model when the run has one, with the run notes under it', () => {
-		const ids = resultSections({ farms: [], runoff: { model: 'gr4j' } as RunSummary['runoff'], wr2012: {} as RunSummary['wr2012'] }).map((s) => s.id);
-		expect(ids.slice(ids.indexOf('res-runoff'), ids.indexOf('res-runoff') + 4)).toEqual(['res-runoff', 'res-wr2012', 'res-notes', 'res-fdc']);
-		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-wr2012');
-	});
-
-	it('adds the plausibility checks after EWR vs observed on a run that has them (engine ≥ 0.25.0)', () => {
-		const ids = resultSections({ farms: [], plausibility: {} as RunSummary['plausibility'] }).map((s) => s.id);
-		expect(ids.slice(ids.indexOf('res-ewr-agreement'), ids.indexOf('res-ewr-agreement') + 3)).toEqual(['res-ewr-agreement', 'res-plausibility', 'res-explore']);
-		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-plausibility');
-	});
-
-	it('names the calibration entry for the uncertainty bands it also holds', () => {
-		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-calibration')?.label).toBe('Calibration & uncertainty');
+	it('names the entries that cover two panels', () => {
+		const all = resultSections({ farms: [] });
+		expect(all.find((s) => s.id === 'res-calibration')?.label).toBe('Calibration & uncertainty');
+		expect(all.find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
+		// The flow-duration curve sits beside EWR vs outflow, so it has no entry of its own.
+		expect(all.find((s) => s.id === 'res-ewr')?.label).toBe('EWR & flow duration');
+		expect(all.map((s) => s.id)).not.toContain('res-fdc');
 	});
 
 	it('uses unique ids', () => {

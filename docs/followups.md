@@ -786,14 +786,14 @@ the suggested order (the IDs carry the detail):
       in the guard's change log: sharing the engine with the calibration
       worker (−13 KB total but +23 KB on a catchment's cold open) and
       `experimentalMinChunkSize` (1–4 KB, cold loads grow).
-- [ ] **The Runs tab still carries the whole help text** (26 KB gzip on top of
-      the page). `WaterStoryPanel` → `PictureTour` → `lib/help/guides.ts` →
-      `lib/help/content.ts`: PictureTour only needs a guide's title for its
-      stop links, but importing `guideFor` pulls in every guide and, through
-      them, the glossary. Durable fix: a small generated `id → title` map for
-      guide links (kept in sync by `guides.test.ts`), so PictureTour stops
-      importing `guides.ts`. Trigger: the next change to the Runs tab or
-      PictureTour, or the Runs tab's cold cost becoming the one to cut.
+- [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
+      gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
+      `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
+      "Where the water went" panel, which repeated figures the summary cards,
+      the self-checks' water balance and the runoff model panel already show;
+      no project-page component imports `lib/help` now. If PictureTour comes
+      back to an app page, give it a small `id → title` map for its guide links
+      first, so it stops importing `guides.ts`.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

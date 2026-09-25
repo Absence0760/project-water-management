@@ -2,6 +2,9 @@
 	// The standard result views of one run: hydrograph, flow-duration curve,
 	// EWR vs outflow, a farm's dam storage and supply, and an explorer for any
 	// stored series. Each series is fetched once, on demand (see cache.ts).
+	// It also lays out the results below the summary in the groups of
+	// sections.ts, with a heading per group: the parent slots its own panels
+	// into each group, since the flow charts share one unit switch.
 	import type { Snippet } from 'svelte';
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
@@ -21,8 +24,11 @@
 		nodeNames,
 		nodeOrder,
 		damCapacity,
-		afterHydrograph,
-		afterFlowViews
+		riverLead,
+		riverTail,
+		farmsLead,
+		modelTail,
+		deeperLead
 	}: {
 		projectId: string;
 		runId: string;
@@ -32,10 +38,16 @@
 		nodeOrder: ReadonlyMap<string, number>;
 		/** nodeId → dam capacity (m³) from the current model. */
 		damCapacity: ReadonlyMap<string, number>;
-		/** Full-width panels slotted after the hydrograph (e.g. calibration). */
-		afterHydrograph?: Snippet;
-		/** …and after the flow-duration / EWR pair (e.g. EWR compliance). */
-		afterFlowViews?: Snippet;
+		/** Full-width panels opening River & Reserve, before the EWR / flow-duration pair (Reserve compliance). */
+		riverLead?: Snippet;
+		/** …and after the pair (EWR by month). */
+		riverTail?: Snippet;
+		/** Opening Farms & users, before farm detail (curtailment). */
+		farmsLead?: Snippet;
+		/** Model quality, after the hydrograph (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
+		modelTail?: Snippet;
+		/** Opening Dig deeper, before the explorer (self-checks). */
+		deeperLead?: Snippet;
 	} = $props();
 
 	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
@@ -171,28 +183,28 @@
 {/snippet}
 
 <div class="charts">
-	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
-		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
-		{#if catchError}
-			<div class="alert alert-error" role="alert">{catchError}</div>
-		{:else if catchLoading && !hydroSeries.length}
-			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
+	<h2 class="group-h wide">River &amp; Reserve</h2>
+	{#if riverLead}<div class="wide slot">{@render riverLead()}</div>{/if}
+
+	<section class="panel" id="res-ewr" aria-labelledby="ewr-h">
+		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
+		{#if catchLoading && !ewrSeries.length}
+			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
 		{:else}
 			<LineChart
-				title="Flow at the outflow gauge: natural, simulated and observed"
+				title="EWR vs simulated outflow"
 				unit={flowUnit}
-				series={hydroSeries}
+				height={260}
+				series={ewrSeries}
 				logToggle
-				bind:log={hydroLog}
+				bind:log={ewrLog}
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
-				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
+				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
 			/>
 		{/if}
 	</section>
-
-	{#if afterHydrograph}<div class="wide slot">{@render afterHydrograph()}</div>{/if}
 
 	<section class="panel" id="res-fdc" aria-labelledby="fdc-h">
 		<h3 id="fdc-h" class="visually-hidden">Flow-duration curve</h3>
@@ -238,27 +250,10 @@
 		{/if}
 	</section>
 
-	<section class="panel" id="res-ewr" aria-labelledby="ewr-h">
-		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
-		{#if catchLoading && !ewrSeries.length}
-			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
-		{:else}
-			<LineChart
-				title="EWR vs simulated outflow"
-				unit={flowUnit}
-				height={260}
-				series={ewrSeries}
-				logToggle
-				bind:log={ewrLog}
-				recentDays={RECENT}
-				recentLabel="Last 3 years"
-				toolbar={unitToggle}
-				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
-			/>
-		{/if}
-	</section>
+	{#if riverTail}<div class="wide slot">{@render riverTail()}</div>{/if}
 
-	{#if afterFlowViews}<div class="wide slot">{@render afterFlowViews()}</div>{/if}
+	<h2 class="group-h wide">Farms &amp; users</h2>
+	{#if farmsLead}<div class="wide slot">{@render farmsLead()}</div>{/if}
 
 	{#if farmOptions.length}
 		<section class="panel wide" id="res-farm" aria-labelledby="farm-h">
@@ -304,6 +299,33 @@
 		</section>
 	{/if}
 
+	<h2 class="group-h wide">Model quality</h2>
+	<section class="panel wide" id="res-hydrograph" aria-labelledby="hydro-h">
+		<h3 id="hydro-h" class="visually-hidden">Hydrograph</h3>
+		{#if catchError}
+			<div class="alert alert-error" role="alert">{catchError}</div>
+		{:else if catchLoading && !hydroSeries.length}
+			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
+		{:else}
+			<LineChart
+				title="Flow at the outflow gauge: natural, simulated and observed"
+				unit={flowUnit}
+				series={hydroSeries}
+				logToggle
+				bind:log={hydroLog}
+				recentDays={RECENT}
+				recentLabel="Last 3 years"
+				toolbar={unitToggle}
+				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
+			/>
+		{/if}
+	</section>
+
+	{#if modelTail}<div class="wide slot">{@render modelTail()}</div>{/if}
+
+	<h2 class="group-h wide">Dig deeper</h2>
+	{#if deeperLead}<div class="wide slot">{@render deeperLead()}</div>{/if}
+
 	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
 		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
 		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} />
@@ -324,6 +346,15 @@
 	}
 	.slot {
 		min-width: 0;
+	}
+	/* A group of panels (sections.ts): a quiet label above them, not a panel title. */
+	.group-h {
+		margin: 1.25rem 0 0.6rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
 	}
 	@media (max-width: 1100px) {
 		.charts {

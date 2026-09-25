@@ -12,7 +12,6 @@
 import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
-	import WaterStoryPanel from './WaterStoryPanel.svelte';
 	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
@@ -25,7 +24,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { activeSectionId, resultSections } from './sections';
+	import { activeSectionId, resultGroups } from './sections';
 	import { filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
@@ -276,7 +275,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 	// The rail's in-page menu, and which section is being read (scroll spy).
-	const sections = $derived(detail ? resultSections(detail.run.summary) : []);
+	const groups = $derived(detail ? resultGroups(detail.run.summary) : []);
+	const sections = $derived(groups.flatMap((g) => g.sections));
 	let activeSection = $state<string | null>(null);
 	$effect(() => {
 		const ids = sections.map((x) => x.id);
@@ -436,9 +436,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		{#if sections.length}
 			<nav class="panel sections" aria-label="Result sections">
 				<h2 class="rail-h">On this page</h2>
-				<ul>
-					{#each sections as sec (sec.id)}
-						<li><a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{sec.label}</a></li>
+				<ul class="groups">
+					{#each groups as g, gi (gi)}
+						<li>
+							{#if g.label}<span class="grp-h" id="grp-{gi}">{g.label}</span>{/if}
+							<ul aria-labelledby={g.label ? `grp-${gi}` : undefined}>
+								{#each g.sections as sec (sec.id)}
+									<li><a href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{sec.label}</a></li>
+								{/each}
+							</ul>
+						</li>
 					{/each}
 				</ul>
 			</nav>
@@ -452,6 +459,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
 			</div>
 		{:else if detail}
+			{@const summary = detail.run.summary}
+			<!-- The run's own settings: older cached details lack them, so fall back to the project's. -->
+			{@const shownSettings = detail.run.settings}
+			{@const runSettings = shownSettings ?? project.settings}
+			{@const runSeries = detail.series}
+			{@const shownRunId = detail.run.id}
+			{@const shownRun = detail.run}
 			<section class="panel" aria-labelledby="res-h" aria-busy={detailLoading}>
 				<div class="panel-head">
 					<div>
@@ -480,29 +494,21 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
 				</section>
 			</section>
-			<section class="panel" id="res-water" aria-labelledby="res-water-h">
-				<WaterStoryPanel summary={detail.run.summary} />
+			<section class="panel" id="res-notes">
+				{#key shownRunId}
+					<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
+				{/key}
+				<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
+				<div class="evidence" id="res-evidence">
+					{#key shownRunId}
+						<Lazy load={loadEvidencePanel}>
+							{#snippet children(EvidencePanel)}
+								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+							{/snippet}
+						</Lazy>
+					{/key}
+				</div>
 			</section>
-			<section class="panel" id="res-checks">
-				<SelfChecksPanel
-					summary={detail.run.summary}
-					{projectId}
-					runId={detail.run.id}
-					startDate={detail.run.startDate}
-					endDate={detail.run.endDate}
-					nodes={traceNodes}
-				/>
-			</section>
-			<section class="panel" id="res-curtailment">
-				<CurtailmentTable summary={detail.run.summary} {farmNames} />
-			</section>
-			{@const summary = detail.run.summary}
-			<!-- The run's own settings: older cached details lack them, so fall back to the project's. -->
-			{@const shownSettings = detail.run.settings}
-			{@const runSettings = shownSettings ?? project.settings}
-			{@const runSeries = detail.series}
-			{@const shownRunId = detail.run.id}
-			{@const shownRun = detail.run}
 			<RunCharts
 				{projectId}
 				runId={detail.run.id}
@@ -512,7 +518,33 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{nodeOrder}
 				{damCapacity}
 			>
-				{#snippet afterHydrograph()}
+				{#snippet riverLead()}
+					{#if summary.ewrAssurance?.length}
+						<div class="panel" id="res-reserve">
+							<Lazy load={loadAssurancePanel}>
+								{#snippet children(EwrAssurancePanel)}
+									<EwrAssurancePanel sites={summary.ewrAssurance ?? []} />
+								{/snippet}
+							</Lazy>
+						</div>
+					{/if}
+				{/snippet}
+				{#snippet riverTail()}
+					<div class="panel" id="res-ewr-grid">
+						{#if summary.ewrCompliance}
+							<EwrHeatmap compliance={summary.ewrCompliance} />
+						{:else}
+							<h3>EWR compliance by month</h3>
+							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
+						{/if}
+					</div>
+				{/snippet}
+				{#snippet farmsLead()}
+					<section class="panel" id="res-curtailment">
+						<CurtailmentTable {summary} {farmNames} />
+					</section>
+				{/snippet}
+				{#snippet modelTail()}
 					<div class="panel" id="res-calibration">
 						<CalibrationPanel
 							calibration={summary.calibration}
@@ -527,7 +559,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
-						<!-- Uncertainty bands (issue #4 phase 9): with the calibration they come from, one menu entry so the rail still fits a laptop screen. -->
+						<!-- Uncertainty bands (issue #4 phase 9): with the calibration they come from, one menu entry. -->
 						<div class="uncertainty" id="res-uncertainty">
 							<Lazy load={loadUncertaintyPanel}>
 								{#snippet children(UncertaintyPanel)}
@@ -552,40 +584,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							</Lazy>
 						</div>
 					{/if}
-					<div class="panel" id="res-notes">
-						{#key shownRunId}
-							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
-						{/key}
-						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
-						<div class="evidence" id="res-evidence">
-							{#key shownRunId}
-								<Lazy load={loadEvidencePanel}>
-									{#snippet children(EvidencePanel)}
-										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-									{/snippet}
-								</Lazy>
-							{/key}
-						</div>
-					</div>
-				{/snippet}
-				{#snippet afterFlowViews()}
-					{#if summary.ewrAssurance?.length}
-						<div class="panel" id="res-reserve">
-							<Lazy load={loadAssurancePanel}>
-								{#snippet children(EwrAssurancePanel)}
-									<EwrAssurancePanel sites={summary.ewrAssurance ?? []} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-					<div class="panel" id="res-ewr-grid">
-						{#if summary.ewrCompliance}
-							<EwrHeatmap compliance={summary.ewrCompliance} />
-						{:else}
-							<h3>EWR compliance by month</h3>
-							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
-						{/if}
-					</div>
 					<div class="panel" id="res-ewr-agreement">
 						<EwrAgreementTable {summary} />
 					</div>
@@ -598,6 +596,18 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							</Lazy>
 						</div>
 					{/if}
+				{/snippet}
+				{#snippet deeperLead()}
+					<section class="panel" id="res-checks">
+						<SelfChecksPanel
+							{summary}
+							{projectId}
+							runId={shownRunId}
+							startDate={shownRun.startDate}
+							endDate={shownRun.endDate}
+							nodes={traceNodes}
+						/>
+					</section>
 				{/snippet}
 			</RunCharts>
 		{:else if loading || detailLoading || (runs.length > 0 && selectedId)}
@@ -896,6 +906,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		margin: 0;
 		padding: 0;
 	}
+	/* A group's name above its links (sections.ts), quieter than the links. */
+	.grp-h {
+		display: block;
+		margin: 0.4rem 0 0.05rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
 	.sections a {
 		display: block;
 		padding: 0.25rem 0.6rem;
@@ -919,6 +939,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			display: flex;
 			flex-wrap: wrap;
 			gap: 0.35rem;
+		}
+		/* Each group's chips wrap on their own lines, under the group's name. */
+		.sections ul.groups {
+			display: block;
 		}
 		.sections a {
 			display: inline-flex;

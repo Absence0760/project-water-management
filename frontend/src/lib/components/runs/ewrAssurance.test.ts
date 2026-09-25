@@ -81,11 +81,10 @@ describe('formatting', () => {
 });
 
 describe('resultSections', () => {
-	it('lists Reserve compliance only when the run has a rule table', () => {
+	it('lists Reserve compliance only when the run has a rule table, opening the river group', () => {
 		const base = { farms: [], runoff: undefined, wr2012: undefined };
 		expect(resultSections(base).map((s) => s.id)).not.toContain('res-reserve');
 		const ids = resultSections({ ...base, ewrAssurance: [site(() => 1)] }).map((s) => s.id);
-		expect(ids.indexOf('res-reserve')).toBe(ids.indexOf('res-ewr') + 1);
-		expect(ids.indexOf('res-reserve')).toBeLessThan(ids.indexOf('res-ewr-grid'));
+		expect(ids.slice(ids.indexOf('res-reserve'), ids.indexOf('res-reserve') + 3)).toEqual(['res-reserve', 'res-ewr', 'res-ewr-grid']);
 	});
 });
