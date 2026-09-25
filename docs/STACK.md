@@ -30,8 +30,9 @@ sides share.
   engine's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
-  charts, vitest. SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) reads and writes
-  spreadsheets, pinned as a URL dependency on its official CDN tarball
+  charts, vitest. SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) writes the `.xlsx`
+  run export (the b023 import reads workbooks with its own streaming reader,
+  `lib/spreadsheet/import/`; the tests use SheetJS to check it), pinned as a URL dependency on its official CDN tarball
   (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`, integrity hash in
   `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand
   and only load it lazily (a worker or a lazy chunk), never in a page chunk. Dev port `7777`. `frontend/.env.production` sets

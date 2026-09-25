@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { decodeXml, packageParts, relsPathOf, resolveTarget, sheetParts } from './ooxml';
+import { CONTENT_TYPES_NAMESPACE, decodeXml, packageParts, relTargets, relsPathOf, resolveTarget } from './ooxml';
 
 describe('packageParts', () => {
-	it('finds the workbook, shared strings and the parts SheetJS insists on', () => {
+	it('finds the workbook, shared strings, styles and the namespace', () => {
 		const ct = `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 			<Default Extension="xml" ContentType="application/xml"/>
 			<Override PartName="/xl/workbook.xml" ContentType="application/vnd.ms-excel.sheet.macroEnabled.main+xml"/>
@@ -13,7 +13,20 @@ describe('packageParts', () => {
 			<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>
 			<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>
 		</Types>`;
-		expect(packageParts(ct)).toEqual({ workbook: 'xl/workbook.xml', binary: false, strings: ['xl/sharedStrings.xml'], support: ['xl/styles.xml', 'xl/metadata.xml'] });
+		expect(packageParts(ct)).toEqual({
+			workbook: 'xl/workbook.xml',
+			binary: false,
+			strings: ['xl/sharedStrings.xml'],
+			support: ['xl/styles.xml', 'xl/metadata.xml'],
+			styles: 'xl/styles.xml',
+			namespace: CONTENT_TYPES_NAMESPACE
+		});
+	});
+
+	it('reads a prefixed <Types> namespace, and none when it is missing', () => {
+		expect(packageParts(`<ct:Types xmlns:ct="${CONTENT_TYPES_NAMESPACE}"/>`).namespace).toBe(CONTENT_TYPES_NAMESPACE);
+		expect(packageParts('<Types/>').namespace).toBeNull();
+		expect(packageParts('<Types xmlns="urn:other"/>').namespace).toBe('urn:other');
 	});
 
 	it('flags a binary .xlsb workbook', () => {
@@ -22,30 +35,22 @@ describe('packageParts', () => {
 	});
 });
 
-describe('sheetParts', () => {
-	it('maps sheet names to parts through the relationships, entities decoded', () => {
-		const wb = `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>
-			<sheet name="Farm &amp; dam" sheetId="1" r:id="rId2"/>
-			<sheet sheetId="2" name="It&apos;s &lt;b&gt;" r:id="rId1"/>
-			<sheet name="Gone" sheetId="3" r:id="rId9"/>
-		</sheets></workbook>`;
+describe('relTargets', () => {
+	it('maps relationship ids to parts, resolved against the workbook, external targets left out', () => {
 		const rels = `<Relationships>
 			<Relationship Id="rId1" Type="…/worksheet" Target="worksheets/sheet1.xml"/>
 			<Relationship Id="rId2" Type="…/worksheet" Target="/xl/worksheets/sheet2.xml"/>
 			<Relationship Id="rId3" Type="…/hyperlink" Target="https://example.com" TargetMode="External"/>
 		</Relationships>`;
-		const { names, parts } = sheetParts('xl/workbook.xml', wb, rels);
-		expect(names).toEqual(['Farm & dam', "It's <b>", 'Gone']);
-		expect([...parts]).toEqual([
-			['Farm & dam', 'xl/worksheets/sheet2.xml'],
-			["It's <b>", 'xl/worksheets/sheet1.xml']
+		expect([...relTargets('xl/workbook.xml', rels)]).toEqual([
+			['rId1', 'xl/worksheets/sheet1.xml'],
+			['rId2', 'xl/worksheets/sheet2.xml']
 		]);
 	});
 
-	it('accepts any namespace prefix on the elements and the relationship id', () => {
-		const wb = '<x:workbook><x:sheets><x:sheet name="A" sheetId="1" rel:id="r1"/></x:sheets></x:workbook>';
+	it('accepts any namespace prefix on the elements', () => {
 		const rels = '<pr:Relationships><pr:Relationship Id="r1" Target="../xl/worksheets/a.xml"/></pr:Relationships>';
-		expect([...sheetParts('xl/workbook.xml', wb, rels).parts]).toEqual([['A', 'xl/worksheets/a.xml']]);
+		expect([...relTargets('xl/workbook.xml', rels)]).toEqual([['r1', 'xl/worksheets/a.xml']]);
 	});
 });
 

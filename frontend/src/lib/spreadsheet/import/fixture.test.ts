@@ -4,7 +4,7 @@
 // the project JSON and the notes, with and without --gauge-as-reference.
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { WorkBook } from 'xlsx';
+import type { WorkbookSource } from './source';
 import { extractProject, readWorkbook } from './index';
 import { jsonDiff, projectNotes } from './parity';
 
@@ -13,7 +13,7 @@ const read = (name: string) => readFileSync(new URL(name, FIXTURES));
 const lines = (name: string) => read(name).toString('utf8').split('\n');
 
 describe('synthetic b023 workbook: parity with extract_project.py', () => {
-	let wb: WorkBook;
+	let wb: WorkbookSource;
 	beforeAll(async () => {
 		wb = await readWorkbook(read('synthetic_b023.xlsx'));
 	});

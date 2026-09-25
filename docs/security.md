@@ -252,10 +252,26 @@ In short:
     relationships, the workbook, shared strings, styles, the b023 config
     sheets). The VBA project, the per-farm result sheets, drawings and
     embedded objects are never inflated;
-  - nothing is evaluated: SheetJS reads cached cell values only (no formula
-    engine, `cellFormula: false`, `bookVBA: false`), and the one place formula
-    text matters (hand-written [Transfers] rules) reads the plain-text copy
-    b023 keeps, matched against a fixed rule shape, never executed;
+  - those parts are parsed by the import's own streaming reader, not a
+    general XML or spreadsheet library (`xml.ts`, `sheet.ts`,
+    `sharedStrings.ts`, `workbookParts.ts`): each part is tokenized as it
+    inflates, so no sheet is ever held whole. There is no DTD support at
+    all: a `<!DOCTYPE>` or any other declaration is refused, so no entity
+    can be defined, and entity references are never expanded beyond the five
+    XML built-ins and numeric references (the rest stay literal text).
+    Every tag, comment and CDATA section is capped at 1 MB, nesting at 128
+    levels, and a cell value or shared string at 1 M characters (Excel's own
+    limit is 32 767). Unclosed or mismatched tags, text outside the root,
+    UTF-16 parts, markup inside a value and a cell pointing at a shared
+    string that isn't there are all typed `UnreadableWorkbookError`s
+    (`corrupt`), with a test for each (`xml.test.ts`, `workbook.test.ts`).
+    Cells are kept as typed-array slots, so the memory a sheet can take is
+    bounded by its unpacked size, which the zip caps already bound;
+  - nothing is evaluated: the reader keeps cached cell values only (formula
+    text is never read, the VBA project never unpacked), and the one place
+    formula text matters (hand-written [Transfers] rules) reads the
+    plain-text copy b023 keeps, matched against a fixed rule shape, never
+    executed;
   - error messages, notes and the unmapped report quote sheet and farm names
     and formula text from the file, so the import dialog renders all of it as
     text (plain Svelte interpolation, never `{@html}`); an e2e test imports a
@@ -264,8 +280,9 @@ In short:
   - it all runs in a module worker from `'self'` (`worker-src 'self'`), and
     only the extracted project reaches the server, through the same
     validation as any `.json` import.
-- The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,
-  pinned in `frontend/package.json` to its official CDN tarball with the
+- The `.xlsx` export uses SheetJS CE 0.20.3 (the in-browser importer no
+  longer does; the tests still read workbooks with it, to compare the two
+  readers cell by cell), pinned in `frontend/package.json` to its official CDN tarball with the
   integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
   which has known advisories. Dependabot and `pnpm audit` don't track a URL
   dependency, so check the SheetJS release notes and bump it by hand.

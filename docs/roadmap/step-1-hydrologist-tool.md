@@ -1569,8 +1569,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Status: landed (2026-09-25, issue #11).** **Import b023 workbook** on the
   project list reads the workbook in `lib/spreadsheet/import/import.worker.ts`
-  (SheetJS CE mini build plus the TypeScript port, 101 KB gzip, the
-  spreadsheet-worker ceiling) and submits through `POST /projects/import`;
+  (the TypeScript port and its streaming workbook reader, 25 KB gzip; it
+  shipped on SheetJS CE's mini build at 101 KB) and submits through
+  `POST /projects/import`;
   the review shows the counts, the importer's notes, the unmapped report
   and the gauge-as-reference option (ui.md § Import a b023 workbook). The
   notes and unmapped report are kept with the project (017_project_import,
@@ -1581,7 +1582,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - `readWorkbook` reads the zip itself and unpacks only the parts the
     importer reads (`zip.ts`, capped and bounds-checked; security.md), since
     SheetJS's reader inflated the whole ~600 MB of the client workbook first
-    (about 40% lower peak memory, read time ~2.9 s → ~1.1 s);
+    (about 40% lower peak memory, read time ~2.9 s → ~1.1 s); then a
+    streaming reader of its own replaced SheetJS in the import (`xml.ts`,
+    `sheet.ts`, `sharedStrings.ts`, `workbookParts.ts`): the read's own
+    memory ~90% lower again and its time halved, every cell compared with
+    the SheetJS reader in the parity tests (followups.md);
   - the import route gives fresh ids in the document's id order, so an
     import runs to the same last bit as its source (found checking the
     acceptance below).
@@ -1590,7 +1595,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   Python one (`sourceWorkbooks.test.ts`, local), and both, imported through
   the route's code with a run, store identical run summaries (checked
   locally on 2026-09-25); the synthetic parity test runs in CI. Left open:
-  peak memory on the largest workbooks (followups.md).
+  profiling in a real browser and two string decodings where SheetJS and
+  openpyxl differ (followups.md).
 - **Goal:** upload a b023 `.xlsm` in the UI with no Python, so the client
   can onboard their other catchments.
 - **Changes:**

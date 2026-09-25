@@ -846,7 +846,8 @@ its own chunk loaded with the tab; WP-2.10,
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
   list and, below it, an **On this page** menu (the "Result sections"
   navigation) linking to each panel (`#res-summary` … `#res-explore`, listed
-  by `runs/sections.ts`). The rail is sticky, so the menu stays in view down
+  by `runs/sections.ts` in groups, each a list labelled by the group's name
+  under a small heading). The rail is sticky, so the menu stays in view down
   the long results page, and it marks the section being read with
   `aria-current="location"` (scroll spy: `activeSectionId`, the last section
   whose top has passed under the sticky header, or the last one at the
@@ -856,11 +857,32 @@ its own chunk loaded with the tab; WP-2.10,
   still fits a 768px-tall window without clipping, and a longer menu takes
   its height from the list (once the list is at its minimum the rail scrolls
   on its own). Narrower, the rail stacks above the results and the menu
-  becomes wrapping chips. Farm detail appears only when the run has farms,
-  Runoff model only for a GR4J run, and Plausibility checks only on a run
-  made by engine 0.25.0 or later. The page's `scroll-padding-top`
+  becomes wrapping chips, a line of them per group. Farm detail appears only
+  when the run has farms, Reserve compliance only with a rule table, Runoff
+  model only for a GR4J run, WR2012 check only with a reference, and
+  Plausibility checks only on a run made by engine 0.25.0 or later. The
+  page's `scroll-padding-top`
   keeps a jumped-to section, or a focused control, clear of the sticky
   header.
+- **Page order.** The results are grouped by the question they answer
+  (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
+  as a quiet heading, `RunCharts.svelte`), so the panels that are read
+  together sit together:
+  1. **Summary**, then **Notes & evidence** (`#res-notes`).
+  2. **River & Reserve**: Reserve compliance by month (with a rule table),
+     EWR vs outflow beside the flow-duration curve (one menu entry, **EWR &
+     flow duration**, since they share a row), EWR by month.
+  3. **Farms & users**: curtailment (with the other water users and the EWR
+     sites tables), farm detail.
+  4. **Model quality**: hydrograph, calibration & uncertainty (with where the
+     parameters came from), runoff model, WR2012 check, EWR vs observed,
+     plausibility checks.
+  5. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
+
+  Failed self-checks, plausibility findings and a WR2012 query or "not
+  usable" flag are also run warnings (engine), so they show at the top of the
+  summary however far down their panel is. The bullets below describe each
+  panel; the order above is the page's.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
   rainfall series. While a run is going it shows progress. A note says when
@@ -910,19 +932,9 @@ its own chunk loaded with the tab; WP-2.10,
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
   green at or above 95 %, amber below; themed tokens, so it follows dark mode, and
   solid `CanvasText` under forced colours); the number stays the content.
-- **Where the water went** (`#res-water`, `runs/WaterStoryPanel.svelte`, figures
-  from `runs/waterStory.ts`): the run's whole-period water balance
-  (`summary.waterBalance.total`, engine ≥ 0.11.0) as yearly averages on the help
-  illustration's eight stops: rain on the catchment, evaporation (GR4J runs;
-  legacy says why not), natural flow with the share of rain, farm dams (spill,
-  and storage at the start and end), irrigation supplied against demand with
-  return flow, transfers (they net to nothing), the share of days below the EWR,
-  and outflow with the share of natural flow that reached the outlet. The panel
-  says the picture is a generic catchment, not a drawing of the project's
-  network. A run saved before the water balance existed says to run again.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
-  [model.md § Verification](./model.md#verification)) comes next. It has three
+  [model.md § Verification](./model.md#verification)). It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
   the first problem (farm name and date) under a failed one, and the largest
@@ -965,7 +977,7 @@ its own chunk loaded with the tab; WP-2.10,
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run
   means (`RunSummaryView.svelte`).
-- Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
+- **Curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
   equitable share* under "Equitable share (fairness benchmark, ex EWR)", then
@@ -989,8 +1001,8 @@ its own chunk loaded with the tab; WP-2.10,
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
-  at the Reserve determination's EWR sites to protect upstream reaches.* Then
-  the hydrograph (observed flow as a line
+  at the Reserve determination's EWR sites to protect upstream reaches.* The
+  hydrograph (observed flow as a line
   under simulated outflow, broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
@@ -1009,7 +1021,7 @@ its own chunk loaded with the tab; WP-2.10,
   the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them; the run comparison's
-  overlay has its own while a flow series is picked. Then the calibration panel (it opens with the same
+  overlay has its own while a flow series is picked. The calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
@@ -1021,7 +1033,7 @@ its own chunk loaded with the tab; WP-2.10,
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that
   every observed day was excluded). The calibration window shown is the run's,
-  not today's. Then the **runoff model** panel for GR4J runs (`RunoffPanel`:
+  not today's. The **runoff model** panel for GR4J runs (`RunoffPanel`:
   the parameters, a table of where the rain went (rain, evaporation, flow,
   exchange, change in storage, in mm and as a share of rain;
   `runs/runoff.ts`), and the production and routing stores through time),
@@ -1065,8 +1077,7 @@ its own chunk loaded with the tab; WP-2.10,
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
-  stored,
-  then **Run notes** under it on every run (`runs/RunNotes.svelte`,
+  stored. **Run notes** on every run (`runs/RunNotes.svelte`,
   `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
   explanation of the run, the one thing about a run that can change after it
   is made. Editors get a textarea with a character count (4 000 at most) and
@@ -1096,8 +1107,8 @@ its own chunk loaded with the tab; WP-2.10,
   **different runoff model** ("1 run made after the nominated evidence run “A”
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
-  miss a later model switch. Then
-  the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
+  miss a later model switch. The
+  flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, **Reserve compliance by month** when the run has a rule
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
@@ -1123,7 +1134,7 @@ its own chunk loaded with the tab; WP-2.10,
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
-  there is no table. Then the **Plausibility checks** (`#res-plausibility`,
+  there is no table. The **Plausibility checks** (`#res-plausibility`,
   `runs/PlausibilityPanel.svelte`, its own chunk, helpers in
   `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
   only on runs that have them): the dry season in one sentence, a line per
@@ -1143,7 +1154,7 @@ its own chunk loaded with the tab; WP-2.10,
   other runoff model's simulated outflow (fetched on demand, left out with a
   note when it used another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
-  Q70 / Q90 / Q95 table. Then farm detail (dam
+  Q70 / Q90 / Q95 table. Farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS

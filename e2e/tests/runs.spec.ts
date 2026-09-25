@@ -214,21 +214,24 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
-		'Where the water went',
-		'Self-checks',
+		'Notes & evidence',
+		'EWR & flow duration',
+		'EWR by month',
 		'Curtailment',
+		'Farm detail',
 		'Hydrograph',
 		'Calibration & uncertainty',
 		'Runoff model',
-		'Notes & evidence',
-		'Flow duration',
-		'EWR vs outflow',
-		'EWR by month',
 		'EWR vs observed',
 		'Plausibility checks',
-		'Farm detail',
+		'Self-checks',
 		'Explore outputs'
 	]);
+	// The panels are grouped by the question they answer, in the menu and on the page alike.
+	const groups = ['River & Reserve', 'Farms & users', 'Model quality', 'Dig deeper'];
+	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Farms & users|Model quality|Dig deeper)$/ })).toHaveText(groups);
+	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR & flow duration', 'EWR by month']);
+	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
 
 	// The menu sits in the rail beside the results and stays in view as the page scrolls,
 	// marking the section being read.
@@ -307,25 +310,6 @@ test('with a long runs list the whole results menu stays in view on a laptop scr
 	await expect(page.getByText('No run label matches.')).toBeVisible();
 	await filter.fill('');
 	await expect(runs.getByRole('listitem')).toHaveCount(20);
-});
-
-test('a run tells where its water went on the catchment picture', async ({ page, owner }) => {
-	void owner;
-	const project = await seedRunnableProject(page.request, 'Where the water went');
-	await createRun(page.request, project.id, 'Baseline');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Where the water went' }).click();
-	const panel = page.getByRole('region', { name: 'Where the water went' });
-	await expect(panel).toBeInViewport();
-	await expect(panel.getByRole('img', { name: /An illustrated catchment/ })).toBeVisible();
-
-	// Eight stops, rain to outlet, each with this run's figure or why there is none.
-	const stops = panel.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 3 }) });
-	await expect(stops).toHaveCount(8);
-	await expect(stops.nth(0)).toContainText(/Rain on the catchment\s*[\d.,]+ Mm³ a year\./);
-	await expect(stops.nth(2)).toContainText(/Natural flow\s*[\d.,]+ Mm³ a year\./);
-	await expect(stops.nth(5)).toContainText('add up to nothing');
-	await expect(stops.nth(7)).toContainText(/Outflow at the outlet\s*[\d.,]+ Mm³ a year\.\s*\d+% of the natural flow reached the outlet/);
 });
 
 test('an editor writes a run note that is still there after a reload, with who changed it', async ({ page, owner }) => {

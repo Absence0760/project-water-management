@@ -645,18 +645,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: a sentence or two in plain words first (how often the river’s requirement was met, which farms fell short, and the fit when there is observed flow), then mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged, and a small bar beside each farm’s % shows its share at a glance.',
-							'**Where the water went**: the run’s yearly water balance, from rain to the outlet.',
-							'**Self-checks**: whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day** for one farm. See [[balance-check|the self-checks]].',
-							'**Curtailment**: each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites. See [[guide:curtailment-targets|Curtailment targets]].',
-							'**Hydrograph**: simulated and observed flow; natural flow is hidden until you click it in the legend. Try the log scale for low flows.',
-							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
-							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
-							'**WR2012 check**, when set up.',
+							'**Summary**: any warnings from the run first (a failed self-check, a plausibility finding and a WR2012 query all land here), then a sentence or two in plain words (how often the river’s requirement was met, which farms fell short, and the fit when there is observed flow), then mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged, and a small bar beside each farm’s % shows its share at a glance.',
 							'**Notes & evidence**: the run’s notes, and whether it is the project’s evidence run. See below.',
-							'**Flow duration**, **EWR vs outflow**, **EWR by month** and **EWR vs observed**.',
-							'**Farm detail**: dam storage and supply against demand, per farm.',
-							'**Explore outputs**: any stored daily series, by node.'
+							'**River & Reserve**: Reserve compliance by month (with a rule table), EWR against outflow beside the flow-duration curve, and EWR by month.',
+							'**Farms & users**: **Curtailment** (each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]), then **Farm detail**: dam storage and supply against demand, per farm.',
+							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend, and the log scale helps with low flows), **Calibration** with **Where the parameters came from** and the uncertainty bands, the **Runoff model** (GR4J runs: where the rain went and the stores through time), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
+							'**Dig deeper**: **Self-checks** (whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
 						]
 					},
 					{

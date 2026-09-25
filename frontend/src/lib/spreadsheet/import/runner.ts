@@ -1,6 +1,6 @@
 // The page's side of the import worker (./import.worker.ts). The import
 // dialog imports this module dynamically when a workbook is picked, so
-// neither it nor the worker (which carries SheetJS) is in any page chunk.
+// neither it nor the worker (which carries the parser) is in any page chunk.
 // One session per picked file: parse(), then any number of extract() calls
 // as the user changes options, then close(). cancel() terminates the worker
 // at once and rejects the pending call with WorkbookImportCancelled.

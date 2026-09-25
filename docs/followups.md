@@ -786,14 +786,14 @@ the suggested order (the IDs carry the detail):
       in the guard's change log: sharing the engine with the calibration
       worker (−13 KB total but +23 KB on a catchment's cold open) and
       `experimentalMinChunkSize` (1–4 KB, cold loads grow).
-- [ ] **The Runs tab still carries the whole help text** (26 KB gzip on top of
-      the page). `WaterStoryPanel` → `PictureTour` → `lib/help/guides.ts` →
-      `lib/help/content.ts`: PictureTour only needs a guide's title for its
-      stop links, but importing `guideFor` pulls in every guide and, through
-      them, the glossary. Durable fix: a small generated `id → title` map for
-      guide links (kept in sync by `guides.test.ts`), so PictureTour stops
-      importing `guides.ts`. Trigger: the next change to the Runs tab or
-      PictureTour, or the Runs tab's cold cost becoming the one to cut.
+- [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
+      gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
+      `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
+      "Where the water went" panel, which repeated figures the summary cards,
+      the self-checks' water balance and the runoff model panel already show;
+      no project-page component imports `lib/help` now. If PictureTour comes
+      back to an app page, give it a small `id → title` map for its guide links
+      first, so it stops importing `guides.ts`.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
@@ -1139,19 +1139,41 @@ role and not before it.
   - [ ] **SA-only help tag.** The WR2012 help entries are South African;
         tag them when `HelpEntry.countries` lands (international.md WP-I.12).
 - **Workbook import in the browser (WP-1.31).** Left open:
-  - [ ] **Peak memory on the largest workbooks.** `readWorkbook` now unpacks
-        only the parts it reads (`lib/spreadsheet/import/zip.ts`, 2026-09-25),
-        which took the client workbook's peak about 40% down and its read
-        time from about 2.9 s to 1.1 s (Node with SheetJS on its browser code
-        paths). What remains is SheetJS parsing the [Flow data] sheet (a
-        ~40 MB XML part for a 40-year record) into a string and one object
-        per cell, several hundred MB at the peak: fine on a laptop, marginal
-        on a phone. Durable fix: a streaming reader for the few sheets the
-        importer reads (a SAX pass over the sheet XML that keeps only the
-        named-range columns as numbers), with the parity tests as the guard.
-        Trigger: a user reports the import failing on a phone or low-memory
-        machine, or a workbook with a longer record than the client's. It
-        would also drop SheetJS from the import worker (101 KB gzip).
+  - [x] **Peak memory on the largest workbooks** (2026-09-25).
+        `readWorkbook` first unpacked only the parts it reads
+        (`lib/spreadsheet/import/zip.ts`: the client workbook's peak about
+        40% down, read 2.9 s → 1.1 s), then stopped using SheetJS altogether:
+        a streaming OOXML reader (`xml.ts` tokenizer, `workbookParts.ts`,
+        `sheet.ts`, `sharedStrings.ts`) parses each part as it inflates and
+        keeps each cell as typed-array slots, so the ~40 MB [Flow data] XML is
+        never held as a string or turned into an object per cell. Measured in
+        Node (vitest fork, SheetJS on its browser code paths for the before;
+        median of 3; the harness is a throwaway test that times
+        `readWorkbook` + `extractProject` and reads `process.resourceUsage()`):
+        client workbook peak RSS ~815 → ~330 MB, of which ~270 MB is the
+        harness holding the 87 MB file twice, so the read's own share ~550 →
+        ~60 MB; `readWorkbook` ~1.3 s → ~0.65 s. Synthetic fixture: peak
+        129 → 114 MB (harness ~95 MB), read ~50 → ~25 ms. Parity: the
+        fixture and local source-workbook tests give identical output, and a
+        new cell-by-cell comparison with the SheetJS reader
+        (`readerParity.test.ts`, and on the client workbooks in
+        `sourceWorkbooks.test.ts`) finds no difference. The import worker
+        101 → 25 KB gzip (the bundle guard's spreadsheet-worker ceiling
+        107 → 95 KB, now the export worker's).
+  - [ ] **Strings SheetJS and openpyxl decode differently.** The reader keeps
+        SheetJS's string decoding, so the import reads what it read before.
+        Two cases differ from openpyxl, and so from the Python importer the
+        port must match: Excel's `_xHHHH_` escapes (SheetJS turns
+        `_x000D_` into a carriage return, openpyxl leaves the text as
+        written) and a formula's cached text (`t="str"`, which SheetJS
+        entity-decodes twice: `a&amp;amp;b` reads `a&b`, openpyxl `a&amp;b`).
+        Checked with a hand-made workbook through openpyxl 3.1 in read-only
+        mode. Neither occurs in a cell the importer reads in the workbooks
+        seen so far (the parity tests are green). Durable fix: decode as
+        openpyxl does in `sheet.ts` and `sharedStrings.ts` (one decode, no
+        `_xHHHH_` handling), with a Python-parity fixture for each case.
+        Trigger: a workbook whose names or labels carry either (a line break
+        typed as CR+LF in a header, a formula-built farm name with an `&`).
   - [x] **The notes and unmapped report are kept** (2026-09-25). The import
         dialog sends them beside the document (`importReport` on
         `POST /projects/import`, capped by zod) and they are stored in the
@@ -1161,10 +1183,12 @@ role and not before it.
         through `GET /projects/:id/import-report` and on the Overview's
         Import record, both lists collapsed at first; not dismissible, since
         it is the audit trail. Not in `export.json` (api.md § Import report).
-  - [ ] **Measured in a real browser.** The memory figures above are Node
-        with SheetJS on its browser code paths; no one has profiled the
-        client workbook's import in Chrome or Safari, or on a phone. Trigger:
-        with the peak-memory item above.
+  - [ ] **Measured in a real browser.** The memory figures above are Node;
+        no one has profiled the client workbook's import in Chrome or Safari,
+        or on a phone (the e2e tests run the streaming reader in Chromium on
+        the synthetic workbook only). Trigger: a user reports the import
+        failing on a phone or low-memory machine, or a workbook with a longer
+        record than the client's.
 
 ## Pipelines
 
