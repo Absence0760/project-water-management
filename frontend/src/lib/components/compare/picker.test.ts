@@ -54,7 +54,14 @@ describe('picker defaults', () => {
 
 	it('labels runs, falling back to "Untitled run"', () => {
 		const fmt = (iso: string) => iso.slice(0, 10);
-		expect(runOptionLabel(run('r', 'Baseline'), fmt)).toBe('Baseline · 2026-09-23');
-		expect(runOptionLabel(run('r'), fmt)).toBe('Untitled run · 2026-09-23');
+		expect(runOptionLabel(run('r', 'Baseline'), fmt)).toBe('Baseline · 2026-09-23 · 2000–2020');
+		expect(runOptionLabel(run('r'), fmt)).toBe('Untitled run · 2026-09-23 · 2000–2020');
+	});
+
+	it('adds the Runs list tags that apply, in its order', () => {
+		const fmt = (iso: string) => iso.slice(0, 10);
+		const tagged: RunMeta = { ...run('r', 'Dam raise'), evidence: 'current', pinned: true, legacy: true };
+		expect(runOptionLabel(tagged, fmt, true)).toBe('Dam raise · 2026-09-23 · 2000–2020 · latest · evidence · pinned · workbook comparison');
+		expect(runOptionLabel({ ...run('r', 'Old'), evidence: 'past' }, fmt)).toBe('Old · 2026-09-23 · 2000–2020 · former evidence');
 	});
 });

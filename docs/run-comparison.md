@@ -12,7 +12,11 @@ Open `/compare?project=<id>` (the **Compare runs** link on the Runs tab's
 runs list; the page links **Back to runs**). The page starts on that
 project's **previous run (A — baseline)** and **latest run (B — changed)**.
 Each side has its own project and run picker, so either side can point at
-another project. Switching a side to another project picks that project's
+another project. Each run option reads like a Runs list row, as text
+(`runOptionLabel` in `compare/picker.ts`): label · when it ran · the years it
+covers, then the tags that apply (latest, evidence or former evidence,
+pinned, workbook comparison), e.g. "Baseline · 2026-09-23 15:06 · 1981–2025 ·
+latest · pinned". Switching a side to another project picks that project's
 newest run that isn't already the other side. The URL holds the choice
 (`/compare?a=<projectId>:<runId>&b=<projectId>:<runId>`), so a comparison can be
 bookmarked or shared with anyone who can see both projects.
