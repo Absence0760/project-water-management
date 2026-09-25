@@ -240,10 +240,12 @@ Besides the email settings, `lambda.tf` sets `DATABASE_URL` (as `water_app`,
 `NODE_EXTRA_CA_CERTS` (the RDS CA bundle).
 
 The release package (`infra/scripts/package-lambdas.sh`) bundles `nodemailer`
-into `dist/lambda.mjs` (~440 KB zipped, ~1.8 MB unzipped) but leaves
-`@aws-sdk/*` external, so the SES client comes from the `nodejs24.x` runtime.
-(A plain `pnpm build` bundles it too.) Both mail transports are loaded lazily,
-only for the transport in use.
+and `@aws-sdk/client-sesv2` into the API's `lambda.mjs` (~660 KB zipped,
+~3.2 MB unzipped), so production sends mail with the lockfile's pinned SDK, not
+the one the `nodejs24.x` runtime happens to ship. Both mail transports are
+loaded lazily, only for the transport in use. The migrate Lambda is the
+exception: it imports `@aws-sdk/client-secrets-manager` from the runtime on
+purpose (`backend/src/lambda-migrate.ts`).
 
 ## 3. Terraform
 

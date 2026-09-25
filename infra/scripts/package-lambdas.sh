@@ -15,9 +15,11 @@
 #     migrations/*.sql                read by scripts/migrate.ts from <dirname>/../migrations
 #     rds-global-bundle.pem
 #
-# @aws-sdk/* stays external: the nodejs24.x runtime provides it. The migrate
-# Lambda uses it for Secrets Manager and the API Lambda for SES v2 (email), so
-# in production both run the runtime's SDK version, not the lockfile's.
+# The API bundle includes @aws-sdk/client-sesv2 (email), so production sends mail
+# with the lockfile's pinned SDK, not whatever the nodejs24.x runtime ships. The
+# migrate Lambda keeps @aws-sdk/* external: it imports Secrets Manager from the
+# runtime on purpose (see backend/src/lambda-migrate.ts), and it isn't a
+# backend dependency.
 set -euo pipefail
 
 repo_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -35,7 +37,7 @@ banner="import{createRequire}from'module';const require=createRequire(import.met
 esbuild() {
   pnpm --dir "$backend" exec esbuild "$@" \
     --bundle --platform=node --target=node24 --format=esm \
-    --external:'@aws-sdk/*' --banner:js="$banner" --log-level=warning
+    --banner:js="$banner" --log-level=warning
 }
 
 rm -f "$out/lambda.zip" "$out/migrate.zip"
@@ -47,7 +49,7 @@ cp "$ca" "$stage/api/rds-global-bundle.pem"
 (cd "$stage/api" && zip -q -9 -X -r "$out/lambda.zip" .)
 
 # --- Migrate -----------------------------------------------------------------
-esbuild "$backend/src/lambda-migrate.ts" --outfile="$stage/migrate/dist/lambda-migrate.mjs"
+esbuild "$backend/src/lambda-migrate.ts" --external:'@aws-sdk/*' --outfile="$stage/migrate/dist/lambda-migrate.mjs"
 cp "$backend"/migrations/*.sql "$stage/migrate/migrations/"
 cp "$ca" "$stage/migrate/rds-global-bundle.pem"
 (cd "$stage/migrate" && zip -q -9 -X -r "$out/migrate.zip" .)

@@ -581,9 +581,11 @@ the suggested order (the IDs carry the detail):
 - [ ] **Client catchment regression on real data:** the suite has a commented
       deviation list but has never run against the real workbook. Re-extract
       it and run `pnpm test:engine`; a failure prints the actual difference
-      next to its bound. Then load it (`pnpm seed:demo`, under
-      `systemd-run --user --scope -p MemoryMax=4G`: the workbook has crashed
-      the laptop before), make a run, and confirm in the Self-checks panel
+      next to its bound. Then load it (`pnpm seed:demo`; the workbook has
+      crashed a laptop before, so cap its memory: on Linux run it under
+      `systemd-run --user --scope -p MemoryMax=4G`; macOS has no per-process
+      cap, so close other heavy apps and watch Memory Pressure in Activity
+      Monitor, stopping it with Ctrl-C if it turns red), make a run, and confirm in the Self-checks panel
       that every check passes, every residual is float noise, and the yearly
       water balance is physically sensible (runoff coefficient, consumptive
       use against demand, storage change). This is the first time the
