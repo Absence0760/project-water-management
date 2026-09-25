@@ -14,7 +14,7 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
 	if (e.data.type !== 'start') return;
 	try {
 		const { input, filename } = await collectWorkbookInput(e.data.request, (...a) => fetch(...a), (progress) => post({ type: 'progress', progress }));
-		const bytes = buildWorkbook(input);
+		const bytes = await buildWorkbook(input);
 		post({ type: 'done', bytes, filename }, [bytes.buffer]);
 	} catch (err) {
 		post({ type: 'error', message: err instanceof Error ? err.message : String(err) });

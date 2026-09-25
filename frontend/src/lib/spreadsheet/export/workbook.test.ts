@@ -1,5 +1,5 @@
 import type { RunSummary } from '@water-management/engine';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { parseCsv } from './csv';
 import { annualVolumeRows, buildWorkbook, dailyCells, dailyStub, inputRows, streamDailySheet, type DailyTable, type WorkbookInput } from './workbook';
@@ -109,7 +109,10 @@ const read = (bytes: Uint8Array) => XLSX.read(bytes, { type: 'array', cellNF: tr
 const aoa = (ws: XLSX.WorkSheet) => XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null, blankrows: true });
 
 describe('buildWorkbook', () => {
-	const wb = read(buildWorkbook(input()));
+	let wb: XLSX.WorkBook;
+	beforeAll(async () => {
+		wb = read(await buildWorkbook(input()));
+	});
 
 	it('names the sheets in order, Excel-safe and unique', () => {
 		expect(wb.SheetNames).toEqual([
@@ -227,13 +230,13 @@ describe('buildWorkbook', () => {
 		expect(inputs[area + 2]!.slice(0, 3)).toEqual(["'=Upper farm", 'Lucerne', 20000]);
 	});
 
-	it('marks a legacy run on the summary sheet, as the CSV does', () => {
-		const legacy = read(buildWorkbook(input({ summaryCsv: '# runoff_model=legacy; workbook comparison only; not evidence (audit H1)\r\n' + summaryCsv })));
+	it('marks a legacy run on the summary sheet, as the CSV does', async () => {
+		const legacy = read(await buildWorkbook(input({ summaryCsv: '# runoff_model=legacy; workbook comparison only; not evidence (audit H1)\r\n' + summaryCsv })));
 		expect(aoa(legacy.Sheets['Summary']!)[0]![0]).toBe('# runoff_model=legacy; workbook comparison only; not evidence (audit H1)');
 	});
 
-	it('copes with a run without an EWR grid, calibration or catchment series', () => {
-		const bare = read(buildWorkbook(input({ summary: { farms: [], warnings: [] } as unknown as RunSummary, catchment: null, nodes: [], settings: null, model: null })));
+	it('copes with a run without an EWR grid, calibration or catchment series', async () => {
+		const bare = read(await buildWorkbook(input({ summary: { farms: [], warnings: [] } as unknown as RunSummary, catchment: null, nodes: [], settings: null, model: null })));
 		expect(bare.SheetNames).not.toContain('Catchment');
 		expect(aoa(bare.Sheets['EWR grid']!)[1]![0]).toMatch(/before engine 0\.3\.0/);
 		expect(aoa(bare.Sheets['Inputs']!)[1]![0]).toBe('Not recorded for this run');
@@ -260,7 +263,7 @@ describe('daily sheets streamed into SheetJS XML', () => {
 		expect(() => streamDailySheet('<worksheet><sheetData><row r="1"></row></sheetData></worksheet>', catchment)).toThrow(/unexpected sheet XML/);
 	});
 
-	it('handles thousands of rows and reads back every value', () => {
+	it('handles thousands of rows and reads back every value', async () => {
 		const days = 5000;
 		const t: DailyTable = {
 			name: 'Long',
@@ -271,7 +274,7 @@ describe('daily sheets streamed into SheetJS XML', () => {
 				values: Array.from({ length: days }, (_, i) => (i % 97 === c ? null : Math.sin(i * (c + 1)) * 1e4))
 			}))
 		};
-		const wb = read(buildWorkbook(input({ catchment: t, nodes: [] })));
+		const wb = read(await buildWorkbook(input({ catchment: t, nodes: [] })));
 		const rows = aoa(wb.Sheets['Catchment']!);
 		expect(rows).toHaveLength(days + 1);
 		for (let c = 0; c < 5; c++) expect(rows.slice(1).map((r) => r[c + 1])).toEqual(t.columns[c]!.values);
@@ -284,4 +287,74 @@ describe('inputRows', () => {
 		const rows = inputRows({ a: 1, b: [1, 2], c: { d: 'x', e: [{ f: true }] }, g: null }, null);
 		expect(rows).toEqual([['Settings the run used'], ['a', 1], ['b', 1, 2], ['c.d', 'x'], ['c.e[1].f', 'yes'], ['g', null]]);
 	});
+});
+
+/** A deterministic multi-year run shaped like a real one: many zero days, values at full double precision. */
+function syntheticRun(years: number, farms: number): { catchment: DailyTable; nodes: DailyTable[] } {
+	let seed = 42;
+	const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+	const days = Math.round(years * 365.25);
+	const table = (name: string, cols: number): DailyTable => ({
+		name,
+		startDate: '1990-10-01',
+		columns: Array.from({ length: cols }, (_, c) => ({
+			header: `Column ${c} (m³/day)`,
+			unit: c % 7 === 3 ? 'mm' : 'm³/day',
+			values: Array.from({ length: days }, (_, i) => (c % 4 === 0 && i % 3 ? 0 : rnd() < 0.35 ? 0 : (1 + Math.sin(i / 58)) * rnd() * 10 ** (1 + (c % 4))))
+		}))
+	});
+	return { catchment: table('Catchment', 19), nodes: Array.from({ length: farms }, (_, f) => table(`Farm ${f + 1}`, 32)) };
+}
+
+describe('the zip container', () => {
+	/** The zip's parts by name, uncompressed (SheetJS's own container reader). */
+	const parts = (bytes: Uint8Array) => {
+		const cfb = XLSX.CFB.read(bytes, { type: 'array' });
+		const out = new Map<string, string>();
+		cfb.FullPaths.forEach((p: string, i: number) => {
+			const f = cfb.FileIndex[i];
+			if (f.type === 2 && f.content?.length) out.set(p.slice(cfb.FullPaths[0].length), new TextDecoder().decode(f.content));
+		});
+		return out;
+	};
+
+	it('is a deflated OOXML zip whose streamed sheets are, uncompressed, exactly what SheetJS writes', async () => {
+		const t = farm('F');
+		const bytes = await buildWorkbook(input({ catchment: null, nodes: [t] }));
+		// Every local header says method 8 (deflate).
+		const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+		let at = 0;
+		let entries = 0;
+		while (view.getUint32(at, true) === 0x04034b50) {
+			expect(view.getUint16(at + 8, true)).toBe(8);
+			at += 30 + view.getUint16(at + 26, true) + view.getUint32(at + 18, true);
+			entries++;
+		}
+		expect(entries).toBeGreaterThan(5);
+		const p = parts(bytes);
+		expect([...p.keys()]).toEqual(expect.arrayContaining(['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet2.xml']));
+		// Sheet 2 (the farm) holds the same XML SheetJS writes from the full cells.
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x']]), 'Summary');
+		XLSX.utils.book_append_sheet(wb, dailyCells(t), 'F');
+		const full = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false })), { type: 'array' });
+		const expected = new TextDecoder().decode(XLSX.CFB.find(full, '/xl/worksheets/sheet2.xml').content);
+		expect(p.get('xl/worksheets/sheet2.xml')!.replace(/ s="\d+"/g, '')).toBe(expected.replace(/ s="\d+"/g, ''));
+	});
+
+	it('keeps a multi-year run small (real deflate) and reads every cell back', async () => {
+		// 10 years, catchment + 3 farms: ~1.3 million cells.
+		const run = syntheticRun(10, 3);
+		const bytes = await buildWorkbook(input(run));
+		const raw = [...parts(bytes).values()].reduce((n, x) => n + x.length, 0);
+		// Measured 4.0 MB: the parts are 17.6 MB uncompressed, and SheetJS own deflate makes ~8.6 MB of the same cells.
+		expect(bytes.length).toBeLessThan(4_600_000);
+		expect(bytes.length).toBeLessThan(raw / 4);
+		const wb = read(bytes);
+		for (const t of [run.catchment, ...run.nodes]) {
+			const rows = aoa(wb.Sheets[t.name]!);
+			expect(rows).toHaveLength(t.columns[0]!.values.length + 1);
+			t.columns.forEach((c, i) => expect(rows.slice(1).map((r) => r[i + 1])).toEqual(c.values));
+		}
+	}, 60_000);
 });
