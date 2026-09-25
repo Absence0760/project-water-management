@@ -823,6 +823,15 @@ the suggested order (the IDs carry the detail):
       `network/attribution.ts` sizes the noise by the dams at both ends of the
       day's transfers too, the same `RESIDUE` rule as 0.19.2. Pinned in
       `run.invariants.test.ts` beside the 0.19.1–0.19.2 seeds.
+- [x] **Order invariance: Reserve rule tables (engine 0.24.1, 2026-09-25).**
+      The first 20 000-case soak with rule tables in the fuzz generator
+      failed on 18 seeds per model. Two tables for one site were resolved by
+      list order (now neither is used, with a warning; the API already
+      refused such a list), and a site's natural flow summed in display order
+      moved the percentile across a flat stretch of the table's natural
+      curve (now summed in node-id order, and a flow within 1e-12 of a curve
+      point counts as reaching it). Seeds 3238, 6191, 17126, 18472 pinned in
+      `run.invariants.test.ts`; the flat-curve case in `assurance.test.ts`.
 - [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,

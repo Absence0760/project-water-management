@@ -138,6 +138,12 @@ describe('engine invariants on random networks', () => {
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		// 0.21.1: a transfer source at its reserve sends a one-ulp residue in one node order (seed 14313).
+		// 0.24.1: Reserve rule tables. Two tables for one site were resolved by list order, and a site's
+		// natural flow summed in display order moved the percentile across a flat stretch of the curve.
+		for (const [seed, opts] of [[3238, {}], [6191, {}], [17126, { runoffModel: 'gr4j' as const }], [18472, { runoffModel: 'gr4j' as const }]] as const) {
+			const input = randomInput(seed, opts);
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
 		expect(checkOrderInvariance(randomInput(14313), runModel(randomInput(14313)), 14313), 'seed 14313').toBeNull();
 		for (const [seed, opts] of [[9051, {}], [11240, { runoffModel: 'gr4j' as const }], [15426, { runoffModel: 'gr4j' as const }]] as const) {
 			const input = randomInput(seed, opts);

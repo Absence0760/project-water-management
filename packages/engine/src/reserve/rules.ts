@@ -197,7 +197,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 /**
  * Stored rule tables as the run uses them: anything that isn't an object or
  * fails ewrRuleTableIssues is dropped with a warning naming its site; a
- * second table for a site already listed is dropped; `natural` is ignored
+ * site listed more than once has none of its tables used (order-independent); `natural` is ignored
  * unless the natural source is the table. The site's existence is checked by
  * the run, which knows the network.
  */
@@ -207,8 +207,10 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 		warnings.push('EWR rule tables are not a list; ignored');
 		return [];
 	}
-	const out: EwrRuleTable[] = [];
-	const seen = new Set<string>();
+	// Two usable tables for one site: which is meant can't be told, and keeping the first made
+	// the result depend on the list's order (fuzz seeds 3238 …, engine 0.24.1). Neither is used.
+	// The API refuses such a list (ewrRuleListIssues); this covers settings that bypassed it.
+	const usable: EwrRuleTable[] = [];
 	for (const r of raw.slice(0, EWR_RULE_TABLES_MAX)) {
 		if (!isObj(r)) continue;
 		const t: EwrRuleTable = {
@@ -228,12 +230,19 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			warnings.push(`EWR rule table for ${where} skipped: it isn't usable (${issues.map((i) => i.message).join(' ')})`);
 			continue;
 		}
+		usable.push(t);
+	}
+	const count = new Map<string, number>();
+	for (const t of usable) count.set(t.siteNodeId ?? '', (count.get(t.siteNodeId ?? '') ?? 0) + 1);
+	const out: EwrRuleTable[] = [];
+	const warned = new Set<string>();
+	for (const t of usable) {
 		const key = t.siteNodeId ?? '';
-		if (seen.has(key)) {
-			warnings.push(`a second EWR rule table for ${where} is ignored: each site has one`);
+		if ((count.get(key) ?? 0) > 1) {
+			if (!warned.has(key)) warnings.push(`${count.get(key)} EWR rule tables for ${t.siteNodeId === null ? 'the outlet' : `site ${t.siteNodeId}`}: none is used, because each site has one`);
+			warned.add(key);
 			continue;
 		}
-		seen.add(key);
 		if (t.naturalSource === 'run') t.natural = null;
 		out.push(t);
 	}

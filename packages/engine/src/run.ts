@@ -85,7 +85,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.24.0';
+export const ENGINE_VERSION = '0.24.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -1053,7 +1053,12 @@ function assessEwrRules(
 			continue;
 		}
 		const natural = new Float64Array(days);
-		for (const f of siteOf.get(node)?.farms ?? []) {
+		// Summed in node-id order, not display order, so a month's natural volume (and the
+		// percentile and requirement it selects) is bit-identical however the network is listed:
+		// on a flat stretch of the table's natural curve a one-ulp difference moved the
+		// percentile from one % point to the next (fuzz seed 18472, engine 0.24.1).
+		const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+		for (const f of upstreamFarms) {
 			const r = sim.nodes[f]!.runoff;
 			for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
 		}

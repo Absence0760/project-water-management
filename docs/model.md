@@ -1570,8 +1570,14 @@ test needs it. The run also stores each site's requirement as a daily series,
 complete months), so it can be charted and downloaded beside the flow.
 
 **Warnings.** A table that isn't usable (validation below) is skipped; so is
-one whose site is missing or isn't the outlet or a gauge, and a second table
-for the same site. Plausibility notes don't block a table but are repeated as
+one whose site is missing or isn't the outlet or a gauge. When a site has
+two usable tables (the API refuses that; stored settings can still carry it),
+**neither** is used, from engine 0.24.1: keeping the first made the result depend
+on the list's order. **Order invariance** (engine ≥ 0.24.1): a site's natural
+flow is summed over its farms in node-id order, and a natural flow within 1e-12
+of a curve point counts as reaching it, so a one-ulp difference can't move the
+percentile across a flat stretch of the curve (equal natural flow at several %
+points). Plausibility notes don't block a table but are repeated as
 run warnings: an EWR row that rises with the % point, a natural row that rises
 (its running minimum is used), and an EWR above the natural flow at a point
 (`table` source), which even natural flow can't meet. A calendar month the
