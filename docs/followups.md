@@ -10,8 +10,15 @@ Tick items off (or move them into an issue) as they are done.
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and
       logger volumes (commit 4f931bb onward). The tree no longer has them,
-      but history does. Scrub them (`git filter-repo --replace-text`, as for
-      WP-1.7) before the repo is made public.
+      but history does. On 2026-09-25 a wider sweep also took out of the tree
+      the calibration window and logger dates, fit scores on client data, the
+      gauge and logger site labels, record lengths, farm/node/transfer counts,
+      run timings and sizes, workbook cell values and the blank workbook's
+      catchment area (docs, test fixtures, help text). History still has all
+      of it. Scrub it (`git filter-repo --replace-text`, as for WP-1.7, with
+      the value list kept in `infra-secrets/water-management/`) before the
+      repo is made public. `pnpm check:terms` is a no-op until that terms
+      list exists.
 
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
