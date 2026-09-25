@@ -140,6 +140,55 @@ describe('run daily export', () => {
 	});
 });
 
+describe('all-farms daily export', () => {
+	const base = () => `/projects/${projectId}/runs/${runId}/export/farms.csv`;
+	/** One column of a farm's own daily CSV, by header. */
+	async function farmColumn(nodeId: string, header: string) {
+		const rows = lines((await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv?nodeId=${nodeId}`)).text);
+		const i = rows[0]!.split(',').indexOf(header);
+		expect(i, header).toBeGreaterThan(0);
+		return rows.slice(1).map((r) => r.split(',')[i]);
+	}
+	/** The farm cells of a farms.csv data row (numbers only, so a plain split is safe). */
+	const cells = (row: string) => row.split(',').slice(1);
+
+	// The run's farm order is upstream first (Farm 2 drains into Farm "upper").
+	it('puts every farm side by side in the run order, like [Fragmented flow] (I)', async () => {
+		const res = await download(viewer, `${base()}?key=runoff`);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-disposition')).toMatch(/_baseline_all-farms_runoff_daily_\d{4}-\d{2}-\d{2}\.csv"$/);
+		expect(res.text.startsWith(BOM)).toBe(true);
+		const rows = lines(res.text);
+		expect(rows[0]).toBe('date,Farm 2 [I] (m³/day),"Farm, ""upper"" [I] (m³/day)"');
+		expect(rows).toHaveLength(DAYS + 1);
+		expect(rows[1]!.startsWith('2024-02-15,')).toBe(true);
+		// The same numbers as each farm's own daily CSV, column I.
+		const upper = await farmColumn(farm.id, 'Farm runoff [I] (m³/day)');
+		const lower = await farmColumn(farm2.id, 'Farm runoff [I] (m³/day)');
+		expect(rows.slice(1).map(cells)).toEqual(lower.map((l, d) => [l, upper[d]]));
+		expect(upper.some((v) => Number(v) > 0)).toBe(true); // not a table of zeros
+	});
+
+	it('exports the fragmented EWR (Y) the same way', async () => {
+		const rows = lines((await download(owner, `${base()}?key=ewr`)).text);
+		expect(rows[0]).toBe('date,Farm 2 [Y] (m³/day),"Farm, ""upper"" [Y] (m³/day)"');
+		const upper = await farmColumn(farm.id, 'EWR share [Y] (m³/day)');
+		const lower = await farmColumn(farm2.id, 'EWR share [Y] (m³/day)');
+		expect(rows.slice(1).map(cells)).toEqual(lower.map((l, d) => [l, upper[d]]));
+		// A constant monthly EWR split by share: positive every day for both farms.
+		expect(upper.every((v) => Number(v) > 0) && lower.every((v) => Number(v) > 0)).toBe(true);
+	});
+
+	it('honours a from/to window and rejects a bad key or window', async () => {
+		const rows = lines((await download(owner, `${base()}?key=runoff&from=2024-02-28&to=2024-03-01`)).text);
+		expect(rows.slice(1).map((r) => r.slice(0, 10))).toEqual(['2024-02-28', '2024-02-29', '2024-03-01']);
+		expect((await download(owner, base())).status).toBe(400); // key is required
+		expect((await download(owner, `${base()}?key=natural_flow`)).status).toBe(400); // a catchment series, not a farm one
+		expect((await download(owner, `${base()}?key=runoff&from=2024-03-02&to=2024-03-01`)).status).toBe(400);
+		expect((await download(owner, `${base()}?key=runoff&from=2030-01-01`)).status).toBe(400);
+	});
+});
+
 describe('run summary export', () => {
 	it('writes the farm table, catchment and calibration blocks', async () => {
 		const res = await download(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
@@ -212,6 +261,27 @@ describe('legacy run CSV comment (audit H1)', () => {
 	});
 });
 
+describe('all-farms export after the network changed', () => {
+	it('uses a renamed farm\'s current name and drops a deleted farm (its series went with it)', async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Changed network' });
+		const pid = body.project.id;
+		const out = node('Outlet', null);
+		const a = node('Farm A', out.id);
+		const b = node('Farm B', out.id);
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		const put = (nodes: unknown[]) => owner.call('PUT', `/projects/${pid}/model`, { nodes, crops: [], cropAreas: [], transfers: [] });
+		expect((await put([out, a, b])).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Before' });
+		expect(run.status).toBe(201);
+		const path = `/projects/${pid}/runs/${run.body.run.id}/export/farms.csv?key=runoff`;
+		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A [I] (m³/day),Farm B [I] (m³/day)'); // positive control
+
+		expect((await put([out, { ...a, name: 'Farm A (renamed)' }])).status).toBe(200);
+		expect(lines((await download(owner, path)).text)[0]).toBe('date,Farm A (renamed) [I] (m³/day)');
+	});
+});
+
 describe('input series export', () => {
 	it('exports one series as date,value with empty cells for missing days', async () => {
 		const res = await download(viewer, `/projects/${projectId}/series/${rainId}/export.csv`);
@@ -266,6 +336,7 @@ describe('export access', () => {
 		const paths = [
 			`/projects/${projectId}/runs/${runId}/export/daily.csv`,
 			`/projects/${projectId}/runs/${runId}/export/summary.csv`,
+			`/projects/${projectId}/runs/${runId}/export/farms.csv?key=runoff`,
 			`/projects/${projectId}/series/${rainId}/export.csv`,
 			`/projects/${projectId}/export.json`
 		];

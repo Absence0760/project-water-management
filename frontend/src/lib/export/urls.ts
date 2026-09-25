@@ -31,6 +31,9 @@ export function exportUrls(baseUrl: string) {
 		/** Every daily series of one node, or of the catchment when `nodeId` is null. */
 		runDaily: (projectId: string, runId: string, nodeId: string | null = null, w: DailyWindow = {}) =>
 			`${p(projectId)}/runs/${enc(runId)}/export/daily.csv${query({ nodeId, from: w.from, to: w.to })}`,
+		/** One farm series (`key`, e.g. runoff = I, ewr = Y) for every farm of the run, a column per farm. */
+		runFarms: (projectId: string, runId: string, key: string, w: DailyWindow = {}) =>
+			`${p(projectId)}/runs/${enc(runId)}/export/farms.csv${query({ key, from: w.from, to: w.to })}`,
 		runSummary: (projectId: string, runId: string) => `${p(projectId)}/runs/${enc(runId)}/export/summary.csv`,
 		series: (projectId: string, seriesId: string, w: DailyWindow = {}) =>
 			`${p(projectId)}/series/${enc(seriesId)}/export.csv${query({ from: w.from, to: w.to })}`,
@@ -42,18 +45,35 @@ export function exportUrls(baseUrl: string) {
 export type ExportUrls = ReturnType<typeof exportUrls>;
 
 /**
- * Menu entries for one run: the summary sheet, the catchment table, then one
- * daily table per node (in the order given — pass them in network order).
+ * Menu entries for one run: the summary sheet, the catchment table, the
+ * workbook's two fragmentation sheets (all farms side by side, only when the
+ * run has farms), then one daily table per node (in the order given — pass
+ * them in network order).
  */
 export function runDownloadItems(
 	urls: ExportUrls,
 	projectId: string,
 	runId: string,
-	nodes: readonly { id: string; name: string }[] = []
+	nodes: readonly { id: string; name: string }[] = [],
+	hasFarms = false
 ): DownloadItem[] {
 	return [
 		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-farm table, catchment and calibration' },
 		{ label: 'Daily series — catchment (CSV)', url: urls.runDaily(projectId, runId), hint: 'Natural flow, outflow, EWR, rain…' },
+		...(hasFarms
+			? [
+					{
+						label: 'Fragmented flow — all farms (CSV)',
+						url: urls.runFarms(projectId, runId, 'runoff'),
+						hint: 'Each farm’s runoff [I], a column per farm, like the workbook sheet'
+					},
+					{
+						label: 'Fragmented EWR — all farms (CSV)',
+						url: urls.runFarms(projectId, runId, 'ewr'),
+						hint: 'Each farm’s EWR share [Y], a column per farm, like the workbook sheet'
+					}
+				]
+			: []),
 		...nodes.map((n) => ({ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) }))
 	];
 }

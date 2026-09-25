@@ -771,6 +771,9 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
+Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
+all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
+
 ### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
 
 **Why.** Invasive alien trees and commercial forestry (a streamflow reduction

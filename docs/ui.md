@@ -353,7 +353,10 @@ The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
 workbook's FarmTemplate order, the letter in each header
 (`Irrigation supplied [G] (m³/day)`), the working columns between them and the
-balance check `[V]` next to outflow. The **summary CSV** adds the self-checks,
+balance check `[V]` next to outflow. **Fragmented flow — all farms** and
+**Fragmented EWR — all farms** (only when the run has farms) put one series
+of every farm side by side, a date column then a column per farm, like
+the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. The **summary CSV** adds the self-checks,
 the water balance per water year and a column guide giving each letter's
 formula ([api.md § Export](./api.md)).
 
