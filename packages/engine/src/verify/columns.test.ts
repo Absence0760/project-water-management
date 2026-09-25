@@ -46,7 +46,7 @@ const cat = (out: ModelOutput, key: string) => out.series.find((s) => s.nodeId =
 
 describe('GR4J_COLUMNS', () => {
 	// X2 ≠ 0 so the exchange series is stored too.
-	const out = runModel(input({ runoffModel: 'gr4j', gr4j: { x1: 250, x2: -0.4, x3: 70, x4: 2.2 } }));
+	const out = runModel(input({ runoffModel: 'gr4j', gr4j: { x1: 250, x2: -0.4, x3: 70, x4: 2.2, warmupDays: 365 } }));
 
 	it('names every catchment series GR4J stores for the trace, once', () => {
 		const keys = GR4J_COLUMNS.map((c) => c.key);
