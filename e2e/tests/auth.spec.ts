@@ -22,7 +22,8 @@ test('register lands on the project list, sign out and back in', async ({ page }
 	await expect(page.getByText('You have no projects yet.')).toBeVisible();
 	await expect(page.getByRole('banner')).toContainText('New User');
 
-	await page.getByRole('button', { name: 'Sign out' }).click();
+	await page.getByRole('button', { name: 'Account menu for New User' }).click();
+	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 	await expect(page).toHaveURL('/login');
 	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
@@ -31,6 +32,39 @@ test('register lands on the project list, sign out and back in', async ({ page }
 	await expect(page).toHaveURL(/\/login\?next=/);
 
 	await signInThroughForm(page, email, PASSWORD);
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(page).toHaveURL('/');
+});
+
+test('"Sign out everywhere" from the account menu also signs out another device', async ({ page, owner, browser }) => {
+	// A second "device": its own browser context and cookie jar, signed in
+	// through the login form as the same account.
+	const otherDevice = await browser.newContext();
+	const otherPage = await otherDevice.newPage();
+	await otherPage.goto('/login');
+	await signInThroughForm(otherPage, owner.email, owner.password);
+	await expect(otherPage.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+	await page.goto('/');
+	await page.getByRole('banner').getByRole('button').click();
+	page.once('dialog', (d) => void d.accept());
+	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
+	await expect(page).toHaveURL('/login');
+
+	// The other device's session is really revoked: its next request is rejected.
+	await otherPage.goto('/');
+	await expect(otherPage).toHaveURL(/\/login\?next=/);
+
+	await otherDevice.close();
+});
+
+test('cancelling "Sign out everywhere" leaves the session signed in', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	await page.getByRole('banner').getByRole('button').click();
+	page.once('dialog', (d) => void d.dismiss());
+	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
+
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');
 });

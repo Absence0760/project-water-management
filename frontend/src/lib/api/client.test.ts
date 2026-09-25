@@ -23,6 +23,15 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ email: 'a@b.c', password: 'pw' });
 	});
 
+	it('posts to /auth/logout-everywhere and returns undefined (204)', async () => {
+		const f = mockFetch(204);
+		const api = createApi('http://x', f);
+		await expect(api.auth.logoutEverywhere()).resolves.toBeUndefined();
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/logout-everywhere');
+		expect(init.method).toBe('POST');
+	});
+
 	it('returns the new run with the ids of runs the server trimmed (none from an older server)', async () => {
 		const run = { id: 'r21', label: 'x' };
 		const trimmed = createApi('', mockFetch(201, { run, removedRunIds: ['r1'] }));

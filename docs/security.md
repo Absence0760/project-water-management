@@ -244,9 +244,7 @@ readable by anyone. The rules:
 
 - No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
   rule. (Phase 7)
-- No password change while signed in (use "Forgot password"), and no
-  "Sign out everywhere" button in the UI yet — the endpoint exists
-  (`POST /auth/logout-everywhere`). (Phase 7)
+- No password change while signed in (use "Forgot password"). (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build
