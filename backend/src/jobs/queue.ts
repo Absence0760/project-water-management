@@ -50,22 +50,27 @@ export interface EnqueueOptions {
  * after the commit (transport.ts `wakeWorker`).
  */
 export async function enqueueJob(db: Db, o: EnqueueOptions): Promise<{ job: JobMeta; created: boolean }> {
-	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO job (project_id, kind, payload, dedupe_key, run_after, max_attempts, acting_user_id)
-		 VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5), $6, app_current_user_id())
-		 ON CONFLICT (project_id, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued', 'failed') DO NOTHING
-		 RETURNING id`,
-		[o.projectId, o.kind, JSON.stringify(o.payload ?? {}), o.dedupeKey ?? null, o.delaySeconds ?? 0, o.maxAttempts ?? 5]
-	);
-	const created = rows.length > 0;
-	const { rows: job } = await db.query<JobMeta>(
-		created
-			? `SELECT ${JOB_META} FROM job j JOIN app_user u ON u.id = j.acting_user_id WHERE j.id = $1`
-			: `SELECT ${JOB_META} FROM job j JOIN app_user u ON u.id = j.acting_user_id
-			   WHERE j.project_id = $1 AND j.dedupe_key = $2 AND j.status IN ('queued', 'failed')`,
-		created ? [rows[0]!.id] : [o.projectId, o.dedupeKey]
-	);
-	return { job: job[0]!, created };
+	// Two tries: the pending job we collided with may be claimed (so no longer
+	// pending) between the insert and the read, and then the insert succeeds.
+	for (let attempt = 0; attempt < 2; attempt++) {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO job (project_id, kind, payload, dedupe_key, run_after, max_attempts, acting_user_id)
+			 VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5), $6, app_current_user_id())
+			 ON CONFLICT (project_id, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued', 'failed') DO NOTHING
+			 RETURNING id`,
+			[o.projectId, o.kind, JSON.stringify(o.payload ?? {}), o.dedupeKey ?? null, o.delaySeconds ?? 0, o.maxAttempts ?? 5]
+		);
+		const created = rows.length > 0;
+		const { rows: job } = await db.query<JobMeta>(
+			created
+				? `SELECT ${JOB_META} FROM job j JOIN app_user u ON u.id = j.acting_user_id WHERE j.id = $1`
+				: `SELECT ${JOB_META} FROM job j JOIN app_user u ON u.id = j.acting_user_id
+				   WHERE j.project_id = $1 AND j.dedupe_key = $2 AND j.status IN ('queued', 'failed')`,
+			created ? [rows[0]!.id] : [o.projectId, o.dedupeKey]
+		);
+		if (job[0]) return { job: job[0], created };
+	}
+	throw new Error('enqueue: the pending job with this dedupe key kept changing');
 }
 
 /** A project's jobs, newest first (RLS: viewer). */
