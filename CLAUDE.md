@@ -107,12 +107,12 @@ Don't spin up the dev server to visually verify UI/frontend changes before repor
 
 Run these as slash-commands. Each delegates to a specialised agent (`.claude/agents/`).
 
-- `/check` — typecheck + tests + format + lint in one pass.
+- `/check` — pre-commit gate: code-reviewer + test-gap-checker + doc-hygiene-checker over the working diff, in parallel (advisory).
 - `/safe-edit` — workflow for security-sensitive or load-bearing changes.
 - `/safe-migration` — DB-schema-change workflow (apply locally, verify RLS, sync types, propose smoke tests).
 - `/polish-ui` — typography / layout polish on a target frontend surface.
 - `/release-readiness` — go/no-go checklist before tagging.
-- `/audit/all` — runs every audit in `audit/`; `/audit/<area>` for a single sweep. Areas: `secrets`, `infra`, `deps`, `xss`, `cost-controls`, `auth`, `accessibility`, `gdpr`, `data-export-completeness`, `account-deletion-completeness`, `cookie-consent`, `third-party-data-flows`.
+- `/audit/all` — runs the core sweep (secrets, xss, deps, infra, cost-controls) in parallel; `/audit/<area>` for a single sweep, including the ones `all` skips. Areas: `secrets`, `infra`, `deps`, `xss`, `cost-controls`, `auth`, `accessibility`, `gdpr`, `data-export-completeness`, `account-deletion-completeness`, `cookie-consent`, `third-party-data-flows`.
 - `/persona` — runs the bug-hunting persona auditors (`.claude/agents/persona-*.md`): real-world points of view (new user, power user, admin, international user, accessibility, integrator, adversary, data subject) that find logic / UX / domain bugs a code review misses. Each writes a living report to `reviews/<persona>.md` (git-ignored). Protocol + how to add domain personas: `.claude/personas/README.md`. Domain pack for this app (need + correctness): `hydrologist`, `environmentalist`, `licence-applicant`, `licensing-authority`, `wua-manager`, `farmer`.
 
 These ship with placeholder examples and need per-project adaptation — see `.claude/README.md`.
@@ -120,7 +120,7 @@ These ship with placeholder examples and need per-project adaptation — see `.c
 ## Where to look
 
 - `docs/STACK.md` — the canonical "what is this and how do I run it" doc
-- `docs/` — additional architecture/deployment/security docs 
+- `docs/` — additional architecture/deployment/security docs
 - `.github/workflows/gitleaks.yml` — secret scanning (base-owned)
 - `.github/workflows/audit.yml` — weekly `pnpm audit` + auto-issue (base-owned)
 - `.github/workflows/security.yml` — CodeQL static analysis + container scanning (base-owned)
