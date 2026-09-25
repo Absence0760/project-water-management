@@ -37,6 +37,8 @@ The page has these sections, top to bottom:
    factors can move with no settings line at all: new rain data, a keep-dry
    or missing period (which since engine 0.18.0 also decides which days the
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
+   a multi-day accumulation newly detected, kept or listed (engine ≥ 0.20.0,
+   its window days are left out of the fit, [§2.4d](./model.md#24d-multi-day-rainfall-accumulations)),
    or the engine version. And there is a
    warning when **either run used the legacy runoff model** (audit H1): it
    doesn't conserve water at the event scale, so the comparison is a workbook
@@ -48,6 +50,7 @@ The page has these sections, top to bottom:
    *"Calibration peak flow coefficient a: 0.09 → 0.12"*,
    *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*,
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
+   *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
    *"Fit record: parameters edited since the fit (x1)"*.
 3. **Headline results.** A **Water balance** table (total irrigation supplied
    and deficit, share of demand supplied, farms below 95 % supplied, EWR days
@@ -63,7 +66,7 @@ The page has these sections, top to bottom:
    whether (and what) the WR2012 MAR penalty pulled towards, whether the
    parameters were edited since the fit, and whether that run's own forcing
    (pan coefficient, A-pan evaporation, CHIRPS bias correction, zero-rain
-   runs) has changed since its fit ("no" when the fit predates recorded
+   runs and multi-day accumulations) has changed since its fit ("no" when the fit predates recorded
    forcing — nothing to compare). A run whose parameters
    didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both

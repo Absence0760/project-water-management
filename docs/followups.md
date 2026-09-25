@@ -153,13 +153,33 @@ Tick items off (or move them into an issue) as they are done.
       Re-run the issue #4 phase 6 GR4J-vs-legacy comparison on the client
       catchment with the correction on (condition 1), and record the result
       in the issue.
+- [ ] **Multi-day rain accumulations (issue #2, audit B4). Built (engine
+      0.20.0, model.md §2.4d): detection, spreading by bias-corrected CHIRPS
+      (default on), keep-as-recorded and listed windows in Settings → Rain
+      gaps and CHIRPS, the run warning, `summary.rainAccumulation`, the
+      `rain_catchment_spread` column, the summary CSV block, Data-tab shading,
+      run comparison and fit provenance.** Still open, for the hydrologist
+      (engine-audit.md question 10): (1) confirm the thresholds (20 mm; 3 days;
+      CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 92-day cap) against
+      the station's observer logs or "accumulated" flags, if the source files
+      have them; (2) some detected windows read far less than CHIRPS over
+      them. An unread gauge loses catch to evaporation and overflow, so decide
+      whether such a window's total should be scaled up, or its days treated
+      as missing instead of spread. The durable fix is an under-catch rule
+      with its own threshold (the window's total against corrected CHIRPS),
+      once the hydrologist says which; until then the gauge total is kept.
+      Trigger: the hydrologist's review of issue #2.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #3). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
       record's `forcing` (fit provenance), so a change flags "Forcing changed
       since fit". Engine 0.18.0 added the double-mass check and made the
-      CHIRPS fit respect keep-dry (end of this item). Still open: the hydrologist's
+      CHIRPS fit respect keep-dry (end of this item). Engine 0.20.0 handles
+      the multi-day accumulations some of these runs end in (audit B4,
+      model.md §2.4d): the reading's total is spread over the run by CHIRPS
+      instead of being kept on its day while CHIRPS also fills the run, which
+      counted that rain twice (the item above). Still open: the hydrologist's
       answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
