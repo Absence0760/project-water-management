@@ -75,6 +75,17 @@
 //             and ~3 KB on Settings (without the split the Runs chunk hit the
 //             41 KB ceiling). No new dependency. Headroom ~5 KB on the total;
 //             the largest chunk is 38 KB (the Runs tab), ~3 KB under.
+// 2026-09-25  total 429 → 441 KB; largest chunk stays 41 KB. Merging the
+//             three features built in parallel today measures 435 KB: the
+//             Reserve compliance work above (measured alone on an older main),
+//             plus the nominated evidence run (Runs tab Evidence panel, badges,
+//             compare notes) and multi-day rain accumulations (engine 0.20.0
+//             detector + spreading in the page and the calibration worker,
+//             the Settings section, Data-tab shading, help). No new dependency.
+//             The largest chunk is now 40 KB (the Runs tab), ~1 KB under, so
+//             the next Runs-tab feature must lazy-load. Headroom ~6 KB on the
+//             total. Bringing it down is issue #9 (the engine shipped twice,
+//             help text on demand), which should ratchet this back.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -86,7 +97,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 429,
+	totalCodeKb: 441,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });
