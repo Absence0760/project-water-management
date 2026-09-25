@@ -28,7 +28,7 @@ env/
 dist/
 build/
 .svelte-kit/
-# The e2e build of the frontend (e2e/playwright.config.ts): API URL baked in for :3101.
+# The e2e build of the frontend (e2e/support/build-site.ts): this checkout's e2e API URL baked in.
 build-e2e/
 .svelte-kit-e2e/
 .next/
@@ -43,6 +43,8 @@ coverage/
 .nyc_output/
 test-results/
 playwright-report/
+blob-report/
+all-blob-reports/
 htmlcov/
 .pytest_cache/
 .mypy_cache/

@@ -1,4 +1,4 @@
-// Rebuilds the isolated `water_e2e` database from backend/migrations before
+// Rebuilds the checkout's isolated e2e database (support/env.ts) from backend/migrations before
 // the suite runs: create it if missing, drop + recreate the public schema,
 // migrate. Needs local Postgres (`pnpm dev:db:up`).
 //

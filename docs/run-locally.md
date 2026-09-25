@@ -211,7 +211,7 @@ pnpm dev:db:reset           # DELETE all local data, recreate and migrate
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
 pnpm test:backend:db        # API + RLS tests, catalogue guards and route-auth inventory (water_test DB)
-pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801)
+pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 ```
 
