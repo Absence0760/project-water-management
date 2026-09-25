@@ -1,9 +1,10 @@
-<!-- One farm element on one day: inflows split around the dam, irrigation,
-     spill, diversion, return flow and outflow. Styles: ../Diagram.svelte. -->
+<!-- One farm element on one day: inflows split around the dam, rain on the
+     dam, evaporation, seepage, irrigation, spill, diversion, return flow and
+     outflow. Styles: ../Diagram.svelte. -->
 <svg
 	viewBox="0 0 660 390"
 	role="img"
-	aria-label="Upstream inflow splits: its upstream share enters the dam and the rest passes below it. The farm's own runoff splits the same way by its runoff share. A transfer adds water to the dam or takes it out. The diversion takes water from the river below the dam back into it. Irrigation draws from the dam; part of it returns to the river as return flow. Water above the dam's capacity spills into the river below the dam. The river below the dam leaves as the farm's outflow to the next element."
+	aria-label="Upstream inflow splits: its upstream share enters the dam and the rest passes below it. The farm's own runoff splits the same way by its runoff share. A transfer adds water to the dam or takes it out. Rain falls on the dam's surface and adds to it; open-water evaporation leaves it. Seepage leaks from the dam into the river below it. The diversion takes water from the river below the dam back into it. Irrigation draws from the dam; part of it returns to the river as return flow. Water above the dam's capacity spills into the river below the dam. The river below the dam leaves as the farm's outflow to the next element."
 >
 	<defs>
 		<marker id="fd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -57,6 +58,14 @@
 	<text class="s" x="398" y="245">spill</text>
 	<path class="wire" d="M225 255 V298" marker-end="url(#fd-arrow)" />
 	<text class="s" x="233" y="282">return flow</text>
+
+	<!-- the dam's own surface: rain in, evaporation out; seepage below the wall -->
+	<path class="wire" d="M290 76 V108" marker-end="url(#fd-arrow)" />
+	<text class="s" x="284" y="96" text-anchor="end">rain on dam</text>
+	<path class="wire" d="M370 108 V76" marker-end="url(#fd-arrow)" />
+	<text class="s" x="376" y="96">evaporation</text>
+	<path class="wire" d="M345 180 V298" marker-end="url(#fd-arrow)" />
+	<text class="s" x="339" y="238" text-anchor="end">seepage</text>
 
 	<path class="wire" d="M330 336 V372" marker-end="url(#fd-arrow)" />
 	<text class="s" x="342" y="368">outflow to the next element</text>
