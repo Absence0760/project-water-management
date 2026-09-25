@@ -96,7 +96,7 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $57–62/month | ≈ $49–51/month | ≈ $48/month |
+| Idle cost (infra/README.md § Cost) | ≈ $58–63/month | ≈ $50–52/month | ≈ $49/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
@@ -293,6 +293,7 @@ variables and secrets:
 | `LAMBDA_FUNCTION_NAME` | `lambda_function_name` |
 | `MIGRATE_FUNCTION_NAME` | `migrate_function_name` |
 | `WORKER_FUNCTION_NAME` | `worker_function_name` (the release preflight requires it) |
+| `FETCHER_FUNCTION_NAME` | `fetcher_function_name` (data feeds; the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
@@ -510,6 +511,52 @@ plan-only until the first deploy):
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 
+## Data feeds
+
+The feeds ([architecture.md § Data feeds](./architecture.md#data-feeds)) run
+on the job queue, with the fetching done outside the VPC (infra/feeds.tf,
+plan-only until the first deploy):
+
+- **The worker** (`FEED_FETCHER=sqs`) never fetches: a `feed_fetch` job sends
+  a versioned request to the `fetch-requests` queue
+  (`FETCH_REQUESTS_QUEUE_URL`) and is done.
+- **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
+  `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
+  access, which is what keeps the feeds from needing a NAT), 512 MB, 120 s,
+  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`.
+  It has no database access and no credentials to one: its role may receive
+  from `fetch-requests` and send to `ingest-results`, nothing else. One
+  request per invocation; a failed send is a batch-item failure, retried.
+- **`ingest-results`** triggers the worker, which checks each result answers a
+  real `feed_fetch` job of that feed and queues a `feed_ingest` job as that
+  job's user; the job validates the result before merging.
+- **Network:** the worker reaches both queues through the existing SQS
+  interface endpoint, whose policy now also admits it to `fetch-requests`
+  (send) and `ingest-results` (receive), and nothing else. The API still
+  reaches only `jobs`. The fetcher talks to SQS and the sources over the
+  public internet.
+- **Retries and DLQs:** each queue dead-letters after 5 receives into its own
+  DLQ (14 days). A source that is down or answers garbage is *not* a
+  retry: the fetcher sends the failure back, the feed records it and shows as
+  failing, and the schedule tries again (15 minutes after one failure,
+  doubling up to a day).
+- **Alarms:** `fetch-requests-dlq-depth`, `ingest-results-dlq-depth` and
+  `fetcher-errors` (a crash or timeout), all > 0, to the alerts topic. A
+  stale or failing feed shows in the app; emailing its owners is WP-2.13.
+- **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
+  waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
+  separate licence notice: confirm before relying on it commercially (the
+  roadmap's D7). DWS's terms of use for automated retrieval must be checked
+  before a DWS feed is used in production, and the DWS site answers our
+  (non-South-African) network with HTTP 403: confirm the fetcher's region can
+  reach it ([followups.md](./followups.md)).
+- **Cost (idle delta ≈ +$0.70/month):** two more queues and two DLQs cost
+  nothing at rest, but each SQS event source polls continuously (~0.65 M
+  receives a month each); with the `jobs` queue's that is ~1.9 M, ~0.9 M past
+  the free tier, ≈ $0.40. Three alarms ≈ $0.30. The fetcher's own compute is
+  cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
+  No NAT, no new endpoint.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same
@@ -528,8 +575,9 @@ plan-only until the first deploy):
 CloudFront, S3, Lambda and SES sending are cents. WAF is ~$7/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
-still cheaper than a NAT (~$33/month plus data). Total ≈ $48/month in
-us-east-1, ≈ $57–62 in af-south-1; the breakdown is in
+still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher runs
+outside the VPC for the same reason. Total ≈ $49/month in
+us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
 is set from `budget_monthly_usd` (default 60; raise it to ~80 for
 af-south-1).

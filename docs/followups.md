@@ -1044,6 +1044,38 @@ role and not before it.
 
 ## Features left half-way
 
+- **Data feeds** (issue #10 part 2, WP-2.10, 2026-09-25;
+  [architecture.md § Data feeds](./architecture.md#data-feeds)). Built:
+  CHIRPS, CHIRPS-GEFS and DWS parsers on synthetic fixtures, `017_feeds`,
+  the jobs, the routes, Settings → Data feeds, the fetcher Lambda and its
+  queues (plan only). Left open:
+  - [ ] **DWS is unverified against the live site.** It answers HTTP 403 to
+        our (non-South-African) network, so the parser follows the format two
+        open-source clients parse (RivRetrieve-Python, aquascope), not a
+        recorded page. Trigger: the first deploy. From the fetcher's region,
+        attach a DWS feed to a throwaway project and check it goes OK; if the
+        page differs, the feed fails loudly (nothing is written) and
+        `sources/dws.ts` plus its fixture change together. The quality codes
+        are counted, not interpreted: agree with the hydrologist which ones
+        should become gaps.
+  - [ ] **Terms of use (operator decision, roadmap D7):** DWS's terms for
+        automated retrieval, and CHIRPS-GEFS's licence (CHIRPS itself is
+        public domain). Decide before a DWS or GEFS feed is used for a client.
+  - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
+        published into `rain_chirps_mm`; the existing CHIRPS bias correction
+        (Settings → Rain gaps) applies at run time, as for an uploaded series.
+  - [ ] Marking a fed series on the Data tab ("from CHIRPS feed"), and an
+        audit event per merge (needs WP-2.4's `audit_event`).
+  - [ ] A debounced re-run after new data (WP-2.11) and emailing owners about
+        a stale or failing feed (WP-2.13): today the panel and the CloudWatch
+        alarms are how anyone hears.
+  - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
+  - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
+        last 50 days daily (~200 range requests). Trigger: more than ~20
+        CHIRPS feeds in production. Durable fix: fetch each (day, grid row)
+        once per tick and share it between feeds, or keep a per-day
+        preliminary/final marker so final days aren't re-read.
+
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):
   - copies that remember their source nodes (renamed farms in a copy don't

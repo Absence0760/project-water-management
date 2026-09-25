@@ -561,6 +561,18 @@ and `'none'` is there for that case, not to reproduce the workbook. Runs
 saved before 0.7.0 used raw CHIRPS; run comparison flags the engine version
 change, and compares a stored run without the setting as the default.
 
+**Where the CHIRPS and forecast series come from.** Uploaded, or from a data
+feed (Settings → Data feeds, [architecture.md § Data feeds](./architecture.md#data-feeds)):
+a CHIRPS feed writes CHIRPS v3 **as published**, the weighted mean of the
+configured 0.05° cells, into `rain_chirps_mm` (preliminary days first, then
+their final values once published), and a CHIRPS-GEFS feed writes the 16-day
+forecast into `rain_forecast_mm`. Neither changes the priority above: rain
+used is catchment rain, else CHIRPS (bias-corrected here, unless the mode is
+`'none'`), else the forecast, so fed CHIRPS fills only the days the catchment
+series doesn't have, and the forecast only days past both. Because the feed
+stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
+already corrected before upload. The engine needs no change for fed data.
+
 ### 2.4c Zero-rain runs treated as missing
 
 Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20

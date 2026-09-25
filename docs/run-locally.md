@@ -123,9 +123,9 @@ the e2e stack uses `log`, so neither needs Mailpit.
 
 ## Background jobs
 
-Some work runs later, in a worker, instead of inside a request: today a
-queued model run (`POST /projects/:id/jobs`), and in step 2 the data feeds,
-automatic re-runs and alerts ([architecture.md § Background work](./architecture.md#background-work)).
+Some work runs later, in a worker, instead of inside a request: a queued
+model run (`POST /projects/:id/jobs`) and the data feeds (below), and in step
+2 automatic re-runs and alerts ([architecture.md § Background work](./architecture.md#background-work)).
 Locally the worker is one Node process against the same Postgres, with no AWS
 and no queue emulator (`JOB_TRANSPORT=inprocess`, the default). It is opt-in:
 
@@ -142,6 +142,30 @@ since lost the role. Without the worker, jobs just wait in the table: the
 project's `GET /projects/:id/jobs` shows them `queued`, and the next tick runs
 them. Stopping the worker mid-job is safe: the job is claimed again once its
 lease (`JOB_LEASE_SECONDS`, 6 minutes) runs out.
+
+## Data feeds
+
+Settings → **Data feeds** attaches CHIRPS rainfall, the CHIRPS-GEFS forecast
+or a DWS gauge to a project ([architecture.md § Data feeds](./architecture.md#data-feeds)).
+Locally they need **no network**: `FEED_SOURCE=fixtures` (the default)
+answers every source from the synthetic files in `backend/fixtures/feeds/`,
+re-dated to today, and the panel shows a "Sample data" badge. The sample grid
+is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
+25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
+feed), and any station code for DWS (e.g. `X0H000`).
+
+Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
+they fetch daily on their own, and "Run now" fetches at once. Without it:
+
+```bash
+pnpm dev:feeds:run          # one tick that queues EVERY enabled feed, due or not, runs them, exits
+pnpm dev:jobs:tick          # one tick: only the feeds that are due (and any other due job)
+```
+
+To try the real sources from your machine, put `FEED_SOURCE=live` in a
+gitignored `backend/.env.development.local` and use real coordinates. CHIRPS
+and the forecast are public; the DWS site may refuse requests from outside
+South Africa (HTTP 403), which the feed shows as failing.
 
 ## Import the client catchment (demo data)
 
@@ -252,6 +276,7 @@ pnpm dev:run:frontend       # frontend only
 pnpm dev:run:backend        # backend only
 pnpm dev:run:worker         # background-job worker only (see Background jobs)
 pnpm dev:jobs:tick          # one job tick, then exit
+pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default), then exit
 pnpm dev:db:status          # is Postgres up?
 pnpm dev:db:logs            # follow Postgres logs
 pnpm dev:db:psql            # psql as the owner role

@@ -24,8 +24,11 @@ flowchart LR
     Q[[SQS jobs<br/>+ DLQ]]
     T[EventBridge<br/>every 5 min]
     W[Worker Lambda<br/>background jobs]
+    FQ[[SQS fetch-requests<br/>ingest-results]]
+    FL[Fetcher Lambda<br/>no VPC, no DB]
     L --- EL
   end
+  SRC[(CHIRPS · GEFS · DWS<br/>public sources)]
 
   UI -- "GET /*" --> CF --> S3
   UI -- "/api/* (cookie)" --> CF -- "+ shared-secret header" --> L
@@ -33,12 +36,16 @@ flowchart LR
   L -- "wake-up" --> Q --> W
   T --> W
   W -- "SQL as water_app<br/>RLS as the job's acting user" --> DB
+  W -- "fetch request" --> FQ --> FL
+  FL -- "HTTPS (range reads)" --> SRC
+  FL -- "parsed days (untrusted)" --> FQ
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
 (`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`
 (plus Mailpit, which catches all email; the background-job worker is an
-opt-in Node process, `pnpm dev:run:worker`, polling the same Postgres). The
+opt-in Node process, `pnpm dev:run:worker`, polling the same Postgres, and
+data feeds read synthetic fixture files, never the internet). The
 browser calls the backend directly on `:3001` (CORS with credentials). In
 production, CloudFront serves the site and **proxies `/api/*` from the same
 origin**, so the session cookie is first-party.
@@ -217,8 +224,9 @@ sequenceDiagram
 
 Work that shouldn't run inside a request, or can't fit the API Lambda's 30 s,
 goes through one job queue (roadmap WP-2.8; `backend/src/jobs/`,
-`016_jobs.sql`). Today its one consumer is `rerun` (a model run off the
-request path, `POST /projects/:id/jobs`); step 2's feeds, auto re-runs, alerts
+`016_jobs.sql`). Its consumers are `rerun` (a model run off the request
+path, `POST /projects/:id/jobs`) and the data feeds' `feed_fetch` /
+`feed_ingest` ([§ Data feeds](#data-feeds)); step 2's auto re-runs, alerts
 and reports plug in as further kinds.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -269,6 +277,78 @@ payload, run })` (`jobs/registry.ts` documents the contract) and list it in
 which already names every step-2 kind (`feed_fetch`, `feed_ingest`, `rerun`,
 `alert_eval`, `report_render`).
 
+## Data feeds
+
+Rainfall and gauge flow that arrive by themselves (roadmap WP-2.10;
+`backend/src/feeds/`, `017_feeds.sql`, the `feed_fetch` / `feed_ingest`
+jobs). A `data_feed` row names a source, where to read it and the series it
+merges into:
+
+| Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
+| --- | --- | --- | --- |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs; today's issue, else yesterday's |
+| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: an HTML page whose `<pre>` holds `DATE D_AVG_FR QUAL` rows; at most 20 years per request. Our network gets HTTP 403 from the site, so this format is taken from two open-source clients that parse it (see [followups.md](./followups.md)) |
+
+- **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
+  no dependency): the header, the image directory at the end of the file,
+  then one ~16 KB strip per grid row a cell falls in. A global day is 15–70 MB;
+  a fetch reads a few tens of KB per day. The reader refuses anything outside
+  that layout (BigTIFF, tiles, a predictor, another sample type) rather than
+  guess, and snaps the float32-rounded 0.05° pixel scale, which otherwise
+  drifts a whole pixel across the grid.
+- **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
+  or outside the grid, a server error page answered with HTTP 200: the fetch
+  fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
+  feed shows as failing. A DWS row without a usable value is a gap, never a
+  zero.
+- **The window.** CHIRPS reads from 50 days before its newest day to
+  yesterday, so final values overwrite preliminary ones, at most 120 days per
+  fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
+  reads the newest issue. DWS re-reads a year before its newest day (verified
+  data is revised in arrears), 10 years on the first fetch.
+- **Merging** goes through `series/merge.ts mergeInto`, the same path as
+  `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
+  value for never erases one already there. The merge and the feed's health
+  commit in the job's transaction, as the job's acting user.
+- **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
+  the enabled feeds not scheduled within a day (or an hour), and the tick
+  queues a `feed_fetch` for each **as the feed's acting user** (the owner who
+  last saved it), under RLS. A failing feed retries sooner: 15 minutes after
+  one failure, doubling up to its interval. If the acting user is no longer an
+  editor, the enqueue is refused, the feed records it
+  (`app_feed_schedule_failed`), and it shows failing until an owner saves it.
+- **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
+  `failing` (the last fetch failed), `stale` (the newest day is older than the
+  source normally lags: 12 days for CHIRPS, under 12 days ahead for the
+  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`,
+  `disabled`. A feed not fetched two days after it was attached is stale ("the
+  background worker may not be running"). Emailing owners about a stale feed
+  is WP-2.13.
+
+Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
+
+- `inline` (the default: local, CI, e2e): the `feed_fetch` job fetches and
+  merges in one transaction. `FEED_SOURCE=fixtures` (the default) answers the
+  sources' URLs from `backend/fixtures/feeds/`: an invented grid re-dated to
+  today and encoded as real LZW GeoTIFFs in the CHC layout, and a synthetic
+  DWS page replayed over the requested window. No network.
+  `FEED_SOURCE=live` in a gitignored `.env.development.local` tries the real
+  sources.
+- `sqs` (production): the worker has no internet, so `feed_fetch` sends a
+  versioned `fetch` message to the `fetch-requests` queue. The **fetcher
+  Lambda** (`lambda-fetcher.ts`, outside the VPC, no database) fetches with
+  `FEED_SOURCE=live` and sends the result as an `ingest` message to
+  `ingest-results`. The worker checks that it answers a real `feed_fetch` job
+  of that feed (`app_feed_fetch_job`), queues a `feed_ingest` job as that
+  job's user, and the job validates the result (`FetchResult`) before
+  merging. A result for a feed saved with new settings since the fetch is
+  dropped.
+
+Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
+audit event per merge (WP-2.4), the debounced re-run after new data (WP-2.11),
+and a bounding-box config for CHIRPS (cells only).
+
 ## Key choices
 
 | Choice | Why |
@@ -291,7 +371,7 @@ water-management/
 ├── docker-compose.yml     Postgres 17 on :5434, Mailpit (SMTP :1026, UI :8026)
 ├── dev/postgres/          First-boot SQL: water_app role, water_test DB
 ├── packages/engine/       Model + shared types (vitest)
-├── backend/               Hono API, migrations/, scripts/migrate.ts (vitest: unit + db)
+├── backend/               Hono API, migrations/, scripts/migrate.ts (vitest: unit + db), fixtures/feeds/ (synthetic feed sources)
 ├── frontend/              SvelteKit static app (vitest)
 ├── scripts/               check_root_scripts.mjs, guards/ + release/ (node:test), wbt-import/ (Python)
 ├── infra/                 Terraform

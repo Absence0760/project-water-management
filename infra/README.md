@@ -22,6 +22,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
    API ──SendMessage (SQS VPC endpoint)──► SQS jobs ──► worker Lambda ────────────────┤ water_app, RLS as
    EventBridge rate(5 minutes) ─────────────────────────► (jobs.tf)                      the job's acting user
                                             └─► jobs-dlq (after 5 receives; alarms)
+   worker ──SendMessage (endpoint)──► SQS fetch-requests ──► fetcher Lambda (NO VPC, no DB; feeds.tf)
+   worker ◄── SQS ingest-results ◄──SendMessage (public)──────┘   └──HTTPS──► data.chc.ucsb.edu, www.dws.gov.za
+                     (each queue: a DLQ after 5 receives; alarms)
 ```
 
 - **Single origin.** The browser only calls the site's own domain. `/api/*` is
@@ -46,10 +49,12 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   (the API Lambda's `SendEmail`; `ses.tf`), **Secrets Manager** (the migrate
   Lambda only; its endpoint policy allows reading the RDS master secret and
   nothing else) and **SQS** (the API sends job wake-ups, the worker uses the
-  queue; its endpoint policy names only those two roles and the `jobs` queue;
-  `jobs.tf`). If a future feature needs egress, add the
-  matching VPC endpoint for an AWS service. Reach for a NAT (~$33/month) only
-  for genuinely external hosts.
+  `jobs` queue and the data feeds' `fetch-requests` / `ingest-results`; its
+  endpoint policy names only those two roles and those three queues, the API
+  on `jobs` alone; `jobs.tf`). If a future feature needs egress, add the
+  matching VPC endpoint for an AWS service. Genuinely external hosts are
+  reached by a Lambda **outside** the VPC with no database access, as the
+  data feeds' fetcher does (`feeds.tf`), rather than a NAT (~$33/month).
 - **Email (SES).** Domain identity for the site hostname with Easy DKIM
   (2048-bit), custom MAIL FROM `mail.<domain>` (MX + SPF), DMARC at `p=none`,
   and a configuration set that requires TLS to the receiving server, puts
@@ -57,7 +62,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   counts to CloudWatch. The API role may call `ses:SendEmail` on that identity
   and configuration set only, and only with `From = no-reply@<domain>`.
   Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
-- **Three Lambdas.** `water-management-backend` is the API. It connects as the
+- **Four Lambdas.** `water-management-backend` is the API. It connects as the
   RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
   concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
   reads the owner credentials at run time, creates or re-passwords
@@ -67,6 +72,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   as `water_app`: 1024 MB, 300 s, reserved concurrency 2, triggered by the
   SQS `jobs` queue and an EventBridge tick every 5 minutes
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
+  `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
+  downloads the data feeds' sources: no VPC, no database URL or secret, 512
+  MB, 120 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
+  limited to receiving `fetch-requests` and sending `ingest-results`
+  ([docs/deployment.md § Data feeds](../docs/deployment.md#data-feeds)).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
@@ -84,6 +94,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `rds.tf` | Subnet group, pg17 parameter group, log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / backlog / dead-job alarms |
+| `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
@@ -224,17 +235,18 @@ Idle to light use, on-demand, us-east-1:
 | SES API interface endpoint, 1 AZ | 7.30 |
 | SQS interface endpoint, 1 AZ (job wake-ups, `jobs.tf`) | 7.30 |
 | SQS + EventBridge (the 5-minute tick: ~8,600 invocations) | ~0 |
+| SQS polling by the three event sources (`jobs`, `fetch-requests`, `ingest-results`: ~0.65 M receives a month each, ~0.9 M past the free tier) | ~0.40 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (RDS master secret) | 0.40 |
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 17 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric), logs, RDS log export | ~2.10 |
-| CloudFront (PriceClass_All), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $48** |
+| CloudWatch: 20 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric, the two feed DLQs and fetcher errors), logs, RDS log export | ~2.40 |
+| CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
+| **Total** | **≈ $49** (the data feeds added ≈ $0.70) |
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $57–62/month**. Check the AWS pricing calculator before
+which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
 you commit to it. At that level the default `budget_monthly_usd = 60` sits
 right on the baseline and the forecast alert would fire every month, so
 **raise it to ~80 for af-south-1**. Main levers: the three endpoint AZ counts
@@ -310,7 +322,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
    `CLOUDFRONT_DOMAIN_NAME` (unused by the workflows) as variables, and
    `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` (debugging only) as
    secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
@@ -384,7 +396,12 @@ background-job stack (queue SSE, the DLQ after 5 receives, visibility ≥ 6×
 the worker timeout, the worker's runtime / size / concurrency / VPC / env and
 no owner credentials, the 5-minute tick and its invoke permission, the SQS
 event source, the SQS endpoint's policy naming only the two roles and the
-jobs queue, and the deploy role's right to update the worker); every alarm
+jobs queue, and the deploy role's right to update the worker); the data-feed
+stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
+size and concurrency, an environment with no database URL, a role on the two
+feed queues only; the worker's `FEED_FETCHER=sqs` and its event source; the
+API kept to the jobs queue through the endpoint; the deploy role's right to
+update the fetcher); every alarm
 wired to SNS, including the `self_check_failed` log metric filter (pattern
 and metric name) and its alarm; the budget; the deploy policy having no
 wildcards; and the

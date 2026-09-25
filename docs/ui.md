@@ -560,7 +560,7 @@ running. SheetJS loads only then, in a worker, never with the page.
 - **On this page.** Under the intro, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`; listed by
+  `#set-quality`, then `#set-feeds` after the form; listed by
   `settings/sections.ts`). It sticks under the app header down the long form
   and marks the group being read with `aria-current="location"`, using the
   Runs rail's scroll spy (`activeSectionId` from `runs/sections.ts`). It is a
@@ -778,6 +778,41 @@ value such as 250000.
   thirds), 150 %, 90 days). Out-of-range
   values block Save with a message. They only change which water years are
   flagged, never the results.
+
+### Data feeds
+
+Below the settings form (it saves on its own, never through the save bar) is
+**Data feeds** (`#set-feeds`; `lib/components/feeds/DataFeedsPanel.svelte`,
+its own chunk loaded with the tab; WP-2.10,
+[architecture.md § Data feeds](./architecture.md#data-feeds)).
+
+- **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
+  **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
+  card carries `data-state`), the source, the series it writes ("→ Rainfall —
+  forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
+  schedule and who it runs as, the server's health sentence ("The last fetch
+  failed: the source is unreachable: HTTP 503. Newest data 2026-09-01."), and
+  "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
+  calendar day, never shifted by the time zone). CHIRPS says how many of the
+  days are preliminary.
+- **A warning** above the list counts the feeds that are stale or failing
+  ("1 feed needs attention: …", `role="alert"`).
+- **Run now** (editors) queues a fetch at once and says so; the status
+  updates once the background worker has run it (**Refresh status**).
+  **Switch off / on** and **Remove** (with a confirm; the series keeps its
+  days) are for owners.
+- **Attach a feed** (owners): source, **Into series** (the kinds that source
+  may write), an optional series name, the schedule, and either **Grid cells**
+  (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
+  their weighted mean) or a **DWS station** code (checked as `A2H012`). The
+  form explains a bad cell or code before anything is sent, and a second feed
+  for the same series is refused.
+- When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
+  default in dev and CI), a **Sample data** badge says so, and the cells hint
+  names the sample grid's extent.
+- Viewers see the list and the health, with no buttons. Tested by
+  `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
+  feed and the form open).
 
 ## Runs & results
 

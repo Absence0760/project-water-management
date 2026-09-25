@@ -20,7 +20,10 @@ sides share.
   (SES in production), picked by `MAIL_TRANSPORT`. Background jobs
   (`src/jobs/`) queue in a Postgres `job` table; a local worker process runs
   them (`JOB_TRANSPORT=inprocess`), and in production a worker Lambda woken
-  through SQS (`@aws-sdk/client-sqs`) and a 5-minute schedule.
+  through SQS (`@aws-sdk/client-sqs`) and a 5-minute schedule. Data feeds
+  (`src/feeds/`: CHIRPS, CHIRPS-GEFS, DWS) run on that queue, reading
+  synthetic fixtures (`fixtures/feeds/`, `FEED_SOURCE=fixtures`, the
+  default) everywhere but the production fetcher Lambda.
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has three projects: `unit` (no DB),
   `db` (needs Postgres) and `perf` (same wall-clock-budget caveat as the
@@ -52,7 +55,8 @@ sides share.
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
   (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
   worker, `backend/src/lambda-worker.ts`, with its SQS queue + DLQ and
-  EventBridge tick) + RDS Postgres 17
+  EventBridge tick, and the data feeds' fetcher, `backend/src/lambda-fetcher.ts`,
+  outside the VPC with its two queues) + RDS Postgres 17
   in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
   ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
@@ -69,6 +73,7 @@ pnpm dev:run:frontend       # one side only
 pnpm dev:run:backend
 pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LISTEN job_queued
 pnpm dev:jobs:tick          # run every due job once and exit
+pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -172,8 +177,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it
   out. The same pair for the job worker: `jobs/worker.ts` (local, dotenv) and
-  `lambda-worker.ts` (AWS, never dotenv); `infra/scripts/package-lambdas.sh`
-  refuses a Lambda bundle that contains dotenv.
+  `lambda-worker.ts` (AWS, never dotenv), and `lambda-fetcher.ts` is AWS
+  only; `infra/scripts/package-lambdas.sh` refuses a Lambda bundle that
+  contains dotenv.
 - **Static SPA frontend only.** No SSR adapters. Routes render client-side from
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).

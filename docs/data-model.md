@@ -37,6 +37,8 @@ erDiagram
   node     |o--o{ run_series : "per node (null = catchment)"
   project  ||--o{ job : "background jobs"
   app_user ||--o{ job : "acts as"
+  project  ||--o{ data_feed : "scheduled feeds"
+  app_user |o--o{ data_feed : "acts as (nullable)"
 ```
 
 ## Tables and their workbook origin
@@ -472,6 +474,50 @@ The background job queue's source of truth ([architecture.md § Background work]
 - Indexes: `(status, run_after)` for the claim; `(project_id, created_at)`,
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
+
+### Data feeds (017_feeds.sql)
+
+One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
+
+| Column | Holds |
+| --- | --- |
+| `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
+| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays` |
+| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series |
+| `enabled`, `schedule` | `daily` or `hourly` |
+| `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
+| `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
+| `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below |
+
+- **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
+  acting user equal to the signed-in user. The `data_feed_stamp` trigger runs
+  on `water_app`'s writes only: it stamps the acting user, keeps the id,
+  project and creator, and never lets a direct write set health (an owner
+  can't forge "last success"). Changing the source, config or target clears
+  the health; switching a feed back on makes it due at once.
+- **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
+  - `app_claim_due_feeds(limit, all)`: the scheduler, no user context. Claims
+    enabled feeds with an acting user that are due (not scheduled within a
+    day, or an hour; a failing feed after 15 min × 2^(failures − 1), capped at
+    the interval), `FOR UPDATE SKIP LOCKED`, stamping `last_scheduled_at`.
+    `all` claims every enabled feed (`pnpm dev:feeds:run`). Returns id,
+    project and acting user only.
+  - `app_record_feed_result(feed, ok, last_date, last_value, error, meta)`:
+    the fetch's outcome, as the job's user, who must be an editor of the
+    feed's project. `last_data_date` only moves forward.
+  - `app_feed_schedule_failed(feed)`: the scheduler couldn't queue a fetch as
+    the acting user (RLS refused: no longer an editor); records a fixed
+    message.
+  - `app_feed_fetch_job(job, feed)`: for the production worker's
+    `ingest-results` messages, the project and acting user of a real
+    `feed_fetch` job of that feed, or nothing.
+- Grants: `SELECT, INSERT, UPDATE, DELETE` to `water_app`. Indexes: the
+  unique constraint covers `project_id`; `acting_user_id`, `created_by`; and
+  `last_scheduled_at` (partial, enabled with an acting user) for the claim.
+- `feeds/feeds.db.test.ts` checks the RLS with positive controls, the forged
+  health, the schedule, the acting user losing the role, and the ingest
+  hand-off.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role
