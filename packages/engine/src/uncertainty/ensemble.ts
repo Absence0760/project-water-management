@@ -20,15 +20,16 @@
 //   same rule: when it passes, the band includes the run it qualifies.
 //
 // One ensemble is one runoff model: results of two models are never pooled.
-// Every member is a full runModel of the project, so the same seed and
-// options reproduce the ensemble exactly (./verify.ts checks it).
+// Every member is a full model run of the project (runModelWithoutChecks:
+// runModel less the plausibility checks, which no member result reads), so
+// the same seed and options reproduce the ensemble exactly (./verify.ts checks it).
 import { fromEpochDay, toEpochDay, waterYearIndex, type Monthly } from '../calendar';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, prepareCalibration, type CalibrationBounds, type ParamSet } from '../calibrate/calibrate';
 import { fitScores, OBJECTIVE_LABELS, OBJECTIVES, type ObjectiveId } from '../calibrate/objective';
 import { waterYearOf } from '../network/stats';
 import { CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
-import { chirpsColumns, ENGINE_VERSION, pickObservedKind, prepareRun, runModel, type PreparedRun } from '../run';
+import { chirpsColumns, ENGINE_VERSION, pickObservedKind, prepareRun, runModelWithoutChecks, type PreparedRun } from '../run';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/simulate';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
@@ -616,7 +617,7 @@ const roundScores = (s: MemberScores): MemberScores => ({
 
 /** Run one member: its run, scores, verdict and (when kept) its outputs. Also returns the run for coverage. */
 export function runMember(ctx: EnsembleContext, m: EnsembleMember): { result: MemberResult; output: ModelOutput } {
-	const output = runModel(memberInput(ctx, m));
+	const output = runModelWithoutChecks(memberInput(ctx, m));
 	const scores = memberScores(ctx, m, output);
 	const rejected = rejectReasons(ctx.options.thresholds, scores);
 	const accepted = rejected.length === 0;

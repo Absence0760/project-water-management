@@ -35,7 +35,7 @@ const TRANSFER: Record<keyof Transfer, true> = {
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
-	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, flowShare: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,

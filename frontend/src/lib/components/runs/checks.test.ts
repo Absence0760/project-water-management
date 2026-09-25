@@ -82,6 +82,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		supplied: F,
 		inflow_upstream: 250,
 		runoff: 750,
+		landcover_reduction: 0,
 		transfer: 0,
 		upstream_to_dam: 100,
 		upstream_below_dam: 150,
@@ -123,6 +124,15 @@ describe('day trace', () => {
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', letter: 'Q[t−1]', value: 500 });
 		expect(rows.slice(1).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
 		expect(rows.find((r) => r.key === 'supplied')).toMatchObject({ letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' });
+	});
+
+	it('shows the land-cover reduction right after the runoff I it was taken from, and only for a farm that has land cover', () => {
+		const keys = traceRows(farmDay()).map((r) => r.key);
+		expect(keys[keys.indexOf('runoff') + 1]).toBe('landcover_reduction');
+		const day = farmDay();
+		const without = traceRows({ ...day, columns: day.columns.filter((c) => c.key !== 'landcover_reduction') }).map((r) => r.key);
+		expect(without).not.toContain('landcover_reduction');
+		expect(without[without.indexOf('runoff') + 1]).toBe('transfer');
 	});
 
 	it('adds the day-before soil-water store after the storage when the run has one (engine 0.14.0)', () => {

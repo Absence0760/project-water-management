@@ -1,4 +1,4 @@
-// Data + filter logic behind the Data tab's "Preview data" dialog
+// Data + filter logic behind the Data tab's "Preview all data" dialog
 // (SeriesPreviewDialog.svelte): one wide table, one row per day across the
 // union of every input series' period, one column per series plus columns
 // for how the model used that day's data. No Svelte, no DOM — pure and unit

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// "Preview data" (Input time series card header) / a row's own "Preview":
+	// "Preview all data" (Input time series card header) / a row's own "Preview":
 	// every input series' daily value, side by side, plus columns for how the
 	// model actually used that day's data (rain gap-fill + source, CHIRPS bias
 	// correction, flow in m³/day, calibration exclusions — all computed with the
@@ -28,7 +28,7 @@
 		list,
 		values,
 		settings,
-		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview data" button) shows every column. */
+		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview all data" button) shows every column. */
 		focusSeriesId = null,
 		onRetry
 	}: {
@@ -65,7 +65,7 @@
 	const filtered = $derived(filterPreviewRows(rows, { query, missingOnly, flaggedOnly, visibleSeriesIds }));
 
 	// Un-hide (never re-hide other columns) the focused series on open; the
-	// header "Preview data" button (focusSeriesId null) resets to every column.
+	// header "Preview all data" button (focusSeriesId null) resets to every column.
 	let wasOpen = false;
 	$effect(() => {
 		if (open && !wasOpen) {
@@ -198,7 +198,7 @@
 						<th scope="col" class="datecol">Date <HelpTip key="preview.date" label="About the date column" /></th>
 						{#each visibleColumns as col (col.id)}
 							{@const unit = headerUnit(col)}
-							<th scope="col" class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
+							<th scope="col" class:num={col.id !== 'excluded'} class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
 								{col.label}{#if unit}
 									<span class="u">({unit})</span>
 								{/if}

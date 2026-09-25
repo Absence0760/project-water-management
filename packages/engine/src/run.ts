@@ -87,7 +87,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.26.1';
+export const ENGINE_VERSION = '0.27.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -97,6 +97,18 @@ export { resolveCatchmentAreaKm2 } from './runoff';
 /** Run the full model: natural flow from the selected runoff model (./runoff), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
 	return runModelWith(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx));
+}
+
+/**
+ * runModel without the hydrologist plausibility checks: `summary.plausibility`
+ * is absent and their warnings aren't added; every other series and summary
+ * figure is identical. For the uncertainty ensemble, whose hundreds of member
+ * runs read none of it (ensemble.ts memberMetrics / memberScores). Nothing
+ * here references ./plausibility, so a bundle that only runs ensembles (the
+ * browser's calibration worker) leaves that code out.
+ */
+export function runModelWithoutChecks(input: ModelInput): ModelOutput {
+	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null);
 }
 
 /**
@@ -130,6 +142,19 @@ export function withVerification(input: ModelInput, output: ModelOutput): ModelO
 export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
+): ModelOutput {
+	return runNetwork(input, naturalFlow, runPlausibility);
+}
+
+/**
+ * The model run itself. `plausibility` is the checks step (runPlausibility),
+ * passed in rather than called directly so that runModelWithoutChecks, which
+ * passes null, doesn't reference it and a bundler can drop it.
+ */
+function runNetwork(
+	input: ModelInput,
+	naturalFlow: (ctx: RunContext) => NaturalFlowInput,
+	plausibility: typeof runPlausibility | null
 ): ModelOutput {
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass } = prepareRun(input);
 
@@ -347,6 +372,7 @@ export function runModelWith(
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
+			flowShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
@@ -494,7 +520,7 @@ export function runModelWith(
 	);
 
 	// Hydrologist plausibility checks (engine ≥ 0.25.0, ./plausibility): report and warn only.
-	const plausibility = runPlausibility({
+	const checked = plausibility?.({
 		input,
 		settings,
 		start,
@@ -511,7 +537,7 @@ export function runModelWith(
 		ewrShort,
 		reserve: ewrAssurance.map((a) => a.report)
 	});
-	warnings.push(...plausibility.warnings);
+	if (checked) warnings.push(...checked.warnings);
 
 	return {
 		engineVersion: ENGINE_VERSION,
@@ -538,7 +564,7 @@ export function runModelWith(
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
-			plausibility: plausibility.checks,
+			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainAccumulation: accumulation?.info ?? null,

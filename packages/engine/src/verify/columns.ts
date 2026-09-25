@@ -27,7 +27,14 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
 	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
-	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share" },
+	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share − runoff removed by land cover (only with land cover, WP-1.35)" },
+	{
+		key: 'landcover_reduction',
+		letter: null,
+		formula:
+			"runoff removed by land cover (invasive plants, forestry) before it reaches the river or dam: taken from natural flow × this farm's share, so I + this = natural flow × share (WP-1.35)",
+		optional: true
+	},
 	{ key: 'transfer', letter: 'J', formula: 'Σ transfers in − Σ transfers out (limited by rate, daily cap and minimum storage)' },
 	{ key: 'upstream_to_dam', letter: 'K', formula: 'H × % upstream inflow to dam' },
 	{ key: 'upstream_below_dam', letter: 'L', formula: 'H − K' },

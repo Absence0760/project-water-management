@@ -11,7 +11,7 @@
 // change itself does. Members are judged once, on the baseline: the
 // application changes the network, not the observed history.
 import type { ModelInput, ModelOutput } from '../project';
-import { ENGINE_VERSION, prepareRun, runModel } from '../run';
+import { ENGINE_VERSION, prepareRun, runModelWithoutChecks } from '../run';
 import { band, type Band } from './bands';
 import {
 	ensembleContext,
@@ -82,7 +82,7 @@ export function runPairedEnsemble(
 	let head: EnsembleHeader | null = null;
 	let cancelled = false;
 	for (const m of todo) {
-		const output = runModel(memberInput(ctx, m as EnsembleMember));
+		const output = runModelWithoutChecks(memberInput(ctx, m as EnsembleMember));
 		head ??= pairedHeader(baseline.header, output);
 		out.push({ index: m.index, metrics: memberMetrics(ctx, output) });
 		if (opts.onProgress?.({ done: out.length, total: todo.length, accepted: out.length }) === true) {

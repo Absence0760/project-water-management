@@ -87,7 +87,7 @@
 	let previewMounted = $state(false);
 	const warmPreview = () => prefetch(loadPreviewDialog);
 	let previewFocusSeriesId = $state<string | null>(null);
-	/** The card header's "Preview data": every column, nothing highlighted. */
+	/** The card header's "Preview all data": every column, nothing highlighted. */
 	function openPreviewAll() {
 		previewFocusSeriesId = null;
 		previewMounted = true;
@@ -282,7 +282,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small">Daily values · {list.length} series{newestDate ? ` · data up to ${newestDate} (${describeAge(daysBetween(newestDate, today))})` : ''}</span>
-			<button type="button" class="btn btn-sm" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview data</button>
+			<button type="button" class="btn btn-sm" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
 		{/if}
 	</div>
 	<LoadState

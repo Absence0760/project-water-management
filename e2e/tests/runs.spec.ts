@@ -163,6 +163,46 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 	await expect.poll(async () => { const r = await range(); return daysBetween(r.start, r.end); }).toBeLessThan(daysBetween(dragged.start, dragged.end) / 2);
 });
 
+test('every daily results chart moves through the record like the hydrograph, and the flow charts share the m³/s ↔ m³/day switch', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Chart parity');
+	const days = 8 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Parity');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const figure = (title: RegExp) => page.locator('figure', { has: page.getByRole('img', { name: title }) });
+	const hydro = figure(/^Flow at the outflow gauge/);
+	const ewr = figure(/^EWR vs simulated outflow/);
+	const fdc = figure(/^Flow-duration curve/);
+	const explore = page.locator('#res-explore figure');
+	const farmSupply = figure(/^Supply vs demand/);
+
+	// Earlier / Later on every windowed daily chart, not just the hydrograph.
+	for (const chart of [ewr, explore, farmSupply]) {
+		await expect(chart.locator('canvas')).toBeVisible();
+		const end = await chart.getAttribute('data-view-end');
+		await expect(chart.getByRole('button', { name: /Later/ })).toBeDisabled();
+		await chart.getByRole('button', { name: /Earlier/ }).click();
+		await expect(chart).not.toHaveAttribute('data-view-end', end!);
+		await chart.getByRole('button', { name: /Later/ }).click();
+		await expect(chart).toHaveAttribute('data-view-end', end!);
+	}
+	// The flow-duration curve has no dates to move through.
+	await expect(fdc.getByRole('button', { name: /Earlier/ })).toHaveCount(0);
+
+	// The unit switch sits on each flow chart and drives them all.
+	for (const chart of [hydro, ewr, fdc, explore]) await expect(chart.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
+	await ewr.getByRole('button', { name: 'm³/day' }).click();
+	for (const chart of [hydro, ewr, fdc, explore]) {
+		await expect(chart.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
+		await expect(chart.locator('.u-legend')).toContainText('(m³/day)');
+	}
+	// A chart that isn't a flow has no flow-unit switch.
+	await expect(farmSupply.getByRole('button', { name: 'm³/s' })).toHaveCount(0);
+});
+
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');

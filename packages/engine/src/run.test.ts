@@ -185,6 +185,21 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 	});
 });
 
+describe('runModel — flow share in the farm summary (engine 0.27.0)', () => {
+	it('reports each farm\'s share, the factor behind its runoff (I) and EWR (Y), and the shares add to 1', () => {
+		// Areas 3 and 1 km²: area shares 0.75 and 0.25.
+		const nodes = [node('A', { areaKm2: 3, downstreamNodeId: 'B' }), node('B', { areaKm2: 1, sortOrder: 1 })];
+		const natural = [400, 0, 1234.5];
+		const out = run({ nodes, natural, settings: { ewrPragmaticM3PerDay: flat(100) as Monthly } });
+		const share = new Map(out.summary.farms.map((f) => [f.nodeId, f.flowShare]));
+		expect(share).toEqual(new Map([['A', 0.75], ['B', 0.25]]));
+		for (const id of ['A', 'B']) {
+			expect(get(out, id, 'runoff')).toEqual(natural.map((q) => q * share.get(id)!));
+			expect(get(out, id, 'ewr')).toEqual(natural.map(() => 100 * share.get(id)!));
+		}
+	});
+});
+
 describe('runModel — no rounding in the balance (audit R1)', () => {
 	it('fragmentation conserves natural flow: Σ farm runoff = natural flow', () => {
 		// Four equal farms: ROUND(0.25) = 0 lost 1 m³/day; ROUND(0.5) = 1 created 2 m³/day from 2.

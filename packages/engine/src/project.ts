@@ -735,6 +735,12 @@ export interface FarmSummary {
 	/** Mean crop water requirement F (net irrigation need, engine ≥ 0.16.0); absent on older runs. */
 	avgCropRequirementM3Day?: number;
 	/**
+	 * The farm's share of the catchment flow and of the EWR, 0–1 (docs/model.md
+	 * §2.5, the workbook's [Fragmented flow] / [Fragmented EWR] factor), as the
+	 * run applied it (engine ≥ 0.27.0); absent on older runs.
+	 */
+	flowShare?: number;
+	/**
 	 * Mean EWR charge (positive): this farm's share of the shortfall at the EWR
 	 * sites below it (engine ≥ 0.17.0, audit Q17). Engines before 0.17.0 stored
 	 * the mean incremental shortfall (Element sheet AB).

@@ -333,7 +333,7 @@ export const HELP: HelpEntry[] = [
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		aliases: ['fragmentation', 'fragmented flow', 'share'],
-		fields: ['settings.flowShareMethod', 'node.flowShareManual'],
+		fields: ['settings.flowShareMethod', 'node.flowShareManual', 'summary.flowShare'],
 		related: ['hi-lo-split', 'farm-area', 'natural-flow'],
 		source: 'b023 Farm spec; docs/model.md §2.5'
 	},

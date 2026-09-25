@@ -51,6 +51,8 @@ const CATCHMENT_ORDER = [
 // A farm's columns in FarmTemplate order (F … AB), intermediate ones included
 // (engine ≥ 0.12.0), so the file reads left to right like the formulas.
 const NODE_ORDER = FARM_DAILY_COLUMNS.map((c) => c.key);
+/** The series keys a farm can have, the optional ones included (land cover, boreholes, senior users): what the all-farms export (`farms.csv?key=`) accepts. */
+export const FARM_SERIES_KEYS: ReadonlySet<string> = new Set(NODE_ORDER);
 const rank = (keys: string[]) => new Map(keys.map((k, i) => [k, i]));
 const RANK = { catchment: rank(CATCHMENT_ORDER), node: rank(NODE_ORDER) };
 
@@ -99,9 +101,11 @@ export interface SummaryMeta {
  */
 const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).toPrecision(12)) : v);
 /** Fields converted with `pct` (the engine's own key names). */
-const PERCENT_KEYS = new Set(['fractionSupplied', 'ewrFractionDaysNotMet']);
+const PERCENT_KEYS = new Set(['flowShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
 const FARM_COLUMNS: [key: string, header: string][] = [
+	// Engine ≥ 0.27.0; empty on older runs. The share of both the flow (I) and the EWR (Y).
+	['flowShare', 'Flow share (%)'],
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],

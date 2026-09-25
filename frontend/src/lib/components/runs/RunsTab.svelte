@@ -292,7 +292,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		};
 	});
 	const downloadItems = $derived(
-		detail ? runDownloadItems(downloads, projectId, detail.run.id, editor.model.nodes.map((n) => ({ id: n.id, name: n.name }))) : []
+		detail
+			? runDownloadItems(
+					downloads,
+					projectId,
+					detail.run.id,
+					editor.model.nodes.map((n) => ({ id: n.id, name: n.name })),
+					detail.run.summary.farms.length > 0
+				)
+			: []
 	);
 </script>
 

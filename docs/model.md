@@ -771,6 +771,12 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 - Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
+Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
+all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
+The run records each farm's share as applied (`FarmSummary.flowShare`, engine
+≥ 0.27.0), so the summary CSV's `Flow share (%)` column stays right after the
+network's areas or method change; the Network tab shows the current setting.
+
 ### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
 
 **Why.** Invasive alien trees and commercial forestry (a streamflow reduction
@@ -918,7 +924,8 @@ storage to whole m³; the engine doesn't (R1).
 | F | Crop water requirement | from §2.3 (`crop_requirement`) |
 | D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.16.0, N1). The workbook has no column: D = F there |
 | H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
-| I | Farm runoff | fragmented natural flow (§2.5) |
+| I | Farm runoff | fragmented natural flow (§2.5), less the land-cover reduction when the farm has land cover (§2.5a) |
+| – | Runoff removed by land cover | `landcover_reduction`, only for a farm with land cover (§2.5a): I + this = natural flow × share. The daily CSV puts it right after I |
 | J | Transfer in (+) / out (−) | from §2.6 |
 | K | Upstream inflow "above dam" (into the dam) | `H × pctUpstreamToDam` (engine ≥ 0.9.0; the workbook computed L this way, see quirk Q1) |
 | L | Upstream inflow "below dam" | `H − K` |
@@ -2433,7 +2440,10 @@ it never changes a run's results.
   and re-running three randomly chosen members (`verifyEnsemble`,
   `verifyPaired`; [security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Storage:
   [data-model.md](./data-model.md) (`run_uncertainty`).
-- **Cost.** Every member is a full `runModel`: 25–55 ms on the example
+- **Cost.** Every member is a full model run, `runModelWithoutChecks`:
+  `runModel` less the plausibility checks (§2.10d), which no member result
+  reads, so a member's series and summary are otherwise identical and the
+  checks' code stays out of the calibration worker. 25–55 ms on the example
   catchments, so 300 members take 8–16 s in the browser's calibration worker.
 - **For the hydrologist** (plan.md question 18): the default thresholds
   (KGE′ ≥ 0.5, ±50 % low-flow bias, WR2012 up to *query*), the pan
