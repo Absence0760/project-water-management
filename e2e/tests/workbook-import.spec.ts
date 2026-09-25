@@ -225,6 +225,18 @@ test('names from the workbook are shown as text, never as HTML', async ({ page, 
 	await expect(dialog.getByRole('region', { name: 'Importer notes' }).getByText(`farm ${payload}: [Farm spec] min dam %`)).toBeVisible();
 	await expect(page.locator('dialog img')).toHaveCount(0);
 	expect(await page.evaluate(() => document.body.dataset.xss)).toBeUndefined();
+
+	// Stored with the project and shown again on its Overview: still text.
+	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
+	const record = page.getByRole('region', { name: 'Import record' });
+	const stored = record.getByRole('region', { name: /^Unmapped report/ });
+	await stored.getByText(/^Show the \d+ items$/).click();
+	await expect(stored.getByRole('cell', { name: payload, exact: true }).first()).toBeVisible();
+	await record.getByRole('region', { name: 'Importer notes' }).getByText(/^Show the \d+ notes$/).click();
+	await expect(record.getByText(`farm ${payload}: [Farm spec] min dam %`)).toBeVisible();
+	await expect(page.locator('main img')).toHaveCount(0);
+	expect(await page.evaluate(() => document.body.dataset.xss)).toBeUndefined();
 });
 
 for (const colorScheme of ['light', 'dark'] as const) {
