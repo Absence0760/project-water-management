@@ -2194,6 +2194,134 @@ calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and th
 first hydrologist question in
 [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
+### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
+
+Not in the workbook. Four checks a reviewing hydrologist makes by hand
+([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
+findings*), run on every run by `packages/engine/src/plausibility/`. They
+**only report and warn**: no check changes a model result. The run keeps them
+in `RunSummary.plausibility`; the Runs & results tab has a *Plausibility
+checks* panel ([ui.md](./ui.md)) and the summary CSV a *Plausibility checks*
+block ([api.md](./api.md#export)). Every threshold below is an engine
+constant, with its reasoning; the values are for the hydrologist to confirm
+([followups.md](./followups.md), *Hydrologist plausibility checks*).
+
+**The dry season** (`season.ts`). Checks 3 and 4 need one. It is the **six
+consecutive calendar months with the lowest mean daily flow**, wrapping past
+December: South African practice splits the year into a wet and a dry half
+(the Reserve's wet- and dry-season low flows, WR2012's seasonal index), and
+which half is dry differs by region (about May–October in summer-rainfall
+catchments, December–May in winter-rainfall ones), so it is found from the
+catchment's own flow rather than fixed. The flow is the first record whose
+every calendar month has **28 or more** valid days: the calibration record,
+then the other observed record, then the run's simulated natural flow.
+Observed flow comes first because it doesn't depend on the runoff model, so
+runs of different models get the same months and their curves can be
+overlaid. A tie keeps the window starting earliest in the water year.
+
+**1. Natural flow ≥ observed flow + net abstraction, per water year**
+(`naturalised.ts`). A gauge or logger at the outlet measures the impacted
+river. Adding back what the network took out upstream rebuilds the natural
+flow that record implies (naturalisation, §7), and that can't exceed the
+simulated natural flow beyond measurement error. On the calibration record's
+days (missing, negative and calibration-excluded days left out), per water
+year:
+
+- N = simulated natural flow, O = observed flow, S = simulated outflow;
+- the **modelled net abstraction** A = N − S, from the network's own water
+  balance (the self-check `balance` closes it every day), split into
+  **dams** (Σ over dams of the storage gained + evaporation − rain on the
+  surface), **land cover** (§2.5a) and **use net of return flows**, the rest
+  (irrigation G − T, other users, stream depletion by boreholes, and flow
+  from any node that doesn't drain to the outlet);
+- a year **fails** when O + A − N > tolerance. Since A = N − S this is the
+  same as S < O − tolerance: the simulated outflow's volume falls short of
+  the observed beyond the gauge's error. It is reported in the naturalised
+  form so the split shows which term would have to be wrong: natural flow
+  simulated too low (rain, parameters), abstraction over-estimated, or the
+  record.
+
+A year is judged with **300 or more** observed days (both seasons, as the
+double-mass checks require); shorter years are listed but not judged. The
+**tolerance** is **10 % of the year's observed volume**
+(`NATURALISED_TOLERANCE`): rated South African gauging weirs are good to
+about ±5 % in their gauged range (Wessels & Rooseboom 2009), but a year's
+volume also carries extrapolated floods and low flows, and published reviews
+put annual-volume uncertainty at about 10 % for a well-rated station
+(McMillan, Krueger & Freer 2012). A **floor** of 1 % of the record's mean
+observed volume over the same number of days (`NATURALISED_FLOOR`) keeps a
+near-dry year, whose own 10 % is a few hundred cubic metres, from failing on
+noise. A failing year warns ("Natural flow below observed + abstraction in …").
+
+**2. EWR days by good-rain and fallback-rain years** (`rainSource.ts`). A
+day's rain is a **station** reading when the catchment rain series has a
+value the run used as recorded: not blank, not a suspect zero run or listed
+missing period set aside (§2.4c), not a day a multi-day accumulation was
+spread over (§2.4d, `rain_catchment_spread`). Every other day is
+**fallback**: bias-corrected CHIRPS or forecast rain filled it, its rain was
+spread onto it, or nothing did and it ran dry. A water year is a **fallback
+year** when **more than half its rain** (the run's final rain, mm) fell on
+fallback days, **or more than half its days** were fallback days
+(`FALLBACK_YEAR_SHARE` 0.5). The day rule catches a year of blanks that ran
+dry: almost no fallback rain, but no station record either. Every other year
+is a **good-rain year**. The outlet's days not met (the pragmatic EWR, the
+headline count) are totalled per group, and so are the months met at each
+Reserve rule-table site (`summary.ewrAssurance`, §2.9c). The run warns when
+the share of days not met, or of Reserve months met, differs between the
+groups by **10 percentage points or more** (`RAIN_SOURCE_WARN_DIFF`), and
+when a project with a catchment rain series has only fallback years. The
+difference can be real climate (a station out of action through a drought),
+which is why it only warns: it says how far the EWR result leans on the
+fallback years, whose rain misses small storms and places large ones badly
+even after bias correction.
+
+**3. Double-mass curve of observed flow against rain** (`flowDoubleMass.ts`).
+Cumulative observed flow (mm over the catchment) against cumulative rain (the
+run's final rain) is a straight line while the catchment, its development and
+the gauge stay the same (Searcy & Hardison 1960). It runs on the calibration
+record's water years with **300+ days** having both and **100+ mm** of rain,
+10 such years or no result, and uses the rain-vs-CHIRPS check's break
+detection unchanged (`doubleMassSegments` in `doublemass.ts`, §2.10a: up to
+two breaks by BIC, segments of 5+ years, reported at a slope change of
+**20 %+** confirmed by Pettitt p < 0.05 or a BIC gain of 6). Because the
+runoff ratio isn't linear in rain (a run of dry years lowers it on its own),
+each break is set against the **simulated outflow** over the same days, which
+has the same rain and fixed development: `unexplained` = (1 + observed
+change) ÷ (1 + simulated change) − 1. Then a **hint**, not a verdict:
+
+| Hint | Rule | Reading |
+| --- | --- | --- |
+| `rain` | \|unexplained\| < 20 % | the model shows the same change with the same rain: no warning |
+| `newUse` | a fall, and the dry season's unexplained change is at least 10 points below the wet season's (`FLOW_DM_SEASON_MARGIN`) | abstraction and dams filling take a larger share of low flows |
+| `gauge` | a fall the wet season takes more of, or any rise | a weir bypassed or drowned in floods under-reads high flows; a rise can't come from new use (a rating change, or use that stopped) |
+| `unclear` | anything else, or no dry season | |
+
+Every break with a hint other than `rain` warns. The model keeps development
+fixed over a run (followups: *development can't vary over time*), so a real
+change in use biases the fit before or after it; confirm with the gauge's
+records and the development history.
+
+**4. Dry-season low-flow duration curves** (`lowFlow.ts`). The flow duration
+curve of the dry-season days only (Weibull positions, as §2.9c), in m³/s at
+the exceedance points 1, 2, 5, 10, 20 … 90, 95, 98 and 99 %, for the gauge
+and the logger (each on its own days, calibration exclusions left out), the
+simulated outflow and natural flow (every dry-season day of the run), and the
+simulated outflow again on each observed record's days. A curve needs **90
+dry-season days** (half a dry season). The results panel overlays them with
+the whole-run simulated outflow of the latest run of each other runoff
+model, when that run used the same dry season. The run warns when, on the
+calibration record's dry-season days, the simulated **Q90** is more than a
+**factor of 2** above or below the observed (`LOW_FLOW_WARN_FACTOR`), with
+flows under 0.001 m³/s (the gauge's published resolution) counted as 0.001.
+Low flows are where a gauge is least certain (a weir's rating near its crest,
+silt and weed), and low-flow discharge uncertainty runs to ±50–100 %
+(McMillan, Krueger & Freer 2012), so a factor of 2 is outside what gauging
+error explains (CR-16's low-flow FDC bias).
+
+**Not yet** (followups): a Q90 comparison for the other observed record (it
+may be a different river), a check per gauge node inside the network (the
+observed records are the outlet's), and the checks in the run comparison.
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
@@ -2614,6 +2742,9 @@ step when a definition changes.
 | **Pitman** | A monthly rainfall-runoff model used in South African water-resource studies (WR90/WR2012). "Pitman flow" = its naturalised flow series. |
 | **Natural flow** | Flow as it would be with no farms, dams or abstraction. |
 | **Naturalisation** | Rebuilding natural flow from observed flow by adding back abstraction and storage changes. |
+| **Fallback-rain year** | A water year where more than half the rain, or more than half the days, came from CHIRPS, forecast, spread or blank days instead of a catchment station reading (§2.10d). |
+| **Dry season** | Here: the six consecutive calendar months with the lowest mean flow (§2.10d). |
+| **Low-flow duration curve** | The flow duration curve of the dry-season days only; Q90 is the flow equalled or exceeded 90 % of them. |
 | **Fragmentation** | Splitting catchment flow (or EWR) into per-farm shares. |
 | **EWR** | Environmental Water Requirement: the flow that must stay in the river for the ecosystem. |
 | **IFR / Reserve** | Instream Flow Requirement or Ecological Reserve, the South African legal terms for the EWR. |

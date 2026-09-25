@@ -42,6 +42,7 @@ import {
 	type ZeroRainMask
 } from './rain';
 import { doubleMass as doubleMassOf, doubleMassCheck, doubleMassRunWarning, type DoubleMass } from './doublemass';
+import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -85,7 +86,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.24.1';
+export const ENGINE_VERSION = '0.25.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -484,6 +485,26 @@ export function runModelWith(
 		)
 	);
 
+	// Hydrologist plausibility checks (engine ≥ 0.25.0, ./plausibility): report and warn only.
+	const plausibility = runPlausibility({
+		input,
+		settings,
+		start,
+		days,
+		natural,
+		simOutflow,
+		observedKind,
+		aligned,
+		accumulation,
+		finalRain,
+		plan,
+		sim,
+		coverTotal,
+		ewrShort,
+		reserve: ewrAssurance.map((a) => a.report)
+	});
+	warnings.push(...plausibility.warnings);
+
 	return {
 		engineVersion: ENGINE_VERSION,
 		startDate,
@@ -509,6 +530,7 @@ export function runModelWith(
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
+			plausibility: plausibility.checks,
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainAccumulation: accumulation?.info ?? null,
@@ -517,6 +539,74 @@ export function runModelWith(
 	};
 }
 
+
+/**
+ * The plausibility checks' inputs from a finished run (./plausibility): the
+ * observed records at the outlet, the calibration exclusions as a day mask,
+ * the dams' daily storage gain + evaporation − rain on them and the station
+ * rain days. Sums over nodes run in node-id order, so the result doesn't
+ * depend on how the network is listed.
+ */
+function runPlausibility(r: {
+	input: ModelInput;
+	settings: ProjectSettings;
+	start: number;
+	days: number;
+	natural: Float64Array;
+	simOutflow: Float64Array;
+	observedKind: CalibrationFlowKind | null;
+	aligned: (kind: SeriesKind) => (number | null)[];
+	accumulation: AccumulationRun | null;
+	finalRain: (number | null)[] | null;
+	plan: NetworkPlan;
+	sim: ReturnType<typeof simulateNetwork>;
+	coverTotal: Float64Array;
+	ewrShort: Float64Array;
+	reserve: EwrAssuranceSite[];
+}) {
+	const { input, settings, start, days, plan, sim } = r;
+	const series = input.series ?? {};
+	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
+	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = r.aligned(kind);
+	const excluded = new Uint8Array(days);
+	for (const x of exclusionRanges(settings.calibrationExclusions)) {
+		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
+	}
+	const nodes = input.model.nodes;
+	const byId = nodes.map((_, i) => i).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+	const dams = new Float64Array(days);
+	for (const i of byId) {
+		const w = sim.workings?.[i];
+		if (!w || plan.nodes[i]!.kind !== 'farm') continue;
+		const q = sim.nodes[i]!.storage;
+		let prev = plan.nodes[i]!.initialStorageM3;
+		for (let t = 0; t < days; t++) {
+			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]!;
+			prev = q[t]!;
+		}
+	}
+	const catchment = r.aligned('rain_catchment_mm');
+	const station = new Uint8Array(days);
+	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
+	return plausibilityChecks({
+		start,
+		days,
+		runoffModel: settings.runoffModel,
+		naturalM3Day: r.natural,
+		simulatedM3Day: r.simOutflow,
+		observed,
+		calibrationKind: r.observedKind,
+		excluded,
+		damsM3Day: dams,
+		landCoverM3Day: r.coverTotal,
+		rainMm: r.finalRain,
+		station,
+		hasStation: !!series.rain_catchment_mm,
+		ewrShortfall: r.ewrShort,
+		reserve: r.reserve,
+		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input)
+	});
+}
 
 /** The run's settings, window and aligned inputs: everything before natural flow. */
 export interface PreparedRun {

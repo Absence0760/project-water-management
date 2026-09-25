@@ -5,6 +5,7 @@ import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrat
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
+import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
@@ -1185,6 +1186,14 @@ export interface RunSummary {
 		 */
 		doubleMass?: DoubleMass | null;
 	};
+	/**
+	 * Hydrologist plausibility checks (engine ≥ 0.25.0, ./plausibility,
+	 * model.md §2.10d): natural ≥ observed + abstraction per water year, EWR
+	 * results by rain source, the double-mass curve of observed flow against
+	 * rain, and dry-season low-flow duration curves. Report and warn only.
+	 * Absent on older runs.
+	 */
+	plausibility?: PlausibilityChecks;
 	/**
 	 * The CHIRPS fallback bias correction (engine ≥ 0.7.0, ./rain.ts): the
 	 * factors fitted per calendar month and how many run days used them. null
