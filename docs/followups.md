@@ -669,7 +669,9 @@ the suggested order (the IDs carry the detail):
       models.
       **20 000-case soak on 0.19.0 (2026-09-24) failed**, stopping at the
       3-failure cap per model (legacy scanned seeds 1–8984, GR4J 1–17277),
-      so later seeds are unscanned. Repro any seed with
+      so later seeds are unscanned. **20 000-case soak on 0.19.3
+      (2026-09-25, `FUZZ_MAX_FAILURES=100`, seeds 1–20 000):** GR4J passed;
+      legacy failed on one seed, 14313 (order invariance, below). Repro any seed with
       `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
 - [x] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
       9681).** Fixed in engine 0.19.1 (2026-09-25). The cause was not the
@@ -721,6 +723,25 @@ the suggested order (the IDs carry the detail):
       `run.invariants.test.ts` › "engine 0.19.3: doubling crop areas …".
       The random-cases tests' failure cap is now `FUZZ_MAX_FAILURES`
       (default 3; model.md §6).
+- [ ] **Order invariance: a one-ulp transfer charged as an EWR impact
+      (legacy seed 14313).** Found by the 20 000-case soak on engine 0.19.3
+      (2026-09-25; the 0.19.0 soak stopped at seed 8984, so this range was
+      unscanned). It fails with and without the 0.19.3 dam limiter, so it
+      is older. The only rule into n9 draws from n0 (13 821 m³, 65 % dead
+      storage, so a reserve of ~8 984 m³), and n0 sits at its reserve.
+      `free = Q_src[t−1] − reserve` then comes out as 0 or as one ulp
+      (1.8e-12 m³) depending on the node order, n9 receives that residue,
+      and `network/attribution.ts` charges it to n9 as an impact, because
+      the noise scale counts n9's own dam and upstream nodes but not the
+      transfer's source dam. So `daysEwrNotMet` moves by one (537 vs 536).
+      Durable fix (pick one; both are small): a transfer moves nothing when
+      `free` is within `RESIDUE` of the source storage (network/simulate.ts,
+      the same kind of noise floor as `shortfall`), or the attribution noise
+      scale adds the storage of the source dams of the day's transfers into
+      the farm. Then pin seed 14313 beside the 0.19.1–0.19.2 seeds. Not
+      done here because it is the EWR attribution / transfer code, outside
+      this change. Trigger: the next engine change to either, or before the
+      issue #4 soak is signed off.
 - [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,
