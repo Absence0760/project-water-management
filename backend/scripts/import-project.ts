@@ -4,19 +4,16 @@
 //   pnpm import:project <project.json> --email you@example.com [--name "…"] [--password …] [--run]
 //
 // With --password, the user is created if missing (local demo seeding only).
-// Runs through the same RLS-bound path and validation as the API.
+// Runs through the same RLS-bound path and validation as POST /projects/import
+// (src/projects/import.ts).
 import { config } from 'dotenv';
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { z } from 'zod';
 import { hashPassword } from '../src/auth/password.js';
 import { closePool } from '../src/db/pool.js';
-import { withoutUser, withUser } from '../src/db/tx.js';
-import { saveModel } from '../src/model/store.js';
-import { executeRun } from '../src/runs/execute.js';
-import { ModelBody, modelProblems } from '../src/model/validate.js';
-// Shared with GET /projects/:id/export.json, so an export re-imports as-is.
-import { ProjectFile } from '../src/projects/document.js';
+import { withoutUser } from '../src/db/tx.js';
+// The same validation and transaction as POST /projects/import.
+import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
 
 export async function importProject(file: string, email: string, opts: ImportOptions = {}) {
 	return importProjectData(JSON.parse(await readFile(file, 'utf8')), email, opts);
@@ -30,11 +27,14 @@ export interface ImportOptions {
 	displayName?: string;
 }
 
-/** Validate and create a project from an in-memory project document. Returns its id. */
+/**
+ * Validate and create a project from an in-memory project document as the
+ * user with this email (created first when `password` is given). Returns its
+ * id. A requested run that fails throws, after the import has committed.
+ */
 export async function importProjectData(raw: unknown, email: string, opts: ImportOptions = {}): Promise<string> {
-	const data = ProjectFile.parse(raw);
-	const problems = modelProblems(data.model);
-	if (problems.length) throw new Error(`invalid model:\n  ${problems.join('\n  ')}`);
+	// Validate before touching users, so a bad file never creates a demo user.
+	const data = parseProjectFile(raw);
 
 	const userId = await withoutUser(async (db) => {
 		const { rows } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [email.toLowerCase()]);
@@ -51,36 +51,19 @@ export async function importProjectData(raw: unknown, email: string, opts: Impor
 		return created[0]!.id;
 	});
 
-	const projectId = await withUser(userId, async (db) => {
-		const id = crypto.randomUUID();
-		await db.query(
-			'INSERT INTO project (id, name, description, settings, created_by) VALUES ($1, $2, $3, $4, $5)',
-			[id, opts.name ?? data.name, data.description, JSON.stringify(data.settings), userId]
-		);
-		// Imported ids are deterministic per workbook; give each import its own
-		// so the same workbook can be imported more than once.
-		await saveModel(db, id, freshIds(data.model));
-		for (const s of data.series) {
-			await db.query(
-				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values") VALUES ($1, $2, $3, $4, $5, $6)`,
-				[id, s.kind, s.name, s.unit, s.startDate, s.values]
-			);
-		}
-		return id;
-	});
-	if (opts.run) await withUser(userId, (db) => executeRun(db, projectId, 'Initial run (import)'));
+	const { projectId, runError } = await importProjectFile(userId, data, { name: opts.name, run: opts.run });
+	if (runError) throw new Error(`imported project ${projectId}, but ${runError}`);
 	return projectId;
 }
 
-function freshIds(m: z.infer<typeof ModelBody>) {
-	const map = new Map<string, string>();
-	const id = (old: string) => map.get(old) ?? (map.set(old, crypto.randomUUID()), map.get(old)!);
-	return {
-		nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
-		crops: m.crops.map((c) => ({ ...c, id: id(c.id) })),
-		cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
-		transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) }))
-	};
+/** An import failure as the CLI prints it: the message plus any listed problems. */
+function describe(err: unknown): string {
+	const e = err as { message?: string; details?: unknown; issues?: unknown };
+	const list = (Array.isArray(e.details) ? e.details : Array.isArray(e.issues) ? e.issues : []) as { message?: string; path?: unknown[] }[];
+	const lines = list.map((d) => `${Array.isArray(d.path) && d.path.length ? `${d.path.join('.')}: ` : ''}${d.message ?? ''}`);
+	// A ZodError's own message is its issues as JSON; the list says it better.
+	const head = Array.isArray(e.issues) ? 'invalid project file' : (e.message ?? String(err));
+	return [head, ...lines.map((l) => `  ${l}`)].join('\n');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -98,7 +81,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	importProject(file, values.email, { name: values.name, password: values.password, run: values.run })
 		.then((id) => console.log(`imported project ${id}`))
 		.catch((err) => {
-			console.error(err.message);
+			console.error(describe(err));
 			process.exitCode = 1;
 		})
 		.finally(closePool);

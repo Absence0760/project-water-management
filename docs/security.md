@@ -199,7 +199,10 @@ In short:
   document, the network is a tree with one outflow, and names are unique.
 - Series are capped at 60 000 values. The backend itself caps every request
   body at 4 MB (Hono `bodyLimit`, `backend/src/app.ts`, `413` past it),
-  tighter than and ahead of Lambda's 6 MB payload limit in production.
+  tighter than and ahead of Lambda's 6 MB payload limit in production. The
+  one exception is `POST /projects/import` (a whole project document), capped
+  at 5 MB on the route, after the session check, so an anonymous caller never
+  gets a large body read.
 - Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
   server never parses `.xlsm` files and no macro content is ever executed.
   The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,

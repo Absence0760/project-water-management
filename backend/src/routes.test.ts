@@ -77,6 +77,27 @@ describe('route auth inventory', () => {
 		}
 	);
 
+	it('includes POST /projects/import, which carries its own body cap behind the session check', async () => {
+		expect(routes).toContain('POST /projects/import');
+		// Signed out, even an oversized body is a 401: the session is checked before the body is read.
+		const res = await app.request('/projects/import', {
+			method: 'POST',
+			headers: { origin: 'http://localhost:7777', 'content-type': 'application/json' },
+			body: 'x'.repeat(6 * 1024 * 1024)
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it('keeps the general 4 MB body cap on every other route', async () => {
+		const res = await app.request('/auth/login', {
+			method: 'POST',
+			headers: { origin: 'http://localhost:7777', 'content-type': 'application/json' },
+			body: JSON.stringify({ email: 'a@example.com', password: 'x'.repeat(4 * 1024 * 1024) })
+		});
+		expect(res.status).toBe(413);
+		expect(await res.json()).toEqual({ error: 'request too large' });
+	});
+
 	it('logout and health answer anonymous requests', async () => {
 		expect((await app.request('/health')).status).toBe(200);
 		const res = await app.request('/auth/logout', { method: 'POST', headers: { origin: 'http://localhost:7777' } });

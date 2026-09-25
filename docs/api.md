@@ -79,8 +79,8 @@ cross-origin form post rejected by the CSRF check, a write RLS refused, or, in
 production, a request that didn't come through CloudFront); `400` =
 validation (`details` = zod issues), or `{ error: "invalid JSON" }` for a
 body that isn't JSON (`backend/src/http/body.ts`); `409` = conflict (duplicate name or email,
-already a member, last owner/admin); `413` = request body over 4 MB, a series
-over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
+already a member, last owner/admin); `413` = request body over 4 MB (5 MB
+for `POST /projects/import`), a series over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
 `Retry-After`). Database errors are mapped to fixed messages and anything
 unexpected is `500 { error: "Internal server error" }`; raw database error
@@ -103,6 +103,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204` | owner |
+| POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
@@ -231,6 +232,64 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `editedParams` on every `PATCH`** (fitted parameters whose value in the
   saved settings differs from the fit), whatever the client sends, so a hand
   edit after Apply always marks the record.
+
+### Import a project file
+
+`POST /projects/import` creates a project from a project document: the file
+`GET /projects/:id/export.json` writes ([Export](#export)) or the workbook
+importer's `project.json` (`scripts/wbt-import`). It's how a catchment gets
+into an environment with no database access, such as production (WP-1.8).
+`pnpm import:project` and `pnpm seed:examples` share its code
+(`backend/src/projects/import.ts`).
+
+- **Body:** the document as JSON (`ProjectFile` in
+  `backend/src/projects/document.ts`): `{ name, description?, settings?,
+  model, series? }`. An export posts as-is: unknown top-level keys
+  (`format`, `version`, `exportedAt`, `engineVersion`) are ignored. To import
+  under another name, change `name` in the body. Series take the same bounds
+  as `PUT /projects/:id/series` (a real `YYYY-MM-DD` start date, a unit of
+  1–20 characters, a name of at most 100, finite numbers or `null`, at most
+  60 000 values).
+- **Query:** `teamId` (uuid) puts the project in a team, with the same rule as
+  `POST /projects`: `404 team not found` if you're not in it, `403 requires
+  team member` for a team viewer, omitted = personal. `run=1` (or `true`)
+  runs the model once after the import.
+- **Atomic:** validation, the project row, the model and every series go in
+  one `withUser` transaction as you (RLS applies, and the existing trigger
+  makes you owner). Any failure rolls it all back, so nothing partial is left.
+  Every row gets a fresh id, so one file can be imported any number of times;
+  settings that name a node (each EWR rule table's `siteNodeId`) follow the
+  new ids. Settings are stored as the file has them (a workbook import's
+  partial settings keep tracking the defaults); a `fitRecord`'s
+  `editedParams` is recomputed as on `PATCH`.
+- **Response:** `201 { project }`, where `project` has the same shape
+  `POST /projects` returns. With `run=1` it also carries `runId`, or, when
+  the run fails, `runError` (for example `"model run failed: …"` when GR4J has
+  no A-pan evaporation yet). The run happens **after** the import commits, in
+  its own transaction, so a model that can't run yet is still imported: fix
+  the input and run it from the Runs tab.
+- **Errors:** `400 { error: "invalid request", details }` for the zod shape
+  (`details` = zod issues); `400 { error: "invalid project file", details:
+  [{ message }] }` for the structural model rules (`modelProblems`: one
+  outflow node, no cycles, references that resolve, …) and two series with
+  the same kind and name; `400 invalid JSON`; `404 team not found`; `401`
+  signed out; `413 { error: "project file larger than 5 MB — remove series
+  the model doesn't need from the file, import it, then upload those series
+  as CSV" }`.
+
+**Body size.** The import has its own **5 MB** cap (`IMPORT_MAX_BYTES`), the
+same as the export cap, so any file the app exports imports back; every other
+route keeps the general 4 MB cap. It can't go much higher: Lambda refuses a
+request payload over **6 MB** (the event JSON wraps the body as one escaped
+string, plus headers), and a request can't be streamed. For scale, the client
+catchment's `project.json` (4 series of about 16 000 days, 13 nodes) is about
+**0.4 MB** compact; a 60 000-day series is about 0.8–1 MB. So a real
+catchment has roughly 12× headroom, and gzip request bodies were not added.
+If projects outgrow the cap, add `Content-Encoding: gzip` (a
+`CompressionStream` in the browser) with a decompressed cap; note that a
+binary body reaches Lambda base64-encoded (+33 %), so the compressed cap has
+to stay near 4.4 MB. `import.test.ts` fails if the export cap is raised past
+the import cap, which is the trigger to do this.
 
 ### Members
 
@@ -714,8 +773,9 @@ with `= + - @`, a tab or a CR get a leading `'` so a spreadsheet never runs them
 `from`/`to` are inclusive ISO dates, clamped to the series; `400` if they are
 not real dates, `from > to`, or the window misses the series entirely.
 
-**Project document** (`export.json`) is the shape `pnpm import:project`
-accepts (`ProjectFile` in `backend/src/projects/document.ts`), so a project
+**Project document** (`export.json`) is the shape
+[`POST /projects/import`](#import-a-project-file) and `pnpm import:project`
+accept (`ProjectFile` in `backend/src/projects/document.ts`), so a project
 round-trips export → import:
 
 ```jsonc
@@ -729,8 +789,8 @@ round-trips export → import:
 }
 ```
 
-Runs are not included (re-run after importing, or pass `--run`). The importer
-gives every row a fresh id.
+Runs are not included (re-run after importing, or pass `run=1` / `--run`).
+The importer gives every row a fresh id.
 
 **Size cap — 413.** Production serves the API through Lambda's *buffered*
 response mode, which fails any response over **6 MB**. Every export body is

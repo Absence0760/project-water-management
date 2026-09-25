@@ -28,6 +28,12 @@ export function handleError(err: unknown, c: Context) {
 	if (err instanceof ZodError) {
 		return c.json({ error: 'invalid request', details: err.issues }, 400);
 	}
+	// A body streamed without Content-Length that outgrows a bodyLimit fails
+	// the handler's read; the bodyLimit middleware then answers with its own
+	// 413 message. Not a server fault, so it isn't logged.
+	if (err instanceof Error && err.name === 'BodyLimitError') {
+		return c.json({ error: 'request too large' }, 413);
+	}
 	if (err instanceof HTTPException) {
 		return c.json({ error: err.message || 'error' }, err.status);
 	}
