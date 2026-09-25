@@ -187,7 +187,6 @@
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
-				pannable
 				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
@@ -208,6 +207,7 @@
 				xy={fdc.xy}
 				xLabel="Time flow is equalled or exceeded (%)"
 				xFormat={(v) => `${fmtNum(v, v < 1 ? 2 : 0, true)}%`}
+				toolbar={unitToggle}
 				logToggle
 				bind:log={fdcLog}
 			/>
@@ -252,6 +252,7 @@
 				bind:log={ewrLog}
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
+				toolbar={unitToggle}
 				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
 			/>
 		{/if}
@@ -305,7 +306,7 @@
 
 	<section class="panel wide" id="res-explore" aria-labelledby="exp-h">
 		<div class="panel-head"><h3 id="exp-h">Explore any output</h3></div>
-		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} />
+		<RunChart {projectId} {runId} {refs} {nodeNames} {nodeOrder} {flowUnit} flowToolbar={unitToggle} />
 	</section>
 </div>
 

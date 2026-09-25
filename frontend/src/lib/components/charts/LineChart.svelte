@@ -25,7 +25,7 @@
 		toolbar,
 		caption,
 		shade = [],
-		pannable = false
+		pannable = true
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -47,8 +47,9 @@
 		shade?: { start: string; end: string }[];
 		/**
 		 * Daily charts: Shift+drag moves the view through the record, with
-		 * Earlier / Later buttons as the non-drag route. A plain drag still
-		 * draws a box to zoom into, as on every chart.
+		 * Earlier / Later buttons as the non-drag route (shown once there is
+		 * somewhere to move to). A plain drag still draws a box to zoom into,
+		 * as on every chart. On by default; `false` opts a daily chart out.
 		 */
 		pannable?: boolean;
 	} = $props();
@@ -304,7 +305,7 @@
 		<span class="ttl">{title}</span>
 		<span class="tools">
 			{#if toolbar}{@render toolbar()}{/if}
-			{#if isTime && pannable && hasData}
+			{#if isTime && pannable && hasData && (canWindow || canPan)}
 				<span class="seg" role="group" aria-label="Move through the record">
 					<button type="button" class="btn btn-sm" disabled={!canPan || view!.min <= dataLo} onclick={() => step(-1)}>◀ Earlier</button>
 					<button type="button" class="btn btn-sm" disabled={!canPan || view!.max >= dataHi} onclick={() => step(1)}>Later ▶</button>
@@ -328,7 +329,7 @@
 	{/if}
 	<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
 	<p class="hint">
-		{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom; Shift+drag, or Earlier / Later, to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
+		{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom, then Shift+drag (or Earlier / Later) to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
 	</p>
 </figure>
 
