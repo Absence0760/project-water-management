@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -102,6 +103,48 @@ class SyntheticWorkbook(unittest.TestCase):
                 self.assertEqual(sum(fragment in n for n in notes), 1, fragment)
         self.assertTrue(any("imported as flow_reference_m3s" in n and "divided by 0.8" in n for n in ref_notes))
         self.assertTrue(any(n.startswith("WARNING: ") and "runs use the logger record" in n for n in ref_notes))
+
+
+class Variants(unittest.TestCase):
+    """Branches the committed workbook can't reach, on a variant of it (not committed)."""
+
+    def extract(self, **kwargs):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / gen.WORKBOOK_NAME
+            gen.write_workbook(path)
+            project, _expected, notes = gen.extract(path, **kwargs)
+        return project, notes
+
+    def test_unknown_fragmentation_method_falls_back_to_area(self):
+        with mock.patch.object(gen, "FRAGMENTATION_METHOD", "Equal shares"):
+            project, notes = self.extract()
+        self.assertEqual(project["settings"]["flowShareMethod"], "area")
+        self.assertIn("unknown fragmentation method 'Equal shares'; using area", notes)
+
+    def test_a_second_root_is_noted(self):
+        network = [(n, t, [u for u in ups if u != "Golf Farm"]) for n, t, ups in gen.NETWORK]
+        with mock.patch.object(gen, "NETWORK", network):
+            _, notes = self.extract()
+        self.assertIn("elements ['Golf Farm', 'Outlet Gauge'] have no downstream element; only Outlet Gauge is the outflow gauge", notes)
+
+    def test_rUseFlow_on_pitman_is_unset_with_a_warning(self):
+        with mock.patch.object(gen, "USE_FLOW", 1):
+            project, notes = self.extract()
+        self.assertIsNone(project["settings"]["calibrationFlowKind"])
+        self.assertTrue(any(n.startswith("WARNING: [Flow data] rUseFlow calibrates against Pitman flow") for n in notes))
+
+    def test_rUseFlow_on_an_empty_series_is_unset(self):
+        with mock.patch.object(gen, "USE_FLOW", 3), mock.patch.object(gen, "LOGGER_FROM", gen.END + gen.dt.timedelta(days=30)):
+            project, notes = self.extract()
+        self.assertIsNone(project["settings"]["calibrationFlowKind"])
+        self.assertNotIn("flow_logger_m3s", [s["kind"] for s in project["series"]])
+        self.assertIn("[Flow data] rUseFlow picks flow_logger_m3s, which has no values; calibrationFlowKind left unset", notes)
+
+    def test_a_calibration_window_that_ends_before_it_starts_is_dropped(self):
+        swapped = {"D11": gen.CALIBRATION["D12"], "D12": gen.CALIBRATION["D11"]}
+        with mock.patch.dict(gen.CALIBRATION, swapped):
+            project, _ = self.extract()
+        self.assertEqual((project["settings"]["calibrationStart"], project["settings"]["calibrationEnd"]), (None, None))
 
 
 if __name__ == "__main__":
