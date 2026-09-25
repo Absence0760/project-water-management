@@ -74,7 +74,7 @@ describe('summary sheet', () => {
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
 		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, multi-day accumulations,
 		// double-mass check, calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(14);
+		expect(lines.filter((l) => l === '').length).toBe(15);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
