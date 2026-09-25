@@ -199,6 +199,12 @@ variable "sqs_endpoint_az_count" {
   }
 }
 
+variable "fetcher_reserved_concurrency" {
+  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  type        = number
+  default     = 2
+}
+
 variable "jobs_backlog_alarm_seconds" {
   description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
   type        = number

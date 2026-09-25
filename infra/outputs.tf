@@ -37,6 +37,11 @@ output "worker_function_name" {
   value       = aws_lambda_function.worker.function_name
 }
 
+output "fetcher_function_name" {
+  description = "Fetcher Lambda function name (data feeds, feeds.tf). deploy-backend.yml updates its code after the worker."
+  value       = aws_lambda_function.fetcher.function_name
+}
+
 output "public_site_url" {
   description = "Public URL of the site."
   value       = local.site_origin

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build and zip the three backend Lambdas. Used by .github/workflows/deploy-backend.yml;
+# Build and zip the four backend Lambdas. Used by .github/workflows/deploy-backend.yml;
 # runnable locally from anywhere in the repo (needs `pnpm install` first).
 #
-#   infra/scripts/package-lambdas.sh            # → backend/dist/{lambda,migrate,worker}.zip
+#   infra/scripts/package-lambdas.sh            # → backend/dist/{lambda,migrate,worker,fetcher}.zip
 #
 # Package layouts (they must match the handlers in infra/lambda.tf):
 #
@@ -19,7 +19,11 @@
 #     lambda-worker.mjs               esbuild bundle of backend/src/lambda-worker.ts
 #     rds-global-bundle.pem
 #
-# The API and worker bundles include @aws-sdk/client-sqs (job wake-ups) the
+#   fetcher.zip                       handler lambda-fetcher.handler (infra/feeds.tf)
+#     lambda-fetcher.mjs              esbuild bundle of backend/src/lambda-fetcher.ts
+#                                     (no database, so no CA bundle)
+#
+# The API, worker and fetcher bundles include @aws-sdk/client-sqs (job wake-ups, feed queues) the
 # same way. The API bundle includes @aws-sdk/client-sesv2 (email), so production sends mail
 # with the lockfile's pinned SDK, not whatever the nodejs24.x runtime ships. The
 # migrate Lambda keeps @aws-sdk/* external: it imports Secrets Manager from the
@@ -45,8 +49,8 @@ esbuild() {
     --banner:js="$banner" --log-level=warning
 }
 
-rm -f "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip"
-mkdir -p "$out" "$stage/api" "$stage/migrate/dist" "$stage/migrate/migrations" "$stage/worker"
+rm -f "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip" "$out/fetcher.zip"
+mkdir -p "$out" "$stage/api" "$stage/migrate/dist" "$stage/migrate/migrations" "$stage/worker" "$stage/fetcher"
 
 # --- API ---------------------------------------------------------------------
 esbuild "$backend/src/lambda.ts" --outfile="$stage/api/lambda.mjs"
@@ -64,13 +68,17 @@ esbuild "$backend/src/lambda-worker.ts" --outfile="$stage/worker/lambda-worker.m
 cp "$ca" "$stage/worker/rds-global-bundle.pem"
 (cd "$stage/worker" && zip -q -9 -X -r "$out/worker.zip" .)
 
+# --- Fetcher -------------------------------------------------------------------
+esbuild "$backend/src/lambda-fetcher.ts" --outfile="$stage/fetcher/lambda-fetcher.mjs"
+(cd "$stage/fetcher" && zip -q -9 -X -r "$out/fetcher.zip" .)
+
 # Neither Lambda bundle may carry dotenv: it would read env files from the
 # package in production (docs/STACK.md § Two backend entry points).
-for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs"; do
+for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs" "$stage/fetcher/lambda-fetcher.mjs"; do
   if grep -q 'dotenv' "$f"; then echo "error: $(basename "$f") bundles dotenv" >&2; exit 1; fi
 done
 
-for z in lambda migrate worker; do
+for z in lambda migrate worker fetcher; do
   echo "== $z.zip ($(du -h "$out/$z.zip" | cut -f1))"
   unzip -Z1 "$out/$z.zip" | sed 's/^/   /'
 done

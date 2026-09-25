@@ -18,8 +18,9 @@
 # this one queue: no NAT. The API reaches it through the same endpoint to
 # send wake-ups.
 #
-# NOT here yet: WP-2.10 adds the `fetch-requests` / `ingest-results` queues
-# and the fetcher Lambda outside the VPC; WP-2.13 gives the worker SES.
+# The data feeds' queues and the fetcher Lambda outside the VPC are in
+# feeds.tf (WP-2.10); the worker reaches them through the same endpoint.
+# NOT here yet: WP-2.13 gives the worker SES.
 # ----------------------------------------------------------------------------
 
 locals {
@@ -158,6 +159,9 @@ resource "aws_lambda_function" "worker" {
       NODE_EXTRA_CA_CERTS = local.rds_ca_path
       JOB_TRANSPORT       = "sqs"
       JOBS_QUEUE_URL      = aws_sqs_queue.jobs.url
+      # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
+      FEED_FETCHER             = "sqs"
+      FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
     }
   }
 
@@ -289,7 +293,7 @@ resource "aws_vpc_endpoint" "sqs" {
   security_group_ids  = [aws_security_group.vpce_sqs.id]
   private_dns_enabled = true
 
-  # Only these roles, only this queue, only the actions they use.
+  # Only these roles, only these queues, only the actions they use.
   policy = data.aws_iam_policy_document.sqs_endpoint.json
 
   tags = { Name = "${local.project}-sqs" }
@@ -309,6 +313,25 @@ data "aws_iam_policy_document" "sqs_endpoint" {
     sid       = "WorkerUsesJobsQueue"
     actions   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
     resources = [aws_sqs_queue.jobs.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  # Data feeds (feeds.tf): the worker asks the fetcher and reads its answers.
+  statement {
+    sid       = "WorkerSendsFetchRequests"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.fetch_requests.arn]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.worker_lambda.arn]
+    }
+  }
+  statement {
+    sid       = "WorkerConsumesIngestResults"
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    resources = [aws_sqs_queue.ingest_results.arn]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]
