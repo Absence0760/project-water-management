@@ -497,7 +497,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    recommendation):* the equitable share is labelled a fairness benchmark,
    "Not an allocation or licence condition".
 8. **Pragmatic EWR (Q10).** Is entering the 12 monthly values enough, or must the
-   app derive them from Desktop Reserve tables?
+   app derive them from Desktop Reserve tables? *Built pending your answer
+   (engine 0.21.0, hydrologist Q6): a Reserve rule table (12 months × % points)
+   can be entered per EWR site beside the pragmatic EWR, and every run then
+   reports monthly compliance with it ([model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
+   The pragmatic EWR still sets the daily charge and curtailment.* See 17.
 9. **Reference results.** Is the client catchment's current working workbook the version to
    match? Are there other catchments (B, C…) with workbooks we can use as test
    cases?
@@ -510,6 +514,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 12. **EWR "days not met".** Count days that were actually short (app default)
     or the workbook macro's running monthly total? The workbook's EWR pivot is
     also stale on part of the farm-months (macro not re-run). (model.md §2.9)
+    *With a Reserve rule table the headline is months met against it, and
+    days not met is the secondary measure (engine 0.21.0).*
 13. **Curtailment targets** (model.md §2.11, Q11–Q15): is reduce/gain a
     fairness target or a schedule farms can follow (a downstream surplus can't
     reach an upstream farm)? The column "Reduction of demand required (%)" is
@@ -538,6 +544,17 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     Do the station's records (observer logs, "accumulated" flags) say which
     readings are multi-day totals? Should a total that reads far below CHIRPS
     be scaled up for the catch an unread gauge loses, or treated as missing?
+17. **Reserve rule tables (hydrologist Q6).** *Built from the literature
+    (engine 0.21.0, model.md §2.9c), to confirm.* Which gazetted table applies
+    at the outlet and at each EWR site (so which gauges to add), and is it the
+    total flow or the low flows? Should a month's natural-flow percentile come
+    from the run's own natural flow (the default) or the gazette's natural
+    curve? Linear interpolation between % points (as built) or log
+    interpolation? Below the driest point, should the requirement scale with
+    the flow (as built) or hold at the drought flow? Is monthly compliance the
+    measure the CMA wants, or % of time from daily flows as well? And should
+    the daily EWR charge and curtailment follow the rule table's requirement
+    instead of the pragmatic EWR?
 
 ### Product
 

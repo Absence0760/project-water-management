@@ -62,6 +62,19 @@
 //             the guard deliberately counts every lazy chunk. Headroom ~6 KB
 //             on the total and ~4 KB on the chunk, so a tab's code sliding
 //             back into the page chunk, or the next feature, fails here.
+// 2026-09-25  total 411 → 429 KB; largest chunk stays 41 KB. main @ 0d5712f
+//             re-measures 406 KB total and a 37 KB largest chunk (the Runs
+//             tab). EWR compliance by the Reserve's assurance rules (engine
+//             0.21.0, model.md §2.9c) brings it to 424 KB: the engine's
+//             reserve/ code in the page and the calibration worker (~2 KB),
+//             the Settings rule-table section ~3 KB and its lazy editor 4 KB,
+//             the Runs headline card ~1.5 KB and its lazy Reserve compliance
+//             panel 3.4 KB, run comparison ~2 KB, help ~1 KB. The two panels
+//             are dynamic imports loaded only when a project or run has a rule
+//             table, so a cold open without one costs ~1.5 KB on the Runs tab
+//             and ~3 KB on Settings (without the split the Runs chunk hit the
+//             41 KB ceiling). No new dependency. Headroom ~5 KB on the total;
+//             the largest chunk is 38 KB (the Runs tab), ~3 KB under.
 // 2026-09-25  total 411 → 419 KB (issue #9). main @ 657e39e measured 407 KB;
 //             by merge time main @ 354bea0 measured 419 KB, already over 411:
 //             the multi-day rain accumulations (B4: engine, Settings, Data tab)
@@ -87,6 +100,13 @@
 //             since a shared chunk carries what every importer needs.
 //             experimentalMinChunkSize: 1–4 KB off the total for 1–2 KB more
 //             on cold loads, not worth it.
+// 2026-09-25  total 419 → 435 KB; largest chunk stays 41 KB. Merging #9
+//             with the features built in parallel the same day (the Reserve
+//             compliance entry above, measured alone on an older main; the
+//             nominated evidence run: Runs-tab Evidence panel, badges, compare
+//             notes) measures 429 KB with #9's savings in. No new dependency.
+//             The largest chunk is 40 KB (the Runs tab), ~1 KB under, so the
+//             next Runs-tab feature must lazy-load. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -98,7 +118,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 419,
+	totalCodeKb: 435,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });

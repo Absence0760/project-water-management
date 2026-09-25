@@ -75,7 +75,10 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
 Runs & results) is a dynamic `import()` of its component, as are the two
-on-demand dialogs (Add data, and the Data tab's series preview). uPlot and the
+on-demand dialogs (Add data, and the Data tab's series preview) and the two
+Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
+the project has a table, and the Runs & results compliance panel, loaded for a
+run that has a report). uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 

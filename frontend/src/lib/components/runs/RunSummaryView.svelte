@@ -5,6 +5,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, type FarmSortKey } from './results';
+	import { headlineSite } from './ewrAssurance';
 
 	let {
 		summary,
@@ -27,6 +28,8 @@
 		ewr: farms.reduce((s, f) => s + f.avgEwrShortfallM3Day, 0)
 	});
 	const cal = $derived(summary.calibration);
+	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project has a rule table.
+	const reserve = $derived(headlineSite(summary));
 	const c = $derived(summary.catchment);
 
 	let sortKey = $state<FarmSortKey>('network');
@@ -75,8 +78,19 @@
 				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
 		</dd>
 	</div>
+	{#if reserve}
+		<div class="stat" class:flagged={reserve.overall.rate !== null && reserve.overall.rate < 1}>
+			<dt>Reserve rules met <HelpTip key="reserve-compliance" /></dt>
+			<dd>{reserve.overall.rate === null ? '–' : fmtPct(reserve.overall.rate)}<small>of months</small></dd>
+			<dd class="sub">
+				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}
+					· up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
+			</dd>
+			<dd class="sub"><a href="#res-reserve">by month of the year</a></dd>
+		</div>
+	{/if}
 	<div class="stat" class:flagged={c.ewrFractionDaysNotMet > 0.05}>
-		<dt>EWR not met <HelpTip key="catchment.ewrFractionDaysNotMet" /></dt>
+		<dt>{reserve ? 'Days below the pragmatic EWR' : 'EWR not met'} <HelpTip key="catchment.ewrFractionDaysNotMet" /></dt>
 		<dd>{fmtPct(c.ewrFractionDaysNotMet)}<small>of days</small></dd>
 		<dd class="sub">{fmtNum(c.ewrDaysNotMet)} of {fmtNum(days)} days at the outflow gauge</dd>
 	</div>

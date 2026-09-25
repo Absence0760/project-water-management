@@ -10,6 +10,8 @@ export * from './runoff';
 export * from './calibrate/calibrate';
 export * from './calibrate/objective';
 export * from './reference/wr2012';
+export * from './reserve/rules';
+export * from './reserve/assurance';
 export * from './calibrate/provenance';
 export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './calibrate/dds';
 export { Rng } from './random';

@@ -1008,6 +1008,30 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 EWR analysis'
 	},
 	{
+		id: 'reserve-rules',
+		term: 'EWR rule table (the Reserve’s assurance rules)',
+		short: 'The Reserve’s EWR as a table: per month, the flow required at each assurance level, read at the natural flow’s percentile.',
+		long: 'A South African Reserve determination (the Desktop Reserve Model and its revised form) gives the ecological water requirement as a table: for each month, the flow required at each assurance level, or “% point” (10 %, 20 % … 90 %, 99 %). Assurance is the share of time the flow should be equalled or exceeded, so 10 % is the requirement in wet conditions and 99 % the drought flow. The gazette pairs it with the natural flow at the same points.\n\nEnter one table per EWR site: the outlet, or a gauge placed at the determination’s EWR site. Say where it comes from, the unit (Mm³ per month, or the month’s mean m³/s), whether it is the total flow or low flows only, and where the natural-flow percentile comes from: the run’s own natural flow at the site (ranked among the same month in every year of the run), or the table’s natural flows. The scale multiplies every value, for a table given for a larger or smaller catchment than the site.\n\nPaste the 12 month rows from a spreadsheet or a PDF, with the heading row of % points if you have it; month names in the first column put rows in order. The table adds a monthly compliance report. The pragmatic EWR still drives the daily EWR charge and curtailment.',
+		units: 'Mm³ per month or m³/s; % points 0–100',
+		category: 'ewr',
+		aliases: ['assurance rules', 'assurance table', 'rule curve', 'Reserve rule table', 'Reserve determination', 'maintenance low flows', 'drought flows'],
+		fields: ['settings.ewrRules'],
+		related: ['reserve-compliance', 'ewr', 'desktop-reserve-model', 'ewr-days-not-met'],
+		source: 'Hughes & Hannart (2003); Hughes et al. (2014); Pollard et al. (2011) WRC K8/881/2; docs/model.md §2.9c'
+	},
+	{
+		id: 'reserve-compliance',
+		term: 'Monthly compliance with the Reserve rules',
+		short: 'Share of months whose simulated flow met the Reserve rule table’s requirement for that month’s natural condition.',
+		long: 'For each complete calendar month, the month’s natural flow at the EWR site (the upstream farms’ runoff, before any dam or abstraction) is placed on that month’s natural flow duration curve. The EWR is read from the rule table at the same % point, interpolated between points, and the month is met when the simulated flow at the site is at least that. A naturally dry month is held to the drought flow; a wet one to more. The requirement depends only on natural flow, so more abstraction can only lose months.\n\nThe report gives the share of months met (the headline), per month of the year, the deficit volume, the longest run of consecutive months not met and the FDC check: whether the simulated flow duration curve of each month lies on or above the EWR curve at each % point. Days below the pragmatic EWR stay alongside as a second measure. With fewer than 10 years of a month the percentiles are coarse, and the run says so. The daily series ewr_rule is each month’s requirement per day.',
+		units: 'share of months; Mm³; months',
+		category: 'ewr',
+		aliases: ['Reserve compliance', 'assurance compliance', 'months met', 'contiguity', 'FDC check'],
+		fields: ['run.ewr_rule'],
+		related: ['reserve-rules', 'ewr-days-not-met', 'ewr-agreement'],
+		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
+	},
+	{
 		id: 'ewr-agreement',
 		term: 'EWR test against observed flow',
 		short: "Does the model fall below the EWR on the days the observed river did? A 2×2 table of observed days, with scores.",

@@ -10,6 +10,8 @@ import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
+import type { EwrRuleTable } from './reserve/rules';
+import type { EwrAssuranceSite } from './reserve/assurance';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -183,6 +185,15 @@ export interface ProjectSettings {
 	calibration: CalibrationParams;
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
+	/**
+	 * The Reserve's assurance rules per EWR site (engine ≥ 0.21.0, hydrologist
+	 * Q6; ./reserve/rules.ts): at most one table per site (the outlet, or a
+	 * gauge). Each run then judges monthly compliance against them
+	 * (summary.ewrAssurance, docs/model.md §2.9c). Empty (the default) = none;
+	 * the daily pragmatic EWR above still drives the shortfall charge and
+	 * curtailment either way.
+	 */
+	ewrRules: EwrRuleTable[];
 	/** Optional simulation window (ISO dates); defaults to the full series. */
 	simulationStart: string | null;
 	simulationEnd: string | null;
@@ -302,6 +313,7 @@ export function defaultProjectSettings(): ProjectSettings {
 			]
 		},
 		ewrPragmaticM3PerDay: zeros,
+		ewrRules: [],
 		simulationStart: null,
 		simulationEnd: null,
 		reportStart: null,
@@ -938,6 +950,13 @@ export interface RunSummary {
 	curtailment?: CurtailmentSummary;
 	/** EWR compliance grid; absent on runs saved by engines before 0.3.0. */
 	ewrCompliance?: EwrCompliance;
+	/**
+	 * Monthly compliance with the Reserve's assurance rules at each EWR site
+	 * that has a rule table (engine ≥ 0.21.0, ./reserve/assurance.ts), outlet
+	 * first then gauges in node-id order. Absent when the project has no table,
+	 * and on older runs.
+	 */
+	ewrAssurance?: EwrAssuranceSite[];
 	/**
 	 * Simulated natural flow against the entered WR2012 reference (engine ≥
 	 * 0.6.0); absent when the project has no reference, and on older runs.

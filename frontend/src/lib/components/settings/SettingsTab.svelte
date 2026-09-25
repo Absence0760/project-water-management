@@ -44,6 +44,7 @@
 	import { activeSectionId } from '$lib/components/runs/sections';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
+	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
 
 	let {
@@ -102,7 +103,10 @@
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
 	let wr2012Error = $state<string | null>(null);
-	const blocked = $derived(!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!reportError || !!dqError || !!wr2012Error);
+	let reserveError = $state<string | null>(null);
+	const blocked = $derived(
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
+	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
 		saveBlockers([
@@ -112,6 +116,7 @@
 			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
+			{ id: 'set-reserve', message: reserveError },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError }
 		])
@@ -720,6 +725,11 @@
 			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
 		</fieldset>
 	</section>
+
+	<!-- Reserve rule tables (engine ≥ 0.21.0) -------------------------------------->
+	<div id="set-reserve">
+		<EwrRulesSection bind:value={s.ewrRules} bind:error={reserveError} {readonly} nodes={editor?.model.nodes ?? []} />
+	</div>
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" id="set-period" aria-labelledby="per-h">

@@ -327,7 +327,8 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
 
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
- * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
+ * details, the per-farm table, the catchment figures, the curtailment and EWR
+ * site tables, Reserve compliance, the CHIRPS bias factors,
  * the catchment rain treated as missing, the multi-day accumulations, the
  * double-mass check, calibration,
  * the WR2012 check, the column guide, warnings. The run details carry the run notes.
@@ -373,6 +374,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
+	yield '';
+
+	yield* ewrAssuranceLines(summary.ewrAssurance);
 	yield '';
 
 	yield* waterBalanceLines(summary.waterBalance);
@@ -502,6 +506,70 @@ export function* ewrSiteLines(c: RunSummary['curtailment']): Generator<string> {
 	}
 	yield csvRow(['Site', 'Outlet', 'Farms upstream', 'Days not met', 'Average shortfall (m³/day)', 'Charged to farms (m³/day)', 'Natural (m³/day)']);
 	for (const s of c.ewrSites) yield csvRow([s.name, s.isOutlet ? 'yes' : 'no', s.farmCount, s.daysNotMet, s.shortfallM3Day, s.chargedM3Day, s.naturalM3Day]);
+}
+
+const RULE_UNIT_TEXT = { mcm: 'Mm³ per month', m3s: 'm³/s (mean over the month)' } as const;
+const RULE_UNIT_SHORT = { mcm: 'Mm³', m3s: 'm³/s' } as const;
+
+/**
+ * Monthly compliance with the Reserve's assurance rules at each EWR site with
+ * a rule table (engine ≥ 0.21.0, model.md §2.9c): the table's provenance and
+ * method, the headline (months met), the deficit and contiguity, the FDC
+ * check, then per month of the year and month by month. Flows are in the
+ * table's unit; deficits in m³.
+ */
+export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator<string> {
+	yield csvRow(['Reserve compliance by month (EWR rule tables)']);
+	if (!sites?.length) {
+		yield csvRow(['Not assessed: no EWR rule table in the settings the run used (or a run made before engine 0.21.0)']);
+		return;
+	}
+	for (const [i, r] of sites.entries()) {
+		if (i > 0) yield '';
+		const u = RULE_UNIT_SHORT[r.unit];
+		yield csvRow(['Site', r.name, r.isOutlet ? 'outlet' : 'gauge']);
+		yield csvRow(['Source', r.source]);
+		yield csvRow(['Covers', r.component === 'total' ? 'total flow (low and high flows)' : 'low flows only']);
+		yield csvRow(['Unit', RULE_UNIT_TEXT[r.unit]]);
+		yield csvRow(['Natural-flow percentile from', r.naturalSource === 'run' ? "the run's simulated natural flow at the site" : "the table's natural flows"]);
+		yield csvRow(['Scale applied to the table', r.scale]);
+		yield csvRow(['% points', ...r.points]);
+		const o = r.overall;
+		yield csvRow(['Months met', o.met, 'of', o.months, 'Met (%)', pct(o.rate) as Cell]);
+		yield csvRow(['Deficit over the run (m³)', o.deficitM3]);
+		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
+		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
+		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
+		yield csvRow(['Month', 'Complete years', 'Months met', 'Met (%)', 'Deficit (m³)', `Mean required (${u})`, `Mean simulated (${u})`, 'FDC points met']);
+		for (const m of r.byMonth) {
+			const fdcMet = m.fdc.filter((f) => f.met).length;
+			yield csvRow([
+				MONTH_NAMES[m.month - 1]!,
+				m.years,
+				m.met,
+				pct(m.rate) as Cell,
+				m.deficitM3,
+				m.meanRequired,
+				m.meanActual,
+				m.years ? `${fdcMet} of ${m.fdc.length}` : ''
+			]);
+		}
+		yield csvRow(['Year', 'Month', 'Water year', `Natural (${u})`, 'Natural condition (% exceedance)', 'Beyond the table', `Required (${u})`, `Simulated (${u})`, 'Met', 'Deficit (m³)']);
+		for (const m of r.months) {
+			yield csvRow([
+				m.year,
+				MONTH_NAMES[m.month - 1]!,
+				waterYearText(m.waterYear),
+				m.natural,
+				m.percentile,
+				m.beyond === 'wetter' ? 'wetter than the first point' : m.beyond === 'drier' ? 'drier than the last point' : '',
+				m.required,
+				m.actual,
+				m.met ? 'yes' : 'no',
+				m.deficitM3
+			]);
+		}
+	}
 }
 
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */

@@ -1,0 +1,67 @@
+// Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
+// pure helpers for EwrAssurancePanel.svelte and the headline card.
+import type { EwrAssuranceMonth, EwrAssuranceSite, RunSummary } from '@water-management/engine';
+import { fmtNum, fmtPct } from '$lib/format/number';
+import { monthName } from '$lib/format/months';
+
+/** The site the headline reports: the outlet when it has a table, else the first site. */
+export function headlineSite(summary: Pick<RunSummary, 'ewrAssurance'>): EwrAssuranceSite | null {
+	const sites = summary.ewrAssurance ?? [];
+	return sites.find((s) => s.isOutlet) ?? sites[0] ?? null;
+}
+
+export const UNIT_LABEL = { mcm: 'Mm³', m3s: 'm³/s' } as const;
+
+/** A flow in the table's unit, to about three significant figures. */
+export function fmtFlow(v: number | null | undefined): string {
+	if (v == null || !Number.isFinite(v)) return '–';
+	const a = Math.abs(v);
+	return fmtNum(v, a === 0 ? 0 : a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : Math.min(6, 2 - Math.floor(Math.log10(a))));
+}
+
+/** m³ → Mm³ text. */
+export const fmtMm3 = (m3: number) => fmtNum(m3 / 1e6, 3);
+
+/** "Met in 18 of 24 months (75.0 %)", or why not assessed. */
+export function verdict(s: EwrAssuranceSite): string {
+	const o = s.overall;
+	if (!o.months) return 'Not assessed: the run has no complete calendar month.';
+	if (o.met === o.months) return `Met in every one of the ${fmtNum(o.months)} complete months.`;
+	if (o.met === 0) return `Not met in any of the ${fmtNum(o.months)} complete months.`;
+	return `Met in ${fmtNum(o.met)} of ${fmtNum(o.months)} months (${fmtPct(o.rate)}); not met in ${fmtNum(o.months - o.met)}.`;
+}
+
+/** The method in one sentence: where the percentile comes from, the unit, what the table covers, its scale. */
+export function describeMethod(s: EwrAssuranceSite): string {
+	const nat = s.naturalSource === 'run' ? 'the run’s own natural flow at the site' : 'the table’s natural flows';
+	const covers = s.component === 'total' ? 'total flow (low and high flows)' : 'low flows only';
+	const scale = s.scale === 1 ? '' : `, scaled × ${fmtNum(s.scale, 4, true)}`;
+	return `Each month’s requirement is the EWR at the % point its natural flow sits at (percentile from ${nat}); table in ${s.unit === 'mcm' ? 'Mm³ per month' : 'm³/s, the month’s mean'}, ${covers}${scale}.`;
+}
+
+/** "Oct 2001". */
+export const monthLabel = (m: Pick<EwrAssuranceMonth, 'year' | 'month'>) => `${monthName(m.month)} ${m.year}`;
+
+/** The natural-flow condition: "62 %" or "wetter than 10 %" / "drier than 99 %". */
+export function conditionText(m: Pick<EwrAssuranceMonth, 'percentile' | 'beyond'>): string {
+	const r = Math.round(m.percentile * 10) / 10;
+	const p = `${fmtNum(r, Number.isInteger(r) ? 0 : 1)} %`;
+	return m.beyond === 'wetter' ? `wetter than ${p}` : m.beyond === 'drier' ? `drier than ${p}` : p;
+}
+
+/** Share of the requirement that flowed, "83%" (– when nothing was required). */
+export const shareOfRequired = (m: Pick<EwrAssuranceMonth, 'required' | 'actual'>) => (m.required > 0 ? fmtPct(m.actual / m.required, 0) : '–');
+
+/** A calendar month's FDC check in words: "8 of 10 points", or "–" without a complete year. */
+export function fdcText(fdc: readonly { met: boolean | null }[]): string {
+	const judged = fdc.filter((f) => f.met !== null);
+	return judged.length ? `${judged.filter((f) => f.met).length} of ${judged.length}` : '–';
+}
+
+/** The shortest record of any assessed calendar month, when it is under the engine's threshold (for a caution line). */
+export function fewYears(s: EwrAssuranceSite, threshold: number): number | null {
+	const years = s.byMonth.filter((m) => m.years > 0).map((m) => m.years);
+	if (!years.length) return null;
+	const few = Math.min(...years);
+	return few < threshold ? few : null;
+}
