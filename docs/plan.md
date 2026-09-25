@@ -531,6 +531,14 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     dry spells? Are there other stretches (e.g. partial records in 1996,
     2021 and 2022, which read far below CHIRPS) that should be treated as
     missing?
+16. **Multi-day accumulations (issue #2).** Some readings look like several
+    days' rain entered on the day the gauge was read, after days entered as
+    0. From engine 0.20.0 the app
+    spreads each such total back over the days it covers by CHIRPS
+    ([model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations)).
+    Do the station's records (observer logs, "accumulated" flags) say which
+    readings are multi-day totals? Should a total that reads far below CHIRPS
+    be scaled up for the catch an unread gauge loses, or treated as missing?
 
 ### Product
 

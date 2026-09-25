@@ -9,9 +9,12 @@ import {
 	doubleMassRunWarning,
 	pettittP
 } from './doublemass';
-import { defaultProjectSettings, type DailySeries, type ModelInput, type SeriesKind } from './project';
+import { defaultProjectSettings, type DailySeries, type ModelInput, type SeriesKind, type ZeroRainSettings } from './project';
 import { chirpsBiasFactors } from './rain';
 import { runModel } from './run';
+
+/** The accumulation fields (engine ≥ 0.20.0) at their defaults. */
+const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'spread', keepReadings: [], addAccumulations: [] };
 
 type Series = Partial<Record<SeriesKind, DailySeries>>;
 
@@ -159,11 +162,11 @@ describe('doubleMass', () => {
 		const dm = doubleMass(series(c, h))!;
 		expect(dm.skippedYears).toContain(1995);
 		const period = { start: fromEpochDay(d0 + from - 3), end: fromEpochDay(d0 + from + 92), reason: 'confirmed dry' };
-		const kept = doubleMass(series(c, h), { mode: 'missing', keepDry: [period], missing: [] })!;
+		const kept = doubleMass(series(c, h), { ...ACC, mode: 'missing', keepDry: [period], missing: [] })!;
 		expect(kept.skippedYears).not.toContain(1995);
 		expect(kept.years.find((y) => y.waterYear === 1995)!.ratio).toBeLessThan(1.8); // the zeros count
 		// Listed missing wins over keep-dry.
-		const listed = doubleMass(series(c, h), { mode: 'missing', keepDry: [period], missing: [period] })!;
+		const listed = doubleMass(series(c, h), { ...ACC, mode: 'missing', keepDry: [period], missing: [period] })!;
 		expect(listed.skippedYears).toContain(1995);
 	});
 

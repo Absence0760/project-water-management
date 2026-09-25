@@ -18,6 +18,16 @@ import {
 	seriesChecks
 } from './quality';
 import {
+	ACCUMULATION_COLUMN,
+	accumulationWarnings,
+	applyAccumulations,
+	claimsDays,
+	fitExcludedWindows,
+	rainAccumulations,
+	spreadAccumulations,
+	type AccumulationRun
+} from './accumulation';
+import {
 	applyChirpsCorrection,
 	blankMasked,
 	chirpsBiasFactors,
@@ -67,7 +77,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.19.2';
+export const ENGINE_VERSION = '0.20.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -111,7 +121,7 @@ export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
 ): ModelOutput {
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, doubleMass } = prepareRun(input);
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass } = prepareRun(input);
 
 	// --- natural flow ---------------------------------------------------------
 	const nf = naturalFlow({ settings, startDate, days, aligned });
@@ -211,6 +221,7 @@ export function runModelWith(
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
+	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
 	const farmSeries: [keyof NodeResult, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
@@ -416,6 +427,7 @@ export function runModelWith(
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
+			rainAccumulation: accumulation?.info ?? null,
 			warnings
 		}
 	};
@@ -444,6 +456,8 @@ export interface PreparedRun {
 	chirpsCorrection: ChirpsCorrection | null;
 	/** Catchment rain days set aside as missing (CR-20; null without a catchment rain series). */
 	zeroRain: ZeroRainMask | null;
+	/** Multi-day accumulations and the days they spread over (engine ≥ 0.20.0, audit B4; null without a catchment rain series). */
+	accumulation: AccumulationRun | null;
 	/** The double-mass check of catchment rain against CHIRPS (engine ≥ 0.18.0; null without both or too few years). */
 	doubleMass: DoubleMass | null;
 }
@@ -478,12 +492,19 @@ export function prepareRun(input: ModelInput): PreparedRun {
 
 	// Rain used = catchment ?? CHIRPS ?? forecast; CHIRPS is bias-corrected
 	// where it fills in (audit B1). Catchment rain is blanked first on the days
-	// settings.zeroRainRuns sets aside (CR-20), so they fall back too. Every
+	// settings.zeroRainRuns sets aside (CR-20), so they fall back too, and a
+	// multi-day accumulation's recorded total is spread over the days it
+	// covers (audit B4), which the zero-run fill then leaves alone. Every
 	// consumer (runoff models, demand, calibration, the runoff coefficient)
 	// reads the rain through `aligned`.
-	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days);
+	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection);
+	const claimed = new Set<number>();
+	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
+	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day));
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc));
+	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns);
+	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month) : null;
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
@@ -504,6 +525,16 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		finishZeroRainInfill(zeroRain, (t) => chirps[t] ?? forecast[t] ?? null);
 		warnings.push(...zeroRainWarnings(zeroRain.infill));
 	}
+	if (accumulation) {
+		// Left as recorded while CHIRPS fills the zero run it ends: that rain counts twice.
+		const filled = (w: { start: string; end: string }) => {
+			if (!zeroRain) return false;
+			for (let d = Math.max(toEpochDay(w.start), start); d <= Math.min(toEpochDay(w.end), end); d++) if (zeroRain.mask[d - start]) return true;
+			return false;
+		};
+		const doubled = accumulation.info.windows.filter((w) => w.status === 'asRecorded' && filled(w));
+		warnings.push(...accumulationWarnings(accumulation.info, doubled));
+	}
 
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
 		warnings.push(
@@ -513,7 +544,7 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		);
 	}
 
-	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, doubleMass };
+	return { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass };
 }
 
 /**

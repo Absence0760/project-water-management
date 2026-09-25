@@ -291,8 +291,17 @@ describe('fitRecordFor', () => {
 		expect(rec.forcing!.chirpsBiasCorrection).toBe('none');
 	});
 
-	it('records the zero-rain run settings the fit ran under, copied, not shared with the form (CR-20)', () => {
-		const form = { ...defaultProjectSettings(), zeroRainRuns: { mode: 'missing' as const, keepDry: [{ waterYear: 2003, reason: 'real' }], missing: [] } };
+	it('records the zero-rain run settings the fit ran under, accumulation fields included, copied, not shared with the form (CR-20, B4)', () => {
+		const form = {
+			...defaultProjectSettings(),
+			zeroRainRuns: {
+				...defaultProjectSettings().zeroRainRuns,
+				mode: 'missing' as const,
+				keepDry: [{ waterYear: 2003, reason: 'real' }],
+				accumulationMode: 'asRecorded' as const,
+				addAccumulations: [{ start: '2003-07-01', end: '2003-07-09', reason: 'observer away' }]
+			}
+		};
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
 		expect(rec.forcing!.zeroRainRuns).toEqual(form.zeroRainRuns);
 		form.zeroRainRuns.keepDry[0]!.reason = 'changed';

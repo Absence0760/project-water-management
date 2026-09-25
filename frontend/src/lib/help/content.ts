@@ -1086,8 +1086,19 @@ export const HELP: HelpEntry[] = [
 		category: 'data',
 		aliases: ['missing rainfall', 'zero rain', 'rain gaps', 'keep dry', 'infilled rainfall days'],
 		fields: ['settings.zeroRainRuns', 'run.rain_catchment_missing'],
-		related: ['rain-catchment', 'chirps-bias', 'rain-final'],
+		related: ['rain-catchment', 'chirps-bias', 'rain-final', 'rain-accumulations'],
 		source: 'Not in the workbook; docs/model.md §2.4c; engine-audit.md B2'
+	},
+	{
+		id: 'rain-accumulations',
+		term: 'Multi-day rain accumulations',
+		short: 'Several days of rain read on one day after days entered as 0: the total is spread back over those days in proportion to CHIRPS.',
+		long: 'When nobody reads the rain gauge for a few days, the unread days are often entered as 0 (or left blank) and the whole total on the day it was read. The total is right; the days are wrong: a dry spell, then one day far wetter than it was. Viney & Bates (2004) found these untagged accumulations throughout long daily records.\n\nA run flags a reading as an accumulation when it is at least 20 mm, follows at least 3 days of 0 or blank catchment rain, bias-corrected CHIRPS reads less than a quarter of it on that day and the days either side (CHIRPS can be a day early or late), and CHIRPS over the days before (leaving out the day just before) reads at least half of it. The window is those days, at most the last 92, plus the reading day. A storm after a real dry spell is left alone: CHIRPS is dry over the days before it.\n\nBy default the run keeps the recorded total and spreads it over the window in proportion to bias-corrected CHIRPS. Those days are not also filled from CHIRPS as a zero run (which would count the rain twice), and they are left out of the CHIRPS factor fit. If CHIRPS reads no rain over a window at all, its total stays on the reading day. The rain series you uploaded is never changed.\n\nIn Settings → Rain gaps and CHIRPS, **Keep as recorded** lists readings you know were one day\'s rain (a thunderstorm CHIRPS missed): a detection whose reading day falls in one stays as recorded, and counts in the CHIRPS fit. **Also spread** lists windows by hand, ending on the reading day. A period listed as missing, or a keep-dry period, wins over a detection. Each run lists every window in its warnings and its summary CSV, and the daily column "Catchment rain from a multi-day accumulation" is 1 on each day spread. Comparing runs lists any change to these settings. Not in the workbook (docs/engine-audit.md B4).',
+		category: 'data',
+		aliases: ['accumulated rainfall', 'untagged accumulation', 'multi-day total', 'weekend rain', 'gauge not read', 'disaggregation'],
+		fields: ['run.rain_catchment_spread'],
+		related: ['zero-rain-runs', 'chirps-bias', 'rain-catchment', 'rain-final'],
+		source: 'Not in the workbook; Viney & Bates 2004; docs/model.md §2.4d; engine-audit.md B4'
 	},
 	{
 		id: 'rain-forecast',

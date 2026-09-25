@@ -8,8 +8,11 @@ import {
 	type ComparableRun,
 	type RunInputsSnapshot
 } from './compare';
-import { defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary } from './project';
+import { defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary, type ZeroRainSettings } from './project';
 import { ewrAgreement } from './network/ewrAgreement';
+
+/** The accumulation fields as a run saved before engine 0.20.0 ran them: as recorded. */
+const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'asRecorded', keepReadings: [], addAccumulations: [] };
 
 // Synthetic catchment — invented names and values only (public repo).
 
@@ -315,7 +318,7 @@ describe('diffInputs', () => {
 		const b = snapshot();
 		b.settings.runoffModel = 'legacy';
 		b.settings.effectiveRainStoreMm = 0;
-		b.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
+		b.settings.zeroRainRuns = { ...ACC, mode: 'asRecorded', keepDry: [], missing: [] };
 		b.settings.lakeEvapFactor = 0;
 		expect(diffInputs(a, b)).toEqual([]);
 	});
@@ -503,6 +506,7 @@ describe('diffInputs', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
 		b.settings.zeroRainRuns = {
+			...defaultProjectSettings().zeroRainRuns,
 			mode: 'asRecorded',
 			keepDry: [{ start: '2003-05-01', end: '2003-08-31', reason: 'real drought' }],
 			missing: [{ waterYear: 1999, reason: 'gauge offline' }]
@@ -514,9 +518,36 @@ describe('diffInputs', () => {
 		]);
 		const old = snapshot();
 		delete (old.settings as Record<string, unknown>).zeroRainRuns;
-		expect(texts(old, a)).toEqual(['Flagged zero-rain runs: run as recorded (dry) → treated as missing (CHIRPS fills them)']);
+		expect(texts(old, a)).toEqual([
+			'Flagged zero-rain runs: run as recorded (dry) → treated as missing (CHIRPS fills them)',
+			'Multi-day rain accumulations: run as recorded (one day) → spread over the days they cover (CHIRPS pattern)'
+		]);
 		const recorded = structuredClone(a);
-		recorded.settings.zeroRainRuns = { mode: 'asRecorded', keepDry: [], missing: [] };
+		recorded.settings.zeroRainRuns = { ...ACC, mode: 'asRecorded', keepDry: [], missing: [] };
+		expect(diffInputs(old, recorded)).toEqual([]);
+	});
+
+	it('describes the multi-day accumulation settings (B4); a run saved before 0.20.0 ran them as recorded', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		const z0 = defaultProjectSettings().zeroRainRuns;
+		b.settings.zeroRainRuns = {
+			...z0,
+			accumulationMode: 'asRecorded',
+			keepReadings: [{ start: '2003-06-10', end: '2003-06-10', reason: 'thunderstorm' }],
+			addAccumulations: [{ start: '2003-07-01', end: '2003-07-09', reason: 'observer away' }]
+		};
+		expect(texts(a, b)).toEqual([
+			'Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)',
+			'Keep-reading period 2003-06-10 – 2003-06-10 added: “thunderstorm”',
+			'Listed accumulation 2003-07-01 – 2003-07-09 added: “observer away”'
+		]);
+		// A 0.15–0.19 run stored zeroRainRuns without the accumulation fields: it compares as "as recorded".
+		const old = snapshot();
+		const { accumulationMode: _m, keepReadings: _k, addAccumulations: _a, ...pre } = z0;
+		(old.settings as Record<string, unknown>).zeroRainRuns = pre;
+		const recorded = structuredClone(a);
+		recorded.settings.zeroRainRuns = { ...z0, accumulationMode: 'asRecorded' };
 		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 

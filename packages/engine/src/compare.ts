@@ -493,7 +493,8 @@ const CALIBRATION_ARRAYS: Record<string, string> = {
  * it ran legacy, whatever today's default is; one without a soil-water store
  * predates it (engine 0.14.0), so it ran with none (0 mm); one without
  * zeroRainRuns predates it (engine 0.15.0), so it ran flagged zero runs as
- * recorded.
+ * recorded; one whose zeroRainRuns has no accumulationMode predates that
+ * (engine 0.20.0), so it ran multi-day accumulations as recorded.
  */
 function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Record<string, unknown> {
 	const d = defaultProjectSettings() as unknown as Record<string, unknown>;
@@ -505,7 +506,16 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		// Runs store settings merged over the defaults, so a snapshot without a
 		// store size predates it (engine < 0.14.0) and carried no rain over.
 		effectiveRainStoreMm: r.effectiveRainStoreMm ?? 0,
-		zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [], ...((r.zeroRainRuns as object | undefined) ?? {}) },
+		zeroRainRuns: {
+			mode: 'asRecorded',
+			keepDry: [],
+			missing: [],
+			// Multi-day accumulations were left as recorded before engine 0.20.0.
+			accumulationMode: 'asRecorded',
+			keepReadings: [],
+			addAccumulations: [],
+			...((r.zeroRainRuns as object | undefined) ?? {})
+		},
 		// Likewise dams evaporated only from engine 0.16.0 (audit N2).
 		lakeEvapFactor: r.lakeEvapFactor ?? 0,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
@@ -567,6 +577,12 @@ function diffSettings(ra: RunInputsSnapshot['settings'] | undefined, rb: RunInpu
 	if (!same(za.mode, zb.mode)) push('Flagged zero-rain runs', `Flagged zero-rain runs: ${zeroMode(za.mode)} → ${zeroMode(zb.mode)}`);
 	out.push(...diffExclusions(za.keepDry, zb.keepDry, 'Keep-dry period'));
 	out.push(...diffExclusions(za.missing, zb.missing, 'Missing-rain period'));
+	const accMode = (v: unknown) => (v === 'spread' ? 'spread over the days they cover (CHIRPS pattern)' : v === 'asRecorded' ? 'run as recorded (one day)' : String(v));
+	if (!same(za.accumulationMode, zb.accumulationMode)) {
+		push('Multi-day rain accumulations', `Multi-day rain accumulations: ${accMode(za.accumulationMode)} → ${accMode(zb.accumulationMode)}`);
+	}
+	out.push(...diffExclusions(za.keepReadings, zb.keepReadings, 'Keep-reading period'));
+	out.push(...diffExclusions(za.addAccumulations, zb.addAccumulations, 'Listed accumulation'));
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([

@@ -165,6 +165,15 @@ alongside teams, e.g. to give an outside client `viewer` access.
   extra periods treated as missing in either mode. A `PATCH` merges the group
   one level deep, so sending `{ mode }` keeps the stored lists; each list is
   replaced whole. [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
+  Engine ≥ 0.20.0 adds three fields for multi-day accumulations:
+  `accumulationMode` is `spread` (the default: a detected or listed
+  accumulation's recorded total is spread over the days it covers in
+  proportion to bias-corrected CHIRPS) or `asRecorded` (each reading stays on
+  its day); `keepReadings` (detections confirmed as one day's rain) and
+  `addAccumulations` (windows listed by hand, ending on the reading day) are
+  period lists validated like the others. An unknown mode or a bad period is
+  a `400`. Settings stored before 0.20.0 read back with the defaults merged
+  in. [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
   `calibrationExclusions` (at most 100) lists periods left out of every
   calibration score: `{ waterYear, reason }` (a whole water year, Oct–Sep,
   by the year it starts in) or `{ start, end, reason }` (inclusive
@@ -192,14 +201,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   chirpsBiasCorrection, zeroRainRuns }`, `panCoefficient`/`apanMm` each 12
   monthly numbers with the same bounds as the settings fields,
   `chirpsBiasCorrection` optional — `monthly | none`, `zeroRainRuns` optional
-  and whole — `{ mode, keepDry, missing }` validated like the setting) is the
+  and whole — `{ mode, keepDry, missing }` validated like the setting, plus
+  optional `accumulationMode`, `keepReadings`, `addAccumulations` from engine
+  0.20.0) is the
   pan coefficient, A-pan evaporation, CHIRPS bias correction mode and
   zero-rain run handling the fit ran under. GR4J's parameters trade off against
   evaporation, so the pan coefficient is never calibrated. The two CHIRPS
   settings change the rain fed to the model on the days CHIRPS fills a gap.
   So a fit is only valid for the forcing it recorded. `forcing` is absent on a
   record made before it was tracked, and `chirpsBiasCorrection` or
-  `zeroRainRuns` is absent on a `forcing` made before it was added.
+  `zeroRainRuns` is absent on a `forcing` made before it was added (and the
+  accumulation fields on a `zeroRainRuns` recorded before 0.20.0; they are
+  then not compared).
   `fitRecordStatus`'s `forcingChanged` compares it against the current
   settings, tolerant of float noise, and is `false` when there is nothing
   recorded to compare.
@@ -492,7 +505,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   days were left out of the fit: `lowVsChirpsYears`, `doubtfulKeepDry: [{
   start, end, days, chirpsMm, limitMm, waterYears }]` (kept-dry runs CHIRPS
   contradicts; their years are in `excludedWaterYears`), `flaggedDaysLeftOut`,
-  `missingDaysLeftOut` and `keptDryDaysInFit`; all absent on older runs. A
+  `missingDaysLeftOut` and `keptDryDaysInFit`; all absent on older runs.
+  Engine ≥ 0.20.0 adds `accumulationDaysLeftOut` (multi-day accumulation
+  window days left out one by one). A
   run that corrected any day also lists the factors in `warnings`, and a
   doubted keep-dry adds its own warning. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 - `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
@@ -502,6 +517,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   reason, days }], asRecordedDays, days, recordedMm, filledMm, unfilledDays }`.
   The catchment series `rain_catchment_missing` is 1 on each day set aside.
   Rules: [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing).
+- `summary.rainAccumulation` (engine ≥ 0.20.0) is what the run did with
+  multi-day accumulations in the catchment rain, `null` when the project has
+  no catchment rain series, absent on older runs: `{ mode, criteria: { minMm,
+  minRunDays, maxRunDays, readingDayShare, runShare }, windows: [{ start, end,
+  source: 'detected' | 'listed', reason, status: 'spread' | 'noChirps' |
+  'asRecorded' | 'kept' | 'noReading', keptReason, totalMm, readingMm,
+  runDays, nearChirpsMm, runChirpsMm, chirpsMm, daysInRun, usedMm }], skipped:
+  string[], spreadWindows, spreadDays, spreadMm }`. The detection figures
+  (`runDays`, `nearChirpsMm`, `runChirpsMm`) are `null` for a listed window,
+  and `chirpsMm` for a window not spread. The catchment series
+  `rain_catchment_spread` is 1 on each day whose rain came from a window.
+  Rules: [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
 
 ## Compare runs
 

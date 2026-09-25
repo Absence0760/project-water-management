@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
-import { defaultProjectSettings, type ProjectSettings } from '../project';
+import { defaultProjectSettings, type ProjectSettings, type ZeroRainSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import {
@@ -16,6 +16,9 @@ import {
 	resolveFitRecord,
 	sanitizeExclusions
 } from './provenance';
+
+/** The accumulation fields (engine ≥ 0.20.0) at their defaults. */
+const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'spread', keepReadings: [], addAccumulations: [] };
 
 const scores = (kge: number): FitScores => ({
 	days: 100,
@@ -221,7 +224,7 @@ describe('fit record', () => {
 		// The CHIRPS bias correction mode alone can flag it too.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, rec).forcingChanged).toBe(true);
 		// Zero-rain run handling (engine ≥ 0.15.0) is part of the forcing too: a fit recorded with it flags a change of mode or list.
-		const zr = { mode: 'missing' as const, keepDry: [], missing: [] };
+		const zr = { ...ACC, mode: 'missing' as const, keepDry: [], missing: [] };
 		const withZr = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, zeroRainRuns: zr } });
 		expect(withZr.forcing!.zeroRainRuns).toEqual(zr);
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: zr }, withZr).forcingChanged).toBe(false);
@@ -231,6 +234,19 @@ describe('fit record', () => {
 		).toBe(true);
 		// … and a run snapshot from before the setting ran flagged runs as recorded.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' }, withZr).forcingChanged).toBe(true);
+		// The accumulation fields (engine ≥ 0.20.0) are part of it: a change of mode or list flags it …
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, accumulationMode: 'asRecorded' } }, withZr).forcingChanged).toBe(true);
+		expect(
+			fitRecordStatus(
+				{ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, addAccumulations: [{ start: '2003-07-01', end: '2003-07-09', reason: 'observer away' }] } },
+				withZr
+			).forcingChanged
+		).toBe(true);
+		// … but a fit whose zeroRainRuns predates them (engine < 0.20.0) has nothing to compare them against.
+		const { accumulationMode: _m, keepReadings: _k, addAccumulations: _a, ...preAcc } = zr;
+		const pre020 = { ...withZr, forcing: { ...withZr.forcing!, zeroRainRuns: preAcc as unknown as ZeroRainSettings } };
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, accumulationMode: 'asRecorded' } }, pre020).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, pre020).forcingChanged).toBe(true);
 		// A fit recorded before zeroRainRuns was tracked: nothing to compare, so it alone never flags.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, rec).forcingChanged).toBe(false);
 		// A forcing recorded before chirpsBiasCorrection was added to it: nothing to compare, so it alone never flags.
