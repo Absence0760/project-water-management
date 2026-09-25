@@ -1003,6 +1003,27 @@ min role is farmer, with RLS doing the scoping.
 
 ### WP-2.8 Background jobs
 
+> **Status: built** (issue #10 part 1; `016_jobs.sql`, `backend/src/jobs/`,
+> `infra/jobs.tf`; [architecture.md § Background work](../architecture.md#background-work)).
+> Where the build departs from the design below, and why:
+> - **Dedupe** covers *pending* jobs (`queued`, `failed`), not
+>   `('queued','running')`, and the claim skips a job whose key has one
+>   running. With the design's index, data merged while a re-run is running
+>   would be dropped as a duplicate of the run that already read the old data.
+> - **The claim returns routing columns only**, never the payload: the worker
+>   reads the payload as the acting user, under RLS. **Finishing needs the
+>   lease token** the claim drew, so a worker whose lease ran out can't
+>   overwrite the job's new attempt, and success is recorded in the same
+>   transaction as the handler's writes.
+> - **Infra has the `jobs` queue only**, plus the worker, tick, endpoint and
+>   alarms. The `fetch-requests` / `ingest-results` queues and the fetcher
+>   Lambda arrive with WP-2.10, which also extends the worker's SQS message
+>   type (`jobs/transport.ts`). The worker has no SES yet (WP-2.13); a dead
+>   job alarms through CloudWatch (`job_dead`) until then.
+> - The first consumer is `rerun`, queued through `POST /projects/:id/jobs`.
+>   The UI (header, "Feed activity") isn't built: it lands with its first
+>   users, WP-2.10 / 2.11.
+
 **Goal.** One queue for work that shouldn't run inside a request, or can't
 fit the 30 s API Lambda (`infra/variables.tf` `lambda_timeout_seconds`):
 fetches, ingest of fetched data, auto re-runs, alert evaluation, and

@@ -101,6 +101,7 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = [
       aws_lambda_function.backend.arn,
       aws_lambda_function.migrate.arn,
+      aws_lambda_function.worker.arn,
     ]
   }
 

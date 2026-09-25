@@ -19,9 +19,10 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
  * them. The evidence-nomination history is tamper evidence
- * (010_run_nomination.sql).
+ * (010_run_nomination.sql). A job's row changes only through the queue's
+ * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination']);
+const APPEND_ONLY = new Set(['run_nomination', 'job']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
@@ -113,7 +114,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app no UPDATE, DELETE or TRUNCATE, table or column, on append-only tables (run_nomination)', async () => {
+	it('grants water_app no UPDATE, DELETE or TRUNCATE, table or column, on append-only tables (run_nomination, job)', async () => {
 		for (const table of APPEND_ONLY) {
 			for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);

@@ -42,7 +42,7 @@ Tick items off (or move them into an issue) as they are done.
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 70 and set `dmarc_report_email`.
+      `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
 
 ## Hydrologist
 

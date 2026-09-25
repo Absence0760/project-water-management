@@ -44,6 +44,8 @@ No env files to write. `backend/.env.development` and
 | `SMTP_HOST` / `SMTP_PORT` | `127.0.0.1` / `1026` | Mailpit's SMTP port |
 | `MAIL_FROM` | `Water Management <no-reply@localhost>` | Sender |
 | `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
+| `JOB_TRANSPORT` | `inprocess` | How the job worker is woken: `inprocess` (the local worker polls and LISTENs), `memory` (tests), `sqs` (production). See [Background jobs](#background-jobs) |
+| `JOB_POLL_SECONDS` | `15` | How often the local worker looks for due jobs without a wake-up |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
 
 To override something on your machine, create a gitignored
@@ -118,6 +120,28 @@ still succeeds. If you'd rather not run it at all, put `MAIL_TRANSPORT=log` in
 `backend/.env.development.local` and the emails (links included) are printed
 to the backend console instead. The DB tests use an in-memory transport and
 the e2e stack uses `log`, so neither needs Mailpit.
+
+## Background jobs
+
+Some work runs later, in a worker, instead of inside a request: today a
+queued model run (`POST /projects/:id/jobs`), and in step 2 the data feeds,
+automatic re-runs and alerts ([architecture.md § Background work](./architecture.md#background-work)).
+Locally the worker is one Node process against the same Postgres, with no AWS
+and no queue emulator (`JOB_TRANSPORT=inprocess`, the default). It is opt-in:
+
+```bash
+pnpm dev:full               # pnpm dev + the worker, all three in one terminal
+pnpm dev:run:worker         # the worker on its own, beside a running pnpm dev
+pnpm dev:jobs:tick          # run every due job once, print what happened, exit
+```
+
+The worker ticks every `JOB_POLL_SECONDS` (15) and straight away when a job
+is queued (the job table's insert trigger NOTIFYs `job_queued`). Each job runs
+as the user who queued it, so a job fails (and says why) if that user has
+since lost the role. Without the worker, jobs just wait in the table: the
+project's `GET /projects/:id/jobs` shows them `queued`, and the next tick runs
+them. Stopping the worker mid-job is safe: the job is claimed again once its
+lease (`JOB_LEASE_SECONDS`, 6 minutes) runs out.
 
 ## Import the client catchment (demo data)
 
@@ -226,6 +250,8 @@ Catchment Consultants" and `analyst@example.com` is a member.
 ```bash
 pnpm dev:run:frontend       # frontend only
 pnpm dev:run:backend        # backend only
+pnpm dev:run:worker         # background-job worker only (see Background jobs)
+pnpm dev:jobs:tick          # one job tick, then exit
 pnpm dev:db:status          # is Postgres up?
 pnpm dev:db:logs            # follow Postgres logs
 pnpm dev:db:psql            # psql as the owner role

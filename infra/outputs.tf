@@ -32,6 +32,11 @@ output "migrate_function_name" {
   value       = aws_lambda_function.migrate.function_name
 }
 
+output "worker_function_name" {
+  description = "Worker Lambda function name (background jobs, jobs.tf). deploy-backend.yml updates its code after the API."
+  value       = aws_lambda_function.worker.function_name
+}
+
 output "public_site_url" {
   description = "Public URL of the site."
   value       = local.site_origin

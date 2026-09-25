@@ -3,7 +3,7 @@
 # see: runtime/sizing of the Lambdas, the DB's durability + privacy settings,
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
-# alarms, the deploy role's trust pin, and the plan-time rejection of
+# background-job queues / worker / SQS endpoint policy, the alarms, the deploy role's trust pin, and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -177,6 +177,58 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:lambda:af-south-1:000000000000:function:water-management-migrate"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.worker
+  override_during = plan
+  values = {
+    arn           = "arn:aws:lambda:af-south-1:000000000000:function:water-management-worker"
+    function_name = "water-management-worker"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.worker_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-worker-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-worker-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.jobs
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-jobs"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-jobs"
+  }
+}
+
+override_resource {
+  target          = aws_cloudwatch_event_rule.worker_tick
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-worker-tick"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.worker_lambda
+  override_during = plan
+  values = {
+    id = "sg-0000000000worker"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.jobs_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-jobs-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-jobs-dlq"
   }
 }
 
@@ -553,6 +605,10 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.rds_freeable_memory,
       aws_cloudwatch_metric_alarm.ses_bounce_rate,
       aws_cloudwatch_metric_alarm.ses_complaint_rate,
+      aws_cloudwatch_metric_alarm.jobs_dlq_depth,
+      aws_cloudwatch_metric_alarm.worker_errors,
+      aws_cloudwatch_metric_alarm.jobs_backlog,
+      aws_cloudwatch_metric_alarm.job_dead,
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])])
     error_message = "Every regional alarm must notify the alerts SNS topic."
   }
@@ -569,8 +625,8 @@ run "alarms" {
     error_message = "SES alarms must fire before AWS's review thresholds (5% bounce, 0.1% complaint)."
   }
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "50"
-    error_message = "A $50 monthly budget exists by default."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "60"
+    error_message = "A $60 monthly budget exists by default."
   }
   assert {
     condition     = aws_sns_topic_subscription.alerts_email[0].endpoint == "ops@example.com" && aws_sns_topic_subscription.alerts_us_east_1_email[0].endpoint == "ops@example.com"
@@ -601,6 +657,140 @@ run "alarms" {
     condition     = aws_cloudwatch_metric_alarm.self_check_failed.alarm_actions == toset([aws_sns_topic.alerts.arn])
     error_message = "The self-check alarm must notify the same alerts SNS topic as every other alarm."
   }
+}
+
+# ---------------------------------------------------------------------------
+# Background jobs (jobs.tf, WP-2.8)
+# ---------------------------------------------------------------------------
+
+run "background_jobs" {
+  command = plan
+
+  # --- Queues: SSE everywhere, a DLQ after 5 receives -------------------------
+  assert {
+    condition     = aws_sqs_queue.jobs.sqs_managed_sse_enabled && aws_sqs_queue.jobs_dlq.sqs_managed_sse_enabled
+    error_message = "Both job queues must be encrypted at rest (SQS-managed SSE)."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sqs_queue.jobs.redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.jobs.redrive_policy).deadLetterTargetArn == aws_sqs_queue.jobs_dlq.arn
+    )
+    error_message = "The jobs queue must dead-letter to its DLQ after 5 receives."
+  }
+  assert {
+    condition     = aws_sqs_queue.jobs.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+    error_message = "Visibility timeout must be at least 6x the worker timeout, or messages redeliver mid-tick."
+  }
+
+  # --- Worker Lambda ------------------------------------------------------------
+  assert {
+    condition = (
+      aws_lambda_function.worker.runtime == "nodejs24.x" &&
+      aws_lambda_function.worker.handler == "lambda-worker.handler" &&
+      aws_lambda_function.worker.memory_size == 1024 &&
+      aws_lambda_function.worker.timeout == 300
+    )
+    error_message = "Worker Lambda: nodejs24.x, lambda-worker.handler, 1024 MB, 300 s."
+  }
+  assert {
+    condition     = aws_lambda_function.worker.reserved_concurrent_executions == 2
+    error_message = "Worker concurrency must be capped at 2 by default (spend + DB connections)."
+  }
+  assert {
+    condition     = length(aws_lambda_function.worker.vpc_config) == 1 && aws_lambda_function.worker.vpc_config[0].security_group_ids == toset([aws_security_group.worker_lambda.id])
+    error_message = "The worker runs in the VPC with its own security group."
+  }
+  assert {
+    condition = (
+      startswith(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "postgresql://water_app:") &&
+      strcontains(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "sslmode=verify-full") &&
+      aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
+      aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
+    )
+    error_message = "The worker connects as the RLS-bound water_app over verified TLS, with the sqs transport."
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.worker.environment[0].variables), "MASTER_SECRET_ARN")
+    error_message = "The worker must never be given the owner credentials: jobs run under RLS."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
+      aws_lambda_function.backend.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
+    )
+    error_message = "The API must wake the worker through the jobs queue."
+  }
+
+  # --- Triggers -------------------------------------------------------------------
+  assert {
+    condition     = aws_cloudwatch_event_rule.worker_tick.schedule_expression == "rate(5 minutes)" && aws_cloudwatch_event_target.worker_tick.arn == aws_lambda_function.worker.arn
+    error_message = "EventBridge must tick the worker every 5 minutes."
+  }
+  assert {
+    condition     = aws_lambda_permission.worker_tick.principal == "events.amazonaws.com" && aws_lambda_permission.worker_tick.source_arn == aws_cloudwatch_event_rule.worker_tick.arn
+    error_message = "Only the tick rule may invoke the worker through EventBridge."
+  }
+  assert {
+    condition     = aws_lambda_event_source_mapping.worker_jobs.event_source_arn == aws_sqs_queue.jobs.arn && aws_lambda_event_source_mapping.worker_jobs.function_name == aws_lambda_function.worker.arn
+    error_message = "The jobs queue must trigger the worker."
+  }
+
+  # --- SQS endpoint: private DNS, and a policy naming only our roles and queue ---
+  assert {
+    condition     = aws_vpc_endpoint.sqs.vpc_endpoint_type == "Interface" && aws_vpc_endpoint.sqs.private_dns_enabled && aws_vpc_endpoint.sqs.service_name == "com.amazonaws.af-south-1.sqs"
+    error_message = "SQS must be reached through a private-DNS interface endpoint (no NAT)."
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.sqs.subnet_ids) == 1
+    error_message = "The SQS endpoint defaults to one AZ (sqs_endpoint_az_count, cost)."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
+      toset(s.resources) == toset([aws_sqs_queue.jobs.arn]) && alltrue([for a in s.actions : !strcontains(a, "*")])
+    ])
+    error_message = "The SQS endpoint policy must name only the jobs queue, with no wildcard actions."
+  }
+  assert {
+    condition = toset(flatten([for s in data.aws_iam_policy_document.sqs_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
+      aws_iam_role.lambda.arn, aws_iam_role.worker_lambda.arn,
+    ])
+    error_message = "Only the API and worker roles may use the SQS endpoint."
+  }
+  assert {
+    condition = alltrue(flatten([for d in [data.aws_iam_policy_document.worker_lambda, data.aws_iam_policy_document.lambda_jobs_send] : [
+      for s in d.statement : toset(s.resources) == toset([aws_sqs_queue.jobs.arn])
+    ]]))
+    error_message = "The API and worker IAM policies reach the jobs queue only."
+  }
+  assert {
+    condition     = contains(flatten([for s in data.aws_iam_policy_document.github_deploy.statement : s.resources if s.sid == "LambdaUpdate"]), aws_lambda_function.worker.arn)
+    error_message = "The deploy role must be able to update the worker's code."
+  }
+
+  # --- Alarms -----------------------------------------------------------------------
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && aws_cloudwatch_metric_alarm.jobs_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.jobs_dlq.name
+    error_message = "DLQ depth > 0 must alarm."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
+    error_message = "The backlog alarm must read the metric lambda-worker.ts emits (METRIC_NAMESPACE, OldestDueJobAgeSeconds)."
+  }
+  assert {
+    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
+    error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
+  }
+}
+
+run "rejects_short_jobs_backlog_alarm" {
+  command = plan
+
+  variables {
+    jobs_backlog_alarm_seconds = 300
+  }
+
+  expect_failures = [var.jobs_backlog_alarm_seconds]
 }
 
 # ---------------------------------------------------------------------------

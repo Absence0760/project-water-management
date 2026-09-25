@@ -2,7 +2,7 @@ name: Deploy backend
 
 # Release-triggered, estate model (threkir release-backend.yml / release-web.yml,
 # feohledger aws-deploy.yml): publishing a GitHub Release whose tag is
-# `backend@X.Y.Z` deploys the API + migrations to production. A bare tag push
+# `backend@X.Y.Z` deploys the API, migrations and job worker to production. A bare tag push
 # does nothing; the published Release is the deploy trigger, so its notes are
 # written up front and the deploy is a deliberate act:
 #
@@ -17,15 +17,16 @@ name: Deploy backend
 #              reviewer, and every AWS variable/secret is set. Until the AWS
 #              account is bootstrapped, this is where a release stops, with a
 #              pointer to infra/README.md § Operator steps.
-#   build      no environment, no AWS. Installs deps and packages both Lambda
-#              zips. Third-party npm code never runs in a job that holds AWS
+#   build      no environment, no AWS. Installs deps and packages the three
+#              Lambda zips (API, migrate, worker). Third-party npm code never runs in a job that holds AWS
 #              credentials.
 #   deploy     `environment: production`: GitHub pauses for the required
 #              reviewer, and only then can the OIDC token carry the
 #              `environment:production` subject the deploy role trusts.
 #              Migrations run BEFORE the API code is updated (expand/contract,
-#              CLAUDE.md rule 2), then a /api/health smoke check.
-#   attach     `contents: write` only: attaches both zips to the Release, so
+#              CLAUDE.md rule 2); the worker's code follows the API's;
+#              then a /api/health smoke check.
+#   attach     `contents: write` only: attaches the zips to the Release, so
 #              the exact artifact that shipped is kept with its notes.
 #
 # Rollback / redeploy: run it manually with an older published tag
@@ -88,11 +89,12 @@ jobs:
         id: preflight
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUIRED_CONFIG: AWS_DEPLOY_ROLE_ARN,AWS_REGION,LAMBDA_FUNCTION_NAME,MIGRATE_FUNCTION_NAME,PUBLIC_SITE_URL
+          REQUIRED_CONFIG: AWS_DEPLOY_ROLE_ARN,AWS_REGION,LAMBDA_FUNCTION_NAME,MIGRATE_FUNCTION_NAME,WORKER_FUNCTION_NAME,PUBLIC_SITE_URL
           AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           LAMBDA_FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
           MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
+          WORKER_FUNCTION_NAME: ${{ vars.WORKER_FUNCTION_NAME }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: node scripts/release/preflight.mjs backend
 
@@ -125,7 +127,8 @@ jobs:
         run: pnpm -C backend check
 
       # backend/dist/lambda.zip (API) + backend/dist/migrate.zip (migrations +
-      # owner-role runner). Layouts documented in the script.
+      # owner-role runner) + backend/dist/worker.zip (background jobs).
+      # Layouts documented in the script.
       - name: Build and package Lambdas
         run: infra/scripts/package-lambdas.sh
 
@@ -136,11 +139,12 @@ jobs:
           path: |
             backend/dist/lambda.zip
             backend/dist/migrate.zip
+            backend/dist/worker.zip
           if-no-files-found: error
           retention-days: 30
 
   deploy:
-    name: Deploy (migrate, then API)
+    name: Deploy (migrate, then API, then worker)
     needs: [preflight, build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -212,6 +216,20 @@ jobs:
             --query 'CodeSha256' --output text
           aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
 
+      # After the API, like it: the worker runs jobs against the migrated
+      # schema. A tick that starts mid-update runs the old code, which the
+      # expand/contract rule keeps compatible.
+      - name: Update worker Lambda code
+        env:
+          WORKER_FUNCTION_NAME: ${{ vars.WORKER_FUNCTION_NAME }}
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code \
+            --function-name "$WORKER_FUNCTION_NAME" \
+            --zip-file "fileb://dist/worker.zip" \
+            --query 'CodeSha256' --output text
+          aws lambda wait function-updated --function-name "$WORKER_FUNCTION_NAME"
+
       # Through CloudFront, the same path a browser takes (/api/* is proxied
       # with the shared-secret header; a direct Function URL hit is a 403).
       - name: Smoke check /api/health
@@ -248,4 +266,5 @@ jobs:
           set -euo pipefail
           mv dist/lambda.zip "dist/backend-${VERSION}-lambda.zip"
           mv dist/migrate.zip "dist/backend-${VERSION}-migrate.zip"
+          mv dist/worker.zip "dist/backend-${VERSION}-worker.zip"
           gh release upload "$RELEASE_TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"

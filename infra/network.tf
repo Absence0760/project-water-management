@@ -2,13 +2,15 @@
 # Private-only VPC — no internet gateway, no NAT, no public subnets
 #
 # Nothing in the VPC needs the internet:
-#   - the API Lambda talks to Postgres, and to SES (SendEmail) through the SES
-#     API interface endpoint in ses.tf. It makes no other outbound calls;
+#   - the API Lambda talks to Postgres, to SES (SendEmail) through the SES
+#     API interface endpoint in ses.tf, and to SQS (job wake-ups) through the
+#     SQS interface endpoint in jobs.tf. It makes no other outbound calls;
 #     CloudWatch Logs delivery is done by the Lambda service, not through the
 #     function's ENI;
 #   - RDS never initiates connections;
 #   - the migrate Lambda additionally needs Secrets Manager (to read the
-#     RDS-managed master credentials), reached through ONE interface endpoint.
+#     RDS-managed master credentials), reached through ONE interface endpoint;
+#   - the worker Lambda (jobs.tf) talks to Postgres and to SQS.
 #
 # A NAT gateway would be ~$33/month + data before any traffic; an interface
 # endpoint is ~$7.30/month per AZ. If a future feature needs outbound calls
