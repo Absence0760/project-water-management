@@ -34,7 +34,14 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	// No retries: a flaky test is a bug to fix, not to re-roll.
 	retries: 0,
-	workers: process.env.CI ? 2 : undefined,
+	// Every worker shares one API process (single-threaded Node), and the heavy
+	// requests (multi-year runs, 20-run setups, ensemble checks) block it for
+	// everyone. Playwright's default, half the cores (10 on a 20-core laptop),
+	// queued pages past their waits: 6 load-timeout failures in a full run on
+	// a clean main, all passing at 6 workers, which also finished sooner
+	// (167 s vs 192 s). CI runs 2 per shard, each shard with its own API.
+	// E2E_WORKERS overrides it for a one-off run.
+	workers: process.env.CI ? 2 : Number(process.env.E2E_WORKERS) || 6,
 	reporter: BLOB ? [['list'], ['blob']] : process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
 	globalSetup: './support/global-setup.ts',
 	use: {

@@ -63,6 +63,14 @@ before it touches the database: Playwright starts its web servers before the
 global setup. Set `E2E_SLOT` in one of them. The two runs still share one
 docker Postgres, so on a loaded laptop both run slower.
 
+Locally it runs **6 workers** (`playwright.config.ts`; `E2E_WORKERS=n` for a
+one-off run). They all share the one API process, which is single-threaded, so
+more workers queue behind each other's heavy requests (multi-year runs, 20-run
+setups) rather than finishing sooner: at Playwright's default of half the cores
+(10 here) a full run on a clean main had 6 load timeouts and took 192 s; at 6
+it passed in 167 s. CI is unaffected: 2 workers per shard, each shard with its
+own API.
+
 ### CI: 14 shards
 
 `ci.yml` runs the suite as 14 parallel jobs, `E2E (Playwright) 1/14 … 14/14`
