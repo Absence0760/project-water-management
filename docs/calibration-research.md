@@ -179,7 +179,8 @@ CR-30 and CR-31 are the larger licensing features in roadmap step 3.
 
 1. **Recession (CR-14).** Should the legacy model become a mass-conserving
    store, or should the app recommend GR4J and keep legacy only to reproduce
-   the workbook?
+   the workbook? The app now does the second, pending this answer (audit H1,
+   2026-09-24).
 2. **EWR form (CR-30).** Is the 12-value pragmatic EWR acceptable for the
    client's purpose? Or does the CMA expect the assurance-table form from the
    gazetted Reserve study for this reach?

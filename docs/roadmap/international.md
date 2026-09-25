@@ -453,6 +453,12 @@ rather than add a dependency:
 - **Goal:** natural flow from rain comes from a named generator, not only the
   b023 recession. The b023 recession is hard-wired to Western Cape winter
   logic, and audit H1 says it doesn't conserve event volume.
+- **Status:** the GR4J half has landed through issue #4, under other names:
+  the `RunoffModel` interface in `packages/engine/src/runoff/types.ts`, with
+  `runoff/legacy.ts` (the b023 recession) and `runoff/gr4j.ts`, selected by
+  `settings.runoffModel` (`'legacy' | 'gr4j'`, GR4J the default since engine
+  0.11.0). AWBM still to come; it fits that interface rather than the
+  `generators/` layout below.
 - **Changes (engine):**
   - `generators/types.ts`:
     `interface FlowGenerator<P> { id; version; defaults(): P; validate(p): string[]; run(p, { rainMm, petMm?, areaKm2, startDate, days }): { naturalFlowM3Day; stores?; series; warnings } }`.

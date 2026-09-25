@@ -816,7 +816,10 @@ run in parallel after WP-4.1.
   Also drop or wire the unused parameters (`LagWeight`, …). Per-unit rain
   gauges (P3) and per-unit calibration multipliers (P5).
   `ProjectSettings.flowGenerator: 'b023-recession' | 'bucket-v1'` (default
-  unchanged). Bumps `ENGINE_VERSION`.
+  unchanged). Bumps `ENGINE_VERSION`. (Since written, the seam has landed as
+  the `RunoffModel` interface in `packages/engine/src/runoff/` and
+  `settings.runoffModel: 'legacy' | 'gr4j'`, GR4J by default; the bucket
+  model becomes a third `runoffModel` value.)
 - **Data model.** `hydro_unit(id, project_id, node_id, name, area_km2,
   map_mm, params jsonb)`, `hydro_unit_gauge(unit_id, series_id, weight)`.
   RLS through `app_has_role`. Same-project triggers on `node_id` and
