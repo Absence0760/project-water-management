@@ -175,7 +175,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Self-checks',
 		'Curtailment',
 		'Hydrograph',
-		'Calibration',
+		'Calibration & uncertainty',
 		'Runoff model',
 		'Notes & evidence',
 		'Flow duration',

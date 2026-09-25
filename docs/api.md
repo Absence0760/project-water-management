@@ -615,6 +615,31 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `rain_catchment_spread` is 1 on each day whose rain came from a window.
   Rules: [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
 
+### Uncertainty bands
+
+Engine ≥ 0.26.0, migration 014, [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9).
+The ensemble runs in the browser (hundreds of model runs, the calibration
+worker); the server resolves its options, the database draws the seed, and
+the result is stored only after the server has checked it.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/runs/:runId/model-input` | – | `{ input: ModelInput }`: the run's own input (its settings and model snapshot, with the project's series). `409` when a series changed since the run (only hashes of the values are stored with a run), with the kinds | viewer |
+| GET | `/projects/:id/runs/:runId/uncertainty` | – | `{ ensembles: Ensemble[] }`, newest first, **every** ensemble started for the run (abandoned starts included), without `result` | viewer |
+| GET | `/projects/:id/runs/:runId/uncertainty/:uid` | – | `{ ensemble: Ensemble & { result } }`: `result` = `{ engineVersion, header, members, coverage }` (an ensemble) or `{ engineVersion, header, members: { index, metrics }[] }` (paired) | viewer |
+| POST | `/projects/:id/runs/:runId/uncertainty` | `{ request: { members?, bounds?, free?, panOffset?, rainSources?, records?, thresholds?: { objective?, minSkill?, wr2012MaxLevel?, maxLowFlowBiasPct? } } }` or `{ baselineId }` | `201 { ensemble, notes }`, status `started`: the resolved options (`ResolvedEnsembleOptions`, the model is the run's own) with the seed the database drew. `baselineId` (a complete ensemble of **another** run of this project, same runoff model and period) starts a paired band: its options and seed are the baseline's. `400` with the engine's reason for options the run can't use (fewer than 30 members, a rain source it lacks, no observed record, two models, two periods); `409` from `model-input`, or at 50 ensembles for the run | editor |
+| POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }` | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
+
+- `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
+  `summary` is `EnsembleSummary` (`total`, `accepted`, `gated`,
+  `referenceAccepted`, `rejected` by reason, `bands`, `coverage`,
+  `coverageWarning`, `decisionRule`, `notes`) or, for a paired row,
+  `PairedSummary` (difference bands, `ewrDaysNotMetWorse`, `shortfallWorse`,
+  `unpaired`, `decisionRule`); `null` until complete. A band is
+  `{ n, p5, p50, p95, min, max }`, the percentiles `null` below 30 members.
+- Nothing about a stored ensemble can change and none can be deleted
+  ([data-model.md](./data-model.md), "Uncertainty bands").
+
 ## Compare runs
 
 Compare two runs, from the same project or from two projects you can see (for

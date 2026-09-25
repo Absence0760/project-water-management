@@ -498,7 +498,24 @@ the reports):
   0.21.0, below). Phase 9 criteria are below.
 
 **Open items (not yet started):**
-- [ ] **Phase 9: uncertainty bands.** Build to these criteria (assessor):
+- [x] **Phase 9: uncertainty bands.** Done 2026-09-25, engine 0.26.0,
+      migration 014 ([model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9),
+      [ui.md](./ui.md), [run-comparison.md](./run-comparison.md)). A seeded
+      Latin hypercube over the free parameters (log-uniform across a
+      decade or more), a ±0.1 pan-coefficient shift, station-with-infill vs
+      CHIRPS-only rain and gauge vs logger; member 0 is the run itself.
+      Kept by stored thresholds (KGE′ ≥ 0.5 before the split date, WR2012 up
+      to *query* and inside the MAR band, low-flow bias ±50 %), diffed in the
+      Runs-tab history and run comparison; coverage of the held-out half per
+      record (warning below 70 %); no percentiles below 30 kept; bands on
+      every output below plus the monthly Reserve compliance rate; paired
+      B − A bands in run comparison; one model per ensemble. The database
+      draws the seed and keeps every start; the server regenerates the
+      sample and re-runs member 0 and three random members before storing
+      (licensing, issue #15: bands can't be cherry-picked). The ensemble
+      runs in the calibration worker: 300 members take 8–16 s on the example
+      catchments. Defaults to confirm: plan.md question 18.
+      Criteria it was built to (assessor):
       - The ensemble comes from a seeded sample across the parameter bounds
         (Latin hypercube or DDS-AU), **not** the optimiser's search path.
       - The ensemble also varies the pan coefficient, the rain source and the
@@ -532,8 +549,9 @@ the reports):
             site from the month's requirement (`ewr_rule`, already stored),
             fed to attribution in place of the pragmatic EWR, with a new
             engine version and a regression note. Trigger: their answer.
-      - [ ] **Uncertainty on compliance.** Phase 9's bands should include the
-            monthly Reserve compliance rate beside days not met.
+      - [x] **Uncertainty on compliance.** Phase 9's bands include the
+            monthly Reserve compliance rate per site beside days not met
+            (engine 0.26.0).
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -615,8 +633,10 @@ the suggested order (the IDs carry the detail):
       CR-1 below can then reuse its batch and report code. Do it
       before CR-1, or as soon as the hydrologist asks for another
       side-by-side of fits.
-- [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
-      → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
+- [ ] **Ensemble and reporting:** ~~CR-1 behavioural ensemble with the EWR
+      range~~ (done as Phase 9, engine 0.26.0: a few hundred Latin-hypercube
+      sets in one worker, not 10–20k across several; more workers are the
+      scaling step if the hydrologist wants larger samples) → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
       thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
       FDC overlays and %nMAR.

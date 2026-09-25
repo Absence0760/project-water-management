@@ -41,6 +41,10 @@ describe('resultSections', () => {
 		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-plausibility');
 	});
 
+	it('names the calibration entry for the uncertainty bands it also holds', () => {
+		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-calibration')?.label).toBe('Calibration & uncertainty');
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);

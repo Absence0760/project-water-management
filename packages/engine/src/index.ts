@@ -20,6 +20,7 @@ export * from './rain';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
+export * from './uncertainty';
 export * from './verify/columns';
 export { verifyRun } from './verify/verify';
 export { buildTopology, type Topology } from './network/topology';

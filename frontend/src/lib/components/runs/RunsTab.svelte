@@ -22,16 +22,20 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
-	import Wr2012Panel from './Wr2012Panel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
-	import EvidencePanel from './EvidencePanel.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultSections } from './sections';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
+	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
+	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
+	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
+	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
+	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
+	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
 
 	let {
 		projectId,
@@ -463,6 +467,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
+						<!-- Uncertainty bands (issue #4 phase 9): with the calibration they come from, one menu entry so the rail still fits a laptop screen. -->
+						<div class="uncertainty" id="res-uncertainty">
+							<Lazy load={loadUncertaintyPanel}>
+								{#snippet children(UncertaintyPanel)}
+									{#key shownRunId}
+										<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
+									{/key}
+								{/snippet}
+							</Lazy>
+						</div>
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
@@ -471,7 +485,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					{/if}
 					{#if summary.wr2012}
 						<div class="panel" id="res-wr2012">
-							<Wr2012Panel report={summary.wr2012} />
+							<Lazy load={loadWr2012Panel}>
+								{#snippet children(Wr2012Panel)}
+									<Wr2012Panel report={summary.wr2012!} />
+								{/snippet}
+							</Lazy>
 						</div>
 					{/if}
 					<div class="panel" id="res-notes">
@@ -481,7 +499,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
 						<div class="evidence" id="res-evidence">
 							{#key shownRunId}
-								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+								<Lazy load={loadEvidencePanel}>
+									{#snippet children(EvidencePanel)}
+										<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+									{/snippet}
+								</Lazy>
 							{/key}
 						</div>
 					</div>
@@ -545,7 +567,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
-	.provenance {
+	.provenance,
+	.uncertainty {
 		margin-top: 1rem;
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);

@@ -1,13 +1,36 @@
-// Web Worker: runs the engine's calibrate() off the main thread, so the page
-// stays responsive for the minute or so a fit takes. Progress is posted at
-// most every 100 ms. Cancel = the page terminates the worker.
-import { calibrate } from '@water-management/engine';
+// Web Worker: runs the engine's heavy loops off the main thread, so the page
+// stays responsive: calibrate() for a fit (a minute or so), and the
+// uncertainty ensemble (issue #4 phase 9: hundreds of model runs) and its
+// paired run on another run's inputs. One worker for all three, so the
+// engine ships once. Progress is posted at most every 100 ms. Cancel = the
+// page terminates the worker.
+import { calibrate, runEnsemble, runPairedEnsemble, type EnsembleProgress } from '@water-management/engine';
+import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
 
-const post = (m: WorkerMessage) => (self as unknown as Worker).postMessage(m);
+const post = (m: WorkerMessage | EnsembleWorkerMessage) => (self as unknown as Worker).postMessage(m);
 
-self.onmessage = (e: MessageEvent<FitRequest>) => {
+function runJob(job: EnsembleJob) {
+	let last = 0;
+	const onProgress = (progress: EnsembleProgress) => {
+		const now = performance.now();
+		if (now - last >= 100 || progress.done === progress.total) {
+			last = now;
+			post({ type: 'ensemble-progress', progress });
+		}
+	};
+	try {
+		const result =
+			job.kind === 'ensemble' ? runEnsemble(job.input, job.options, { onProgress }) : runPairedEnsemble(job.input, job.baseline, { onProgress });
+		post({ type: 'ensemble-done', result });
+	} catch (err) {
+		post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+	}
+}
+
+self.onmessage = (e: MessageEvent<FitRequest | EnsembleJob>) => {
 	const req = e.data;
+	if ('kind' in req) return runJob(req);
 	let last = 0;
 	try {
 		const report = calibrate(req.input, {

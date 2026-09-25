@@ -32,6 +32,8 @@ erDiagram
   model_run ||--o{ run_series : outputs
   project  ||--o{ run_nomination : "evidence history"
   model_run ||--o{ run_nomination : "nominated as"
+  model_run ||--o{ run_uncertainty : "uncertainty ensembles"
+  run_uncertainty |o--o{ run_uncertainty : "paired on (baseline)"
   node     |o--o{ run_series : "per node (null = catchment)"
 ```
 
@@ -220,6 +222,43 @@ B on … because …". A run can be nominated again later (A, B, A).
 - Migration 009 is reserved for pinned runs (issue #7). The runner applies
   every unapplied file in name order, so 010 applying first is harmless.
 
+**Uncertainty bands (014_run_uncertainty.sql).** One row per ensemble a
+run's editor starts ([model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9)):
+`project_id`, `run_id` (→ `model_run`, cascade), `baseline_id` (→ another
+`run_uncertainty` row, cascade; set for a **paired** band, which re-runs that
+baseline's kept members on this run), `runoff_model`, `engine_version`,
+`method` (`lhs`), `seed`, `members`, `options jsonb` (the resolved options:
+dimensions, rain sources, records, the acceptance **thresholds**), `status`
+(`started` → `complete`), and on completion `accepted`, `summary jsonb` (the
+bands, coverage, notes and decision rule) and `result jsonb` (the header, the
+kept members' parameters and outputs, every member's scores and verdict, the
+coverage), `created_by`, `created_at`, `completed_at`. A CHECK ties the four
+completion columns to `status`. Indexes cover every foreign key, `run_id`
+leading `(run_id, created_at DESC)`. A 300-member result is ~200–300 KB.
+
+Un-cherry-pickable by privilege (the licensing assessor's concern, issue #15):
+
+- **The database draws the seed.** The `run_uncertainty_start` BEFORE INSERT
+  trigger (`SECURITY DEFINER`, `search_path` pinned) sets `seed` (and
+  `options.seed`) itself, stamps `created_by` / `created_at` from the session,
+  forces `status = 'started'` and empty results, checks the run (and a
+  baseline) belong to the project, and caps a run at **50** starts under a
+  per-run advisory lock. A paired row copies its baseline's options, seed,
+  members, method and model, and needs a complete, unpaired baseline of
+  another run.
+- **Every start is kept.** `water_app` has `SELECT`, `INSERT`, and `UPDATE` of
+  `status`, `accepted`, `summary`, `result`, `completed_at` only; no `DELETE`
+  and no delete policy (the catalogue test's `COLUMN_ONLY_UPDATE` and
+  `NO_DELETE`). An ensemble started and never completed stays, visibly
+  abandoned.
+- **Completed once.** The update policy only sees `started` rows, and the
+  `run_uncertainty_complete` trigger lets only whoever started a row complete
+  it, only to `complete`, stamping `completed_at`. Options and thresholds are
+  outside the column grant.
+- Rows go only with their run (a nominated run can't be deleted) or project.
+- **RLS:** viewers read; editors insert and complete (`run_uncertainty_select`,
+  `_insert`, `_update`).
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
@@ -313,6 +352,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `run_nomination` (the evidence history): SELECT needs `viewer`, INSERT
   `editor`; there is no UPDATE or DELETE for anyone (see § Evidence nomination
   above).
+- `run_uncertainty` (uncertainty ensembles): SELECT needs `viewer`, INSERT and
+  the one completing UPDATE `editor`; no DELETE for anyone (see § Uncertainty
+  bands above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

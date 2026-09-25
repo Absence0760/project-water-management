@@ -2021,6 +2021,106 @@ run with it (`RunSummary.wr2012`). It never changes model results.
 - **Deterministic:** the same inputs and engine version give an identical
   report (tested).
 
+### 2.10d Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
+
+A single run gives one number for EWR days not met, curtailment and the annual
+volumes. Phase 9 reports how far those numbers move across every parameter set
+and forcing the record can't rule out: a **behavioural ensemble** in the GLUE
+sense (Beven & Binley 1992), built to the assessor's criteria in
+[followups.md](./followups.md). The code is `packages/engine/src/uncertainty/`;
+it never changes a run's results.
+
+- **The sample** (`ensembleMembers`): a seeded **Latin hypercube** (McKay et al.
+  1979) of `members` points (30–1 000, default 300) across the free
+  parameters' bounds, **never the optimiser's search path** (a DDS trajectory
+  crowds where one fit happened to look). Each point falls in a different
+  one of `members` equal strata of every dimension.
+  - Parameters: the model's free parameters (GR4J X1, X3, X4; legacy a, b and
+    the season factors) inside the **typical** bounds (Perrin et al. 2003's
+    80 % range) by default, or the fit record's bounds when the project's
+    parameters come from a fit of this model (§2.10b), or `wide`. A range
+    spanning a factor of ten or more is sampled **log-uniformly** (X1, X3,
+    and X4 in the wide bounds): a uniform draw would put nearly every member
+    in its top decade. Parameters not free keep the project's values.
+  - **Pan coefficient** (GR4J only; the legacy model uses no PET): an
+    additive shift of the whole monthly row, uniform in ±`panOffset`
+    (default ±0.1, at most 0.3). A shifted month stays inside the FAO-56
+    Class A range 0.35–0.85 (or at the project's own value when that is
+    outside it). §2.4a shows the pan coefficient moves MAR and EWR days
+    even after refitting, so it belongs in the band, not in the fit.
+  - **Rain source**, when the project has both station rain and CHIRPS
+    covering ≥ 99 % of the run: half the members use the rain as a run does
+    (station rain, bias-corrected CHIRPS where it is blank, §2.4b), half use
+    **CHIRPS alone**, every day bias-corrected by the run's own monthly
+    factors (the station series dropped, correction then off, the run
+    window pinned). The spread between them is the rain-data uncertainty
+    the record can't settle.
+  - **Observed record**, when both a gauge and a logger record have at least
+    30 scored days: half the members are judged against each. A record that
+    measures a different river (a neighbouring gauge) belongs in
+    `flow_reference_m3s`, which the engine never reads.
+  - Categories are LHS dimensions too, so they split evenly (± 1).
+  - **Member 0** is always the run itself: the project's parameters, no pan
+    shift, its rain and its primary record. It is judged by the same rule;
+    when it passes, every band's [min, max] contains the run it qualifies
+    (tested), and when it fails the summary says so.
+- **Acceptance** (`rejectReasons`), on thresholds stored with the ensemble
+  (`options.thresholds`) so two ensembles' rules can be diffed
+  (`diffEnsembleOptions`, shown in the Runs tab history and run comparison):
+  - a **skill score** (default KGE′, or the fit record's objective) of at
+    least `minSkill` (default **0.5**) on the member's record, on the scored
+    days (window, exclusions) **before the split date**;
+  - the **WR2012 flag** (§2.10c) on the member's natural MAR no worse than
+    `wr2012MaxLevel` (default *query*: a member "not usable for EWR findings"
+    is rejected; `unusable` switches the check off), and inside the MAR band
+    when `settings.wr2012.calibrationPenalty` sets one. No reference, no check;
+  - the **low-flow check**: |FDC low-flow volume bias| (Yilmaz et al. 2008,
+    the bottom 30 % of days, §2.10b) at most `maxLowFlowBiasPct` (default
+    **50 %**; null switches it off). A bias that can't be computed fails.
+- **Held-out coverage.** The split date is the median scored day of the
+  primary record: acceptance uses the days before it, and the days from it
+  are **held out**. For each record, `coverage` counts the held-out
+  observations inside that day's 5–95 % band of the kept members' simulated
+  outflow (`bandCoverage`); below **70 %** it warns that the band is too
+  narrow to trust.
+- **Bands** (`band`, `summariseEnsemble`): the 5th, 50th and 95th percentiles
+  (linear, type 7) of the kept members, **none with fewer than 30 kept**
+  (`MIN_BAND_MEMBERS`; the coverage statistic is withheld too). Banded:
+  - outlet EWR days not met, in total and per month of the year;
+  - the shortfall volume against the outlet EWR (Mm³ over the run);
+  - each farm's curtailment (total change in supply, §2.11 column S);
+  - natural and simulated-outflow volume per water year, and both MARs;
+  - the monthly Reserve compliance rate per site with a rule table (§2.9c);
+  - monthly **flow-duration curves** of simulated outflow at 5 … 99 %
+    exceedance, each read against the month's mean outlet EWR.
+- **One runoff model per ensemble.** Bands of GR4J and legacy are never
+  pooled: each ensemble has one `model`, and paired bands refuse two.
+- **The decision rule** (`ensembleDecisionRule`) states the thresholds, the
+  split date, the percentiles, the 30-member gate, the coverage test and the
+  sample (members, seed, bounds) in one paragraph, printed next to every band.
+- **Paired bands** (`runPairedEnsemble`, `summarisePaired`): every kept
+  member of a baseline run's ensemble is run again, unchanged, on another
+  run's inputs (same project, same model, same period), and the difference
+  other − baseline is banded member by member, with the share of pairs in
+  which the other run fails the EWR on more days. Pairing cancels the
+  catchment-response uncertainty both runs share, so the band is the change's
+  own impact (a licence application's extra impact, [run-comparison.md](./run-comparison.md)).
+  Members are judged once, on the baseline: an application changes the
+  network, not the observed history. The same inputs give exactly zero.
+- **Reproducible and checked.** The same input and options give an identical
+  ensemble (tested); metrics are rounded to 6 significant figures. The server
+  assigns the seed and stores the resolved options before the browser runs
+  anything, then stores the result only after regenerating the whole sample
+  and re-running three randomly chosen members (`verifyEnsemble`,
+  `verifyPaired`; [security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Storage:
+  [data-model.md](./data-model.md) (`run_uncertainty`).
+- **Cost.** Every member is a full `runModel`: 25–55 ms on the example
+  catchments, so 300 members take 8–16 s in the browser's calibration worker.
+- **For the hydrologist** (plan.md question 18): the default thresholds
+  (KGE′ ≥ 0.5, ±50 % low-flow bias, WR2012 up to *query*), the pan
+  coefficient's ±0.1, and whether 300 members suffice, are defaults to
+  confirm, not findings.
+
 ### 2.10a Data quality: do the observed flow records agree?
 
 Not in the workbook — added after comparing the client catchment's two observed records.
