@@ -790,7 +790,7 @@ value such as 250000.
   whose top has passed under the sticky header, or the last one at the
   bottom of the page). A long runs list scrolls inside its panel so the menu
   stays in reach: the rail is a column in which only the list shrinks (at
-  most 16rem, at least 7.5rem), so with 20 runs and every menu entry the rail
+  most 24rem, at least 7.5rem), so with 20 runs and every menu entry the rail
   still fits a 768px-tall window without clipping, and a longer menu takes
   its height from the list (once the list is at its minimum the rail scrolls
   on its own). Narrower, the rail stacks above the results and the menu
@@ -804,7 +804,15 @@ value such as 250000.
   rainfall series. While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
-  run shown; editors delete one with its ✕. Its header links to **Compare
+  run shown; editors delete one with its ✕. Rows are compact so several fit
+  the narrow rail: the label (two lines at most; the full label is the row's
+  tooltip and the results heading), when it ran and the years it covers
+  ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
+  (latest, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
+  ✕ stack in a narrow column beside it. The full period, days, author and
+  engine version are in the results header. From 7 runs up
+  (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
+  whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
   runs** (`/compare?project=<id>`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
