@@ -1,0 +1,108 @@
+"""The synthetic b023 workbook fixture can't drift from its generator or from the importer.
+
+    .venv/bin/python -m unittest discover -s scripts/wbt-import
+
+scripts/wbt-import/fixtures/synthetic_b023.* is the fixture the in-browser
+importer's parity test compares against (WP-1.31). This test regenerates the
+workbook into a temp dir and checks that extract_project.py gives exactly the
+committed project JSON and notes, for both the regenerated and the committed
+workbook. If it fails after a deliberate importer or generator change, run
+`python scripts/wbt-import/make_synthetic_workbook.py` and commit the result
+(and the TypeScript port must follow the change).
+"""
+
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import make_synthetic_workbook as gen  # noqa: E402
+
+
+class SyntheticWorkbook(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.fresh = Path(cls.tmp.name) / gen.WORKBOOK_NAME
+        gen.write_workbook(cls.fresh)
+        cls.fresh_outputs = gen.expected_outputs(cls.fresh)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def committed(self, name: str) -> str:
+        return (gen.FIXTURES / name).read_text(encoding="utf-8")
+
+    def test_the_committed_outputs_match_a_regenerated_workbook(self):
+        for name, text in self.fresh_outputs.items():
+            with self.subTest(name=name):
+                self.assertEqual(text, self.committed(name), f"{name} is stale: rerun make_synthetic_workbook.py")
+
+    def test_the_committed_workbook_gives_the_committed_outputs(self):
+        for name, text in gen.expected_outputs(gen.FIXTURES / gen.WORKBOOK_NAME).items():
+            with self.subTest(name=name):
+                self.assertEqual(text, self.committed(name), f"the committed workbook no longer gives {name}")
+
+    def test_regenerating_is_deterministic(self):
+        again = Path(self.tmp.name) / "again" / gen.WORKBOOK_NAME
+        again.parent.mkdir()
+        gen.write_workbook(again)
+        self.assertEqual(again.read_bytes(), self.fresh.read_bytes())
+
+    def test_small_enough_to_commit(self):
+        # pre-commit's check-added-large-files caps a file at 500 KB.
+        for path in gen.FIXTURES.glob(f"{gen.STEM}*"):
+            with self.subTest(path=path.name):
+                self.assertLess(path.stat().st_size, 500 * 1024)
+
+    def test_the_fixture_exercises_the_importer_branches(self):
+        # A guard on the generator: each case in README "The synthetic workbook" still shows up.
+        project = json.loads(self.committed(f"{gen.STEM}.project.json"))
+        notes = self.committed(f"{gen.STEM}.notes.txt").splitlines()
+        ref_notes = self.committed(f"{gen.STEM}.gauge-reference.notes.txt").splitlines()
+        m = project["model"]
+        nodes = {n["name"]: n for n in m["nodes"]}
+
+        self.assertIn("Echo Farm", nodes)  # "Echo  Farm" in [Network]: whitespace normalised
+        self.assertEqual({n["kind"] for n in m["nodes"]}, {"farm", "gauge"})
+        self.assertEqual([n["name"] for n in m["nodes"] if n["downstreamNodeId"] is None], ["Outlet Gauge"])
+        self.assertIsNone(nodes["Delta Farm"]["flowShareManual"])  # missing from [Farm spec]
+        self.assertEqual(nodes["Charlie Farm"]["flowShareManual"], 0)  # Specific method, blank cell
+        self.assertEqual(nodes["Foxtrot Farm"]["divertCapacityM3Day"], 4320)  # typed as text
+        self.assertEqual(project["settings"]["flowShareMethod"], "manual")
+        self.assertEqual(len(m["transfers"]), 4)  # 7 columns: no destination, rate 0 and unknown element dropped
+        self.assertEqual([t["months"] for t in m["transfers"]], [[1, 2, 3, 4, 11, 12], [11, 12], [7], [5, 6, 7]])
+        self.assertEqual(project["settings"]["calibration"]["summerMonths"], [3, 10, 11, 12])
+        self.assertEqual(
+            [s["kind"] for s in project["series"]], ["flow_observed_m3s", "flow_logger_m3s", "rain_catchment_mm", "rain_chirps_mm"]
+        )
+        self.assertEqual({len(s["values"]) for s in project["series"]}, {(gen.END - gen.START).days + 1})
+        rain = next(s for s in project["series"] if s["kind"] == "rain_catchment_mm")
+        self.assertIn(None, rain["values"])
+        self.assertEqual(project["series"][3]["name"], "rain_chirps_mm")  # blank header
+
+        for fragment in (
+            "substring match also runs it in months [1, 2]",
+            "substring match also makes months [1, 2] summer",
+            "farm Bravo Farm: [Farm spec] min dam % 0.3 is the workbook's transfer minimum",
+            "is missing from [Farm spec]",
+            "dam(s) have no surface area",
+            "crop Hops X is not in [Crop demand]",
+            "farm Kilo Farm is not in [Network]",
+            "names an unknown element; skipped",
+            "run(s) of zero rain",
+            "Pitman flow column has 120 days",
+            "no Element sheet for Hotel Farm",
+        ):
+            with self.subTest(note=fragment):
+                self.assertEqual(sum(fragment in n for n in notes), 1, fragment)
+        self.assertTrue(any("imported as flow_reference_m3s" in n and "divided by 0.8" in n for n in ref_notes))
+        self.assertTrue(any(n.startswith("WARNING: ") and "runs use the logger record" in n for n in ref_notes))
+
+
+if __name__ == "__main__":
+    unittest.main()
