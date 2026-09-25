@@ -79,6 +79,19 @@ describe('naturalisedCheck', () => {
 		expect(naturalisedWarning(c)).toBeNull();
 	});
 
+	it('names every failing year and, as the worst, the one furthest beyond its own tolerance', () => {
+		// Year 1: O = 1 m³/s, S = 0.8 (gap 20 % of O, twice the tolerance). Year 2: O = 0.1, S = 0.05 (gap 50 % of O).
+		const days = 730;
+		const x = year(86_400, 0.8 * 86_400, 1, 0, 0, days);
+		for (let t = 365; t < days; t++) {
+			(x.observedM3s as (number | null)[])[t] = 0.1;
+			(x.simulatedM3Day as number[])[t] = 0.05 * 86_400;
+		}
+		const w = naturalisedWarning(naturalisedCheck(x)!)!;
+		expect(w).toMatch(/in 2 of 2 water years \(2001\/02, 2002\/03\)/);
+		expect(w).toMatch(/worst 2002\/03:/);
+	});
+
 	it('is null when no day has an observation', () => {
 		expect(naturalisedCheck(year(1, 1, null))).toBeNull();
 		expect(naturalisedWarning(null)).toBeNull();

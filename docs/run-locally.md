@@ -87,7 +87,9 @@ projects. Between them they show every feature of the current engine:
 Every dam has a surveyed full-supply area, so dam evaporation and rain on the
 dam are not estimated. The only run warnings are the ones each example is built
 to show (the CHIRPS and zero-rain infill, the drowned weir, the logger, the
-WR2012 note). `backend/scripts/examples/catchments.test.ts` fails if any other
+WR2012 note), plus the plausibility check on Droëvlei (2015/16) and
+Sandspruit (2014/15 and 2015/16), where the fitted GR4J falls more than 10 %
+short of the invented weir record's volume (model.md §2.10d). `backend/scripts/examples/catchments.test.ts` fails if any other
 warning appears, if a self-check fails, or if an example stops parsing as a
 project document. So an engine or schema change that leaves the examples
 behind shows up in `pnpm test`.

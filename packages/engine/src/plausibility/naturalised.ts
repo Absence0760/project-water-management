@@ -168,7 +168,9 @@ const RECORD: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'observ
 export function naturalisedWarning(c: NaturalisedCheck | null): string | null {
 	if (!c || !c.failedYears.length) return null;
 	const failed = c.years.filter((y) => y.passed === false);
-	const worst = failed.reduce((w, y) => ((y.gapPct ?? Infinity) > (w.gapPct ?? Infinity) ? y : w), failed[0]!);
+	// Worst: the gap furthest beyond its own tolerance.
+	const over = (y: NaturalisedYear) => (y.toleranceMm3 > 0 ? y.gapMm3 / y.toleranceMm3 : Infinity);
+	const worst = failed.reduce((w, y) => (over(y) > over(w) ? y : w), failed[0]!);
 	const list = failed.map((y) => wyLabel(y.waterYear)).join(', ');
 	return (
 		`Natural flow below observed + abstraction in ${failed.length} of ${c.judgedYears} water years (${list}): ` +

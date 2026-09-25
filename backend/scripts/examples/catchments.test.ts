@@ -31,10 +31,16 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		// The drowned weir's flat top in the excluded water year.
 		/^Observed flow: 1 flat stretch of 14 or more days with the same value \(2014-/
 	],
-	'Example · Droëvlei (water-stressed)': [/^Observed flow records disagree .*2020\/21/],
+	'Example · Droëvlei (water-stressed)': [
+		/^Observed flow records disagree .*2020\/21/,
+		// The plausibility check (engine 0.25.0): the fitted GR4J falls more than 10 % short of the invented weir record in one year.
+		/^Natural flow below observed \+ abstraction in 1 of 14 water years \(2015\/16\)/
+	],
 	'Example · Sandspruit (summer rainfall, larger network)': [
 		/^WR2012 check: the run has no complete water year inside the reference period/,
-		/^Simulated natural flow is 1\d % below the WR2012 naturalised MAR for X99Z .*Note the difference/
+		/^Simulated natural flow is 1\d % below the WR2012 naturalised MAR for X99Z .*Note the difference/,
+		// The plausibility check (engine 0.25.0): the fitted GR4J falls more than 10 % short of the invented weir record in two years.
+		/^Natural flow below observed \+ abstraction in 2 of 14 water years \(2014\/15, 2015\/16\)/
 	]
 };
 
