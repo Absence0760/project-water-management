@@ -46,6 +46,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   an account, and sends at most one email per address per minute (later
   requests inside the window get `202` and no email). Requesting again replaces
   the previous link.
+- **`logout-everywhere`** is reachable from the frontend header's account menu
+  ("Sign out everywhere", next to plain "Sign out"), which asks for
+  confirmation before calling it (docs/ui.md § Header).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).

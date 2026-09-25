@@ -127,7 +127,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					displayName,
 					...(inviteToken ? { inviteToken } : {})
 				}).then((r) => r.user),
-			logout: () => request<void>('POST', '/auth/logout')
+			logout: () => request<void>('POST', '/auth/logout'),
+			/** Signs out every device (this one included): revokes every session issued before now. */
+			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere')
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),

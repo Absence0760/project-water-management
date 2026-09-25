@@ -1,5 +1,24 @@
 # The catchment workspace (UI)
 
+## App header and account menu
+
+Every signed-in page (`lib/components/layout/AppHeader.svelte`) shows a sticky
+header with the brand, the Projects / Teams / Help nav, and an account control
+on the right: an avatar, display name and email that open a menu (same
+disclosure pattern as the Data/Runs tabs' download menu — a button plus a
+hidden list, not an ARIA `menu`/`menuitem` widget) with two actions:
+
+- **Sign out** — ends this device's session only, same as before.
+- **Sign out everywhere** — asks for confirmation, then calls
+  `POST /auth/logout-everywhere` ([api.md § Auth](./api.md#auth)), which
+  revokes every session on the account (this device included) by moving its
+  revocation watermark forward. Both actions clear the local session and
+  return to `/login`.
+
+The menu is keyboard-operable: Escape closes it and returns focus to the
+account button, as does a click outside; a tab or click that leaves the
+header closes it too.
+
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
 renders empty and then fills in. The Overview, Data and Runs tabs take those
@@ -22,8 +41,9 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 Settings has its own save button, which sits above that bar.
 
 **Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
-"Data up to" dropdown, the download menu and the dialogs. Help tips and the
-"Data up to" dropdown also close on a click outside. The one exception guards
+account menu, the "Data up to" dropdown, the download menu and the dialogs.
+Help tips, the account menu and the "Data up to" dropdown also close on a
+click outside. The one exception guards
 unsaved input: while **Add data** holds a file that is read but not uploaded
 (or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
