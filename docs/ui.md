@@ -733,9 +733,10 @@ value such as 250000.
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
   demand, Explore outputs, the model stores, the Data tab's series chart and
-  the run comparison. The m³/s ↔ m³/day switch sits on every flow chart
+  the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
-  flow series is picked), and one click sets all of them. Then the calibration panel (it opens with the same
+  flow series is picked), and one click sets all of them; the run comparison's
+  overlay has its own while a flow series is picked. Then the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
