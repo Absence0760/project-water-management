@@ -505,6 +505,17 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.8 Project import through the API
 
+> **Status (2026-09):** built. `POST /projects/import` (shared with the
+> scripts through `backend/src/projects/import.ts`) and the *Import project
+> file (.json)* dialog on the project list, with DB, route-inventory, unit,
+> e2e and axe tests ([api.md § Import a project file](../api.md#import-a-project-file),
+> [ui.md § Project list](../ui.md#project-list)). Two departures from the
+> plan below: the route has its **own 5 MB** cap (the export cap, so every
+> export imports back) instead of the general 4 MB one, and `run` is a query
+> parameter (`?run=1`); a run that fails after the import commits comes back
+> as `runError` with the project kept. Measured: the client catchment's
+> `project.json` is about 0.4 MB, so gzip request bodies weren't needed.
+
 - **Goal:** there is currently no way to load a catchment into production.
   `pnpm import:project` (`backend/scripts/import-project.ts`) writes to the
   DB directly, and production has no DB access path. Add an atomic import
@@ -1775,7 +1786,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - strings rendered as text (no `{@html}`);
     - the server re-validates everything with zod on `PUT /model` and
       `POST /projects/import`.
-  - **The import route** takes up to 4 MB of JSON:
+  - **The import route** takes up to 5 MB of JSON (its own cap; WP-1.8):
     - auth-gated;
     - `bodyLimit`;
     - the existing WAF per-IP rules;

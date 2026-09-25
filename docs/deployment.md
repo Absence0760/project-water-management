@@ -440,6 +440,25 @@ nothing. Step by step:
 8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`
    and `-migrate.zip`, or `web-X.Y.Z-build.zip`).
 
+## Getting a catchment into production
+
+Production has no database access path: `pnpm import:project` and
+`pnpm seed:examples` write to a database directly, so they only work locally.
+A catchment reaches production through the app instead
+([api.md § Import a project file](./api.md#import-a-project-file)):
+
+1. Locally, extract the workbook (`scripts/wbt-import/extract_project.py`,
+   [run-locally.md](./run-locally.md)) or build and check the project in the
+   local app and download it (**Download project (JSON)** on its Overview).
+2. Sign in to production and choose **Import project file (.json)** on the
+   project list. Pick the file, check the preview (name, team, node and series
+   counts) and import it, optionally with a first run.
+
+The import runs as the signed-in user under RLS, in one transaction, so a
+failed import leaves nothing behind. The file is at most 5 MB (the client
+catchment is about 0.4 MB). Client files stay out of the repo: take them from
+`data/` (gitignored) or the private source repo, never from a commit.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same

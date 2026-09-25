@@ -168,10 +168,18 @@ project for an existing user (`--password` also creates the user; local demo
 only; `--run` also stores one model run). Open the project, press **Run**, and compare the Shortfalls table with the workbook's
 `[Shortfalls]` sheet.
 
-A project downloaded from the app (**Download → Project (JSON)**, i.e.
-`GET /projects/:id/export.json`) has the same shape, so
+A project downloaded from the app (**Download project (JSON)** on its
+Overview, i.e. `GET /projects/:id/export.json`) has the same shape, so
 `pnpm import:project <downloaded>.json --email …` copies it into another
 installation ([api.md § Export](./api.md#export)).
+
+**Or import in the UI**, with no script and into any account: on the project
+list, choose **Import project file (.json)**, pick the `project.json` (from
+the workbook importer or a download), check the preview (name, team, what's
+in the file), tick *Run the model after importing* if you like, and import.
+It's the same code path as `import:project` (`POST /projects/import`,
+[api.md § Import a project file](./api.md#import-a-project-file)), and it's
+how a catchment gets into production ([deployment.md](./deployment.md#getting-a-catchment-into-production)).
 
 The 87 MB workbook takes a minute or so to read. The importer uses openpyxl's
 read-only mode, so memory stays bounded.
