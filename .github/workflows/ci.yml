@@ -134,11 +134,52 @@ jobs:
       - name: DB tests
         run: pnpm test:backend:db
 
-  e2e:
-    name: End-to-end tests (Playwright)
+  # E2E runs as 14 shards (e2e/README.md § CI). The site under test is built
+  # once here (with the slot-0 API URL, :3101, that every CI runner uses) and
+  # handed to each shard, so no shard spends its minutes on `vite build`.
+  e2e-build:
+    name: E2E site build
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the e2e site
+        run: pnpm -C e2e build:site
+
+      - name: Upload the site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-site
+          path: frontend/build-e2e/
+          if-no-files-found: error
+          retention-days: 1
+
+  e2e:
+    name: E2E (Playwright) ${{ matrix.shard }}/14
+    needs: [changes, e2e-build]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Every shard reports, so one red shard doesn't hide the others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     services:
       postgres:
         image: postgres:17-alpine
@@ -168,8 +209,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+
+      # The browser download is keyed on the Playwright version; the system
+      # libraries it needs still come from apt on every run (install-deps).
+      - name: Cache Chromium
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Chromium
-        run: pnpm -C e2e exec playwright install --with-deps chromium
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -C e2e exec playwright install-deps chromium
+          else
+            pnpm -C e2e exec playwright install --with-deps chromium
+          fi
+
+      - name: Download the site
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-site
+          path: frontend/build-e2e/
 
       - name: Create app role
         env:
@@ -177,18 +242,70 @@ jobs:
         run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
 
       # Global setup creates + migrates water_e2e; Playwright starts the
-      # backend (:3101) and builds + serves the frontend (:7801) itself.
-      - name: E2E tests
-        run: pnpm test:e2e
+      # backend (:3101) and serves the prebuilt site (:7801). The config refuses
+      # a site built for another API URL.
+      - name: E2E tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        env:
+          E2E_PREBUILT: '1'
+          E2E_BLOB: '1'
+        run: pnpm -C e2e exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
-      - name: Upload report
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: e2e/blob-report/
+          retention-days: 1
+
+      - name: Upload failure traces
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: playwright-results-${{ matrix.shard }}
+          path: e2e/test-results/
+          retention-days: 7
+
+  # One HTML report for the whole suite, merged from the shards' blobs. Runs
+  # whether or not a shard failed; the shards themselves decide the gate.
+  e2e-report:
+    name: E2E report (all shards)
+    needs: [changes, e2e]
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.e2e.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: blob-report-*
+          path: e2e/all-blob-reports/
+          merge-multiple: true
+
+      - name: Merge into one report
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: pnpm -C e2e exec playwright merge-reports --reporter=list,html ./all-blob-reports
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
           name: playwright-report
-          path: |
-            e2e/playwright-report/
-            e2e/test-results/
+          path: e2e/playwright-report/
           retention-days: 7
 
   # Workflow syntax as GitHub parses it (actionlint), plus this repo's CI
@@ -297,7 +414,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e, env-isolation, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, env-isolation, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:

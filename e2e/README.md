@@ -19,14 +19,16 @@ pnpm -C e2e e2e:list      # list the tests without running them
 `pnpm test:e2e` does all of the setup itself:
 
 1. **Database.** `support/global-setup.ts` connects as the schema owner, creates
-   the `water_e2e` database if it is missing, drops and recreates its `public`
+   the checkout's e2e database (`water_e2e` in the main checkout; see
+   [Several checkouts at once](#several-checkouts-at-once)) if it is missing, drops and recreates its `public`
    schema, and applies `backend/migrations` with the backend's own migrator.
    Every run starts from an empty schema.
 2. **Servers.** Playwright's `webServer` starts the backend on **:3101** (as the
-   RLS-bound `water_app` role, against `water_e2e`) and the frontend on
-   **:7801**. The frontend is a **production build**, not the Vite dev server:
-   `vite build` with `PUBLIC_API_URL=http://localhost:3101` baked in (it is
-   `$env/static/public`), written to `frontend/build-e2e/` (with
+   RLS-bound `water_app` role, against the e2e database) and the frontend on
+   **:7801** (in the main checkout). The frontend is a **production build**, not
+   the Vite dev server: `support/build-site.ts` runs `vite build` with the
+   checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
+   is `$env/static/public`), written to `frontend/build-e2e/` (with
    `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
    gitignored) so the production output in `frontend/build/` is never touched,
    then served by `support/static-server.mjs` with the SPA fallback the way
@@ -43,10 +45,48 @@ pnpm -C e2e e2e:list      # list the tests without running them
    (HMR, unminified source) anyway, run `E2E_DEV_SERVER=1 pnpm test:e2e …`;
    specs that load a page many times may fail there.
 
+### Several checkouts at once
+
+Each checkout of the repo gets its own **slot**, and the slot picks the ports
+and the database (`support/env.ts`), so two sessions can run `pnpm test:e2e`
+in two worktrees at the same time:
+
+| Checkout | Slot | API | Site | Database |
+| --- | --- | --- | --- | --- |
+| Main checkout (`.git` is a directory), and CI | 0 | :3101 | :7801 | `water_e2e` |
+| A git worktree (`.git` is a file) | 1–98, from a hash of its path | :3101 + slot | :7801 + slot | `water_e2e_<slot>` |
+
+`E2E_SLOT=<0–98> pnpm test:e2e` picks one by hand. Each checkout also builds
+into its own `frontend/build-e2e/`. If two checkouts ever land on the same
+slot, the second run stops at start-up on a port that is already in use,
+before it touches the database: Playwright starts its web servers before the
+global setup. Set `E2E_SLOT` in one of them. The two runs still share one
+docker Postgres, so on a loaded laptop both run slower.
+
+### CI: 14 shards
+
+`ci.yml` runs the suite as 14 parallel jobs, `E2E (Playwright) 1/14 … 14/14`
+(`playwright test --shard=N/14`; `fullyParallel` splits by test, not by file):
+
+1. **`e2e-build`** builds the site once (`pnpm -C e2e build:site`) and uploads
+   it. Every CI runner is slot 0, so the build's API URL is :3101 for all.
+2. **Each shard** gets its own Postgres service, downloads the site and runs
+   with `E2E_PREBUILT=1` (serve that build, don't rebuild). The config refuses a
+   prebuilt site whose stamp (`e2e-api-url.txt`) names another API URL.
+   Chromium is cached by Playwright version; only its apt libraries install on
+   every run. `E2E_BLOB=1` writes a blob report, and failure traces upload as
+   `playwright-results-<shard>`.
+3. **`e2e-report`** merges the blobs into one HTML report
+   (`playwright-report` artifact), whether or not a shard failed.
+
+All three are in the `CI gate`'s `needs`. To reproduce one shard locally:
+`pnpm -C e2e exec playwright test --shard=3/14`.
+
 Only Chromium is configured. On Fedora, Playwright prints "your OS is not
 officially supported" and downloads its Ubuntu build, which runs fine here.
 `playwright install-deps` is apt-only, so it doesn't work on Fedora, and you
-don't need it. CI (Ubuntu) uses `playwright install --with-deps chromium`.
+don't need it. CI (Ubuntu) caches the browser and runs `playwright install-deps chromium`
+(`install --with-deps` on a cache miss).
 
 Failures keep a trace and a screenshot under `e2e/test-results/`. Open one
 with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
@@ -55,12 +95,13 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 
 | Path | What |
 | --- | --- |
-| `playwright.config.ts` | Ports, web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`), `timezoneId: 'UTC'`, no retries |
-| `support/env.ts` | Ports and database URLs (dev-only docker credentials) |
-| `support/global-setup.ts` | Rebuilds `water_e2e` |
+| `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`) |
+| `support/env.ts` | The checkout's slot, and from it the ports and database URLs (dev-only docker credentials); `env.test.ts` tests the slot (`pnpm test`) |
+| `support/build-site.ts` | Builds the site under test with the checkout's API URL baked in (`pnpm -C e2e build:site`) |
+| `support/global-setup.ts` | Rebuilds the checkout's e2e database |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
-| `support/db.ts` | Plants reset / verify / invite link tokens straight into `water_e2e` (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows |
-| `support/static-server.mjs` | Serves the e2e frontend build on :7801: files as they are, `index.html` for any other path (the SPA fallback, as CloudFront does). No dependencies |
+| `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows |
+| `support/static-server.mjs` | Serves the e2e frontend build on the site port: files as they are, `index.html` for any other path (the SPA fallback, as CloudFront does). No dependencies |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path |
 | `tests/golden-path.spec.ts` | One user journey done only through the UI: register, create "Catchment D", build the network, crops and a transfer, save, set A-pan and EWR, upload two years of rain and flow, run the model, read the results, reload, then add two more catchments |

@@ -5,15 +5,19 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { executeRun, loadModelInput, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
 // only model there was, legacy — same "absent → legacy" convention the
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
+// `evidence` is the run's place in the evidence history (010_run_nomination).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
-	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy"`;
+	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel",
+	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
+	${EVIDENCE_STATUS_SQL} AS evidence`;
 const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
 
 /** Longest run note, in characters (007_run_notes.sql CHECK). */
@@ -180,6 +184,9 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			// A run the evidence history names is kept for good (the foreign key refuses it too).
+			const { rowCount: cited } = await db.query('SELECT 1 FROM run_nomination WHERE project_id = $1 AND run_id = $2 LIMIT 1', [id, runId]);
+			if (cited) throw new ApiError(409, 'this run is or was nominated as evidence, so it is kept');
 			const { rowCount } = await db.query('DELETE FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
 			if (!rowCount) throw new ApiError(404, 'not found');
 			return c.body(null, 204);

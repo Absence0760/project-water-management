@@ -11,6 +11,7 @@ import type {
 import type {
 	AddMemberResult,
 	Member,
+	Nomination,
 	Project,
 	ProjectSummary,
 	Role,
@@ -233,6 +234,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Replace the run's written explanation ('' clears it); answers with the run's metadata and the new stamp. */
 			setNotes: (id: string, runId: string, notes: string) =>
 				request<{ run: RunMeta }>('PATCH', `${p(id)}/runs/${enc(runId)}`, { notes }).then((r) => r.run),
+			/** The project's evidence history, oldest first (the last entry is the current nomination). */
+			nominations: (id: string) => request<{ nominations: Nomination[] }>('GET', `${p(id)}/evidence`).then((r) => r.nominations),
+			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
+			nominate: (id: string, runId: string, reason: string) =>
+				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},

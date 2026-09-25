@@ -633,7 +633,29 @@ value such as 250000.
   this run". When the WR2012 flag is *query* or *not usable* and there is no
   note, a prompt asks for the reason. "Last changed … by …" shows under a
   note. Saving updates the shown run, its cached detail and its row in the
-  runs list; the note also appears on the compare page and in the summary CSV,
+  runs list; the note also appears on the compare page and in the summary CSV.
+  The same panel then holds the **Evidence** section
+  (`runs/EvidencePanel.svelte`, `#res-evidence`, helpers in
+  `runs/evidence.ts`; the menu entry is **Notes & evidence**, one entry so the
+  rail still fits a laptop screen beside a full runs list): whether the shown
+  run is the project's nominated evidence run ("Nominated as evidence on … by
+  …", or "…; replaced by “B” on …" for a past one) and, when another run is,
+  which. Editors get a required **Why this run is the evidence** textarea (2 000
+  characters at most) and **Nominate as evidence** (or **Nominate this run
+  instead** when another run is current; `POST …/evidence`). A legacy-model
+  run and the current evidence run say why they can't be nominated instead.
+  Under it the **Nomination history**, newest first: "Nominated “A” on … by
+  …", then each "Replaced by “B” on … by …", each with the run's runoff model
+  and engine version and the reason, the current one badged. Nothing in the
+  history can be edited or removed. In the runs list the current evidence run
+  carries an **Evidence** badge and a replaced one **Former evidence**; neither
+  has a delete button (the server refuses with `409`). The run header repeats
+  the badge and the evidence line (a link to the section). Above the results,
+  a warning appears when a run made **after** the nominated run uses a
+  **different runoff model** ("1 run made after the nominated evidence run “A”
+  uses a different runoff model (legacy (b023 workbook), not GR4J). The
+  nomination still stands: …"), so neither an applicant nor an assessor can
+  miss a later model switch. Then
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the

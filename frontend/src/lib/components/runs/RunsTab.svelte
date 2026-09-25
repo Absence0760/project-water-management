@@ -4,7 +4,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { api, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import { api, type Nomination, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
@@ -24,6 +24,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Wr2012Panel from './Wr2012Panel.svelte';
 	import RunNotes from './RunNotes.svelte';
+	import EvidencePanel from './EvidencePanel.svelte';
+	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultSections } from './sections';
 
 	let {
@@ -49,6 +51,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	} = $props();
 
 	let runs = $state<RunMeta[]>(untrack(() => initialRuns ?? []));
+	/** The project's evidence history, oldest first (010_run_nomination). */
+	let nominations = $state<Nomination[]>([]);
 	let loading = $state(untrack(() => initialRuns === null));
 	let loadError = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
@@ -91,7 +95,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		if (!runs.length) loading = true;
 		loadError = null;
 		try {
-			runs = await api.runs.list(projectId);
+			const [list, history] = await Promise.all([api.runs.list(projectId), api.runs.nominations(projectId)]);
+			runs = list;
+			nominations = history;
 			onRunsChange?.(runs);
 		} catch (e) {
 			loadError = msg(e);
@@ -178,6 +184,28 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		const cached = detailCache.get(updated.id);
 		if (cached) detailCache.set(updated.id, { ...cached, run: { ...cached.run, ...fields } });
 		runs = runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r));
+		onRunsChange?.(runs);
+	}
+
+	// Each run's place in the evidence history, from the history itself so a
+	// nomination shows at once: 'current', 'past' or absent.
+	const evidenceById = $derived.by(() => {
+		const m = new Map<string, 'current' | 'past'>();
+		for (const n of nominations) m.set(n.runId, 'past');
+		const cur = currentNomination(nominations);
+		if (cur) m.set(cur.runId, 'current');
+		return m;
+	});
+	const drift = $derived(modelDriftWarning(runs, nominations));
+	const evidenceFmt = (iso: string) => fmtDate(iso, true);
+	/** The run header's evidence line for the shown run, or null when it was never nominated. */
+	const shownEvidence = $derived(detail ? evidenceLine(detail.run.id, nominations, evidenceFmt) : null);
+
+	/** A run was nominated: the history and every run's status follow. */
+	function nominated(history: Nomination[]) {
+		nominations = history;
+		const status = (id: string) => evidenceById.get(id) ?? null;
+		runs = runs.map((r) => ({ ...r, evidence: status(r.id) }));
 		onRunsChange?.(runs);
 	}
 
@@ -292,6 +320,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {/if}
 
 {#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
+{#if drift}<p class="alert alert-warning" role="status" data-testid="evidence-drift">{drift}</p>{/if}
 
 <div class="layout">
 	<!-- The rail: the runs list, then an in-page menu of the result panels. It
@@ -323,11 +352,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					{#each runs as r, i (r.id)}
 						<li class:active={r.id === selectedId}>
 							<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
-								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}</span>
+								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}{#if evidenceById.get(r.id) === 'current'}<span class="badge badge-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="badge" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}</span>
 								<span class="meta">{r.startDate} → {r.endDate}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
 							</button>
-							{#if canRun}
+							{#if canRun && !evidenceById.has(r.id)}
 								<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
 							{/if}
 						</li>
@@ -365,6 +394,12 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 								>Workbook comparison</span
 							>
 						{/if}
+						{#if evidenceById.get(detail.run.id) === 'current'}
+							<span class="badge badge-owner">Evidence</span>
+						{:else if evidenceById.get(detail.run.id) === 'past'}
+							<span class="badge">Former evidence</span>
+						{/if}
+						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<span class="muted small">
 							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
@@ -438,6 +473,12 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
 						{/key}
+						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
+						<div class="evidence" id="res-evidence">
+							{#key shownRunId}
+								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+							{/key}
+						</div>
 					</div>
 				{/snippet}
 				{#snippet afterFlowViews()}
@@ -472,6 +513,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 </div>
 
 <style>
+	.evidence-line {
+		display: block;
+		margin: 0.15rem 0;
+	}
+	.evidence {
+		margin-top: 1rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
+	}
 	.provenance {
 		margin-top: 1rem;
 		padding-top: 0.75rem;

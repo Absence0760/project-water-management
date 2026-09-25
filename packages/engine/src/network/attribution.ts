@@ -75,6 +75,15 @@ export interface AttributionResult {
 	perSite?: Float64Array[][];
 }
 
+/**
+ * The float residue a volume leaves when a larger one cancels: a few units in
+ * the last place (ulp ≈ 2.2e-16 relative), so 1e-14 is about 45 ulp. Used for
+ * the dam storage and upstream flows an impact is computed next to. Far below
+ * SHORTFALL_NOISE on purpose: 1e-12 of a 10⁶ m³ dam would call a real
+ * 1e-6 m³ impact noise (fuzz seeds 9051, 11240, 15426).
+ */
+const RESIDUE = 1e-14;
+
 /** Two charges within this relative difference are a tie (float noise from summing in another order). */
 const TIE = 1e-9;
 
@@ -135,20 +144,20 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 				const U = outflow[f]![t]!;
 				const e = inW - U;
 				// A difference of volumes that cancels exactly in real arithmetic is float noise, not an
-				// impact. Judged against every volume in the farm's balance, its dam storage included, and
-				// those of the nodes draining into it (engine 0.19.1). Otherwise a full dam spilling its
+				// impact. Judged against the farm's own flows (SHORTFALL_NOISE) and, at the tighter
+				// RESIDUE, its dam storage and the nodes draining into it (engine 0.19.2). Otherwise a full dam spilling its
 				// runoff (e = I − spill, a cancellation at the scale of the storage), or an empty farm below
 				// one whose outflow carries a 1e-13 residue, passes the test on flows alone and is charged
 				// for a day in one node order and not in another.
 				const s = Math.max(Math.abs(inflow[f]![t]!) + Math.abs(runoff[f]![t]!) + Math.abs(jInt[f]!), Math.abs(U));
-				let noise = Math.max(s, dam(f, t));
+				let far = dam(f, t);
 				const ups = upstream[f]!;
 				for (let u = 0; u < ups.length; u++) {
 					const j = ups[u]!;
-					noise = Math.max(noise, Math.abs(inflow[j]![t]!) + Math.abs(runoff[j]![t]!), Math.abs(outflow[j]![t]!), dam(j, t));
+					far = Math.max(far, Math.abs(inflow[j]![t]!) + Math.abs(runoff[j]![t]!), Math.abs(outflow[j]![t]!), dam(j, t));
 				}
 				eRaw[f] = e;
-				ePlus[f] = e > SHORTFALL_NOISE * noise ? e : 0;
+				ePlus[f] = e > Math.max(SHORTFALL_NOISE * s, RESIDUE * far) ? e : 0;
 				E += ePlus[f]!;
 				scale = Math.max(scale, s);
 			}

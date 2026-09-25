@@ -56,11 +56,17 @@ export function runsKeptPerProject(env: string | undefined = process.env.RUNS_KE
  * Delete the project's oldest runs beyond the cap (run_series cascades).
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
+ *
+ * A run the evidence history names, now or before (010_run_nomination), is
+ * never trimmed and doesn't count against the cap: the cap keeps the newest
+ * `keep` runs that were never nominated.
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
-			SELECT id FROM model_run WHERE project_id = $1 ORDER BY created_at DESC, id DESC OFFSET $2
+			SELECT r.id FROM model_run r
+			WHERE r.project_id = $1 AND NOT EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id)
+			ORDER BY r.created_at DESC, r.id DESC OFFSET $2
 		) RETURNING id`,
 		[projectId, keep]
 	);

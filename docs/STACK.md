@@ -28,14 +28,16 @@ sides share.
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
-  so it never collides with `pnpm dev`. The site is a production build
-  (`frontend/build-e2e/`, API URL baked in), not the Vite dev server
+  so it never collides with `pnpm dev`; a git worktree gets its own slot
+  (ports + database, `e2e/support/env.ts`), so two checkouts can run it at
+  once. The site is a production build (`frontend/build-e2e/`, API URL baked
+  in), not the Vite dev server. CI runs it as 14 shards on one shared build
   ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
   http://localhost:8026, `pnpm dev:mail:up`).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
-  bound by RLS. The `water_test` database is for DB tests.
+  bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored.
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
@@ -167,8 +169,8 @@ Prefer reading these over guessing. Update them when behaviour changes.
 ## What not to do
 
 - Don't add a test framework beyond vitest (unit) and Playwright (e2e, `e2e/`). Python importer tests aside, and the
-  dependency-free CI/release guards under `scripts/` use Node's built-in `node:test` (the estate pattern), since the
-  root package has no dependencies.
+  dependency-free CI/release guards under `scripts/` (and `e2e/support/*.test.ts`) use Node's built-in `node:test`
+  (the estate pattern), since the root package has no dependencies.
 - Don't replace pnpm, and don't `npm install -g` anything.
 - Don't add the npm `xlsx` package (stale, with known advisories). Use SheetJS
   from its CDN tarball when the in-browser importer is built.

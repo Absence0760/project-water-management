@@ -50,6 +50,19 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ notes: 'why' });
 	});
 
+	it('reads the evidence history and POSTs a nomination, answering with the whole history', async () => {
+		const nominations = [{ id: 'n1', runId: 'r1', reason: 'why' }];
+		const get = mockFetch(200, { nominations });
+		await expect(createApi('', get).runs.nominations('p/1')).resolves.toEqual(nominations);
+		expect((get.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/evidence');
+		const post = mockFetch(201, { nomination: nominations[0], nominations });
+		await expect(createApi('', post).runs.nominate('p1', 'r1', 'why')).resolves.toEqual(nominations);
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/projects/p1/evidence');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body as string)).toEqual({ runId: 'r1', reason: 'why' });
+	});
+
 	it('returns undefined for 204', async () => {
 		const api = createApi('', mockFetch(204));
 		await expect(api.projects.remove('p1')).resolves.toBeUndefined();

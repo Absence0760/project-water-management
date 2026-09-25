@@ -8,7 +8,7 @@ import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput, shrink } from './testing/fuzz';
-import { checkAll, checkDoubledCropAreas, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
+import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const CASES = Number(env.FUZZ_CASES ?? 400);
@@ -107,15 +107,22 @@ describe('engine invariants on random networks', () => {
 		}
 	});
 
-	it('engine 0.19.1: a float residue is not a farm\'s EWR impact, in any node order (seeds 4014, 8984, 9681)', () => {
+	it('engine 0.19.1–0.19.2: a float residue is not a farm\'s EWR impact, in any node order, and a tiny real one still is (seeds 4014, 8984, 9681; 9051, 11240, 15426)', () => {
 		// A full dam spilling its runoff (e = I − spill, ±1e-11 at the storage's scale), and an
 		// empty farm below one whose outflow carried a 1e-13 m³ residue, each passed a noise
 		// test sized by their flows alone and were charged for a day in one node order and not
 		// the other, so "days EWR not met" moved by one. Impacts are now judged against every
 		// volume in the balance, dam storage and upstream flows included (network/attribution.ts).
+		// 0.19.1 judged the storage and upstream terms at 1e-12 and zeroed real ~1e-6 m³ impacts
+		// next to a 10⁶ m³ dam (the attribution self-check caught it, seeds 9051 … 15426); 0.19.2
+		// uses ~45 ulp (RESIDUE) for those terms.
 		for (const [seed, opts] of [[4014, {}], [8984, {}], [9681, { runoffModel: 'gr4j' as const }]] as const) {
 			const input = randomInput(seed, opts);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
+		for (const [seed, opts] of [[9051, {}], [11240, { runoffModel: 'gr4j' as const }], [15426, { runoffModel: 'gr4j' as const }]] as const) {
+			const input = randomInput(seed, opts);
+			expect(checkEwrAttribution(input, runModel(input)), `seed ${seed}`).toBeNull();
 		}
 	});
 });
