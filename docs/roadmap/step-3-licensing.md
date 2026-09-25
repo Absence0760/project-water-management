@@ -287,7 +287,7 @@ must build WP-2.15 Phase B.
   - Reproduction of a run on the same engine is `identical: true`.
   - No editor action removes a cited run.
   - DB growth per new series version is at most one compressed array
-    (~128 KB raw for the client catchment).
+    (one daily array of the record's length, raw).
 - **Size.** M. **Depends on:** WP-1.11, WP-2.3.
 
 ---
@@ -735,8 +735,9 @@ must build WP-2.15 Phase B.
     - each probe replaces the node's demand with `draft × pattern` and
       calls the internal `runModelWith`, with natural flow computed
       **once** and reused;
-    - ~25 probes × ~160 ms (the client catchment) ≈ 4 s per yield;
-    - `storageYieldCurve` = 10 yields ≈ 40 s.
+    - ~25 probes, each a full run (a fraction of a second), so seconds per
+      yield;
+    - `storageYieldCurve` = 10 yields, well under a minute.
   - *Backend:* a new job kind `yield` on
     [WP-2.8](./step-2-shared-catchment.md#wp-28-background-jobs)'s queue
     (`backend/src/jobs/handlers/yield.ts`). The job runs as the acting
@@ -1657,9 +1658,9 @@ onboarding them. Don't assume it's in scope.
 | --- | --- | --- |
 | S3 tiles | 0.5–3 GB → under $0.10/month | One SA extract. Refreshed quarterly at most. |
 | CloudFront tile egress | ~2–5 MB per map session; 1 000 sessions → under $1/month | Range requests, long cache |
-| New job kinds on WP-2.8's worker Lambda (yield, assessments, packs) | Cents per month at tens of packs | No new Lambda or queue. A storage–yield curve (~40 s) fits the 300 s worker timeout. |
+| New job kinds on WP-2.8's worker Lambda (yield, assessments, packs) | Cents per month at tens of packs | No new Lambda or queue. A storage–yield curve (under a minute) fits the 300 s worker timeout. |
 | WP-2.15 Phase B render Lambda (if Step 3 is what triggers it) | ~2 GB × ~30–60 s per pack: cents per month | Container image; Step 2's estimate applies |
-| RDS growth | Cited runs at ~5–25 MB each, on top of WP-1.11 pins and WP-2.3 publications. 50 packs × 2 runs → ≤ 2.5 GB, ~$0.5/month. `series_blob`: ~128 KB per series version. | Step 2 already names "run outputs to S3" as a DB-size-triggered follow-up; cited runs count towards that trigger |
+| RDS growth | Cited runs at ~5–25 MB each, on top of WP-1.11 pins and WP-2.3 publications. 50 packs × 2 runs → ≤ 2.5 GB, ~$0.5/month. `series_blob`: one compressed daily array per series version. | Step 2 already names "run outputs to S3" as a DB-size-triggered follow-up; cited runs count towards that trigger |
 | S3 packs (PDF + bundle) | ~2–10 MB per version | Versioned bucket, object lock (governance mode) on `packs/` for immutability |
 
 **Alarms** (WP-2.8's DLQ, worker-error and oldest-job alarms cover the new kinds), plus:

@@ -74,7 +74,7 @@ version.
 | WhatsApp / SMS alerts | Optional follow-up after Step 2 (tradeoffs in WP-2.13) |
 | Catchment map and polygon-based CHIRPS extraction | Not planned in a step yet. Step 2 uses a bounding box or cell list. **Leave room for** a `catchment_geometry` source in `data_feed.config`. |
 | Farmers uploading their own meter or dam readings | **Leave room for** a nullable `time_series.node_id`. Every farmer policy on `time_series` must then be extended (noted in WP-2.1). |
-| Partial recompute from the first changed day | Not worth building. A full engine run is ~0.2 s, and storing outputs dominates the cost (WP-2.11). |
+| Partial recompute from the first changed day | Not worth building. A full engine run takes a fraction of a second, and storing outputs dominates the cost (WP-2.11). |
 | Translating the modeller workspace (Network, Crops, Settings, Runs tabs) | Stays English. Revisit if Afrikaans-speaking WUA staff ask for it. |
 | Moving run outputs to S3 | Later, triggered by DB size (see Risks) |
 
@@ -1322,7 +1322,7 @@ doesn't flood storage, and it doesn't evict the modeller's runs.
 - **Publication stays a human act by default** (D5). An auto run shows the
   editor "New auto run: publish?" with the diff against the published run.
   Optional per project: `autoRun.publish = 'never' | 'if_no_new_warnings'`.
-- **Partial recompute: not built.** The engine takes ~0.2 s for 44 years. At
+- **Partial recompute: not built.** The engine takes a fraction of a second for a full record. At
   60 farms a run writes ~800 series (~30–50 MB before TOAST compression),
   which dominates, and a partial engine recompute wouldn't reduce it. **Leave
   room:** if runs get slow, first store only the tail of auto runs
