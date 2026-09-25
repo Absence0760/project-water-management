@@ -680,11 +680,15 @@ the suggested order (the IDs carry the detail):
       applied before E is summed, so Σ charges = D* still holds. Two scales
       that were tried and rejected: every upstream farm's flows, and the
       site's shortfall D. Both are too coarse and zeroed real impacts on fuzz
-      networks. Tests: `attribution.test.ts` › "a float residue at the scale
+      networks. **0.19.2 (same day):** the 20 000-case soak showed 0.19.1's
+      1e-12 of dam storage was still too coarse (it zeroed real ~1e-6 m³
+      impacts beside a 10⁶ m³ dam; seeds 9051, 11240, 15426 failed
+      `checkEwrAttribution`), so the storage and upstream terms now use
+      `RESIDUE` = 1e-14 (~45 ulp), the size of the residues actually seen. Tests: `attribution.test.ts` › "a float residue at the scale
       of a dam or an upstream flow is not an impact", `run.invariants.test.ts`
       › "engine 0.19.1: …" pins the three seeds.
 - [ ] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
-      7686, 17277).** Not the room-cap bug: rain captured on a farm dam's
+      7686, 15979, 17277; 15979 new in the 2026-09-25 soak, 0.84 → 0.87).** Not the room-cap bug: rain captured on a farm dam's
       own surface (steep area–storage curve, exponent up to 3) and farms
       sitting at a high dead-storage level, where a slightly different
       storage path shifts threshold days. Same size as the accepted seed
