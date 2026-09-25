@@ -88,7 +88,8 @@ pending invitations, the confirm-email banner) render through
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
-- **Table** (desktop default) or **One node** (phone default): every field has
+- **Table** (the default from 900px wide) or **One node** (the default
+  below it), switched by the Layout buttons: every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
   The flow share in use (with the Settings method) and its total are shown.
@@ -140,13 +141,6 @@ pending invitations, the confirm-email banner) render through
   order is `node.sortOrder`, which is display only: runs always use the
   topological order. Every list of nodes uses it (`lib/model/order.ts`).
 
-## Transfers
-
-Each rule has a **Priority** column (whole number, lower moves first; equal
-priorities share a source dam pro rata to their limits, [engine-audit
-Q18](./engine-audit.md)). A new rule starts after the existing ones (the
-highest priority + 1). The help explains the destination's room cap (N4).
-
 ## Crops & demand
 
 Crop factors run October to September and are reorderable. Planted areas
@@ -174,7 +168,11 @@ the Network tab.
 One row per transfer rule: source and destination node, the months it runs
 (twelve toggles, water-year order, with **All**/**None**), a maximum rate
 (m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
-which it stops, and an enabled switch. The empty state says what a transfer
+which it stops, a **Priority** and an enabled switch. Priority is a whole
+number, lower moves first; equal priorities share a source dam pro rata to
+their limits ([engine-audit Q18](./engine-audit.md)). A new rule starts after
+the existing ones (the highest priority + 1). The help explains the
+destination's room cap (N4). The empty state says what a transfer
 is (most catchments have none); with fewer than two nodes it links to the
 Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
 its remove button on top, From and To side by side, the month toggles six to a
@@ -188,7 +186,8 @@ Each series shows its role in the model, its period, its last date and age,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
-that series in the chart below. Below 640px wide each row becomes a card
+that series in the chart below. Editors can **Delete** a series (after a
+confirm; runs already stored are not affected). Below 640px wide each row becomes a card
 (series and role on top, then labelled Period / Data up to / Missing /
 Typical, the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
@@ -279,7 +278,8 @@ formula ([api.md § Export](./api.md)).
   `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
   focused control is never hidden under either (WCAG 2.4.11).
 - **Save bar.** Sticky at the bottom (above the model save bar when that
-  shows). When something blocks Save it says how many groups have a problem
+  shows), with "Unsaved settings", **Discard** and **Save settings** (editors
+  only). When something blocks Save it says how many groups have a problem
   and links to each one (`saveBlockers`; the link's accessible name carries
   the message), and that group's menu link gets a red dot ("has a problem").
   Each problem is also shown next to its field.
@@ -298,77 +298,77 @@ value such as 108700.
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
   and days in February.
 - **Calibration is four panels**, each its own menu entry, rather than one
-  long one: **Flow calibration (rain → natural flow)** (runoff model,
-  catchment area, the model's parameters and pan coefficient, and Legacy's
-  Advanced), **Rain gaps and CHIRPS** (the CHIRPS bias correction picker and
-  Zero-rain runs: which days CHIRPS fills, and how), **Calibration record**
-  (the calibration window and flow series, and the calibration exclusions;
-  their errors point the save bar here), and **Fit automatically** (the fit
-  panel and the fit record of the parameters). The items below are described
-  in their old order; the panels hold them as listed here.
-- **Flow calibration**: the **runoff model** picker (GR4J, the default, or
-  "Legacy (b023 workbook, comparison only)", `settings.runoffModel`). Legacy
-  doesn't conserve water at the event scale (audit H1), so it's kept for
-  workbook comparison only, never evidence: a legacy run carries an amber
-  "Workbook comparison" badge on the Runs list and the run header, a matching
-  label on its CSV exports and on legacy fit records in FitProvenance, and
-  run comparison notes it when either side is legacy. Then the **CHIRPS bias correction** picker
-  (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected per
-  month, the default, or raw CHIRPS; it applies to both models and to
-  demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)), the
-  catchment area (blank = the sum of the farm areas, which is shown), the
-  calibration window and flow series, and the **calibration exclusions**
-  (`calibration/CalibrationExclusions.svelte`): "Exclude a water year" and
-  "Exclude a date range" add a row, each with a required **Reason**. A water
-  year shows the dates it covers ("WY 2015/16: 2015-10-01 – 2016-09-30"). A
-  blank reason, a reversed range or a period listed twice shows an alert and
-  blocks Save. Excluded days are left out of Fit automatically and the run's
-  calibration statistics (model.md §2.10). A run that corrected CHIRPS lists
-  the monthly factors and the number of days in its warnings. Below that,
-  **Zero-rain runs in the catchment rain** (`settings/ZeroRainSection.svelte`,
-  `settings.zeroRainRuns`, [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)):
-  a **Flagged zero runs** picker ("Treat as missing", the default, or "Run as
-  recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
-  treat as missing** period lists. These share the calibration exclusions'
-  editor (`common/PeriodList.svelte`), with the same required reason and the
-  same checks that block Save. The rest
-  depends on the model:
-  - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
-    months as toggles. **Advanced** holds the winter switch, the recession
-    parameters and the 80-value recession tables.
+  long one: Flow calibration, Rain gaps and CHIRPS, Calibration record and
+  Fit automatically, in that order.
+- **Flow calibration (rain → natural flow)** (`#set-flow`): the **runoff
+  model** picker ("GR4J (Perrin et al. 2003)", the default, or "Legacy (b023
+  workbook, comparison only)", `settings.runoffModel`). Legacy doesn't
+  conserve water at the event scale (audit H1), so it's kept for workbook
+  comparison only, never evidence: a legacy run carries an amber "Workbook
+  comparison" badge on the Runs list and the run header, a matching label on
+  its CSV exports and on legacy fit records in FitProvenance, and run
+  comparison notes it when either side is legacy. Then the catchment area
+  (blank = the sum of the farm areas, which is shown). The rest depends on
+  the model:
+  - **Legacy**: a, b, rain threshold, summer and winter factors, initial base
+    flow, and summer months as toggles. **Advanced** ("Advanced: winter
+    switch, recession and base flow", collapsed) holds the base-flow reset
+    ratio, the winter switch, the recession parameters, the 80-value
+    recession tables and any other stored calibration keys.
   - **GR4J**: X1, X3 and X4, each with its typical and allowed range
     (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
     input refuses values outside those bounds. The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0. Above the monthly **pan coefficient**
-    row, a **preset** picker (Generic, Winter rainfall (e.g. Western Cape),
-    Summer rainfall — indicative, from FAO-56 Table 5 climate classes, Allen
-    et al. 1998; model.md §2.4a) fills the row with a starting point; the row
-    stays editable after, and nothing is stored about which preset (or
-    whether one) was picked. A warning appears under the row when a month
-    sits outside FAO-56's usual 0.6–0.85 range for a Class A pan — a
+    row, a **preset** picker (Generic (flat 0.70), Winter rainfall (e.g.
+    Western Cape), Summer rainfall — indicative, from FAO-56 Table 5 climate
+    classes, Allen et al. 1998; model.md §2.4a) fills the row with a starting
+    point; the row stays editable after, and nothing is stored about which
+    preset (or whether one) was picked. A warning appears under the row when
+    a month sits outside FAO-56's usual 0.6–0.85 range for a Class A pan — a
     plausibility check, not a hard limit, so a value further out still saves.
     A separate notice appears when A-pan × pan coefficient is 0 in every
     month: the engine then refuses GR4J runs and fits.
-  - **Fit automatically** (`calibration/FitPanel.svelte`, below the calibration
-    window) fits the selected model's parameters in a Web Worker
-    (`lib/calibration/`). It takes the objective, **Bounds** (a select: "Wide
-    (default)" — each parameter's full calibration range — or "Typical
-    (Perrin et al. 80 %)" — a tighter, published range, with a hint under it;
-    model.md §2.10b), the model runs per fit
-    (default 1 500), the **seed** (default 1; the same seed, data and engine
-    version give the same fit, and the seed is recorded), the **starts**
-    (default 5, 1–10: separate searches of the whole record from their own
-    seeds, the best kept; model.md §2.10b), which parameters to fit (GR4J X2
-    only when exchange is on), and whether to validate. Validation runs the
-    split-sample and dry → wet tests: two more fits. The run count is budget ×
-    (starts + 2 with validation + 1 with the WR2012 penalty), and the progress
-    line names the start. The fit always leaves out the stored exclusions; the
-    result line gives the bounds, the seed, the starts and the number of
-    excluded periods. With more than one start a **Starts** table lists each
-    start's seed, score and fitted parameters, the kept one marked, and a
-    note says when near-equal scores come with scattered parameters.
+- **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
+  picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
+  per month, the default, or raw CHIRPS; it applies to both models and to
+  demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+  A run that corrected CHIRPS lists the monthly factors and the number of
+  days in its warnings. Below it, **Zero-rain runs in the catchment rain**
+  (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
+  [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
+  **Flagged zero runs** picker ("Treat as missing", the default, or "Run as
+  recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
+  treat as missing** period lists. These share the calibration exclusions'
+  editor (`common/PeriodList.svelte`), with the same required reason and the
+  same checks that block Save.
+- **Calibration record** (`#set-record`): the calibration window and flow
+  series (`calibration/CalibrationWindowFields.svelte`), and the
+  **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
+  "Exclude a water year" and "Exclude a date range" add a row, each with a
+  required **Reason**. A water year shows the dates it covers ("WY 2015/16:
+  2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
+  listed twice shows an alert and blocks Save (the save bar links here).
+  Excluded days are left out of Fit automatically and the run's calibration
+  statistics (model.md §2.10).
+- **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
+  selected model's parameters in a Web Worker (`lib/calibration/`). It takes
+  the objective, **Bounds** (a select: "Wide (default)" — each parameter's
+  full calibration range — or "Typical (Perrin et al. 80 %)" — a tighter,
+  published range, with a hint under it; model.md §2.10b), the model runs per
+  fit (default 1 500), the **seed** (default 1; the same seed, data and
+  engine version give the same fit, and the seed is recorded), the
+  **starts** (default 5, 1–10: separate searches of the whole record from
+  their own seeds, the best kept; model.md §2.10b), which parameters to fit
+  (GR4J X2 only when exchange is on), and whether to validate. Validation
+  runs the split-sample and dry → wet tests: two more fits. The run count is
+  budget × (starts + 2 with validation + 1 with the WR2012 penalty), and the
+  progress line names the start. The fit always leaves out the stored
+  exclusions; the result line gives the bounds, the seed, the starts and the
+  number of excluded periods. With more than one start a **Starts** table
+  lists each start's seed, score and fitted parameters, the kept one marked,
+  and a note says when near-equal scores come with scattered parameters.
   - **Also validate against** appears only when the project has both a gauge
     and a logger record. It offers the record the fit doesn't use (the
     calibration flow series above, else the default gauge) and defaults to
@@ -464,8 +464,14 @@ value such as 108700.
   and Runoff model only for a GR4J run. The page's `scroll-padding-top`
   keeps a jumped-to section, or a focused control, clear of the sticky
   header.
-- The run button is disabled, with links, until the project has a network
-  and a rainfall series. While a run is going it shows progress.
+- **Run model** takes an optional **Run label** (e.g. "Baseline"). The
+  button is disabled, with links, until the project has a network and a
+  rainfall series. While a run is going it shows progress. A note says when
+  inputs changed since the latest run.
+- **The runs list** (newest first, the newest marked "latest") selects the
+  run shown; editors delete one with its ✕. Its header links to **Compare
+  runs** (`/compare?project=<id>`, [run-comparison.md](./run-comparison.md)).
+  Viewing an older run, the header offers "go to latest".
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Summary** (the "Run summary" region): headline cards give mean natural

@@ -8,9 +8,12 @@ project D copied from C and then modified.
 
 ## Using it
 
-Open `/compare?project=<id>`. The page starts on that project's **previous
-run (A)** and **latest run (B)**. Each side has its own project and run
-picker, so either side can point at another project. The URL holds the choice
+Open `/compare?project=<id>` (the **Compare runs** link on the Runs tab's
+runs list; the page links **Back to runs**). The page starts on that
+project's **previous run (A — baseline)** and **latest run (B — changed)**.
+Each side has its own project and run picker, so either side can point at
+another project. Switching a side to another project picks that project's
+newest run that isn't already the other side. The URL holds the choice
 (`/compare?a=<projectId>:<runId>&b=<projectId>:<runId>`), so a comparison can be
 bookmarked or shared with anyone who can see both projects.
 
@@ -20,8 +23,8 @@ as B.
 
 The page has these sections, top to bottom:
 
-1. **Runs compared.** Label, project, period and time of each run. There is a
-   warning when the two runs cover **different periods**, because every result
+1. **Runs compared.** Label, project, period and time of each run. A note
+   says when both sides are the same run. There is a warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
    from the dates. There is a note when the **engine version** differs, and a
    warning when **either run used the legacy runoff model** (audit H1): it
@@ -35,20 +38,22 @@ The page has these sections, top to bottom:
    *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*,
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
    *"Fit record: parameters edited since the fit (x1)"*.
-3. **Headline results.** Total irrigation supplied and deficit, share of demand
-   supplied, farms below 95 % supplied, EWR days not met, mean outflow and
-   natural flow, the runoff coefficient (natural flow ÷ rain), and the
-   calibration statistics (KGE, NSE, percent bias, RMSE) for A and B side by
-   side, with the change. The calibration table is labelled **calibration
+3. **Headline results.** A **Water balance** table (total irrigation supplied
+   and deficit, share of demand supplied, farms below 95 % supplied, EWR days
+   not met and their share, mean outflow and natural flow, the runoff
+   coefficient (natural flow ÷ rain)) and a **Calibration against observed
+   flow** table (KGE, NSE, percent bias, RMSE and the overlapping days) for A
+   and B side by side, with the change. The calibration table is labelled **calibration
    period (in-sample)**: each run is scored on the days its parameters were
    tuned on. Under it, **Fit and validation** sets each run's fit record side
    by side: the fit (model, time, objective, seed), the bounds it searched
    (wide or typical, model.md §2.10b), its in-sample score, its split-sample,
    wet-year and independent-record scores ("not run" when that test wasn't),
    whether (and what) the WR2012 MAR penalty pulled towards, whether the
-   parameters were edited since the fit, and whether that run's own pan
-   coefficient / A-pan evaporation has changed since its fit ("no" when the
-   fit predates recorded forcing — nothing to compare). A run whose parameters
+   parameters were edited since the fit, and whether that run's own forcing
+   (pan coefficient, A-pan evaporation, CHIRPS bias correction, zero-rain
+   runs) has changed since its fit ("no" when the fit predates recorded
+   forcing — nothing to compare). A run whose parameters
    didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
    the project, set the copy to GR4J (Settings → Flow calibration), run both
    and compare them. The input diff then reads *"Runoff model: legacy (b023
