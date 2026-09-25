@@ -38,6 +38,49 @@ test('a project with data and a run: setup complete, counts shown', async ({ pag
 	await expect(stat(page, 'Outflow gauge')).toHaveText('Outflow gauge');
 });
 
+test('the latest run: its headline figures, the change from the run before, and a link to it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Overview latest run');
+	await createRun(page.request, project.id, 'Baseline');
+	const second = await createRun(page.request, project.id, 'Second');
+	await page.goto(`/projects/${project.id}`);
+
+	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
+	await expect(latest).toContainText('Second');
+	await expect(latest).toContainText(/\d{1,2} [A-Z][a-z]{2} \d{4} – \d{1,2} [A-Z][a-z]{2} \d{4}/);
+	await expect(latest).toContainText(/engine \d+\.\d+\.\d+/);
+	await expect(latest).toContainText('ran today');
+	const card = (term: string) => latest.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
+	await expect(card('EWR not met')).toContainText('of days');
+	await expect(card('Irrigation supplied')).toContainText('of demand');
+	await expect(card('Mean simulated outflow')).toContainText('m³/s');
+	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
+	// Same inputs, so every change is zero, and it says which run it is against.
+	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
+	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
+
+	await latest.getByRole('link', { name: 'Open in Runs' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]run=${second}`));
+	await expect(page.getByRole('heading', { level: 2, name: 'Second' })).toBeVisible();
+});
+
+test('needs attention: stale data links to the Data tab; a project with no runs has no latest-run strip', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Overview attention');
+	await page.goto(`/projects/${project.id}`);
+	// The seeded rain ends in January 2022, long before today.
+	const panel = page.getByRole('region', { name: 'Needs attention', exact: true });
+	await expect(panel).toContainText('The newest input data ends 28 Jan 2022');
+	await expect(panel.getByRole('link', { name: 'Add data' })).toHaveAttribute('href', '?tab=series');
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toHaveCount(0);
+
+	await createRun(page.request, project.id, 'Only run');
+	await page.reload();
+	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
+	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
+	await expect(latest).not.toContainText('vs previous run');
+});
+
 test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Overview fact links');

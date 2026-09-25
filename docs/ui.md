@@ -89,8 +89,44 @@ shorter than the cap looks as before.
 
 ## Overview
 
-The setup checklist (`overview/checklist.ts`), eight headline facts, project
-details, team and members.
+The setup checklist (`overview/checklist.ts`), the latest run's results,
+a "Needs attention" list, eight headline facts, project details, team and
+members.
+
+- **Latest run** (`overview/LatestRun.svelte`, rules in
+  `overview/latestRun.ts`), shown once the project has a run. It is the
+  **newest run by `createdAt`**, even when an older run is the nominated
+  evidence: the Overview answers "what does the model say now?", and only
+  the newest run reflects the latest data and edits. When the evidence run is
+  a different run, a line under the context names and links it, so the two
+  can't be confused. A context line gives the label, the run period
+  (`fmtDay`, e.g. "1 Oct 2021 – 28 Jan 2022"), the engine version and "ran …
+  ago" (`describeAge`, by the viewer's calendar), with badges for a legacy run
+  (*Workbook comparison*, plus a note that its figures are for workbook
+  comparison only, not evidence) and the evidence run. **Open in Runs** links
+  to `?tab=runs&run=<id>`. Four cards, the same figures and labels as the Runs
+  tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
+  site from `headlineSite`) or, without a rule table, *EWR not met* (days below
+  the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
+  M farms below" `SUPPLY_TARGET`); *Calibration NSE* (in-sample; "–" without
+  observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
+  is only in a run's daily series, not its summary, so it has no card. Each
+  card shows its change from the previous run (the one before it by
+  `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
+  better/worse, so colour is never the only cue), only when both runs have the
+  figure: the Reserve only at the same site, the pragmatic EWR only when
+  neither run headlines a rule table. The full records come through the Runs
+  tab's `detailCache`, so only this section shows a loading or error state
+  (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
+  cards in a row, 2 × 2 below 760 px.
+- **Needs attention** (`overview/NeedsAttention.svelte`, rules in
+  `overview/attention.ts`): one sentence and one link per item, hidden when
+  there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
+  worst named, links to the run), the latest run's warnings, rainfall the
+  latest run hasn't used (`newDataSinceRun`, links to Runs to re-run), input
+  data older than `STALE_DAYS` (`freshness`, links to Data), and farms with no
+  planted area once anything is planted (links to Crops; before that the
+  checklist's crops step covers it). Run items wait for the run's summary.
 
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to

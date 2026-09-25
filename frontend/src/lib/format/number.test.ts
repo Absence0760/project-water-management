@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtNum, fmtPct, localIsoDate, parseNum } from './number';
+import { fmtDate, fmtDay, fmtNum, fmtPct, localIsoDate, parseNum } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -78,5 +78,24 @@ describe('localIsoDate', () => {
 		const late = new Date(2026, 8, 23, 23);
 		expect(late.toISOString().slice(0, 10)).toBe('2026-09-24');
 		expect(localIsoDate(late)).toBe('2026-09-23');
+	});
+});
+
+describe('fmtDay', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('spells a calendar day out without a leading zero', () => {
+		expect(fmtDay('2021-10-01')).toBe('1 Oct 2021');
+		expect(fmtDay('2024-02-29')).toBe('29 Feb 2024');
+		expect(fmtDay('not a date')).toBe('not a date');
+		expect(fmtDay('2021-13-01')).toBe('2021-13-01');
+	});
+	it('never shifts the day, whatever the time zone', () => {
+		for (const zone of ['Pacific/Pago_Pago', 'Pacific/Kiritimati']) {
+			process.env.TZ = zone;
+			expect(fmtDay('2021-10-01')).toBe('1 Oct 2021');
+		}
 	});
 });

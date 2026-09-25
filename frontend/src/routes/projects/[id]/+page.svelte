@@ -32,7 +32,7 @@
 	import { describeAge } from '$lib/components/series/coverage';
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
-	import { localIsoDate } from '$lib/format/number';
+	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 
@@ -108,8 +108,6 @@
 	let rerunning = $state(false);
 	let rerunError = $state<string | null>(null);
 
-	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-	const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
 
 	function openAddData(file: File | null = null) {
 		droppedFile = file;
@@ -293,7 +291,7 @@
 						<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
 							<summary>
 								<span class="dot" aria-hidden="true"></span>
-								Data up to <strong>{longDate(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+								Data up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
 							</summary>
 							<div class="fresh-pop">
 								<table class="data compact">
