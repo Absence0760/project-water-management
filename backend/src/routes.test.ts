@@ -64,6 +64,19 @@ describe('route auth inventory', () => {
 		expect(res.status).toBe(400);
 	});
 
+	it.each(['POST /auth/register', 'POST /auth/login', 'POST /auth/forgot-password'])(
+		'%s answers a body that is not JSON with 400, not 500',
+		async (route) => {
+			const res = await app.request(route.split(' ')[1]!, {
+				method: 'POST',
+				headers: { origin: 'http://localhost:7777', 'content-type': 'application/json' },
+				body: '{"email":'
+			});
+			expect(res.status).toBe(400);
+			expect(await res.json()).toEqual({ error: 'invalid JSON' });
+		}
+	);
+
 	it('logout and health answer anonymous requests', async () => {
 		expect((await app.request('/health')).status).toBe(200);
 		const res = await app.request('/auth/logout', { method: 'POST', headers: { origin: 'http://localhost:7777' } });

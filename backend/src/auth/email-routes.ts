@@ -13,6 +13,7 @@ import { requireUser, type AuthEnv } from './middleware.js';
 import { hashPassword } from './password.js';
 import { clearSession } from './session.js';
 import { newToken, parseToken, RESEND_COOLDOWN, TOKEN_TTL } from './tokens.js';
+import { readJson } from '../http/body.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const token = z.string().max(200);
@@ -54,7 +55,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	// so the endpoint can't be used to discover accounts. Throttled per address
 	// through the token table (one mail per cooldown window).
 	.post('/forgot-password', async (c) => {
-		const body = z.object({ email }).parse(await c.req.json());
+		const body = z.object({ email }).parse(await readJson(c));
 		const mail = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ id: string; email: string }>('SELECT id, email FROM app_user WHERE email = $1', [
 				body.email
@@ -70,7 +71,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	// Sets a new password, marks the address verified (the link proved the
 	// inbox), and revokes every existing session — including a thief's.
 	.post('/reset-password', async (c) => {
-		const body = z.object({ token, password }).parse(await c.req.json());
+		const body = z.object({ token, password }).parse(await readJson(c));
 		const hash = parseToken(body.token);
 		if (!hash) throw new ApiError(400, INVALID_LINK);
 		const newHash = await hashPassword(body.password);
@@ -100,7 +101,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 		return c.body(null, 204);
 	})
 	.post('/verify-email', async (c) => {
-		const body = z.object({ token }).parse(await c.req.json());
+		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
 		if (!hash) throw new ApiError(400, INVALID_LINK);
 		const ok = await withoutUser(async (db) => {
@@ -134,7 +135,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	// What an invite link is for, so the sign-up page can say "Ann invited you
 	// to …" and prefill the address. The 256-bit token is the credential.
 	.post('/invite-info', async (c) => {
-		const body = z.object({ token }).parse(await c.req.json());
+		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
 		if (!hash) throw new ApiError(404, 'this invitation is invalid or has expired');
 		const row = await withoutUser(async (db) => {

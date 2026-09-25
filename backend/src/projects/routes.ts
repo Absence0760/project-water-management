@@ -8,6 +8,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
+import { readJson } from '../http/body.js';
 
 type ProjectRow = {
 	id: string;
@@ -75,7 +76,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/', async (c) => {
-		const body = CreateBody.parse(await c.req.json());
+		const body = CreateBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 			// the SELECT policy before the AFTER trigger has made us a member.
@@ -95,7 +96,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.patch('/:id', async (c) => {
-		const body = PatchBody.parse(await c.req.json());
+		const body = PatchBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, body.teamId !== undefined ? 'owner' : 'editor');
@@ -133,7 +134,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/copy', async (c) => {
-		const body = z.object({ name }).parse(await c.req.json());
+		const body = z.object({ name }).parse(await readJson(c));
 		const srcId = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, srcId, 'viewer');
@@ -168,7 +169,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/members', async (c) => {
-		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await c.req.json());
+		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await readJson(c));
 		const id = c.req.param('id');
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
@@ -199,7 +200,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		return c.json({ member: result.member }, 201);
 	})
 	.patch('/:id/members/:userId', async (c) => {
-		const body = z.object({ role: RoleEnum }).parse(await c.req.json());
+		const body = z.object({ role: RoleEnum }).parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');

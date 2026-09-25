@@ -8,6 +8,7 @@ import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole } from './access.js';
+import { readJson } from '../http/body.js';
 
 const RoleEnum = z.enum(['member', 'admin']);
 const Name = z.string().trim().min(1).max(200);
@@ -40,7 +41,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/', async (c) => {
-		const body = z.object({ name: Name }).parse(await c.req.json());
+		const body = z.object({ name: Name }).parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			// Id generated here: RETURNING would be checked against team_select
 			// before the AFTER trigger has made the creator a member.
@@ -63,7 +64,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.patch('/:id', async (c) => {
-		const body = z.object({ name: Name }).parse(await c.req.json());
+		const body = z.object({ name: Name }).parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
@@ -81,7 +82,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/:id/members', async (c) => {
-		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await c.req.json());
+		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await readJson(c));
 		const result = await withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
@@ -112,7 +113,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		return c.json({ member: result.member }, 201);
 	})
 	.patch('/:id/members/:userId', async (c) => {
-		const body = z.object({ role: RoleEnum }).parse(await c.req.json());
+		const body = z.object({ role: RoleEnum }).parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireTeamRole(db, id, 'admin');

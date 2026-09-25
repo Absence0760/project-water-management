@@ -5,6 +5,7 @@ import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
 import { loadModel, saveModel } from './store.js';
 import { ModelBody, modelProblems } from './validate.js';
+import { readJson } from '../http/body.js';
 
 export const modelRoutes = new Hono<AuthEnv>()
 	.get('/:id/model', async (c) =>
@@ -14,7 +15,7 @@ export const modelRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.put('/:id/model', async (c) => {
-		const model = ModelBody.parse(await c.req.json());
+		const model = ModelBody.parse(await readJson(c));
 		const problems = modelProblems(model);
 		if (problems.length) throw new ApiError(400, 'invalid model', problems);
 		const id = c.req.param('id');

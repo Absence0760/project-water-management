@@ -63,8 +63,8 @@ pnpm build                  # all workspaces (frontend/build, backend/dist/lambd
 pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests everywhere (no DB)
-pnpm test:engine | test:frontend | test:backend
-pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
+pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
+pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 pnpm test:e2e:install       # once: download Playwright's Chromium
 

@@ -8,6 +8,7 @@ import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { clearSession, issueSession } from './session.js';
 import { parseToken } from './tokens.js';
+import { readJson } from '../http/body.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -47,7 +48,7 @@ const USER_COLS = 'id, email, display_name, email_verified_at';
 
 export const authRoutes = new Hono<AuthEnv>()
 	.post('/register', async (c) => {
-		const body = RegisterBody.parse(await c.req.json());
+		const body = RegisterBody.parse(await readJson(c));
 		const hash = await hashPassword(body.password);
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
 		const result = await withoutUser(async (db) => {
@@ -76,7 +77,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		return c.json({ user: toUser(result.row) }, 201);
 	})
 	.post('/login', async (c) => {
-		const body = LoginBody.parse(await c.req.json());
+		const body = LoginBody.parse(await readJson(c));
 		// Per-address lockout (005_login_throttle.sql). Counted in its own
 		// transaction before the password check, so parallel guesses queue on
 		// the row lock and can't all get past it. Keyed by the typed address,

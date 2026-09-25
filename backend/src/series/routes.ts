@@ -6,6 +6,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { mergeDaily } from './merge.js';
+import { readJson } from '../http/body.js';
 
 export const MAX_SERIES_VALUES = 60_000;
 
@@ -45,7 +46,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		});
 	})
 	.put('/:id/series', async (c) => {
-		const body = PutBody.parse(await c.req.json());
+		const body = PutBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
@@ -63,7 +64,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 	// Append / merge new days into a series (daily or batch updates). Creates the
 	// series if it doesn't exist. Only the days sent are touched.
 	.post('/:id/series/merge', async (c) => {
-		const body = PutBody.parse(await c.req.json());
+		const body = PutBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
