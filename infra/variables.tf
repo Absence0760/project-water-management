@@ -175,6 +175,40 @@ variable "migrate_reserved_concurrency" {
   default     = 1
 }
 
+# --- Background jobs (jobs.tf) -------------------------------------------------
+
+variable "worker_memory_mb" {
+  description = "Worker Lambda memory. A queued re-run is the same engine run the API does, so the same 1024 MB."
+  type        = number
+  default     = 1024
+}
+
+variable "worker_reserved_concurrency" {
+  description = "Max concurrent worker Lambda executions: bounds spend, DB connections (x a pool of 2) and parallel jobs. 2 is the SQS event source's minimum. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  type        = number
+  default     = 2
+}
+
+variable "sqs_endpoint_az_count" {
+  description = "How many AZs get an ENI for the SQS interface endpoint (job wake-ups from the API, the worker's queue). 1 halves the cost; both subnets still reach it."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.sqs_endpoint_az_count >= 1 && var.sqs_endpoint_az_count <= 2
+    error_message = "Must be 1 or 2."
+  }
+}
+
+variable "jobs_backlog_alarm_seconds" {
+  description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
+  type        = number
+  default     = 900
+  validation {
+    condition     = var.jobs_backlog_alarm_seconds >= 600
+    error_message = "At least 600 s (two 5-minute ticks), or the alarm fires on normal operation."
+  }
+}
+
 # --- Email (SES, ses.tf) -----------------------------------------------------
 
 variable "mail_from_local_part" {
