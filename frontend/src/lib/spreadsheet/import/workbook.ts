@@ -45,9 +45,13 @@ const READ_OPTIONS: XLSX.ParsingOptions = {
 	bookVBA: false
 };
 
-export interface ReadLimits extends ZipLimits {
+export interface ReadOptions extends ZipLimits {
+	/** Largest file accepted (default MAX_WORKBOOK_BYTES). */
 	maxBytes?: number;
+	/** Most sheets accepted (default MAX_WORKBOOK_SHEETS). */
 	maxSheets?: number;
+	/** Called before each sheet is parsed: (sheet, i, n), 1-based. */
+	onProgress?: (sheet: string, i: number, n: number) => void;
 }
 
 /**
@@ -63,12 +67,12 @@ export interface ReadLimits extends ZipLimits {
  * those sheets. The Element sheets, the calculation chain, the VBA project,
  * drawings and media are never inflated.
  */
-export async function readWorkbook(data: ArrayBuffer | Uint8Array, limits: ReadLimits = {}): Promise<XLSX.WorkBook> {
-	const maxBytes = limits.maxBytes ?? MAX_WORKBOOK_BYTES;
-	const maxSheets = limits.maxSheets ?? MAX_WORKBOOK_SHEETS;
+export async function readWorkbook(data: ArrayBuffer | Uint8Array, opts: ReadOptions = {}): Promise<XLSX.WorkBook> {
+	const maxBytes = opts.maxBytes ?? MAX_WORKBOOK_BYTES;
+	const maxSheets = opts.maxSheets ?? MAX_WORKBOOK_SHEETS;
 	if (data.byteLength > maxBytes) throw new WorkbookTooLargeError('bytes', data.byteLength, maxBytes);
 	const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-	const zip = ZipArchive.open(bytes, limits);
+	const zip = ZipArchive.open(bytes, opts);
 
 	const parts = new Map<string, StoredEntry>();
 	/** Inflate one part (once), kept under its exact name in the zip; false when the zip lacks it. */
@@ -96,33 +100,40 @@ export async function readWorkbook(data: ArrayBuffer | Uint8Array, limits: ReadL
 	const layout = sheetParts(workbookPart, text(workbookPart), hasRels ? text(relsPart) : '');
 	if (layout.names.length > maxSheets) throw new WorkbookTooLargeError('sheets', layout.names.length, maxSheets);
 
-	const read = (sheets: string[]) => {
-		const packed = storedZip([...parts.values()]);
-		// The zip holds a copy; drop the inflated parts before SheetJS makes its own.
-		if (sheets.length > 0) parts.clear();
+	const read = (entries: StoredEntry[], sheets: string[]) => {
 		try {
-			return XLSX.read(packed, { ...READ_OPTIONS, sheets });
+			return XLSX.read(storedZip(entries), { ...READ_OPTIONS, sheets });
 		} catch (e) {
 			throw new UnreadableWorkbookError(e instanceof Error ? e.message : String(e));
 		}
 	};
-	// Pass 1, no sheets: the defined names, to see which sheets they point at.
-	const book = new B023Workbook(read([]));
+	// No sheets first: the defined names, to see which sheets they point at.
+	const wb = read([...parts.values()], []);
+	const book = new B023Workbook(wb);
 	const wanted = new Set<string>();
 	for (const name of ALL_NAMES) {
 		const target = book.sheetOf(name);
-		if (target !== null && book.wb.SheetNames.includes(target)) wanted.add(target);
+		if (target !== null && wb.SheetNames.includes(target)) wanted.add(target);
 	}
 	// The usual b023 sheets, or exactly the named ranges' sheets when those
-	// lie elsewhere (renamed or moved tables).
-	const sheets = [...wanted].every((s) => B023_SHEETS.includes(s)) ? B023_SHEETS : [...wanted];
+	// lie elsewhere (renamed or moved tables). SheetJS matches sheet names
+	// case-insensitively; so does this.
+	const byLower = new Map(layout.names.map((n) => [n.toLowerCase(), n] as const));
+	const sheets = ([...wanted].every((s) => B023_SHEETS.includes(s)) ? B023_SHEETS : [...wanted])
+		.map((s) => byLower.get(s.toLowerCase()))
+		.filter((s): s is string => s !== undefined && zip.find(layout.parts.get(s) ?? '') !== undefined);
 	for (const s of pkg.strings) await load(s);
-	for (const s of sheets) {
-		const part = layout.parts.get(s);
-		if (part !== undefined) await load(part);
+	const shared = [...parts.values()];
+	parts.clear();
+	// Then one sheet at a time, so only one sheet's part and XML text is in
+	// memory at once, and the caller can show which sheet is being read.
+	for (const [i, s] of sheets.entries()) {
+		opts.onProgress?.(s, i + 1, sheets.length);
+		const part = zip.find(layout.parts.get(s)!)!;
+		const one = read([...shared, { name: part, data: await zip.read(part), crc: zip.info(part)!.crc }], [s]);
+		Object.assign(wb.Sheets, one.Sheets);
 	}
-	// Pass 2: those sheets.
-	return read(sheets);
+	return wb;
 }
 
 /** A named range resolved to its sheet and 1-based corners. */

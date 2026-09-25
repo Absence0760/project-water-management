@@ -67,7 +67,10 @@ describe('B023Workbook', () => {
 describe('readWorkbook', () => {
 	it('parses only the sheets the named ranges point at', async () => {
 		const b = syntheticB023().set('Farm A', 'A1', 'an Element sheet');
-		const wb = await readWorkbook(b.toFile());
+		const seen: string[] = [];
+		const wb = await readWorkbook(b.toFile(), { onProgress: (s, i, n) => seen.push(`${i}/${n} ${s}`) });
+		// One step per b023 sheet, in order; never the Element sheet.
+		expect(seen).toEqual(['AppSettings', 'Network', 'Farm spec', 'Crop demand', 'Farm demand', 'Transfers', 'Flow data', 'Flow Calibration Cfg', 'EWR Cfg'].map((s, i) => `${i + 1}/9 ${s}`));
 		expect(wb.SheetNames).toContain('Farm A');
 		expect(wb.Sheets['Farm A']).toBeUndefined();
 		expect(wb.Sheets['Network']).toBeDefined();

@@ -135,8 +135,26 @@ is written by `zip.ts` with the browser's `CompressionStream('deflate-raw')`,
 since SheetJS's own browser deflate made files ~2.5 times larger. It imports
 SheetJS's mini build (`xlsx/dist/xlsx.mini.min`: `.xlsx` without the legacy
 formats and codepages, 87 KB instead of 112 KB). The bundle guard gives
-spreadsheet workers (`export.worker`, and later the workbook import's
+spreadsheet workers (`export.worker` and the workbook import's
 `import.worker`) their own ceiling, apart from the calibration worker's.
+
+The in-browser b023 workbook import (WP-1.31) is built the same way:
+`lib/spreadsheet/import/import.worker.ts` (101 KB gzip) is the only code that
+imports the parser (`lib/spreadsheet/import/`, SheetJS's mini build, which
+reads `.xlsm` as well as `.xlsx`). The import dialog dynamically imports a
+~1 KB runner (`lib/spreadsheet/import/runner.ts`) when a workbook is picked,
+which starts the worker the same way (`worker-src 'self'`) and posts it the
+`File` itself, so the bytes are read in the worker, not copied from the page.
+The protocol (`protocol.ts`, `messages.ts`): `parse` reads the workbook and
+extracts the project, posting progress per sheet; `extract` builds the project
+again with other options (the gauge as a reference) from the workbook the
+worker still holds, in milliseconds; a failure comes back as a plain object
+with the typed error's code and fields (the missing named ranges, sheet and
+cell). Cancel, closing the dialog and a finished import terminate the worker.
+Before SheetJS sees the file, `zip.ts` unpacks only the parts the importer
+reads, with the browser's `DecompressionStream('deflate-raw')` and hard caps
+([security.md § Input handling](./security.md#input-handling)); SheetJS's own
+reader would inflate the whole ~600 MB of a client-size workbook first.
 
 The trade-off: split chunks compress a little worse than one big chunk, so the
 total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
