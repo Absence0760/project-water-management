@@ -41,6 +41,24 @@ describe('freshIds', () => {
 		expect(model.transfers[0]).toMatchObject({ id: ids.get(t), fromNodeId: nb, toNodeId: na });
 		expect(model.landCover![0]).toMatchObject({ id: ids.get(lc), nodeId: nb });
 	});
+
+	it('keeps the ids’ order, which the engine sums and breaks ties in', () => {
+		// Python importer ids and a UI-made id, deliberately not in list order.
+		const olds = ['c3f1', '0aa2', 'ffff-last', '7b00', '00-first', 'b2', 'x-crop', 'a-transfer'];
+		const nodes = olds.slice(0, 6).map((id, i) => ({ id, downstreamNodeId: i === 0 ? null : olds[0]! }));
+		for (let round = 0; round < 20; round++) {
+			const { ids } = freshIds({
+				nodes: nodes as never,
+				crops: [{ id: 'x-crop' }] as never,
+				cropAreas: [],
+				transfers: [{ id: 'a-transfer', fromNodeId: 'b2', toNodeId: 'c3f1' }] as never
+			});
+			const byOld = [...olds].sort();
+			const byNew = [...olds].sort((a, b) => (ids.get(a)! < ids.get(b)! ? -1 : 1));
+			expect(byNew).toEqual(byOld);
+			for (const o of olds) expect(ids.get(o)).toMatch(/^[0-9a-f-]{36}$/);
+		}
+	});
 });
 
 describe('projectFileProblems', () => {
