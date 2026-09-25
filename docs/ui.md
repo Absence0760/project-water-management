@@ -322,7 +322,17 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. The derived columns are
+inside a Settings → *Calibration exclusions* period. Every column header,
+Date included, carries an ⓘ `HelpTip` saying where that number comes from, how
+it is derived and what it tells you: a raw series column reuses its kind's
+`series.<SeriesKind>` entry, and each derived column has its own
+`preview.<column>` entry (`preview.date`, `preview.flowM3Day`,
+`preview.rainUsed`, `preview.chirpsFactor`, `preview.chirpsCorrected`,
+`preview.excluded`), the key set per column in `series/preview.ts`. The bubble
+is a top-layer popover, so the sideways scroll and sticky header don't clip
+it, and Escape closes the tip without closing the dialog. A header shows its
+unit once: the m³/day columns name it in their label, so no second `(m³/day)`
+follows. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
 for any day outside the model's own run window. The search box takes a date
@@ -693,9 +703,19 @@ value such as 250000.
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* Then
-  the hydrograph (observed flow as
-  dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
-  the full period), the calibration panel (it opens with the same
+  the hydrograph (observed flow as a line
+  under simulated outflow, broken on every day without a reading and never
+  bridged, a lone reading between gaps shown as a dot; natural flow starts
+  hidden and its legend entry shows it, and a legend toggle survives the log
+  scale and unit switches; a switched-off entry is struck through in the
+  muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
+  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  into, as on every chart; **Shift+drag** moves the view back and forth
+  through the record at the same width, and **◀ Earlier / Later ▶** move it
+  by half a window (the non-drag route, and the only one on touch). Neither
+  goes past the ends of the record, and the window survives the log scale
+  and unit switches. The figure carries the visible range as
+  `data-view-start` / `data-view-end` (`LineChart`'s `pannable` prop), the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in

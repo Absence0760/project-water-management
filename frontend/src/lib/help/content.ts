@@ -10,6 +10,10 @@
 //   transfer.<Transfer field>       series.<SeriesKind>
 //   summary.<FarmSummary field>     catchment.<RunSummary.catchment field>
 //   stats.<CalibrationStats field>  run.<run series key>
+//   preview.<column>                the Data tab's daily preview (series/preview.ts):
+//                                   date, flowM3Day, rainUsed, chirpsFactor,
+//                                   chirpsCorrected, excluded. Its raw series
+//                                   columns use series.<SeriesKind>.
 // A key belongs to exactly one entry (guarded by content.test.ts).
 
 export type HelpCategory =
@@ -1269,7 +1273,7 @@ export const HELP: HelpEntry[] = [
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm, used after the other rain series run out, to look ahead a few days.',
 		units: 'mm/day',
-		long: 'Treat results on forecast days as indicative only.',
+		long: 'Used on days neither catchment rain nor CHIRPS has a value, usually the days after the other records end. Treat results on forecast days as indicative only.',
 		category: 'data',
 		fields: ['series.rain_forecast_mm'],
 		related: ['rain-catchment'],
@@ -1298,6 +1302,74 @@ export const HELP: HelpEntry[] = [
 		fields: ['series.flow_reference_m3s'],
 		related: ['observed-flow', 'calibration'],
 		source: 'docs/model.md §2.10'
+	},
+	// The Data tab's daily preview ("Input time series — daily preview"): one
+	// entry per column it derives. Its raw series columns use series.<kind>.
+	{
+		id: 'preview-date',
+		term: 'Date (daily preview)',
+		short: 'One row per day, from the first day of the earliest loaded series to the last day of the latest. A blank cell means no reading.',
+		long: 'The rows come from the input series themselves, not from the simulation period: the table starts on the first day any loaded series has and ends on the last. Each series column shows its value for that day exactly as uploaded; a blank means that series has no reading that day, or the day is outside its period. A shaded value carries a data-check flag (negative, outlier or flat-line), found with the same rules as the Data checks, and screen readers read the flag with the value.\n\nThe search box narrows the rows by date prefix (2015, 2015-03) or by a value in the visible series (> 20, = 0); Missing only and Flagged only keep the days where a visible series is blank or flagged. Lining every input up by day is the quickest way to see a gap in one record that another fills, or a spike only one instrument recorded.',
+		category: 'data',
+		aliases: ['daily preview', 'preview data', 'series preview'],
+		fields: ['preview.date'],
+		related: ['gauge-logger-agreement', 'rain-catchment', 'observed-flow'],
+		source: 'Not in the workbook; docs/ui.md § Data tab (Preview)'
+	},
+	{
+		id: 'preview-flow-m3day',
+		term: 'Flow in m³/day (daily preview)',
+		short: 'The flow series’ m³/s value × 86 400: the unit the model works in, so the day reads directly against simulated flows.',
+		long: 'Flow records are uploaded in m³/s. The model converts them to m³/day (1 m³/s = 86 400 m³/day) before comparing them with the simulated outflow, which is in m³/day like every flow and volume inside the model. This column is that conversion, day by day, blank where the record has no reading. Use it to read an observed day against the daily results or the daily CSV export without converting by hand.\n\nFor gauge or logger flow this is the value calibration and the EWR comparison score against, when that record is the one chosen under “Compare with”. A reference gauge on another river is converted the same way, but the model never reads it.',
+		units: 'm³/day',
+		category: 'data',
+		fields: ['preview.flowM3Day'],
+		related: ['observed-flow', 'units', 'reference-gauge'],
+		source: 'docs/model.md §2.1, §7'
+	},
+	{
+		id: 'preview-rain-used',
+		term: 'Rain used (daily preview)',
+		short: 'The rain the model runs on each day: catchment rain if it has a reading, else bias-corrected CHIRPS, else forecast rain.',
+		long: 'It is worked out with the same code a run uses, so it is the rain that drives runoff and reduces irrigation demand. Catchment rain comes first, after the rain-gap settings: days of a zero run treated as missing count as blank, so CHIRPS fills them, and a multi-day accumulation is spread back over the days it covers. That is why this column can differ from the catchment rain column on a day that has a reading. Where catchment rain is blank, CHIRPS stands in (scaled by its month’s factor when the bias correction is on), then forecast rain.\n\nIt is blank outside the simulation period (Settings, simulation start and end) and on days no source has a value, which the model treats as dry. It is the rain before the legacy model’s rain threshold. Compare it with the uploaded columns to see which days were filled and from where; screen readers also read the source with each value.',
+		units: 'mm/day',
+		category: 'data',
+		aliases: ['rain used', 'gap-filled rain'],
+		fields: ['preview.rainUsed'],
+		related: ['rain-final', 'chirps-bias', 'zero-rain-runs', 'rain-accumulations'],
+		source: 'docs/model.md §2.4, §2.4b–d'
+	},
+	{
+		id: 'preview-chirps-factor',
+		term: 'CHIRPS bias factor (daily preview)',
+		short: 'The catchment ÷ CHIRPS rain factor for the day’s calendar month: what CHIRPS is multiplied by on days it fills a catchment gap.',
+		long: 'Fitted from the loaded records for each calendar month: catchment rain divided by CHIRPS rain, summed over the days both have a reading, leaving out suspect catchment rain (see CHIRPS bias correction). A month with fewer than 90 shared days, or less than 50 mm of CHIRPS on them, takes the factor pooled over all months, and factors are kept between 0.25 and 4. A dash means no factor could be fitted, so CHIRPS is used as it is.\n\nThe same factor shows on every day of that month in the simulation period, but it only changes a day where CHIRPS fills in for blank catchment rain, and not at all when Settings → CHIRPS bias correction is set to Raw CHIRPS (it is then shown for reference only). A factor well away from 1 says CHIRPS reads consistently wetter or drier than the catchment record in that month.',
+		units: '× (ratio)',
+		category: 'data',
+		fields: ['preview.chirpsFactor'],
+		related: ['chirps-bias', 'chirps', 'double-mass'],
+		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
+	},
+	{
+		id: 'preview-chirps-corrected',
+		term: 'CHIRPS corrected (daily preview)',
+		short: 'CHIRPS as the model reads it: × the month’s bias factor on days it fills blank catchment rain, as uploaded on every other day.',
+		long: 'Only CHIRPS the model actually uses is corrected. On a day with no catchment rain value (including the days of a zero run treated as missing) it is CHIRPS × that month’s factor; on a day catchment rain has a reading CHIRPS isn’t used, so it shows as uploaded. With Raw CHIRPS chosen, or no factor fitted, it is the uploaded value every day. Blank outside the simulation period.\n\nBeside the uploaded CHIRPS column it shows how much rain the correction added or took away on the filled days. It differs from a run’s corrected-CHIRPS output column, which applies the factor on every day.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.chirpsCorrected'],
+		related: ['chirps-bias', 'preview-chirps-factor', 'preview-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
+	},
+	{
+		id: 'preview-excluded',
+		term: 'Excluded from calibration (daily preview)',
+		short: 'Marks days inside a calibration exclusion from Settings: they don’t count in Fit automatically or in a run’s calibration scores.',
+		long: 'Comes from Settings & calibration → Calibration exclusions: whole water years (1 October to 30 September) or date ranges, each with a reason. A day inside one reads Excluded, and screen readers also read the reason; every other day shows a dash. The model still simulates excluded days; only the scores leave them out, so Fit automatically and the run’s calibration statistics compare observed and simulated flow on the remaining days of the calibration window.\n\nUse it to check that an exclusion covers the days you meant, such as a gauge outage or a suspect rain year, and no more.',
+		category: 'data',
+		fields: ['preview.excluded'],
+		related: ['calibration-exclusions', 'calibration-window'],
+		source: 'Not in the workbook; docs/model.md §2.10'
 	},
 	{
 		id: 'wr90',

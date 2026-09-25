@@ -10,11 +10,18 @@
 	// project's Playwright/Chromium build, so no extra JS is needed here for
 	// either). Data is whatever SeriesTab has already loaded (same `values`
 	// store the chart uses) — this dialog fetches nothing itself.
+	//
+	// Every column header carries an ⓘ HelpTip (series.<kind> for a raw series,
+	// preview.<column> for a derived one, keys set in ./preview.ts): where the
+	// number comes from, how it's derived and what it tells you. The bubble is a
+	// top-layer popover, so neither the sideways scroll nor the sticky header
+	// clips it; the headers have no sort or other click behaviour to trigger.
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import type { Daily } from './coverage';
-	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, seriesColumnId, type PreviewFlag } from './preview';
+	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag } from './preview';
 
 	let {
 		open = $bindable(false),
@@ -188,12 +195,14 @@
 				<caption class="visually-hidden">Daily values for every input series, plus how the model used them</caption>
 				<thead>
 					<tr aria-rowindex="1">
-						<th scope="col" class="datecol">Date</th>
+						<th scope="col" class="datecol">Date <HelpTip key="preview.date" label="About the date column" /></th>
 						{#each visibleColumns as col (col.id)}
+							{@const unit = headerUnit(col)}
 							<th scope="col" class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
-								{col.label}{#if col.unit}
-									<span class="u">({col.unit})</span>
+								{col.label}{#if unit}
+									<span class="u">({unit})</span>
 								{/if}
+								<HelpTip key={col.helpKey} label="About {col.label}" />
 							</th>
 						{/each}
 					</tr>

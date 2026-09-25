@@ -13,6 +13,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { CATEGORY_TITLES, HELP, helpFieldKeys, helpFor, searchHelp } from './content';
 
 // Exhaustive `Record<keyof T, true>` objects: the typecheck fails if the engine
@@ -70,6 +71,14 @@ const RUN_KEYS = [
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];
 
+// The daily preview's derived columns (series/preview.ts), from every series kind at once.
+const PREVIEW_KEYS = [
+	PREVIEW_DATE_HELP_KEY,
+	...buildPreviewColumns(SERIES_KINDS.map((kind, i) => ({ id: `s${i}`, kind, name: '', unit: '', startDate: '2020-01-01', length: 1 })))
+		.map((c) => c.helpKey)
+		.filter((k) => k.startsWith('preview.'))
+];
+
 const settings = defaultProjectSettings();
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
@@ -82,7 +91,8 @@ const VALID: Record<string, Set<string>> = {
 	summary: new Set(Object.keys(SUMMARY)),
 	catchment: new Set(Object.keys(CATCHMENT)),
 	stats: new Set(Object.keys(STATS)),
-	run: new Set(RUN_KEYS)
+	run: new Set(RUN_KEYS),
+	preview: new Set(PREVIEW_KEYS.map((k) => k.slice('preview.'.length)))
 };
 
 describe('help content', () => {
@@ -136,7 +146,8 @@ describe('help content', () => {
 			...Object.keys(TRANSFER).map((k) => `transfer.${k}`),
 			...Object.keys(settings).filter((k) => k !== 'calibration').map((k) => `settings.${k}`),
 			...Object.keys(settings.calibration).map((k) => `calibration.${k}`),
-			...SERIES_KINDS.map((k) => `series.${k}`)
+			...SERIES_KINDS.map((k) => `series.${k}`),
+			...PREVIEW_KEYS
 		].filter((k) => !skip.has(k));
 		const missing = editable.filter((k) => !helpFor(k));
 		expect(missing).toEqual([]);
@@ -157,6 +168,8 @@ describe('help content', () => {
 		for (const f of files) {
 			const src = readFileSync(f, 'utf8');
 			for (const m of src.matchAll(/<HelpTip\b[^>]*?\bkey=["']([^"']+)["']/g)) used.push(m[1]!);
+			// A computed key (`key={col.helpKey}` in SeriesPreviewDialog) isn't seen here: the
+			// daily preview's keys are covered by PREVIEW_KEYS above and series/preview.test.ts.
 			// Components that place the HelpTip themselves take the key as a helpKey prop (PeriodList).
 			for (const m of src.matchAll(/\bhelpKey=["']([^"']+)["']/g)) used.push(m[1]!);
 		}
