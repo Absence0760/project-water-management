@@ -23,7 +23,7 @@ and [data-model.md](./data-model.md)):
   cloud account. AWS comes later.
 - **One TypeScript engine** (`packages/engine`) is used by the browser (for
   instant what-if runs) and by the Lambda (for stored runs). A full client catchment
-  run takes about 18 ms.
+  run takes milliseconds.
 - Time series are stored as `double precision[]`, and run outputs as one array
   per series. Sessions use a JWT in an httpOnly cookie. Migrations are plain
   SQL. Charts use uPlot.
@@ -87,7 +87,7 @@ a second and third project (empty, or copied) side by side.
 
 **Acceptance:** regression tests driven by fixtures extracted from the client catchment
 (under `data/`, gitignored, skipped when absent) match the workbook's columns
-**exactly** for all 16 161 days: natural flow, net demand per farm, storage,
+**exactly** for every day of the record: natural flow, net demand per farm, storage,
 spill, outflow, deficit, EWR shortfall and simulated outflow. Committed
 synthetic fixtures cover the same code paths on CI. *Superseded by the
 engine-correctness policy (CLAUDE.md rule 10):* the suite matches the
@@ -155,7 +155,7 @@ workbook (as in 1a) with **no manual edits**.
 - ✅ **Run and results** (V1 built, with flow-duration curves, a log scale and dam storage %): a run button, a run history, catchment charts (natural
   vs simulated vs observed flow, EWR line, days not met), per-farm charts
   (demand vs supplied, dam storage, spill), a Shortfalls table, and calibration
-  stats. Charts use uPlot and handle 16k points without lag.
+  stats. Charts use uPlot and handle a full multi-decade daily record without lag.
 - ⬜ A browser-side instant preview: change a parameter and see the effect
   without saving, using the same engine.
 - ✅ Members panel (owner manages; anyone can leave).
@@ -197,7 +197,7 @@ rows exist for this.
   "new data since last run" banner.
 - ⬜ **Partial recompute** from the first changed day, reusing stored state
   (the workbook's "New data from" logic) — only needed if full runs get slow
-  (currently ~0.2 s engine time for 44 years).
+  (currently a fraction of a second of engine time for the full record).
 - ⬜ Forecast days flagged (workbook marks them "F") and shown distinctly in charts.
 
 ---
@@ -267,7 +267,7 @@ writing, or gives a ranked change list.
 
 ## Phase 5: AI runoff module as an alternative flow generator ([model.md §5](./model.md#5-the-ai-runoff-module-dev-003))
 
-- ⬜ Fix the water balance first: the 56% of effective rain that goes
+- ⬜ Fix the water balance first: the large share of effective rain that goes
   untracked, drainage that creates water, the unused `RainfallFactor`, and the
   hard-coded outlet node.
 - ⬜ Hydrological units per project (area, MAP, reference gauge). Multiple rain
@@ -440,7 +440,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 > through it; that sub-catchment is far more developed; the column is raw for
 > part of the record and area-scaled for the rest; and the logger's magnitude
 > is checked against independent field gaugings. The two records' disagreement
-> from 2014 is therefore not evidence about either instrument. Since engine
+> over their overlap is therefore not evidence about either instrument. Since engine
 > 0.7.1 the importer can bring the gauge in as a reference series the engine
 > never scores against.
 >
@@ -453,7 +453,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >    are extrapolated, so peak days and wet-season volumes are uncertain; the
 >    answer decides which days get flagged.
 > 3. **Area:** the project's catchment area differs from the source report's
->    area at the logger by about 5 %. Which is right?
+>    area at the logger. Which is right?
 > 4. **Accept the limitation:** the logger record is short and mostly dry, so
 >    it can't pin down GR4J's X1 and X3. The fit to present is the one with
 >    Perrin's typical bounds plus the WR2012 MAR band; the durable fix is a
@@ -498,7 +498,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    "Not an allocation or licence condition".
 8. **Pragmatic EWR (Q10).** Is entering the 12 monthly values enough, or must the
    app derive them from Desktop Reserve tables?
-9. **Reference results.** Is the client catchment "WORKING 007" workbook the version to
+9. **Reference results.** Is the client catchment's current working workbook the version to
    match? Are there other catchments (B, C…) with workbooks we can use as test
    cases?
 10. **Zero observed flows.** The workbook skips days where observed flow is
@@ -509,7 +509,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     WR2012 five-statistic table, CR-28.*
 12. **EWR "days not met".** Count days that were actually short (app default)
     or the workbook macro's running monthly total? The workbook's EWR pivot is
-    also stale on ~23 % of farm-months (macro not re-run). (model.md §2.9)
+    also stale on part of the farm-months (macro not re-run). (model.md §2.9)
 13. **Curtailment targets** (model.md §2.11, Q11–Q15): is reduce/gain a
     fairness target or a schedule farms can follow (a downstream surplus can't
     reach an upstream farm)? The column "Reduction of demand required (%)" is
@@ -525,12 +525,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     PBIAS closer to 0 better? Do you need per-farm series (e.g. the same
     farm's dam storage) overlaid across runs?
 15. **Zero-rain runs (issue #3).** The catchment rain has two long runs of
-    zeros in the wet season: 1991-05-25 → 1991-07-26 and 1999-12-28 →
-    2000-12-31. CHIRPS recorded rain on both. From CR-20 the app fills them
+    zeros in the wet season (dates in the private source repo). CHIRPS
+    recorded rain on both. From CR-20 the app fills them
     with bias-corrected CHIRPS by default. Are they missing data, or real
-    dry spells? Are there other stretches (e.g. partial records in 1996,
-    2021 and 2022, which read far below CHIRPS) that should be treated as
-    missing?
+    dry spells? Are there other stretches (e.g. partial-record years that
+    read far below CHIRPS) that should be treated as missing?
 
 ### Product
 
@@ -573,7 +572,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 | **Scope creep**: three model families, pump scenarios, AI runoff | Nothing gets finished | The phases gate on client sign-off. The node-based and runoff features wait until the b023 port is accepted. |
 | **VPC Lambda cold starts / DB connection limits** | Slow first request; too many connections from concurrent Lambdas | RDS stays warm. Small `pg` pool per Lambda (1–2). Reserved concurrency is capped. RDS Proxy only if connection counts become a problem. |
 | **Run output volume** (up to ~25 MB/run) | DB growth and cost | Trim keys, cap the number of runs, float4. Runs can be recomputed deterministically. |
-| **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports are ~2 MB for the client catchment. Use S3 presigned upload if a project goes over. |
+| **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports for the client catchment are well under the limit. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
 | **Single developer / bus factor** | Stalls | Docs (this folder), tests as the spec, conventional commits. |
 | **Stale SheetJS on npm** | Security advisories | Use the official CDN tarball when the in-browser importer lands. The Python importer covers V1. |
