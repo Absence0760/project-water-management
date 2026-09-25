@@ -130,7 +130,9 @@ describe('openGrid + readPoints', () => {
 			['several bands', writeGrid(spec({ override: { 277: [3, [3]] } })), /more than one band/],
 			['another compression', writeGrid(spec({ override: { 259: [3, [8]] } })), /compression 8/],
 			['no georeferencing', writeGrid(spec({ override: { 33922: null } })), /georeferencing/],
-			['a short strip table', writeGrid(spec({ override: { 273: [4, [8, 9]] } })), /strip table/],
+			// A header claiming 100 000-pixel rows: refused before the decode buffer is allocated.
+			['a strip that would decode too large', writeGrid(spec({ override: { 256: [4, [100_000]], 278: [3, [6]] } })), /decode to an implausible size/],
+			['a short strip table',writeGrid(spec({ override: { 273: [4, [8, 9]] } })), /strip table/],
 			['an IFD past the end of the file', good.subarray(0, 60), /ends before its image directory|truncated/]
 		];
 		it.each(cases)('%s', async (_, bytes, message) => {

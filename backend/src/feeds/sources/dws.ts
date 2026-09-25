@@ -100,6 +100,8 @@ export function parseDwsDaily(page: string): DwsDays {
 	const days = [...byDay.keys()];
 	const first = Math.min(...days);
 	const last = Math.max(...days);
+	// Rows are few, but their dates come from the page: bound the span before allocating it.
+	if (last - first + 1 > MAX_ROWS) throw new FeedFormatError('the DWS table spans more days than one request can hold');
 	const values = Array.from({ length: last - first + 1 }, (_, i) => byDay.get(first + i) ?? null);
 	return { startDate: fromEpochDay(first), values, quality, rejected };
 }

@@ -69,6 +69,8 @@ const NODATA_FLOOR = -9000;
 /** Upper bounds, so a corrupt header can't make us request or allocate absurd amounts. */
 const MAX_DIM = 100_000;
 const MAX_STRIP_BYTES = 8 * 1024 * 1024;
+/** Decoded: a CHC row is 7200 × 4 bytes (28.8 KB); allow ~70 such rows per strip. */
+const MAX_DECODED_STRIP_BYTES = 2 * 1024 * 1024;
 
 /**
  * Opens a GeoTIFF by reading its header and first IFD. Returns null when the
@@ -235,6 +237,8 @@ export async function readPoints(read: RangeRead, grid: GridInfo, points: readon
 		if (!raw || raw.length < bytes) throw new FeedFormatError('the grid file ends inside a strip');
 		const rows = Math.min(grid.rowsPerStrip, grid.height - s * grid.rowsPerStrip);
 		const expected = rows * rowBytes;
+		// Bound what the header makes us allocate, not only what we read.
+		if (expected > MAX_DECODED_STRIP_BYTES) throw new FeedFormatError('a strip of the grid would decode to an implausible size');
 		const data = grid.compression === 5 ? lzwDecode(raw, expected) : raw.subarray(0, expected);
 		if (data.length < expected) throw new FeedFormatError('a strip of the grid is truncated');
 		decoded.set(s, new DataView(data.buffer, data.byteOffset, data.byteLength));

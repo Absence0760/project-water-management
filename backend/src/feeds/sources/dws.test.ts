@@ -66,7 +66,8 @@ describe('parseDwsDaily on other pages', () => {
 			['a table without a DATE header', page('20210101 1.5 1'), /no DATE header/],
 			['changed columns', page('DATE COR_LEVEL QUAL\n20210101 1.5 1'), /columns changed/],
 			['an impossible date', page('DATE D_AVG_FR QUAL\n20210230 1.5 1'), /impossible date/],
-			['a date listed twice', page('DATE D_AVG_FR QUAL\n20210101 1.5 1\n20210101 1.6 1'), /twice/]
+			['a date listed twice', page('DATE D_AVG_FR QUAL\n20210101 1.5 1\n20210101 1.6 1'), /twice/],
+			['two rows centuries apart', page('DATE D_AVG_FR QUAL\n18000101 1.5 1\n20210101 1.6 1'), /spans more days/]
 		];
 		it.each(cases)('%s', (_, body, message) => {
 			expect(() => parseDwsDaily(body)).toThrow(FeedFormatError);
