@@ -1,6 +1,6 @@
 // The Settings & calibration page's in-page menu, one link per group in page
 // order, and the list of what blocks Save, each pointing at its group. The ids
-// are set on the panels in SettingsTab.svelte (and on Wr2012Section's panel).
+// are set on the panels in SettingsTab.svelte (and around Wr2012Section and EwrRulesSection).
 
 export const SETTINGS_SECTIONS = [
 	{ id: 'set-demand', label: 'Demand' },
@@ -11,6 +11,7 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-wr2012', label: 'WR2012 check' },
 	{ id: 'set-share', label: 'Flow share' },
 	{ id: 'set-ewr', label: 'EWR' },
+	{ id: 'set-reserve', label: 'Reserve rules' },
 	{ id: 'set-period', label: 'Simulation period' },
 	{ id: 'set-quality', label: 'Data quality' }
 ] as const;

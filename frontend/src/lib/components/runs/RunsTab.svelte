@@ -23,10 +23,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Wr2012Panel from './Wr2012Panel.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import EvidencePanel from './EvidencePanel.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultSections } from './sections';
+	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
+	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
 
 	let {
 		projectId,
@@ -482,6 +485,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					</div>
 				{/snippet}
 				{#snippet afterFlowViews()}
+					{#if summary.ewrAssurance?.length}
+						<div class="panel" id="res-reserve">
+							<Lazy load={loadAssurancePanel}>
+								{#snippet children(EwrAssurancePanel)}
+									<EwrAssurancePanel sites={summary.ewrAssurance ?? []} />
+								{/snippet}
+							</Lazy>
+						</div>
+					{/if}
 					<div class="panel" id="res-ewr-grid">
 						{#if summary.ewrCompliance}
 							<EwrHeatmap compliance={summary.ewrCompliance} />

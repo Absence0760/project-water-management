@@ -7,7 +7,7 @@ export interface ResultSection {
 	label: string;
 }
 
-export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'wr2012'>): ResultSection[] {
+export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance'>): ResultSection[] {
 	const out: ResultSection[] = [
 		{ id: 'res-summary', label: 'Summary' },
 		{ id: 'res-water', label: 'Where the water went' },
@@ -25,6 +25,8 @@ export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'w
 		{ id: 'res-notes', label: 'Notes & evidence' },
 		{ id: 'res-fdc', label: 'Flow duration' },
 		{ id: 'res-ewr', label: 'EWR vs outflow' },
+		// Reserve compliance by month: only when the project has a rule table (engine ≥ 0.21.0).
+		...(summary.ewrAssurance?.length ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
 		{ id: 'res-ewr-grid', label: 'EWR by month' },
 		{ id: 'res-ewr-agreement', label: 'EWR vs observed' }
 	];

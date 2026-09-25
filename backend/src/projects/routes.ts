@@ -8,7 +8,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 import { readJson } from '../http/body.js';
 
 type ProjectRow = {
@@ -148,12 +148,14 @@ export const projectRoutes = new Hono<AuthEnv>()
 				const { rows } = await db.query<{ role: string | null }>('SELECT app_team_role($1) AS role', [src.team_id]);
 				if (hasTeamRole(rows[0]?.role, 'member')) teamId = src.team_id;
 			}
+			// Fresh node ids for the copy; settings that name a node (the EWR rule tables' sites) follow them.
+			const { model: copied, ids } = remapIds(await loadModel(db, srcId));
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id)
 				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
-				[newId, body.name, src.description, JSON.stringify(src.settings ?? {}), teamId]
+				[newId, body.name, src.description, JSON.stringify(remapSettingNodeIds(src.settings ?? {}, ids)), teamId]
 			);
-			await saveModel(db, newId, remapIds(await loadModel(db, srcId)));
+			await saveModel(db, newId, copied);
 			await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
 				 SELECT $2, kind, name, unit, start_date, "values" FROM time_series WHERE project_id = $1`,
@@ -266,7 +268,7 @@ async function requireTeamContributor(db: import('../db/tx.js').Db, teamId: stri
 	await requireTeamRole(db, teamId, 'member', 'team not found');
 }
 
-/** Fresh ids for a copied model, keeping every internal reference intact. */
+/** Fresh ids for a copied model, keeping every internal reference intact; `ids` maps old → new. */
 function remapIds(model: import('@water-management/engine').ProjectModel) {
 	const map = new Map<string, string>();
 	const id = (old: string) => {
@@ -275,9 +277,12 @@ function remapIds(model: import('@water-management/engine').ProjectModel) {
 		return n;
 	};
 	return {
-		nodes: model.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
-		crops: model.crops.map((c) => ({ ...c, id: id(c.id) })),
-		cropAreas: model.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
-		transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) }))
+		model: {
+			nodes: model.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
+			crops: model.crops.map((c) => ({ ...c, id: id(c.id) })),
+			cropAreas: model.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
+			transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) }))
+		},
+		ids: map as ReadonlyMap<string, string>
 	};
 }

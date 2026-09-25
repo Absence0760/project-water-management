@@ -55,6 +55,8 @@ import { exclusionRanges, sanitizeExclusions } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
 import { buildTopology } from './network/topology';
 import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
+import { ewrRuleTableNotes, resolveEwrRules } from './reserve/rules';
+import { assessSite, assuranceWarnings, type EwrAssuranceSite } from './reserve/assurance';
 import { NATURAL_FLOW, RUNOFF_MODELS, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	CALIBRATION_FLOW_KINDS,
@@ -77,7 +79,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.20.0';
+export const ENGINE_VERSION = '0.21.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -216,6 +218,10 @@ export function runModelWith(
 		push(id, 'ewr_charged', 'EWR shortfall charged to the farms upstream (negative)', 'm³/day', site.charged);
 		push(id, 'ewr_natural', 'EWR shortfall not caused by use: natural (negative)', 'm³/day', site.natural);
 	}
+	// The Reserve's assurance rules (engine ≥ 0.21.0, hydrologist Q6): monthly
+	// compliance at each EWR site with a rule table (./reserve/assurance.ts).
+	const ewrAssurance = assessEwrRules(settings, nodes, topo.outflow, attribution.sites, sim, simOutflow, startDate, days, warnings);
+	for (const a of ewrAssurance) push(a.report.nodeId, 'ewr_rule', 'EWR from the Reserve rule table (the month’s requirement, per day)', 'm³/day', a.requiredM3Day);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
 	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
@@ -423,6 +429,7 @@ export function runModelWith(
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
+			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
 			chirpsCorrection,
@@ -760,6 +767,65 @@ function catchmentRunoffCoefficient(
 }
 
 /**
+ * Assess each rule table at its EWR site (./reserve/assurance.ts): the outlet
+ * (simulated outflow) or a gauge (its flow). The site's natural flow is the
+ * runoff (I) of the farms upstream of it: rain-driven flow before any dam or
+ * abstraction. A table whose site is missing or isn't a gauge is skipped with
+ * a warning. Outlet first, then gauges by node id (the EWR sites' order).
+ */
+function assessEwrRules(
+	settings: ProjectSettings,
+	nodes: NetworkNode[],
+	outflow: number,
+	sites: readonly { node: number; farms: Int32Array }[],
+	sim: { nodes: readonly NodeResult[] },
+	simOutflow: Float64Array,
+	startDate: string,
+	days: number,
+	warnings: string[]
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array }[] {
+	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array }[] = [];
+	const siteOf = new Map(sites.map((s) => [s.node, s]));
+	const key = (id: string | null) => id ?? '';
+	const tables = [...settings.ewrRules].sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
+	const done = new Set<number>();
+	for (const table of tables) {
+		const node = table.siteNodeId === null ? outflow : nodes.findIndex((n) => n.id === table.siteNodeId);
+		if (node < 0) {
+			warnings.push(
+				table.siteNodeId === null
+					? 'EWR rule table for the outlet skipped: the network has no outlet'
+					: `EWR rule table skipped: its site (${table.siteNodeId}) is not in the network`
+			);
+			continue;
+		}
+		const isOutlet = node === outflow;
+		if (done.has(node)) {
+			// A table keyed by the outlet node's id besides one for "the outlet" (null).
+			warnings.push(`a second EWR rule table for "${nodes[node]!.name}" is ignored: each site has one`);
+			continue;
+		}
+		if (!isOutlet && nodes[node]!.kind !== 'gauge') {
+			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: an EWR site is the outlet or a gauge`);
+			continue;
+		}
+		const natural = new Float64Array(days);
+		for (const f of siteOf.get(node)?.farms ?? []) {
+			const r = sim.nodes[f]!.runoff;
+			for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
+		}
+		const impacted = isOutlet ? simOutflow : sim.nodes[node]!.outflow;
+		const name = nodes[node]!.name;
+		for (const note of ewrRuleTableNotes(table)) warnings.push(`EWR rule table at ${isOutlet ? `the outlet (${name})` : name}: ${note}`);
+		const a = assessSite(startDate, days, { table, nodeId: isOutlet ? null : nodes[node]!.id, name, isOutlet, natural, impacted });
+		warnings.push(...assuranceWarnings(a.report));
+		done.add(node);
+		out.push(a);
+	}
+	return out;
+}
+
+/**
  * settings.reportStart/reportEnd as day indices into the run, clipped to it.
  * null means the run's own start/end. A window that doesn't overlap the run
  * (or ends before it starts) falls back to the whole run, with a warning.
@@ -903,6 +969,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.dataQuality = resolveDataQuality(raw?.dataQuality, warnings);
 	s.zeroRainRuns = resolveZeroRain(raw?.zeroRainRuns, warnings);
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
+	s.ewrRules = resolveEwrRules(raw?.ewrRules, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {

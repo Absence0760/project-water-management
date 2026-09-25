@@ -8,6 +8,16 @@ import {
 	exclusionError,
 	exclusionKey,
 	EXCLUSIONS_MAX,
+	EWR_NATURAL_SOURCES,
+	EWR_RULE_COMPONENTS,
+	EWR_RULE_POINTS_MAX,
+	EWR_RULE_SCALE_MAX,
+	EWR_RULE_SOURCE_MAX,
+	EWR_RULE_TABLES_MAX,
+	EWR_RULE_UNITS,
+	EWR_RULE_VALUE_MAX,
+	ewrRuleListIssues,
+	ewrRuleTableIssues,
 	GR4J_PARAMS,
 	MAX_STARTS,
 	OBJECTIVES,
@@ -39,6 +49,22 @@ export function mergeSettings(stored: unknown): ProjectSettings {
 		if (isObj(v) && isObj(raw[k])) out[k] = { ...v, ...(raw[k] as Json) };
 	}
 	return out as unknown as ProjectSettings;
+}
+
+/**
+ * Stored settings for a copy whose nodes got fresh ids (POST /projects/:id/copy,
+ * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) follows its
+ * node. A site not in the map (already dangling) is left as it was, so the
+ * copy's runs warn about it as the original's do. Anything else is unchanged.
+ */
+export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, string>): Json {
+	const s: Json = isObj(stored) ? { ...stored } : {};
+	if (Array.isArray(s.ewrRules)) {
+		s.ewrRules = s.ewrRules.map((t: unknown) =>
+			isObj(t) && typeof t.siteNodeId === 'string' && ids.has(t.siteNodeId) ? { ...t, siteNodeId: ids.get(t.siteNodeId) } : t
+		);
+	}
+	return s;
 }
 
 /** Settings replaced whole by a patch, never merged: a fit record describes one fit. */
@@ -107,6 +133,37 @@ const Wr2012CalibrationPenalty = z
 	.strict()
 	.superRefine((p, ctx) => {
 		for (const i of wr2012PenaltyIssues(p)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
+	});
+/**
+ * A Reserve rule table for one EWR site (engine reserve/rules.ts, model.md
+ * §2.9c): the shape here, then the engine's own checks (rising % points, 12
+ * rows × points, natural flows when they are the source), so the form, the
+ * API and the run agree on what is usable. siteNodeId null = the outlet; that
+ * it names a gauge is checked by the run, which knows the network.
+ */
+const ruleGrid = z.array(z.array(z.number().finite().min(0).max(EWR_RULE_VALUE_MAX)).max(EWR_RULE_POINTS_MAX)).length(12);
+const EwrRuleTable = z
+	.object({
+		siteNodeId: z.string().min(1).max(100).nullable(),
+		source: z.string().trim().min(1).max(EWR_RULE_SOURCE_MAX),
+		component: z.enum(EWR_RULE_COMPONENTS),
+		unit: z.enum(EWR_RULE_UNITS),
+		points: z.array(z.number().finite()).max(EWR_RULE_POINTS_MAX),
+		ewr: ruleGrid,
+		naturalSource: z.enum(EWR_NATURAL_SOURCES),
+		natural: ruleGrid.nullable(),
+		scale: z.number().finite().gt(0).max(EWR_RULE_SCALE_MAX)
+	})
+	.strict()
+	.superRefine((t, ctx) => {
+		for (const i of ewrRuleTableIssues(t)) ctx.addIssue({ code: 'custom', path: [i.field], message: i.message });
+	});
+const EwrRuleList = z
+	.array(EwrRuleTable)
+	.max(EWR_RULE_TABLES_MAX)
+	.superRefine((list, ctx) => {
+		const err = ewrRuleListIssues(list);
+		if (err) ctx.addIssue({ code: 'custom', message: err });
 	});
 const bounded = (key: string) => {
 	const p = GR4J_PARAMS.find((x) => x.key === key)!;
@@ -300,6 +357,8 @@ export const SettingsPatch = z
 			.strict(),
 		calibration: z.record(z.string(), z.unknown()),
 		ewrPragmaticM3PerDay: monthly,
+		// Reserve rule tables per EWR site (engine ≥ 0.21.0); the list is replaced whole.
+		ewrRules: EwrRuleList,
 		simulationStart: isoDate.nullable(),
 		simulationEnd: isoDate.nullable(),
 		reportStart: isoDate.nullable(),

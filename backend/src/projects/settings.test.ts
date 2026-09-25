@@ -1,6 +1,6 @@
 import { defaultProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
+import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -508,5 +508,72 @@ describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
 
 	it('defaults to 0.75 × A-pan for a project that never set it', () => {
 		expect(mergeSettings({}).lakeEvapFactor).toBe(0.75);
+	});
+});
+
+describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
+	const issues = (ewrRules: unknown) => {
+		const r = SettingsPatch.safeParse({ ewrRules });
+		return r.success ? [] : r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+	};
+	// Synthetic: round numbers, EWR half the natural flow.
+	const table = (over: Record<string, unknown> = {}) => ({
+		siteNodeId: null,
+		source: 'Synthetic table',
+		component: 'total',
+		unit: 'mcm',
+		points: [10, 50, 90],
+		ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+		naturalSource: 'table',
+		natural: Array.from({ length: 12 }, () => [3, 2, 1]),
+		scale: 1,
+		...over
+	});
+
+	it('accepts none, a table at the outlet and one at a gauge, from the run or the table', () => {
+		expect(issues(defaultProjectSettings().ewrRules)).toEqual([]);
+		expect(issues([table(), table({ siteNodeId: 'g1', naturalSource: 'run', natural: null, unit: 'm3s', component: 'lowFlow', scale: 0.25 })])).toEqual([]);
+	});
+
+	it('runs the engine checks: source, rising points, the grid shape, natural flows when they are the source', () => {
+		expect(issues([table({ source: ' ' })])).toContain('ewrRules.0.source: Say where the table comes from (Reserve determination, gazette notice, table).');
+		expect(issues([table({ points: [10, 90, 50] })])).toEqual(['ewrRules.0.points: The % points must rise from left to right, each once.']);
+		expect(issues([table({ ewr: Array.from({ length: 12 }, () => [1, 0.5]) })])).toEqual(['ewrRules.0.ewr: Each EWR row needs one value per % point (Oct has 2 of 3).']);
+		expect(issues([table({ natural: null })])).toEqual(['ewrRules.0.natural: Enter the natural flow at each point, or find the percentile from the run.']);
+		expect(issues([table({ ewr: Array.from({ length: 11 }, () => [1, 1, 1]) })])[0]).toMatch(/^ewrRules\.0\.ewr: /);
+	});
+
+	it('rejects negative or huge values, a bad scale or unit, unknown keys, two tables for one site and too many', () => {
+		const neg = Array.from({ length: 12 }, (_, m) => (m === 5 ? [1, -1, 0] : [1, 1, 0]));
+		expect(issues([table({ ewr: neg })]).length).toBeGreaterThan(0);
+		expect(issues([table({ ewr: Array.from({ length: 12 }, () => [2e6, 1, 0]) })]).length).toBeGreaterThan(0);
+		expect(issues([table({ scale: 0 })]).length).toBeGreaterThan(0);
+		expect(issues([table({ unit: 'l/s' })]).length).toBeGreaterThan(0);
+		expect(issues([table({ extra: 1 })]).length).toBeGreaterThan(0);
+		expect(issues([table(), table()])).toEqual(['ewrRules: Each EWR site can have one rule table.']);
+		expect(issues(Array.from({ length: 21 }, (_, i) => table({ siteNodeId: `g${i}` }))).length).toBeGreaterThan(0);
+		expect(issues({ siteNodeId: null }).length).toBeGreaterThan(0);
+	});
+
+	it('defaults to none for settings stored before it, and a patch replaces the whole list', () => {
+		expect(mergeSettings({}).ewrRules).toEqual([]);
+		const stored = { ewrRules: [table(), table({ siteNodeId: 'g1' })] };
+		expect(patchSettings(stored, { ewrRules: [table({ siteNodeId: 'g2' })] }).ewrRules).toEqual([table({ siteNodeId: 'g2' })]);
+		expect(patchSettings(stored, { ewrRules: [] }).ewrRules).toEqual([]);
+	});
+});
+
+describe('remapSettingNodeIds (project copy)', () => {
+	it('moves each rule table to its node’s new id, keeps the outlet and unknown sites, and changes nothing else', () => {
+		const ids = new Map([
+			['g1', 'new-g1'],
+			['f1', 'new-f1']
+		]);
+		const stored = { effectiveRainFraction: 0.5, ewrRules: [{ siteNodeId: null, source: 'a' }, { siteNodeId: 'g1', source: 'b' }, { siteNodeId: 'gone', source: 'c' }] };
+		const out = remapSettingNodeIds(stored, ids);
+		expect(out).toEqual({ effectiveRainFraction: 0.5, ewrRules: [{ siteNodeId: null, source: 'a' }, { siteNodeId: 'new-g1', source: 'b' }, { siteNodeId: 'gone', source: 'c' }] });
+		expect(stored.ewrRules[1]!.siteNodeId).toBe('g1');
+		expect(remapSettingNodeIds({ apanMm: [1] }, ids)).toEqual({ apanMm: [1] });
+		expect(remapSettingNodeIds(null, ids)).toEqual({});
 	});
 });

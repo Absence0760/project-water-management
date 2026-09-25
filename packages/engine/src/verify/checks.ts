@@ -18,7 +18,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 
 /**
  * Daily balance identities and bounds, every node, every day:
- * - every value finite (observed flow may be NaN on missing days);
+ * - every value finite (observed flow may be NaN on missing days, the Reserve
+ *   rule requirement outside complete months);
  * - routed inflow = Σ upstream outflow (gauges pass it through);
  * - farm balance H + I + J + rain on dam + Q[t−1] = U + G − T + evaporation
  *   + Q (T = return flow β·(1 − e)·G, audit N1; rain on the dam and
@@ -29,7 +30,9 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * - the catchment balance closes over the run: opening storage + runoff =
  *   outflow + consumptive use + closing storage.
  */
-const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor']);
+// ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
+// month at either end of the run is not assessed against the Reserve rules.
+const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);

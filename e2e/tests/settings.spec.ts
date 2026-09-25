@@ -82,6 +82,7 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'WR2012 check',
 		'Flow share',
 		'EWR',
+		'Reserve rules',
 		'Simulation period',
 		'Data quality'
 	]);
