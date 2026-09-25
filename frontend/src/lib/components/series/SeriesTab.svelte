@@ -177,11 +177,13 @@
 	// The series a run reads for a kind: the first of that kind by name.
 	const first = (k: string) => [...list].filter((s) => s.kind === k).sort((a, b) => a.name.localeCompare(b.name))[0];
 
-	// Days a run treats as missing (CR-20), shaded on the catchment rain a run reads: the first by name.
+	// Days a run treats as missing (CR-20) or spreads a multi-day accumulation over (B4), shaded on the
+	// catchment rain a run reads: the first by name. Accumulations are judged against the CHIRPS a run reads.
 	const shading = $derived.by(() => {
 		if (!viewing || viewing.kind !== 'rain_catchment_mm' || viewing.id !== first('rain_catchment_mm')?.id) return null;
 		const v = values[viewing.id];
-		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, [])) : null;
+		const h = first('rain_chirps_mm');
+		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly') : null;
 	});
 
 	// Gauge vs logger, when both records exist.

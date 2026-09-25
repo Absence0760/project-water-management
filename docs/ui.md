@@ -252,6 +252,10 @@ Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
 naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)).
+It also tints the multi-day accumulation windows a run will spread by CHIRPS
+(engine `rainAccumulations`, judged against the first CHIRPS series by name
+and the CHIRPS bias setting, as a run does), and the caption counts them and
+their days ([model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations)).
 `LineChart`'s `shade` prop draws the bands.
 When both catchment rain and CHIRPS are loaded, a **Double mass: catchment
 rain vs CHIRPS** panel (`series/DoubleMassPanel.svelte`, data from
@@ -396,7 +400,15 @@ value such as 108700.
   same checks that block Save. The Keep dry hint says that kept-dry days
   count in the CHIRPS factor fit, filled runs are left out of it, and a run
   warns and leaves the year out when CHIRPS reads a lot of rain over a
-  kept-dry run (engine ≥ 0.18.0, model.md §2.4b).
+  kept-dry run (engine ≥ 0.18.0, model.md §2.4b). Then **Multi-day
+  accumulations** (engine ≥ 0.20.0, same component,
+  [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations)): an
+  **Accumulated readings** picker ("Spread over the days they cover", the
+  default, or "Run as recorded (one day)"), then **Keep as recorded** (only
+  when spreading: readings confirmed as one day's rain) and **Also spread**
+  (windows listed by hand, ending on the reading day), on the same period
+  editor. The help entry *Multi-day rain accumulations* explains the
+  detection rule.
 - **Calibration record** (`#set-record`): the calibration window and flow
   series (`calibration/CalibrationWindowFields.svelte`), and the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):

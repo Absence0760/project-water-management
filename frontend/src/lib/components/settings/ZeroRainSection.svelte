@@ -1,14 +1,16 @@
 <!--
 	Settings for settings.zeroRainRuns (engine ≥ 0.15.0, CR-20, docs/model.md
 	§2.4c): what a run does with the zero-rain runs the Data tab flags, plus
-	keep-dry and missing periods. `error` is set while either list is invalid,
-	so the parent form can block saving.
+	keep-dry and missing periods; and (engine ≥ 0.20.0, audit B4, §2.4d) what
+	it does with multi-day accumulations, plus readings kept as recorded and
+	windows listed by hand. `error` is set while any list is invalid, so the
+	parent form can block saving.
 -->
 <script lang="ts">
 	import type { ZeroRainSettings } from '@water-management/engine';
 	import PeriodList from '$lib/components/common/PeriodList.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { ZERO_RAIN_OPTIONS } from './rain';
+	import { ACCUMULATION_OPTIONS, ZERO_RAIN_OPTIONS } from './rain';
 
 	let {
 		value = $bindable(),
@@ -22,10 +24,13 @@
 
 	let keepDryError = $state<string | null>(null);
 	let missingError = $state<string | null>(null);
+	let keepReadingsError = $state<string | null>(null);
+	let addError = $state<string | null>(null);
 	$effect(() => {
-		error = keepDryError ?? missingError;
+		error = keepDryError ?? missingError ?? keepReadingsError ?? addError;
 	});
 	const option = $derived(ZERO_RAIN_OPTIONS.find((o) => o.value === value.mode));
+	const accOption = $derived(ACCUMULATION_OPTIONS.find((o) => o.value === value.accumulationMode));
 </script>
 
 <div class="zero-rain" data-testid="zero-rain-settings">
@@ -64,6 +69,43 @@
 		addRangeLabel="Add a date range"
 		placeholder="e.g. logger fault; values copied from a neighbour"
 		noun="missing-rain period"
+	/>
+
+	<h3 class="sub" id="st-acc-h">Multi-day accumulations</h3>
+	<div class="field mode" data-testid="accumulation-settings">
+		<span class="lbl"><label for="st-acc">Accumulated readings</label><HelpTip key="rain-accumulations" /></span>
+		<select id="st-acc" disabled={readonly} bind:value={value.accumulationMode} aria-describedby="st-acc-h2">
+			{#each ACCUMULATION_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+		</select>
+		<span class="hint" id="st-acc-h2">{accOption?.help}</span>
+	</div>
+	{#if value.accumulationMode === 'spread'}
+		<PeriodList
+			bind:list={value.keepReadings}
+			bind:error={keepReadingsError}
+			{readonly}
+			legend="Keep as recorded"
+			helpKey="rain-accumulations"
+			hint="Readings a run flags as accumulations that you know were one day's rain, such as a thunderstorm CHIRPS missed. A flagged reading whose day falls inside one of these periods stays on its day, and its days count in the CHIRPS factor fit."
+			empty="None: every flagged accumulation is spread."
+			addYearLabel="Keep a water year's readings"
+			addRangeLabel="Keep a date range's readings"
+			placeholder="e.g. thunderstorm, farm records agree"
+			noun="keep-reading period"
+		/>
+	{/if}
+	<PeriodList
+		bind:list={value.addAccumulations}
+		bind:error={addError}
+		{readonly}
+		legend="Also spread"
+		helpKey="rain-accumulations"
+		hint="Accumulations the check misses, listed by hand: the period's last day is the reading day, and the catchment rain recorded over the period is spread over it by CHIRPS. A period listed as missing above wins over one listed here."
+		empty="None."
+		addYearLabel="Add a water year"
+		addRangeLabel="Add a date range"
+		placeholder="e.g. station log: gauge read weekly in 1985"
+		noun="listed accumulation"
 	/>
 </div>
 
