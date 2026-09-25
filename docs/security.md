@@ -18,6 +18,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   `/api/*`, so the cookie is first-party. Together with `SameSite=Lax`, this
   blocks cross-site POSTs from carrying the session. The API accepts JSON bodies
   only.
+- **CSRF middleware.** Hono's `csrf()` (`backend/src/app.ts`) additionally
+  rejects cross-origin, non-safe requests whose `Origin` isn't in
+  `ALLOWED_ORIGINS` — a second layer alongside `SameSite=Lax` against the
+  cross-site form posts a browser can still make without triggering CORS.
 - **Revocation:** every request re-reads `app_user.sessions_revoked_at`;
   a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
   as is a session for an account that no longer exists. A password reset sets
@@ -130,8 +134,9 @@ In short:
   are parameterised (`pg`), and there is no string-built SQL.
 - Model documents are validated as a whole: references resolve inside the
   document, the network is a tree with one outflow, and names are unique.
-- Series are capped at 60 000 values. The Lambda's 6 MB payload limit bounds
-  request size in production.
+- Series are capped at 60 000 values. The backend itself caps every request
+  body at 4 MB (Hono `bodyLimit`, `backend/src/app.ts`, `413` past it),
+  tighter than and ahead of Lambda's 6 MB payload limit in production.
 - Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
   server never parses `.xlsm` files and no macro content is ever executed.
   The later in-browser importer parses in the user's browser with SheetJS from
@@ -222,8 +227,9 @@ readable by anyone. The rules:
 - **Lambda Function URL**: the backend rejects any request without the
   CloudFront shared-secret header, so the WAF and CloudFront can't be bypassed
   by calling the Function URL directly.
-- **WAF:** a per-IP rate limit on CloudFront, covering both the site and
-  `/api/*`.
+- **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+  limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
+  default 1000 per 5 minutes) covering the whole site and `/api/*`.
 - **Response headers** (CloudFront, both behaviours): CSP (`default-src
   'self'`, `object-src 'none'`, `frame-ancestors 'none'`, no third-party
   origins; `default-src 'none'` on `/api/*`), HSTS 2 years, nosniff,
@@ -251,8 +257,6 @@ readable by anyone. The rules:
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
-- No rate limiting specifically on `/auth/register` beyond the WAF's per-IP
-  rule. (Phase 7)
 - No password change while signed in (use "Forgot password"). (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
