@@ -1160,7 +1160,7 @@ role and not before it.
         `sourceWorkbooks.test.ts`) finds no difference. The import worker
         101 → 25 KB gzip (the bundle guard's spreadsheet-worker ceiling
         107 → 95 KB, now the export worker's).
-  - [ ] **Strings SheetJS and openpyxl decode differently.** The reader keeps
+  - [ ] **Strings SheetJS and openpyxl decode differently** (issue #22). The reader keeps
         SheetJS's string decoding, so the import reads what it read before.
         Two cases differ from openpyxl, and so from the Python importer the
         port must match: Excel's `_xHHHH_` escapes (SheetJS turns
@@ -1183,7 +1183,7 @@ role and not before it.
         through `GET /projects/:id/import-report` and on the Overview's
         Import record, both lists collapsed at first; not dismissible, since
         it is the audit trail. Not in `export.json` (api.md § Import report).
-  - [ ] **Measured in a real browser.** The memory figures above are Node;
+  - [ ] **Measured in a real browser** (issue #23). The memory figures above are Node;
         no one has profiled the client workbook's import in Chrome or Safari,
         or on a phone (the e2e tests run the streaming reader in Chromium on
         the synthetic workbook only). Trigger: a user reports the import
