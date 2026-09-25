@@ -1,7 +1,7 @@
 import { FARM_COLUMNS, type RunVerification, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import type { RunDay } from '$lib/api';
-import { BALANCE_COLUMNS, balanceTableRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+import type { RunCatchmentDay, RunDay } from '$lib/api';
+import { BALANCE_COLUMNS, balanceTableRows, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 const check = (passed: boolean) => ({ id: 'balance' as const, label: 'x', passed, detail: passed ? null : 'broken' });
 
@@ -174,5 +174,97 @@ describe('day trace', () => {
 		const old = farmDay();
 		old.columns = old.columns.filter((c) => c.key !== 'return_flow');
 		expect(dayClosure(old)).toBeNull();
+	});
+});
+
+// A GR4J day on 2 km² that closes: 100 mm stored the day before, 12 mm rain,
+// −0.5 mm exchange, 3 mm AET, 4 mm flow (8 000 m³/day), 104.5 mm after.
+const gr4jDay = (over: Partial<RunCatchmentDay> = {}): RunCatchmentDay => ({
+	date: '2021-01-02',
+	nodeId: null,
+	name: 'Catchment',
+	kind: 'catchment',
+	runoffModel: 'gr4j',
+	areaKm2: 2,
+	params: { x1: 350, x2: -1, x3: 90, x4: 1.7, warmupDays: 365 },
+	previousStorageMm: 100,
+	previousStores: { production_store: 80, routing_store: 15, uh_store: 5 },
+	columns: [
+		['aet', 3],
+		['exchange', -0.5],
+		['natural_flow', 8000],
+		['pet', 4],
+		['production_store', 85],
+		['rain_used', 12],
+		['rain_chirps', 11],
+		['routing_store', 14.5],
+		['uh_store', 5]
+	].map(([key, value]) => ({ key: key as string, label: key as string, unit: key === 'natural_flow' ? 'm³/day' : 'mm', value: value as number })),
+	...over
+});
+
+describe('catchmentTraceRows', () => {
+	it('lists the GR4J day in model order, each store the day before above it, and the flow as mm', () => {
+		const rows = catchmentTraceRows(gr4jDay());
+		expect(rows.map((r) => [r.key, r.letter])).toEqual([
+			['previous_storage', 'Σ[t−1]'],
+			['rain_used', 'P'],
+			['pet', 'E'],
+			['aet', 'AET'],
+			['previous_production_store', 'S[t−1]'],
+			['production_store', 'S'],
+			['previous_uh_store', 'UH[t−1]'],
+			['uh_store', 'UH'],
+			['exchange', 'F'],
+			['previous_routing_store', 'R[t−1]'],
+			['routing_store', 'R'],
+			['natural_flow', 'Q'],
+			['natural_flow_mm', 'Q (mm)']
+		]);
+		const v = (k: string) => rows.find((r) => r.key === k)!.value;
+		expect(v('previous_production_store')).toBe(80);
+		expect(v('natural_flow_mm')).toBe(4);
+		// Series outside the catalogue (CHIRPS rain) are not part of the trace.
+		expect(rows.some((r) => r.key === 'rain_chirps')).toBe(false);
+		expect(rows.find((r) => r.key === 'aet')!.formula).toContain('MIN(P, E)');
+	});
+
+	it('shows the exchange as 0 when X2 = 0 left no series, and each store as unknown on the first day', () => {
+		const day = gr4jDay({ previousStores: { production_store: null, routing_store: null, uh_store: null } });
+		day.columns = day.columns.filter((c) => c.key !== 'exchange');
+		const rows = catchmentTraceRows(day);
+		expect(rows.find((r) => r.key === 'exchange')!.value).toBe(0);
+		expect(rows.find((r) => r.key === 'previous_routing_store')!.value).toBeNull();
+		expect(rows[0]).toMatchObject({ key: 'previous_storage', value: 100 });
+	});
+
+	it('lists the [Flow data] columns of a legacy run, with no stores', () => {
+		const day = gr4jDay({ runoffModel: 'legacy', areaKm2: null, params: null, previousStorageMm: null, previousStores: null });
+		day.columns = ['base_flow', 'is_summer', 'natural_flow', 'rain_flow', 'rain_used', 'resultant_flow', 'response_flow'].map((key) => ({ key, label: key, unit: null, value: 1 }));
+		expect(catchmentTraceRows(day).map((r) => r.letter)).toEqual(['R', 'N', 'V', 'S', 'X', 'Y', 'AB']);
+	});
+});
+
+describe('catchmentClosure', () => {
+	it('closes the day: before + rain + exchange − AET − flow − after', () => {
+		const c = catchmentClosure(gr4jDay())!;
+		expect(c).toMatchObject({ before: 100, rain: 12, exchange: -0.5, evaporation: 3, flow: 4, after: 104.5 });
+		expect(Math.abs(c.residual)).toBeLessThan(1e-12);
+	});
+
+	it('shows a residual when the numbers do not close', () => {
+		const day = gr4jDay();
+		day.columns.find((c) => c.key === 'routing_store')!.value = 16.5;
+		expect(catchmentClosure(day)!.residual).toBeCloseTo(-2, 12);
+	});
+
+	it('counts a missing exchange as 0, and has no closure for a legacy run or a missing store', () => {
+		const day = gr4jDay();
+		day.columns = day.columns.filter((c) => c.key !== 'exchange');
+		expect(catchmentClosure(day)!.residual).toBeCloseTo(0.5, 12);
+		expect(catchmentClosure(gr4jDay({ runoffModel: 'legacy', areaKm2: null, previousStorageMm: null, previousStores: null }))).toBeNull();
+		const partial = gr4jDay();
+		partial.columns = partial.columns.filter((c) => c.key !== 'uh_store');
+		expect(catchmentClosure(partial)).toBeNull();
 	});
 });
