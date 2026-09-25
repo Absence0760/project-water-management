@@ -597,7 +597,8 @@ the reports):
             hydrologist asks to compare the checks between runs (for
             example before and after a refit).
 - [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
-      hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
+      hydrologist asks for it. Phase 10 (remove legacy) is issue #16, due by
+      2026-11-30 (sign-off assumed 2026-09-25, issue #4 closed).
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
