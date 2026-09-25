@@ -883,7 +883,7 @@ D_s     = MAX(Z_s − U_s, 0)                         the site's shortfall (nois
 F_s     = the farms whose outflow reaches s (the site's own node when it is a farm)
 e_f,s   = H + I + J_int − U                         net impact of farm f ∈ F_s
           J_int counts only the transfers with BOTH ends in F_s
-e⁺      = MAX(e, 0)                                 (noise below 1e-12 of the farm's volumes = 0)
+e⁺      = MAX(e, 0)                                 (noise below 1e-12 of the balance's volumes = 0: flows, dam storage, upstream flows; storage and upstream from 0.19.1)
 E_s     = Σ_{f ∈ F_s} e⁺_f,s
 D*_s    = MIN(D_s, E_s)                             charged to farms   (series ewr_charged = −D*)
 N_s     = D_s − D*_s                                natural            (series ewr_natural = −N)

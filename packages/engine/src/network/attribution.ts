@@ -43,6 +43,8 @@ export interface AttributionInput {
 	runoff: readonly ArrayLike<number>[];
 	outflow: readonly ArrayLike<number>[];
 	supplied: readonly ArrayLike<number>[];
+	/** Per node, daily: Q dam storage at the end of the day (only sizes float noise; omitted = no dams). */
+	storage?: readonly ArrayLike<number>[];
 	/** Per node: consumptive share of what is supplied, k = 1 − β(1 − e), so c = G·k = G − T (audit N1). */
 	consumptivePerSupplied: ArrayLike<number>;
 	/** Each transfer rule's daily volume. */
@@ -105,6 +107,9 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 	const siteOut: AttributionSiteResult[] = sites.map(({ site, farms }) => ({ node: site.node, farms, charged: new Float64Array(days), natural: new Float64Array(days) }));
 	const perSite = opts.perSite ? sites.map(() => kind.map(() => new Float64Array(days))) : undefined;
 
+	const storage = input.storage;
+	/** A dam's storage today and yesterday: the scale its spill and storage gain are computed at. */
+	const dam = (i: number, t: number) => (storage ? Math.max(Math.abs(storage[i]![t]!), t > 0 ? Math.abs(storage[i]![t - 1]!) : 0) : 0);
 	const jInt = new Float64Array(n);
 	const ePlus = new Float64Array(n);
 	const eRaw = new Float64Array(n);
@@ -129,10 +134,21 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 				const inW = inflow[f]![t]! + runoff[f]![t]! + jInt[f]!;
 				const U = outflow[f]![t]!;
 				const e = inW - U;
-				// A difference of volumes that cancels exactly in real arithmetic is float noise, not an impact.
+				// A difference of volumes that cancels exactly in real arithmetic is float noise, not an
+				// impact. Judged against every volume in the farm's balance, its dam storage included, and
+				// those of the nodes draining into it (engine 0.19.1). Otherwise a full dam spilling its
+				// runoff (e = I − spill, a cancellation at the scale of the storage), or an empty farm below
+				// one whose outflow carries a 1e-13 residue, passes the test on flows alone and is charged
+				// for a day in one node order and not in another.
 				const s = Math.max(Math.abs(inflow[f]![t]!) + Math.abs(runoff[f]![t]!) + Math.abs(jInt[f]!), Math.abs(U));
+				let noise = Math.max(s, dam(f, t));
+				const ups = upstream[f]!;
+				for (let u = 0; u < ups.length; u++) {
+					const j = ups[u]!;
+					noise = Math.max(noise, Math.abs(inflow[j]![t]!) + Math.abs(runoff[j]![t]!), Math.abs(outflow[j]![t]!), dam(j, t));
+				}
 				eRaw[f] = e;
-				ePlus[f] = e > SHORTFALL_NOISE * s ? e : 0;
+				ePlus[f] = e > SHORTFALL_NOISE * noise ? e : 0;
 				E += ePlus[f]!;
 				scale = Math.max(scale, s);
 			}

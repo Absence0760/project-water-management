@@ -67,7 +67,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.19.0';
+export const ENGINE_VERSION = '0.19.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -191,6 +191,7 @@ export function runModelWith(
 		runoff: sim.nodes.map((r) => r.runoff),
 		outflow: sim.nodes.map((r) => r.outflow),
 		supplied: sim.nodes.map((r) => r.supplied),
+		storage: sim.nodes.map((r) => r.storage),
 		consumptivePerSupplied: plan.nodes.map((n) => 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency)),
 		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
 		sites: [

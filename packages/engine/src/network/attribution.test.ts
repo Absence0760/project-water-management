@@ -94,6 +94,28 @@ describe('attributeEwrShortfall — Q17 net-impact pro rata at EWR sites', () =>
 		expect(Array.from(out.binding[0]!)).toEqual([-1]);
 	});
 
+	it('a float residue at the scale of a dam or an upstream flow is not an impact (engine 0.19.1)', () => {
+		// A full dam of 253 927 m³ spills its runoff: e = I − spill is exact 0 in real arithmetic,
+		// but the spill is computed at the storage's scale, so e comes out ±1e-11 depending on
+		// summation order. Judged on flows alone (12.5 m³) that passes the noise test.
+		const I = 12.49676966671541;
+		const spill = I - 1.4550138871527452e-11;
+		// Farm B beside it takes 10 m³ that day, so the site's shortfall is charged to someone.
+		const full = build({ kind: ['farm', 'farm', 'gauge'], down: [2, 2, -1], I: [[I], [50], [0]], U: [[spill], [40], [spill + 40]], sites: [[2, [-100]]] });
+		const withDam = attributeEwrShortfall({ ...full, storage: [[253927], [0], [0]] });
+		expect(withDam.charge[0]![0]).toBe(0);
+		expect(withDam.charge[1]![0]).toBeCloseTo(-10, 9);
+		// Without the storage it would be charged: the storage is what sizes the noise here.
+		expect(attributeEwrShortfall(full).charge[0]![0]).toBeLessThan(0);
+
+		// An empty farm B below a farm A whose outflow carries a 1e-13 residue: B's own volumes
+		// are all noise, so they can't size it; A's (1 000 m³ in) do.
+		const residue = build({ kind: ['farm', 'farm', 'gauge'], down: [1, 2, -1], I: [[1000], [0], [0]], U: [[1.1368683772161603e-13], [0], [0]], sites: [[2, [-50]]] });
+		expect(attributeEwrShortfall(residue).charge[1]![0]).toBe(0);
+		// A real impact on the same day is still charged.
+		expect(attributeEwrShortfall(residue).charge[0]![0]).toBeCloseTo(-50, 9);
+	});
+
 	it('with no impact at all the whole shortfall is natural (a drought no one caused)', () => {
 		const out = attributeEwrShortfall(build({ kind: ['farm', 'gauge'], down: [1, -1], I: [[10], [0]], U: [[10], [10]], sites: [[1, [-40]]] }));
 		expect(out.charge[0]![0]).toBe(0);

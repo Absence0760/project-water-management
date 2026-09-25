@@ -669,15 +669,23 @@ the suggested order (the IDs carry the detail):
       3-failure cap per model (legacy scanned seeds 1–8984, GR4J 1–17277),
       so later seeds are unscanned. Repro any seed with
       `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
-- [ ] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
-      9681).** The F8 class of float noise at a new site:
-      `network/attribution.ts`'s per-farm charge
-      `A = min(D* × e⁺_f / E, e⁺_f)` leaves a residual of about −1e-13 whose
-      sign depends on node order. Flooring `A` against `SHORTFALL_NOISE`
-      fixed the seeds but broke `checkEwrAttribution` (Σ charges < D*), so
-      it was reverted. Durable fix: accumulate `E` (and the charges) in a
-      canonical order (by node id), as F8 did, with the three seeds as
-      regression tests; `ENGINE_VERSION` 0.19.1 if any output moves.
+- [x] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
+      9681).** Fixed in engine 0.19.1 (2026-09-25). The cause was not the
+      summing order of E but which farms counted as having an impact at all.
+      A farm's net impact e was called noise only against its own *flows*, and
+      two cases slipped through: a full dam spilling its runoff (e = I − spill
+      cancels at the scale of the storage, ±1e-11, seed 4014), and an empty farm
+      below one whose outflow carried a 1e-13 residue (seed 8984). Either came
+      out positive in one node order and 0 in the other, so the farm was charged
+      for a day. `network/attribution.ts` now sizes the noise by every volume in
+      the balance: the farm's flows, its dam storage (today and yesterday) and
+      the flows and storage of the nodes draining into it. The threshold is
+      applied before E is summed, so Σ charges = D* still holds. Two scales
+      that were tried and rejected: every upstream farm's flows, and the
+      site's shortfall D. Both are too coarse and zeroed real impacts on fuzz
+      networks. Tests: `attribution.test.ts` › "a float residue at the scale
+      of a dam or an upstream flow is not an impact", `run.invariants.test.ts`
+      › "engine 0.19.1: …" pins the three seeds.
 - [ ] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
       7686, 17277).** Not the room-cap bug: rain captured on a farm dam's
       own surface (steep area–storage curve, exponent up to 3) and farms

@@ -106,6 +106,18 @@ describe('engine invariants on random networks', () => {
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 	});
+
+	it('engine 0.19.1: a float residue is not a farm\'s EWR impact, in any node order (seeds 4014, 8984, 9681)', () => {
+		// A full dam spilling its runoff (e = I − spill, ±1e-11 at the storage's scale), and an
+		// empty farm below one whose outflow carried a 1e-13 m³ residue, each passed a noise
+		// test sized by their flows alone and were charged for a day in one node order and not
+		// the other, so "days EWR not met" moved by one. Impacts are now judged against every
+		// volume in the balance, dam storage and upstream flows included (network/attribution.ts).
+		for (const [seed, opts] of [[4014, {}], [8984, {}], [9681, { runoffModel: 'gr4j' as const }]] as const) {
+			const input = randomInput(seed, opts);
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------
