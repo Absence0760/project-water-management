@@ -37,7 +37,7 @@ sides share.
   http://localhost:8026, `pnpm dev:mail:up`).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
-  bound by RLS. The `water_test` database is for DB tests.
+  bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored.
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda

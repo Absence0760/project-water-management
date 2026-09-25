@@ -43,7 +43,7 @@
 		"check:bundle": "node scripts/guards/check_web_bundle_budget.mjs",
 		"check:compliance": "node scripts/guards/check_compliance_drift.mjs",
 		"check:terms": "node scripts/guards/check_client_terms.mjs",
-		"//-- test --": "test = unit tests everywhere (no DB, no wall-clock assertions). test:guards = node:test suites for the CI/release guards in scripts/. test:backend:db needs dev:db:up; it migrates and uses the water_test database. test:engine:perf / test:backend:perf are separate performance-budget targets (median of several runs; not part of `test` because a busy machine or parallel workspaces would make a hard wall-clock ceiling flake — run them alone).",
+		"//-- test --": "test = unit tests everywhere (no DB, no wall-clock assertions). test:guards = node:test suites for the CI/release guards in scripts/. test:backend:db needs dev:db:up; it migrates and uses the water_test database (water_test_w<n> in a git worktree, backend/src/__tests__/test-db.ts). test:engine:perf / test:backend:perf are separate performance-budget targets (median of several runs; not part of `test` because a busy machine or parallel workspaces would make a hard wall-clock ceiling flake — run them alone).",
 		"test": "pnpm -r run test",
 		"test:engine": "pnpm -C packages/engine test",
 		"test:engine:perf": "pnpm -C packages/engine test:perf",
