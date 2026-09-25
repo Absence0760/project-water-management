@@ -819,14 +819,19 @@ or French locale, "1,234.56" in a US one), so the workbook doesn't prejudge
 D10, the app's own thousands separator, which is still open. The CSVs stay
 unformatted and ungrouped (machine-readable).
 
-The file is SheetJS output (CE 0.20.3, its mini build): SheetJS writes the
-workbook, and a daily sheet's rows are streamed into the sheet XML SheetJS
-wrote for a stub of it, in SheetJS's own cell markup, then zipped by SheetJS
-(a whole client-size run as SheetJS cell objects needs ~4 GB, past a browser
-tab). A unit test pins that a streamed sheet is byte-for-byte the sheet
-SheetJS writes from the same cells. For scale, a ~45-year, 13-node run builds
-in ~3 s and is a ~100 MB file (SheetJS's fixed-Huffman deflate;
-[followups.md](./followups.md) has the native-compression follow-up).
+The parts are SheetJS output (CE 0.20.3, its mini build): SheetJS writes the
+workbook uncompressed, and a daily sheet's rows are streamed into the sheet
+XML SheetJS wrote for a stub of it, in SheetJS's own cell markup (a whole
+client-size run as SheetJS cell objects needs ~4 GB, past a browser tab). A
+unit test pins that a streamed sheet is byte-for-byte the sheet SheetJS
+writes from the same cells. The zip container is written by
+`lib/spreadsheet/export/zip.ts`: every part deflated with the platform's
+`CompressionStream('deflate-raw')` (real zlib deflate), plain PKZIP headers
+and central directory, no zip64. SheetJS's own browser deflate is
+fixed-Huffman and made files ~2.5 times larger. For scale, a ~45-year,
+13-node run builds in ~4.6 s and is a ~41 MB file (100.8 MB with SheetJS's
+zip); a unit test holds a synthetic 10-year, 3-farm run under 4.6 MB (it
+measures 4.0).
 
 **Project document** (`export.json`) is the shape
 [`POST /projects/import`](#import-a-project-file) and `pnpm import:project`

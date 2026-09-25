@@ -183,6 +183,16 @@
 //             workbook import (WP-1.31) will share the 95 KB ceiling; it
 //             reads .xlsm, so it may need the full build: measure it then.
 //             Headroom ~6 KB total, ~8 KB on the spreadsheet worker.
+// 2026-09-25  total 591 → 597 KB; spreadsheet worker 87 → 88 KB (ceiling
+//             95 unchanged). main @ 6c4af4f already measures 590 KB: the
+//             project import dialog (WP-1.8) merged alongside the .xlsx
+//             export. This change zips the workbook with the platform's
+//             CompressionStream('deflate-raw') instead of SheetJS's
+//             fixed-Huffman deflate (lib/spreadsheet/export/zip.ts: a
+//             ~45-year, 13-node run 100.8 → 41.2 MB): the export worker
+//             +0.8 KB, page code unchanged (+0.1 KB, hash noise). Measured
+//             591 KB, at the old ceiling; raised by the usual ~6 KB so the
+//             next change is measured rather than failing on the merge.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -194,7 +204,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 591,
+	totalCodeKb: 597,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

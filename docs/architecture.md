@@ -130,7 +130,9 @@ a same-origin script, so the CSP's `worker-src 'self'` allows it (no `blob:`
 workers; `infra/scripts/check-csp.mjs` passes on the build). The worker does
 the fetching (one bulk request per node, [api.md § Bulk run
 series](./api.md#bulk-run-series)) and the building, posts progress per node,
-and transfers the finished file back; Cancel terminates it. It imports
+and transfers the finished file back; Cancel terminates it. The zip itself
+is written by `zip.ts` with the browser's `CompressionStream('deflate-raw')`,
+since SheetJS's own browser deflate made files ~2.5 times larger. It imports
 SheetJS's mini build (`xlsx/dist/xlsx.mini.min`: `.xlsx` without the legacy
 formats and codepages, 87 KB instead of 112 KB). The bundle guard gives
 spreadsheet workers (`export.worker`, and later the workbook import's

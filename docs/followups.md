@@ -1056,15 +1056,14 @@ role and not before it.
     - **Open it in Excel and LibreOffice by hand** once: the tests read it
       back with SheetJS (and pin each streamed sheet byte-for-byte to
       SheetJS's own output), but no one has opened a generated file in Excel
-      yet to confirm there is no repair prompt. Trigger: before the first
-      client handover of a workbook.
-    - **Smaller files.** SheetJS zips with a fixed-Huffman deflate: a ~45-year,
-      13-node run is ~100 MB, where zlib level 6 makes the same parts ~41 MB.
-      Durable fix: write the zip in the worker with the browser's native
-      `CompressionStream('deflate-raw')` (every browser the app supports has
-      it), keeping SheetJS's parts, with a test that the output reads back
-      identically. Trigger: a user sharing a workbook by email, or a download
-      complaint on a client-size run.
+      or LibreOffice yet to confirm there is no repair prompt (LibreOffice
+      isn't installed on the dev machine, so no headless smoke test either).
+      Trigger: before the first client handover of a workbook.
+    - [x] **Smaller files** (2026-09-25): the workbook is zipped with the
+      platform's `CompressionStream('deflate-raw')` (`zip.ts`) instead of
+      SheetJS's fixed-Huffman deflate; a ~45-year, 13-node run 100.8 →
+      41.2 MB, built in ~4.6 s. A unit test caps a synthetic 10-year run's
+      size and reads every cell back.
     - No frozen header row or live formulas (SheetJS CE doesn't write panes;
       the formula audit workbook is the separate item in § Verification).
   - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,

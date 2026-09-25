@@ -11,9 +11,11 @@
 // daily sheet goes to SheetJS as a stub (its header row and one probe row with
 // every column's number format), and its rows are then streamed into the
 // sheet XML SheetJS wrote, in exactly the markup SheetJS writes for a numeric
-// cell (`<c r="B2" s="2"><v>1.5</v></c>`); the zip is SheetJS's own (its CFB
-// writer). workbook.test.ts pins the equivalence: a daily sheet built this way
-// is byte-for-byte the sheet SheetJS writes from the same cells.
+// cell (`<c r="B2" s="2"><v>1.5</v></c>`). workbook.test.ts pins the
+// equivalence: a daily sheet built this way is byte-for-byte the sheet
+// SheetJS writes from the same cells. SheetJS writes the parts uncompressed
+// and ./zip.ts packs them with the platform's real deflate (SheetJS's own
+// browser deflate is fixed-Huffman: ~2.5 times the size).
 import type { RunSummary } from '@water-management/engine';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import type { Cell } from './csv';
@@ -21,6 +23,7 @@ import { parseCsv } from './csv';
 import { DATE_FORMAT, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary, type SummarySheet } from './summary';
+import { zip, type ZipEntry } from './zip';
 
 /** One daily column: the daily CSV's header and the series' unit and values. */
 export interface DailyColumn {
@@ -311,7 +314,7 @@ export function streamDailySheet(stubXml: string, t: DailyTable): Uint8Array {
 const AFTER_DAILY: SummarySheet[] = ['Curtailment', 'Reserve compliance', 'Annual volumes', 'Data checks'];
 
 /** The workbook as .xlsx bytes. */
-export function buildWorkbook(input: WorkbookInput): Uint8Array {
+export async function buildWorkbook(input: WorkbookInput): Promise<Uint8Array> {
 	const byName = splitSummary(parseCsv(input.summaryCsv));
 	const name = sheetNamer();
 	const fixed = ['Summary', 'Catchment', ...AFTER_DAILY, 'EWR grid', 'Inputs', 'Warnings'];
@@ -348,6 +351,21 @@ export function buildWorkbook(input: WorkbookInput): Uint8Array {
 		file.content = content;
 		file.size = content.length;
 	}
-	const zip = XLSX.CFB.write(cfb, { fileType: 'zip', type: 'array', compression: true }) as ArrayLike<number> | ArrayBuffer;
-	return zip instanceof Uint8Array ? zip : new Uint8Array(zip as ArrayBuffer);
+	return zip(workbookParts(cfb));
+}
+
+/**
+ * The parts of SheetJS's container, in its order, as its own zip writer picks
+ * them: files with content, without the container's internal marker entry.
+ */
+function workbookParts(cfb: { FullPaths: string[]; FileIndex: { type: number; content?: Uint8Array | number[]; size?: number }[] }): ZipEntry[] {
+	const root = cfb.FullPaths[0]!;
+	const out: ZipEntry[] = [];
+	for (let i = 1; i < cfb.FullPaths.length; i++) {
+		const f = cfb.FileIndex[i]!;
+		const name = cfb.FullPaths[i]!.slice(root.length);
+		if (f.type !== 2 || !f.size || !f.content || !f.content.length || name === '\u0001Sh33tJ5') continue;
+		out.push({ name, data: f.content instanceof Uint8Array ? f.content : Uint8Array.from(f.content) });
+	}
+	return out;
 }

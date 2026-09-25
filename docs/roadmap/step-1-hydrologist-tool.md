@@ -1421,9 +1421,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   columns × ~45 years ≈ 6.5 MB of JSON), so the bulk route pages by day
   window (one request up to ~17 years, three for ~45); and daily rows are
   streamed into SheetJS's sheet XML, because SheetJS's cell objects for a
-  client-size run need ~4 GB. A ~45-year, 13-node run builds in ~3 s
-  (~100 MB file). Open in followups.md § Features left half-way: opening a
-  file in Excel by hand, and smaller files through native compression.
+  client-size run need ~4 GB; the zip uses the browser's native deflate. A
+  ~45-year, 13-node run builds in ~4.6 s (~41 MB file). Open in
+  followups.md § Features left half-way: opening a file in Excel by hand.
   CSV values and the workbook are compared cell for cell in
   `e2e/tests/xlsx-export.spec.ts`.
 - **Goal:** download a run as a workbook (summary, catchment daily, one
