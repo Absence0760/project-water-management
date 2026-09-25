@@ -115,8 +115,13 @@ departure, and it lists each affected column with its finding ID.
   `POST /projects/import`) takes the same `project.json`, or a project's own
   download, into any account, including production. Still to come: reading
   the `.xlsm` itself in the browser (WP-1.31).
-- ⬜ The importer reports whatever it could not map: hand-written transfer
+- 🚧 The importer reports whatever it could not map: hand-written transfer
   formulas that don't fit the rule shape, or a Specific method with no values.
+  Done in the TypeScript port (`frontend/src/lib/spreadsheet/import/`, the
+  `unmapped` list: transfer formulas, a rule with no destination or no rate,
+  M1 month lists, blank Specific shares, unknown element types, number cells
+  holding text; [scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
+  Not built: showing it on the import review screen (WP-1.31).
 
 **Acceptance:** importing the client catchment gives a project whose run reproduces the
 workbook (as in 1a) with **no manual edits**.
