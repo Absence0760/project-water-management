@@ -57,8 +57,10 @@ pnpm dev
 
 - **Frontend:** http://localhost:7777
 - **Backend:** http://localhost:3001 (`GET /health` → `{ "ok": true }`)
-- The backend applies any pending migrations before it starts (`tsx scripts/migrate.ts`), so a
-  database set up before a new migration landed catches up instead of failing requests with a 500.
+- The backend applies any pending migrations every time it starts or restarts
+  (`backend/scripts/dev-server.ts` under `tsx watch`, which also watches `backend/migrations/`).
+  So a database set up before a new migration landed, or a `git pull` that adds one while
+  `pnpm dev` is running, catches up instead of failing requests with a 500.
 
 Register an account on the site. The first user needs no invitation, and each
 user starts with no projects.
