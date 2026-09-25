@@ -187,6 +187,12 @@ personal copy (the Copy dialog says so).
   user as an open diamond (legend "Other water user"). The client check
   mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
   return share in 0–100 %.
+- **Groundwater (boreholes)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
+  one-node form only (`detailOnly`), on farms and other users: borehole
+  capacity (m³/day, empty = none), **Borehole rule** (supplemental / primary /
+  drought), drought trigger (%), stream depletion (%) and depletion lag
+  (days). The client check refuses boreholes on a gauge and the drought rule
+  without a farm dam.
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
@@ -595,6 +601,9 @@ value such as 108700.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
+  a table of each one's mean pumping, its share of what was supplied, and the
+  stream depletion it causes (`RunSummaryView.svelte`).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run

@@ -1,4 +1,4 @@
-import { upgradeLegacyModel, USER_PRIORITIES, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_RULES, upgradeLegacyModel, USER_PRIORITIES, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -41,7 +41,13 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// Other water users (WP-1.33): monthly demand (water-year months), return share, priority.
 				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				userReturnPct: frac.default(0),
-				userPriority: z.enum(USER_PRIORITIES).default('senior')
+				userPriority: z.enum(USER_PRIORITIES).default('senior'),
+				// Boreholes (WP-1.34): capacity null = none; depletion share and lag of the river's loss.
+				boreholeCapacityM3Day: nonNeg.nullable().default(null),
+				boreholeRule: z.enum(BOREHOLE_RULES).default('supplemental'),
+				boreholeTriggerPct: frac.default(0.3),
+				streamDepletionFrac: frac.default(0),
+				streamDepletionLagDays: nonNeg.max(36_500).default(0)
 			})
 		)
 		.max(500),
@@ -94,6 +100,10 @@ export function modelProblems(m: ProjectModel): string[] {
 
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !nodeIds.has(n.downstreamNodeId)) problems.push(`"${n.name}" drains into an unknown node`);
+		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.
+		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.kind === 'gauge') problems.push(`gauge "${n.name}" can't have boreholes`);
+		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
+			problems.push(`"${n.name}": the drought borehole rule needs a farm dam to trigger on`);
 		if (n.downstreamNodeId === n.id) problems.push(`"${n.name}" drains into itself`);
 	}
 	for (const a of m.cropAreas) {

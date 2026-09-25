@@ -231,6 +231,29 @@ export const HELP: HelpEntry[] = [
 		source: 'docs/model.md §2.7c'
 	},
 	{
+		id: 'borehole',
+		term: 'Boreholes (groundwater)',
+		short: 'Groundwater a farm or other user pumps, up to a daily capacity, by a rule: supplemental, primary or drought.',
+		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Drought — supplemental, but only while the dam holds less than its trigger share of capacity at the start of the day (a farm with a dam only).\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',
+		units: 'm³/day',
+		category: 'network',
+		aliases: ['groundwater', 'borehole', 'well', 'aquifer', 'pumping'],
+		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'summary.avgGroundwaterM3Day'],
+		related: ['stream-depletion', 'element-farm', 'element-user'],
+		source: 'docs/model.md §2.7d; roadmap WP-1.34'
+	},
+	{
+		id: 'stream-depletion',
+		term: 'Stream depletion',
+		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
+		long: 'Pumping near a river lowers the dry-season base flow the EWR depends on. The model takes a share d of each day’s pumping from the flow leaving the node, delayed through a single linear store with time constant k days, so the river keeps losing water for a while after the pumps stop and, over a long run, loses d × the pumped volume in all.\n\nThe river never goes below 0: depletion due on a day with nothing left to take is reported as unmet (drawn from aquifer storage instead). A first estimate of k is the stream depletion factor, distance² × storativity ÷ transmissivity (Jenkins 1968).\n\nA gauge or logger record measured while the boreholes pumped already carries their depletion: keep them in the model when calibrating, so the fitted natural flow isn’t reduced twice.',
+		category: 'network',
+		aliases: ['base flow reduction', 'baseflow depletion', 'Glover', 'Jenkins', 'SDF'],
+		fields: ['node.streamDepletionFrac', 'node.streamDepletionLagDays', 'run.baseflow_depletion', 'run.depletion_unmet', 'run.depletion_store', 'summary.avgBaseflowDepletionM3Day'],
+		related: ['borehole', 'ewr'],
+		source: 'docs/model.md §2.7d; Jenkins (1968); Glover & Balmer (1954)'
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',

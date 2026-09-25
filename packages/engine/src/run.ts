@@ -36,6 +36,7 @@ import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
+import { boreholeOf } from './network/boreholes';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -68,7 +69,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.22.0';
+export const ENGINE_VERSION = '0.23.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -260,6 +261,13 @@ export function runModelWith(
 			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
+		if (plan.nodes[i]!.borehole) {
+			// Boreholes (WP-1.34): what they gave and what the river loses for it.
+			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
+			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
+			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
+			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
+		}
 		if (node.kind === 'user') {
 			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
 			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
@@ -280,6 +288,9 @@ export function runModelWith(
 		for (let t = 0; t < a.length; t++) s += a[t]!;
 		return a.length ? s / a.length : 0;
 	};
+	/** A node with boreholes: its mean pumping and stream depletion (WP-1.34). */
+	const groundwaterMeans = (p: NetworkPlan['nodes'][number], r: NodeResult) =>
+		p.borehole ? { avgGroundwaterM3Day: mean(r.groundwater), avgBaseflowDepletionM3Day: mean(r.depletion) } : {};
 	const farms: FarmSummary[] = [];
 	nodes.forEach((node, i) => {
 		if (node.kind !== 'farm') return;
@@ -300,9 +311,12 @@ export function runModelWith(
 			avgCropRequirementM3Day: avgCrop,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
-			daysEwrNotMet: notMet
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
 		});
 	});
+
+	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
 
 	// Other water users (WP-1.33): whole-run means, like FarmSummary.
 	const users: UserSummary[] = [];
@@ -324,7 +338,8 @@ export function runModelWith(
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgReturnedM3Day: mean(r.userReturn),
 			avgEwrChargeM3Day: 0 - mean(charge),
-			daysEwrNotMet: notMet
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
 		});
 	});
 
@@ -678,6 +693,7 @@ export function buildNetworkPlan(
 				rainOffset: demand[i]!.rainOffset,
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
+				...boreholeOf(n, warnings),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
 		})
@@ -686,6 +702,42 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_observed_m3s || series.flow_logger_m3s);
+
+/**
+ * Run warnings for boreholes (WP-1.34): stream depletion the river could not
+ * give (it had no flow left at the node), and, when the project has an
+ * observed record, the double-counting caution: flows measured while these
+ * boreholes pumped already carry their depletion, so a calibration that
+ * leaves them out would fit natural flow too low and then take it off again.
+ */
+function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, observed: boolean, warnings: string[]) {
+	let unmet = 0;
+	let depleting = 0;
+	const names: string[] = [];
+	plan.nodes.forEach((p, i) => {
+		if (!p.borehole) return;
+		const r = sim.nodes[i]!;
+		let u = 0;
+		for (let t = 0; t < plan.days; t++) u += r.depletionUnmet[t]!;
+		if (u > 1e-9) {
+			unmet += u;
+			names.push(nodes[i]!.name);
+		}
+		if (p.borehole.depletionFrac > 0) depleting++;
+	});
+	if (unmet > 1e-9) {
+		warnings.push(
+			`stream depletion of ${unmet.toFixed(0)} m³ over the run could not be taken from the river, which had no flow left there; it is drawn from aquifer storage instead and not counted (${names.join('; ')})`
+		);
+	}
+	if (depleting && observed) {
+		warnings.push(
+			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
+		);
+	}
+}
 
 /** k: the share of what a node is supplied that it consumes, 1 − β(1 − e) for a farm (audit N1), 1 − r for an other user (WP-1.33). */
 function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {

@@ -136,6 +136,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	}
 	// Other water users (WP-1.33), from their own stream so the rest of a seed's network is what it was.
 	addUsers(new Rng(seed ^ 0x510e527f), nodes);
+	// Boreholes and stream depletion (WP-1.34), likewise from their own stream.
+	addBoreholes(new Rng(seed ^ 0x9b05688c), nodes);
 	const farmIds = nodes.filter((x) => x.kind === 'farm').map((x) => x.id);
 
 	// --- crops -------------------------------------------------------------------
@@ -268,6 +270,25 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+}
+
+/**
+ * Boreholes (WP-1.34) on farms and other users in 30 % of seeds: each node has
+ * them half the time, with a capacity from a trickle to more than any demand,
+ * any rule (drought on a dam-less node too, which runs as supplemental), a
+ * trigger from 0 to 1, stream depletion none, some or all, with no lag, a
+ * short one or one far longer than the run.
+ */
+function addBoreholes(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind === 'gauge' || !g.bool(0.5)) continue;
+		n.boreholeCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), 1e9]);
+		n.boreholeRule = g.pick(['supplemental', 'primary', 'drought'] as const);
+		n.boreholeTriggerPct = g.frac(0.1, 0.1);
+		n.streamDepletionFrac = g.frac(0.25, 0.25);
+		n.streamDepletionLagDays = g.pick([0, 0, g.float(0.1, 5), g.logFloat(1, 5000)]);
+	}
 }
 
 /**

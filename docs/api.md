@@ -306,6 +306,14 @@ Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.m
 and `"senior"`; the engine ignores them on farms and gauges. `PUT` refuses a
 crop area or a transfer on a user node.
 
+Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
+every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
+`boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
+`boreholeTriggerPct` (0–1), `streamDepletionFrac` (0–1) and
+`streamDepletionLagDays` (0–36 500). A body without them gets `null`,
+`"supplemental"`, 0.3, 0 and 0. `PUT` refuses boreholes on a gauge and the
+drought rule on a node without a farm dam.
+
 Validation on `PUT`: ids unique, node and crop names unique (ignoring case),
 one crop area per node + crop; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a
@@ -418,6 +426,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- Boreholes (engine ≥ 0.23.0): a farm or user with boreholes has
+  `avgGroundwaterM3Day` and `avgBaseflowDepletionM3Day` on its summary, the
+  run series `groundwater_used`, `baseflow_depletion`, `depletion_unmet` and
+  `depletion_store` (m³), and `summary.waterBalance` rows gain
+  `groundwaterM3` and `streamDepletionM3`. `summary.verification.checks` has
+  a `groundwater` check on every run (it passes trivially without boreholes).
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's

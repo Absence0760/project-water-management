@@ -15,7 +15,7 @@ import {
 	type WaterBalance,
 	type WaterBalanceRow
 } from '../project';
-import { checkBalance, checkEwrAttribution, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
+import { checkBalance, checkEwrAttribution, checkGroundwater, checkReportTotals, checkRunoffBalance, checkSoilWater, checkTransferLimits, checkWorkings } from './checks';
 
 const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput) => string | null][] = [
 	['balance', 'Every farm balances every day, storage stays within the dam, supply stays within demand', checkBalance],
@@ -24,7 +24,8 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 	['runoff', 'The runoff model balances: rain − evaporation − flow + exchange = change in storage', checkRunoffBalance],
 	['transfers', 'Transfers stay within their months, rates, daily caps and minimum storage', checkTransferLimits],
 	['reports', 'The EWR grid, farm summaries and curtailment report add up to the daily series', checkReportTotals],
-	['ewrAttribution', 'Each EWR site’s shortfall splits exactly into the part charged to the farms upstream (pro rata to their net impact, never more than a farm took) and the natural part', checkEwrAttribution]
+	['ewrAttribution', 'Each EWR site’s shortfall splits exactly into the part charged to the farms upstream (pro rata to their net impact, never more than a farm took) and the natural part', checkEwrAttribution],
+	['groundwater', 'Boreholes pump within their capacity, and the stream depletion they cause is lagged without losing or making water and never takes the river below 0', checkGroundwater]
 ];
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
@@ -117,6 +118,18 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		const r = farm(n.id, 'return_flow');
 		for (let t = 0; t < out.days; t++) userUse[t]! += (g[t] ?? 0) - (r[t] ?? 0);
 	}
+	// Boreholes (WP-1.34), farms and other users: groundwater into supply, stream depletion out of the river.
+	const gwNodes = input.model.nodes.filter((n) => series.has(`${n.id}|groundwater_used`));
+	const gwIn = new Float64Array(out.days);
+	const depOut = new Float64Array(out.days);
+	for (const n of gwNodes) {
+		const g = farm(n.id, 'groundwater_used');
+		const d = farm(n.id, 'baseflow_depletion');
+		for (let t = 0; t < out.days; t++) {
+			gwIn[t]! += g[t] ?? 0;
+			depOut[t]! += d[t] ?? 0;
+		}
+	}
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
 
@@ -124,7 +137,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0 };
+		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -141,6 +154,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.rainOnDams += fRainOnDam![t]!;
 			r.evap += fEvap![t]!;
 			r.otherUse += userUse[t]!;
+			r.gw += gwIn[t]!;
+			r.dep += depOut[t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -174,10 +189,11 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			transfersM3: r.transfer,
 			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
+			...(gwNodes.length ? { groundwaterM3: r.gw, streamDepletionM3: r.dep } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: opening + r.runoff + r.transfer + r.rainOnDams - consumptive - r.evap - r.otherUse - r.outflow - closing
+			residualM3: opening + r.runoff + r.transfer + r.rainOnDams + r.gw - consumptive - r.evap - r.otherUse - r.dep - r.outflow - closing
 		};
 	};
 

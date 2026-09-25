@@ -734,7 +734,13 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['lossReturnFraction', 'share of losses returning', pct],
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
-	['userPriority', 'priority', plain]
+	['userPriority', 'priority', plain],
+	// Boreholes (WP-1.34).
+	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
+	['boreholeRule', 'borehole rule', plain],
+	['boreholeTriggerPct', 'borehole drought trigger', pct],
+	['streamDepletionFrac', 'stream depletion share', pct],
+	['streamDepletionLagDays', 'stream depletion lag', withUnit('days')]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;

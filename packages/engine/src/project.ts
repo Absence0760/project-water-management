@@ -445,7 +445,39 @@ export interface NetworkNode {
 	userReturnPct?: number;
 	/** kind 'user' only: priority against the farms. Default 'senior'. */
 	userPriority?: UserPriority;
+	/**
+	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
+	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
+	 * boreholes, and the other borehole fields are inert.
+	 */
+	boreholeCapacityM3Day?: number | null;
+	/** When the boreholes run. Default 'supplemental'. */
+	boreholeRule?: BoreholeRule;
+	/** 'drought' only: they run while the dam holds less than this fraction of its capacity (start of the day). Default 0.3. */
+	boreholeTriggerPct?: number;
+	/** Share d (0–1) of the pumped volume that is eventually taken from the river's flow at this node (stream depletion). Default 0. */
+	streamDepletionFrac?: number;
+	/** Time constant k (days, ≥ 0) of the linear-reservoir lag between pumping and depletion; 0 = the same day. Default 0. */
+	streamDepletionLagDays?: number;
 }
+
+/**
+ * When a node's boreholes run (WP-1.34, docs/model.md §2.7d):
+ * 'supplemental' — only for the demand dam and river leave unmet;
+ * 'primary' — first, the dam and river cover the rest;
+ * 'drought' — supplemental, but only while the dam is below its trigger (farms with a dam only).
+ */
+export const BOREHOLE_RULES = ['supplemental', 'primary', 'drought'] as const;
+export type BoreholeRule = (typeof BOREHOLE_RULES)[number];
+
+/** What a node without the borehole fields runs as: no boreholes (WP-1.34). */
+export const BOREHOLE_DEFAULTS = {
+	boreholeCapacityM3Day: null,
+	boreholeRule: 'supplemental',
+	boreholeTriggerPct: 0.3,
+	streamDepletionFrac: 0,
+	streamDepletionLagDays: 0
+} as const;
 
 /** What a user node without the fields runs as (WP-1.33). */
 export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
@@ -517,6 +549,12 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.userDemandM3Day === undefined) n.userDemandM3Day = USER_DEFAULTS.userDemandM3Day;
 				n.userReturnPct ??= USER_DEFAULTS.userReturnPct;
 				n.userPriority ??= USER_DEFAULTS.userPriority;
+				// Boreholes (WP-1.34): none unless set.
+				if (n.boreholeCapacityM3Day === undefined) n.boreholeCapacityM3Day = BOREHOLE_DEFAULTS.boreholeCapacityM3Day;
+				n.boreholeRule ??= BOREHOLE_DEFAULTS.boreholeRule;
+				n.boreholeTriggerPct ??= BOREHOLE_DEFAULTS.boreholeTriggerPct;
+				n.streamDepletionFrac ??= BOREHOLE_DEFAULTS.streamDepletionFrac;
+				n.streamDepletionLagDays ??= BOREHOLE_DEFAULTS.streamDepletionLagDays;
 				return n;
 			})
 		: model.nodes;
@@ -625,6 +663,10 @@ export interface FarmSummary {
 	avgEwrShortfallM3Day: number;
 	/** Days the farm was charged (engine ≥ 0.17.0); before, days its AB was below 0. */
 	daysEwrNotMet: number;
+	/** Mean groundwater pumped, part of supplied (engine ≥ 0.23.0, WP-1.34); only for a node with boreholes. */
+	avgGroundwaterM3Day?: number;
+	/** Mean stream depletion taken from the river below it (WP-1.34); only for a node with boreholes. */
+	avgBaseflowDepletionM3Day?: number;
 }
 
 /**
@@ -646,6 +688,10 @@ export interface UserSummary {
 	/** Mean EWR charge (positive): its share of the shortfall at the EWR sites below it, net-impact pro rata like a farm's. */
 	avgEwrChargeM3Day: number;
 	daysEwrNotMet: number;
+	/** Mean groundwater pumped, part of supplied (WP-1.34); only with boreholes. */
+	avgGroundwaterM3Day?: number;
+	/** Mean stream depletion taken from the river below it (WP-1.34); only with boreholes. */
+	avgBaseflowDepletionM3Day?: number;
 }
 
 /**
@@ -1054,7 +1100,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;
@@ -1118,10 +1164,14 @@ export interface WaterBalanceRow {
 	damEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
+	/** Groundwater pumped into supply, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
+	groundwaterM3?: number;
+	/** Stream depletion taken from the river (WP-1.34); absent without boreholes. */
+	streamDepletionM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − other use − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater − consumptive use − dam evaporation − other use − stream depletion − outflow − closing. */
 	residualM3: number;
 }
 

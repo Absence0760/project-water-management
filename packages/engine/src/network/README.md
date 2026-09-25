@@ -88,6 +88,11 @@ and Zs (`senior_requirement`) accumulates like Z and drops by D below the
 senior user. Users are EWR contributors in `attribution.ts` (e = H − U) and
 get their own curtailment rows (`curtailment.ts` `otherUserCurtailment`).
 
+**Boreholes** (engine ≥ 0.23.0, WP-1.34; docs/model.md §2.7d) on a farm or
+user add groundwater GW to its supply by rule (`supply` in `simulate.ts`;
+parameters resolved by `boreholes.ts`), and take stream depletion from its
+outflow through a linear-reservoir lag (`deplete`), clamped at the flow there.
+
 A **gauge** passes its upstream through: `outflow` = Σ upstream U,
 `ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = MIN(outflow − ewr_cumulative, 0).
 (The workbook's gauge sums the upstream AA, which overstates the shortfall at a

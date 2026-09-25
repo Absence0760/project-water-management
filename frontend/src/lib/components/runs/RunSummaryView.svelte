@@ -19,6 +19,8 @@
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
+	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
+	const pumping = $derived([...farms, ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
@@ -177,6 +179,35 @@
 		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
 		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
 	</p>
+{/if}
+
+{#if pumping.length}
+	<h3>Groundwater</h3>
+	<p class="muted small">
+		Boreholes: groundwater pumped (part of supplied) and the stream depletion it causes in the river below (daily averages over the run).
+	</p>
+	<div class="table-wrap">
+		<table class="data groundwater">
+			<thead>
+				<tr>
+					<th scope="col">Farm or user</th>
+					<th scope="col" class="num">Pumped<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Share of supplied<br /><span class="u">%</span></th>
+					<th scope="col" class="num">Stream depletion<br /><span class="u">m³/day</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each pumping as g (g.nodeId)}
+					<tr>
+						<th scope="row">{g.name}</th>
+						<td class="num">{fmtNum(g.avgGroundwaterM3Day ?? 0)}</td>
+						<td class="num">{g.avgSuppliedM3Day > 0 ? fmtPct((g.avgGroundwaterM3Day ?? 0) / g.avgSuppliedM3Day) : '–'}</td>
+						<td class="num">{fmtNum(g.avgBaseflowDepletionM3Day ?? 0)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 {#if summary.users?.length}

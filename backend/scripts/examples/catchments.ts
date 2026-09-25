@@ -23,6 +23,7 @@ import {
 	IRRIGATION_SYSTEMS,
 	NEW_FARM_IRRIGATION,
 	USER_DEFAULTS,
+	BOREHOLE_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -219,8 +220,9 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damAreaFullM2: cap > 0 && depth !== null ? Math.round(cap / depth) : null,
 			damAreaExponent: DAM_AREA_EXPONENT,
 			damSeepagePerDay: f.seepage ?? 0,
-			// Not an other water user (WP-1.33): the inert defaults.
-			...USER_DEFAULTS
+			// Not an other water user (WP-1.33), no boreholes (WP-1.34): the inert defaults.
+			...USER_DEFAULTS,
+			...BOREHOLE_DEFAULTS
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>

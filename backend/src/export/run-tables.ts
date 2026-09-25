@@ -106,6 +106,12 @@ const FARM_COLUMNS: [key: string, header: string][] = [
 	['daysEwrNotMet', 'Days charged for the EWR']
 ];
 
+/** Farm summary columns only some runs have (a feature's own), labelled when present (WP-1.34). */
+const OPTIONAL_FARM_LABELS: Record<string, string> = {
+	avgGroundwaterM3Day: 'Average groundwater pumped (m³/day)',
+	avgBaseflowDepletionM3Day: 'Average stream depletion (m³/day)'
+};
+
 const CATCHMENT_ROWS: Record<string, string> = {
 	meanNaturalFlowM3Day: 'Mean natural flow (m³/day)',
 	meanSimulatedOutflowM3Day: 'Mean simulated outflow (m³/day)',
@@ -286,7 +292,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	const extra = [...new Set(farms.flatMap((f) => Object.keys(f)))].filter(
 		(k) => !known.has(k) && farms.some((f) => scalar(f[k]) !== undefined)
 	);
-	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...extra]);
+	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)]);
 	for (const f of farms) {
 		yield csvRow([
 			String(f.name ?? ''),
@@ -472,6 +478,8 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
 	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
 	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
+	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
+	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],

@@ -54,6 +54,22 @@ describe('other water users (WP-1.33)', () => {
 	});
 });
 
+describe('boreholes (WP-1.34)', () => {
+	it('fills no boreholes by default, and refuses them on a gauge, and the drought rule without a dam', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id);
+		const parsed = ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ boreholeCapacityM3Day: null, boreholeRule: 'supplemental', boreholeTriggerPct: 0.3, streamDepletionFrac: 0, streamDepletionLagDays: 0 });
+		const gauge = node('Gauge', null, { boreholeCapacityM3Day: 5 });
+		expect(modelProblems(model([gauge, node('A', gauge.id)])).join()).toMatch(/gauge "Gauge" can't have boreholes/);
+		expect(modelProblems(model([out, node('B', out.id, { damCapacityM3: 0, boreholeCapacityM3Day: 5, boreholeRule: 'drought' })])).join()).toMatch(/drought borehole rule needs a farm dam/);
+		expect(modelProblems(model([out, node('C', out.id, { damCapacityM3: 1000, boreholeCapacityM3Day: 5, boreholeRule: 'drought' })]))).toEqual([]);
+		for (const bad of [{ boreholeCapacityM3Day: -1 }, { streamDepletionFrac: 1.1 }, { streamDepletionLagDays: -2 }, { boreholeTriggerPct: 2 }]) {
+			expect(ModelBody.safeParse({ nodes: [out, { ...farm, ...bad }], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
+		}
+	});
+});
+
 describe('ModelBody (PUT /model, project documents)', () => {
 	const body = (nodes: Record<string, unknown>[]) => ({ nodes, crops: [], cropAreas: [], transfers: [] });
 

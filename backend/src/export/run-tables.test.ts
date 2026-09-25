@@ -422,7 +422,7 @@ describe('farm column guide', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
-		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise');
+		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)');
 	});
 });
 

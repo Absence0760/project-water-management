@@ -139,4 +139,15 @@ describe('validateModel', () => {
 			'"Town" is an other water user: transfers run between farm dams.'
 		]);
 	});
+
+	it('checks boreholes as the API does (WP-1.34)', () => {
+		const g = node('g', 'Gauge', null);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 100, streamDepletionFrac: 0.5 }]))).toEqual([]);
+		expect(messages(model([{ ...g, boreholeCapacityM3Day: 5 }, node('a', 'A', 'g')]))).toEqual(['"Gauge": a gauge can\'t have boreholes.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a farm dam to trigger on.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), streamDepletionFrac: 1.5, streamDepletionLagDays: -1 }]))).toEqual([
+			'"A": borehole capacity and depletion lag can\'t be negative.',
+			'"A": stream depletion and the drought trigger must be between 0% and 100%.'
+		]);
+	});
 });

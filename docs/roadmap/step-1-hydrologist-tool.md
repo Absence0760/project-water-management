@@ -1669,6 +1669,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.34 Groundwater abstraction and base-flow reduction
 
+> **Built 2026-09-25 (engine 0.23.0, migration 012), off by default.** As
+> specified, for farms and other users, with a drought-rule trigger
+> (`borehole_trigger_pct`) added. The depletion is a lagged linear-reservoir
+> draw on the river at the node rather than on the GR4J routing store; why,
+> and how double counting is avoided (calibrate with the historical pumping in
+> place), is in [model.md §2.7d](../model.md). Audit finding N5.
+
 - **Goal:** borehole pumping is modelled as a supply source for farms and
   as a loss to the river's base flow, instead of being invisible.
   Groundwater is a separate resource with its own licences, but pumping near

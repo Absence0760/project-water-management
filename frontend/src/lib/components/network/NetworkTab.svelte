@@ -7,7 +7,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GROUPS, isPct, isVolume, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
+	import { GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import UserFields from './UserFields.svelte';
@@ -271,7 +271,8 @@
 										grouped={readonly && !isPct(f)}
 										placeholder={f.nullable ? '–' : undefined}
 										disabled={readonly}
-										bind:value={node[f.key]}
+										value={node[f.key] ?? null}
+							onchange={(v) => setNodeField(node, f.key, v)}
 									/>
 								</td>
 								{/if}

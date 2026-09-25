@@ -71,6 +71,15 @@ export interface PlanNode {
 	/** A user's priority (WP-1.33): a senior user takes what reaches it; a junior one leaves the senior requirement passing it. */
 	senior?: boolean;
 	/**
+	 * Boreholes (WP-1.34, docs/model.md §2.7d); absent = none. `rule` 0 =
+	 * supplemental, 1 = primary, 2 = drought (supplemental while the dam holds
+	 * less than `triggerM3` at the start of the day). `depletionFrac` d of what
+	 * is pumped enters a linear reservoir that releases `depletionAlpha` of its
+	 * content each day (1 − e^(−1/k); 1 for k = 0) as depletion of the river
+	 * at this node.
+	 */
+	borehole?: { capacityM3Day: number; rule: 0 | 1 | 2; triggerM3: number; depletionFrac: number; depletionAlpha: number };
+	/**
 	 * A farm's share of the senior users' demand below it, m³/day (WP-1.33):
 	 * Σ over senior users u downstream of D_u × share / Σ upstream shares of u,
 	 * the EWR's fragmentation rule. Absent = none.
@@ -154,6 +163,49 @@ export interface NodeResult {
 	seniorRequirement: Float64Array;
 	/** A user's return below it, r × supplied (WP-1.33); zeros for farms (theirs is a working column) and gauges. */
 	userReturn: Float64Array;
+	/** Groundwater pumped (WP-1.34), part of `supplied`. Zeros without boreholes. */
+	groundwater: Float64Array;
+	/** Stream depletion taken from the node's outflow (WP-1.34), after the clamp. */
+	depletion: Float64Array;
+	/** Depletion due that the river could not give (no flow left): drawn from aquifer storage instead, reported. */
+	depletionUnmet: Float64Array;
+	/** Depletion still to come at the end of the day: the lag reservoir's content (m³). */
+	depletionStore: Float64Array;
+}
+
+/**
+ * Surface and groundwater supply for demand D (WP-1.34): `surface` is what the
+ * dam and river can give. Supplemental (and drought, while triggered) pumps
+ * only what the surface leaves; primary pumps first. Returns [surface, ground].
+ */
+function supply(node: PlanNode, D: number, surface: number, qPrev: number): [number, number] {
+	const b = node.borehole;
+	if (!b) return [Math.min(surface, D), 0];
+	if (b.rule === 1) {
+		const g = Math.min(b.capacityM3Day, D);
+		return [Math.min(surface, D - g), g];
+	}
+	const s = Math.min(surface, D);
+	if (b.rule === 2 && !(qPrev < b.triggerM3)) return [s, 0];
+	return [s, Math.min(b.capacityM3Day, D - s)];
+}
+
+/**
+ * Today's stream depletion at a node (WP-1.34): d × pumping enters the lag
+ * reservoir, α of its content is due, and the river gives at most what flows
+ * out of the node (`flow`); the rest is unmet. Writes the node's depletion
+ * columns and returns the depletion taken.
+ */
+function deplete(node: PlanNode, r: NodeResult, t: number, pumped: number, flow: number): number {
+	const b = node.borehole;
+	if (!b) return 0;
+	const store = (t === 0 ? 0 : r.depletionStore[t - 1]!) + b.depletionFrac * pumped;
+	const due = b.depletionAlpha * store;
+	const taken = Math.min(due, Math.max(flow, 0));
+	r.depletionStore[t] = store - due;
+	r.depletion[t] = taken;
+	r.depletionUnmet[t] = due - taken;
+	return taken;
 }
 
 /**
@@ -216,7 +268,11 @@ function allocNode(days: number): NodeResult {
 		ewrShortfall: f(),
 		ewrShortfallIncremental: f(),
 		seniorRequirement: f(),
-		userReturn: f()
+		userReturn: f(),
+		groundwater: f(),
+		depletion: f(),
+		depletionUnmet: f(),
+		depletionStore: f()
 	};
 }
 
@@ -394,9 +450,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				// the same day. Like a gauge it has no EWR share of its own.
 				const D = node.demand[t]!;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
-				const G = Math.min(D, avail);
+				// Boreholes (WP-1.34): what the river can't give (or first, primary).
+				const [Gs, Ggw] = supply(node, D, avail, 0);
+				const G = Math.min(Gs + Ggw, D);
 				const T = (node.userReturn ?? 0) * G;
-				const U = sumU - G + T;
+				const Uriver = sumU - Gs + T;
+				const U = Uriver - deplete(node, r, t, Ggw, Uriver);
+				r.groundwater[t] = Ggw;
 				r.demand[t] = D;
 				r.supplied[t] = G;
 				r.deficit[t] = D - G;
@@ -479,15 +539,23 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const avail = qStart + M + O + K + J;
 			// Irrigation draws only what is above the dam's minimum operating
 			// level (dead storage, audit Q5); a dam below it supplies nothing.
-			const G = Math.min(Math.max(avail - node.deadStorageM3, 0), D);
-			const P = avail - G;
+			// Boreholes (WP-1.34) add groundwater: supplemental after the dam and
+			// river, primary before them, drought only while the dam is low.
+			const [Gs, Ggw] = supply(node, D, Math.max(avail - node.deadStorageM3, 0), qPrev);
+			// Gs + (D − Gs) can round one ulp above D.
+			const G = Math.min(Gs + Ggw, D);
+			const P = avail - Gs;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
 			const S = L + N - O;
 			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
 			const T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
 			// Seepage leaves the dam below the wall and joins the outflow the same day (N2).
-			const U = Rr + S + T + Sp;
+			// Stream depletion from pumping (WP-1.34) is taken from the flow leaving the farm.
+			const Uriver = Rr + S + T + Sp;
+			const Dep = deplete(node, r, t, Ggw, Uriver);
+			const U = Uriver - Dep;
+			r.groundwater[t] = Ggw;
 			const Y = ewrT * node.share;
 			const Z = Y + sumZ;
 			// AA = MIN(U − Z, 0) and AB = MIN(AA − Σ upstream AA, 0), with float
@@ -525,7 +593,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				w.damEvaporation[t] = E;
 				w.rainOnDam[t] = Pd;
 				w.damSeepage[t] = Sp;
-				w.balanceResidual[t] = H + I + J + Pd - (G - T) - E - (Q - qPrev) - U;
+				w.balanceResidual[t] = H + I + J + Pd + Ggw - (G - T) - E - (Q - qPrev) - U - Dep;
 				w.passedForSenior[t] = passed;
 			}
 		}

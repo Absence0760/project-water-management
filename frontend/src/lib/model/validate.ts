@@ -56,6 +56,16 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
 			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });
 		}
+		// Boreholes (WP-1.34), as the API checks them.
+		if ((n.boreholeCapacityM3Day ?? 0) > 0) {
+			if (n.kind === 'gauge') issues.push({ area: 'network', message: `${label}: a gauge can't have boreholes.` });
+			else if (n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
+				issues.push({ area: 'network', message: `${label}: the drought borehole rule needs a farm dam to trigger on.` });
+		}
+		if (!inRange(n.boreholeCapacityM3Day ?? 0, 0, Infinity) || !inRange(n.streamDepletionLagDays ?? 0, 0, 36_500))
+			issues.push({ area: 'network', message: `${label}: borehole capacity and depletion lag can't be negative.` });
+		if (!inRange(n.streamDepletionFrac ?? 0, 0, 1) || !inRange(n.boreholeTriggerPct ?? 0.3, 0, 1))
+			issues.push({ area: 'network', message: `${label}: stream depletion and the drought trigger must be between 0% and 100%.` });
 		// Other water users (WP-1.33), as the API checks them.
 		if (n.kind === 'user') {
 			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });

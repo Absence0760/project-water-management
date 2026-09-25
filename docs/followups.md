@@ -65,6 +65,13 @@ Tick items off (or move them into an issue) as they are done.
         farm. Confirm both rules and which priority each user has. Known
         limit: a farm never releases stored water for a senior user, and
         development (users, their demand) can't vary within a run.
+      - WP-1.34 boreholes (engine 0.23.0): do boreholes matter in the client
+        catchment, and is there any data on pumping volumes, distances from
+        the river or aquifer tests? Confirm the method (a lagged linear
+        reservoir with capture share d and time constant k, not a Glover/Hunt
+        kernel) and the values; depletion the river can't give is dropped,
+        not carried over. If the calibration record was measured while they
+        pumped, calibrate with them in the model (model.md §2.7d).
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),

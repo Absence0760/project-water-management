@@ -13,7 +13,10 @@ export async function loadModel(db: Db, projectId: string): Promise<ProjectModel
 				divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
 				loss_return_fraction AS "lossReturnFraction", dam_area_full_m2 AS "damAreaFullM2",
 				dam_area_exponent AS "damAreaExponent", dam_seepage_per_day AS "damSeepagePerDay",
-				user_demand_m3_day AS "userDemandM3Day", user_return_pct AS "userReturnPct", user_priority AS "userPriority"
+				user_demand_m3_day AS "userDemandM3Day", user_return_pct AS "userReturnPct", user_priority AS "userPriority",
+				borehole_capacity_m3_day AS "boreholeCapacityM3Day", borehole_rule AS "boreholeRule",
+				borehole_trigger_pct AS "boreholeTriggerPct", stream_depletion_frac AS "streamDepletionFrac",
+				stream_depletion_lag_days AS "streamDepletionLagDays"
 			 FROM node WHERE project_id = $1 ORDER BY sort_order, name`,
 			[projectId]
 		);
@@ -66,8 +69,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 				flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 				dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
-				dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+				dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
+				borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
 			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 				area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
 				flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
@@ -77,13 +81,17 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 				loss_return_fraction = EXCLUDED.loss_return_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
 				dam_area_exponent = EXCLUDED.dam_area_exponent, dam_seepage_per_day = EXCLUDED.dam_seepage_per_day,
 				user_demand_m3_day = EXCLUDED.user_demand_m3_day, user_return_pct = EXCLUDED.user_return_pct,
-				user_priority = EXCLUDED.user_priority
+				user_priority = EXCLUDED.user_priority, borehole_capacity_m3_day = EXCLUDED.borehole_capacity_m3_day,
+				borehole_rule = EXCLUDED.borehole_rule, borehole_trigger_pct = EXCLUDED.borehole_trigger_pct,
+				stream_depletion_frac = EXCLUDED.stream_depletion_frac, stream_depletion_lag_days = EXCLUDED.stream_depletion_lag_days
 			 WHERE node.project_id = EXCLUDED.project_id`,
 			[
 				n.id, projectId, n.name, n.kind, n.sortOrder, n.areaKm2, n.areaHiKm2, n.areaLoKm2, n.flowShareManual,
 				n.pctUpstreamToDam, n.pctRunoffToDam, n.damCapacityM3, n.damInitialPct, n.damMinPct,
 				n.divertCapacityM3Day, n.irrigationEfficiency, n.lossReturnFraction, n.damAreaFullM2, n.damAreaExponent,
-				n.damSeepagePerDay, n.userDemandM3Day ?? null, n.userReturnPct ?? 0, n.userPriority ?? 'senior'
+				n.damSeepagePerDay, n.userDemandM3Day ?? null, n.userReturnPct ?? 0, n.userPriority ?? 'senior',
+				n.boreholeCapacityM3Day ?? null, n.boreholeRule ?? 'supplemental', n.boreholeTriggerPct ?? 0.3,
+				n.streamDepletionFrac ?? 0, n.streamDepletionLagDays ?? 0
 			],
 			'node'
 		);

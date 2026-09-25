@@ -1,11 +1,11 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { IRRIGATION_SYSTEMS, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type BoreholeRule, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, isPct, NODE_FIELDS, systemOf, type NodeField } from './fields';
+	import { damHints, GROUPS, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
 	import UserFields from './UserFields.svelte';
 
 	let {
@@ -35,14 +35,20 @@
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
 			if (f.farmOnly && node.kind !== 'farm') continue;
-			// An other water user has no land, dam or routing of its own (WP-1.33).
-			if (node.kind === 'user') continue;
+			if (f.notGauge && node.kind === 'gauge') continue;
+			// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34).
+			if (node.kind === 'user' && f.group !== 'groundwater') continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
 		return [...out];
 	});
 	const id = (k: string) => `nd-${k}-${node.id}`;
+	const BOREHOLE_RULE_LABEL: Record<BoreholeRule, string> = {
+		supplemental: 'Supplemental: after the dam and river',
+		primary: 'Primary: first, the dam and river cover the rest',
+		drought: 'Drought: supplemental while the dam is below the trigger'
+	};
 	const hints = $derived(damHints(node));
 </script>
 
@@ -112,7 +118,8 @@
 							placeholder={f.nullable ? 'not set' : undefined}
 							disabled={readonly}
 							aria-describedby="{id(f.key)}-h"
-							bind:value={node[f.key]}
+							value={node[f.key] ?? null}
+							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
 						<span class="hint" id="{id(f.key)}-h">{f.help}</span>
 					</div>
@@ -136,6 +143,14 @@
 							{/each}
 						</select>
 						<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
+					</div>
+				{/if}
+				{#if g === 'groundwater'}
+					<div class="field">
+						<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
+						<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
+							{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
+						</select>
 					</div>
 				{/if}
 				{#if g === 'dam'}

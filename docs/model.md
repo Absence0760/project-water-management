@@ -1045,6 +1045,98 @@ curtailment rows are the means of the series. The fuzz generator adds up to
 three users (senior or junior, any return share, demand from none to far more
 than the river) to 30 % of networks.
 
+### 2.7d Groundwater abstraction and stream depletion (engine ≥ 0.23.0, roadmap WP-1.34, audit N5)
+
+**Why.** Many farms supplement from boreholes, and pumping near a river
+lowers the dry-season base flow the EWR depends on. Without it a farm with
+boreholes shows its full deficit and the river never feels the pumping.
+**Off by default**: a node without a borehole capacity runs exactly as before.
+
+**Fields** (farms and other users, not gauges; migration 012):
+
+| Field | Meaning |
+| --- | --- |
+| `boreholeCapacityM3Day` | most that can be pumped per day; null / 0 = no boreholes |
+| `boreholeRule` | `supplemental` (default): only what the dam and river leave unmet; `primary`: pumped first, the dam and river cover the rest; `drought`: supplemental while the dam holds less than `boreholeTriggerPct` × capacity at the start of the day (farms with a dam only) |
+| `boreholeTriggerPct` | the drought trigger, 0–1 of dam capacity (default 0.3) |
+| `streamDepletionFrac` d | share of the pumped volume the river eventually loses (0–1, default 0) |
+| `streamDepletionLagDays` k | time constant of the lag between pumping and depletion (days, default 0 = the same day) |
+
+**Each day**, with *surface* = what the dam and river can give (a farm:
+MAX(avail − dead storage, 0), §2.7; a user: its river take, §2.7c):
+
+```
+supplemental:  Gs = MIN(surface, D)          GW = MIN(cap, D − Gs)
+primary:       GW = MIN(cap, D)              Gs = MIN(surface, D − GW)
+drought:       as supplemental while Q[t−1] < trigger × dam capacity, else GW = 0
+G  = Gs + GW                                 (supplied; the dam or river gives only Gs, so P = avail − Gs)
+T  = β(1 − e) × G                            (the losses of pumped water return too)
+Sd = Sd[t−1] + d × GW;   due = α × Sd;   Sd ← Sd − due,   α = 1 − e^(−1/k)  (α = 1 when k = 0)
+Dep = MIN(due, R + S + T + seepage)          taken from the flow leaving the node
+unmet = due − Dep                            reported (series depletion_unmet) and warned about
+U  = R + S + T + seepage − Dep
+```
+
+The farm balance gains groundwater in and depletion out:
+`(H + I + J + Pd + GW) − (G − T) − E − ΔQ − U − Dep = 0` (column V).
+
+**Method: a lagged, linear-reservoir draw on the river at the borehole's
+node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
+
+- *Analytical stream depletion* (Theis 1941; Glover & Balmer 1954; Jenkins
+  1968; Hunt 1999 with a streambed conductance) needs the aquifer's
+  transmissivity and storativity, the borehole's distance from the river and,
+  for Hunt, the streambed leakance. Those are rarely known for South African
+  farm boreholes, and a daily convolution of the Glover response over a
+  multi-decade run is costly in calibration's thousands of runs. The two
+  parameters used here span the same behaviour: d is the long-run capture
+  share (1 for a well-connected alluvial aquifer, where Glover's depletion
+  tends to the whole pumping rate; lower where pumping captures evaporation
+  or regional outflow instead), and k is the response time. A first estimate
+  of k is Jenkins' stream depletion factor SDF = a²S/T (a the distance, S the
+  storativity, T the transmissivity): the Glover response to a step reaches
+  about half the pumping rate at t ≈ SDF. The exponential kernel is a
+  simplification of that response (it front-loads the depletion slightly);
+  the hydrologist can replace it with a Glover or Hunt kernel per borehole
+  when aquifer data exist.
+- *The GR4J routing store* is catchment-wide and belongs to the natural-flow
+  model: drawing on it would put a human impact inside the runoff model's
+  balance (§2.4a) and could not say which reach loses the water. The legacy
+  model has no store to draw on at all. Taking the depletion from the river at
+  the node works identically for both runoff models, keeps natural flow
+  natural, and puts the loss where the EWR is checked.
+- *Volume is conserved.* Over the run d × Σ GW = Σ Dep + Σ unmet + Sd at the
+  end: depletion keeps going for a while after pumping stops, and the store's
+  content at the end is depletion still to come. `checkGroundwater` asserts
+  this and every day's recursion.
+- *The river never goes negative.* Depletion due on a day with no flow left
+  at the node is unmet: in reality the aquifer's storage (or a losing reach)
+  supplies it. It is not carried over, which slightly understates depletion
+  in a dry spell; the run warns with the volume and the nodes.
+
+**Double counting and calibration.** A gauge or logger record measured while
+the boreholes pumped already carries their depletion. Because calibration
+scores the whole run, network included (§2.10b), the fitted GR4J parameters
+describe natural flow **only if the boreholes (and their depletion) are in the
+model while calibrating**, as they were during the record. The app therefore
+handles it baseline-relative: keep the historical pumping in the project you
+calibrate, and model a change (more boreholes, less pumping) as a copy whose
+run is compared with the baseline (run comparison, docs/run-comparison.md).
+Every run whose project has an observed record and depleting boreholes warns
+about this. Development can't vary within a run, so a record that spans the
+drilling of the boreholes is only approximately represented (followups.md).
+
+**EWR and curtailment.** Depletion lowers the node's outflow, so it is part
+of the node's net impact (e = H + I + J − U, §2.7b) and of any EWR charge.
+`supplied` includes groundwater, so the fraction supplied, the equitable
+share (§2.11) and the curtailment supply cut count it too.
+
+**Outputs** (only on nodes with boreholes): `groundwater_used`,
+`baseflow_depletion`, `depletion_unmet`, `depletion_store` (m³);
+`FarmSummary` / `UserSummary` `avgGroundwaterM3Day` and
+`avgBaseflowDepletionM3Day`; the water balance's `groundwaterM3` and
+`streamDepletionM3`.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
@@ -1981,7 +2073,8 @@ text:
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Drought borehole rules (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (seed 1450). |
+| `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
@@ -2031,7 +2124,9 @@ runoff coefficient, the GR4J store balance (AET, exchange, Δstorage and its
 residual in mm), and the network balance in m³: start storage + farm runoff +
 transfers + rain on dams = consumptive use (supplied − return flow) + dam
 evaporation + other users' use (taken − returned, engine ≥ 0.22.0, §2.7c,
-`otherUseM3`, only when the network has users) + outflow + end storage +
+`otherUseM3`, only when the network has users) − groundwater pumped +
+stream depletion (engine ≥ 0.23.0, §2.7d, `groundwaterM3` /
+`streamDepletionM3`, only with boreholes) + outflow + end storage +
 residual (the dam terms from engine 0.16.0, §2.7a; seepage is inside the
 outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
 so both are shown. The residual is float noise; anything else is a bug.
@@ -2127,6 +2222,7 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
+| **Stream depletion** | River flow a borehole's pumping captures: a share d of the pumping, lagged, taken from the river at the node (engine ≥ 0.23.0, §2.7d). |
 | **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a senior/junior priority (engine ≥ 0.22.0, §2.7c). |
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |

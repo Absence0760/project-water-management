@@ -22,7 +22,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true,
 	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
-	userDemandM3Day: true, userReturnPct: true, userPriority: true
+	userDemandM3Day: true, userReturnPct: true, userPriority: true,
+	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -32,7 +33,8 @@ const TRANSFER: Record<keyof Transfer, true> = {
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
-	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true
+	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -58,6 +60,8 @@ const RUN_KEYS = [
 	'dam_area', 'rain_on_dam', 'dam_evaporation', 'dam_seepage',
 	// Other water users (engine 0.22.0, WP-1.33)
 	'senior_requirement', 'passed_for_senior',
+	// Boreholes (engine 0.23.0, WP-1.34)
+	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
 ];

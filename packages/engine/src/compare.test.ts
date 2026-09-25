@@ -352,6 +352,19 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists a farm’s boreholes added and their depletion changed (WP-1.34)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		Object.assign(f, { boreholeCapacityM3Day: 500, boreholeRule: 'primary', streamDepletionFrac: 0.4, streamDepletionLagDays: 10 });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: borehole capacity none → 500 m³/day',
+			'Rooikloof: borehole rule supplemental → primary',
+			'Rooikloof: stream depletion share 0% → 40%',
+			'Rooikloof: stream depletion lag 0 days → 10 days'
+		]);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

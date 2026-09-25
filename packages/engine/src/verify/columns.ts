@@ -44,7 +44,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'below_dam_not_diverted', letter: 'S', formula: 'L + N − O' },
 	{ key: 'return_flow', letter: 'T', formula: 'loss return fraction β × (1 − e) × G: the share of the application losses that reaches the river' },
 	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage' },
-	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise' },
+	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)' },
 	{ key: 'deficit', letter: 'W', formula: 'D − G' },
 	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
@@ -57,6 +57,10 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			"−(largest over the EWR sites below it of D × MAX(e, 0) ÷ Σ MAX(e, 0)), with D = MIN(site shortfall, Σ MAX(e, 0)) and e = H + I + J − U counting only transfers with both ends upstream of the site (audit Q17)"
 	},
 	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' },
+	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, D − surface G), primary MIN(capacity, D) first, drought as supplemental while Q[t−1] < trigger × dam capacity; part of G (WP-1.34)', optional: true },
+	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + d × GW − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + d × GW), all of it when lag = 0', optional: true },
+	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + seepage): taken from the flow leaving the farm, so U = R + S + T + seepage − Dep', optional: true },
+	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },
 	{
 		key: 'senior_requirement',
 		letter: 'Zs',
@@ -82,7 +86,11 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Σ Z of the elements directly upstream (a user has no EWR share)' },
 	{ key: 'ewr_shortfall', letter: 'AA', formula: 'MIN(U − Z, 0)' },
 	{ key: 'ewr_charge', letter: null, formula: 'as a farm’s, with net impact e = H − U = G − T' },
-	{ key: 'senior_requirement', letter: 'Zs', formula: 'senior: MAX(0, Σ upstream Zs − demand); junior: Σ upstream Zs; only with senior users', optional: true }
+	{ key: 'senior_requirement', letter: 'Zs', formula: 'senior: MAX(0, Σ upstream Zs − demand); junior: Σ upstream Zs; only with senior users', optional: true },
+	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, demand − river take), primary MIN(capacity, demand) first; part of G (WP-1.34)', optional: true },
+	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + d × GW − due', optional: true },
+	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, H − river take + T); U = H − river take + T − Dep', optional: true },
+	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */
