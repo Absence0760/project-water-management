@@ -51,7 +51,7 @@ engine 0.4.0.
 | Q2 transfer reads spill | Not mirrored (already). |
 | Q3 transfer order / spill at the receiver | **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0**, see N4: capped at the receiver's room; transfers before irrigation. |
 | Q4 | Doc only. |
-| Q5 irrigation may empty the dam | **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0.** `node.damMinPct` is the dam's minimum operating level (dead storage): `G = MIN(MAX(avail − cap·damMinPct, 0), F)` with `avail = Q[t−1] + M + O + K + J`, and a transfer keeps `cap × MAX(rule minStoragePct, damMinPct)` in its source. Migration 006 reset every stored value to 0 (the importer had filled it with the workbook's transfer minimum, which each rule already carries), so no existing result changes; the importer writes 0 and notes the workbook value. The editor flags a dam with a 0 floor as a hint ("irrigation may empty this dam"), not an error. Tests: `run.test.ts` › "irrigation stops at the minimum operating level", "keeps the source dam's minimum operating level"; `checkWorkings` checks the G formula and `checkTransferLimits` the reserve. |
+| Q5 irrigation may empty the dam | **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0.** `node.damMinPct` is the dam's minimum operating level (dead storage): `G = MIN(MAX(avail − cap·damMinPct, 0), D)` with `avail = Q[t−1] + Pd − E − Sp + M + O + K + J` (D and the dam terms from N1 and N2, also engine 0.16.0), and a transfer keeps `cap × MAX(rule minStoragePct, damMinPct)` in its source. Migration 006 reset every stored value to 0 (the importer had filled it with the workbook's transfer minimum, which each rule already carries), so no existing result changes; the importer writes 0 and notes the workbook value. The editor flags a dam with a 0 floor as a hint ("irrigation may empty this dam"), not an error. Tests: `run.test.ts` › "irrigation stops at the minimum operating level", "keeps the source dam's minimum operating level"; `checkWorkings` checks the G formula and `checkTransferLimits` the reserve. |
 | Q6 threshold on the demand offset | Defensible: small rains are mostly intercepted ([Dastane 1974]). The larger issue, no carry-over, is N3: decided on a persona recommendation (engine 0.14.0, soil-water store), pending the hydrologist. The threshold still applies before the store. |
 | Q7 Pitman fallback | **Removed (P1, engine 0.10.0).** Natural flow comes only from the runoff model. Days without rain data are still warned about (W2). |
 | Q8 hi/lo over listed farms | Sound (the shares are normalised); W3 catches area drift. |
@@ -63,7 +63,7 @@ engine 0.4.0.
 | Q15 l/s truncated | **Fixed (R1).** |
 | Q16 | Workbook-only. |
 | Q17 incremental shortfalls don't add up | **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist) — engine 0.17.0.** Both options, combined: the EWR is assessed at **EWR sites** (the outlet and every gauge), and each site's shortfall `D = MAX(Z − U, 0)` is charged to the farms upstream of it **pro rata to their net impact** `e = H + I + J_int − U` (`J_int`: only transfers with both ends upstream of the site, so an export is charged to its source and an import credited). Charged `D* = MIN(D, Σ e⁺)`, natural `N = D − D*`, farm share `A = D*·e⁺/Σe⁺`; a farm under several sites carries the largest share and records the binding site. Each charge splits into an irrigation part `A·c/(c + MAX(e − c, 0))` (c = G − T) and a storage / pass-inflow part; the supply cut is `A_irr / (1 − β(1 − e))` (model.md §2.7b). New series `ewr_charge`, `ewr_charge_irrigation` (farms), `ewr_charged`, `ewr_natural` (sites); curtailment R, FarmSummary EWR means and the farm EWR grids use the charge; `CurtailmentSummary.ewrSites` is the per-site table. AB stays as the diagnostic **reach shortfall**. The G1 gauge fix stands. Tests: `network/attribution.test.ts` (hand cases and random-tree invariants: Σ A + N = D, 0 ≤ A ≤ e⁺, nothing outside a site's catchment or on a met day, max over sites, order-free), `run.test.ts` › "charges a short outlet …", the confluence case, `checkEwrAttribution` in every saved run's self-checks and the fuzz soak; on the client catchment "Q17: every EWR site splits exactly …". |
-| Q18 several transfers from one dam | Overdraw fixed earlier (rule order). **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0:** `transfer.priority`, lower first; equal priorities share the dam pro rata to their limits (N4). |
+| Q18 several transfers from one dam | Overdraw fixed earlier (engine 0.3.1: rules served in list order from what is left, engine review F1). **Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0:** `transfer.priority`, lower first; equal priorities share the dam pro rata to their limits (N4). |
 
 ## Verified sound (no change)
 
@@ -144,7 +144,8 @@ client values are not recorded here: the repo is public.) **H1, N1, N2 and N3 ar
 move results materially.** H1 waits for the hydrologist (legacy is kept as a
 workbook comparison only); N3 (engine 0.14.0) and N1 and N2 (engine 0.16.0)
 are implemented on a persona recommendation the hydrologist still has to
-confirm, see below.
+confirm, see below. Q17 and Q13 (engine 0.17.0) change every farm's EWR
+charge and curtailment figures, but no flow or storage.
 
 ## Regression suite: deviation list
 
