@@ -187,6 +187,7 @@
 				recentDays={RECENT}
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
+				pannable
 				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}

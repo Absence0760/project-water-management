@@ -67,3 +67,15 @@ export function alignDaily(series: DailyInput[]): { x: number[]; ys: (number | n
 	});
 	return { x, ys };
 }
+
+/**
+ * Shift the visible window [min, max] by `delta`, keeping its width and
+ * stopping at the data's ends [lo, hi] rather than scrolling past them. A
+ * window as wide as the data (or wider) is the whole range.
+ */
+export function panWindow(min: number, max: number, delta: number, lo: number, hi: number): { min: number; max: number } {
+	const width = max - min;
+	if (width >= hi - lo) return { min: lo, max: hi };
+	const start = Math.min(Math.max(min + delta, lo), hi - width);
+	return { min: start, max: start + width };
+}

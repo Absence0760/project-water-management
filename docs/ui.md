@@ -627,8 +627,15 @@ value such as 250000.
   under simulated outflow, broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
-  scale and unit switches; m³/s or m³/day, log scale, last 3 years or the full
-  period), the calibration panel (it opens with the same
+  scale and unit switches; a switched-off entry is struck through in the
+  muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
+  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  into, as on every chart; **Shift+drag** moves the view back and forth
+  through the record at the same width, and **◀ Earlier / Later ▶** move it
+  by half a window (the non-drag route, and the only one on touch). Neither
+  goes past the ends of the record, and the window survives the log scale
+  and unit switches. The figure carries the visible range as
+  `data-view-start` / `data-view-end` (`LineChart`'s `pannable` prop), the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in

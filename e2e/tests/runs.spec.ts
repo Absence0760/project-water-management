@@ -104,6 +104,65 @@ test('the hydrograph starts with natural flow hidden and keeps a legend toggle a
 	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
 });
 
+test('the hydrograph view moves through the record by Shift+drag and by Earlier / Later, and a plain drag still zooms', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Hydrograph pan');
+	const days = 8 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Pan');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	await expect(chart.locator('canvas')).toBeVisible();
+	const earlier = chart.getByRole('button', { name: /Earlier/ });
+	const later = chart.getByRole('button', { name: /Later/ });
+	const range = async () => ({ start: (await chart.getAttribute('data-view-start'))!, end: (await chart.getAttribute('data-view-end'))! });
+	const daysBetween = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+
+	// Opens on the last 3 years, at the end of the record: nothing later.
+	const opened = await range();
+	expect(daysBetween(opened.start, opened.end)).toBeCloseTo(3 * 365, -1);
+	await expect(later).toBeDisabled();
+	await expect(earlier).toBeEnabled();
+
+	// Earlier moves half a window back, keeping the width; Later comes back.
+	await earlier.click();
+	await expect(chart).not.toHaveAttribute('data-view-end', opened.end);
+	const back = await range();
+	expect(daysBetween(back.end, opened.end)).toBeCloseTo(1.5 * 365, -1);
+	expect(daysBetween(back.start, back.end)).toBeCloseTo(daysBetween(opened.start, opened.end), 0);
+	await later.click();
+	await expect(chart).toHaveAttribute('data-view-end', opened.end);
+
+	// Shift+dragging right pulls earlier data into view.
+	const over = chart.locator('.u-over');
+	const box = (await over.boundingBox())!;
+	const y = box.y + box.height / 2;
+	await page.keyboard.down('Shift');
+	await page.mouse.move(box.x + box.width * 0.3, y);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.7, y, { steps: 5 });
+	await page.mouse.up();
+	await page.keyboard.up('Shift');
+	await expect(chart).not.toHaveAttribute('data-view-end', opened.end);
+	const dragged = await range();
+	expect(daysBetween(dragged.end, opened.end)).toBeGreaterThan(300);
+	expect(daysBetween(dragged.start, dragged.end)).toBeCloseTo(daysBetween(opened.start, opened.end), 0);
+
+	// The view survives a rebuild (log scale).
+	await chart.getByRole('button', { name: 'Log scale' }).click();
+	await expect(chart.getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(chart).toHaveAttribute('data-view-end', dragged.end);
+
+	// A plain drag still draws a box and zooms into it.
+	await page.mouse.move(box.x + box.width * 0.4, y);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 });
+	await page.mouse.up();
+	await expect.poll(async () => { const r = await range(); return daysBetween(r.start, r.end); }).toBeLessThan(daysBetween(dragged.start, dragged.end) / 2);
+});
+
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');

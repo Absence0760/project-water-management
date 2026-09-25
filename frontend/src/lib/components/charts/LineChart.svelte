@@ -8,7 +8,7 @@
 	import uPlot from 'uplot';
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum } from '$lib/format/number';
-	import { alignDaily, fmtCompact, isolatedIndices, type ChartSeries } from './series';
+	import { alignDaily, fmtCompact, isolatedIndices, panWindow, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -24,7 +24,8 @@
 		recentLabel = 'Recent',
 		toolbar,
 		caption,
-		shade = []
+		shade = [],
+		pannable = false
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -44,6 +45,12 @@
 		caption?: string;
 		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption`). */
 		shade?: { start: string; end: string }[];
+		/**
+		 * Daily charts: Shift+drag moves the view through the record, with
+		 * Earlier / Later buttons as the non-drag route. A plain drag still
+		 * draws a box to zoom into, as on every chart.
+		 */
+		pannable?: boolean;
 	} = $props();
 
 	let host: HTMLDivElement | undefined = $state();
@@ -53,6 +60,8 @@
 	// Legend clicks, by series label, so a rebuild (log scale, units, theme)
 	// keeps what the user switched on or off rather than resetting to `hidden`.
 	const shownByLabel = new Map<string, boolean>();
+	// The visible x range (epoch s), kept in step with the plot's scale.
+	let view = $state<{ min: number; max: number } | null>(null);
 
 	const isTime = $derived(!xy);
 	const aligned = $derived(xy ?? alignDaily(series));
@@ -62,6 +71,9 @@
 	const hasData = $derived(plotted.some((ys) => ys.some((v) => v !== null)));
 	const spanDays = $derived(isTime && aligned.x.length ? (aligned.x[aligned.x.length - 1]! - aligned.x[0]!) / 86_400 : 0);
 	const canWindow = $derived(!!recentDays && spanDays > recentDays * 1.2);
+	const dataLo = $derived(aligned.x[0] ?? 0);
+	const dataHi = $derived(aligned.x[aligned.x.length - 1] ?? 0);
+	const canPan = $derived(isTime && pannable && !!view && view.max - view.min < dataHi - dataLo);
 
 	function token(name: string, fallback: string): string {
 		if (!host) return fallback;
@@ -126,6 +138,13 @@
 			cursor: { drag: { x: true, y: false }, points: { size: 7 } },
 			hooks: {
 				...(isTime && shade.length ? { drawClear: [(u: uPlot) => drawShade(u, withAlpha(token('--warning', '#8a5a00'), 0.16))] } : {}),
+				setScale: [
+					(u: uPlot, key: string) => {
+						if (key !== 'x') return;
+						const { min, max } = u.scales.x!;
+						view = min != null && max != null ? { min, max } : null;
+					}
+				],
 				setSeries: [
 					(u: uPlot, idx: number | null, o: uPlot.Series) => {
 						if (idx != null && idx > 0 && o.show != null) shownByLabel.set(series[idx - 1]!.label, o.show);
@@ -176,8 +195,43 @@
 				}
 			]
 		};
+		const prev = view;
 		plot = new uPlot(opts, [aligned.x, ...plotted] as uPlot.AlignedData, host);
-		if (canWindow) showRecent();
+		// A rebuild (log scale, units, theme) keeps the window the user was
+		// looking at; a first build, or a window the new data doesn't cover,
+		// opens on the recent period as before.
+		if (isTime && prev && prev.min >= dataLo && prev.max <= dataHi && prev.max - prev.min < dataHi - dataLo) plot.setScale('x', prev);
+		else if (canWindow) showRecent();
+		if (isTime && pannable) attachPan(plot);
+	}
+
+	/** Shift+drag moves the view; a plain drag is left to uPlot's zoom box. */
+	function attachPan(u: uPlot) {
+		u.over.addEventListener('pointerdown', (e: PointerEvent) => {
+			if (e.button !== 0 || !e.shiftKey || !canPan) return;
+			const { min, max } = u.scales.x!;
+			if (min == null || max == null) return;
+			// Cancelling pointerdown suppresses the mouse events uPlot's zoom listens for.
+			e.preventDefault();
+			u.over.setPointerCapture(e.pointerId);
+			const x0 = e.clientX;
+			const perPx = (max - min) / Math.max(1, u.over.clientWidth);
+			const move = (ev: PointerEvent) => u.setScale('x', panWindow(min, max, -(ev.clientX - x0) * perPx, dataLo, dataHi));
+			const end = () => {
+				u.over.removeEventListener('pointermove', move);
+				u.over.removeEventListener('pointerup', end);
+				u.over.removeEventListener('pointercancel', end);
+			};
+			u.over.addEventListener('pointermove', move);
+			u.over.addEventListener('pointerup', end);
+			u.over.addEventListener('pointercancel', end);
+		});
+	}
+
+	/** Earlier / Later: move by half the visible window. */
+	function step(dir: -1 | 1) {
+		if (!plot || !view) return;
+		plot.setScale('x', panWindow(view.min, view.max, (dir * (view.max - view.min)) / 2, dataLo, dataHi));
 	}
 
 	/** Tints each `shade` range over the full plot height, a day wide at each end. */
@@ -240,11 +294,22 @@
 	onDestroy(() => plot?.destroy());
 </script>
 
-<figure class="chart" data-shaded={shade.length || undefined}>
+<figure
+	class="chart"
+	data-shaded={shade.length || undefined}
+	data-view-start={isTime && view ? isoDay(view.min) : undefined}
+	data-view-end={isTime && view ? isoDay(view.max) : undefined}
+>
 	<figcaption class="head">
 		<span class="ttl">{title}</span>
 		<span class="tools">
 			{#if toolbar}{@render toolbar()}{/if}
+			{#if isTime && pannable && hasData}
+				<span class="seg" role="group" aria-label="Move through the record">
+					<button type="button" class="btn btn-sm" disabled={!canPan || view!.min <= dataLo} onclick={() => step(-1)}>◀ Earlier</button>
+					<button type="button" class="btn btn-sm" disabled={!canPan || view!.max >= dataHi} onclick={() => step(1)}>Later ▶</button>
+				</span>
+			{/if}
 			{#if canWindow && hasData}
 				<span class="seg" role="group" aria-label="Time window">
 					<button type="button" class="btn btn-sm" onclick={showRecent}>{recentLabel}</button>
@@ -263,7 +328,7 @@
 	{/if}
 	<div class="plot" bind:this={host} role="img" aria-label="{title}: line chart of {series.map((s) => s.label).join(', ')}"></div>
 	<p class="hint">
-		{#if caption}{caption}{' '}{/if}Drag across the chart to zoom; double-click to reset.
+		{#if caption}{caption}{' '}{/if}{#if isTime && pannable}Drag across the chart to zoom; Shift+drag, or Earlier / Later, to move through the record; double-click for the full period.{:else}Drag across the chart to zoom; double-click to reset.{/if}
 	</p>
 </figure>
 
@@ -350,6 +415,18 @@
 	}
 	.plot :global(.u-legend.u-inline tr) {
 		margin-right: 0.9rem;
+	}
+	/* A switched-off series: uPlot fades it to 30 %, which fails text
+	   contrast; strike it through in the muted text colour instead. */
+	.plot :global(.u-legend .u-off > *) {
+		opacity: 1;
+	}
+	.plot :global(.u-legend .u-off .u-label) {
+		color: var(--text-muted);
+		text-decoration: line-through;
+	}
+	.plot :global(.u-legend .u-off .u-marker) {
+		opacity: 0.35;
 	}
 	.plot :global(.u-legend .u-marker) {
 		width: 1em;
