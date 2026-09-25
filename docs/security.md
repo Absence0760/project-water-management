@@ -232,7 +232,12 @@ readable by anyone. The rules:
   everything extracted from them (`data/`) are gitignored. Committed test
   fixtures are **synthetic**: made-up farm names, made-up numbers. Never paste
   real farm names, owners, dam sizes or series into fixtures, test names, code
-  comments, commit messages or docs examples.
+  comments, commit messages or docs examples. The one tracked workbook,
+  `scripts/wbt-import/fixtures/synthetic_b023.xlsx` (a narrow `.gitignore`
+  exception), is synthetic too: `make_synthetic_workbook.py` builds it from an
+  invented catchment (NATO-alphabet farm names, seeded random series), and only
+  its layout follows b023. Regenerate it; never edit it by hand or paste client
+  values into it ([scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-synthetic-workbook)).
 - **Client terms guard.** The client's catchment, farm and workbook names
   (and the gauge and quaternary codes that pinpoint it) are listed in
   `../infra-secrets/water-management/client-terms.txt`, outside this repo,
