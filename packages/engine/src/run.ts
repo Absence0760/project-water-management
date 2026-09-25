@@ -87,7 +87,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.26.1';
+export const ENGINE_VERSION = '0.27.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -347,6 +347,7 @@ export function runModelWith(
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
+			flowShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,

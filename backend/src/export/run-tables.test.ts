@@ -69,7 +69,9 @@ describe('summary sheet', () => {
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
 		expect(lines[farmHeader]).toContain('Average crop water requirement (m³/day),Average abstraction demand (m³/day)');
 		expect(lines[farmHeader]).toContain('Demand supplied (%)');
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",90,100,80,20,80,-5,3');
+		// The fixture is a run before engine 0.27.0: no flow share, so that cell is empty.
+		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),Average crop water requirement/);
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,90,100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
@@ -86,8 +88,17 @@ describe('summary sheet', () => {
 		s.farms[0]!.fractionSupplied = 0.07;
 		s.catchment.ewrFractionDaysNotMet = 1 / 3;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",90,100,80,20,7,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,90,100,80,20,7,-5,3');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
+	});
+
+	it('writes the flow share (engine ≥ 0.27.0) as a percentage next to the farm name', () => {
+		const s = structuredClone(summary);
+		s.farms[0]!.flowShare = 0.07;
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,90,100,80,20,80,-5,3');
+		s.farms[0]!.flowShare = 0;
+		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,90,100,80,20,80,-5,3');
 	});
 
 	it('keeps fields the engine adds later and says when calibration is missing', () => {

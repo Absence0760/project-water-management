@@ -773,6 +773,9 @@ use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
 all farms** downloads (`export/farms.csv?key=runoff|ewr`, [api.md § Export](./api.md#export)).
+The run records each farm's share as applied (`FarmSummary.flowShare`, engine
+≥ 0.27.0), so the summary CSV's `Flow share (%)` column stays right after the
+network's areas or method change; the Network tab shows the current setting.
 
 ### 2.5a Land-cover streamflow reductions (engine ≥ 0.24.0, roadmap WP-1.35)
 

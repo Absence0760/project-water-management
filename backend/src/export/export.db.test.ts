@@ -198,6 +198,14 @@ describe('run summary export', () => {
 		expect(rows[0]).toBe('Project,Catchment Ä / Export');
 		expect(rows.some((r) => r.startsWith('"Farm, ""upper""",'))).toBe(true);
 		expect(rows.some((r) => r.startsWith('Farm 2,'))).toBe(true);
+		// Each farm's flow share as the run applied it (engine 0.27.0), in %, right after the name; together 100 %.
+		const header = rows.find((r) => r.startsWith('Farm,Flow share (%),'));
+		expect(header).toBeDefined();
+		const lower = Number(rows.find((r) => r.startsWith('Farm 2,'))!.split(',')[1]);
+		const upper = Number(rows.find((r) => r.startsWith('"Farm, ""upper""",'))!.split(',')[2]); // the quoted name holds a comma
+		expect(lower).toBeGreaterThan(0);
+		expect(upper).toBeGreaterThan(0);
+		expect(lower + upper).toBeCloseTo(100, 9);
 		expect(rows).toContain('Catchment');
 		expect(rows.some((r) => r.startsWith('NSE,'))).toBe(true);
 		// The engine's self-checks and the water balance (engine 0.12.0).

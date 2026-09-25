@@ -101,9 +101,11 @@ export interface SummaryMeta {
  */
 const pct = (v: unknown): unknown => (typeof v === 'number' ? Number((v * 100).toPrecision(12)) : v);
 /** Fields converted with `pct` (the engine's own key names). */
-const PERCENT_KEYS = new Set(['fractionSupplied', 'ewrFractionDaysNotMet']);
+const PERCENT_KEYS = new Set(['flowShare', 'fractionSupplied', 'ewrFractionDaysNotMet']);
 
 const FARM_COLUMNS: [key: string, header: string][] = [
+	// Engine ≥ 0.27.0; empty on older runs. The share of both the flow (I) and the EWR (Y).
+	['flowShare', 'Flow share (%)'],
 	['avgCropRequirementM3Day', 'Average crop water requirement (m³/day)'],
 	['avgDemandM3Day', 'Average abstraction demand (m³/day)'],
 	['avgSuppliedM3Day', 'Average supplied (m³/day)'],
