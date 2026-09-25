@@ -38,7 +38,7 @@ describe('rainSourceEwr', () => {
 	it('calls a year fallback when more than half its rain fell on fallback days, even with most days read', () => {
 		// 300 station days of 0 mm, 65 fallback days of 10 mm: 100 % of the rain is fallback, 18 % of the days.
 		const x = input([0, 0]);
-		const rain = x.rainMm;
+		const rain = x.rainMm as (number | null)[];
 		for (let t = 0; t < 365; t++) rain[t] = t < 300 ? 0 : 10;
 		for (let t = 300; t < 365; t++) x.station[t] = 0;
 		const y = rainSourceEwr(x)!.years[0]!;
@@ -51,7 +51,7 @@ describe('rainSourceEwr', () => {
 		const x = input([0, 0]);
 		for (let t = 0; t < 200; t++) {
 			x.station[t] = 0;
-			x.rainMm[t] = null;
+			(x.rainMm as (number | null)[])[t] = null;
 		}
 		const y = rainSourceEwr(x)!.years[0]!;
 		expect(y.fallbackRainMm).toBe(0);
