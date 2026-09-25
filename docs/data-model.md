@@ -189,7 +189,7 @@ Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
 
-### Teams (002_teams.sql)
+### Teams (002_teams.sql, 008_team_viewer.sql)
 
 Users and groups work across many catchments. A **team** (e.g. a consultancy
 or a catchment management agency) has members with a team role, and projects
@@ -197,6 +197,7 @@ may belong to a team (`project.team_id`):
 
 | Team role | Effective role on every team project |
 | --- | --- |
+| `viewer` | `viewer` (read-only: e.g. a WUA clerk or a client reviewer) |
 | `member` | `editor` |
 | `admin` | `owner` (and manages the team: rename, members, delete) |
 
@@ -207,7 +208,19 @@ project-scoped tables at once. The team's creator becomes its first admin and a
 team always keeps at least one admin (same trigger pattern as project owners).
 Deleting a team keeps its projects with their direct members (`ON DELETE SET
 NULL`); the creator of a project is always a direct owner. A project can only be
-created in, or moved into, a team the user belongs to (moving needs owner).
+created in, moved into or copied into a team where the user is a `member` or
+`admin` (moving needs owner): a team `viewer` would otherwise become the direct
+owner of a project inside a team they can only read. `project_insert` and
+`project_update` enforce this (008); `project_update` only gates a *change* of
+team, so a direct editor can still edit a project whose team they only view. A
+viewer copying a team project gets a personal copy.
+
+`app_project_role()` maps each team role explicitly and gives an unknown one no
+access (NULL), so a role added later can never fall through to `editor`. The
+enum is ordered `viewer < member < admin`. `008` adds `viewer` with `ALTER TYPE
+… ADD VALUE` inside the migration runner's per-file transaction, which
+PostgreSQL allows as long as nothing in that transaction *uses* the new value:
+the mapping compares the role as text for that reason.
 
 ### Two database roles
 

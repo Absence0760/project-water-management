@@ -6,6 +6,7 @@
 	import {
 		api,
 		ApiError,
+		hasTeamRole,
 		TEAM_ROLES,
 		type Invite,
 		type ProjectSummary,
@@ -57,6 +58,8 @@
 	let deleting = $state(false);
 
 	const isAdmin = $derived(team?.role === 'admin');
+	// Viewers read the team's projects but can't add one to the team.
+	const canAddProjects = $derived(hasTeamRole(team?.role, 'member'));
 	const adminCount = $derived(members.filter((m) => m.role === 'admin').length);
 	const soleAdmin = (m: TeamMember) => m.role === 'admin' && adminCount <= 1;
 
@@ -239,7 +242,7 @@
 													onchange={(e) => setRole(m, e.currentTarget.value as TeamRole)}
 												>
 													{#each TEAM_ROLES as r (r)}
-														<option value={r} disabled={r === 'member' && soleAdmin(m)}>{r}</option>
+														<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{r}</option>
 													{/each}
 												</select>
 											{:else}
@@ -303,6 +306,7 @@
 						{/key}
 					{/if}
 					<dl class="roles">
+						<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
 						<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
 						<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
 					</dl>
@@ -313,7 +317,9 @@
 					<section class="panel" aria-labelledby="tp-h">
 						<div class="panel-head">
 							<h2 id="tp-h">Projects</h2>
-							<a class="small" href="{base}/?owner=team:{team.id}&new=1">New project in this team</a>
+							{#if canAddProjects}
+								<a class="small" href="{base}/?owner=team:{team.id}&new=1">New project in this team</a>
+							{/if}
 						</div>
 						{#if projects.length}
 							<ul class="plist">
@@ -325,7 +331,11 @@
 								{/each}
 							</ul>
 						{:else}
-							<p class="muted">No projects yet. Create one here, or move an existing project into the team from its Overview tab.</p>
+							<p class="muted">
+								{canAddProjects
+									? 'No projects yet. Create one here, or move an existing project into the team from its Overview tab.'
+									: 'No projects yet.'}
+							</p>
 						{/if}
 					</section>
 

@@ -53,9 +53,12 @@ export interface Member {
 	role: Role;
 }
 
-/** Team roles: admins are owners of every team project, members are editors. */
-export type TeamRole = 'member' | 'admin';
-export const TEAM_ROLES: readonly TeamRole[] = ['member', 'admin'];
+/**
+ * Team roles, lowest first: on every team project a viewer is a viewer, a
+ * member an editor and an admin an owner (docs/data-model.md § Teams).
+ */
+export type TeamRole = 'viewer' | 'member' | 'admin';
+export const TEAM_ROLES: readonly TeamRole[] = ['viewer', 'member', 'admin'];
 
 export interface Team {
 	id: string;
@@ -211,4 +214,14 @@ const RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
 /** True when `role` is at least `min`. */
 export function hasRole(role: Role | undefined | null, min: Role): boolean {
 	return role != null && RANK[role] >= RANK[min];
+}
+
+const TEAM_RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2 };
+
+/**
+ * True when team `role` is at least `min`. An unknown role is never enough, so
+ * a role this build doesn't know about can't be treated as a member.
+ */
+export function hasTeamRole(role: TeamRole | string | undefined | null, min: TeamRole): boolean {
+	return role != null && Object.hasOwn(TEAM_RANK, role) && TEAM_RANK[role as TeamRole] >= TEAM_RANK[min];
 }

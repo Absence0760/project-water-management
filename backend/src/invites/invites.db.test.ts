@@ -307,6 +307,24 @@ describe('team invites', () => {
 		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([]);
 	});
 
+	it('invites a team viewer, who joins read-only (008_team_viewer)', async () => {
+		const admin = await signUp('TVAdmin');
+		const teamId = (await admin.call('POST', '/teams', { name: 'Reviewers' })).body.team.id;
+		const pid = (await admin.call('POST', '/projects', { name: 'Reviewed catchment', teamId })).body.project.id;
+
+		const email = newEmail('teamviewer');
+		const res = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'viewer' });
+		expect(res.status).toBe(201);
+		expect(res.body).toMatchObject({ invited: true, invite: { email, role: 'viewer' } });
+		expect(lastMailTo(email)!.text).toContain('as a viewer');
+		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([expect.objectContaining({ email, role: 'viewer' })]);
+
+		const invitee = await register(email, tokenIn(lastMailTo(email)));
+		expect((await invitee.call('GET', `/teams/${teamId}`)).body.team.role).toBe('viewer');
+		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('viewer');
+		expect((await invitee.call('PATCH', `/projects/${pid}`, { name: 'x' })).status).toBe(403);
+	});
+
 	it('an unverified account is invited to a team, and joins once it confirms', async () => {
 		const admin = await signUp('TSquat');
 		const teamId = (await admin.call('POST', '/teams', { name: 'Squatters' })).body.team.id;

@@ -99,7 +99,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
 In short:
 
-- Roles are **viewer < editor < owner**, per project.
+- Roles are **viewer < editor < owner**, per project. A team grants one of
+  them on every team project: team **viewer → viewer**, **member → editor**,
+  **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
+  explicit and an unrecognised team role grants nothing, in SQL
+  (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
+  later can't silently become an editor.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every

@@ -102,7 +102,8 @@ workbook (as in 1a) with **no manual edits**.
 ### 1c. Backend API ([api.md](./api.md))
 
 - ✅ **Teams** (`002_teams.sql`): groups own many catchments. Team admin → owner
-  and team member → editor on every team project; direct sharing still works;
+  and team member → editor on every team project (team viewer → viewer since
+  `008_team_viewer.sql`); direct sharing still works;
   the effective role is the higher of the two. Teams UI in progress.
 - ✅ **Append / merge daily data**: `POST /projects/:id/series/merge` adds a
   daily or batch update to a series by date (new days extend, re-sent days

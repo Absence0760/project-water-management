@@ -7,9 +7,9 @@ import { ApiError } from '../http/errors.js';
 import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
-import { requireTeamRole } from './access.js';
+import { requireTeamRole, TEAM_ROLES } from './access.js';
 
-const RoleEnum = z.enum(['member', 'admin']);
+const RoleEnum = z.enum(TEAM_ROLES);
 const Name = z.string().trim().min(1).max(200);
 
 async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
@@ -52,7 +52,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 	.get('/:id', async (c) =>
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
-			await requireTeamRole(db, id, 'member');
+			await requireTeamRole(db, id, 'viewer');
 			const { rows: members } = await db.query(
 				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role
 				 FROM team_member m JOIN app_user u ON u.id = m.user_id WHERE m.team_id = $1
@@ -131,7 +131,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 	.delete('/:id/members/:userId', async (c) => {
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			const role = await requireTeamRole(db, id, 'member');
+			const role = await requireTeamRole(db, id, 'viewer');
 			if (userId !== c.get('userId') && role !== 'admin') throw new ApiError(403, 'requires team admin');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastAdmin(db, id, userId);

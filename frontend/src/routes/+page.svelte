@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, type ProjectSummary, type Team } from '$lib/api';
+	import { api, hasTeamRole, type ProjectSummary, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import GetStarted from '$lib/components/projects/GetStarted.svelte';
@@ -88,11 +88,14 @@
 	const groups = $derived(owner === 'all' ? groupProjects(visible, teams) : []);
 	const ownerLabel = $derived(options.find((o) => o.value === owner)?.label ?? 'All projects');
 	const selectedTeam = $derived(owner.startsWith('team:') ? teams.find((t) => `team:${t.id}` === owner) : undefined);
+	// Teams you may add projects to: a team viewer only reads its projects.
+	const addableTeams = $derived(teams.filter((t) => hasTeamRole(t.role, 'member')));
+	const canAddTo = (teamId: string | undefined) => !!teamId && addableTeams.some((t) => t.id === teamId);
 
 	function openCreate() {
 		newName = '';
 		newDescription = '';
-		newTeamId = selectedTeam?.id ?? '';
+		newTeamId = canAddTo(selectedTeam?.id) ? selectedTeam!.id : '';
 		actionError = null;
 		createOpen = true;
 	}
@@ -169,7 +172,7 @@
 
 	<LoadState {loading} error={loadError} retry={load} empty={false}>
 		{#if projects.length === 0}
-			<GetStarted oncreate={openCreate} hasTeams={teams.length > 0} />
+			<GetStarted oncreate={openCreate} hasTeams={addableTeams.length > 0} />
 		{:else}
 			<div class="layout">
 				<nav class="owners" aria-label="Filter by owner">
@@ -232,8 +235,15 @@
 								<button type="button" class="btn" onclick={clearFilters}>Clear search and filter</button>
 							{:else if selectedTeam}
 								<p><strong>{selectedTeam.name}</strong> has no projects yet.</p>
-								<p class="muted">Projects you create in a team can be edited by every member; team admins are owners.</p>
-								<button type="button" class="btn btn-primary" onclick={openCreate}>New project in {selectedTeam.name}</button>
+								{#if canAddTo(selectedTeam.id)}
+									<p class="muted">
+										Projects you create in a team can be edited by every member; team viewers can only read them, and team
+										admins are owners.
+									</p>
+									<button type="button" class="btn btn-primary" onclick={openCreate}>New project in {selectedTeam.name}</button>
+								{:else}
+									<p class="muted">You're a viewer in this team, so you can't add projects to it.</p>
+								{/if}
 							{:else}
 								<p>Nothing here.</p>
 								<button type="button" class="btn" onclick={clearFilters}>Show all projects</button>
@@ -271,11 +281,12 @@
 			<label for="np-team">Belongs to</label>
 			<select id="np-team" bind:value={newTeamId} aria-describedby="np-team-hint">
 				<option value="">Personal</option>
-				{#each teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+				{#each addableTeams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 			</select>
 			<span class="hint" id="np-team-hint">
-				{#if teams.length}
-					Personal: only you and people you share it with. In a team, every member can edit and team admins are owners.
+				{#if addableTeams.length}
+					Personal: only you and people you share it with. In a team, members can edit, viewers can only read and team
+					admins are owners.
 				{:else}
 					Only you and people you share it with. <a href="{base}/teams">Create a team</a> to work on catchments together.
 				{/if}
@@ -304,7 +315,11 @@
 		{#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
 		<p class="muted">
 			The model and time series are copied; model runs are not.
-			{#if copySource?.team?.name}The copy stays in {copySource.team.name}.{/if}
+			{#if copySource?.team?.name}
+				{canAddTo(copySource.team.id)
+					? `The copy stays in ${copySource.team.name}.`
+					: `You're a viewer in ${copySource.team.name}, so the copy is personal.`}
+			{/if}
 		</p>
 		<div class="field">
 			<label for="cp-name">Name of the copy</label>

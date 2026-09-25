@@ -94,6 +94,18 @@ pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
 
+## Teams
+
+`/teams` lists your teams with your role; `/teams/:id` shows members, pending
+invites and the team's projects. Admins pick each member's role from
+**viewer / member / admin** (the sole admin's viewer and member options are
+disabled), and the page explains each role in a short list under the table:
+viewers read every team project, members edit them, admins own them and
+manage the team. A team viewer doesn't get "New project in this team"; the
+New project dialog and the Overview's *Move to* list offer only teams where
+you're a member or admin, and copying a team project you only view makes a
+personal copy (the Copy dialog says so).
+
 ## Network
 
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the

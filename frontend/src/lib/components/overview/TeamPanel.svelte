@@ -3,7 +3,7 @@
 	// one of your teams or back to personal.
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
-	import { api, type Member, type Project, type Team } from '$lib/api';
+	import { api, hasTeamRole, type Member, type Project, type Team } from '$lib/api';
 	import { cached } from './cache';
 
 	let {
@@ -37,6 +37,8 @@
 	// the team: the API can't move it to personal for them.
 	const directOwner = $derived(direct?.some((m) => m.userId === currentUserId && m.role === 'owner') ?? true);
 	const current = $derived(project.team?.id ?? '');
+	// Only teams you may add projects to (member or admin); a team viewer can't.
+	const movable = $derived(teams?.filter((t) => hasTeamRole(t.role, 'member')) ?? null);
 	const targetName = $derived(target ? (teams?.find((t) => t.id === target)?.name ?? 'the team') : 'Personal');
 
 	async function move(e: SubmitEvent) {
@@ -68,7 +70,7 @@
 				Belongs to a team you're not in. You have access because it was shared with you directly.
 			{/if}
 		</p>
-		<p class="muted small">Team admins are owners of this project and team members are editors, as well as anyone listed under Members.</p>
+		<p class="muted small">Team admins are owners of this project, team members are editors and team viewers can only read it, as well as anyone listed under Members.</p>
 	{:else}
 		<p class="owner-line"><strong>Personal project.</strong> Only the people listed under Members can open it.</p>
 	{/if}
@@ -80,10 +82,10 @@
 				<label for="move-team">Move to</label>
 				<select id="move-team" bind:value={target} disabled={moving}>
 					<option value="" disabled={!!project.team && !directOwner}>Personal</option>
-					{#if project.team && !teams?.some((t) => t.id === project.team?.id)}
+					{#if project.team && !movable?.some((t) => t.id === project.team?.id)}
 						<option value={project.team.id}>{project.team.name ?? 'Current team'}</option>
 					{/if}
-					{#each teams ?? [] as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+					{#each movable ?? [] as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
@@ -94,7 +96,7 @@
 			<p class="muted small">
 				You're an owner through the team, so you can't make it personal: add yourself under Members as an owner first.
 			</p>
-		{:else if teams && !teams.length}
+		{:else if movable && !movable.length}
 			<p class="muted small"><a href="{base}/teams">Create a team</a> to share this catchment with colleagues in one step.</p>
 		{/if}
 	{/if}
