@@ -1,8 +1,9 @@
-import { EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	curtailmentLines,
+	ewrAssuranceLines,
 	ewrSiteLines,
 	zeroRainLines,
 	doubleMassLines,
@@ -69,9 +70,9 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
-		// EWR sites, water balance, CHIRPS factors, rain treated as missing, double-mass check,
-		// calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(13);
+		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing,
+		// double-mass check, calibration, WR2012 check, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(14);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -513,5 +514,58 @@ describe('run notes and the WR2012 block', () => {
 		expect(cal).toBeGreaterThan(0);
 		expect(wr).toBeGreaterThan(cal);
 		expect(lines).toContain('Quaternary,X11A');
+	});
+});
+
+describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
+	// Synthetic: two Octobers of 1.5 Mm³ natural flow, 70 % on the table's natural curve, 0.75 Mm³ required.
+	const start = '2000-10-01';
+	const days = 366 + 365;
+	const natural = new Float64Array(days).fill(1.5e6 / 31);
+	const impacted = natural.map((v, t) => (t < 31 ? v * 0.4 : v));
+	const table = {
+		siteNodeId: null,
+		source: 'Synthetic, table 1',
+		component: 'lowFlow' as const,
+		unit: 'mcm' as const,
+		points: [10, 50, 90],
+		ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+		naturalSource: 'table' as const,
+		natural: Array.from({ length: 12 }, () => [3, 2, 1]),
+		scale: 1
+	};
+	const report = assessSite(start, days, { table, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
+
+	it('gives the provenance, the headline, the months of the year and each month', () => {
+		const lines = [...ewrAssuranceLines([report])];
+		expect(lines[0]).toBe('Reserve compliance by month (EWR rule tables)');
+		expect(lines).toContain('Site,Outlet gauge,outlet');
+		expect(lines).toContain('Source,"Synthetic, table 1"');
+		expect(lines).toContain('Covers,low flows only');
+		expect(lines).toContain("Natural-flow percentile from,the table's natural flows");
+		expect(lines).toContain('% points,10,50,90');
+		// 24 complete months; the first October (0.6 Mm³ < 0.75) is the only one short.
+		expect(lines).toContain(`Months met,23,of,24,Met (%),${Number(((23 / 24) * 100).toPrecision(12))}`);
+		expect(lines).toContain('Longest run of months not met,1');
+		const header = lines.indexOf('Month,Complete years,Months met,Met (%),Deficit (m³),Mean required (Mm³),Mean simulated (Mm³),FDC points met');
+		expect(header).toBeGreaterThan(0);
+		expect(lines.slice(header + 1, header + 13).map((l) => l.split(',')[0])).toEqual(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+		expect(lines[header + 1]!.split(',').slice(0, 4)).toEqual(['Oct', '2', '1', '50']);
+		const detail = lines.findIndex((l) => l.startsWith('Year,Month,Water year'));
+		const oct = lines[detail + 1]!.split(',');
+		expect(oct.slice(0, 3)).toEqual(['2000', 'Oct', '2000/01']);
+		expect(oct[8]).toBe('no');
+		expect(Number(oct[9])).toBeCloseTo(150_000, 3);
+		expect(lines.length).toBe(detail + 1 + 24);
+	});
+
+	it('says when nothing was assessed, and is part of the summary sheet', () => {
+		expect([...ewrAssuranceLines(undefined)]).toEqual([
+			'Reserve compliance by month (EWR rule tables)',
+			'Not assessed: no EWR rule table in the settings the run used (or a run made before engine 0.21.0)'
+		]);
+		const lines = [...summaryCsvLines(meta, { ...summary, ewrAssurance: [report] })];
+		expect(lines).toContain('Reserve compliance by month (EWR rule tables)');
+		expect(lines).toContain('Site,Outlet gauge,outlet');
 	});
 });
