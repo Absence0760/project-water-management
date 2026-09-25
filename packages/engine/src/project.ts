@@ -595,7 +595,7 @@ export interface FarmSummary {
 
 /** Observed vs simulated volume in one water year (paired days only). */
 export interface AnnualVolume {
-	/** Water year, labelled by the calendar year it starts in (1981 = Oct 1981 – Sep 1982). */
+	/** Water year, labelled by the calendar year it starts in (2001 = Oct 2001 – Sep 2002). */
 	waterYear: number;
 	/** Days with an observation (the days the volumes cover). */
 	days: number;

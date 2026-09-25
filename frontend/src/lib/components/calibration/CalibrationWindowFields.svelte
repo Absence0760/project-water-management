@@ -69,7 +69,7 @@
 	</div>
 	<p class="hint muted" id="{uid}-hint">
 		Calibration statistics only score days inside this window. Leave blank to use every day with an observation. The
-		workbook calibrates on a fixed period (e.g. Oct 2010 – Sep 2018).
+		workbook calibrates on a fixed period (e.g. Oct 2005 – Sep 2012).
 	</p>
 	{#if error}<p class="err" role="alert">{error}</p>{/if}
 </fieldset>

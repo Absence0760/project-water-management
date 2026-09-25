@@ -139,7 +139,7 @@ export const SCORE_ROWS: ScoreRow[] = [
 export interface ScoreColumn {
 	id: string;
 	label: string;
-	/** "2013-04-15 – 2015-10-02", or "WY 1983/84, 1992/93" for a set of water years. */
+	/** "2002-04-15 – 2004-10-02", or "WY 2001/02, 2004/05" for a set of water years. */
 	period: string;
 	scores: FitScores;
 	/** Validation columns are scored on days the parameters were not fitted to. */

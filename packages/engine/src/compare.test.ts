@@ -601,13 +601,13 @@ describe('diffInputs', () => {
 		const b = structuredClone(a);
 		Object.assign(b.settings, {
 			reportStart: '2015-10-01',
-			calibrationEnd: '2018-09-30',
+			calibrationEnd: '2012-09-30',
 			calibrationFlowKind: 'flow_logger_m3s',
 			dataQuality: { agreementMinRatio: 0.8 } // stored sparsely: the other two stay at their defaults
 		});
 		expect(texts(a, b)).toEqual([
 			'Curtailment report start: start of run → 2015-10-01',
-			'Calibration window end: end of record → 2018-09-30',
+			'Calibration window end: end of record → 2012-09-30',
 			'Calibration flow series: default (observed, else logger) → Logger flow',
 			'Data quality gauge/logger lowest ratio: 66.67% → 80%'
 		]);

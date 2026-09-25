@@ -61,12 +61,12 @@ describe('formatting helpers', () => {
 	});
 
 	it('describes and validates the window', () => {
-		expect(describeWindow('2010-10-01', '2018-09-30')).toBe('2010-10-01 – 2018-09-30');
+		expect(describeWindow('2005-10-01', '2012-09-30')).toBe('2005-10-01 – 2012-09-30');
 		expect(describeWindow(null, null)).toBe('whole record');
-		expect(describeWindow('2010-10-01', null)).toBe('from 2010-10-01');
+		expect(describeWindow('2005-10-01', null)).toBe('from 2005-10-01');
 		expect(windowError(null, null)).toBeNull();
-		expect(windowError('2010-10-01', '2018-09-30')).toBeNull();
-		expect(windowError('2018-10-01', '2010-09-30')).toMatch(/before the end/);
-		expect(windowError('2010-13-45', null)).toMatch(/must be a date/);
+		expect(windowError('2005-10-01', '2012-09-30')).toBeNull();
+		expect(windowError('2012-10-01', '2005-09-30')).toMatch(/before the end/);
+		expect(windowError('2005-13-45', null)).toMatch(/must be a date/);
 	});
 });

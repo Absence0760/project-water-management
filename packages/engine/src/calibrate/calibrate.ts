@@ -296,7 +296,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 
 	// The network is causal: nothing after the last scored day changes a
 	// score, so each evaluation stops there (a full run is ~20 ms on a
-	// 44-year catchment; a record that ends early saves the rest).
+	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
 	let runoff: (p: ParamSet, n: number) => void;
 	if (modelId === 'gr4j') {

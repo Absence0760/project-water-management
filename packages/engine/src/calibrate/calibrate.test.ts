@@ -51,7 +51,7 @@ function rain(days: number, start: string, seed: number): number[] {
  * One farm (no dam, no crops) draining to a gauge, so simulated outflow =
  * natural flow; the "observed" record is GR4J itself with known parameters.
  */
-function synthetic(truth: Gr4jParams, years = 8, start = '2010-10-01'): ModelInput {
+function synthetic(truth: Gr4jParams, years = 8, start = '1990-10-01'): ModelInput {
 	const days = Math.round(years * 365.25);
 	const r = rain(days, start, 7);
 	const input: ModelInput = {
@@ -226,17 +226,17 @@ describe('calibrate', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
 		const obs = input.series.flow_observed_m3s!;
 		obs.values[40] = null;
-		input.settings.calibrationStart = '2011-10-01';
-		input.settings.calibrationEnd = '2013-09-30';
-		const pb = prepareCalibration(input, [{ start: '2012-01-01', end: '2012-01-31' }]);
-		const d0 = toEpochDay('2010-10-01');
+		input.settings.calibrationStart = '1991-10-01';
+		input.settings.calibrationEnd = '1993-09-30';
+		const pb = prepareCalibration(input, [{ start: '1992-01-01', end: '1992-01-31' }]);
+		const d0 = toEpochDay('1990-10-01');
 		const dates = Array.from(pb.scoredDays, (t) => fromEpochDay(d0 + t));
-		expect(dates[0]).toBe('2011-10-01');
-		expect(dates.at(-1)).toBe('2013-09-30');
-		expect(dates.some((d) => d.startsWith('2012-01'))).toBe(false);
+		expect(dates[0]).toBe('1991-10-01');
+		expect(dates.at(-1)).toBe('1993-09-30');
+		expect(dates.some((d) => d.startsWith('1992-01'))).toBe(false);
 		expect(pb.scoredDays.length).toBe(731 - 31);
-		const report = calibrate(input, { budget: 50, validate: false, exclusions: [{ start: '2012-01-01', end: '2012-01-31' }] });
-		expect(report.fit).toMatchObject({ start: '2011-10-01', end: '2013-09-30' });
+		const report = calibrate(input, { budget: 50, validate: false, exclusions: [{ start: '1992-01-01', end: '1992-01-31' }] });
+		expect(report.fit).toMatchObject({ start: '1991-10-01', end: '1993-09-30' });
 		expect(report.fit.scores.days).toBe(700);
 	});
 
@@ -244,23 +244,23 @@ describe('calibrate', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
 		const all = prepareCalibration(input).scoredDays.length;
 		input.settings.calibrationExclusions = [
-			{ waterYear: 2011, reason: 'suspect rain' },
-			{ start: '2013-01-01', end: '2013-01-10', reason: 'gauge outage' }
+			{ waterYear: 1991, reason: 'suspect rain' },
+			{ start: '1993-01-01', end: '1993-01-10', reason: 'gauge outage' }
 		];
-		const pb = prepareCalibration(input, [{ start: '2013-01-05', end: '2013-01-20' }]);
-		const d0 = toEpochDay('2010-10-01');
+		const pb = prepareCalibration(input, [{ start: '1993-01-05', end: '1993-01-20' }]);
+		const d0 = toEpochDay('1990-10-01');
 		const dates = Array.from(pb.scoredDays, (t) => fromEpochDay(d0 + t));
-		expect(dates.some((d) => d >= '2011-10-01' && d <= '2012-09-30')).toBe(false);
-		expect(dates.some((d) => d >= '2013-01-01' && d <= '2013-01-20')).toBe(false);
+		expect(dates.some((d) => d >= '1991-10-01' && d <= '1992-09-30')).toBe(false);
+		expect(dates.some((d) => d >= '1993-01-01' && d <= '1993-01-20')).toBe(false);
 		expect(pb.scoredDays.length).toBe(all - 366 - 20);
 		expect(pb.exclusions).toEqual([
-			{ start: '2011-10-01', end: '2012-09-30' },
-			{ start: '2013-01-01', end: '2013-01-10' },
-			{ start: '2013-01-05', end: '2013-01-20' }
+			{ start: '1991-10-01', end: '1992-09-30' },
+			{ start: '1993-01-01', end: '1993-01-10' },
+			{ start: '1993-01-05', end: '1993-01-20' }
 		]);
 		const report = calibrate(input, { budget: 30, validate: false });
 		expect(report.exclusions).toHaveLength(2);
-		expect(report.fit.waterYears).not.toContain(2011);
+		expect(report.fit.waterYears).not.toContain(1991);
 		// The same days runModel's calibration statistics score.
 		const out = runModel(input);
 		const stats = out.summary.calibration!;
@@ -274,12 +274,12 @@ describe('calibrate', () => {
 	it('runModel warns when the exclusions leave nothing to score, and drops an invalid one', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
 		input.settings.calibrationExclusions = [
-			{ start: '2000-01-01', end: '2030-01-01', reason: 'everything' },
-			{ waterYear: 2011, reason: '' }
+			{ start: '1980-01-01', end: '2030-01-01', reason: 'everything' },
+			{ waterYear: 1991, reason: '' }
 		];
 		const { summary } = runModel(input);
 		expect(summary.calibration!.days).toBe(0);
-		expect(summary.calibration!.exclusions).toEqual([{ start: '2000-01-01', end: '2030-01-01', reason: 'everything' }]);
+		expect(summary.calibration!.exclusions).toEqual([{ start: '1980-01-01', end: '2030-01-01', reason: 'everything' }]);
 		expect(summary.warnings).toContain('every observed day inside the calibration window falls in a calibration exclusion');
 		expect(summary.warnings.some((w) => /calibration exclusion .* needs a reason; ignored/.test(w))).toBe(true);
 	});
@@ -306,11 +306,11 @@ describe('calibrate', () => {
 			expect(dsst.calibration.waterYears).toEqual(dsst.dryYears);
 			expect(dsst.validation.waterYears).toEqual(dsst.wetYears);
 			expect(dsst.calibration.waterYears.filter((y) => dsst.validation.waterYears.includes(y))).toEqual([]);
-			// Every water year of the 8-year record is 2010/11 … 2017/18.
-			expect([...dsst.dryYears, ...dsst.wetYears].sort()).toEqual([2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017]);
+			// Every water year of the 8-year record is 1990/91 … 1997/98.
+			expect([...dsst.dryYears, ...dsst.wetYears].sort()).toEqual([1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997]);
 			// Contiguous periods list their years too.
-			expect(report.fit.waterYears).toEqual([2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017]);
-			expect(report.fit).toMatchObject({ start: '2010-10-01' });
+			expect(report.fit.waterYears).toEqual([1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997]);
+			expect(report.fit).toMatchObject({ start: '1990-10-01' });
 			const ss = report.splitSample!;
 			expect(ss.calibration.waterYears.at(-1)).toBeLessThanOrEqual(ss.validation.waterYears[0]!);
 		} finally {
@@ -332,7 +332,7 @@ describe('calibrate', () => {
 		input.series.rain_catchment_mm!.values = Array.from({ length: years * 365 }, (_, t) => oneYear[t % 365]!);
 		const truth = { ...input.settings, gr4j: { x1: 420, x2: 0, x3: 85, x4: 2.3, warmupDays: 365 } };
 		const flow = runModel({ ...input, settings: truth, series: { rain_catchment_mm: input.series.rain_catchment_mm } }).series.find((s) => s.key === 'natural_flow')!.values;
-		input.series.flow_observed_m3s = { startDate: '2010-10-01', values: flow.map((q) => q / 86_400) };
+		input.series.flow_observed_m3s = { startDate: '1990-10-01', values: flow.map((q) => q / 86_400) };
 		const report = calibrate(input, { budget: 60 });
 		expect(report.differential!.wetDryRatio).toBeLessThan(1.5);
 		expect(report.notes.join(' ')).toMatch(/no clearly wet years to test on/);
@@ -417,7 +417,7 @@ describe('calibrate', () => {
 	it('the fast path matches the traced simulation over the scored days', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 2);
 		const f = runoffForcing({ apanMm: apan as never, panCoefficient: new Array(12).fill(0.7) as never }, {
-			startDate: '2010-10-01',
+			startDate: '1990-10-01',
 			days: 730,
 			aligned: (k) => (k === 'rain_catchment_mm' ? input.series.rain_catchment_mm!.values.slice(0, 730) : new Array(730).fill(null))
 		});
@@ -431,16 +431,16 @@ describe('calibrate', () => {
 describe('calibrate with an independent validation record', () => {
 	/**
 	 * The gauge is the truth; the logger is a second instrument that reads 60 %
-	 * of it, and only from 2015-10-01 (its own days, outside the gauge's
+	 * of it, and only from 1995-10-01 (its own days, outside the gauge's
 	 * calibration window).
 	 */
 	function twoRecords(): ModelInput {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 8);
 		const gauge = input.series.flow_observed_m3s!;
-		const from = toEpochDay('2015-10-01') - toEpochDay(gauge.startDate);
-		input.series.flow_logger_m3s = { startDate: '2015-10-01', values: gauge.values.slice(from).map((q) => (q === null ? null : q * 0.6)) };
+		const from = toEpochDay('1995-10-01') - toEpochDay(gauge.startDate);
+		input.series.flow_logger_m3s = { startDate: '1995-10-01', values: gauge.values.slice(from).map((q) => (q === null ? null : q * 0.6)) };
 		input.settings.calibrationFlowKind = 'flow_observed_m3s';
-		input.settings.calibrationEnd = '2015-09-30';
+		input.settings.calibrationEnd = '1995-09-30';
 		return input;
 	}
 
@@ -454,7 +454,7 @@ describe('calibrate with an independent validation record', () => {
 		expect(ind.calibration).toEqual(report.fit);
 		// The logger's own days, not the gauge's calibration window.
 		const loggerDays = input.series.flow_logger_m3s!.values.filter((v) => v !== null).length;
-		expect(ind.validation).toMatchObject({ start: '2015-10-01', waterYears: [2015, 2016, 2017] });
+		expect(ind.validation).toMatchObject({ start: '1995-10-01', waterYears: [1995, 1996, 1997] });
 		expect(ind.validation.scores.days).toBe(loggerDays);
 		expect(ind.overlapDays).toBe(0);
 		// Fitted to the gauge, the model overshoots a logger that reads 60 % of it by ≈ 1/0.6.
@@ -462,7 +462,7 @@ describe('calibrate with an independent validation record', () => {
 		expect(ind.validation.scores.fdcHighPct).not.toBeNull();
 		expect(report.notes.join(' ')).toMatch(/Scored against the logger record instead, KGE′ falls from 0\.\d\d to .*does not hold on the other instrument/);
 		// Exclusions apply to it too.
-		const excl = calibrate(input, { budget: 50, validate: false, validationRecord: 'flow_logger_m3s', exclusions: [{ start: '2016-01-01', end: '2016-01-31' }] });
+		const excl = calibrate(input, { budget: 50, validate: false, validationRecord: 'flow_logger_m3s', exclusions: [{ start: '1996-01-01', end: '1996-01-31' }] });
 		expect(excl.independentRecord!.validation.scores.days).toBe(loggerDays - 31);
 	}, 60_000);
 
@@ -486,7 +486,7 @@ describe('calibrate with an independent validation record', () => {
 		expect({ ...absent, notes: plain.notes }).toEqual(plain);
 
 		const short = structuredClone(input);
-		short.series.flow_logger_m3s = { startDate: '2011-01-01', values: new Array(20).fill(1) };
+		short.series.flow_logger_m3s = { startDate: '1991-01-01', values: new Array(20).fill(1) };
 		const r = calibrate(short, { budget: 60, validate: false, validationRecord: 'flow_logger_m3s' });
 		expect(r.independentRecord).toBeNull();
 		expect(r.notes.join(' ')).toMatch(/logger record has only 20 observed days/);
@@ -505,14 +505,14 @@ describe('calibrate with an independent validation record', () => {
 });
 
 describe('validationNotes', () => {
-	const period = (kge: number) => ({ start: '2014-10-01', end: '2015-09-30', waterYears: [2014], scores: { ...fitScores([1, 2, 3], [1, 2, 3]), kgePrime: kge } });
+	const period = (kge: number) => ({ start: '2003-10-01', end: '2004-09-30', waterYears: [2003], scores: { ...fitScores([1, 2, 3], [1, 2, 3]), kgePrime: kge } });
 	const test = (cal: number, val: number): ValidationTest => ({ params: {}, calibration: period(cal), validation: period(val) });
 
 	it('calls out a validation score well below the calibration score, and a dry → wet test on few years', () => {
-		const dsst: DifferentialTest = { ...test(0.8, 0.34), dryYears: [2014, 2016], wetYears: [2013, 2015], wetDryRatio: 2.2 };
-		expect(validationNotes('kgePrime', test(0.83, 0.36), dsst)).toEqual([
-			'On the split-sample test KGE′ falls from 0.83 (the half the model was fitted to) to 0.36 (the other half): the fit does not carry over well, so treat results outside the calibration period with caution.',
-			'Fitted to the dry years, KGE′ falls from 0.80 to 0.34 on the wet years: wet-year behaviour is uncertain.',
+		const dsst: DifferentialTest = { ...test(0.78, 0.31), dryYears: [2003, 2005], wetYears: [2002, 2004], wetDryRatio: 2.2 };
+		expect(validationNotes('kgePrime', test(0.86, 0.41), dsst)).toEqual([
+			'On the split-sample test KGE′ falls from 0.86 (the half the model was fitted to) to 0.41 (the other half): the fit does not carry over well, so treat results outside the calibration period with caution.',
+			'Fitted to the dry years, KGE′ falls from 0.78 to 0.31 on the wet years: wet-year behaviour is uncertain.',
 			'The dry → wet test rests on 2 dry and 2 wet water years, too few for a firm conclusion.'
 		]);
 	});

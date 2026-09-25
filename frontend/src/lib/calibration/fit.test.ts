@@ -36,8 +36,8 @@ function report(over: Partial<CalibrationReport> = {}): CalibrationReport {
 		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
 		flowKind: 'flow_observed_m3s',
 		simulatedKey: 'simulated_outflow',
-		fit: period('2013-01-01', '2018-12-31', 0.8),
-		before: period('2013-01-01', '2018-12-31', 0.2),
+		fit: period('2003-01-01', '2008-12-31', 0.8),
+		before: period('2003-01-01', '2008-12-31', 0.2),
 		splitSample: null,
 		differential: null,
 		independentRecord: null,
@@ -117,13 +117,13 @@ describe('progress', () => {
 describe('scoreColumns', () => {
 	it('lists before and fitted, then each test’s fitted and validation part, validation marked', () => {
 		const r = report({
-			splitSample: { params: {}, calibration: period('2013-01-01', '2015-12-31', 0.8), validation: period('2016-01-01', '2018-12-31', 0.4) },
+			splitSample: { params: {}, calibration: period('2003-01-01', '2005-12-31', 0.8), validation: period('2006-01-01', '2008-12-31', 0.4) },
 			differential: {
 				params: {},
-				calibration: period('2014-10-01', '2017-09-30', 0.7, [2014, 2016]),
-				validation: period('2013-10-01', '2018-09-30', 0.3, [2013, 2017]),
-				dryYears: [2014, 2016],
-				wetYears: [2013, 2017],
+				calibration: period('2004-10-01', '2007-09-30', 0.7, [2004, 2006]),
+				validation: period('2003-10-01', '2008-09-30', 0.3, [2003, 2007]),
+				dryYears: [2004, 2006],
+				wetYears: [2003, 2007],
 				wetDryRatio: 2
 			}
 		});
@@ -136,27 +136,27 @@ describe('scoreColumns', () => {
 			['dsst-cal', false],
 			['dsst-val', true]
 		]);
-		expect(cols[3]!.period).toBe('2016-01-01 – 2018-12-31');
-		expect(cols[5]!.period).toBe('WY 2013/14, 2017/18');
+		expect(cols[3]!.period).toBe('2006-01-01 – 2008-12-31');
+		expect(cols[5]!.period).toBe('WY 2003/04, 2007/08');
 		expect(scoreColumns(report()).map((c) => c.id)).toEqual(['before', 'fit']);
 	});
 
 	it('shows the dry → wet test as the water years scored, never an overlapping date envelope', () => {
-		// Interleaved years: the dry set's first–last dates (2014-10-01 … 2017-09-30)
-		// sit inside the wet set's (2013-10-01 … 2018-09-30), although no year is in both.
+		// Interleaved years: the dry set's first–last dates (2004-10-01 … 2007-09-30)
+		// sit inside the wet set's (2003-10-01 … 2008-09-30), although no year is in both.
 		const r = report({
 			differential: {
 				params: {},
-				calibration: period('2014-10-01', '2017-09-30', 0.7, [2014, 2016]),
-				validation: period('2013-10-01', '2018-09-30', 0.3, [2013, 2015, 2017]),
-				dryYears: [2014, 2016],
-				wetYears: [2013, 2015, 2017],
+				calibration: period('2004-10-01', '2007-09-30', 0.7, [2004, 2006]),
+				validation: period('2003-10-01', '2008-09-30', 0.3, [2003, 2005, 2007]),
+				dryYears: [2004, 2006],
+				wetYears: [2003, 2005, 2007],
 				wetDryRatio: 2
 			}
 		});
 		const [dry, wet] = scoreColumns(r).filter((c) => c.id.startsWith('dsst'));
-		expect(dry!.period).toBe('WY 2014/15, 2016/17');
-		expect(wet!.period).toBe('WY 2013/14, 2015/16, 2017/18');
+		expect(dry!.period).toBe('WY 2004/05, 2006/07');
+		expect(wet!.period).toBe('WY 2003/04, 2005/06, 2007/08');
 		for (const c of [dry!, wet!]) expect(c.period).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 		expect(waterYearsText([1999])).toBe('WY 1999/00');
 		expect(waterYearsText([])).toBe('–');
@@ -168,13 +168,13 @@ describe('scoreColumns', () => {
 				flowKind: 'flow_logger_m3s',
 				simulatedKey: 'simulated_outflow',
 				params: {},
-				calibration: period('2013-01-01', '2018-12-31', 0.8),
-				validation: period('2015-10-01', '2018-09-30', 0.5),
+				calibration: period('2003-01-01', '2008-12-31', 0.8),
+				validation: period('2005-10-01', '2008-09-30', 0.5),
 				overlapDays: 0
 			}
 		});
 		const last = scoreColumns(r).at(-1)!;
-		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '2015-10-01 – 2018-09-30', validation: true });
+		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '2005-10-01 – 2008-09-30', validation: true });
 		expect(last.scores.kgePrime).toBe(0.5);
 	});
 });
@@ -222,7 +222,7 @@ describe('applyReport', () => {
 				cropAreas: [],
 				transfers: []
 			},
-			series: { rain_catchment_mm: { startDate: '2015-10-01', values: rain }, flow_observed_m3s: { startDate: '2015-10-01', values: flow } }
+			series: { rain_catchment_mm: { startDate: '2005-10-01', values: rain }, flow_observed_m3s: { startDate: '2005-10-01', values: flow } }
 		};
 		const r = calibrate(input, { budget: 80, validate: false });
 		const applied: ModelInput = { ...input, settings: applyReport(input.settings as ReturnType<typeof defaultProjectSettings>, r) as unknown as ModelInput['settings'] };
@@ -251,8 +251,8 @@ describe('seedError', () => {
 
 describe('fitRecordFor', () => {
 	it('records the report with the form it ran on, the engine version and the time', () => {
-		const form = { ...defaultProjectSettings(), calibrationStart: '2014-10-01', calibrationExclusions: [{ waterYear: 2016, reason: 'suspect rain' }] };
-		const r = report({ seed: 99, notes: ['A note.'], splitSample: { params: {}, calibration: period('2013-01-01', '2015-12-31', 0.8), validation: period('2016-01-01', '2018-12-31', 0.4) } });
+		const form = { ...defaultProjectSettings(), calibrationStart: '2004-10-01', calibrationExclusions: [{ waterYear: 2006, reason: 'suspect rain' }] };
+		const r = report({ seed: 99, notes: ['A note.'], splitSample: { params: {}, calibration: period('2003-01-01', '2005-12-31', 0.8), validation: period('2006-01-01', '2008-12-31', 0.4) } });
 		const rec = fitRecordFor(r, form, { validate: true, validationRecord: 'flow_logger_m3s', now: new Date('2026-09-24T10:05:33.120Z') });
 		expect(rec).toMatchObject({
 			fittedAt: '2026-09-24T10:05:33.120Z',
@@ -262,9 +262,9 @@ describe('fitRecordFor', () => {
 			startResults: [{ seed: 1, params: { x1: 800, x2: 0, x3: 40, x4: 1.2 }, score: 0.8, best: true }],
 			budget: 100,
 			objective: 'kgePrime',
-			calibrationStart: '2014-10-01',
+			calibrationStart: '2004-10-01',
 			calibrationEnd: null,
-			exclusions: [{ waterYear: 2016, reason: 'suspect rain' }],
+			exclusions: [{ waterYear: 2006, reason: 'suspect rain' }],
 			validate: true,
 			validationRecord: 'flow_logger_m3s',
 			notes: ['A note.'],
