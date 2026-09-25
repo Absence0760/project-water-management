@@ -18,6 +18,7 @@
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, type RunRef } from '$lib/components/compare/picker';
+	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { fmtDate } from '$lib/format/number';
 
 	type Side = 'a' | 'b';
@@ -269,6 +270,10 @@
 								{chirpsFitNote(data.comparison.chirpsFit)}
 							</div>
 						{/if}
+						<!-- Either side is, or was, the project's nominated evidence run (010_run_nomination). -->
+						{#each [compareEvidenceNote('A', data.a.run.evidence, (iso) => fmtDate(iso, true)), compareEvidenceNote('B', data.b.run.evidence, (iso) => fmtDate(iso, true))] as note, i (i)}
+							{#if note}<div class="alert alert-info" role="status" data-testid="evidence-note">{note}</div>{/if}
+						{/each}
 						{#if data.a.run.legacy || data.b.run.legacy}
 							<div class="alert alert-warning" role="status">
 								{#if data.a.run.legacy && data.b.run.legacy}Both runs use

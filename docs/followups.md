@@ -453,9 +453,14 @@ the reports):
       - The decision rule is printed next to the band.
 - [ ] **EWR compliance by the Reserve's assurance rules**, monthly, as the
       headline instead of raw days-not-met (hydrologist Q6).
-- [ ] **Nominated evidence run.** Record which run and which model an
-      applicant nominated as evidence, so they can't pick whichever model is
-      kindest after the fact. The assessor rated this Medium.
+- [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
+      nominates a run as evidence with a required reason; the history is
+      append-only in the database (who, when, runoff model and engine version
+      stamped by a trigger), nominated runs can't be deleted or trimmed, and
+      the Runs tab, run header, compare and summary CSV show it, with a
+      warning when a later run uses another runoff model
+      ([data-model.md](./data-model.md), [security.md](./security.md)). The
+      assessor rated this Medium.
 - [ ] **Hydrologist plausibility checks** (as run warnings or a report):
       - natural flow ≥ impacted observed flow + modelled abstraction in every
         water year;
