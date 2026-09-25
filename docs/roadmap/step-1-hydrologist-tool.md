@@ -145,8 +145,10 @@ parallel in git worktrees:
 - **B (workflow):** 1.9–1.11, 1.17–1.18, 1.26–1.32
 - **C (go-live):** 1.7–1.8, 1.12–1.16
 
-WP-1.19–1.24 and 1.33–1.35 start only when the hydrologist's answers arrive. Until then
-track B fills the gap.
+WP-1.19–1.24 were built on 2026-09-24 from simulated hydrologist and
+assessor answers (engine 0.14.0–0.17.0), so the hydrologist now confirms or
+changes each decision rather than answering from scratch
+([followups.md](../followups.md)). WP-1.33–1.35 still wait for the answers.
 
 | WP | Title | Track | Size | Depends on |
 | --- | --- | --- | --- | --- |
@@ -358,7 +360,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   [model.md §2.4c](../model.md#24c-zero-rain-runs-treated-as-missing))
   treats flagged runs as missing in the run so that bias-corrected CHIRPS
   fills them, with per-project keep-dry and missing periods. The stored data
-  still isn't changed.
+  still isn't changed. Engine 0.18.0 makes the CHIRPS factor fit follow the
+  same decisions (flagged runs left out day by day, kept-dry days kept, a
+  keep-dry guard; model.md §2.4b) and adds CR-20's double-mass check
+  against CHIRPS, a warning plus a Data-tab chart (model.md §2.10a).
 - **Changes (as planned):**
   - **engine:** `quality.ts` `checkSeries` gains two checks:
     - `zerorun`: ≥ N consecutive zero days, default 60, counted only when
@@ -673,8 +678,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     Email-first sign-up closes the last account-squatting gap, and is the
     recommendation if sign-up stays open.
   - **Skewed `TZ`:** no workspace sets one today: `frontend/vitest.config.ts`,
-    `packages/engine/vitest.config.ts` and `backend/vitest.workspace.ts` all
-    lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
+    `packages/engine/vitest.workspace.ts` and `backend/vitest.workspace.ts`
+    all lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
     add a CI leg with `TZ=America/Adak` (UTC−10). Fix any failures at the
     source (CLAUDE.md rule 7).
   - **Request sequencer (plan.md 1d):** list and series fetches in
@@ -948,8 +953,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > its simulated natural flow with them, scaled to the catchment, with
 > deviation flags as run warnings, and calibration can add a soft MAR
 > penalty (off by default). `packages/engine/src/reference/wr2012.ts`;
-> [model.md §2.10c](../model.md). A per-run written explanation is a
-> follow-up ([followups.md](../followups.md)).
+> [model.md §2.10c](../model.md). Each run carries a written explanation
+> (`model_run.notes`, 007_run_notes; editable under the WR2012 panel, shown in
+> run comparison), and the summary CSV has a WR2012 block with it.
 
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the
@@ -1073,7 +1079,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
       `node.loss_return_fraction` (0–1);
     - backfill decision D2-N1: e = 1 − `return_flow_pct` with loss return
       1 (keeps the water balance close to today's), or e = 1 (return 0);
-    - later contract `return_flow_pct` once no code reads it.
+    - later contract `return_flow_pct` once no code reads it. (As built:
+      migration 006 backfilled e = 1 − r with loss return 1, and dropped
+      `return_flow_pct` in the same file, since it was never deployed.)
 
     Or per crop, if the hydrologist prefers (then on `crop`).
   - **scripts:** the importer sets the backfill values.
@@ -1152,9 +1160,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Goal:** rain offsets demand beyond the day it falls.
 - **Status: landed (engine 0.14.0)** on persona recommendation, pending the
   hydrologist ([audit N3](../engine-audit.md)). As built: one mode only, a
-  per-farm soil-water store of `settings.effectiveRainStoreMm` (default
-  25 mm; 0 reproduces the workbook), not the `effectiveRainMode` selector
-  or a per-node TAW column below. The crop factors are confirmed A-pan based.
+  per-farm one-bucket store sized by `settings.effectiveRainStoreMm`
+  (default 25 mm; 0 reproduces the workbook), not the three-mode selector or
+  a per-node TAW below. A sixth self-check (`soilWater`) guards it. The
+  Crops tab says crop factors are × A-pan and flags a factor above 1.0.
 - **Changes:**
   - **engine:** `settings.effectiveRainMode: 'daily' | 'monthly' | 'soilWater'`.
     - `monthly`: monthly effective rain against monthly demand (Dastane
@@ -1184,12 +1193,16 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 - **Goal:** farm shortfalls add up to the site's shortfall, and the
   curtailment report says what it means.
 - **Status: landed (engine 0.17.0)** on a simulated CMA-assessor
-  recommendation, pending the real assessor and the hydrologist
-  ([audit Q17, Q11, Q13](../engine-audit.md); model.md §2.7b, §2.11): EWR
-  sites are the outlet and every gauge, charged pro rata to net impact with
-  an irrigation and a storage part; the old AB stays as "reach shortfall";
-  the equitable share is labelled a fairness benchmark; "Demand left %" is
-  bounded. Follow-ons are in followups.md (*Attribution follow-ons*).
+  recommendation, pending the hydrologist and assessor
+  ([audit Q11, Q13, Q17](../engine-audit.md), model.md §2.7b, §2.11). As
+  built: sites are the outlet plus every gauge; each site's shortfall is
+  charged to upstream farms pro rata to net impact (the rest reported as
+  natural), a farm under several sites takes the largest charge, split into
+  irrigation and storage parts; the old AB stays as "reach shortfall";
+  zero-demand farms get no irrigation cut; "Demand left %" is bounded and
+  shows "—" below 1 m³/day; the equitable share is labelled a fairness
+  benchmark. A seventh self-check covers attribution. Not built: the site
+  list in run comparison, a per-gauge "is an EWR site" flag (WP-3.7).
 - **Changes:**
   - **engine:**
     - `network/ewr.ts` / `simulate.ts`: attribute each site's shortfall to
@@ -1237,6 +1250,12 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** a storm can never return more water than it brought (today a
   10 mm storm returns 4.9× its rain).
+- **Status:** GR4J is the default runoff model (engine 0.11.0) and passes
+  the event-scale invariant. The legacy model is kept unchanged but
+  labelled workbook comparison only, never evidence, on every run, badge
+  and CSV export (decided 2026-09-24 on persona recommendation, pending the
+  hydrologist, [audit H1](../engine-audit.md)). What remains is the
+  recalibration and sign-off in WP-1.25.
 - **Changes:**
   - **engine:** a new event response in `flow.ts`:
     - event runoff = `C(R, wetness) × R × area` with C ≤ 1;

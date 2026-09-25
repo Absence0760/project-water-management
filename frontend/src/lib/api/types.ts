@@ -53,9 +53,12 @@ export interface Member {
 	role: Role;
 }
 
-/** Team roles: admins are owners of every team project, members are editors. */
-export type TeamRole = 'member' | 'admin';
-export const TEAM_ROLES: readonly TeamRole[] = ['member', 'admin'];
+/**
+ * Team roles, lowest first: on every team project a viewer is a viewer, a
+ * member an editor and an admin an owner (docs/data-model.md § Teams).
+ */
+export type TeamRole = 'viewer' | 'member' | 'admin';
+export const TEAM_ROLES: readonly TeamRole[] = ['viewer', 'member', 'admin'];
 
 export interface Team {
 	id: string;
@@ -109,7 +112,19 @@ export interface RunMeta {
 	createdBy: string | null;
 	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
 	legacy: boolean;
+	/**
+	 * The modeller's written explanation of the run ('' = none), e.g. why a
+	 * WR2012 flag stands. The one thing about a run an editor may change
+	 * (PATCH …/runs/:runId). Absent from an older API.
+	 */
+	notes?: string;
+	/** When and by whom (display name) the notes last changed; null = never written. */
+	notesUpdatedAt?: string | null;
+	notesUpdatedBy?: string | null;
 }
+
+/** Longest run note, in characters (backend RUN_NOTES_MAX, 007_run_notes.sql). */
+export const RUN_NOTES_MAX = 4000;
 
 export interface Run extends RunMeta {
 	summary: RunSummary;
@@ -159,6 +174,25 @@ export interface RunDay {
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
 }
 
+/** GET …/runs/:runId/day without a nodeId: the catchment's runoff-model day (docs/api.md). */
+export interface RunCatchmentDay {
+	date: string;
+	nodeId: null;
+	name: string;
+	kind: 'catchment';
+	/** 'legacy' for a run without a runoff balance (no stores to trace). */
+	runoffModel: string;
+	/** Area the mm are spread over; null for a legacy run. */
+	areaKm2: number | null;
+	/** The runoff model's parameters as the run used them (GR4J: x1 … x4, warmupDays); null for a legacy run. */
+	params: Record<string, number> | null;
+	/** Σ stores at the end of the day before (the storage after the warm-up on the run's first day), mm. */
+	previousStorageMm: number | null;
+	/** Each store at the end of the day before, mm; each null on the run's first day. Null for a legacy run. */
+	previousStores: Record<string, number | null> | null;
+	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+}
+
 /** One side of GET /compare/runs. */
 export interface CompareSide {
 	project: { id: string; name: string };
@@ -180,4 +214,14 @@ const RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
 /** True when `role` is at least `min`. */
 export function hasRole(role: Role | undefined | null, min: Role): boolean {
 	return role != null && RANK[role] >= RANK[min];
+}
+
+const TEAM_RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2 };
+
+/**
+ * True when team `role` is at least `min`. An unknown role is never enough, so
+ * a role this build doesn't know about can't be treated as a member.
+ */
+export function hasTeamRole(role: TeamRole | string | undefined | null, min: TeamRole): boolean {
+	return role != null && Object.hasOwn(TEAM_RANK, role) && TEAM_RANK[role as TeamRole] >= TEAM_RANK[min];
 }

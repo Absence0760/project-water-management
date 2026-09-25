@@ -60,7 +60,7 @@
 		<div>
 			<h1>Teams</h1>
 			<p class="muted sub">
-				A team owns catchments together. Every member can edit the team's projects; admins are owners and
+				A team owns catchments together. Members edit the team's projects, viewers only read them, and admins are owners and
 				manage the team.
 			</p>
 		</div>

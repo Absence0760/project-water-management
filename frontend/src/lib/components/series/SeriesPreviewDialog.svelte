@@ -94,10 +94,11 @@
 	// only the rows in (and just around) the scrollport are rendered; two
 	// spacer rows hold the scrollbar's height for the rest.
 	const ROW_H = 28;
-	const VIEWPORT_H = 380;
+	// The scroll box fills the dialog, so its height follows the window; 380 until measured.
+	let viewportH = $state(380);
 	const BUFFER = 8;
 	const startIdx = $derived(Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER));
-	const visibleCount = $derived(Math.ceil(VIEWPORT_H / ROW_H) + BUFFER * 2);
+	const visibleCount = $derived(Math.ceil(viewportH / ROW_H) + BUFFER * 2);
 	const endIdx = $derived(Math.min(filtered.length, startIdx + visibleCount));
 	const visibleRows = $derived(filtered.slice(startIdx, endIdx));
 	const topH = $derived(startIdx * ROW_H);
@@ -117,7 +118,7 @@
 	}
 </script>
 
-<Dialog bind:open title="Input time series — daily preview" wide>
+<Dialog bind:open title="Input time series — daily preview" full>
 	<p class="muted period" role="status" aria-live="polite">
 		{#if rows.length}{rows[0]!.date} → {rows[rows.length - 1]!.date} · {fmtNum(filtered.length)} of {fmtNum(rows.length)} days shown{/if}
 	</p>
@@ -170,7 +171,7 @@
 			</details>
 		</div>
 
-		<div class="scroll" bind:this={scrollEl} onscroll={onScroll}>
+		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll}>
 			<table class="data compact" aria-rowcount={filtered.length + 1}>
 				<caption class="visually-hidden">Daily values for every input series, plus how the model used them</caption>
 				<thead>
@@ -305,7 +306,8 @@
 		color: var(--text-muted);
 	}
 	.scroll {
-		max-height: 380px;
+		flex: 1;
+		min-height: 0;
 		overflow: auto;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);

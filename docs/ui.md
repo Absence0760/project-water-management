@@ -1,11 +1,35 @@
 # The catchment workspace (UI)
 
+## App header and account menu
+
+Every signed-in page (`lib/components/layout/AppHeader.svelte`) shows a sticky
+header with the brand, the Projects / Teams / Help nav, and an account control
+on the right: an avatar, display name and email that open a menu (same
+disclosure pattern as the Data/Runs tabs' download menu — a button plus a
+hidden list, not an ARIA `menu`/`menuitem` widget) with two actions:
+
+- **Sign out** — ends this device's session only, same as before.
+- **Sign out everywhere** — asks for confirmation, then calls
+  `POST /auth/logout-everywhere` ([api.md § Auth](./api.md#auth)), which
+  revokes every session on the account (this device included) by moving its
+  revocation watermark forward. Both actions clear the local session and
+  return to `/login`.
+
+The menu is keyboard-operable: Escape closes it and returns focus to the
+account button, as does a click outside; a tab or click that leaves the
+header closes it too.
+
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
 renders empty and then fills in. The Overview, Data and Runs tabs take those
 lists as props and report changes back, so an upload or a run made on one tab
 shows in the others (the Overview's counts and checklist included) without a
-refetch. Tabs follow the modelling workflow:
+refetch. Only the Overview ships with the page; every other tab's code is
+fetched the first time that tab opens (started alongside the data load when
+the URL names the tab, and warmed when its link is hovered or focused), with
+the standard "Loading…" state in the meantime
+([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+Tabs follow the modelling workflow:
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
@@ -22,8 +46,9 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 Settings has its own save button, which sits above that bar.
 
 **Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
-"Data up to" dropdown, the download menu and the dialogs. Help tips and the
-"Data up to" dropdown also close on a click outside. The one exception guards
+account menu, the "Data up to" dropdown, the download menu and the dialogs.
+Help tips, the account menu and the "Data up to" dropdown also close on a
+click outside. The one exception guards
 unsaved input: while **Add data** holds a file that is read but not uploaded
 (or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
@@ -73,6 +98,18 @@ Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
+
+## Teams
+
+`/teams` lists your teams with your role; `/teams/:id` shows members, pending
+invites and the team's projects. Admins pick each member's role from
+**viewer / member / admin** (the sole admin's viewer and member options are
+disabled), and the page explains each role in a short list under the table:
+viewers read every team project, members edit them, admins own them and
+manage the team. A team viewer doesn't get "New project in this team"; the
+New project dialog and the Overview's *Move to* list offer only teams where
+you're a member or admin, and copying a team project you only view makes a
+personal copy (the Copy dialog says so).
 
 ## Network
 
@@ -216,6 +253,18 @@ missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
 naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)).
 `LineChart`'s `shade` prop draws the bands.
+When both catchment rain and CHIRPS are loaded, a **Double mass: catchment
+rain vs CHIRPS** panel (`series/DoubleMassPanel.svelte`, data from
+`series/doubleMass.ts` over the engine's `doubleMass`, with the project's
+zero-rain settings deciding which days are suspect; engine ≥ 0.18.0, CR-20)
+says in a sentence whether the ratio breaks, then draws cumulative catchment
+rain against cumulative CHIRPS (water-year points, the whole-record line
+dashed, the segments between breaks solid, each slope in the caption), a
+small chart of the departure from the whole-record line by water year, and a
+collapsible table of the water-year totals (the charts' text equivalent).
+It needs 10 judged water years; without them the panel is absent. A break
+also shows in Data checks with a **Double mass vs CHIRPS** badge
+([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
 "What the model uses" explains every kind. A **reference gauge (other
 catchment)** series (`flow_reference_m3s`, e.g. imported with
 `--gauge-as-reference`) is badged *Reference only*: it can be charted here as a
@@ -224,8 +273,10 @@ table and it can't be picked as the calibration record. Each series can be
 downloaded as CSV.
 
 **Preview** (`series/SeriesPreviewDialog.svelte`, in a modal `Dialog.svelte`)
-opens a wide, searchable table of every loaded series' daily values side by
-side, one row per day across the union of their periods, plus columns for how
+opens a searchable table of every loaded series' daily values side by
+side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
+and the window's height, with the table filling what's left and only the rows
+in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
 The card header's **Preview data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
@@ -342,7 +393,10 @@ value such as 108700.
   recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
   treat as missing** period lists. These share the calibration exclusions'
   editor (`common/PeriodList.svelte`), with the same required reason and the
-  same checks that block Save.
+  same checks that block Save. The Keep dry hint says that kept-dry days
+  count in the CHIRPS factor fit, filled runs are left out of it, and a run
+  warns and leaves the year out when CHIRPS reads a lot of rain over a
+  kept-dry run (engine ≥ 0.18.0, model.md §2.4b).
 - **Calibration record** (`#set-record`): the calibration window and flow
   series (`calibration/CalibrationWindowFields.svelte`), and the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
@@ -510,9 +564,21 @@ value such as 108700.
   (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
   day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J +
   rain on dam) − used (G − T) − evaporated − stored (Q − Q[t−1]) − out (U). Parameters and names come from
-  the run's input snapshot, not today's model. A run saved before 0.12.0 says
+  the run's input snapshot, not today's model. The picker's first option,
+  **Catchment (rain to natural flow)**, traces the runoff model's day instead
+  (`GET …/runs/:runId/day` without a `nodeId`): for GR4J, rain used P, PET E,
+  AET, each store (production S, unit-hydrograph water in transit UH, routing
+  R) the day before and at the end of the day, the groundwater exchange F
+  (shown as 0 when X2 = 0 stored none), natural flow Q in m³/day and as mm
+  over the catchment, each with its formula from `GR4J_COLUMNS`; then the
+  store balance, stores before + P + F − AET − Q − stores after, with its
+  residual in mm. On a run's first day each store's starting value is shown
+  as – (only their total after the warm-up is recorded) and the balance uses
+  the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
+  and says it keeps no stores, so there is no store balance to close.
+  A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
-  Not yet: a trace of the runoff model's day, an Excel audit workbook, and
+  Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
@@ -559,6 +625,15 @@ value such as 108700.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
+  then **Run notes** under it on every run (`runs/RunNotes.svelte`,
+  `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
+  explanation of the run, the one thing about a run that can change after it
+  is made. Editors get a textarea with a character count (4 000 at most) and
+  **Save notes** (`PATCH …/runs/:runId`); viewers see the text, or "No notes on
+  this run". When the WR2012 flag is *query* or *not usable* and there is no
+  note, a prompt asks for the reason. "Last changed … by …" shows under a
+  note. Saving updates the shown run, its cached detail and its row in the
+  runs list; the note also appears on the compare page and in the summary CSV,
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the

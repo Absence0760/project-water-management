@@ -66,3 +66,48 @@ export const GAUGE_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr_charged', letter: null, formula: '−MIN(shortfall, Σ MAX(e, 0)) over the farms upstream, e = H + I + J − U with only the transfers inside the gauge’s catchment (audit Q17)' },
 	{ key: 'ewr_natural', letter: null, formula: 'shortfall − charged: the part natural flow already missed' }
 ];
+
+// The catchment's runoff-model columns (node_id NULL in run_series), in the
+// order the model computes them, for the catchment day trace (docs/ui.md §
+// Self-checks). `letter` is the symbol docs/model.md § "Rain to flow: GR4J"
+// uses. Depths are mm over the catchment; stores are end-of-day contents.
+
+/** GR4J (engine ≥ 0.5.0): the runoff/gr4j.ts step, one day. */
+export const GR4J_COLUMNS: readonly FarmColumn[] = [
+	{ key: 'rain_used', letter: 'P', formula: 'catchment rain, else CHIRPS, else forecast rain (no threshold); a day with none counts as dry' },
+	{ key: 'pet', letter: 'E', formula: 'pan coefficient × A-pan for the month ÷ calendar days in the month' },
+	{
+		key: 'aet',
+		letter: 'AET',
+		formula: 'MIN(P, E) + Es; Es = S·(2 − S/X1)·tanh(En/X1) ÷ (1 + (1 − S/X1)·tanh(En/X1)), En = MAX(E − P, 0), S = S[t−1]'
+	},
+	{
+		key: 'production_store',
+		letter: 'S',
+		formula:
+			'S[t−1] + Ps − Es − Perc; Ps = X1·(1 − (S/X1)²)·tanh(Pn/X1) ÷ (1 + S/X1·tanh(Pn/X1)), Pn = MAX(P − E, 0); Perc = S′·(1 − (1 + (4S′ ÷ 9X1)⁴)^−¼), S′ = S[t−1] + Ps − Es'
+	},
+	{
+		key: 'uh_store',
+		letter: 'UH',
+		formula: 'UH[t−1] + Pr − Q9 − Q1; Pr = Perc + Pn − Ps, 90 % spread over UH1 (base X4, Q9 released today), 10 % over UH2 (base 2·X4, Q1)'
+	},
+	{
+		key: 'exchange',
+		letter: 'F',
+		formula: 'X2 × (R[t−1] ÷ X3)^3.5, added to the routing store and to the direct flow, clipped so neither goes below 0 (+ gained, − lost); not stored, so 0, when X2 = 0'
+	},
+	{ key: 'routing_store', letter: 'R', formula: 'R′ − Qr; R′ = MAX(0, R[t−1] + Q9 + F), Qr = R′·(1 − (1 + (R′ ÷ X3)⁴)^−¼)' },
+	{ key: 'natural_flow', letter: 'Q', formula: '(Qr + Qd) × catchment area (km²) × 1000; Qd = MAX(0, Q1 + F)' }
+];
+
+/** The legacy [Flow data] port (runoff/legacy.ts, flow.ts), with its workbook column letters. No stores to balance. */
+export const LEGACY_RUNOFF_COLUMNS: readonly FarmColumn[] = [
+	{ key: 'rain_used', letter: 'R', formula: 'catchment rain, else CHIRPS, else forecast rain; 0 at or below the rain threshold' },
+	{ key: 'is_summer', letter: 'N', formula: '1 in a summer month; in winter stays 0 until a summer month, and turns 0 on enough rain today or yesterday' },
+	{ key: 'rain_flow', letter: 'V', formula: 'a × P^b × catchment area (km²) × 1000 × (summer or winter factor)' },
+	{ key: 'base_flow', letter: 'S', formula: 'S[t−1] receded one day, or V when V ÷ that > the base-flow reset ratio' },
+	{ key: 'response_flow', letter: 'X', formula: 'Y[t−1] receded one day + V on a rainy day, else X[t−1] receded along its own index' },
+	{ key: 'resultant_flow', letter: 'Y', formula: 'MAX(X, S)' },
+	{ key: 'natural_flow', letter: 'AB', formula: 'MAX(Y, 0)' }
+];

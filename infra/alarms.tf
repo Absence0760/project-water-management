@@ -141,6 +141,42 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
   }
 }
 
+# --- Backend self-checks ----------------------------------------------------
+# executeRun (backend/src/runs/execute.ts) logs a structured JSON line when a
+# saved run fails one of the engine's own invariant checks (docs/model.md §
+# Verification) — a model bug, not a user error, that today is otherwise only
+# a warning on that one run. The filter matches the event name only; the line
+# never carries user data or a value that could identify the client (just the
+# failed checks' ids, e.g. "balance", "ewrAttribution").
+
+resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
+  name           = "${local.project}-self-check-failed"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.event = \"self_check_failed\" }"
+
+  metric_transformation {
+    name          = "SelfCheckFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "self_check_failed" {
+  alarm_name          = "${local.project}-self-check-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A saved run failed one of the engine's self-checks (invariant violation) — a model bug, not a user error. Open the run's Self-checks panel to see which check and trace the day; docs/model.md § Verification."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- Migrate Lambda --------------------------------------------------------
 # A failed migration also fails the deploy workflow loudly; this catches a
 # manual invocation (e.g. after a password rotation) that nobody watched.

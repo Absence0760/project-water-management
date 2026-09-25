@@ -1,15 +1,16 @@
 <!--
 	What the model says about its own run (engine ≥ 0.12.0): the self-checks,
 	the water balance per water year, and a trace of one farm's day with every
-	intermediate column and its formula (docs/ui.md § Self-checks).
+	intermediate column and its formula, or of the catchment's day in the
+	runoff model (docs/ui.md § Self-checks).
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { api, type RunDay } from '$lib/api';
+	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { BALANCE_COLUMNS, balanceTableRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+	import { BALANCE_COLUMNS, balanceTableRows, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 	let {
 		summary,
@@ -47,11 +48,14 @@
 			traceError = null;
 		});
 	});
-	let day = $state.raw<RunDay | null>(null);
+	/** The trace picker's value for the catchment (the runoff model's day) rather than a node. */
+	const CATCHMENT = 'catchment';
+	let day = $state.raw<RunDay | RunCatchmentDay | null>(null);
 	let traceError = $state<string | null>(null);
 	let tracing = $state(false);
-	const rows = $derived(day ? traceRows(day) : []);
-	const closure = $derived(day ? dayClosure(day) : null);
+	const rows = $derived(!day ? [] : day.kind === 'catchment' ? catchmentTraceRows(day) : traceRows(day));
+	const closure = $derived(day && day.kind !== 'catchment' ? dayClosure(day) : null);
+	const storeClosure = $derived(day?.kind === 'catchment' ? catchmentClosure(day) : null);
 
 	async function trace(e: SubmitEvent) {
 		e.preventDefault();
@@ -60,7 +64,7 @@
 		tracing = true;
 		traceError = null;
 		try {
-			const res = await api.runs.day(projectId, want, nodeId, date);
+			const res = nodeId === CATCHMENT ? await api.runs.catchmentDay(projectId, want, date) : await api.runs.day(projectId, want, nodeId, date);
 			if (want === runId) day = res;
 		} catch (err) {
 			if (want === runId) {
@@ -142,12 +146,13 @@
 	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
 		Every column of one farm's day, with the formula the model used, so the day can be checked by hand. The farm's daily CSV has the same
-		columns for every day.
+		columns for every day. Pick the catchment to see how the runoff model turned the day's rain into natural flow.
 	</p>
 	<form class="trace-form" onsubmit={trace}>
 		<label>
-			<span>Farm or gauge</span>
+			<span>Farm, gauge or catchment</span>
 			<select bind:value={nodeId}>
+				<option value={CATCHMENT}>Catchment (rain to natural flow)</option>
 				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : ''}</option>{/each}
 			</select>
 		</label>
@@ -161,7 +166,7 @@
 	{#if day}
 		<div class="table-wrap" aria-live="polite">
 			<table class="data compact trace">
-				<caption>{day.name} on {day.date}</caption>
+				<caption>{day.name}{day.kind === 'catchment' ? ` (${day.runoffModel === 'gr4j' ? 'GR4J' : day.runoffModel})` : ''} on {day.date}</caption>
 				<thead>
 					<tr>
 						<th scope="col">Col.</th>
@@ -182,7 +187,22 @@
 				</tbody>
 			</table>
 		</div>
-		{#if closure}
+		{#if day.kind === 'catchment'}
+			{#if storeClosure}
+				<p class="closure small">
+					Stores before {fmtValue(storeClosure.before)} + rain (P) {fmtValue(storeClosure.rain)} + exchange (F) {fmtValue(storeClosure.exchange)} − evaporated (AET)
+					{fmtValue(storeClosure.evaporation)} − flow (Q) {fmtValue(storeClosure.flow)} − stores after {fmtValue(storeClosure.after)} =
+					<strong>{fmtValue(storeClosure.residual)}</strong> mm
+				</p>
+			{:else if day.runoffModel === 'legacy'}
+				<p class="muted small">
+					This run used the legacy runoff model, which keeps no stores: the columns show how the day's rain became flow, but there is no store
+					balance to close. GR4J runs trace the stores.
+				</p>
+			{:else}
+				<p class="muted small">This run didn't record every store for this day, so its balance can't be worked out here.</p>
+			{/if}
+		{:else if closure}
 			<p class="closure small">
 				In (H + I + J + rain on dam) {fmtValue(closure.inflow)} − used (G − T) {fmtValue(closure.consumptive)} − evaporated {fmtValue(closure.evaporation)} − stored (Q − Q[t−1]) {fmtValue(closure.storageChange)}
 				− out (U) {fmtValue(closure.outflow)} = <strong>{fmtValue(closure.residual)}</strong> m³

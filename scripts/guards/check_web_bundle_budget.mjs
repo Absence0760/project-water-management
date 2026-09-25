@@ -42,6 +42,26 @@
 //             dependency: the growth is feature code in the page that needs
 //             it. ~6 KB of headroom on the total and ~4 KB on the chunk, so
 //             the next feature is measured again rather than waved through.
+// 2026-09-24  largest chunk 105 → 41 KB (down), total 295 → 411 KB (up).
+//             main @ c23545b was already over both: 383 KB total and a 130 KB
+//             catchment workspace page chunk (nodes/11). A copy of 940060b,
+//             the commit that set 295, re-measures 288 KB, so ~95 KB is the
+//             day's feature code, not a new dependency: the help centre
+//             (guides, tour, pictures, more content) ~38 KB; the Data and Runs
+//             tabs (series preview, double mass, self-checks and runoff trace,
+//             run notes) ~16 KB; engine rain / double-mass / verify code in
+//             both the page and the calibration worker ~20 KB; the rest
+//             spread thin. This change splits the workspace page: only the
+//             Overview tab stays in the page chunk; the six other tabs and
+//             the Add data / series preview dialogs are dynamic imports
+//             (lib/components/common/Lazy.svelte, docs/architecture.md § Code
+//             splitting). Largest chunk now 37 KB (the Runs tab); a cold open
+//             of a catchment downloads ~89 KB instead of ~298 KB (Runs tab,
+//             the heaviest, ~232 KB). The split costs ~22 KB of total (405 KB
+//             across 117 files): separate chunks compress worse than one, and
+//             the guard deliberately counts every lazy chunk. Headroom ~6 KB
+//             on the total and ~4 KB on the chunk, so a tab's code sliding
+//             back into the page chunk, or the next feature, fails here.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -53,8 +73,8 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 295,
-	largestChunkKb: 105,
+	totalCodeKb: 411,
+	largestChunkKb: 41,
 	largestAssetKb: 100,
 });
 

@@ -17,6 +17,7 @@ import type {
 	Run,
 	RunCompareResponse,
 	RunMeta,
+	RunCatchmentDay,
 	RunDay,
 	RunSeriesRef,
 	Team,
@@ -127,7 +128,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					displayName,
 					...(inviteToken ? { inviteToken } : {})
 				}).then((r) => r.user),
-			logout: () => request<void>('POST', '/auth/logout')
+			logout: () => request<void>('POST', '/auth/logout'),
+			/** Signs out every device (this one included): revokes every session issued before now. */
+			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere')
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
@@ -223,7 +226,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One node's columns on one day (the day trace). */
 			day: (id: string, runId: string, nodeId: string, date: string) =>
 				request<RunDay>('GET', `${p(id)}/runs/${enc(runId)}/day?${new URLSearchParams({ nodeId, date })}`),
+			/** The catchment's runoff-model day (the day trace without a node). */
+			catchmentDay: (id: string, runId: string, date: string) =>
+				request<RunCatchmentDay>('GET', `${p(id)}/runs/${enc(runId)}/day?${new URLSearchParams({ date })}`),
 			remove: (id: string, runId: string) => request<void>('DELETE', `${p(id)}/runs/${enc(runId)}`),
+			/** Replace the run's written explanation ('' clears it); answers with the run's metadata and the new stamp. */
+			setNotes: (id: string, runId: string, notes: string) =>
+				request<{ run: RunMeta }>('PATCH', `${p(id)}/runs/${enc(runId)}`, { notes }).then((r) => r.run),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},

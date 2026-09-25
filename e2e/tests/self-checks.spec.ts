@@ -21,7 +21,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
 
 	const trace = page.getByRole('region', { name: /^Trace a day/ });
-	await trace.getByLabel('Farm or gauge').selectOption({ label: 'Upper farm' });
+	await trace.getByLabel('Farm, gauge or catchment').selectOption({ label: 'Upper farm' });
 	await trace.getByLabel('Day').fill('2021-11-15');
 	await trace.getByRole('button', { name: 'Trace' }).click();
 	const table = trace.getByRole('table', { name: 'Upper farm on 2021-11-15' });
@@ -32,4 +32,16 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');
 	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise.
 	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+
+	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
+	await trace.getByLabel('Farm, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
+	await trace.getByRole('button', { name: 'Trace' }).click();
+	const runoff = trace.getByRole('table', { name: 'Catchment (GR4J) on 2021-11-15' });
+	await expect(runoff).toBeVisible();
+	for (const name of ['All stores at the end of the day before', 'Production store (soil moisture), the day before', 'Production store (soil moisture)', 'Routing store', 'Actual evaporation', 'Natural flow']) {
+		await expect(runoff.getByRole('rowheader', { name, exact: true })).toBeVisible();
+	}
+	// The store balance closes from the numbers shown: before + P + F − AET − Q − after is 0 or float noise.
+	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure')).toContainText('mm');
 });

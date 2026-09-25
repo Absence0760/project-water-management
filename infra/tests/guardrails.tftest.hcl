@@ -576,6 +576,31 @@ run "alarms" {
     condition     = aws_sns_topic_subscription.alerts_email[0].endpoint == "ops@example.com" && aws_sns_topic_subscription.alerts_us_east_1_email[0].endpoint == "ops@example.com"
     error_message = "Both SNS topics (regional + us-east-1) must email budget_alert_email."
   }
+
+  # --- Self-check-failed metric filter + alarm ----------------------------
+  assert {
+    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.log_group_name == aws_cloudwatch_log_group.lambda.name
+    error_message = "The self-check filter must read the backend API Lambda's own log group."
+  }
+  assert {
+    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.event = \"self_check_failed\" }"
+    error_message = "The filter must match executeRun's structured event name exactly."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.self_check_failed.metric_name == aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.self_check_failed.namespace == aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+    )
+    error_message = "The alarm must watch the metric the filter emits."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.self_check_failed.threshold == 0 && aws_cloudwatch_metric_alarm.self_check_failed.comparison_operator == "GreaterThanThreshold"
+    error_message = "The alarm must fire on any self-check failure (> 0 in the period)."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.self_check_failed.alarm_actions == toset([aws_sns_topic.alerts.arn])
+    error_message = "The self-check alarm must notify the same alerts SNS topic as every other alarm."
+  }
 }
 
 # ---------------------------------------------------------------------------

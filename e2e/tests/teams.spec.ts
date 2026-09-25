@@ -85,3 +85,46 @@ test('a team admin invites an address with no account and revokes it', async ({ 
 	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
 	await expect(pending).toHaveCount(0);
 });
+
+test('a team viewer reads the team’s catchments but can’t add to the team', async ({ page, owner, signIn }) => {
+	void owner;
+	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Review Board' } });
+	const { team } = (await res.json()) as { team: { id: string } };
+	expect((await page.request.post(`${API_URL}/projects`, { data: { name: 'Reviewed catchment', teamId: team.id } })).status()).toBe(201);
+	const reviewer = await signIn('Team reviewer');
+
+	// The admin adds them read-only with the role picker.
+	await page.goto(`/teams/${team.id}`);
+	await page.getByLabel('Add member by email').fill(reviewer.user.email);
+	await page.getByLabel('Role', { exact: true }).selectOption('viewer');
+	await page.getByRole('button', { name: 'Add', exact: true }).click();
+	await expect(page.getByText('Team reviewer added as viewer.')).toBeVisible();
+	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('viewer');
+	await expect(page.getByRole('region', { name: 'Members' }).getByRole('definition')).toHaveText([
+		"Reads every team project and its runs, but can't change or run anything.",
+		'Edits every team project: model, data and runs.',
+		'Owner of every team project (delete, share, move) and manages this team.'
+	]);
+
+	// They see the team's project as a viewer, with no way to delete it.
+	await reviewer.page.goto('/');
+	const group = reviewer.page.getByRole('region', { name: 'Review Board' });
+	const row = group.getByRole('row').filter({ has: reviewer.page.getByRole('rowheader', { name: 'Reviewed catchment' }) });
+	await expect(row.getByRole('cell', { name: 'viewer', exact: true })).toBeVisible();
+	await expect(row.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
+
+	// The team page doesn't offer to add a project, and neither does New project.
+	await reviewer.page.goto(`/teams/${team.id}`);
+	await expect(reviewer.page.getByRole('heading', { level: 1, name: 'Review Board' })).toBeVisible();
+	await expect(reviewer.page.getByText('Only admins can manage members.')).toBeVisible();
+	await expect(reviewer.page.getByRole('link', { name: 'New project in this team' })).toHaveCount(0);
+	await reviewer.page.goto(`/?owner=team:${team.id}&new=1`);
+	const np = reviewer.page.getByRole('dialog', { name: 'New project' });
+	await expect(np.getByLabel('Belongs to').locator('option')).toHaveText(['Personal']);
+
+	// Promoted to member, they can.
+	await page.getByLabel('Team role for Team reviewer').selectOption('member');
+	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('member');
+	await reviewer.page.goto(`/teams/${team.id}`);
+	await expect(reviewer.page.getByRole('link', { name: 'New project in this team' })).toBeVisible();
+});

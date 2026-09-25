@@ -1,4 +1,4 @@
-# Follow-ups: open work (updated 2026-09-24, after the Phase 6 persona review)
+# Follow-ups: open work (updated 2026-09-24, after the engine 0.19.0 / run notes round)
 
 Everything below is known, unfinished work. Longer-term features live in
 [planned-work.md](./planned-work.md); client and hydrologist questions are in
@@ -133,8 +133,16 @@ Tick items off (or move them into an issue) as they are done.
       warnings, so a false alarm is no longer free: item 2 matters more.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
-      Σ catchment / Σ CHIRPS, fitted without the years the issue #2 checks
-      flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
+      issue #2 checks flag ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+      **Done (engine 0.18.0): the fit follows the zero-rain decisions.** A
+      flagged run treated as missing is left out day by day (the rest of its
+      water year stays in), kept-dry days stay in as confirmed readings, and
+      a keep-dry that bias-corrected CHIRPS contradicts (more than max(50 mm,
+      25 % of the usual annual rain) over its kept days) leaves its year out
+      and warns. Low-vs-CHIRPS years are still left out whole. The run's
+      `chirpsCorrection`, summary CSV and run comparison (`chirpsFit`) say
+      what was left out. Confirm the guard's limits with the hydrologist.
       Confirm with the hydrologist:
       - linear scaling per month, versus quantile mapping (which also fixes
         the wet-day count and intensities that drive GR4J's event response);
@@ -150,8 +158,9 @@ Tick items off (or move them into an issue) as they are done.
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
       shading and the help entry (ui.md), then `zeroRainRuns` in a fit
       record's `forcing` (fit provenance), so a change flags "Forcing changed
-      since fit". Still open: the hydrologist's answer on the two flagged
-      runs.** The issue #2 checks find runs of zero catchment rain
+      since fit". Engine 0.18.0 added the double-mass check and made the
+      CHIRPS fit respect keep-dry (end of this item). Still open: the hydrologist's
+      answer on the two flagged runs.** The issue #2 checks find runs of zero catchment rain
       that look like missing data, but they only warn. A 0 is a reading, so
       those days still run dry and CHIRPS never fills them. On the client
       catchment the check flags exactly two runs, one in the 1991 wet season
@@ -186,8 +195,47 @@ Tick items off (or move them into an issue) as they are done.
       Still ask the hydrologist to confirm the two runs
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)). Out of
       scope: low-vs-CHIRPS years are never blanked whole; the `missing`
-      list covers them once the hydrologist names the bad days. CR-20's
-      double-mass check against CHIRPS follows as a separate step.
+      list covers them once the hydrologist names the bad days.
+      **Double-mass check against CHIRPS: done (engine 0.18.0, audit B3,
+      model.md §2.10a).** Water-year totals, up to two breaks, a data check,
+      a Data-tab chart, a summary-CSV block and a run warning when CHIRPS
+      fills an era whose ratio differs from the fit. It only warns; the
+      response to a real break is the *CHIRPS fit period* item below. The
+      same release made the CHIRPS fit leave flagged runs out day by day and
+      keep kept-dry days in (the *CHIRPS bias correction* item above).
+
+      **Simulated review (2026-09-24), a draft for the real hydrologist, not
+      sign-off.** A `persona-hydrologist` review
+      (`reviews/persona-hydrologist-zero-rain.md`, gitignored and local only,
+      because it quotes client numbers) judged both flagged runs to be
+      missing data, not real dry spells, from CHIRPS and the neighbouring
+      gauge's response. It suggested listing some adjacent days as `missing`
+      too: a probable accumulated reading straight after one run, shorter
+      zero runs in the same year below the 60-day rule, and zero-padded
+      stretches next to calendar-year blank blocks. It also suggested an
+      accumulation check (a very large reading straight after a zero or
+      blank run, on a day CHIRPS is dry). None of this is applied: the
+      hydrologist decides what to list
+      ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)).
+- [ ] **CHIRPS fit period / per-segment factors (tracked from audit B3,
+      2026-09-24).** The double-mass check (model.md §2.10a) warns when the
+      catchment / CHIRPS ratio breaks part-way through the record, but the
+      CHIRPS factors are still one set fitted over all eras, so a gap in the
+      latest era is filled with a blend of older ratios. The simulated
+      hydrologist review suggests two durable responses, never applied
+      silently:
+      1. a setting `chirpsFitPeriod`: `'all'` (the default), `'latestSegment'`,
+         or explicit water-year ranges, each with a reason, recorded in fit
+         provenance (`forcing`) and in run comparison;
+      2. better, **per-segment factors**: fit the monthly factors within
+         each double-mass segment and fill a gap with its own segment's
+         factors, which keeps the monthly shape and removes the blend.
+
+      Trigger: the hydrologist confirms a break on the client catchment is
+      the catchment series changing (station attrition, a new averaging),
+      not CHIRPS, or a project's fallback days mostly fall in a segment the
+      run warning names. Needs an `ENGINE_VERSION` bump, a Settings control,
+      docs (model.md §2.4b, §2.10a) and tests on synthetic broken records.
 - [ ] **Help text read-through** (`frontend/src/lib/help/content.ts`),
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
@@ -418,10 +466,8 @@ the reports):
         each model.
 - [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
       hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
-- [ ] **Persona tooling:** `pnpm -C packages/engine exec tsx` fails because
-      the engine workspace has no `tsx`. The persona agents are told to use
-      it (`.claude/agents/persona-*.md`); either add `tsx` as an engine dev
-      dependency or point the agents at the backend's copy.
+- [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
+      (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
 ## Calibration research (2026-09-24)
 
@@ -585,28 +631,61 @@ the suggested order (the IDs carry the detail):
       failed, then passed when rerun alone. Neither touches the runs page;
       if either fails alone, look for a missing readiness signal on reload
       rather than a longer timeout.
-- [ ] **Wall-clock test flakes under load.** "a GR4J run of an example
-      catchment takes under 50 ms" failed once (2026-09-24) while all three
-      workspaces' tests ran at once; it normally takes about 21 ms. The
-      durable fix: move the timing check to a separate `bench` / soak target,
-      or take the median of several runs against a budget measured on the
-      machine running it, so the unit suite asserts nothing about wall-clock
-      time.
-- [ ] **Frontend bundle ceilings were raised** to 295 KB total and 105 KB
-      for the project page (2026-09-24, fit provenance). Look for code to
-      split, such as lazy-loading the calibration and WR2012 panels, before
-      the next raise.
+- [x] **Wall-clock test flakes under load** (2026-09-24): the timing
+      checks moved out of the unit suite into `*.perf.test.ts` vitest
+      `perf` projects (median of 7 after a warm-up, serial), run with
+      `pnpm test:engine:perf` / `pnpm test:backend:perf`, not by
+      `pnpm test` or CI. The backend's 50 ms example-catchment budget
+      still fails when the machine is busy; run it alone.
+- [x] **Frontend bundle split by tab** (2026-09-24): the catchment
+      workspace loads each tab (and the Add data / series preview dialogs)
+      on demand (`common/Lazy.svelte`, architecture.md § Code splitting).
+      Largest chunk 130 → 37 KB (ceiling 41 KB); opening a catchment ~298
+      → ~89 KB. The total was already 383 KB against a 295 KB ceiling on
+      main (help centre, new tabs' code, engine code), so its ceiling went
+      *up* to 411 KB (405 KB measured).
+- [ ] **Bring the total bundle down** (6 KB of headroom left). Options,
+      measured by the split's author: stop shipping the engine twice (page
+      and calibration worker, 25 KB for the worker); load help tooltip text
+      on demand (25 KB help chunk on any page with a tooltip); Rollup
+      `experimentalMinChunkSize` (~4 KB, changes grouping app-wide).
+      Trigger: the next feature that hits the 411 KB ceiling.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
       0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
-      A 2 000-case run on engine 0.17.0 (2026-09-24) found **seed 921
-      failing "doubling crop areas raised the supply fraction"**, the same on
-      0.16.0, so it came in with N1–N4 or earlier, not attribution. Bisect
-      over 0.13.0 → 0.16.0, find which rule lets more demand be supplied a
-      larger fraction (candidates: the transfer room cap using the
-      receiver's demand, or the soil-water store), and fix at the source.
+      **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
+      cap (N4) ignored the receiving dam's own rain, evaporation and
+      seepage, so a leaky dam was topped up short by a fixed volume and
+      doubling demand raised its supply fraction. The room is now
+      `cap − (Q[t−1] + Pd − E − Sp) + D − scheduled` (model.md §2.6),
+      `checkTransferLimits` reads it the same way, and a named seed-921
+      test pins it. A 2 000-case soak on 0.19.0 passed for both runoff
+      models.
+      **20 000-case soak on 0.19.0 (2026-09-24) failed**, stopping at the
+      3-failure cap per model (legacy scanned seeds 1–8984, GR4J 1–17277),
+      so later seeds are unscanned. Repro any seed with
+      `FUZZ_SEED=<n> FUZZ_CASES=1 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
+- [ ] **Order invariance: EWR days not met off by one (seeds 4014, 8984,
+      9681).** The F8 class of float noise at a new site:
+      `network/attribution.ts`'s per-farm charge
+      `A = min(D* × e⁺_f / E, e⁺_f)` leaves a residual of about −1e-13 whose
+      sign depends on node order. Flooring `A` against `SHORTFALL_NOISE`
+      fixed the seeds but broke `checkEwrAttribution` (Σ charges < D*), so
+      it was reverted. Durable fix: accumulate `E` (and the charges) in a
+      canonical order (by node id), as F8 did, with the three seeds as
+      regression tests; `ENGINE_VERSION` 0.19.1 if any output moves.
+- [ ] **Doubling crop areas raised supply by 0.0015–1.5 pp (seeds 4197,
+      7686, 17277).** Not the room-cap bug: rain captured on a farm dam's
+      own surface (steep area–storage curve, exponent up to 3) and farms
+      sitting at a high dead-storage level, where a slightly different
+      storage path shifts threshold days. Same size as the accepted seed
+      4660 (return flow, which the check already neutralises). A policy
+      call: accept and document them, or neutralise dam-surface rain /
+      dead storage in `checkDoubledCropAreas` too. Ask
+      `persona-hydrologist` first. Also raise the test's 3-failure cap for
+      diagnostic soaks so one run covers every seed.
 - [ ] **Excel audit workbook export** (the strongest independent check). The
       farm daily CSV has every column but the hydrologist still types the
       formulas. An `.xlsx` for one farm: inputs as values, each working column
@@ -618,20 +697,20 @@ the suggested order (the IDs carry the detail):
       About a day. Also settles the `verify/` Python cross-check question
       above: this would replace it. Trigger: after the client catchment run
       (first item) and the hydrologist persona review (below) confirm it's wanted.
-- [ ] **Trace the runoff side.** "Trace a day" covers farms and gauges only.
-      With GR4J the default, most surprises are upstream: how rain becomes
-      natural flow. Add a catchment trace: rain used, PET, AET, production
-      and routing stores before and after, exchange, unit-hydrograph water in
-      transit, natural flow out, and the day's store balance. The series are
-      already stored (`production_store`, `routing_store`, `uh_store`, `aet`,
-      `pet`, `exchange`), so it's the `/day` endpoint accepting the catchment
-      (no `nodeId`) plus a GR4J column catalogue beside `verify/columns.ts`.
-- [ ] **Alert on a failed self-check in production.** A failed check is a
-      model bug, but today it is only a warning on that run. Log a
-      structured line from `executeRun` (`{ event: "self_check_failed",
-      projectId, runId, checks }`, no user data) and add a CloudWatch metric
-      filter + alarm to the budget/alarms stack in `infra/`. `terraform plan`
-      only; apply is the operator's call.
+- [x] **Trace the runoff side** (2026-09-24): `/day` without `nodeId`
+      traces the catchment (GR4J stores before/after, exchange, UH, natural
+      flow, and the store balance with its residual; legacy runs list the
+      [Flow data] columns). Column catalogues `GR4J_COLUMNS` /
+      `LEGACY_RUNOFF_COLUMNS` in `verify/columns.ts` (ui.md, api.md).
+- [ ] **Per-store starting values on a run's first day.** Only the total
+      storage after the warm-up is saved, so day one's catchment trace
+      shows each store's "before" as "–" and balances on the total. Saving
+      each store at the end of the warm-up is an engine change (bump
+      `ENGINE_VERSION`). Trigger: the hydrologist asks for day-one detail.
+- [x] **Alert on a failed self-check in production** (2026-09-24):
+      `executeRun` logs `{ event: "self_check_failed", projectId, runId,
+      checks }` (check ids only), and `infra/alarms.tf` has a metric filter
+      + alarm on the alerts SNS topic (plan-tested; not applied).
 - [ ] **Hydrologist persona review of the Self-checks panel and exports.**
       Run `persona-hydrologist` on the panel, the farm daily CSV and the
       summary CSV: do they answer what a hydrologist checks first? Log gaps
@@ -640,8 +719,8 @@ the suggested order (the IDs carry the detail):
       the Data tab's Preview dialog joins every input series by day with
       rain used and its source, CHIRPS factor and corrected value, flow in
       m³/day, per-series flags and calibration exclusions (ui.md). Its e2e
-      spec `e2e/tests/series-preview.spec.ts` has not been run yet (the e2e
-      ports were busy); run it.
+      spec `e2e/tests/series-preview.spec.ts` passes (2026-09-24); the dialog
+      is now near full-screen (`Dialog` `full` size).
 - [ ] **More columns in the Data tab downloads** (the original request that
       led to the self-checks). `GET /series/:id/export.csv` still writes only
       `date` + the uploaded value. Add how the model used each series: for
@@ -658,8 +737,10 @@ the suggested order (the IDs carry the detail):
 
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
       original ask was spaces (300 000). Pick one app-wide.
-- [ ] **"Sign out everywhere" button.** `POST /auth/logout-everywhere` exists,
-      but the header has no account menu for it yet.
+- [x] **"Sign out everywhere" button** (2026-09-24): the header's account
+      menu has *Sign out* and *Sign out everywhere*. The rest of WP-1.9
+      (`/account` page, password change, `PATCH /auth/me`) is still open in
+      the step-1 roadmap.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
 
@@ -680,13 +761,11 @@ run, and help entries tagged by `audience`, all in step 2.
 
 Open gaps:
 
-- [ ] **No read-only team role.** Every team member becomes an editor on
-      every team project, so a WUA office clerk or a client reviewer added
-      to the team can change settings and run the model. Add a team role
-      `viewer` (→ project `viewer`). This needs a migration adding the enum
-      value, the `app_project_role()` mapping, team invites taking it, and
-      the team page. Tests: DB tests that a team viewer reads but can't
-      write, with a positive control that a team member can write.
+- [x] **Read-only team role** (2026-09-24): team `viewer` → project
+      `viewer` (migration 008). `app_project_role()` maps each team role
+      explicitly (unknown grants nothing); creating or moving a project
+      into a team needs team member or admin; a viewer's copy is personal
+      (data-model.md § Teams, ui.md § Teams).
 - [ ] **Tabs by role.** Viewers are shown tabs they can't act on and mostly
       don't need. Build one pure function, `visibleTabs(role, prefs)`, that
       the tab strip and the Overview checklist (whose steps link to tabs) both use:
@@ -745,20 +824,13 @@ role and not before it.
   - forecast days flagged (plan.md §1e).
 - **Data quality:** gap filling.
 - **WR2012 check (issue #4 phase 8, model.md §2.10c):**
-  - [ ] **A written explanation per run.** An assessor wants the modeller's
-        reason next to a *query* or *not usable* flag (e.g. "the quaternary
-        includes an irrigated tributary outside the model"). Runs are
-        immutable today: `model_run` has no editable field besides the label
-        set at creation, and no `PATCH` route. The durable fix is a
-        `model_run.notes` text column (migration with its RLS: editor may
-        update only that column, via a column-level `GRANT UPDATE (notes)`),
-        `PATCH /projects/:id/runs/:runId { notes }`, shown and editable under
-        the WR2012 panel and carried into run comparison and the summary CSV.
-        Trigger: before the first licence-application use, or when the
-        licensing-assessor review asks for it.
-  - [ ] **Summary CSV export** (`backend/src/export/run-tables.ts`) doesn't
-        carry the WR2012 report yet; add a block (reference, scaling, MAR
-        ratios, monthly table, flag) with the explanation above.
+  - [x] **A written explanation per run** (2026-09-24): migration 007
+        adds `model_run.notes` (+ who/when stamp by trigger); the app may
+        `UPDATE` only that column; `PATCH /projects/:id/runs/:runId`; the
+        Run notes panel under WR2012, run comparison and the summary CSV
+        carry it (data-model.md § Run notes).
+  - [x] **Summary CSV export** carries the WR2012 block (reference, scaling,
+        MAR ratios, monthly table, flag) and the run notes (2026-09-24).
   - [ ] **SA-only help tag.** The WR2012 help entries are South African;
         tag them when `HelpEntry.countries` lands (international.md WP-I.12).
 - **Workbook import in the browser.** It is the Python CLI only today.

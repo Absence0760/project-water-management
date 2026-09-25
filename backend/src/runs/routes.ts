@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { fromEpochDay, toEpochDay, upgradeLegacyModel } from '@water-management/engine';
+import { fromEpochDay, toEpochDay, upgradeLegacyModel, type RunoffBalance } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { withUser } from '../db/tx.js';
+import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { executeRun, loadModelInput, trimRuns } from './execute.js';
@@ -12,8 +12,22 @@ import { executeRun, loadModelInput, trimRuns } from './execute.js';
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
-	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy`;
-const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by`;
+	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy"`;
+const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
+
+/** Longest run note, in characters (007_run_notes.sql CHECK). */
+export const RUN_NOTES_MAX = 4000;
+const NotesBody = z
+	.object({
+		notes: z
+			.string()
+			.trim()
+			.max(RUN_NOTES_MAX)
+			// Postgres text can't hold NUL; refuse it here rather than surface a database error.
+			.refine((s) => !s.includes('\u0000'), 'notes cannot contain NUL characters')
+	})
+	.strict();
 
 export const runRoutes = new Hono<AuthEnv>()
 	.post('/:id/runs', async (c) => {
@@ -90,12 +104,13 @@ export const runRoutes = new Hono<AuthEnv>()
 	})
 	// One node's every column on one day, with the day before's storage and the
 	// node's parameters from the run's own input snapshot: what the day trace
-	// needs to redo the day's arithmetic (docs/ui.md § Self-checks).
+	// needs to redo the day's arithmetic (docs/ui.md § Self-checks). Without a
+	// nodeId it traces the catchment: the runoff model's day.
 	.get('/:id/runs/:runId/day', async (c) => {
 		const { id, runId } = c.req.param();
 		const q = z
 			.object({
-				nodeId: z.string().uuid(),
+				nodeId: z.string().uuid().optional(),
 				// A real calendar date (2024-02-31 would roll over, or reach Postgres as an error).
 				date: z
 					.string()
@@ -106,6 +121,7 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			if (!q.nodeId) return c.json(await catchmentDay(db, id, runId, q.date));
 			const { rows: run } = await db.query<{ index: number | null; days: number; node: Record<string, unknown> | null }>(
 				`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days,
 					(SELECT n FROM jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $4) AS node
@@ -144,6 +160,21 @@ export const runRoutes = new Hono<AuthEnv>()
 			});
 		});
 	})
+	// The run's written explanation (007_run_notes): the one thing about a run
+	// that may change after it is made. The column grant makes every other
+	// column read-only to the app, whatever this handler does.
+	.patch('/:id/runs/:runId', async (c) => {
+		const { id, runId } = c.req.param();
+		const body = NotesBody.parse(await c.req.json().catch(() => ({})));
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			const { rowCount } = await db.query('UPDATE model_run SET notes = $3 WHERE project_id = $1 AND id = $2', [id, runId, body.notes]);
+			if (!rowCount) throw new ApiError(404, 'not found');
+			const { rows } = await db.query(`SELECT ${RUN_META} ${FROM_RUN} WHERE r.id = $1`, [runId]);
+			return c.json({ run: rows[0] });
+		});
+	})
 	.delete('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
@@ -154,6 +185,61 @@ export const runRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		});
 	});
+
+/** The runoff model's stores, as run_series keys (engine runoff/gr4j.ts STORES). */
+const RUNOFF_STORES = ['production_store', 'routing_store', 'uh_store'] as const;
+
+/**
+ * The catchment's day: every catchment series (node_id NULL) that day, the
+ * runoff model's stores at the end of the day before and its parameters from
+ * the run's summary. A legacy run has no stores (runoffModel 'legacy',
+ * previousStorageMm null); the UI says so and lists the [Flow data] columns.
+ */
+async function catchmentDay(db: Db, projectId: string, runId: string, date: string) {
+	const { rows: run } = await db.query<{ index: number | null; days: number; runoff: RunoffBalance | null }>(
+		`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days, r.summary->'runoff' AS runoff
+		 FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+		[projectId, runId, date]
+	);
+	const r = run[0];
+	if (!r) throw new ApiError(404, 'not found');
+	if (r.index === null || r.index < 0 || r.index >= r.days) throw new ApiError(400, 'the date is outside the run');
+	const { rows } = await db.query<{ key: string; label: string | null; unit: string | null; value: number | null; previous: number | null }>(
+		`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit, "values"[$2::int + 1] AS value,
+			CASE WHEN $2::int > 0 THEN "values"[$2::int] END AS previous
+		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,
+		[runId, r.index]
+	);
+	if (!rows.length) throw new ApiError(404, 'not found');
+	const b = r.runoff;
+	// A conceptual model's stores the day before. Only their total is recorded
+	// at the start of the run (after the warm-up), so on its first day each
+	// store is null and the total is the run's starting storage.
+	const byKey = new Map(rows.map((x) => [x.key, x]));
+	const previousStores = b
+		? (Object.fromEntries(RUNOFF_STORES.map((k) => [k, r.index === 0 ? null : (byKey.get(k)?.previous ?? null)])) as Record<(typeof RUNOFF_STORES)[number], number | null>)
+		: null;
+	const previousStorageMm = !b
+		? null
+		: r.index === 0
+			? b.storageStartMm
+			: RUNOFF_STORES.every((k) => typeof previousStores![k] === 'number')
+				? RUNOFF_STORES.reduce((s, k) => s + previousStores![k]!, 0)
+				: null;
+	return {
+		date,
+		nodeId: null,
+		name: 'Catchment',
+		kind: 'catchment' as const,
+		// Only conceptual models record a runoff balance (engine ≥ 0.5.0); a run without one ran the legacy model.
+		runoffModel: b?.model ?? 'legacy',
+		areaKm2: b?.areaKm2 ?? null,
+		params: b ? { ...b.params, warmupDays: b.warmupDays } : null,
+		previousStorageMm,
+		previousStores,
+		columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
+	};
+}
 
 /** The node parameters the day trace needs to redo the day (docs/api.md). */
 const DAY_PARAMS = [

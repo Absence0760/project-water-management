@@ -57,7 +57,7 @@ export default defineConfig({
 					url: WEB_URL,
 					reuseExistingServer: false,
 					timeout: 120_000,
-					env: { PUBLIC_API_URL: API_URL, PUBLIC_SITE_URL: WEB_URL }
+					env: { PUBLIC_API_URL: API_URL }
 				}
 			: {
 					// `svelte-kit sync` first: frontend/tsconfig.json extends the default
@@ -72,7 +72,7 @@ export default defineConfig({
 					// The build is ~20 s on an idle laptop; the rest is headroom for a
 					// loaded one. It starts in parallel with the backend.
 					timeout: 180_000,
-					env: { PUBLIC_API_URL: API_URL, PUBLIC_SITE_URL: WEB_URL }
+					env: { PUBLIC_API_URL: API_URL }
 				}
 	]
 });

@@ -9,15 +9,19 @@ sides share.
 ## Stack
 
 - **packages/engine**: `@water-management/engine`. Pure TypeScript model
-  (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest.
+  (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest,
+  two projects: `unit` (`pnpm test`) and `perf` (`*.perf.test.ts`, wall-clock
+  budgets, `pnpm test:engine:perf` — median of several runs, run serially and alone,
+  not part of `pnpm test`/CI since a loaded machine trips a hard budget).
   Imported as source by frontend and backend.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
   URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`,
   and for email `nodemailer` (SMTP → Mailpit locally) / `@aws-sdk/client-sesv2`
   (SES in production), picked by `MAIL_TRANSPORT`.
   Plain SQL migrations live in `backend/migrations/`, run by
-  `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
-  (needs Postgres).
+  `backend/scripts/migrate.ts`. vitest has three projects: `unit` (no DB),
+  `db` (needs Postgres) and `perf` (same wall-clock-budget caveat as the
+  engine's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
   charts, vitest. Dev port `7777`. `frontend/.env.production` sets
@@ -56,17 +60,18 @@ pnpm dev:db:status | dev:db:logs
 pnpm dev:db:migrate         # apply backend/migrations as `water`
 pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local data)
 pnpm dev:db:psql            # psql as the schema owner
-pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026, dev:mail:open)
-pnpm dev:mail:down | dev:mail:status | dev:mail:logs
+pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026)
+pnpm dev:mail:down | dev:mail:status | dev:mail:logs | dev:mail:open
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
-pnpm test                   # unit tests everywhere (no DB)
+pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
-pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
-pnpm test:e2e:install       # once: download Playwright's Chromium
+pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
+pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
+pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)

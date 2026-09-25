@@ -38,12 +38,13 @@ No env files to write. `backend/.env.development` and
 | `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; local dev is plain http. Unset (Secure on) when deployed. |
 | `CLOUDFRONT_SHARED_SECRET` | empty | Empty turns the CloudFront header check off locally |
 | `SITE_URL` | `http://localhost:7777` | Base of the links in emails |
+| `PORT` | `3001` | Local dev server port; the backend respects it |
+| `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; off for local http, unset (on) in every deployed environment |
 | `MAIL_TRANSPORT` | `smtp` | `smtp` → Mailpit locally; `log` prints emails to the console; `ses` in production |
 | `SMTP_HOST` / `SMTP_PORT` | `127.0.0.1` / `1026` | Mailpit's SMTP port |
 | `MAIL_FROM` | `Water Management <no-reply@localhost>` | Sender |
 | `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
-| `PUBLIC_SITE_URL` (frontend) | `http://localhost:7777` | Absolute URLs in Open Graph tags |
 
 To override something on your machine, create a gitignored
 `.env.development.local` next to the committed file. It wins.
@@ -182,12 +183,12 @@ filters live in the URL (`/?owner=team:<id>&q=…&sort=name`), so Back and share
 links keep them. `/?new=1` opens the New project dialog.
 
 **Teams** (header → Teams, `/teams`) own catchments together: team admins are
-owners of every team project and members are editors. Create a team, add
-colleagues by the email they registered with, and pick the team when creating
-a project, or move an existing one from its Overview tab (owners only). The
-Overview tab also shows a setup checklist (network → crops & areas → rainfall
-and flow data → evaporation/EWR settings → run) that ticks off as the
-catchment is filled in.
+owners of every team project, members are editors and viewers are read-only.
+Create a team, add colleagues by the email they registered with, and pick the
+team when creating a project, or move an existing one from its Overview tab
+(owners only). The Overview tab also shows a setup checklist (network → crops
+& areas → rainfall and flow data → evaporation/EWR settings → run) that ticks
+off as the catchment is filled in.
 
 With the seeded demo data, `demo@example.com` is admin of the team "Demo
 Catchment Consultants" and `analyst@example.com` is a member.

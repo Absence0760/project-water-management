@@ -2,8 +2,8 @@
 // headline, the water-balance table in Mm³, and the day trace built from
 // GET …/runs/:runId/day with the engine's column catalogue (letters and
 // formulas), so the UI and the CSV column guide say the same thing.
-import { FARM_COLUMNS, GAUGE_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
-import type { RunDay } from '$lib/api';
+import { FARM_COLUMNS, GAUGE_COLUMNS, GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import type { RunCatchmentDay, RunDay } from '$lib/api';
 
 export type Tone = 'ok' | 'bad' | 'none';
 
@@ -132,4 +132,98 @@ export function dayClosure(day: RunDay): Closure | null {
 	const storageChange = g('dam_storage') - day.previousStorageM3;
 	const outflow = g('outflow');
 	return { inflow, consumptive, evaporation, storageChange, outflow, residual: inflow - consumptive - evaporation - storageChange - outflow };
+}
+
+/** The runoff model's stores (run_series keys) with their symbols, in GR4J_COLUMNS order. */
+const RUNOFF_STORES: Record<string, string> = { production_store: 'S', uh_store: 'UH', routing_store: 'R' };
+
+/**
+ * The catchment's day (the runoff model's trace) in the order the model
+ * computes it: each store's content the day before just above its end-of-day
+ * row, and the natural flow also as mm over the catchment, so the store
+ * balance can be read off the table. A legacy run lists its [Flow data]
+ * columns; a model without a catalogue lists what the run stored.
+ */
+export function catchmentTraceRows(day: RunCatchmentDay): TraceRow[] {
+	const byKey = new Map(day.columns.map((c) => [c.key, c]));
+	const catalogue = day.runoffModel === 'gr4j' ? GR4J_COLUMNS : day.runoffModel === 'legacy' ? LEGACY_RUNOFF_COLUMNS : null;
+	if (!catalogue) return day.columns.map((c) => ({ key: c.key, letter: null, label: c.label, unit: c.unit, formula: '', value: c.value }));
+	const rows: TraceRow[] = [];
+	if (day.previousStorageMm !== null) {
+		rows.push({
+			key: 'previous_storage',
+			letter: 'Σ[t−1]',
+			label: 'All stores at the end of the day before',
+			unit: 'mm',
+			formula: 'S[t−1] + R[t−1] + UH[t−1]; on the run’s first day, the storage after the warm-up',
+			value: day.previousStorageMm
+		});
+	}
+	for (const c of catalogue) {
+		const col = byKey.get(c.key);
+		const store = day.previousStores ? RUNOFF_STORES[c.key] : undefined;
+		if (store && col) {
+			rows.push({
+				key: `previous_${c.key}`,
+				letter: `${store}[t−1]`,
+				label: `${col.label}, the day before`,
+				unit: 'mm',
+				formula: 'the store at the end of the day before; only the total is recorded for the run’s first day',
+				value: day.previousStores![c.key] ?? null
+			});
+		}
+		if (!col) {
+			// GR4J stores no exchange series when X2 = 0: the catchment is closed and the exchange is 0.
+			if (c.key === 'exchange' && day.runoffModel === 'gr4j')
+				rows.push({ key: c.key, letter: c.letter, label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', formula: c.formula, value: 0 });
+			continue;
+		}
+		rows.push({ key: c.key, letter: c.letter, label: col.label, unit: col.unit, formula: c.formula, value: col.value });
+	}
+	const q = byKey.get('natural_flow')?.value;
+	if (day.areaKm2 && typeof q === 'number') {
+		rows.push({
+			key: 'natural_flow_mm',
+			letter: 'Q (mm)',
+			label: 'Natural flow as depth over the catchment',
+			unit: 'mm',
+			formula: `Q ÷ (${day.areaKm2} km² × 1000)`,
+			value: q / (day.areaKm2 * 1000)
+		});
+	}
+	return rows;
+}
+
+export interface StoreClosure {
+	/** Σ stores at the end of the day before (mm). */
+	before: number;
+	/** P */
+	rain: number;
+	/** F (+ gained, − lost); 0 when the run stored none (X2 = 0). */
+	exchange: number;
+	/** AET */
+	evaporation: number;
+	/** Q in mm over the catchment. */
+	flow: number;
+	/** Σ stores at the end of the day (mm). */
+	after: number;
+	/** before + rain + exchange − evaporation − flow − after: 0 up to float noise. */
+	residual: number;
+}
+
+/** The runoff model's store balance that day, from the returned numbers alone; null for a legacy run or a missing column. */
+export function catchmentClosure(day: RunCatchmentDay): StoreClosure | null {
+	if (day.previousStorageMm === null || !day.areaKm2) return null;
+	const v = new Map(day.columns.map((c) => [c.key, c.value]));
+	const need = ['rain_used', 'aet', 'natural_flow', ...Object.keys(RUNOFF_STORES)];
+	if (need.some((k) => typeof v.get(k) !== 'number')) return null;
+	const g = (k: string) => v.get(k) as number;
+	const ex = v.get('exchange');
+	const before = day.previousStorageMm;
+	const rain = g('rain_used');
+	const exchange = typeof ex === 'number' ? ex : 0;
+	const evaporation = g('aet');
+	const flow = g('natural_flow') / (day.areaKm2 * 1000);
+	const after = Object.keys(RUNOFF_STORES).reduce((s, k) => s + g(k), 0);
+	return { before, rain, exchange, evaporation, flow, after, residual: before + rain + exchange - evaporation - flow - after };
 }

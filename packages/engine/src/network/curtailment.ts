@@ -42,7 +42,7 @@ export function demandPctNote(demandM3Day: number): 'no_demand' | 'below_floor' 
 export interface CurtailmentInput {
 	nodeId: string;
 	name: string;
-	/** Abstraction demand D = F / e, m³/day [demand] — the crop requirement plus application losses (audit N1). */
+	/** Irrigation abstraction demand, m³/day [demand] — D = F / e (engine ≥ 0.16.0; the workbook uses F). */
 	demand: ArrayLike<number>;
 	/** Irrigation supplied, m³/day [supplied] — Element sheet G. */
 	supplied: ArrayLike<number>;

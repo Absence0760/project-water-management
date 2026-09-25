@@ -4,6 +4,7 @@
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
+import type { DoubleMass } from './doublemass';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
@@ -928,11 +929,18 @@ export interface RunSummary {
 		/**
 		 * Negative values, outliers and flat-lines in the input series; from
 		 * engine 0.5.2 also catchment-rain zero runs and water years far below
-		 * CHIRPS (issue #2).
+		 * CHIRPS (issue #2); from 0.18.0 also double-mass breaks against CHIRPS
+		 * ('doublemass').
 		 */
 		seriesChecks?: SeriesCheck[];
 		/** Farms whose area differs from high-MAP + low-MAP area by more than 1 %. */
 		areaMismatches?: AreaMismatch[];
+		/**
+		 * The double-mass curve of catchment rain against CHIRPS (engine ≥
+		 * 0.18.0, ./doublemass.ts); null without both series or with too few
+		 * judged water years, absent on older runs.
+		 */
+		doubleMass?: DoubleMass | null;
 	};
 	/**
 	 * The CHIRPS fallback bias correction (engine ≥ 0.7.0, ./rain.ts): the

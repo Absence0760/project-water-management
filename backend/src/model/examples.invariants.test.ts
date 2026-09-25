@@ -33,17 +33,7 @@ describe('engine invariants on the example catchments', () => {
 			for (const seed of [1, 2]) expect(checkAll(input, seed)).toBeNull();
 		}, 60_000);
 	}
-
-	it('a GR4J run of an example catchment takes under 50 ms (issue #4 phase 2)', () => {
-		const input = inputOf(examples[0]!);
-		input.settings = { ...input.settings, runoffModel: 'gr4j' };
-		// Median of 7 after a warm-up run, so one slow run on a busy machine doesn't decide it.
-		runModel(input);
-		const ms = Array.from({ length: 7 }, () => {
-			const t = performance.now();
-			runModel(input);
-			return performance.now() - t;
-		}).sort((a, b) => a - b);
-		expect(ms[3]).toBeLessThan(50);
-	});
+	// The GR4J-run timing budget lives in examples.perf.test.ts, its own vitest
+	// project (run serially via `pnpm test:perf`, not part of `pnpm test`) —
+	// see docs/followups.md "Wall-clock test flakes under load" (2026-09-24).
 });

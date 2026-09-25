@@ -16,11 +16,13 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   only for plain-http local dev). JavaScript never sees the token.
 - **Same-origin in production.** CloudFront serves the site and proxies
   `/api/*`, so the cookie is first-party. Together with `SameSite=Lax`, this
-  blocks cross-site POSTs from carrying the session. On top of that, CORS
-  allows only the `ALLOWED_ORIGINS` list (with credentials; `Content-Type` is
-  the only allowed request header), and Hono's `csrf` middleware rejects form
-  posts from any other origin with `403` (`backend/src/app.ts`). Handlers read
-  JSON bodies only.
+  blocks cross-site POSTs from carrying the session. CORS allows only the
+  `ALLOWED_ORIGINS` list (with credentials; `Content-Type` is the only allowed
+  request header). The API accepts JSON bodies only.
+- **CSRF middleware.** Hono's `csrf()` (`backend/src/app.ts`) additionally
+  rejects cross-origin, non-safe requests whose `Origin` isn't in
+  `ALLOWED_ORIGINS` (`403`) — a second layer alongside `SameSite=Lax` against the
+  cross-site form posts a browser can still make without triggering CORS.
 - **Revocation:** every signed-in request re-reads `app_user.sessions_revoked_at`;
   a session issued before it (JWT `iat_ms`, falling back to `iat`) is rejected,
   as is a session for an account that no longer exists. A password reset sets
@@ -103,7 +105,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 Full detail is in [data-model.md § Access control](./data-model.md#access-control).
 In short:
 
-- Roles are **viewer < editor < owner**, per project.
+- Roles are **viewer < editor < owner**, per project. A team grants one of
+  them on every team project: team **viewer → viewer**, **member → editor**,
+  **admin → owner** (`app_project_role()`, 008_team_viewer). The mapping is
+  explicit and an unrecognised team role grants nothing, in SQL
+  (`app_project_role`), the API (`hasTeamRole`) and the UI, so a role added
+  later can't silently become an editor.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every
@@ -115,6 +122,10 @@ In short:
   crops, even when the UUID is known.
 - A **last-owner guard** means a project can't be orphaned (and a
   last-admin guard, a team).
+- **Runs are immutable by privilege.** `water_app` may `UPDATE` only
+  `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
+  rewrite a run's inputs, outputs or label after the fact; who last changed
+  the note is stamped by a trigger. The catalogue test pins that column list.
 - The schema owner (`water`) is used only for migrations, never by the running
   API.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
@@ -137,9 +148,9 @@ In short:
   are parameterised (`pg`), and there is no string-built SQL.
 - Model documents are validated as a whole: references resolve inside the
   document, the network is a tree with one outflow, and names are unique.
-- Series are capped at 60 000 values, and every request body at 4 MB
-  (`bodyLimit`, `413`); the Lambda's 6 MB payload limit sits behind that in
-  production.
+- Series are capped at 60 000 values. The backend itself caps every request
+  body at 4 MB (Hono `bodyLimit`, `backend/src/app.ts`, `413` past it),
+  tighter than and ahead of Lambda's 6 MB payload limit in production.
 - Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
   server never parses `.xlsm` files and no macro content is ever executed.
   The later in-browser importer parses in the user's browser with SheetJS from
@@ -232,10 +243,9 @@ readable by anyone. The rules:
 - **Lambda Function URL**: the backend rejects any request without the
   CloudFront shared-secret header, so the WAF and CloudFront can't be bypassed
   by calling the Function URL directly.
-- **WAF:** per-IP rate limits on CloudFront, covering both the site and
-  `/api/*`: 100 requests per 5 minutes on `/api/auth/*`, and
-  `waf_rate_limit_per_ip` (default 1 000 per 5 minutes) on everything
-  (`infra/waf.tf`).
+- **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+  limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
+  default 1000 per 5 minutes) covering the whole site and `/api/*`.
 - **Response headers** (CloudFront, both behaviours): CSP (`default-src
   'self'`, `object-src 'none'`, `frame-ancestors 'none'`, no third-party
   origins; `default-src 'none'` on `/api/*`), HSTS 2 years, nosniff,
@@ -254,14 +264,20 @@ readable by anyone. The rules:
   migrate Lambdas' security groups can reach it.
 - **Blast radius:** Lambda reserved concurrency is capped. There is a budget
   alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
+- **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a
+  structured `{ event: "self_check_failed", projectId, runId, checks }` line
+  — failed check ids only, never a farm name, date or value — when a saved
+  run fails one of the engine's self-checks (docs/model.md § Verification).
+  A CloudWatch log metric filter + alarm on that line (`infra/alarms.tf`,
+  `self_check_failed`) notifies the same alerts SNS topic as every other
+  alarm, so a model bug in production is paged, not just shown as a warning
+  on the one run.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
 - No app-level rate limit on `/auth/register` beyond the WAF's per-IP
   `/api/auth/*` rule. (Phase 7)
-- No password change while signed in (use "Forgot password"), and no
-  "Sign out everywhere" button in the UI yet — the endpoint exists
-  (`POST /auth/logout-everywhere`). (Phase 7)
+- No password change while signed in (use "Forgot password"). (Phase 7)
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build

@@ -112,7 +112,8 @@ workbook (as in 1a) with **no manual edits**.
 ### 1c. Backend API ([api.md](./api.md))
 
 - ✅ **Teams** (`002_teams.sql`): groups own many catchments. Team admin → owner
-  and team member → editor on every team project; direct sharing still works;
+  and team member → editor on every team project (team viewer → viewer since
+  `008_team_viewer.sql`); direct sharing still works;
   the effective role is the higher of the two. Teams UI at `/teams`.
 - ✅ **Append / merge daily data**: `POST /projects/:id/series/merge` adds a
   daily or batch update to a series by date (new days extend, re-sent days
@@ -479,15 +480,18 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    settled before irrigation.*
 4. **Per-farm EWR (Q4).** "Cumulative EWR" at a farm is only its own fragment.
    Should it add up the upstream fragments?
-5. **Dam reserve (Q5).** Should irrigation also stop at the minimum dam level,
-   or only transfers? *Built pending your answer (engine 0.16.0): irrigation
-   stops at the dam's minimum operating level.*
+5. **Dam reserve (Q5).** *Built on a persona recommendation (engine 0.16.0),
+   to confirm:* irrigation now stops at the dam's minimum operating level, and
+   transfers keep the higher of their own minimum and that level. Which dams
+   keep a reserve, and how much?
 6. ~~**Pitman fallback (Q7).**~~ **Settled (2026-09-24):** the app has no
    Pitman input, so natural flow comes only from the rain model
    ([audit P1](./engine-audit.md)). Worth telling the hydrologist.
 7. **Shortfalls report (Q11).** What do "target volume", "reduce/gain" and
    "volume left after irrigation balanced & EWR met" mean exactly? Which of
-   these numbers do farmers actually see?
+   these numbers do farmers actually see? *Interim (engine 0.17.0, persona
+   recommendation):* the equitable share is labelled a fairness benchmark,
+   "Not an allocation or licence condition".
 8. **Pragmatic EWR (Q10).** Is entering the 12 monthly values enough, or must the
    app derive them from Desktop Reserve tables?
 9. **Reference results.** Is the client catchment "WORKING 007" workbook the version to
@@ -507,10 +511,12 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     reach an upstream farm)? The column "Reduction of demand required (%)" is
     actually the share of demand *left* — which do you report? How does a cut
     apply to a farm with no irrigation? Should l/s truncate (hiding cuts under
-    0.1 l/s)? *Built pending your answer (engine 0.17.0, audit Q11/Q13/Q17):
-    the equitable share is labelled a fairness benchmark, a farm with no
-    irrigation gets no supply cut, "Demand left %" is bounded, and EWR
-    shortfalls are charged to upstream farms pro rata to net impact.*
+    0.1 l/s)? *Interim (engine 0.17.0, persona recommendation, to confirm):*
+    reduce/gain is shown as a fairness benchmark only; "Demand left %" is
+    bounded 0–100 and blank under 1 m³/day; a farm with no demand gets no
+    irrigation cut, its EWR charge shown as *store less / pass inflow*; the
+    EWR shortfall is charged to upstream farms by net impact
+    ([engine-audit.md](./engine-audit.md) Q13, Q17).
 14. **Comparing runs.** Is a higher simulated outflow good or neutral, and a
     PBIAS closer to 0 better? Do you need per-farm series (e.g. the same
     farm's dam storage) overlaid across runs?

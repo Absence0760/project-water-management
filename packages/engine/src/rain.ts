@@ -9,9 +9,12 @@
 //
 // So, per calendar month, CHIRPS used as fallback is scaled by
 //   factor(m) = Σ catchment rain / Σ CHIRPS
-// over the days of month m where both have a reading, leaving out water years
-// the issue #2 checks flag as suspect catchment data (zero runs, low vs
-// CHIRPS). A month with too small a sample takes the factor pooled over all
+// over the days of month m where both have a reading, leaving out suspect
+// catchment data: low-vs-CHIRPS water years whole, and the days of flagged
+// zero runs not kept dry and of listed missing periods one by one (engine ≥
+// 0.18.0; before, every year a flagged run touched). Kept-dry days stay in,
+// unless CHIRPS contradicts them (the keep-dry guard, chirpsBiasFactors).
+// A month with too small a sample takes the factor pooled over all
 // months; without even that, CHIRPS stays raw and the run warns. Factors are
 // clamped to CHIRPS_FACTOR_MIN … CHIRPS_FACTOR_MAX.
 //
@@ -30,7 +33,7 @@ import { monthOfEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import { waterYearOf } from './network/stats';
 import { defaultZeroRainSettings, ZERO_RAIN_MODES, type ChirpsBiasMode, type DailySeries, type SeriesKind, type ZeroRainMode, type ZeroRainSettings } from './project';
-import { rainVsChirps, waterYearLabel, zeroRainRuns } from './quality';
+import { rainVsChirps, usualAnnualRainMm, waterYearLabel, zeroRainRuns } from './quality';
 
 /** A calendar month's own factor needs this many days where both series have a reading … */
 export const CHIRPS_FACTOR_MIN_DAYS = 90;
@@ -58,6 +61,21 @@ export interface ChirpsMonthFactor {
 	fallbackDays: number;
 }
 
+/** A kept-dry stretch the fit doubts: bias-corrected CHIRPS reads too much rain over it (engine ≥ 0.18.0). */
+export interface ChirpsKeepDryDoubt {
+	/** The flagged zero run (as flagged, not clipped to the keep-dry period). */
+	start: string;
+	end: string;
+	/** Its days kept dry that have a CHIRPS reading. */
+	days: number;
+	/** Bias-corrected CHIRPS over those days, mm (raw when the mode is 'none' or a month has no factor). */
+	chirpsMm: number;
+	/** The limit it went over: max(KEEP_DRY_DOUBT_MIN_MM, KEEP_DRY_DOUBT_ANNUAL_SHARE × the catchment's usual annual rain), mm. */
+	limitMm: number;
+	/** Water years its kept days fall in: left out of the fit whole. */
+	waterYears: number[];
+}
+
 export interface ChirpsCorrection {
 	mode: ChirpsBiasMode;
 	minDays: number;
@@ -66,8 +84,25 @@ export interface ChirpsCorrection {
 	clampMax: number;
 	/** All months together: the factor a thin month falls back to. */
 	pooled: { days: number; catchmentMm: number; chirpsMm: number; ownFactor: number | null; factor: number | null; clamped: boolean };
-	/** Water years left out of the fit: flagged by the issue #2 zero-run or low-vs-CHIRPS check. */
+	/**
+	 * Water years left out of the fit whole. From engine 0.18.0: the
+	 * low-vs-CHIRPS years and the years of a doubted keep-dry. Before 0.18.0
+	 * also every year a flagged zero run touched, kept dry or not.
+	 */
 	excludedWaterYears: number[];
+	/** Of those, the years the low-vs-CHIRPS check flags (engine ≥ 0.18.0; absent before). */
+	lowVsChirpsYears?: number[];
+	/** Kept-dry stretches CHIRPS contradicts; their years are in excludedWaterYears (engine ≥ 0.18.0). */
+	doubtfulKeepDry?: ChirpsKeepDryDoubt[];
+	/**
+	 * Days left out of the fit one by one, outside the excluded years, where
+	 * both series have a reading (engine ≥ 0.18.0): days of flagged zero runs
+	 * not kept dry, and days of periods listed as missing.
+	 */
+	flaggedDaysLeftOut?: number;
+	missingDaysLeftOut?: number;
+	/** Days of flagged zero runs kept dry that stay in the fit as confirmed readings (engine ≥ 0.18.0). */
+	keptDryDaysInFit?: number;
 	/** Calendar months 1–12, in order. */
 	months: ChirpsMonthFactor[];
 	/** Run days where CHIRPS stood in for blank catchment rain. */
@@ -83,63 +118,61 @@ const isReading = (v: number | null | undefined): v is number => v != null && Nu
 const clamp = (f: number) => Math.min(CHIRPS_FACTOR_MAX, Math.max(CHIRPS_FACTOR_MIN, f));
 const enough = (days: number, chirpsMm: number) => days >= CHIRPS_FACTOR_MIN_DAYS && chirpsMm >= CHIRPS_FACTOR_MIN_MM && chirpsMm > 0;
 
-/** Water years the issue #2 checks flag: every year a flagged zero run touches, and every low-vs-CHIRPS year. */
-export function suspectRainYears(series: Partial<Record<SeriesKind, DailySeries>>): number[] {
-	const out = new Set<number>();
-	const c = series.rain_catchment_mm;
-	if (c) {
-		for (const r of zeroRainRuns(c).runs) {
-			const a = waterYearOf(toEpochDay(r.startDate));
-			const b = waterYearOf(toEpochDay(r.endDate));
-			for (let y = a; y <= b; y++) out.add(y);
-		}
-	}
-	for (const y of rainVsChirps(series)?.flaggedYears ?? []) out.add(y);
-	return [...out].sort((a, b) => a - b);
+/**
+ * Keep-dry guard (engine ≥ 0.18.0). A kept-dry stretch of a flagged zero run
+ * is doubted, and its water years stay out of the fit, when bias-corrected
+ * CHIRPS over its kept days is above the larger of KEEP_DRY_DOUBT_MIN_MM and
+ * KEEP_DRY_DOUBT_ANNUAL_SHARE × the catchment's usual annual rain
+ * (docs/model.md §2.4b says why).
+ */
+export const KEEP_DRY_DOUBT_MIN_MM = 50;
+export const KEEP_DRY_DOUBT_ANNUAL_SHARE = 0.25;
+
+/** How a catchment-rain day counts as suspect: listed missing, a flagged zero run, or a flagged run kept dry. */
+export type SuspectRainDay = 'missing' | 'flagged' | 'keptDry';
+
+export interface SuspectRainDays {
+	/** The status of an epoch day, or null for an ordinary day. */
+	status: (day: number) => SuspectRainDay | null;
+	/** Flagged zero runs with their epoch-day spans, in date order. */
+	runs: { start: string; end: string; from: number; to: number }[];
 }
 
 /**
- * The per-month factors from the whole stored record (not only the run
- * window, so a shorter simulation period doesn't change them). null when the
- * project has no CHIRPS series. The run counts (fallbackDays, …) are 0 here;
- * applyChirpsCorrection fills them. `missingRanges` (settings.zeroRainRuns
- * .missing) are left out of the fit day by day: their catchment rain is
- * declared bad.
+ * Which catchment-rain days are suspect, over the whole stored record, as a
+ * run treats them (§2.4c): a day in a period listed as missing is 'missing'
+ * (in either mode, whatever it reads). Otherwise a day of a zero run the
+ * issue #2 check flags is 'keptDry' when the mode is 'missing' and a keep-dry
+ * period holds it, and 'flagged' when not. In 'asRecorded' mode every flagged
+ * day is 'flagged': that mode runs them dry as a blanket choice, not as a
+ * confirmed reading.
  */
-export function chirpsBiasFactors(
-	series: Partial<Record<SeriesKind, DailySeries>>,
-	mode: ChirpsBiasMode,
-	missingRanges: readonly ExclusionRange[] = []
-): ChirpsCorrection | null {
-	const sb = series.rain_chirps_mm;
-	if (!sb) return null;
-	const sa = series.rain_catchment_mm;
-	const excluded = sa ? suspectRainYears(series) : [];
-	const skip = new Set(excluded);
-	const missing = missingRanges.map((r) => [toEpochDay(r.start), toEpochDay(r.end)] as const);
-	const declaredMissing = (day: number) => missing.some(([a, b]) => day >= a && day <= b);
-	const days = new Array<number>(13).fill(0);
-	const cMm = new Array<number>(13).fill(0);
-	const hMm = new Array<number>(13).fill(0);
-	if (sa) {
-		const a0 = toEpochDay(sa.startDate);
-		const b0 = toEpochDay(sb.startDate);
-		const from = Math.max(a0, b0);
-		const to = Math.min(a0 + sa.values.length, b0 + sb.values.length); // exclusive
-		for (let day = from; day < to; day++) {
-			const va = sa.values[day - a0];
-			const vb = sb.values[day - b0];
-			if (!isReading(va) || !isReading(vb) || skip.has(waterYearOf(day)) || declaredMissing(day)) continue;
-			const m = monthOfEpochDay(day);
-			days[m]!++;
-			cMm[m] = cMm[m]! + va;
-			hMm[m] = hMm[m]! + vb;
+export function suspectRainDays(catchment: DailySeries | undefined, zr: ZeroRainSettings): SuspectRainDays {
+	const runs = catchment
+		? zeroRainRuns(catchment).runs.map((r) => ({ start: r.startDate, end: r.endDate, from: toEpochDay(r.startDate), to: toEpochDay(r.endDate) }))
+		: [];
+	const span = (r: ExclusionRange) => [toEpochDay(r.start), toEpochDay(r.end)] as const;
+	const missing = exclusionRanges(zr.missing).map(span);
+	const keep = zr.mode === 'missing' ? exclusionRanges(zr.keepDry).map(span) : [];
+	const within = (xs: (readonly [number, number])[], day: number) => xs.some(([a, b]) => day >= a && day <= b);
+	return {
+		runs,
+		status: (day) => {
+			if (within(missing, day)) return 'missing';
+			if (!runs.some((r) => day >= r.from && day <= r.to)) return null;
+			return within(keep, day) ? 'keptDry' : 'flagged';
 		}
-	}
+	};
+}
+
+type MonthSums = { days: number[]; cMm: number[]; hMm: number[] };
+
+/** Per-month factors from the month sums: own where the sample is big enough, else pooled; clamped. */
+function factorsFrom(t: MonthSums): { pooled: ChirpsCorrection['pooled']; months: ChirpsMonthFactor[] } {
 	const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
-	const pd = sum(days);
-	const pc = sum(cMm);
-	const ph = sum(hMm);
+	const pd = sum(t.days);
+	const pc = sum(t.cMm);
+	const ph = sum(t.hMm);
 	const pooledOwn = enough(pd, ph) ? pc / ph : null;
 	const pooled = {
 		days: pd,
@@ -151,13 +184,13 @@ export function chirpsBiasFactors(
 	};
 	const months: ChirpsMonthFactor[] = [];
 	for (let m = 1; m <= 12; m++) {
-		const own = enough(days[m]!, hMm[m]!) ? cMm[m]! / hMm[m]! : null;
+		const own = enough(t.days[m]!, t.hMm[m]!) ? t.cMm[m]! / t.hMm[m]! : null;
 		const raw = own ?? pooled.ownFactor;
 		months.push({
 			month: m,
-			days: days[m]!,
-			catchmentMm: cMm[m]!,
-			chirpsMm: hMm[m]!,
+			days: t.days[m]!,
+			catchmentMm: t.cMm[m]!,
+			chirpsMm: t.hMm[m]!,
 			ownFactor: own,
 			factor: raw === null ? null : clamp(raw),
 			source: own !== null ? 'month' : raw !== null ? 'pooled' : null,
@@ -165,15 +198,112 @@ export function chirpsBiasFactors(
 			fallbackDays: 0
 		});
 	}
+	return { pooled, months };
+}
+
+/**
+ * The per-month factors from the whole stored record (not only the run
+ * window, so a shorter simulation period doesn't change them). null when the
+ * project has no CHIRPS series. The run counts (fallbackDays, …) are 0 here;
+ * applyChirpsCorrection fills them.
+ *
+ * What is left out (engine ≥ 0.18.0, docs/model.md §2.4b): low-vs-CHIRPS
+ * water years, whole; the days of periods listed as missing and of flagged
+ * zero runs not kept dry, one by one (suspectRainDays); and the water years
+ * of a kept-dry stretch that bias-corrected CHIRPS contradicts (the keep-dry
+ * guard). Other kept-dry days stay in: they are confirmed readings. The guard
+ * judges a stretch with factors fitted without any flagged-run day, so the
+ * verdict doesn't lean on the keep-dry it is judging.
+ */
+export function chirpsBiasFactors(
+	series: Partial<Record<SeriesKind, DailySeries>>,
+	mode: ChirpsBiasMode,
+	zeroRain: ZeroRainSettings = defaultZeroRainSettings()
+): ChirpsCorrection | null {
+	const sb = series.rain_chirps_mm;
+	if (!sb) return null;
+	const sa = series.rain_catchment_mm;
+	const lowYears = sa ? (rainVsChirps(series)?.flaggedYears ?? []) : [];
+	const suspect = suspectRainDays(sa, zeroRain);
+	const b0 = toEpochDay(sb.startDate);
+
+	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their status.
+	const shared: { day: number; c: number; h: number; status: SuspectRainDay | null }[] = [];
+	if (sa) {
+		const low = new Set(lowYears);
+		const a0 = toEpochDay(sa.startDate);
+		const from = Math.max(a0, b0);
+		const to = Math.min(a0 + sa.values.length, b0 + sb.values.length); // exclusive
+		for (let day = from; day < to; day++) {
+			const va = sa.values[day - a0];
+			const vb = sb.values[day - b0];
+			if (!isReading(va) || !isReading(vb) || low.has(waterYearOf(day))) continue;
+			shared.push({ day, c: va, h: vb, status: suspect.status(day) });
+		}
+	}
+	const sums = (include: (d: (typeof shared)[number]) => boolean): MonthSums => {
+		const t: MonthSums = { days: new Array<number>(13).fill(0), cMm: new Array<number>(13).fill(0), hMm: new Array<number>(13).fill(0) };
+		for (const d of shared) {
+			if (!include(d)) continue;
+			const m = monthOfEpochDay(d.day);
+			t.days[m]!++;
+			t.cMm[m] = t.cMm[m]! + d.c;
+			t.hMm[m] = t.hMm[m]! + d.h;
+		}
+		return t;
+	};
+
+	// The keep-dry guard, judged with factors that trust no flagged-run day.
+	const doubtful: ChirpsKeepDryDoubt[] = [];
+	if (sa && suspect.runs.length && zeroRain.mode === 'missing' && zeroRain.keepDry.length) {
+		const strict = factorsFrom(sums((d) => d.status === null)).months;
+		const usual = usualAnnualRainMm(sa);
+		const limitMm = Math.max(KEEP_DRY_DOUBT_MIN_MM, usual === null ? 0 : KEEP_DRY_DOUBT_ANNUAL_SHARE * usual);
+		for (const r of suspect.runs) {
+			let days = 0;
+			let mm = 0;
+			const years = new Set<number>();
+			for (let day = r.from; day <= r.to; day++) {
+				if (suspect.status(day) !== 'keptDry') continue;
+				const h = sb.values[day - b0];
+				if (!isReading(h)) continue;
+				const f = mode === 'monthly' ? (strict[monthOfEpochDay(day) - 1]!.factor ?? 1) : 1;
+				days++;
+				mm += h * f;
+				years.add(waterYearOf(day));
+			}
+			if (days > 0 && mm > limitMm) {
+				doubtful.push({ start: r.start, end: r.end, days, chirpsMm: mm, limitMm, waterYears: [...years].sort((a, b) => a - b) });
+			}
+		}
+	}
+	const doubtYears = new Set(doubtful.flatMap((d) => d.waterYears));
+	let flaggedDaysLeftOut = 0;
+	let missingDaysLeftOut = 0;
+	let keptDryDaysInFit = 0;
+	const fit = factorsFrom(
+		sums((d) => {
+			if (doubtYears.has(waterYearOf(d.day))) return false;
+			if (d.status === 'missing') missingDaysLeftOut++;
+			else if (d.status === 'flagged') flaggedDaysLeftOut++;
+			else if (d.status === 'keptDry') keptDryDaysInFit++;
+			return d.status === null || d.status === 'keptDry';
+		})
+	);
 	return {
 		mode,
 		minDays: CHIRPS_FACTOR_MIN_DAYS,
 		minMm: CHIRPS_FACTOR_MIN_MM,
 		clampMin: CHIRPS_FACTOR_MIN,
 		clampMax: CHIRPS_FACTOR_MAX,
-		pooled,
-		excludedWaterYears: excluded,
-		months,
+		pooled: fit.pooled,
+		excludedWaterYears: [...new Set([...lowYears, ...doubtYears])].sort((a, b) => a - b),
+		lowVsChirpsYears: lowYears,
+		doubtfulKeepDry: doubtful,
+		flaggedDaysLeftOut,
+		missingDaysLeftOut,
+		keptDryDaysInFit,
+		months: fit.months,
 		fallbackDays: 0,
 		correctedDays: 0,
 		fallbackRawMm: 0,
@@ -214,12 +344,41 @@ const MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 
 /** Water-year order, as the app's monthly settings. */
 const WY_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** What the fit left out, as one sentence for the run warning (leading space), or '' when nothing. */
+export function fitExclusionText(c: ChirpsCorrection): string {
+	const low = c.lowVsChirpsYears ?? c.excludedWaterYears;
+	const doubt = [...new Set((c.doubtfulKeepDry ?? []).flatMap((d) => d.waterYears))].sort((a, b) => a - b);
+	const parts: string[] = [];
+	if (low.length) parts.push(`water years far below CHIRPS (${low.map(waterYearLabel).join(', ')})`);
+	if (doubt.length) parts.push(`water years of kept-dry runs that CHIRPS contradicts (${doubt.map(waterYearLabel).join(', ')})`);
+	if (c.flaggedDaysLeftOut) parts.push(`${plural(c.flaggedDaysLeftOut, 'day')} of flagged zero runs treated as missing`);
+	if (c.missingDaysLeftOut) parts.push(`${plural(c.missingDaysLeftOut, 'day')} listed as missing`);
+	const kept = c.keptDryDaysInFit ? ` ${plural(c.keptDryDaysInFit, 'kept-dry day')} stay in the fit as confirmed readings.` : '';
+	return (parts.length ? ` Left out of the fit as suspect catchment rain: ${parts.join('; ')}.` : '') + kept;
+}
+
+/**
+ * One warning per kept-dry stretch the keep-dry guard doubts: its kept days
+ * run dry, as Settings says, but CHIRPS reads real rain over them, so its
+ * water years stay out of the CHIRPS fit.
+ */
+export function keepDryDoubtWarnings(c: ChirpsCorrection | null): string[] {
+	return (c?.doubtfulKeepDry ?? []).map(
+		(d) =>
+			`Kept-dry zero run ${d.start} to ${d.end} looks doubtful: ${c!.mode === 'monthly' ? 'bias-corrected ' : ''}CHIRPS reads ` +
+			`${Math.round(d.chirpsMm)} mm over its ${plural(d.days, 'kept-dry day')}, above the ${Math.round(d.limitMm)} mm limit ` +
+			`(the larger of ${KEEP_DRY_DOUBT_MIN_MM} mm and ${Math.round(KEEP_DRY_DOUBT_ANNUAL_SHARE * 100)} % of the catchment's usual annual rain). ` +
+			`Those days still run dry, but water year${d.waterYears.length === 1 ? '' : 's'} ${d.waterYears.map(waterYearLabel).join(', ')} ` +
+			'stay out of the CHIRPS factor fit. Check the keep-dry in Settings → Zero-rain runs.'
+	);
+}
+
 /** The run warning for the correction, or null when CHIRPS was never the fallback (or the mode is 'none'). */
 export function chirpsCorrectionWarning(c: ChirpsCorrection | null): string | null {
 	if (!c || c.fallbackDays === 0 || c.mode === 'none') return null;
-	const excluded = c.excludedWaterYears.length
-		? ` Water years left out of the fit as suspect catchment rain (the zero-run and low-vs-CHIRPS checks): ${c.excludedWaterYears.map(waterYearLabel).join(', ')}.`
-		: '';
+	const excluded = fitExclusionText(c);
 	if (c.correctedDays === 0) {
 		return (
 			`CHIRPS rain stands in for blank catchment rain on ${c.fallbackDays} days and is not bias-corrected: ` +

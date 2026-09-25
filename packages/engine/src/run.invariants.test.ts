@@ -73,6 +73,17 @@ describe('engine invariants on random networks', () => {
 		expect(checkDoubledCropAreas(input)).toBeNull();
 	});
 
+	it('seed 921: doubling crop areas never raises the supply fraction of a leaking destination dam (engine 0.19.0)', () => {
+		// A transfer's room at a destination whose dam seeps 100 % a day ignored
+		// that seepage until 0.19.0, so the dam fell below its dead storage by a
+		// fixed volume and the farm's supply fraction rose with its demand
+		// (5.8 % → 7.3 % legacy, 7.5 % → 8.5 % GR4J; n13, 2 000-case soak on 0.17.0).
+		for (const runoffModel of ['legacy', 'gr4j'] as const) {
+			expect(checkDoubledCropAreas(randomInput(921, { runoffModel })), runoffModel).toBeNull();
+			expect(checkAll(randomInput(921, { runoffModel }), 921), runoffModel).toBeNull();
+		}
+	});
+
 	it('Q18: transfer rules sharing a dam give the same results in any list order (no exemption)', () => {
 		// Seeds whose enabled rules share a source dam, with tied priorities among them.
 		let tested = 0;

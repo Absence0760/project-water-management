@@ -46,6 +46,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   an account, and sends at most one email per address per minute (later
   requests inside the window get `202` and no email). Requesting again replaces
   the previous link.
+- **`logout-everywhere`** is reachable from the frontend header's account menu
+  ("Sign out everywhere", next to plain "Sign out"), which asks for
+  confirmation before calling it (docs/ui.md § Header).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
@@ -89,18 +92,18 @@ Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
 (members, delete, move between teams).
 
 Your effective role is the highest of your direct membership and your team
-membership: on a team's projects, a team **admin** is an `owner` and a team
-**member** is an `editor`. Direct sharing (`/projects/:id/members`) still works
+membership: on a team's projects, a team **admin** is an `owner`, a team
+**member** is an `editor` and a team **viewer** is a `viewer`. Direct sharing (`/projects/:id/members`) still works
 alongside teams, e.g. to give an outside client `viewer` access.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects` | – | `{ projects: ProjectSummary[] }` (most recently updated first) | – |
-| POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team you're in; omit/`null` = personal) | – |
+| POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204` | owner |
-| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (model + series copied; runs not; stays in the team only if you're in it) | viewer |
+| POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (model + series copied; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
 - `dataUntil` — the last day covered by any of the project's time series
@@ -110,8 +113,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
-- `PATCH { teamId }` moves the project into a team you belong to (`404 team not
-  found` otherwise) or, with `null`, back to personal. Owner only.
+- `PATCH { teamId }` moves the project into a team where you're a member or
+  admin (`404 team not found` if you're not in it, `403 requires team member`
+  if you're a team viewer) or, with `null`, back to personal. Owner only.
 - `project = ProjectSummary & { settings: ProjectSettings }` — settings are
   returned merged over the defaults, so the client always sees every field.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
@@ -136,7 +140,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   years, start ≤ end), `mapMm` (> 0 or `null`), `source` 1–500 chars `}`),
   `scaling` (`area` | `areaRain`), `lowFlowMonths` (calendar months 1–12, at
   least one, or `null` = from each run), `flags` (the whole `{ notePct,
-  queryPct, queryWetterPct, unusablePct }`, each 0–1 000 %, note ≤ query ≤
+  queryPct, queryWetterPct, unusablePct }`, each above 0 and at most 1 000 %, note ≤ query ≤
   unusable and wetter ≤ query) and `calibrationPenalty` (`{ enabled, weight,
   marLowMm3, marHighMm3 }`, weight 0–10, `marLowMm3` / `marHighMm3` each
   `null` or a number ≥ 0, already at the modelled catchment's scale — both
@@ -253,20 +257,23 @@ clears its invite.
 
 ## Teams
 
-A team owns many projects (catchments) together. Team roles: `member` <
-`admin`. Admins rename/delete the team and manage its members; on the team's
-projects admins are owners and members are editors (see Projects above).
+A team owns many projects (catchments) together. Team roles: `viewer` <
+`member` < `admin`. Admins rename/delete the team and manage its members; on the
+team's projects admins are owners, members are editors and viewers are viewers
+(see Projects above). A team viewer can't add projects to the team (create,
+move or copy into it). `role` in the member and invite bodies is one of
+`viewer`, `member`, `admin`; anything else is a `400`.
 
 | Method | Path | Body | Response | Min team role |
 | --- | --- | --- | --- | --- |
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
-| GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first) | member |
+| GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
-| DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | member |
+| DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 
@@ -343,6 +350,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
+| GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model: `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
+| PATCH | `/projects/:id/runs/:runId` | `{ notes }` | `200 { run: RunMeta }` with the new note and its stamp. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` only ([data-model.md § Run notes](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` | editor |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -352,10 +361,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - A project keeps its newest **20** runs (env `RUNS_KEPT_PER_PROJECT`,
   default 20); each new run deletes the oldest beyond that, with their
   outputs.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, notes, notesUpdatedAt, notesUpdatedBy }` —
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
-  fetch (audit H1, workbook comparison only — not evidence).
+  fetch (audit H1, workbook comparison only — not evidence). `notes` is the
+  modeller's written explanation of the run (`''` = none; e.g. why a WR2012
+  *query* or *not usable* flag stands), `notesUpdatedAt` / `notesUpdatedBy`
+  (display name) when and by whom it last changed (`null` until first
+  written).
 - `run = RunMeta & { summary: RunSummary }`
 - `GET …/runs/:runId` also returns the run's **settings snapshot** (the
   settings it ran with, from `model_run.inputs`), so the Runs page shows the
@@ -429,12 +442,19 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
   `observedAgreement` (gauge vs logger per water year, with the thresholds
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
-  'flatline' | 'zerorun' | 'lowvschirps', days, examples: [{ date, value,
-  runDays?, endDate? }], text }[]`; the last two, engine ≥ 0.5.2, are the
-  catchment-rain checks of issue #2) and
+  'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
+  runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
+  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.18.0, lists
+  double-mass breaks against CHIRPS, one example per break: the next
+  segment's first and last day, its slope ÷ the one before, its shared days),
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
-  whose area is more than 1 % off high + low MAP area). The last two are absent
-  on older runs. Each check also appears in `warnings`. Rules:
+  whose area is more than 1 % off high + low MAP area) and `doubleMass`
+  (engine ≥ 0.18.0; `null` without both rain series or with fewer than 10
+  judged water years): `{ years: [{ waterYear, days, catchmentMm, chirpsMm,
+  ratio, cumChirpsMm, cumCatchmentMm, residualPct }], skippedYears,
+  wholeSlope, segments: [{ fromWaterYear, toWaterYear, years, days, slope }],
+  breaks: [{ afterWaterYear, slopeBefore, slopeAfter, change, pettittP,
+  bicGain }] }`. The last three are absent on older runs. Each check also appears in `warnings`. Rules:
   [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
 - `summary.verification` (engine ≥ 0.12.0) is the engine's self-checks on the
   run ([model.md § Verification](./model.md#verification)):
@@ -456,8 +476,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   factor, clamped }, excludedWaterYears, months: [{ month, days, catchmentMm,
   chirpsMm, ownFactor, factor, source: 'month' | 'pooled' | null, clamped,
   fallbackDays }] (calendar months 1–12), fallbackDays, correctedDays,
-  fallbackRawMm, fallbackCorrectedMm }`. A run that corrected any day also
-  lists the factors in `warnings`. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
+  fallbackRawMm, fallbackCorrectedMm }`. Engine ≥ 0.18.0 adds why years and
+  days were left out of the fit: `lowVsChirpsYears`, `doubtfulKeepDry: [{
+  start, end, days, chirpsMm, limitMm, waterYears }]` (kept-dry runs CHIRPS
+  contradicts; their years are in `excludedWaterYears`), `flaggedDaysLeftOut`,
+  `missingDaysLeftOut` and `keptDryDaysInFit`; all absent on older runs. A
+  run that corrected any day also lists the factors in `warnings`, and a
+  doubted keep-dry adds its own warning. Rules: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
 - `summary.zeroRainInfill` (engine ≥ 0.15.0) is the catchment rain the run
   treated as missing, `null` when the project has no catchment rain series:
   `{ mode, periods: [{ start, end, source: 'flagged' | 'listed', reason,
@@ -495,6 +520,12 @@ matched.
   every WR2012 input appears in `changes`, and `comparison.wr2012` (`null` when
   neither run has the check) holds the deltas of `marRatioOverlap`,
   `marRatioWhole`, `lowFlowRatio` and `patternCorrelation`.
+  `comparison.chirpsFit` (`null` when neither run fitted CHIRPS factors) is
+  `{ pooledFactor: MetricDelta, excludedWaterYearsA, excludedWaterYearsB,
+  changed }`: `changed` when any month's applied factor or the water years
+  left out of the fit differ ([model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
+- Each side's `run` carries its `notes` (and `notesUpdatedAt` / `notesUpdatedBy`),
+  so the modeller's explanation of each run is shown next to the comparison.
 - `404` when either project isn't visible to you, or the run isn't in the named
   project. It never says which side failed. `400` when `a` or `b` is missing or
   isn't `<projectId>:<runId>`.
@@ -517,7 +548,7 @@ ahead of the usual header row.
 | Path | Query | Body |
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details, the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the EWR sites (days not met, shortfall, charged to farms, natural), the 12 CHIRPS bias factors (month, factor, source, shared days), calibration, a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, and `Notes last changed` with the time and name when there is one), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table, catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the EWR sites (days not met, shortfall, charged to farms, natural), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

@@ -80,8 +80,8 @@ test('frontend env files hold PUBLIC_* keys only', () => {
 });
 
 test('the production build default must be same-origin /api', () => {
-	assert.deepEqual(checkEnvFile('frontend/.env.production', 'PUBLIC_API_URL=/api\nPUBLIC_SITE_URL=\n'), []);
-	assert.equal(checkEnvFile('frontend/.env.production', 'PUBLIC_SITE_URL=\n').length, 1, 'missing PUBLIC_API_URL');
+	assert.deepEqual(checkEnvFile('frontend/.env.production', 'PUBLIC_API_URL=/api\n'), []);
+	assert.equal(checkEnvFile('frontend/.env.production', 'PUBLIC_OTHER=\n').length, 1, 'missing PUBLIC_API_URL');
 	const abs = checkEnvFile('frontend/.env.production', 'PUBLIC_API_URL=https://abc.lambda-url.af-south-1.on.aws\n');
 	assert.equal(abs.length, 2, 'not /api, and absolute');
 });

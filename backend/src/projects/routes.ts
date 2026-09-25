@@ -6,6 +6,7 @@ import { ApiError } from '../http/errors.js';
 import { dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
+import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, SettingsPatch } from './settings.js';
 import { readJson } from '../http/body.js';
@@ -81,7 +82,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Id generated here, not via RETURNING: RLS checks RETURNING rows against
 			// the SELECT policy before the AFTER trigger has made us a member.
 			const id = crypto.randomUUID();
-			if (body.teamId) await requireTeamMember(db, body.teamId);
+			if (body.teamId) await requireTeamContributor(db, body.teamId);
 			await db.query(
 				`INSERT INTO project (id, name, description, created_by, team_id) VALUES ($1, $2, $3, app_current_user_id(), $4)`,
 				[id, body.name, body.description ?? '', body.teamId ?? null]
@@ -100,7 +101,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, body.teamId !== undefined ? 'owner' : 'editor');
-			if (body.teamId) await requireTeamMember(db, body.teamId);
+			if (body.teamId) await requireTeamContributor(db, body.teamId);
 			if (body.teamId !== undefined) {
 				// Someone who owns the project only through the current team would
 				// lose access by moving it out; keep them as a direct owner.
@@ -140,11 +141,17 @@ export const projectRoutes = new Hono<AuthEnv>()
 			await requireRole(db, srcId, 'viewer');
 			const src = await getProject(db, srcId);
 			const newId = crypto.randomUUID();
+			// The copy stays in the team only if the copier may add projects to it
+			// (team member or admin); a team viewer or a non-member gets a personal copy.
+			let teamId: string | null = null;
+			if (src.team_id) {
+				const { rows } = await db.query<{ role: string | null }>('SELECT app_team_role($1) AS role', [src.team_id]);
+				if (hasTeamRole(rows[0]?.role, 'member')) teamId = src.team_id;
+			}
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id)
 				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
-				// The copy stays in the team only if the copier belongs to it.
-				[newId, body.name, src.description, JSON.stringify(src.settings ?? {}), src.team_name !== null ? src.team_id : null]
+				[newId, body.name, src.description, JSON.stringify(src.settings ?? {}), teamId]
 			);
 			await saveModel(db, newId, remapIds(await loadModel(db, srcId)));
 			await db.query(
@@ -250,9 +257,13 @@ async function assertNotLastOwner(db: import('../db/tx.js').Db, projectId: strin
 	}
 }
 
-async function requireTeamMember(db: import('../db/tx.js').Db, teamId: string) {
-	const { rows } = await db.query<{ role: string | null }>('SELECT app_team_role($1) AS role', [teamId]);
-	if (!rows[0]?.role) throw new ApiError(404, 'team not found');
+/**
+ * Placing a project in a team (create, move) needs a team role that may add
+ * to it: member or admin. A team viewer only reads (403); a non-member gets 404.
+ * RLS (project_insert / project_update, 008_team_viewer) enforces the same.
+ */
+async function requireTeamContributor(db: import('../db/tx.js').Db, teamId: string) {
+	await requireTeamRole(db, teamId, 'member', 'team not found');
 }
 
 /** Fresh ids for a copied model, keeping every internal reference intact. */

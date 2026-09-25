@@ -23,10 +23,21 @@ as B.
 
 The page has these sections, top to bottom:
 
-1. **Runs compared.** Label, project, period and time of each run. A note
-   says when both sides are the same run. There is a warning when the two runs cover **different periods**, because every result
+1. **Runs compared.** Label, project, period and time of each run, and
+   under each its **run notes** when it has any: the modeller's written
+   explanation (e.g. why a WR2012 query stands), so a reviewer comparing
+   two runs reads each one's reason with it. A note says when both sides
+   are the same run. There is a
+   warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
-   from the dates. There is a note when the **engine version** differs, and a
+   from the dates. There is a note when the **engine version** differs, a
+   note when the **CHIRPS bias factors** differ (`RunComparison.chirpsFit`:
+   any month's applied factor, or the water years left out of the fit, with
+   the pooled factor and left-out years of each side; `chirpsFit.ts`). The
+   factors can move with no settings line at all: new rain data, a keep-dry
+   or missing period (which since engine 0.18.0 also decides which days the
+   fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
+   or the engine version. And there is a
    warning when **either run used the legacy runoff model** (audit H1): it
    doesn't conserve water at the event scale, so the comparison is a workbook
    comparison only, not evidence.
@@ -163,7 +174,7 @@ fitted values"*). A parameter edit itself still has its own line. Settings keys 
 | `compareRuns`, `diffInputs`, types | `packages/engine/src/compare.ts` (pure, unit-tested in `compare.test.ts`) |
 | `GET /compare/runs` | `backend/src/compare/routes.ts`, contract in [api.md § Compare runs](./api.md#compare-runs) |
 | Page | `frontend/src/routes/compare/+page.svelte` |
-| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults) |
+| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note) |
 
 Access follows the usual rules. You need at least **viewer** on both projects.
 The endpoint returns `404` without saying which side you can't see.

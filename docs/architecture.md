@@ -41,7 +41,7 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, members, the model document, series, runs. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801`. |
@@ -67,6 +67,34 @@ Because the engine is pure and deterministic, there is only one implementation
 to test (invariant tests, plus the client catchment regression suite with its
 documented departures from the workbook, [engine-audit.md](./engine-audit.md)),
 and the browser and the stored result can never drift apart. Every run records `ENGINE_VERSION`.
+
+## Code splitting (frontend)
+
+SvelteKit already gives every route its own chunk. The catchment workspace
+(`routes/projects/[id]`) is split further, because it carries most of the app:
+only the Overview tab (the default view) ships in the route's chunk, and each
+other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
+Runs & results) is a dynamic `import()` of its component, as are the two
+on-demand dialogs (Add data, and the Data tab's series preview). uPlot and the
+engine code the tabs use land in shared chunks that load with the first tab
+that needs them.
+
+- `lib/components/common/lazy.ts` memoises each loader, so a hover prefetch,
+  the render and a later remount share one request, and a remount renders at
+  once. A failed import is forgotten so "Try again" refetches.
+- `lib/components/common/Lazy.svelte` renders the standard `LoadState` while
+  the chunk loads (or an error with "Try again"), then the component through a
+  typed snippet, so the tab's props are still type-checked.
+- The open tab's chunk starts downloading alongside the project data, and a
+  tab link warms its chunk on hover or focus, so switching tabs rarely shows
+  the loading state.
+
+The trade-off: split chunks compress a little worse than one big chunk, so the
+total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
+catchment downloading about 90 KB (gzip) instead of about 300 KB. The bundle
+guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
+holds the largest single chunk down, which is what catches a tab's code
+sliding back into the page chunk.
 
 ## Request lifecycle (backend)
 

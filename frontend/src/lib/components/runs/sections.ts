@@ -19,6 +19,8 @@ export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'w
 		...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 		// WR2012 check: only when the project has a reference.
 		...(summary.wr2012 ? [{ id: 'res-wr2012', label: 'WR2012 check' }] : []),
+		// The run's written explanation, under the WR2012 check: every run.
+		{ id: 'res-notes', label: 'Run notes' },
 		{ id: 'res-fdc', label: 'Flow duration' },
 		{ id: 'res-ewr', label: 'EWR vs outflow' },
 		{ id: 'res-ewr-grid', label: 'EWR by month' },

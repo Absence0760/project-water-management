@@ -8,6 +8,14 @@
 	import BrandMark from './BrandMark.svelte';
 
 	let signingOut = $state(false);
+	// The account menu: a disclosure list of buttons, same pattern as
+	// DownloadMenu (no role="menu"/menuitem, so no arrow-key contract to keep).
+	// It sits under a sticky header with room below, so plain CSS anchoring is
+	// enough — no viewport math like DownloadMenu needs for scrolling tables.
+	let menuOpen = $state(false);
+	let accountRoot: HTMLDivElement | undefined = $state();
+	let trigger: HTMLButtonElement | undefined = $state();
+	const menuId = 'account-menu';
 
 	// Section the current URL belongs to, for aria-current on the nav.
 	const section = $derived.by(() => {
@@ -27,20 +35,68 @@
 			.join('') || '?'
 	);
 
+	function closeMenu(refocus = false) {
+		menuOpen = false;
+		if (refocus) trigger?.focus();
+	}
+
+	function onMenuKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && menuOpen) {
+			e.stopPropagation();
+			closeMenu(true);
+		}
+	}
+
+	// Close when focus or a click leaves the widget.
+	function onMenuFocusOut(e: FocusEvent) {
+		if (menuOpen && accountRoot && !accountRoot.contains(e.relatedTarget as Node | null)) menuOpen = false;
+	}
+	$effect(() => {
+		if (!menuOpen) return;
+		const onDoc = (e: PointerEvent) => {
+			if (accountRoot && !accountRoot.contains(e.target as Node)) menuOpen = false;
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
+
+	// Let the layout's route guard react first (it would send us to
+	// /login?next=<this page>); the explicit navigation below then wins, so
+	// the next person to sign in isn't dropped onto this user's page.
+	async function finishSignOut() {
+		session.user = null;
+		signingOut = false;
+		await tick();
+		await goto(`${base}/login`);
+	}
+
 	async function signOut() {
+		closeMenu();
 		signingOut = true;
 		try {
 			await api.auth.logout();
 		} catch {
 			// Even if the call fails, drop the local session and go to login.
 		}
-		session.user = null;
-		signingOut = false;
-		// Let the layout's route guard react first (it would send us to
-		// /login?next=<this page>); the explicit navigation below then wins, so
-		// the next person to sign in isn't dropped onto this user's page.
-		await tick();
-		await goto(`${base}/login`);
+		await finishSignOut();
+	}
+
+	async function signOutEverywhere() {
+		closeMenu();
+		if (
+			!confirm(
+				'Sign out of every device? Any other browser or device signed in to this account — including this one — will need to sign in again.'
+			)
+		) {
+			return;
+		}
+		signingOut = true;
+		try {
+			await api.auth.logoutEverywhere();
+		} catch {
+			// Even if the call fails, drop the local session and go to login.
+		}
+		await finishSignOut();
 	}
 </script>
 
@@ -57,15 +113,44 @@
 			<a href="{base}/help" aria-current={section === 'help' ? 'page' : undefined}>Help</a>
 		</nav>
 		<div class="spacer"></div>
-		<div class="account">
-			<span class="avatar" aria-hidden="true">{initials}</span>
-			<span class="who">
-				<span class="name">{session.user.displayName}</span>
-				<span class="email">{session.user.email}</span>
-			</span>
-			<button type="button" class="btn btn-sm" onclick={signOut} disabled={signingOut}>
-				{signingOut ? 'Signing out…' : 'Sign out'}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="account" bind:this={accountRoot} onkeydown={onMenuKeydown} onfocusout={onMenuFocusOut}>
+			<button
+				type="button"
+				class="account-trigger"
+				bind:this={trigger}
+				aria-label="Account menu for {session.user.displayName}"
+				aria-expanded={menuOpen}
+				aria-controls={menuId}
+				disabled={signingOut}
+				onclick={() => (menuOpen = !menuOpen)}
+			>
+				<span class="avatar" aria-hidden="true">{initials}</span>
+				<span class="who">
+					<span class="name">{session.user.displayName}</span>
+					<span class="email">{session.user.email}</span>
+				</span>
+				<span aria-hidden="true" class="caret">▾</span>
 			</button>
+			<ul id={menuId} class="menu" hidden={!menuOpen}>
+				<li>
+					<button type="button" class="item" onclick={signOut} disabled={signingOut}>
+						<span class="label">Sign out</span>
+						<span class="hint" aria-hidden="true">Just this device</span>
+					</button>
+				</li>
+				<li>
+					<button type="button" class="item item-danger" onclick={signOutEverywhere} disabled={signingOut}>
+						<span class="label">Sign out everywhere</span>
+						<span class="hint" aria-hidden="true">Every device, including this one</span>
+					</button>
+				</li>
+			</ul>
+			<!-- Only while the menu is open (so it exists before a sign-out starts and can announce
+			     it): an always-present empty status region would sit on every page. -->
+			{#if menuOpen || signingOut}
+				<p class="visually-hidden" role="status" aria-live="polite">{signingOut ? 'Signing out…' : ''}</p>
+			{/if}
 		</div>
 	</header>
 {/if}
@@ -141,10 +226,34 @@
 		flex: 1;
 	}
 	.account {
+		position: relative;
+		min-width: 0;
+	}
+	.account-trigger {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
 		min-width: 0;
+		padding: 0.3rem 0.4rem;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+	.account-trigger:hover:not(:disabled),
+	.account-trigger[aria-expanded='true'] {
+		background: var(--surface-2);
+	}
+	.account-trigger:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.caret {
+		flex: none;
+		font-size: 0.75em;
+		color: var(--text-muted);
 	}
 	.avatar {
 		flex: none;
@@ -178,6 +287,56 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		max-width: 22ch;
+	}
+	/* The dropdown: anchored under the trigger. Unlike DownloadMenu it never
+	   sits inside a scrolling ancestor, so plain absolute positioning (no
+	   viewport math, no position: fixed) is enough. */
+	.menu {
+		position: absolute;
+		z-index: 30;
+		top: calc(100% + 4px);
+		right: 0;
+		min-width: 14rem;
+		max-width: min(20rem, calc(100vw - 2 * var(--gutter)));
+		margin: 0;
+		padding: 0.25rem;
+		list-style: none;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	.menu[hidden] {
+		display: none;
+	}
+	.item {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.item:hover:not(:disabled),
+	.item:focus-visible {
+		background: var(--row-hover);
+	}
+	.item:disabled {
+		cursor: not-allowed;
+		opacity: 0.6;
+	}
+	.item-danger .label {
+		color: var(--danger);
+	}
+	.item .hint {
+		font-size: 0.8rem;
+		color: var(--text-muted);
 	}
 	@media (prefers-color-scheme: dark) {
 		.brand {

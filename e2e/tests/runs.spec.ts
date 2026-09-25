@@ -94,6 +94,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Hydrograph',
 		'Calibration',
 		'Runoff model',
+		'Run notes',
 		'Flow duration',
 		'EWR vs outflow',
 		'EWR by month',
@@ -182,4 +183,24 @@ test('a run tells where its water went on the catchment picture', async ({ page,
 	await expect(stops.nth(2)).toContainText(/Natural flow\s*[\d.,]+ Mm³ a year\./);
 	await expect(stops.nth(5)).toContainText('add up to nothing');
 	await expect(stops.nth(7)).toContainText(/Outflow at the outlet\s*[\d.,]+ Mm³ a year\.\s*\d+% of the natural flow reached the outlet/);
+});
+
+test('an editor writes a run note that is still there after a reload, with who changed it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Run notes');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const notes = page.getByRole('region', { name: 'Run notes' });
+	const box = notes.getByRole('textbox', { name: 'Run notes' });
+	const save = notes.getByRole('button', { name: 'Save notes' });
+	await expect(save).toBeDisabled();
+	await box.fill('  The quaternary includes an irrigated tributary outside the model.  ');
+	await save.click();
+	await expect(notes.getByRole('status')).toHaveText('Saved.');
+	await expect(save).toBeDisabled();
+
+	await page.reload();
+	await expect(box).toHaveValue('The quaternary includes an irrigated tributary outside the model.');
+	await expect(notes).toContainText(/Last changed \d{4}-\d\d-\d\d \d\d:\d\d by Owner/);
 });
