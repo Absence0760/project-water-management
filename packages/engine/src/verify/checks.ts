@@ -465,7 +465,8 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   0 ≤ M ≤ I × %; 0 ≤ O ≤ MIN(diversion capacity, L + N);
  * - the dam's surface A = A_full × (Q[t−1] / capacity)^b (A_full as entered,
  *   or capacity ÷ 3 m); rain on it Pd = rain × A / 1000; evaporation
- *   E = MIN(lake factor × A-pan ÷ days in month × A / 1000, Q[t−1] + Pd + J);
+ *   E = MIN(lake factor × A-pan ÷ days in month × A / 1000, Q[t−1] + Pd + J),
+ *   and for b > 1 also ≤ (1 − seepage) × Q[t−1] / b (engine 0.19.3);
  *   seepage Sp = MIN(seepage × Q[t−1], Q[t−1] + Pd + J − E) (audit N2), and
  *   S0 = Q[t−1] + Pd − E − Sp is what the day starts from;
  * - G = MIN(MAX(S0 + M + O + K + J − dead storage, 0), D): irrigation
@@ -526,7 +527,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(area, a, a)) return `${where}: dam area ${area} ≠ A_full ${areaFull} × (Q[t−1] ${qPrev} / capacity ${cap})^${b}`;
 			const pdWant = (damRain(t) * a) / 1000;
 			const there = Math.max(qPrev + pdWant + j, 0);
-			const evWant = Math.min((evapMmDay[t]! * a) / 1000, there);
+			const evRaw = (evapMmDay[t]! * a) / 1000;
+			const evWant = Math.min(b > 1 ? Math.min(evRaw, ((1 - seep) * qPrev) / b) : evRaw, there);
 			const spWant = Math.min(seep * qPrev, there - evWant);
 			if (!near(pd, pdWant, qPrev) || !near(ev, evWant, qPrev) || !near(sp, spWant, qPrev))
 				return `${where}: rain on dam ${pd} / evaporation ${ev} / seepage ${sp} ≠ ${pdWant} / ${evWant} / ${spWant}`;

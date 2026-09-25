@@ -217,16 +217,30 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
  * caps evaporation and seepage at what is in the dam once today's transfer
  * has landed, and the transfer room (N4) counts them as they are. Zero for a
  * node without a dam or an empty one.
+ *
+ * With b > 1 evaporation is also at most (1 − seepage) × Q[t−1] / b (engine
+ * 0.19.3). The daily step applies the start-of-day surface to the whole day,
+ * and when the surface grows faster than the volume (A ∝ Q^b, b > 1) a day's
+ * evaporation of more than 1/b of the dam makes Q[t−1] − E − Sp fall as
+ * Q[t−1] rises: a fuller dam ended the day with less water (149 m³ all
+ * evaporated while 144 m³ kept 3 m³, fuzz seed 15979), which the real
+ * process, a dam evaporating as its surface shrinks, never does. The cap is
+ * the largest loss for which the step keeps that order; it is a limiter, not
+ * physics, and never binds for b ≤ 1, where the clamped step already keeps
+ * it (docs/model.md §2.7a).
  */
 function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64Array | undefined, damRainMm: Float64Array | undefined): { A: number; Pd: number; E: number; Sp: number } {
 	const cap = node.damCapacityM3;
 	if (!(cap > 0 && qPrev > 0)) return { A: 0, Pd: 0, E: 0, Sp: 0 };
-	const A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), node.damAreaExponent);
+	const b = node.damAreaExponent;
+	const A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), b);
+	const s = node.damSeepagePerDay;
+	const E = lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0;
 	return {
 		A,
 		Pd: damRainMm ? (damRainMm[t]! * A) / 1000 : 0,
-		E: lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0,
-		Sp: node.damSeepagePerDay * qPrev
+		E: b > 1 ? Math.min(E, ((1 - s) * qPrev) / b) : E,
+		Sp: s * qPrev
 	};
 }
 

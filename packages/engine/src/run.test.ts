@@ -454,6 +454,26 @@ describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', (
 		expect(get(two, 'D', 'dam_evaporation')).toEqual([10, 0]);
 	});
 
+	it('engine 0.19.3: with b > 1 a fuller dam never ends the day with less water (fuzz seeds 4197, 7686, 15979, 17277)', () => {
+		// 100 m³ with 10 ha when full (1 mm mean depth), b = 3, 6 mm/day: E = 600 × f³ m³ at f = Q[t−1] / capacity.
+		// The uncapped step left 100f − 600f³, which peaks near f = 0.24 and is 0 above f ≈ 0.41, so a fuller
+		// dam ended the day emptier. The cap E ≤ (1 − seepage) × Q[t−1] / b keeps the order.
+		const end = (f: number, over: Partial<NetworkNode> = {}) =>
+			get(dam({ damCapacityM3: 100, damInitialPct: f, damAreaFullM2: 100_000, damAreaExponent: 3, ...over }), 'D', 'dam_storage')[0]!;
+		const fs = Array.from({ length: 20 }, (_, i) => (i + 1) / 20);
+		for (const seepage of [0, 0.3]) {
+			const ends = fs.map((f) => end(f, { damSeepagePerDay: seepage }));
+			for (let i = 1; i < ends.length; i++) expect(ends[i]!, `seepage ${seepage}, f ${fs[i]}`).toBeGreaterThanOrEqual(ends[i - 1]!);
+		}
+		// Full: E = MIN(600, 100 / 3); with seepage 0.3, E = 0.7 × 100 / 3 and Sp = 30.
+		expect(end(1)).toBeCloseTo(200 / 3, 9);
+		expect(end(1, { damSeepagePerDay: 0.3 })).toBeCloseTo(100 - 70 / 3 - 30, 9);
+		// Where 1/b of the dam is more than a day's evaporation the cap doesn't bind: f = 0.2 loses 600 × 0.008 = 4.8 m³.
+		expect(end(0.2)).toBeCloseTo(20 - 4.8, 9);
+		// b ≤ 1 is untouched: at b = 1 the whole 100 m³ still evaporates (600 m³ asked for).
+		expect(end(1, { damAreaExponent: 1 })).toBe(0);
+	});
+
 	it('estimates an unknown area as capacity ÷ 3 m and says how many dams used the estimate (W6)', () => {
 		const out = run({
 			nodes: [

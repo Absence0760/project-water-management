@@ -34,7 +34,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'diverted_to_dam', letter: 'O', formula: 'MIN(diversion capacity, L + N)' },
 	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m' },
 	{ key: 'rain_on_dam', letter: null, formula: 'rain (before any threshold) ÷ 1000 × dam area' },
-	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J)' },
+	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J); for b > 1 also at most (1 − seepage per day) × Q[t−1] ÷ b' },
 	{ key: 'dam_seepage', letter: null, formula: 'MIN(seepage per day × Q[t−1], Q[t−1] + rain on dam + J − evaporation)' },
 	{ key: 'interim_storage', letter: 'P', formula: 'Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G' },
 	{ key: 'dam_storage', letter: 'Q', formula: 'MIN(P, dam capacity)' },
