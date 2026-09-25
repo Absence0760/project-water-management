@@ -645,7 +645,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged.',
+							'**Summary**: a sentence or two in plain words first (how often the river’s requirement was met, which farms fell short, and the fit when there is observed flow), then mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged, and a small bar beside each farm’s % shows its share at a glance.',
 							'**Where the water went**: the run’s yearly water balance, from rain to the outlet.',
 							'**Self-checks**: whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day** for one farm. See [[balance-check|the self-checks]].',
 							'**Curtailment**: each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites. See [[guide:curtailment-targets|Curtailment targets]].',

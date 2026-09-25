@@ -625,7 +625,15 @@ value such as 250000.
   Viewing an older run, the header offers "go to latest".
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
-- **Summary** (the "Run summary" region): headline cards give mean natural
+- **Summary** (the "Run summary" region): it opens with one to three plain
+  sentences (`runs/runSentence.ts`, built only from the stored summary so they
+  always agree with the cards): the river measure the cards lead with (Reserve
+  rules met in X % of months at the headline site when there is a rule table,
+  else the % of days below the pragmatic EWR at the outflow gauge), then the
+  farms (how many got less than 95 % of their demand and the lowest one, or
+  "Every farm got at least 95 %"; left out when the run has no farms), then,
+  only when the run was scored against observed flow, the in-sample NSE and
+  PBIAS with PBIAS in `rating.ts`'s plain words (NSE unrated). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
@@ -636,7 +644,11 @@ value such as 250000.
   scored on the days the parameters were tuned on. When the parameters came
   from Fit automatically, the fit's validation scores sit beside the in-sample
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
-  order by default, with farms under 95 % supplied flagged in text.
+  order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
+  badge and a tinted row). The **Supplied % of demand** column has a small bar
+  beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
+  green at or above 95 %, amber below; themed tokens, so it follows dark mode, and
+  solid `CanvasText` under forced colours); the number stays the content.
 - **Where the water went** (`#res-water`, `runs/WaterStoryPanel.svelte`, figures
   from `runs/waterStory.ts`): the run's whole-period water balance
   (`summary.waterBalance.total`, engine ≥ 0.11.0) as yearly averages on the help

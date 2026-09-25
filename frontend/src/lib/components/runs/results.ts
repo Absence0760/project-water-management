@@ -9,6 +9,9 @@ export const SEC_PER_DAY = 86_400;
 export const m3DayToMm3a = (v: number) => (v * 365.25) / 1e6;
 export const m3DayToM3s = (v: number) => v / SEC_PER_DAY;
 
+/** Width of a supply bar, 0–1: the fraction supplied, clamped (non-finite → 0). */
+export const supplyBarFraction = (f: number) => (Number.isFinite(f) ? Math.min(1, Math.max(0, f)) : 0);
+
 export type FarmSortKey =
 	| 'network'
 	| 'name'
