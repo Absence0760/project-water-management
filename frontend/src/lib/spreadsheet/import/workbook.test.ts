@@ -5,6 +5,8 @@ import { InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, Wo
 import { extractProject } from './extract';
 import { WorkbookBuilder, serialOf, syntheticB023 } from './testWorkbook';
 import { B023Workbook, readWorkbook } from './workbook';
+import { crc32 } from '../export/zip';
+import { ZipArchive, storedZip } from './zip';
 
 function small(): WorkbookBuilder {
 	return new WorkbookBuilder()
@@ -63,15 +65,15 @@ describe('B023Workbook', () => {
 });
 
 describe('readWorkbook', () => {
-	it('parses only the sheets the named ranges point at', () => {
+	it('parses only the sheets the named ranges point at', async () => {
 		const b = syntheticB023().set('Farm A', 'A1', 'an Element sheet');
-		const wb = readWorkbook(b.toFile());
+		const wb = await readWorkbook(b.toFile());
 		expect(wb.SheetNames).toContain('Farm A');
 		expect(wb.Sheets['Farm A']).toBeUndefined();
 		expect(wb.Sheets['Network']).toBeDefined();
 	});
 
-	it('reads the tables from other sheets when the named ranges point there', () => {
+	it('reads the tables from other sheets when the named ranges point there', async () => {
 		// The same workbook with [Network] renamed: the second pass picks the new name up.
 		const b = syntheticB023();
 		const book = b.build();
@@ -81,31 +83,59 @@ describe('readWorkbook', () => {
 		delete book.Sheets['Network'];
 		for (const n of book.Workbook!.Names!) n.Ref = n.Ref.replace(/^Network!/, 'Netwerk!');
 		const file = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
-		const wb = readWorkbook(file);
+		const wb = await readWorkbook(file);
 		expect(wb.Sheets['Netwerk']).toBeDefined();
+		expect(wb.Sheets['Network']).toBeUndefined();
 		expect(extractProject(wb, { fileName: 'x.xlsm' }).project.model.nodes.map((n) => n.name)).toEqual(['Farm A', 'Farm B', 'Outlet']);
 	});
 
-	it('refuses files over the limits before or while parsing', () => {
+	it('refuses files over the limits before or while parsing', async () => {
 		const file = syntheticB023().toFile();
-		expect(() => readWorkbook(file, { maxBytes: 100 })).toThrow(WorkbookTooLargeError);
-		const err = (() => {
-			try {
-				readWorkbook(file, { maxSheets: 3 });
-			} catch (e) {
-				return e as WorkbookTooLargeError;
-			}
-		})();
-		expect(err).toBeInstanceOf(WorkbookTooLargeError);
-		expect(err?.what).toBe('sheets');
+		await expect(readWorkbook(file, { maxBytes: 100 })).rejects.toMatchObject({ code: 'too-large', what: 'bytes' });
+		await expect(readWorkbook(file, { maxSheets: 3 })).rejects.toMatchObject({ code: 'too-large', what: 'sheets' });
+		// workbook.xml, with its defined names, is over 1 KB.
+		await expect(readWorkbook(file, { maxEntryBytes: 1_000 })).rejects.toMatchObject({ code: 'too-large', what: 'unpacked' });
+		await expect(readWorkbook(file, { maxTotalBytes: 5_000 })).rejects.toBeInstanceOf(WorkbookTooLargeError);
 	});
 
-	it('says when the file is not a workbook at all', () => {
-		expect(() => readWorkbook(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]))).toThrow(UnreadableWorkbookError);
+	it('inflates only the parts it reads', async () => {
+		// A large Element sheet: the total cap leaves no room for it, so reading
+		// succeeds only if it is never inflated.
+		const big = syntheticB023();
+		for (let r = 1; r <= 2000; r++) big.row('Farm A', `A${r}`, Array.from({ length: 20 }, (_, i) => r * 100 + i));
+		const file = new Uint8Array(big.toFile());
+		const zip = ZipArchive.open(file);
+		const sizes = zip.names.map((n) => zip.info(n)!.size);
+		const all = sizes.reduce((a, b) => a + b, 0);
+		const largest = Math.max(...sizes);
+		expect(largest).toBeGreaterThan(all / 2); // the Farm A sheet
+		const wb = await readWorkbook(file, { maxTotalBytes: all - largest });
+		expect(wb.Sheets['Network']).toBeDefined();
+		expect(wb.SheetNames).toContain('Farm A');
+		expect(wb.Sheets['Farm A']).toBeUndefined();
+		await expect(readWorkbook(file, { maxTotalBytes: 1_000 })).rejects.toBeInstanceOf(WorkbookTooLargeError);
 	});
 
-	it('reads dates from a saved file as the same serials', () => {
-		const wb = new B023Workbook(readWorkbook(syntheticB023().toFile()));
+	it('says when the file is not a workbook at all', async () => {
+		await expect(readWorkbook(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]))).rejects.toBeInstanceOf(UnreadableWorkbookError);
+		await expect(readWorkbook(new TextEncoder().encode('name,value\nx,1\n'))).rejects.toMatchObject({ code: 'unreadable', reason: 'not-zip' });
+	});
+
+	it('explains an old .xls or a password-protected file (an OLE container, not a zip)', async () => {
+		const ole = new Uint8Array(512);
+		ole.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+		const err = (await readWorkbook(ole).catch((e: unknown) => e)) as UnreadableWorkbookError;
+		expect(err).toBeInstanceOf(UnreadableWorkbookError);
+		expect(err.message).toMatch(/password-protected or an old-format \.xls/);
+	});
+
+	it('says a zip that is not an Office file is not a workbook', async () => {
+		const notOffice = storedZip([{ name: 'readme.txt', data: new TextEncoder().encode('hello'), crc: crc32(new TextEncoder().encode('hello')) }]);
+		await expect(readWorkbook(notOffice)).rejects.toMatchObject({ code: 'unreadable', reason: 'not-workbook' });
+	});
+
+	it('reads dates from a saved file as the same serials', async () => {
+		const wb = new B023Workbook(await readWorkbook(syntheticB023().toFile()));
 		expect(wb.cellNamed('zCalibration_Date1')).toEqual(new XlDateTime('2010-01-01', 0));
 		expect(serialOf('2010-01-01')).toBe(40179);
 	});

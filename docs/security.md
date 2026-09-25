@@ -203,9 +203,32 @@ In short:
   one exception is `POST /projects/import` (a whole project document), capped
   at 5 MB on the route, after the session check, so an anonymous caller never
   gets a large body read.
-- Uploaded workbooks are parsed **offline** by the Python importer in V1, so the
-  server never parses `.xlsm` files and no macro content is ever executed.
-  The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,
+- The server never parses a workbook. A b023 `.xlsm` / `.xlsx` is parsed
+  either offline by the Python importer or **in the browser**, and only the
+  resulting project document reaches the API (`POST /projects/import`, the
+  same zod validation and 5 MB cap as a `.json` upload).
+- **Untrusted workbook parsing (in-browser import, WP-1.31).** The file is
+  hostile until proven otherwise (`frontend/src/lib/spreadsheet/import/`):
+  - it is refused over 150 MB or 250 sheets before anything is unpacked;
+  - `zip.ts` reads the zip itself and bounds-checks every offset and length
+    against the file. Each part is capped at 128 MB unpacked and all the
+    parts read at 256 MB together, checked against the declared size before
+    anything is allocated, and inflation (the platform's
+    `DecompressionStream`) stops the moment a part produces more than it
+    declared, so a zip bomb is a clear "too large" error, not a crashed tab.
+    Encrypted entries, ZIP64, split archives and compression methods other
+    than stored and deflate are refused, and every part's CRC-32 is checked;
+  - only the parts the import reads are ever unpacked (content types,
+    relationships, the workbook, shared strings, styles, the b023 config
+    sheets). The VBA project, the per-farm result sheets, drawings and
+    embedded objects are never inflated;
+  - nothing is evaluated: SheetJS reads cached cell values only (no formula
+    engine, `cellFormula: false`, `bookVBA: false`), and the one place formula
+    text matters (hand-written [Transfers] rules) reads the plain-text copy
+    b023 keeps, matched against a fixed rule shape, never executed;
+  - error messages quote sheet and farm names from the file, so they are
+    plain text for the UI.
+- The in-browser importer and the `.xlsx` export use SheetJS CE 0.20.3,
   pinned in `frontend/package.json` to its official CDN tarball with the
   integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
   which has known advisories. Dependabot and `pnpm audit` don't track a URL

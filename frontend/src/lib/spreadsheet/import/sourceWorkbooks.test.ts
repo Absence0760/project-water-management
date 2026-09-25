@@ -112,10 +112,10 @@ describe.skipIf(!available)('parity with extract_project.py on the source workbo
 			variants.push(["--gauge-as-reference with the seed's scaling", args, { gaugeAsReference: scaling }]);
 		}
 		for (const [variant, args, opts] of variants) {
-			it(`${label}, ${variant}`, { timeout: 180_000 }, () => {
+			it(`${label}, ${variant}`, { timeout: 180_000 }, async () => {
 				const py = runPython(path, args);
 				const t0 = performance.now();
-				const wb = readWorkbook(readFileSync(path));
+				const wb = await readWorkbook(readFileSync(path));
 				const t1 = performance.now();
 				const result = extractProject(wb, { fileName: file, ...opts });
 				const t2 = performance.now();

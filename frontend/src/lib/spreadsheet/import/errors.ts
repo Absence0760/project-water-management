@@ -14,17 +14,32 @@ export class WorkbookImportError extends Error {
 	}
 }
 
-/** The file isn't a spreadsheet SheetJS can open (not a zip, encrypted, truncated …). */
+/**
+ * Why a file couldn't be opened: not a zip at all (or an old .xls or a
+ * password-protected file), an encrypted or ZIP64 archive, a zip compression
+ * method other than stored or deflate, a damaged container, or SheetJS
+ * failing on a part it read.
+ */
+export type UnreadableReason = 'not-zip' | 'encrypted' | 'zip64' | 'method' | 'corrupt' | 'not-workbook';
+
+/** The file isn't a spreadsheet the importer can open (not a zip, encrypted, truncated …). */
 export class UnreadableWorkbookError extends WorkbookImportError {
-	constructor(readonly detail: string) {
+	constructor(
+		readonly detail: string,
+		readonly reason: UnreadableReason = 'not-workbook'
+	) {
 		super('unreadable', `The file couldn't be read as an Excel workbook (${detail}).`);
 	}
 }
 
-/** Over the size or sheet-count limit readWorkbook() enforces before parsing. */
+/**
+ * Over a limit readWorkbook() enforces: the file size or sheet count before
+ * parsing, or the unpacked size of the parts it reads (a zip bomb, or a sheet
+ * far beyond any real workbook's).
+ */
 export class WorkbookTooLargeError extends WorkbookImportError {
 	constructor(
-		readonly what: 'bytes' | 'sheets',
+		readonly what: 'bytes' | 'sheets' | 'unpacked',
 		readonly actual: number,
 		readonly limit: number
 	) {
@@ -32,7 +47,9 @@ export class WorkbookTooLargeError extends WorkbookImportError {
 			'too-large',
 			what === 'bytes'
 				? `The file is ${Math.ceil(actual / 1e6)} MB; the limit is ${limit / 1e6} MB.`
-				: `The workbook has ${actual} sheets; the limit is ${limit}.`
+				: what === 'sheets'
+					? `The workbook has ${actual} sheets; the limit is ${limit}.`
+					: `The parts of the workbook the importer reads unpack to more than ${Math.floor(limit / 1e6)} MB, its limit.`
 		);
 	}
 }

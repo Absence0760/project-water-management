@@ -3,7 +3,8 @@
 // Python importer (scripts/wbt-import/fixtures/, make_synthetic_workbook.py),
 // the project JSON and the notes, with and without --gauge-as-reference.
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { WorkBook } from 'xlsx';
 import { extractProject, readWorkbook } from './index';
 import { jsonDiff, projectNotes } from './parity';
 
@@ -12,7 +13,10 @@ const read = (name: string) => readFileSync(new URL(name, FIXTURES));
 const lines = (name: string) => read(name).toString('utf8').split('\n');
 
 describe('synthetic b023 workbook: parity with extract_project.py', () => {
-	const wb = readWorkbook(read('synthetic_b023.xlsx'));
+	let wb: WorkBook;
+	beforeAll(async () => {
+		wb = await readWorkbook(read('synthetic_b023.xlsx'));
+	});
 
 	it('writes the same project.json', () => {
 		const { project } = extractProject(wb, { fileName: 'synthetic_b023.xlsx' });
@@ -54,11 +58,11 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 		afterEach(() => {
 			process.env.TZ = tz;
 		});
-		it('reads the same dates east and west of UTC', () => {
+		it('reads the same dates east and west of UTC', async () => {
 			const expected = JSON.parse(read('synthetic_b023.project.json').toString('utf8'));
 			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'America/St_Johns']) {
 				process.env.TZ = zone;
-				const { project } = extractProject(readWorkbook(read('synthetic_b023.xlsx')), { fileName: 'synthetic_b023.xlsx' });
+				const { project } = extractProject(await readWorkbook(read('synthetic_b023.xlsx')), { fileName: 'synthetic_b023.xlsx' });
 				expect(jsonDiff(project, expected), zone).toBeNull();
 			}
 		});

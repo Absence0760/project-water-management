@@ -1,0 +1,166 @@
+// The import's zip reader on well-formed, malformed and hostile archives:
+// every refusal is a typed WorkbookImportError, never a hang, an unbounded
+// allocation or a SheetJS stack trace.
+import { deflateRawSync } from 'node:zlib';
+import { describe, expect, it } from 'vitest';
+import * as XLSX from 'xlsx';
+import { crc32, zip as deflatedZip } from '../export/zip';
+import { UnreadableWorkbookError, WorkbookTooLargeError } from './errors';
+import { ZipArchive, inflateRaw, storedZip } from './zip';
+
+const enc = new TextEncoder();
+const entry = (name: string, text: string) => ({ name, data: enc.encode(text), crc: crc32(enc.encode(text)) });
+
+/** A one-entry deflated zip whose header fields can then be tampered with. */
+function oneDeflated(data: Uint8Array, name = 'a.xml'): { bytes: Uint8Array; view: DataView; cd: number } {
+	const packed = new Uint8Array(deflateRawSync(data));
+	const nm = enc.encode(name);
+	const local = 30 + nm.length;
+	const cd = local + packed.length;
+	const out = new Uint8Array(cd + 46 + nm.length + 22);
+	const v = new DataView(out.buffer);
+	v.setUint32(0, 0x04034b50, true);
+	v.setUint16(8, 8, true);
+	v.setUint32(14, crc32(data), true);
+	v.setUint32(18, packed.length, true);
+	v.setUint32(22, data.length, true);
+	v.setUint16(26, nm.length, true);
+	out.set(nm, 30);
+	out.set(packed, local);
+	v.setUint32(cd, 0x02014b50, true);
+	v.setUint16(cd + 10, 8, true);
+	v.setUint32(cd + 16, crc32(data), true);
+	v.setUint32(cd + 20, packed.length, true);
+	v.setUint32(cd + 24, data.length, true);
+	v.setUint16(cd + 28, nm.length, true);
+	out.set(nm, cd + 46);
+	const end = cd + 46 + nm.length;
+	v.setUint32(end, 0x06054b50, true);
+	v.setUint16(end + 8, 1, true);
+	v.setUint16(end + 10, 1, true);
+	v.setUint32(end + 12, 46 + nm.length, true);
+	v.setUint32(end + 16, cd, true);
+	return { bytes: out, view: v, cd };
+}
+
+const reasonOf = async (p: Promise<unknown> | (() => unknown)) => {
+	try {
+		await (typeof p === 'function' ? p() : p);
+	} catch (e) {
+		if (e instanceof UnreadableWorkbookError) return e.reason;
+		if (e instanceof WorkbookTooLargeError) return `too-large:${e.what}`;
+		throw e;
+	}
+	return 'ok';
+};
+
+describe('ZipArchive: well-formed archives', () => {
+	it('round-trips a stored zip and finds names case-insensitively', async () => {
+		const z = ZipArchive.open(storedZip([entry('[Content_Types].xml', '<Types/>'), entry('xl/Workbook.xml', '<workbook/>')]));
+		expect(z.names).toEqual(['[Content_Types].xml', 'xl/Workbook.xml']);
+		expect(z.find('xl/workbook.xml')).toBe('xl/Workbook.xml');
+		expect(new TextDecoder().decode(await z.read('xl/workbook.xml'))).toBe('<workbook/>');
+		expect(z.inflatedBytes).toBe(11);
+	});
+
+	it('reads the deflated zips the export writes and SheetJS writes', async () => {
+		const text = 'x'.repeat(10_000) + 'end';
+		const ours = ZipArchive.open(await deflatedZip([{ name: 'a.txt', data: enc.encode(text) }]));
+		expect(new TextDecoder().decode(await ours.read('a.txt'))).toBe(text);
+		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[1, 'two']]), 'S');
+		const sheetjs = ZipArchive.open(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer));
+		expect(new TextDecoder().decode(await sheetjs.read('xl/workbook.xml'))).toContain('<sheet ');
+	});
+});
+
+describe('ZipArchive: malformed and hostile archives', () => {
+	it('refuses what is not a zip', () => {
+		expect(() => ZipArchive.open(new Uint8Array(0))).toThrow(UnreadableWorkbookError);
+		expect(() => ZipArchive.open(enc.encode('PK not really a zip, just text that is long enough'))).toThrow(UnreadableWorkbookError);
+	});
+
+	it('refuses a directory that points outside the file', async () => {
+		const { bytes, view, cd } = oneDeflated(enc.encode('hello'));
+		const end = bytes.length - 22;
+		view.setUint32(end + 16, bytes.length, true); // directory offset past the end
+		expect(await reasonOf(() => ZipArchive.open(bytes))).toBe('corrupt');
+		view.setUint32(end + 16, cd, true);
+		view.setUint16(end + 10, 5, true); // more entries than the directory holds
+		view.setUint16(end + 8, 5, true);
+		expect(await reasonOf(() => ZipArchive.open(bytes))).toBe('corrupt');
+	});
+
+	it('refuses a local header offset or a compressed size past the end', async () => {
+		const a = oneDeflated(enc.encode('hello'));
+		a.view.setUint32(a.cd + 42, a.bytes.length - 10, true);
+		expect(await reasonOf(ZipArchive.open(a.bytes).read('a.xml'))).toBe('corrupt');
+		const b = oneDeflated(enc.encode('hello'));
+		b.view.setUint32(b.cd + 20, 0x7fffffff, true);
+		expect(await reasonOf(ZipArchive.open(b.bytes).read('a.xml'))).toBe('corrupt');
+	});
+
+	it('refuses ZIP64, split archives and duplicate names', async () => {
+		const a = oneDeflated(enc.encode('hello'));
+		a.view.setUint32(a.cd + 24, 0xffffffff, true);
+		expect(await reasonOf(() => ZipArchive.open(a.bytes))).toBe('zip64');
+		const b = oneDeflated(enc.encode('hello'));
+		b.view.setUint16(b.bytes.length - 22 + 10, 0xffff, true);
+		expect(await reasonOf(() => ZipArchive.open(b.bytes))).toBe('zip64');
+		const c = oneDeflated(enc.encode('hello'));
+		c.view.setUint16(c.bytes.length - 22 + 4, 1, true); // disk number
+		expect(await reasonOf(() => ZipArchive.open(c.bytes))).toBe('corrupt');
+		const dup = storedZip([entry('a.xml', 'one'), entry('a.xml', 'two')]);
+		expect(await reasonOf(() => ZipArchive.open(dup))).toBe('corrupt');
+	});
+
+	it('refuses encrypted entries and unknown compression methods', async () => {
+		const a = oneDeflated(enc.encode('hello'));
+		a.view.setUint16(a.cd + 8, 1, true);
+		expect(await reasonOf(ZipArchive.open(a.bytes).read('a.xml'))).toBe('encrypted');
+		const b = oneDeflated(enc.encode('hello'));
+		b.view.setUint16(b.cd + 10, 12, true); // bzip2
+		expect(await reasonOf(ZipArchive.open(b.bytes).read('a.xml'))).toBe('method');
+	});
+
+	it('stops a zip bomb at its declared size, before it fills memory', async () => {
+		// 16 MB of zeros deflates to ~16 KB; the header claims 1 KB.
+		const bomb = oneDeflated(new Uint8Array(16 * 1024 * 1024));
+		bomb.view.setUint32(bomb.cd + 24, 1024, true);
+		expect(await reasonOf(ZipArchive.open(bomb.bytes).read('a.xml'))).toBe('corrupt');
+	});
+
+	it('caps each entry and the total by declared size before inflating anything', async () => {
+		const big = oneDeflated(new Uint8Array(2_000_000));
+		expect(await reasonOf(ZipArchive.open(big.bytes, { maxEntryBytes: 1_000_000 }).read('a.xml'))).toBe('too-large:unpacked');
+		const two = storedZip([entry('a', 'x'.repeat(600)), entry('b', 'y'.repeat(600))]);
+		const z = ZipArchive.open(two, { maxTotalBytes: 1000 });
+		await z.read('a');
+		expect(await reasonOf(z.read('b'))).toBe('too-large:unpacked');
+		expect(z.inflatedBytes).toBe(600);
+	});
+
+	it('refuses too many entries', () => {
+		const many = storedZip(Array.from({ length: 30 }, (_, i) => entry(`p${i}`, '')));
+		expect(() => ZipArchive.open(many, { maxEntries: 20 })).toThrow(UnreadableWorkbookError);
+	});
+
+	it('detects a damaged entry: bad deflate data, short output, wrong checksum', async () => {
+		const a = oneDeflated(enc.encode('hello world'));
+		a.bytes.fill(0xff, 30 + 5, 30 + 5 + 4); // garbage in the deflate stream
+		expect(await reasonOf(ZipArchive.open(a.bytes).read('a.xml'))).toBe('corrupt');
+		const b = oneDeflated(enc.encode('hello world'));
+		b.view.setUint32(b.cd + 24, 50, true); // claims more than it inflates to
+		expect(await reasonOf(ZipArchive.open(b.bytes).read('a.xml'))).toBe('corrupt');
+		const c = oneDeflated(enc.encode('hello world'));
+		c.view.setUint32(c.cd + 16, 1234, true);
+		expect(await reasonOf(ZipArchive.open(c.bytes).read('a.xml'))).toBe('corrupt');
+	});
+});
+
+describe('inflateRaw', () => {
+	it('inflates into exactly the declared size', async () => {
+		const data = enc.encode('abc'.repeat(1000));
+		expect(await inflateRaw(new Uint8Array(deflateRawSync(data)), data.length)).toEqual(data);
+	});
+});

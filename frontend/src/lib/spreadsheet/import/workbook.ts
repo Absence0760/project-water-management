@@ -6,10 +6,17 @@
 // formula (SheetJS never does) or reads macros: the VBA project isn't
 // extracted (bookVBA false), formula text isn't kept (cellFormula false), and
 // a formula cell Excel saved without a value reads as blank, as in openpyxl.
-import * as XLSX from 'xlsx';
+// The VBA project isn't even unpacked (see readWorkbook()).
+//
+// SheetJS's mini build: it reads .xlsx and .xlsm (the same container) without
+// the legacy formats and codepages, which keeps the import worker small. The
+// parity tests run through it on both kinds.
+import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { type Cell, cellAddress, clean, columnIndex, isName, pyStrip } from './cells';
 import { fromExcelSerial, isDateFormat, isTimedeltaFormat, durationFromExcel } from './dates';
 import { InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, WorkbookTooLargeError } from './errors';
+import { packageParts, relsPathOf, sheetParts } from './ooxml';
+import { type StoredEntry, type ZipLimits, ZipArchive, storedZip } from './zip';
 
 /**
  * Largest file readWorkbook() accepts. A real catchment workbook with a
@@ -38,39 +45,84 @@ const READ_OPTIONS: XLSX.ParsingOptions = {
 	bookVBA: false
 };
 
+export interface ReadLimits extends ZipLimits {
+	maxBytes?: number;
+	maxSheets?: number;
+}
+
 /**
  * Parse the workbook file for extractProject(). Only the sheets the b023
  * named ranges point at are parsed (the Element sheets of a large workbook
  * are most of its size and the project doesn't need them), so the result is
  * a partial WorkBook: SheetNames lists every sheet, Sheets holds those.
+ *
+ * SheetJS inflates every part of a zip it's handed, which for a client-size
+ * workbook peaked near a gigabyte. So this opens the zip itself (./zip.ts)
+ * and hands SheetJS only the parts the import reads: the content types and
+ * relationships, the workbook, its shared strings, styles and metadata, and
+ * those sheets. The Element sheets, the calculation chain, the VBA project,
+ * drawings and media are never inflated.
  */
-export function readWorkbook(
-	data: ArrayBuffer | Uint8Array,
-	limits: { maxBytes?: number; maxSheets?: number } = {}
-): XLSX.WorkBook {
+export async function readWorkbook(data: ArrayBuffer | Uint8Array, limits: ReadLimits = {}): Promise<XLSX.WorkBook> {
 	const maxBytes = limits.maxBytes ?? MAX_WORKBOOK_BYTES;
 	const maxSheets = limits.maxSheets ?? MAX_WORKBOOK_SHEETS;
 	if (data.byteLength > maxBytes) throw new WorkbookTooLargeError('bytes', data.byteLength, maxBytes);
 	const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+	const zip = ZipArchive.open(bytes, limits);
+
+	const parts = new Map<string, StoredEntry>();
+	/** Inflate one part (once), kept under its exact name in the zip; false when the zip lacks it. */
+	const load = async (name: string): Promise<boolean> => {
+		const exact = zip.find(name);
+		if (exact === undefined) return false;
+		if (!parts.has(exact)) parts.set(exact, { name: exact, data: await zip.read(exact), crc: zip.info(exact)!.crc });
+		return true;
+	};
+	const text = (name: string) => new TextDecoder().decode(parts.get(zip.find(name)!)!.data);
+
+	if (!(await load('[Content_Types].xml'))) throw new UnreadableWorkbookError('it has no [Content_Types].xml, so it is not an Office file');
+	const pkg = packageParts(text('[Content_Types].xml'));
+	const workbookPart = pkg.workbook ?? (zip.find('xl/workbook.xml') ?? null);
+	if (workbookPart === null || !(await load(workbookPart))) {
+		throw new UnreadableWorkbookError(
+			pkg.binary || zip.find('xl/workbook.bin') ? 'it is a binary .xlsb workbook; save it from Excel as .xlsm or .xlsx' : 'it has no workbook part'
+		);
+	}
+	await load('_rels/.rels');
+	const relsPart = zip.find(relsPathOf(workbookPart)) ?? 'xl/_rels/workbook.xml.rels';
+	const hasRels = await load(relsPart);
+	for (const p of pkg.support) await load(p);
+
+	const layout = sheetParts(workbookPart, text(workbookPart), hasRels ? text(relsPart) : '');
+	if (layout.names.length > maxSheets) throw new WorkbookTooLargeError('sheets', layout.names.length, maxSheets);
+
 	const read = (sheets: string[]) => {
+		const packed = storedZip([...parts.values()]);
+		// The zip holds a copy; drop the inflated parts before SheetJS makes its own.
+		if (sheets.length > 0) parts.clear();
 		try {
-			return XLSX.read(bytes, { ...READ_OPTIONS, sheets });
+			return XLSX.read(packed, { ...READ_OPTIONS, sheets });
 		} catch (e) {
 			throw new UnreadableWorkbookError(e instanceof Error ? e.message : String(e));
 		}
 	};
-	let wb = read(B023_SHEETS);
-	if (wb.SheetNames.length > maxSheets) throw new WorkbookTooLargeError('sheets', wb.SheetNames.length, maxSheets);
-	// A workbook whose named ranges point at other sheets (renamed or moved
-	// tables) gets a second pass with exactly those.
-	const book = new B023Workbook(wb);
+	// Pass 1, no sheets: the defined names, to see which sheets they point at.
+	const book = new B023Workbook(read([]));
 	const wanted = new Set<string>();
 	for (const name of ALL_NAMES) {
 		const target = book.sheetOf(name);
-		if (target !== null && wb.SheetNames.includes(target)) wanted.add(target);
+		if (target !== null && book.wb.SheetNames.includes(target)) wanted.add(target);
 	}
-	if ([...wanted].some((s) => !wb.Sheets[s])) wb = read([...wanted]);
-	return wb;
+	// The usual b023 sheets, or exactly the named ranges' sheets when those
+	// lie elsewhere (renamed or moved tables).
+	const sheets = [...wanted].every((s) => B023_SHEETS.includes(s)) ? B023_SHEETS : [...wanted];
+	for (const s of pkg.strings) await load(s);
+	for (const s of sheets) {
+		const part = layout.parts.get(s);
+		if (part !== undefined) await load(part);
+	}
+	// Pass 2: those sheets.
+	return read(sheets);
 }
 
 /** A named range resolved to its sheet and 1-based corners. */

@@ -3,7 +3,7 @@
 // Pure parsing, no I/O and no DOM, so it runs in a Web Worker. Load it
 // lazily: it pulls in SheetJS.
 //
-//   const wb = readWorkbook(await file.arrayBuffer());
+//   const wb = await readWorkbook(await file.arrayBuffer());
 //   const { project, notes, unmapped } = extractProject(wb, { fileName: file.name });
 //
 // Parity with the Python importer is tested on the committed synthetic
