@@ -16,9 +16,15 @@
 //   totalCodeKb     every emitted JS + CSS file, summed in bytes and rounded
 //                   once. Lazy chunks count too: code-splitting a dependency
 //                   must not lower this number, only removing weight does.
-//   largestChunkKb  the largest single JS/CSS file. Catches one heavyweight
-//                   dependency landing in one chunk (a second chart library,
-//                   a spreadsheet parser, a date library).
+//   largestChunkKb  the largest single JS/CSS file a page loads. Catches one
+//                   heavyweight dependency landing in one chunk (a second
+//                   chart library, a spreadsheet parser, a date library).
+//   largestWorkerKb the largest Web Worker bundle (`/workers/`, Vite's
+//                   output for `new Worker(new URL(…))`). A worker carries its
+//                   own copy of the engine and is fetched only when a fit or
+//                   an uncertainty ensemble starts, never on navigation, so it
+//                   has its own ceiling instead of the page chunks'. It still
+//                   counts in totalCodeKb.
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
 //                   one favicon, one font weight at a time.
@@ -107,6 +113,61 @@
 //             notes) measures 429 KB with #9's savings in. No new dependency.
 //             The largest chunk is 40 KB (the Runs tab), ~1 KB under, so the
 //             next Runs-tab feature must lazy-load. Headroom ~6 KB.
+// 2026-09-25  total 435 → 449 KB; largest chunk stays 41 KB. The human-impact
+//             work packages (WP-1.33 other water users, WP-1.34 groundwater,
+//             WP-1.35 land cover; engine 0.22–0.24) add 14 KB: the Network tab's
+//             user, borehole and land-cover editors, the schematic's user
+//             marker, model validation, the curtailment rows for users and
+//             help entries. Their Runs-tab tables are code-split
+//             (runs/HumanImpactTables.svelte, loaded only for a run that has
+//             any of them): inline, they took the Runs chunk to 42 KB, over
+//             its ceiling. Measured 443 KB; the largest chunk is 40 KB (the
+//             Runs tab). No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 449 → 458 KB; largest chunk stays 41 KB. The hydrologist
+//             plausibility checks (engine 0.25.0, model.md §2.10d) measure
+//             452 KB: the Runs tab's Plausibility checks panel is its own
+//             chunk (runs/PlausibilityPanel.svelte, 6.2 KB: four tables and
+//             the dry-season low-flow chart, loaded only for a run that has
+//             the checks, on the shared uPlot LineChart), five help entries
+//             ~1.5 KB in the help chunk, and the Runs chunk's lazy hook and
+//             menu entry ~0.4 KB. The Runs chunk is 40.8 KB, just under its
+//             41 KB ceiling, so the next Runs-tab feature must lazy-load or
+//             move something out. The engine checks run on the server only
+//             and add nothing here. No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 449 → 484 KB; largest page chunk stays 41 KB; new
+//             largestWorkerKb 55 KB. Uncertainty bands (issue #4 phase 9,
+//             engine 0.26.0, model.md §2.10e). Measured on the base
+//             48c2fe7 → this change: 443 → 479 KB. The calibration worker
+//             30.6 → 49.6 KB: the ensemble runs in the same worker (one engine
+//             copy, not two) and every member is a full runModel, so the
+//             worker now carries the run's whole output side (curtailment,
+//             the EWR grid, Reserve compliance, the WR2012 report, quality
+//             checks) that calibrate() never needed, plus the ensemble code.
+//             A second worker would have shipped the engine twice (~+30 KB).
+//             The rest (~16 KB) is page code, all lazy: the Runs-tab
+//             uncertainty panel 8 KB (loaded when a run is shown, not in the
+//             Runs chunk, which stays 40.9 KB), the compare page's paired
+//             panel, the engine's summary / diff code they share, help text.
+//             The worker now dwarfs every page chunk, so it moves to its own
+//             ceiling (above) rather than lifting the page ceiling for it.
+//             No new dependency. Headroom ~5 KB total, ~5 KB on the worker.
+// 2026-09-25  total 458/484 → 503 KB. Merging the plausibility checks (458)
+//             and the uncertainty bands (484, measured apart) measures 497 KB.
+//             Together they took the Runs chunk to 42 KB, so the WR2012 panel
+//             and the evidence panel became lazy chunks too (RunsTab.svelte):
+//             the Runs chunk is 39 KB. The calibration worker is 55 KB, at its
+//             ceiling: the next thing the ensemble or the fit needs must come
+//             out of it first. No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 500 → 496 KB; calibration worker 54.5 → 50 KB (the
+//             check shows 51, rounding up), ceilings unchanged. The ensemble's
+//             members now run runModelWithoutChecks (engine run.ts): runModel
+//             less the hydrologist plausibility checks, which no member result
+//             reads. Nothing on the worker's import path references
+//             ./plausibility any more, so Rollup drops it (~12 KB minified);
+//             each member run is also 6–21 % faster on the example catchments.
+//             Ensemble results are byte-identical (same seed, same output
+//             hash). The ceiling stays at 55 KB so the next ensemble or fit
+//             feature has ~4 KB of room. Headroom ~7 KB total.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -118,10 +179,14 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 435,
+	totalCodeKb: 503,
 	largestChunkKb: 41,
+	largestWorkerKb: 55,
 	largestAssetKb: 100,
 });
+
+/** A Web Worker bundle (Vite emits them under `workers/`). */
+const WORKER = /(^|\/)workers\//;
 
 const CODE = /\.(m?js|css)$/;
 
@@ -135,12 +200,15 @@ export function measure(files) {
 	let codeBytes = 0;
 	let codeCount = 0;
 	let largestChunk = { path: '', gzipBytes: 0 };
+	let largestWorker = { path: '', gzipBytes: 0 };
 	let largestAsset = { path: '', gzipBytes: 0 };
 	for (const f of files) {
 		if (CODE.test(f.path)) {
 			codeBytes += f.gzipBytes;
 			codeCount += 1;
-			if (f.gzipBytes > largestChunk.gzipBytes) largestChunk = f;
+			if (WORKER.test(f.path)) {
+				if (f.gzipBytes > largestWorker.gzipBytes) largestWorker = f;
+			} else if (f.gzipBytes > largestChunk.gzipBytes) largestChunk = f;
 		} else if (f.gzipBytes > largestAsset.gzipBytes) {
 			largestAsset = f;
 		}
@@ -150,6 +218,7 @@ export function measure(files) {
 		codeCount,
 		totalCodeKb: kb(codeBytes),
 		largestChunk: { path: largestChunk.path, kb: kb(largestChunk.gzipBytes) },
+		largestWorker: { path: largestWorker.path, kb: kb(largestWorker.gzipBytes) },
 		largestAsset: { path: largestAsset.path, kb: kb(largestAsset.gzipBytes) },
 	};
 }
@@ -173,6 +242,11 @@ export function violations(m, budget = BUDGET) {
 	if (m.largestChunk.kb > budget.largestChunkKb) {
 		out.push(
 			`Largest chunk ${m.largestChunk.path} is ${m.largestChunk.kb} KB, over the ${budget.largestChunkKb} KB per-chunk budget. This usually means one heavyweight dependency landed in one chunk; check it is needed before raising the ceiling.`,
+		);
+	}
+	if (m.largestWorker.kb > budget.largestWorkerKb) {
+		out.push(
+			`Web Worker ${m.largestWorker.path} is ${m.largestWorker.kb} KB, over the ${budget.largestWorkerKb} KB per-worker budget. A worker ships its own copy of what it imports; check a new import is needed there before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
@@ -205,6 +279,7 @@ function main() {
 	const rows = [
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${BUDGET.totalCodeKb} KB`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${BUDGET.largestChunkKb} KB`],
+		[`Largest worker (${m.largestWorker.path || 'none'})`, `${m.largestWorker.kb} KB`, `${BUDGET.largestWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${BUDGET.largestAssetKb} KB`],
 	];
 	for (const [what, size, budget] of rows) console.log(`${what}: ${size} (budget ${budget})`);

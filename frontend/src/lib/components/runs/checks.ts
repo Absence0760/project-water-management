@@ -2,7 +2,7 @@
 // headline, the water-balance table in Mm³, and the day trace built from
 // GET …/runs/:runId/day with the engine's column catalogue (letters and
 // formulas), so the UI and the CSV column guide say the same thing.
-import { FARM_COLUMNS, GAUGE_COLUMNS, GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { FARM_COLUMNS, GAUGE_COLUMNS, GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS, USER_COLUMNS, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import type { RunCatchmentDay, RunDay } from '$lib/api';
 
 export type Tone = 'ok' | 'bad' | 'none';
@@ -63,7 +63,7 @@ export interface TraceRow {
 
 /** The day's columns in FarmTemplate (or GaugeTemplate) order, with the storage the day started from. */
 export function traceRows(day: RunDay): TraceRow[] {
-	const catalogue = day.kind === 'gauge' ? GAUGE_COLUMNS : FARM_COLUMNS;
+	const catalogue = day.kind === 'gauge' ? GAUGE_COLUMNS : day.kind === 'user' ? USER_COLUMNS : FARM_COLUMNS;
 	const byKey = new Map(day.columns.map((c) => [c.key, c]));
 	const rows: TraceRow[] = [];
 	if (day.kind === 'farm') {

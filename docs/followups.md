@@ -59,6 +59,33 @@ Tick items off (or move them into an issue) as they are done.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
+      Built 2026-09-25, off by default, on the engineering decisions below,
+      not client sign-off. Put each to the hydrologist as "confirm or change":
+      - WP-1.33 other water users (engine 0.22.0): are there towns, industry
+        or unlisted irrigators upstream of the logger, and what do they take
+        (monthly m³/day) and return? Priority: a senior user's demand is
+        passed down by the farms upstream (fragmented by flow share like the
+        EWR; farms divert less, then pass inflow below the dam), and it is
+        **not curtailed** for the EWR (its charge stands, not moved onto
+        farms); a junior user takes what reaches it and is curtailed like a
+        farm. Confirm both rules and which priority each user has. Known
+        limit: a farm never releases stored water for a senior user, and
+        development (users, their demand) can't vary within a run.
+      - WP-1.34 boreholes (engine 0.23.0): do boreholes matter in the client
+        catchment, and is there any data on pumping volumes, distances from
+        the river or aquifer tests? Confirm the method (a lagged linear
+        reservoir with capture share d and time constant k, not a Glover/Hunt
+        kernel) and the values; depletion the river can't give is dropped,
+        not carried over. If the calibration record was measured while they
+        pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
+        catchment (invasives, plantations, riparian stands) and their
+        condensed areas? The class reductions are indicative mature-stand
+        values (model.md §2.5a); confirm them, or supply the Scott & Smith /
+        Gush curves by age and site the CMA uses. Confirm the daily split
+        (low-flow share on each day's flow up to the Q75 natural flow, the
+        other share above it) and whether orchards and vineyards need a class.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),
@@ -471,7 +498,24 @@ the reports):
   0.21.0, below). Phase 9 criteria are below.
 
 **Open items (not yet started):**
-- [ ] **Phase 9: uncertainty bands.** Build to these criteria (assessor):
+- [x] **Phase 9: uncertainty bands.** Done 2026-09-25, engine 0.26.0,
+      migration 014 ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9),
+      [ui.md](./ui.md), [run-comparison.md](./run-comparison.md)). A seeded
+      Latin hypercube over the free parameters (log-uniform across a
+      decade or more), a ±0.1 pan-coefficient shift, station-with-infill vs
+      CHIRPS-only rain and gauge vs logger; member 0 is the run itself.
+      Kept by stored thresholds (KGE′ ≥ 0.5 before the split date, WR2012 up
+      to *query* and inside the MAR band, low-flow bias ±50 %), diffed in the
+      Runs-tab history and run comparison; coverage of the held-out half per
+      record (warning below 70 %); no percentiles below 30 kept; bands on
+      every output below plus the monthly Reserve compliance rate; paired
+      B − A bands in run comparison; one model per ensemble. The database
+      draws the seed and keeps every start; the server regenerates the
+      sample and re-runs member 0 and three random members before storing
+      (licensing, issue #15: bands can't be cherry-picked). The ensemble
+      runs in the calibration worker: 300 members take 8–16 s on the example
+      catchments. Defaults to confirm: plan.md question 18.
+      Criteria it was built to (assessor):
       - The ensemble comes from a seeded sample across the parameter bounds
         (Latin hypercube or DDS-AU), **not** the optimiser's search path.
       - The ensemble also varies the pan coefficient, the rain source and the
@@ -505,8 +549,9 @@ the reports):
             site from the month's requirement (`ewr_rule`, already stored),
             fed to attribution in place of the pragmatic EWR, with a new
             engine version and a regression note. Trigger: their answer.
-      - [ ] **Uncertainty on compliance.** Phase 9's bands should include the
-            monthly Reserve compliance rate beside days not met.
+      - [x] **Uncertainty on compliance.** Phase 9's bands include the
+            monthly Reserve compliance rate per site beside days not met
+            (engine 0.26.0).
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -515,16 +560,45 @@ the reports):
       warning when a later run uses another runoff model
       ([data-model.md](./data-model.md), [security.md](./security.md)). The
       assessor rated this Medium.
-- [ ] **Hydrologist plausibility checks** (as run warnings or a report):
+- [x] **Hydrologist plausibility checks** (as run warnings or a report).
+      Done 2026-09-25, engine 0.25.0
+      ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6)):
+      `RunSummary.plausibility`, run warnings, a *Plausibility checks* block
+      in the summary CSV and a lazy-loaded panel on Runs & results
+      ([ui.md](./ui.md)):
       - natural flow ≥ impacted observed flow + modelled abstraction in every
-        water year;
-      - EWR days reported separately for good-rain and fallback-rain years;
+        water year (A = natural − simulated outflow, split into use, dams and
+        land cover; 10 % of the observed volume allowed for gauging error,
+        floor 1 % of the record's mean; judged with 300+ observed days);
+      - EWR days reported separately for good-rain and fallback-rain years
+        (a fallback year has more than half its rain, or its days, from
+        CHIRPS, forecast, spread or blank days), with the Reserve months met
+        split the same way; warns at a 10-point difference;
       - a double-mass curve of gauge flow against rain, to tell new upstream
-        use from a failing gauge;
+        use from a failing gauge (the rain-vs-CHIRPS break detection,
+        `doubleMassSegments`; each break set against the simulated outflow,
+        with a seasonal hint);
       - dry-season low-flow duration curves overlaid for gauge, logger and
-        each model.
+        each model (the latest run of each other runoff model), warning when
+        the simulated Q90 is more than a factor of 2 from the observed.
+
+      For the hydrologist: confirm the dry-season rule (six months of lowest
+      mean flow), the 10 % / 1 % tolerance, the fallback-year rule and its
+      10-point warning, the seasonal hint's 10-point margin and the factor of
+      2 on Q90 (every value and its reasoning is in model.md §2.10d).
+      Still open, each with its trigger:
+      - [ ] **Checks on a gauge node inside the network.** The observed
+            records are the outlet's, so the checks run there only. The
+            durable fix is attaching an observed record to a gauge node
+            (a series per node) and running check 1 and 4 at each. Trigger:
+            a project with a second gauged site.
+      - [ ] **The checks in the run comparison.** Compare shows neither the
+            failing years nor the Q90 ratio side by side. Trigger: the
+            hydrologist asks to compare the checks between runs (for
+            example before and after a refit).
 - [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
-      hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
+      hydrologist asks for it. Phase 10 (remove legacy) is issue #16, due by
+      2026-11-30 (sign-off assumed 2026-09-25, issue #4 closed).
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -560,8 +634,10 @@ the suggested order (the IDs carry the detail):
       CR-1 below can then reuse its batch and report code. Do it
       before CR-1, or as soon as the hydrologist asks for another
       side-by-side of fits.
-- [ ] **Ensemble and reporting:** CR-1 behavioural ensemble with the EWR range
-      → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
+- [ ] **Ensemble and reporting:** ~~CR-1 behavioural ensemble with the EWR
+      range~~ (done as Phase 9, engine 0.26.0: a few hundred Latin-hypercube
+      sets in one worker, not 10–20k across several; more workers are the
+      scaling step if the hydrologist wants larger samples) → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
       "not determinable" → CR-28 WR2012 five-statistic table (confirm the
       thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
       FDC overlays and %nMAR.
@@ -796,6 +872,44 @@ the suggested order (the IDs carry the detail):
       `network/attribution.ts` sizes the noise by the dams at both ends of the
       day's transfers too, the same `RESIDUE` rule as 0.19.2. Pinned in
       `run.invariants.test.ts` beside the 0.19.1–0.19.2 seeds.
+- [x] **Order invariance: Reserve rule tables (engine 0.24.1, 2026-09-25).**
+      The first 20 000-case soak with rule tables in the fuzz generator
+      failed on 18 seeds per model. Two tables for one site were resolved by
+      list order (now neither is used, with a warning; the API already
+      refused such a list), and a site's natural flow summed in display order
+      moved the percentile across a flat stretch of the table's natural
+      curve (now summed in node-id order, and a flow within 1e-12 of a curve
+      point counts as reaching it). Seeds 3238, 6191, 17126, 18472 pinned in
+      `run.invariants.test.ts`; the flat-curve case in `assurance.test.ts`.
+- [x] **Order invariance: list-order float sums tipped thresholds (engine
+      0.26.1, 2026-09-25).** The first 20 000-case soak generating other
+      users, boreholes and land cover (engines 0.22–0.24) failed order
+      invariance on 11 legacy and 16 GR4J seeds with real differences
+      (outflow 7988 vs 8469 m³/day, a dam's area 73.6 vs 0, a user's EWR days
+      not met 209 vs 210). One mechanism throughout: sums over lists in
+      display order (the farms' flow shares and the catchment area Σ farm
+      area, a farm's crops and crop areas, the senior users' claims and
+      upstream share totals, land-cover patches, transfer rules, the EWR
+      attribution's impacts) differed in their last bit when the lists were
+      reordered, and a threshold turned the ulp into a result: a dam sitting
+      exactly at its drought-borehole trigger (seed 3899: 481.22408531730883
+      vs …088 m³, 116 938 m³ pumped in one order, none in the other), a dam
+      running dry in one order and keeping a residue with a surface in the
+      other (5703, 15208, 17002), the catchment area and so every natural
+      flow (7094). None of the new elements had an order rule of its own
+      that was wrong (users are served by position, boreholes are per node,
+      patches add linearly); the noise predates them, they only added the
+      thresholds that amplify it (and 14313 above was the same class).
+      **Fixed at the source:** every sum feeding the balance runs in id
+      order (`packages/engine/src/order.ts`; model.md §6 "The ordering
+      rule"), and `checkOrderInvariance` now requires every daily series to
+      be **bit-identical** in any display order, so a new list-order sum is
+      caught even where no threshold amplifies it (the summary keeps its
+      float tolerance). No documented result changed (engine-audit.md
+      unchanged): only last bits and the tied threshold days move. Tests:
+      `order.test.ts` (one case per sum, on values whose sum depends on the
+      order), `run.invariants.test.ts` › "engine 0.26.1: …" pins the seeds
+      of both models; `runoff/legacy.test.ts` now adds the area in id order.
 - [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,

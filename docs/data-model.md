@@ -32,6 +32,8 @@ erDiagram
   model_run ||--o{ run_series : outputs
   project  ||--o{ run_nomination : "evidence history"
   model_run ||--o{ run_nomination : "nominated as"
+  model_run ||--o{ run_uncertainty : "uncertainty ensembles"
+  run_uncertainty |o--o{ run_uncertainty : "paired on (baseline)"
   node     |o--o{ run_series : "per node (null = catchment)"
 ```
 
@@ -44,9 +46,10 @@ erDiagram
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
-| `node` | A network element: `farm` or `gauge`, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
+| `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
+| `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS`. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007, the only column that changes after the run is made) | A "Calc. Model" press plus the `[Log]` entry |
@@ -70,6 +73,15 @@ erDiagram
 | `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow |
 | `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, floored at 0.01, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
 | `loss_return_fraction` | (1 when r > 0, else 0) | Share β (0–1) of the application losses `(1 − e) × supplied` that returns to the river the same day; default 0.5. Migration 006 backfilled both from `return_flow_pct` and dropped that column |
+
+| `user_demand_m3_day` | (none: b023 has no such element) | Kind `user` only (migration 011, engine ≥ 0.22.0, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)): demand from the river, m³/day per water-year month (12 values ≥ 0, CHECK); NULL = none |
+| `user_return_pct` | (none) | Kind `user` only: share (0–1) of what it takes that returns below it the same day; default 0 |
+| `borehole_capacity_m3_day` | (none: b023 has no groundwater) | Farms and users (migration 012, engine ≥ 0.23.0, [model.md §2.7d](./model.md)): most pumped per day, m³/day; NULL = no boreholes (every existing row) |
+| `borehole_rule` | (none) | `supplemental` (default), `primary` or `drought` (CHECK); the API refuses `drought` without a farm dam and any borehole on a gauge |
+| `borehole_trigger_pct` | (none) | Drought rule: runs while the dam is below this fraction of capacity (0–1, default 0.3) |
+| `stream_depletion_frac` | (none) | Share d (0–1, default 0) of the pumping taken from the river at the node |
+| `stream_depletion_lag_days` | (none) | Lag time constant k (0–36 500 days, default 0 = same day) |
+| `user_priority` | (none) | Kind `user` only: `senior` (default) or `junior` (CHECK). The API refuses crop areas and transfers on a user node |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
@@ -210,6 +222,43 @@ B on … because …". A run can be nominated again later (A, B, A).
 - Migration 009 is reserved for pinned runs (issue #7). The runner applies
   every unapplied file in name order, so 010 applying first is harmless.
 
+**Uncertainty bands (014_run_uncertainty.sql).** One row per ensemble a
+run's editor starts ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)):
+`project_id`, `run_id` (→ `model_run`, cascade), `baseline_id` (→ another
+`run_uncertainty` row, cascade; set for a **paired** band, which re-runs that
+baseline's kept members on this run), `runoff_model`, `engine_version`,
+`method` (`lhs`), `seed`, `members`, `options jsonb` (the resolved options:
+dimensions, rain sources, records, the acceptance **thresholds**), `status`
+(`started` → `complete`), and on completion `accepted`, `summary jsonb` (the
+bands, coverage, notes and decision rule) and `result jsonb` (the header, the
+kept members' parameters and outputs, every member's scores and verdict, the
+coverage), `created_by`, `created_at`, `completed_at`. A CHECK ties the four
+completion columns to `status`. Indexes cover every foreign key, `run_id`
+leading `(run_id, created_at DESC)`. A 300-member result is ~200–300 KB.
+
+Un-cherry-pickable by privilege (the licensing assessor's concern, issue #15):
+
+- **The database draws the seed.** The `run_uncertainty_start` BEFORE INSERT
+  trigger (`SECURITY DEFINER`, `search_path` pinned) sets `seed` (and
+  `options.seed`) itself, stamps `created_by` / `created_at` from the session,
+  forces `status = 'started'` and empty results, checks the run (and a
+  baseline) belong to the project, and caps a run at **50** starts under a
+  per-run advisory lock. A paired row copies its baseline's options, seed,
+  members, method and model, and needs a complete, unpaired baseline of
+  another run.
+- **Every start is kept.** `water_app` has `SELECT`, `INSERT`, and `UPDATE` of
+  `status`, `accepted`, `summary`, `result`, `completed_at` only; no `DELETE`
+  and no delete policy (the catalogue test's `COLUMN_ONLY_UPDATE` and
+  `NO_DELETE`). An ensemble started and never completed stays, visibly
+  abandoned.
+- **Completed once.** The update policy only sees `started` rows, and the
+  `run_uncertainty_complete` trigger lets only whoever started a row complete
+  it, only to `complete`, stamping `completed_at`. Options and thresholds are
+  outside the column grant.
+- Rows go only with their run (a nominated run can't be deleted) or project.
+- **RLS:** viewers read; editors insert and complete (`run_uncertainty_select`,
+  `_insert`, `_update`).
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
@@ -303,6 +352,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `run_nomination` (the evidence history): SELECT needs `viewer`, INSERT
   `editor`; there is no UPDATE or DELETE for anyone (see § Evidence nomination
   above).
+- `run_uncertainty` (uncertainty ensembles): SELECT needs `viewer`, INSERT and
+  the one completing UPDATE `editor`; no DELETE for anyone (see § Uncertainty
+  bands above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

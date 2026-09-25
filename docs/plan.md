@@ -16,6 +16,14 @@ and [data-model.md](./data-model.md)):
   hydrology and invariant tests ([engine-audit.md](./engine-audit.md)), and
   GR4J, not the AI module, became the alternative and then the default runoff
   model (engine 0.11.0, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+- **Runoff model on record: GR4J (issue #4 Phase 6 decision gate, 2026-09-25).**
+  GR4J is the primary daily model; legacy stays for workbook comparison only,
+  never as evidence, until Phase 10 removes it (issue #16, by 2026-11-30). The
+  hydrologist's sign-off, and their acceptance of the client catchment's
+  validation (weak split-sample and dry → wet scores, too wet at low flow by the
+  plausibility checks, so every client figure carries the Phase 9 bands), are
+  **assumed by the operator**, not given in writing. Reopen issue #4 if the
+  hydrologist disagrees.
 - **Multi-project, multi-user.** A user can have any number of projects
   (catchments A, B, C, … and more later). Access is set per project with the
   roles viewer, editor and owner, and **Postgres RLS enforces it**.
@@ -560,6 +568,15 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     measure the CMA wants, or % of time from daily flows as well? And should
     the daily EWR charge and curtailment follow the rule table's requirement
     instead of the pragmatic EWR?
+18. **Uncertainty bands (issue #4 phase 9).** *Built to the assessor's
+    criteria (engine 0.26.0, model.md §2.10e), defaults to confirm.* Is a
+    parameter set behavioural at KGE′ ≥ 0.5 on the first half of the record,
+    with a low-flow FDC bias within ±50 % and a WR2012 flag no worse than
+    *query*? Is ±0.1 the right spread for the monthly pan coefficient, and is
+    CHIRPS alone a fair second rain source for this catchment? Are 300
+    Latin-hypercube members enough, and should the ensemble sample the typical
+    or the wide bounds when the fit used wide ones? What coverage of the
+    held-out half would the CMA accept (the app warns below 70 %)?
 
 ### Product
 

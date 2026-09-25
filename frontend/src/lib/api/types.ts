@@ -1,7 +1,15 @@
 // Wire shapes from docs/api.md that aren't in @water-management/engine.
 import type {
+	EnsembleHeader,
+	EnsembleRequest,
+	EnsembleSummary,
 	InputChange,
+	MemberResult,
+	PairedMember,
+	PairedSummary,
 	ProjectSettings,
+	RecordCoverage,
+	ResolvedEnsembleOptions,
 	RunComparison,
 	RunInputsSnapshot,
 	RunSummary
@@ -150,6 +158,42 @@ export interface Nomination {
 	nominatedBy: string | null;
 }
 
+/**
+ * One uncertainty ensemble of a run (GET …/runs/:runId/uncertainty, docs/api.md
+ * § Uncertainty bands). `baselineId` set = a paired band on the difference from
+ * that run. `summary` is null until the result is stored.
+ */
+export interface Ensemble {
+	id: string;
+	runId: string;
+	baselineId: string | null;
+	baselineRunId: string | null;
+	runoffModel: string;
+	engineVersion: string;
+	method: string;
+	seed: number;
+	members: number;
+	options: ResolvedEnsembleOptions;
+	status: 'started' | 'complete';
+	accepted: number | null;
+	summary: EnsembleSummary | PairedSummary | null;
+	createdAt: string;
+	createdBy: string | null;
+	createdById: string;
+	completedAt: string | null;
+}
+
+/** An ensemble with what it was built from (GET …/uncertainty/:uid). */
+export interface EnsembleDetail extends Ensemble {
+	result:
+		| { engineVersion: string; header: EnsembleHeader; members: MemberResult[]; coverage: RecordCoverage[] }
+		| { engineVersion: string; header: EnsembleHeader; members: PairedMember[] }
+		| null;
+}
+
+/** What POST …/uncertainty takes: the options to resolve, or the baseline of a paired band. */
+export type EnsembleStart = { request: Omit<EnsembleRequest, 'model' | 'seed'> } | { baselineId: string };
+
 /** Longest nomination reason, in characters (backend NOMINATION_REASON_MAX, 010_run_nomination.sql). */
 export const NOMINATION_REASON_MAX = 2000;
 
@@ -184,7 +228,7 @@ export interface RunDay {
 	date: string;
 	nodeId: string;
 	name: string;
-	kind: 'farm' | 'gauge';
+	kind: 'farm' | 'gauge' | 'user';
 	/** Dam storage at the end of the day before (the run's initial storage on its first day); null for gauges. */
 	previousStorageM3: number | null;
 	/**

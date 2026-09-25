@@ -125,6 +125,34 @@ The page has these sections, top to bottom:
 6. **Hydrograph.** One catchment series (simulated outflow by default) from
    both runs on the same chart.
 
+**Uncertainty** (engine ≥ 0.26.0, issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
+`uncertainty/PairedUncertaintyPanel.svelte`, its own chunk), after the
+headline results, for two runs of **one project**:
+
+- Each run's own newest band side by side (EWR days not met, shortfall,
+  outflow MAR, 5–95 %), and what differs between their **rules**: the stored
+  thresholds and options, diffed (`diffEnsembleOptions`), or "Both bands use
+  the same rule". Two bands with different thresholds are not comparable
+  as they stand, and the page says so.
+- The **paired band on B − A**: every parameter set A's newest ensemble kept
+  is run again, unchanged, on B's inputs, and the difference is taken set by
+  set (`runPairedEnsemble`, `summarisePaired`). Pairing cancels the
+  catchment-response uncertainty both runs share, so this is the change's
+  own impact: for a licence application, its extra impact with its
+  uncertainty. The table gives 5 %, median and 95 % of B − A for EWR days not
+  met (with the share of sets in which B fails the EWR on more days),
+  shortfall (with the same share), outflow MAR, Reserve compliance (in
+  percentage points) and curtailment per farm in both runs, then EWR days not
+  met by month; farms in only one run are named. The decision rule is printed
+  above it. Same inputs give exactly zero.
+- It needs A to have a stored ensemble, one runoff model (bands of two models
+  are never pooled: "The runs use different runoff models … no paired band")
+  and one period. An editor of B's project computes it (**Compute the paired
+  band**): the server copies A's seed and rule, the browser runs the pairs,
+  the server re-runs the first pair and three at random before storing it
+  under run B ([api.md](./api.md#uncertainty-bands)). Cross-project pairs
+  get a note instead: the parameter sets describe one catchment.
+
 Every change is **B − A**. A change is shown with a sign and ▲/▼. Green means
 better and red means worse (for example, less deficit or fewer EWR days not
 met). Grey means the change is neither: demand and flow are "just different".
@@ -200,6 +228,7 @@ fitted values"*). A parameter edit itself still has its own line. Settings keys 
 | `GET /compare/runs` | `backend/src/compare/routes.ts`, contract in [api.md § Compare runs](./api.md#compare-runs) |
 | Page | `frontend/src/routes/compare/+page.svelte` |
 | Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note) |
+| Uncertainty and paired bands | `packages/engine/src/uncertainty/paired.ts`; `frontend/src/lib/components/uncertainty/PairedUncertaintyPanel.svelte` |
 
 Access follows the usual rules. You need at least **viewer** on both projects.
 The endpoint returns `404` without saying which side you can't see.

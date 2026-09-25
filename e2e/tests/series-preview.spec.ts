@@ -1,7 +1,7 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-// The Data tab's "Preview data" dialog: every input series' daily values
+// The Data tab's "Preview all data" dialog: every input series' daily values
 // side by side, searchable/filterable, in the shared Dialog.svelte modal.
 
 function previewValues(n: number): (number | null)[] {
@@ -63,7 +63,7 @@ test('opened while the values still load, the preview focuses its search once th
 	});
 	await page.goto(`/projects/${project.id}?tab=series`);
 
-	await page.getByRole('button', { name: 'Preview data' }).click();
+	await page.getByRole('button', { name: 'Preview all data' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 	await expect(dialog.getByRole('status').filter({ hasText: 'Loading…' })).toBeVisible();
 	release();
@@ -71,7 +71,7 @@ test('opened while the values still load, the preview focuses its search once th
 	await expect(dialog.getByLabel('Search by date or value')).toBeFocused();
 });
 
-test('the card header’s "Preview data" opens with every column, the column picker can hide one, and Escape returns focus to the header button', async ({
+test('the card header’s "Preview all data" opens with every column, the column picker can hide one, and Escape returns focus to the header button', async ({
 	page,
 	owner
 }) => {
@@ -81,7 +81,7 @@ test('the card header’s "Preview data" opens with every column, the column pic
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2020-01-01', values: [0.1, 0.2, 0.3] });
 	await page.goto(`/projects/${project.id}?tab=series`);
 
-	const openButton = page.getByRole('button', { name: 'Preview data' });
+	const openButton = page.getByRole('button', { name: 'Preview all data' });
 	await openButton.click();
 	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 	await expect(dialog).toBeVisible();
@@ -122,7 +122,7 @@ test('the preview fills the viewport and renders rows to the bottom of its talle
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: previewValues(731) });
 	await page.setViewportSize({ width: 1600, height: 1000 });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	await page.getByRole('button', { name: 'Preview data' }).click();
+	await page.getByRole('button', { name: 'Preview all data' }).click();
 
 	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 	await expect(dialog).toContainText('731 of 731 days shown');
@@ -148,7 +148,7 @@ test('the column picker keeps each checkbox beside its label', async ({ page, ow
 	const project = await createProject(page.request, 'Series preview picker');
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: previewValues(40) });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	await page.getByRole('button', { name: 'Preview data' }).click();
+	await page.getByRole('button', { name: 'Preview all data' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 	await dialog.getByText('Columns', { exact: true }).click();
 
@@ -157,4 +157,114 @@ test('the column picker keeps each checkbox beside its label', async ({ page, ow
 	await expect(box).toBeVisible();
 	const size = await box.boundingBox();
 	expect(size?.width).toBeLessThan(30);
+});
+
+test('every column header has an ⓘ tip explaining that column, and the tips work from the keyboard inside the dialog', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview tips');
+	// One series of every kind, so every column the preview can produce is on screen.
+	const rain = { unit: 'mm', startDate: '2020-01-01', values: [1, 0, 3] };
+	const flow = { unit: 'm³/s', startDate: '2020-01-01', values: [0.1, 0.2, 0.3] };
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Station A', ...rain });
+	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'Grid B', ...rain });
+	await putSeries(page.request, project.id, { kind: 'rain_forecast_mm', name: 'Outlook C', ...rain });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Weir D', ...flow });
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger E', ...flow });
+	await putSeries(page.request, project.id, { kind: 'flow_reference_m3s', name: 'River F', ...flow });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await expect(dialog).toContainText('3 of 3 days shown');
+
+	// Header text → the glossary term its tip opens on.
+	const expected: [RegExp, string][] = [
+		[/^Date\s*$/, 'Date (daily preview)'],
+		[/^Rainfall — catchment · Station A\s*\(mm\)\s*$/, 'Catchment rainfall'],
+		[/^Rainfall — CHIRPS · Grid B\s*\(mm\)\s*$/, 'CHIRPS rainfall'],
+		[/^Rainfall — forecast · Outlook C\s*\(mm\)\s*$/, 'Forecast rainfall'],
+		[/^Flow — observed gauge · Weir D\s*\(m³\/s\)\s*$/, 'Observed flow'],
+		[/^Flow — logger · Logger E\s*\(m³\/s\)\s*$/, 'Observed flow'],
+		[/^Flow — reference gauge \(other catchment\) · River F\s*\(m³\/s\)\s*$/, 'Reference gauge (other catchment)'],
+		[/^Flow — observed gauge · Weir D \(m³\/day\)\s*$/, 'Flow in m³/day (daily preview)'],
+		[/^Flow — logger · Logger E \(m³\/day\)\s*$/, 'Flow in m³/day (daily preview)'],
+		[/^Flow — reference gauge \(other catchment\) · River F \(m³\/day\)\s*$/, 'Flow in m³/day (daily preview)'],
+		[/^Rain used \(model\)/, 'Rain used (daily preview)'],
+		[/^CHIRPS bias factor/, 'CHIRPS bias factor (daily preview)'],
+		[/^CHIRPS \(corrected\)/, 'CHIRPS corrected (daily preview)'],
+		[/^Excluded from calibration\s*$/, 'Excluded from calibration (daily preview)']
+	];
+	const headers = dialog.locator('thead th');
+	await expect(headers).toHaveCount(expected.length);
+
+	for (const [text, term] of expected) {
+		const th = headers.filter({ hasText: text });
+		await expect(th, `header ${text}`).toHaveCount(1);
+		const tip = th.getByRole('button', { name: /^About / });
+		await expect(tip, `tip in ${text}`).toHaveCount(1);
+		const live = page.locator(`[id="${await tip.getAttribute('aria-controls')}"]`);
+		await tip.click();
+		await expect(live.locator('.term'), `tip in ${text}`).toHaveText(term);
+		await expect(live.locator('.short')).not.toBeEmpty();
+		// Escape closes the tip only, not the dialog around it.
+		await page.keyboard.press('Escape');
+		await expect(live).toBeEmpty();
+		await expect(dialog).toBeVisible();
+	}
+
+	// From the keyboard: Enter opens a tip, Escape closes it and focus returns to its button.
+	const rainTip = dialog.getByRole('button', { name: 'About Rain used (model)' });
+	const live = page.locator(`[id="${await rainTip.getAttribute('aria-controls')}"]`);
+	await rainTip.focus();
+	await page.keyboard.press('Enter');
+	await expect(rainTip).toHaveAttribute('aria-expanded', 'true');
+	await expect(live.locator('.term')).toHaveText('Rain used (daily preview)');
+	await expect(live.locator('.units')).toHaveText('Units: mm/day');
+	await page.keyboard.press('Escape');
+	await expect(live).toBeEmpty();
+	await expect(rainTip).toBeFocused();
+	await expect(rainTip).toHaveAttribute('aria-expanded', 'false');
+	await expect(dialog).toBeVisible();
+
+	// The Date column's own tip, the same way.
+	const dateTip = dialog.getByRole('button', { name: 'About the date column' });
+	await dateTip.focus();
+	await page.keyboard.press('Enter');
+	await expect(page.locator(`[id="${await dateTip.getAttribute('aria-controls')}"] .term`)).toHaveText('Date (daily preview)');
+	await page.keyboard.press('Escape');
+	await expect(dateTip).toBeFocused();
+	await expect(dialog).toBeVisible();
+});
+
+test('the preview has a visible close button, and its number columns line up under right-aligned headers', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview close');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: [1, 22.5, 3] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+
+	const openButton = page.getByRole('button', { name: 'Preview all data' });
+	await openButton.click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await expect(dialog).toContainText('3 of 3 days shown');
+
+	// A number sits under its own header, not between two: both are right-aligned.
+	const rainHeader = dialog.getByRole('columnheader', { name: /^Rainfall — catchment/ });
+	await expect(rainHeader).toHaveCSS('text-align', 'right');
+	const rainCell = dialog.getByRole('row').filter({ hasText: '2020-01-02' }).getByRole('cell').nth(1);
+	await expect(rainCell).toHaveText('22.50');
+	await expect(rainCell).toHaveCSS('text-align', 'right');
+	const headerBox = (await rainHeader.boundingBox())!;
+	const cellBox = (await rainCell.boundingBox())!;
+	expect(Math.abs(headerBox.x + headerBox.width - (cellBox.x + cellBox.width))).toBeLessThan(1);
+	// The date column stays left-aligned, as text.
+	await expect(dialog.getByRole('columnheader', { name: /^Date/ })).toHaveCSS('text-align', 'left');
+
+	// The ✕ in the top-right corner closes it, for anyone who doesn't know Esc does.
+	const close = dialog.getByRole('button', { name: 'Close dialog' });
+	const dialogBox = (await dialog.boundingBox())!;
+	const closeBox = (await close.boundingBox())!;
+	expect(closeBox.y - dialogBox.y).toBeLessThan(24);
+	expect(dialogBox.x + dialogBox.width - (closeBox.x + closeBox.width)).toBeLessThan(24);
+	await close.click();
+	await expect(dialog).toBeHidden();
+	await expect(openButton).toBeFocused();
 });

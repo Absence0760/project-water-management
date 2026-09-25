@@ -170,6 +170,44 @@
 				passing inflow.
 			</p>
 		{/if}
+		{#if c.otherUsers?.length}
+			<h4 id="other-users-heading">Other water users</h4>
+			<p class="muted small">
+				Towns, industry and unlisted users are outside the irrigation equitable share. They are charged for the EWR by
+				their net impact (taken − returned) like farms. A <strong>junior</strong> user is curtailed for its charge; a
+				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the farms).
+			</p>
+			<div class="table-wrap">
+				<table class="data" aria-labelledby="other-users-heading">
+					<thead>
+						<tr>
+							<th scope="col">User</th>
+							<th scope="col">Priority</th>
+							<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Taken<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">EWR charge<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Supply cut<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Charge left standing<br /><span class="u">m³/day</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each c.otherUsers as u (u.nodeId)}
+							<tr>
+								<th scope="row">{farmNames[u.nodeId] ?? u.name}</th>
+								<td>{u.curtailed ? 'junior (curtailed)' : 'senior (not curtailed)'}</td>
+								<td class="num">{fmtVol(u.demandM3Day)}</td>
+								<td class="num">{fmtVol(u.suppliedM3Day)}</td>
+								<td class="num">{fmtVol(u.returnedM3Day)}</td>
+								<td class="num" class:neg={u.ewrChargeM3Day < 0}>{fmtSigned(u.ewrChargeM3Day)}</td>
+								<td class="num" class:neg={u.supplyCutM3Day < 0}>{fmtSigned(u.supplyCutM3Day)}</td>
+								<td class="num" class:neg={u.uncurtailedChargeM3Day < 0}>{fmtSigned(u.uncurtailedChargeM3Day)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
 		{#if sites.length}
 			<h4 id="ewr-sites-heading">EWR sites</h4>
 			{#if sites.length === 1}

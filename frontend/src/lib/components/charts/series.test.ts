@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignDaily, fmtCompact } from './series';
+import { alignDaily, fmtCompact, isolatedIndices, panWindow } from './series';
 
 describe('alignDaily', () => {
 	it('aligns series with different start dates onto a shared axis', () => {
@@ -34,4 +34,40 @@ describe('fmtCompact', () => {
 		[0.001, '1e-3'],
 		[-5_000_000, '-5M']
 	])('%s → %s', (v, want) => expect(fmtCompact(v)).toBe(want));
+});
+
+describe('isolatedIndices', () => {
+	it('marks a reading with a gap on both sides, including at either end', () => {
+		expect(isolatedIndices([4, null, 2, null, null, 3])).toEqual([0, 2, 5]);
+	});
+
+	it('leaves runs of two or more to the line', () => {
+		expect(isolatedIndices([1, 2, null, 3, 4, 5, null])).toEqual([]);
+	});
+
+	it('treats a zero as a reading, not a gap', () => {
+		expect(isolatedIndices([null, 0, null, 0, 0])).toEqual([1]);
+	});
+
+	it('handles an empty or all-blank series', () => {
+		expect(isolatedIndices([])).toEqual([]);
+		expect(isolatedIndices([null, null])).toEqual([]);
+	});
+});
+
+describe('panWindow', () => {
+	it('moves the window by delta, keeping its width', () => {
+		expect(panWindow(40, 60, -15, 0, 100)).toEqual({ min: 25, max: 45 });
+		expect(panWindow(40, 60, 15, 0, 100)).toEqual({ min: 55, max: 75 });
+	});
+
+	it('stops at either end of the data instead of scrolling past it', () => {
+		expect(panWindow(10, 30, -50, 0, 100)).toEqual({ min: 0, max: 20 });
+		expect(panWindow(70, 90, 50, 0, 100)).toEqual({ min: 80, max: 100 });
+	});
+
+	it('shows the whole range when the window is as wide as the data', () => {
+		expect(panWindow(0, 100, 30, 0, 100)).toEqual({ min: 0, max: 100 });
+		expect(panWindow(-5, 120, 30, 0, 100)).toEqual({ min: 0, max: 100 });
+	});
 });

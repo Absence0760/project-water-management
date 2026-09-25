@@ -1,5 +1,5 @@
 <script lang="ts">
-	// "Preview data" (Input time series card header) / a row's own "Preview":
+	// "Preview all data" (Input time series card header) / a row's own "Preview":
 	// every input series' daily value, side by side, plus columns for how the
 	// model actually used that day's data (rain gap-fill + source, CHIRPS bias
 	// correction, flow in m³/day, calibration exclusions — all computed with the
@@ -10,18 +10,25 @@
 	// project's Playwright/Chromium build, so no extra JS is needed here for
 	// either). Data is whatever SeriesTab has already loaded (same `values`
 	// store the chart uses) — this dialog fetches nothing itself.
+	//
+	// Every column header carries an ⓘ HelpTip (series.<kind> for a raw series,
+	// preview.<column> for a derived one, keys set in ./preview.ts): where the
+	// number comes from, how it's derived and what it tells you. The bubble is a
+	// top-layer popover, so neither the sideways scroll nor the sticky header
+	// clips it; the headers have no sort or other click behaviour to trigger.
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import type { Daily } from './coverage';
-	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, seriesColumnId, type PreviewFlag } from './preview';
+	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag } from './preview';
 
 	let {
 		open = $bindable(false),
 		list,
 		values,
 		settings,
-		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview data" button) shows every column. */
+		/** Set when opened from a row's own "Preview" button: that series' column is un-hidden, scrolled into view and highlighted. Null (the card header's "Preview all data" button) shows every column. */
 		focusSeriesId = null,
 		onRetry
 	}: {
@@ -58,7 +65,7 @@
 	const filtered = $derived(filterPreviewRows(rows, { query, missingOnly, flaggedOnly, visibleSeriesIds }));
 
 	// Un-hide (never re-hide other columns) the focused series on open; the
-	// header "Preview data" button (focusSeriesId null) resets to every column.
+	// header "Preview all data" button (focusSeriesId null) resets to every column.
 	let wasOpen = false;
 	$effect(() => {
 		if (open && !wasOpen) {
@@ -188,12 +195,14 @@
 				<caption class="visually-hidden">Daily values for every input series, plus how the model used them</caption>
 				<thead>
 					<tr aria-rowindex="1">
-						<th scope="col" class="datecol">Date</th>
+						<th scope="col" class="datecol">Date <HelpTip key="preview.date" label="About the date column" /></th>
 						{#each visibleColumns as col (col.id)}
-							<th scope="col" class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
-								{col.label}{#if col.unit}
-									<span class="u">({col.unit})</span>
+							{@const unit = headerUnit(col)}
+							<th scope="col" class:num={col.id !== 'excluded'} class:hl={col.seriesId === focusSeriesId} data-series-col={col.id}>
+								{col.label}{#if unit}
+									<span class="u">({unit})</span>
 								{/if}
+								<HelpTip key={col.helpKey} label="About {col.label}" />
 							</th>
 						{/each}
 					</tr>

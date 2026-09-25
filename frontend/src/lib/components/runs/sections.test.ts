@@ -35,6 +35,16 @@ describe('resultSections', () => {
 		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-wr2012');
 	});
 
+	it('adds the plausibility checks after EWR vs observed on a run that has them (engine ≥ 0.25.0)', () => {
+		const ids = resultSections({ farms: [], plausibility: {} as RunSummary['plausibility'] }).map((s) => s.id);
+		expect(ids.slice(ids.indexOf('res-ewr-agreement'), ids.indexOf('res-ewr-agreement') + 3)).toEqual(['res-ewr-agreement', 'res-plausibility', 'res-explore']);
+		expect(resultSections({ farms: [] }).map((s) => s.id)).not.toContain('res-plausibility');
+	});
+
+	it('names the calibration entry for the uncertainty bands it also holds', () => {
+		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-calibration')?.label).toBe('Calibration & uncertainty');
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);

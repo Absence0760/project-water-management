@@ -1,0 +1,186 @@
+// Human impacts on the model document (roadmap WP-1.33 …): they are stored,
+// read back, validated and reach a run. Needs Postgres (pnpm dev:db:up).
+import { describe, expect, it } from 'vitest';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+/** The run series keys of a node that GET …/runs/:runId/series serves. */
+async function seriesKeys(u: User, projectId: string, runId: string, nodeId: string | null, keys: string[]) {
+	const found: string[] = [];
+	for (const key of keys) {
+		const q = new URLSearchParams({ key, ...(nodeId ? { nodeId } : {}) });
+		if ((await u.call('GET', `/projects/${projectId}/runs/${runId}/series?${q}`)).status === 200) found.push(key);
+	}
+	return found;
+}
+
+async function project(u: User, name: string) {
+	const projectId = (await u.call('POST', '/projects', { name })).body.project.id as string;
+	expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+	const rain = Array.from({ length: 60 }, (_, i) => (i % 6 === 0 ? 20 : 0));
+	expect((await u.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	return projectId;
+}
+
+describe('other water users (WP-1.33)', () => {
+	it('stores a user node, reads it back, runs it, and refuses crops, transfers and a bad demand on it', async () => {
+		const u = await signUp('Town');
+		const projectId = await project(u, 'With a town');
+		const outlet = node('Outlet', null);
+		const town = node('Town', outlet.id, { kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(250), userReturnPct: 0.4, userPriority: 'junior' });
+		const farm = node('Upper', town.id);
+		const model = { nodes: [outlet, town, farm], crops: [], cropAreas: [], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === town.id)).toMatchObject({ kind: 'user', userDemandM3Day: monthly(250), userReturnPct: 0.4, userPriority: 'junior' });
+		// A farm keeps the inert defaults.
+		expect(got.find((n) => n.id === farm.id)).toMatchObject({ kind: 'farm', userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'with town' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.users).toHaveLength(1);
+		expect(summary.users[0]).toMatchObject({ nodeId: town.id, priority: 'junior', avgDemandM3Day: 250 });
+		expect(summary.verification.passed).toBe(true);
+		const want = ['demand', 'supplied', 'return_flow', 'outflow', 'ewr_charge'];
+		expect(await seriesKeys(u, projectId, run.body.run.id, town.id, want)).toEqual(want);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		await bad({ ...model, crops: [crop], cropAreas: [{ nodeId: town.id, cropId: crop.id, areaM2: 1000 }] }, /other water user/);
+		const tr = { id: crypto.randomUUID(), fromNodeId: farm.id, toNodeId: town.id, months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
+		await bad({ ...model, transfers: [tr] }, /other water user/);
+		await bad({ ...model, nodes: [outlet, { ...town, userDemandM3Day: [1, 2, 3] }, farm] }, /userDemandM3Day/);
+		await bad({ ...model, nodes: [outlet, { ...town, userDemandM3Day: monthly(-1) }, farm] }, /userDemandM3Day/);
+		await bad({ ...model, nodes: [outlet, { ...town, userPriority: 'first' }, farm] }, /userPriority/);
+		// The database refuses a malformed demand even past the API.
+		await expect(asOwner('UPDATE node SET user_demand_m3_day = $2 WHERE id = $1', [town.id, [1, 2]])).rejects.toThrow(/check/i);
+	});
+
+	it('reads a model saved before the user fields (older document) as having none', async () => {
+		const u = await signUp('Older');
+		const projectId = await project(u, 'Older doc');
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id);
+		// No user fields at all: the API fills the inert defaults.
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.every((n) => n.userDemandM3Day === null && n.userReturnPct === 0 && n.userPriority === 'senior')).toBe(true);
+	});
+});
+
+describe('boreholes (WP-1.34)', () => {
+	it('stores a farm’s boreholes, runs them, and refuses them on a gauge or with a drought rule and no dam', async () => {
+		const u = await signUp('Borehole');
+		const projectId = await project(u, 'With boreholes');
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id, { boreholeCapacityM3Day: 400, boreholeRule: 'primary', streamDepletionFrac: 0.6, streamDepletionLagDays: 15 });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 50_000 }], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === farm.id)).toMatchObject({ boreholeCapacityM3Day: 400, boreholeRule: 'primary', boreholeTriggerPct: 0.3, streamDepletionFrac: 0.6, streamDepletionLagDays: 15 });
+		expect(got.find((n) => n.id === outlet.id)).toMatchObject({ boreholeCapacityM3Day: null, streamDepletionFrac: 0 });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'pumping' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.farms[0].avgGroundwaterM3Day).toBeGreaterThan(0);
+		const want = ['groundwater_used', 'baseflow_depletion', 'depletion_store', 'depletion_unmet'];
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, want)).toEqual(want);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, nodes: [{ ...outlet, boreholeCapacityM3Day: 10 }, farm] }, /gauge .{0,2}Outlet.{0,2} can't have boreholes/);
+		await bad({ ...model, nodes: [outlet, { ...farm, damCapacityM3: 0, boreholeRule: 'drought' }] }, /drought borehole rule needs a farm dam/);
+		await bad({ ...model, nodes: [outlet, { ...farm, streamDepletionFrac: 2 }] }, /streamDepletionFrac/);
+		await bad({ ...model, nodes: [outlet, { ...farm, boreholeRule: 'sometimes' }] }, /boreholeRule/);
+		await expect(asOwner('UPDATE node SET stream_depletion_lag_days = -1 WHERE id = $1', [farm.id])).rejects.toThrow(/check/i);
+	});
+});
+
+describe('land cover (WP-1.35)', () => {
+	async function withCover(u: User, name: string) {
+		const projectId = await project(u, name);
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id, { areaKm2: 10 });
+		const patch = { id: crypto.randomUUID(), nodeId: farm.id, coverClass: 'invasive', areaKm2: 3, densityPct: 0.6, factors: null };
+		const model = { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [], landCover: [patch] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		return { projectId, model, farm, outlet, patch };
+	}
+
+	it('stores patches in the model document, runs them as their own series, and copies them with the project', async () => {
+		const u = await signUp('Cover');
+		const { projectId, model, farm, outlet, patch } = await withCover(u, 'With invasives');
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.landCover).toEqual([patch]);
+		// Overridden reductions round-trip too.
+		const over = { ...patch, factors: { mar: 0.3, lowFlow: 0.45 } };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { ...model, landCover: [over] })).status).toBe(200);
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.landCover).toEqual([over]);
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'invaded' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.landCover.byClass[0]).toMatchObject({ coverClass: 'invasive' });
+		expect(summary.landCover.byClass[0].condensedKm2).toBeCloseTo(1.8, 12);
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['landcover_reduction'])).toEqual(['landcover_reduction']);
+		expect(await seriesKeys(u, projectId, run.body.run.id, null, ['landcover_reduction'])).toEqual(['landcover_reduction']);
+
+		const copy = await u.call('POST', `/projects/${projectId}/copy`, { name: 'Cleared' });
+		expect(copy.status).toBe(201);
+		const copied = (await u.call('GET', `/projects/${copy.body.project.id}/model`)).body;
+		expect(copied.landCover).toHaveLength(1);
+		expect(copied.landCover[0].id).not.toBe(patch.id);
+		expect(copied.landCover[0].nodeId).toBe(copied.nodes.find((n: { name: string }) => n.name === 'Upper').id);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, landCover: [{ ...patch, nodeId: outlet.id }] }, /land cover lies on a farm/);
+		await bad({ ...model, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }, /unknown node/);
+		await bad({ ...model, landCover: [{ ...patch, coverClass: 'bamboo' }] }, /coverClass/);
+		await bad({ ...model, landCover: [{ ...patch, densityPct: 1.5 }] }, /densityPct/);
+		await bad({ ...model, landCover: [{ ...patch, factors: { mar: 2, lowFlow: 0 } }] }, /factors/);
+		// A model saved without landCover (an older document) has none.
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { nodes: model.nodes, crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.landCover).toEqual([]);
+	});
+
+	it('RLS: a member sees a project’s land cover, a non-member sees none and can’t attach a patch to another project’s farm', async () => {
+		const owner = await signUp('CoverOwner');
+		const { projectId, farm, patch } = await withCover(owner, 'Private cover');
+		const count = (userId: string) => withUser(userId, async (db) => (await db.query('SELECT id FROM land_cover WHERE project_id = $1', [projectId])).rowCount);
+		// Positive control: the owner sees the patch.
+		expect(await count(owner.id)).toBe(1);
+		const stranger = await signUp('CoverStranger');
+		expect(await count(stranger.id)).toBe(0);
+		// Through the API too: the project is hidden entirely.
+		expect((await stranger.call('GET', `/projects/${projectId}/model`)).status).toBe(404);
+		// The stranger's own project can't take a patch on the owner's farm (same-project trigger / RLS).
+		const theirs = await project(stranger, 'Theirs');
+		const outlet = node('Outlet', null);
+		const res = await stranger.call('PUT', `/projects/${theirs}/model`, { nodes: [outlet], crops: [], cropAreas: [], transfers: [], landCover: [{ ...patch, id: crypto.randomUUID(), nodeId: farm.id }] });
+		expect(res.status).toBe(400);
+		await expect(
+			withUser(stranger.id, (db) => db.query('INSERT INTO land_cover (project_id, node_id, cover_class, area_km2, density_pct) VALUES ($1, $2, $3, 1, 1)', [theirs, farm.id, 'pine']))
+		).rejects.toThrow(/different project|row-level security|violates/);
+		expect(await count(owner.id)).toBe(1);
+		// A patch whose farm is removed goes with it.
+		await asOwner('DELETE FROM node WHERE id = $1', [farm.id]);
+		expect(await count(owner.id)).toBe(0);
+	});
+});

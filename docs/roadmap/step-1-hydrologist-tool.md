@@ -1628,6 +1628,12 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.33 Other water users (towns, unlisted users)
 
+> **Built 2026-09-25 (engine 0.22.0, migration 011), off by default.** As
+> specified, with two decisions made pending WP-1.1: a senior user's demand is
+> passed down by the farms upstream (fragmented by flow share, like the EWR),
+> and senior users are not curtailed for the EWR while junior ones are.
+> [model.md §2.7c](../model.md).
+
 - **Goal:** water taken from the river by users that aren't modelled farms
   (a town or municipal scheme, industry, unlisted or unlawful irrigators) is
   accounted for, so the model stops handing that water to the listed farms
@@ -1664,6 +1670,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   priority rule applies).
 
 ### WP-1.34 Groundwater abstraction and base-flow reduction
+
+> **Built 2026-09-25 (engine 0.23.0, migration 012), off by default.** As
+> specified, for farms and other users, with a drought-rule trigger
+> (`borehole_trigger_pct`) added. The depletion is a lagged linear-reservoir
+> draw on the river at the node rather than on the GR4J routing store; why,
+> and how double counting is avoided (calibrate with the historical pumping in
+> place), is in [model.md §2.7d](../model.md). Audit finding N5.
 
 - **Goal:** borehole pumping is modelled as a supply source for farms and
   as a loss to the river's base flow, instead of being invisible.
@@ -1705,6 +1718,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   there any data on pumping volumes or aquifer connection), WP-1.24.
 
 ### WP-1.35 Land-cover streamflow reductions (invasive plants, forestry)
+
+> **Built 2026-09-25 (engine 0.24.0, migration 013), off by default.** Patches
+> carry a low-flow and a MAR reduction per class rather than twelve monthly
+> fractions (the low-flow share applies to each day's flow up to the Q75
+> natural flow, the MAR share above it). They are part of the model document
+> (PUT /model), not separate CRUD routes, so the route inventory is unchanged.
+> The panel is in the one-node form. [model.md §2.5a](../model.md).
 
 - **Goal:** the rain-to-flow step accounts for land cover that uses more
   water than the natural vegetation it replaced: invasive alien trees,

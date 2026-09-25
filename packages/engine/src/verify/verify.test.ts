@@ -99,9 +99,11 @@ describe('farm working columns (engine 0.12.0)', () => {
 
 	it('are emitted for farms only, one per catalogue entry', () => {
 		const out = handRun();
-		for (const c of FARM_COLUMNS) expect(out.series.some((s) => s.nodeId === 'b' && s.key === c.key), c.key).toBe(true);
+		// The optional columns come only with the feature that makes them (senior users, WP-1.33): none here.
+		const always = FARM_COLUMNS.filter((c) => !c.optional);
+		for (const c of always) expect(out.series.some((s) => s.nodeId === 'b' && s.key === c.key), c.key).toBe(true);
 		const farmKeys = out.series.filter((s) => s.nodeId === 'b').map((s) => s.key);
-		expect(farmKeys.sort()).toEqual(FARM_COLUMNS.map((c) => c.key).sort());
+		expect(farmKeys.sort()).toEqual(always.map((c) => c.key).sort());
 	});
 });
 
@@ -109,7 +111,7 @@ describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
-		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution']);
+		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover']);
 		expect(v.checks.filter((c) => !c.passed)).toEqual([]);
 		expect(v.passed).toBe(true);
 		expect(v.maxResidual!.valueM3Day).toBeLessThan(1e-9);

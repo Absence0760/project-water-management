@@ -3,13 +3,19 @@
 // ApiError carrying the HTTP status and the server's message.
 import type {
 	DailySeries,
+	MemberResult,
 	ModelInput,
+	PairedMember,
+	RecordCoverage,
 	ProjectModel,
 	ProjectSettings,
 	SeriesMeta
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	Ensemble,
+	EnsembleDetail,
+	EnsembleStart,
 	Member,
 	Nomination,
 	Project,
@@ -241,6 +247,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
+		},
+		uncertainty: {
+			/** A run's own input (its settings and model snapshot with the project's series); 409 when the data changed since. */
+			runInput: (id: string, runId: string) => request<{ input: ModelInput }>('GET', `${p(id)}/runs/${enc(runId)}/model-input`).then((r) => r.input),
+			/** Every ensemble started for a run, newest first, without their members. */
+			list: (id: string, runId: string) => request<{ ensembles: Ensemble[] }>('GET', `${p(id)}/runs/${enc(runId)}/uncertainty`).then((r) => r.ensembles),
+			get: (id: string, runId: string, uid: string) =>
+				request<{ ensemble: EnsembleDetail }>('GET', `${p(id)}/runs/${enc(runId)}/uncertainty/${enc(uid)}`).then((r) => r.ensemble),
+			/** Start one: the server resolves the options and the database draws the seed. */
+			start: (id: string, runId: string, body: EnsembleStart) =>
+				request<{ ensemble: Ensemble; notes: string[] }>('POST', `${p(id)}/runs/${enc(runId)}/uncertainty`, body),
+			/** Store the result (once); the server checks it before summarising the bands. */
+			complete: (id: string, runId: string, uid: string, body: { members: MemberResult[]; coverage: RecordCoverage[] } | { members: PairedMember[] }) =>
+				request<{ ensemble: Ensemble }>('POST', `${p(id)}/runs/${enc(runId)}/uncertainty/${enc(uid)}/result`, body).then((r) => r.ensemble)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

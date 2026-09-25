@@ -161,7 +161,12 @@ export function lookupRequirement(
 	ewr: readonly number[]
 ): { percentile: number; required: number; beyond: EwrConditionBeyond } {
 	const last = points.length - 1;
-	const k = natural.findIndex((n) => n <= v);
+	// A curve point within float noise of v counts as reached: on a flat stretch of the curve
+	// (equal natural flow at several % points) a one-ulp difference in v, from summing the same
+	// flows in another order, otherwise jumps the percentile across the stretch (fuzz seed
+	// 18472, engine 0.24.1). v is the month's volume, so 1e-12 of it is far below any reading.
+	const reach = v + Math.abs(v) * 1e-12;
+	const k = natural.findIndex((n) => n <= reach);
 	if (k === 0) return { percentile: points[0]!, required: ewr[0]!, beyond: v > natural[0]! ? 'wetter' : null };
 	if (k === -1) {
 		// v < natural_last, so natural_last > 0.
@@ -169,7 +174,7 @@ export function lookupRequirement(
 	}
 	const hi = natural[k - 1]!;
 	const lo = natural[k]!;
-	const w = (hi - v) / (hi - lo);
+	const w = Math.min(Math.max((hi - v) / (hi - lo), 0), 1);
 	return {
 		percentile: points[k - 1]! + w * (points[k]! - points[k - 1]!),
 		required: ewr[k - 1]! + w * (ewr[k]! - ewr[k - 1]!),

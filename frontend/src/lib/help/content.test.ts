@@ -13,6 +13,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { CATEGORY_TITLES, HELP, helpFieldKeys, helpFor, searchHelp } from './content';
 
 // Exhaustive `Record<keyof T, true>` objects: the typecheck fails if the engine
@@ -21,7 +22,9 @@ const NODE: Record<keyof NetworkNode, true> = {
 	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true,
-	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true
+	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
+	userDemandM3Day: true, userReturnPct: true, userPriority: true,
+	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -31,7 +34,8 @@ const TRANSFER: Record<keyof Transfer, true> = {
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
-	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true
+	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
+	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, flowShare: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -57,8 +61,22 @@ const RUN_KEYS = [
 	'diverted_to_dam', 'interim_storage', 'below_dam_not_diverted', 'return_flow', 'balance_residual',
 	// Dam evaporation, rain on the dam and seepage (engine 0.16.0, audit N2)
 	'dam_area', 'rain_on_dam', 'dam_evaporation', 'dam_seepage',
+	// Other water users (engine 0.22.0, WP-1.33)
+	'senior_requirement', 'passed_for_senior',
+	// Boreholes (engine 0.23.0, WP-1.34)
+	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store',
+	// Land cover (engine 0.24.0, WP-1.35)
+	'landcover_reduction',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'
+];
+
+// The daily preview's derived columns (series/preview.ts), from every series kind at once.
+const PREVIEW_KEYS = [
+	PREVIEW_DATE_HELP_KEY,
+	...buildPreviewColumns(SERIES_KINDS.map((kind, i) => ({ id: `s${i}`, kind, name: '', unit: '', startDate: '2020-01-01', length: 1 })))
+		.map((c) => c.helpKey)
+		.filter((k) => k.startsWith('preview.'))
 ];
 
 const settings = defaultProjectSettings();
@@ -73,7 +91,8 @@ const VALID: Record<string, Set<string>> = {
 	summary: new Set(Object.keys(SUMMARY)),
 	catchment: new Set(Object.keys(CATCHMENT)),
 	stats: new Set(Object.keys(STATS)),
-	run: new Set(RUN_KEYS)
+	run: new Set(RUN_KEYS),
+	preview: new Set(PREVIEW_KEYS.map((k) => k.slice('preview.'.length)))
 };
 
 describe('help content', () => {
@@ -127,7 +146,8 @@ describe('help content', () => {
 			...Object.keys(TRANSFER).map((k) => `transfer.${k}`),
 			...Object.keys(settings).filter((k) => k !== 'calibration').map((k) => `settings.${k}`),
 			...Object.keys(settings.calibration).map((k) => `calibration.${k}`),
-			...SERIES_KINDS.map((k) => `series.${k}`)
+			...SERIES_KINDS.map((k) => `series.${k}`),
+			...PREVIEW_KEYS
 		].filter((k) => !skip.has(k));
 		const missing = editable.filter((k) => !helpFor(k));
 		expect(missing).toEqual([]);
@@ -148,6 +168,8 @@ describe('help content', () => {
 		for (const f of files) {
 			const src = readFileSync(f, 'utf8');
 			for (const m of src.matchAll(/<HelpTip\b[^>]*?\bkey=["']([^"']+)["']/g)) used.push(m[1]!);
+			// A computed key (`key={col.helpKey}` in SeriesPreviewDialog) isn't seen here: the
+			// daily preview's keys are covered by PREVIEW_KEYS above and series/preview.test.ts.
 			// Components that place the HelpTip themselves take the key as a helpKey prop (PeriodList).
 			for (const m of src.matchAll(/\bhelpKey=["']([^"']+)["']/g)) used.push(m[1]!);
 		}

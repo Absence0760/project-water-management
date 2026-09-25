@@ -26,7 +26,7 @@
 		startDate: string;
 		endDate: string;
 		/** Nodes that can be traced, in network order. */
-		nodes: { id: string; name: string; kind: 'farm' | 'gauge' }[];
+		nodes: { id: string; name: string; kind: 'farm' | 'gauge' | 'user' }[];
 	} = $props();
 
 	const uid = $props.id();
@@ -153,7 +153,7 @@
 			<span>Farm, gauge or catchment</span>
 			<select bind:value={nodeId}>
 				<option value={CATCHMENT}>Catchment (rain to natural flow)</option>
-				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : ''}</option>{/each}
+				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : n.kind === 'user' ? ' (other user)' : ''}</option>{/each}
 			</select>
 		</label>
 		<label>

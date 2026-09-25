@@ -1,13 +1,16 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	curtailmentLines,
 	ewrAssuranceLines,
+	otherUserLines,
+	landCoverLines,
 	ewrSiteLines,
 	zeroRainLines,
 	accumulationLines,
 	doubleMassLines,
+	plausibilityLines,
 	columnGuideLines,
 	evidenceLines,
 	nodeColumnHeader,
@@ -66,15 +69,17 @@ describe('summary sheet', () => {
 		const farmHeader = lines.findIndex((l) => l.startsWith('Farm,'));
 		expect(lines[farmHeader]).toContain('Average crop water requirement (m³/day),Average abstraction demand (m³/day)');
 		expect(lines[farmHeader]).toContain('Demand supplied (%)');
-		expect(lines[farmHeader + 1]).toBe('"Farm, upper",90,100,80,20,80,-5,3');
+		// The fixture is a run before engine 0.27.0: no flow share, so that cell is empty.
+		expect(lines[farmHeader]).toMatch(/^Farm,Flow share \(%\),Average crop water requirement/);
+		expect(lines[farmHeader + 1]).toBe('"Farm, upper",,90,100,80,20,80,-5,3');
 		expect(lines).toContain('Mean natural flow (m³/day),1000');
 		expect(lines).toContain('NSE,0.5');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
 		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, multi-day accumulations,
-		// double-mass check, calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(15);
+		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(16);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -83,8 +88,17 @@ describe('summary sheet', () => {
 		s.farms[0]!.fractionSupplied = 0.07;
 		s.catchment.ewrFractionDaysNotMet = 1 / 3;
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",90,100,80,20,7,-5,3');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",,90,100,80,20,7,-5,3');
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),33.3333333333');
+	});
+
+	it('writes the flow share (engine ≥ 0.27.0) as a percentage next to the farm name', () => {
+		const s = structuredClone(summary);
+		s.farms[0]!.flowShare = 0.07;
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",7,90,100,80,20,80,-5,3');
+		s.farms[0]!.flowShare = 0;
+		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('"Farm, upper"'))).toBe('"Farm, upper",0,90,100,80,20,80,-5,3');
 	});
 
 	it('keeps fields the engine adds later and says when calibration is missing', () => {
@@ -170,6 +184,25 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
 		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
+	it('WP-1.35: lists the land-cover reduction per class with mm/yr over the condensed area', () => {
+		const lines = [...landCoverLines({ lowFlowThresholdM3Day: 120, reductionM3Day: 50, fractionOfNatural: 0.029, byClass: [{ coverClass: 'invasive', condensedKm2: 1.5, reductionM3Day: 50, mmPerYear: 12.175 }] })];
+		expect(lines[0]).toBe('Land-cover streamflow reductions (invasive plants and forestry)');
+		expect(lines).toContain('Share of natural flow (%),2.9');
+		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
+	});
+
+	it('WP-1.33: lists other water users and whether each is curtailed', () => {
+		const users = [{ nodeId: 'u', name: 'Town', priority: 'senior' as const, avgDemandM3Day: 100, avgSuppliedM3Day: 90, avgDeficitM3Day: 10, fractionSupplied: 0.9, avgReturnedM3Day: 45, avgEwrChargeM3Day: 5, daysEwrNotMet: 3 }];
+		const otherUsers = [
+			{ nodeId: 'u', name: 'Town', priority: 'senior' as const, demandM3Day: 100, suppliedM3Day: 90, deficitM3Day: -10, fractionSupplied: 0.9, returnedM3Day: 45, ewrChargeM3Day: -5, curtailed: false, supplyCutM3Day: 0, supplyCutLs: 0, uncurtailedChargeM3Day: -5 }
+		];
+		const lines = [...otherUserLines({ users, curtailment: { ...c, otherUsers } } as unknown as RunSummary)];
+		expect(lines[0]).toBe('Other water users (whole run)');
+		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
+		expect(lines).toContain('Town,senior,100,90,45,-5,no (senior),0,0,-5');
+		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
@@ -411,7 +444,7 @@ describe('farm column guide', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
-		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise');
+		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)');
 	});
 });
 
@@ -670,5 +703,69 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		const lines = [...summaryCsvLines(meta, { ...summary, ewrAssurance: [report] })];
 		expect(lines).toContain('Reserve compliance by month (EWR rule tables)');
 		expect(lines).toContain('Site,Outlet gauge,outlet');
+	});
+});
+
+describe('plausibility checks block (engine ≥ 0.25.0)', () => {
+	// Synthetic: two water years, 1 mm of station rain a day in the first and fallback (CHIRPS) rain in the
+	// second; natural 10 000 m³/day, simulated outflow 6 000, a gauge reading 0.08 m³/s (6 912 m³/day).
+	const start = Date.parse('2001-10-01T00:00:00Z') / 86_400_000;
+	const days = 730;
+	const station = Uint8Array.from({ length: days }, (_, t) => (t < 365 ? 1 : 0));
+	const { checks } = plausibilityChecks({
+		start,
+		days,
+		runoffModel: 'gr4j',
+		naturalM3Day: new Array(days).fill(10_000),
+		simulatedM3Day: new Array(days).fill(6_000),
+		observed: { flow_observed_m3s: new Array(days).fill(0.08) },
+		calibrationKind: 'flow_observed_m3s',
+		excluded: new Uint8Array(days),
+		damsM3Day: new Array(days).fill(1_000),
+		landCoverM3Day: [],
+		rainMm: new Array(days).fill(1),
+		station,
+		hasStation: true,
+		ewrShortfall: Array.from({ length: days }, (_, t) => (t >= 365 && t < 465 ? -1 : 0)),
+		reserve: [],
+		areaKm2: 10
+	});
+
+	it('writes the dry season, each water year of the naturalised check, the rain-source split and the curves', () => {
+		const lines = [...plausibilityLines(checks)];
+		expect(lines[0]).toBe('Plausibility checks');
+		// A constant record: every window ties, so the season starts in October.
+		expect(lines[1]).toBe('Dry season (months),Oct Nov Dec Jan Feb Mar,lowest mean flow in the observed gauge');
+		expect(lines).toContain('Record,observed gauge');
+		expect(lines).toContain('Water years judged,2,failed,2');
+		const y = lines.find((l) => l.startsWith('2001/02,365,'))!.split(',');
+		expect(Number(y[2])).toBeCloseTo(3.65, 12); // N
+		expect(Number(y[4])).toBeCloseTo(1.46, 12); // A = N − S
+		expect(Number(y[5])).toBeCloseTo(0.365, 12); // dams
+		expect(Number(y[7])).toBeCloseTo(1.095, 12); // use
+		expect(Number(y[10])).toBeCloseTo(9.12, 9); // gap, % of N
+		expect(y[12]).toBe('no');
+		expect(lines).toContain('Good-rain years,1,365,0,0');
+		expect(lines).toContain(`Fallback-rain years,1,365,100,${Number(((100 / 365) * 100).toPrecision(12))}`);
+		expect(lines).toContain('2002/03,365,0,365,365,100,100,yes,100');
+		// Two years are too few for the flow double-mass check.
+		expect(lines).toContain('"Not checked: needs an observed flow record, rain and a catchment area, with at least 10 water years of 300+ days with both"');
+		expect(lines).toContain('Runoff model,gr4j');
+		expect(lines.some((l) => l.startsWith("Q90 on the calibration record's dry-season days,observed gauge,days,"))).toBe(true);
+		expect(lines).toContain('Curve,On the days of,Days,Q1,Q2,Q5,Q10,Q20,Q30,Q40,Q50,Q60,Q70,Q75,Q80,Q85,Q90,Q95,Q98,Q99');
+		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(2);
+	});
+
+	it('says what is missing, and is part of the summary sheet', () => {
+		expect([...plausibilityLines(undefined)]).toEqual(['Plausibility checks', 'Run made before engine 0.25.0: no plausibility checks']);
+		const none = [...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null })];
+		expect(none).toContain('Dry season (months),none: no record covers every calendar month,');
+		expect(none).toContain('Not checked: the run has no observed flow record');
+		expect(none).toContain('Not checked: the run has no rainfall series');
+		expect(none).toContain('Not computed: no dry season');
+		const lines = [...summaryCsvLines(meta, { ...summary, plausibility: checks })];
+		expect(lines).toContain('Plausibility checks');
+		expect(lines).toContain('Water years judged,2,failed,2');
+		expect([...summaryCsvLines(meta, summary)]).toContain('Run made before engine 0.25.0: no plausibility checks');
 	});
 });

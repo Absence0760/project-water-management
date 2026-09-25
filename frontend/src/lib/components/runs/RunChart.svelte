@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	// Explorer for any stored output series of a run: pick a node (catchment
 	// first, then the network order) and one of its series by name. Fetches
 	// only the series picked.
@@ -16,7 +16,8 @@
 		refs,
 		nodeNames,
 		nodeOrder = new Map(),
-		flowUnit = 'm³/day'
+		flowUnit = 'm³/day',
+		flowToolbar
 	}: {
 		projectId: string;
 		runId: string;
@@ -24,6 +25,8 @@
 		nodeNames: Map<string, string>;
 		nodeOrder?: ReadonlyMap<string, number>;
 		flowUnit?: 'm³/s' | 'm³/day';
+		/** Shown in the chart's toolbar while a flow series is picked (the results' m³/s ↔ m³/day switch). */
+		flowToolbar?: Snippet;
 	} = $props();
 
 	const CATCHMENT = '__catchment';
@@ -113,7 +116,16 @@
 		</div>
 	</div>
 	<LoadState {loading} {error}>
-		<LineChart {title} {unit} series={data} logToggle={isFlow} bind:log recentDays={3 * 365} recentLabel="Last 3 years" />
+		<LineChart
+			{title}
+			{unit}
+			series={data}
+			logToggle={isFlow}
+			bind:log
+			recentDays={3 * 365}
+			recentLabel="Last 3 years"
+			toolbar={isFlow ? flowToolbar : undefined}
+		/>
 	</LoadState>
 {/if}
 

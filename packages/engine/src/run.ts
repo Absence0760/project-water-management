@@ -42,10 +42,13 @@ import {
 	type ZeroRainMask
 } from './rain';
 import { doubleMass as doubleMassOf, doubleMassCheck, doubleMassRunWarning, type DoubleMass } from './doublemass';
+import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
-import { computeCurtailment, type ReportWindow } from './network/curtailment';
+import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
+import { boreholeOf } from './network/boreholes';
+import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -53,7 +56,8 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { exclusionRanges, sanitizeExclusions } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
-import { buildTopology } from './network/topology';
+import { buildTopology, canonicalOrder } from './network/topology';
+import { cmpStr } from './order';
 import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes, resolveEwrRules } from './reserve/rules';
 import { assessSite, assuranceWarnings, type EwrAssuranceSite } from './reserve/assurance';
@@ -62,6 +66,7 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_AREA_EXPONENT,
+	LAND_COVER_CLASSES,
 	defaultProjectSettings,
 	ESTIMATED_DAM_DEPTH_M,
 	panCoefficientOutOfRange,
@@ -71,6 +76,9 @@ import {
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
+	type UserSummary,
+	type LandCoverClass,
+	type LandCoverSummary,
 	type ModelInput,
 	type NetworkNode,
 	type ModelOutput,
@@ -79,7 +87,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.21.1';
+export const ENGINE_VERSION = '0.27.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -89,6 +97,18 @@ export { resolveCatchmentAreaKm2 } from './runoff';
 /** Run the full model: natural flow from the selected runoff model (./runoff), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
 	return runModelWith(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx));
+}
+
+/**
+ * runModel without the hydrologist plausibility checks: `summary.plausibility`
+ * is absent and their warnings aren't added; every other series and summary
+ * figure is identical. For the uncertainty ensemble, whose hundreds of member
+ * runs read none of it (ensemble.ts memberMetrics / memberScores). Nothing
+ * here references ./plausibility, so a bundle that only runs ensembles (the
+ * browser's calibration worker) leaves that code out.
+ */
+export function runModelWithoutChecks(input: ModelInput): ModelOutput {
+	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null);
 }
 
 /**
@@ -122,6 +142,19 @@ export function withVerification(input: ModelInput, output: ModelOutput): ModelO
 export function runModelWith(
 	input: ModelInput,
 	naturalFlow: (ctx: RunContext) => NaturalFlowInput
+): ModelOutput {
+	return runNetwork(input, naturalFlow, runPlausibility);
+}
+
+/**
+ * The model run itself. `plausibility` is the checks step (runPlausibility),
+ * passed in rather than called directly so that runModelWithoutChecks, which
+ * passes null, doesn't reference it and a bundler can drop it.
+ */
+function runNetwork(
+	input: ModelInput,
+	naturalFlow: (ctx: RunContext) => NaturalFlowInput,
+	plausibility: typeof runPlausibility | null
 ): ModelOutput {
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass } = prepareRun(input);
 
@@ -173,6 +206,16 @@ export function runModelWith(
 	}
 
 	push(null, 'natural_flow', 'Natural flow', 'm³/day', natural);
+	// Land cover (WP-1.35): the catchment's total reduction, its own series so it is never hidden in calibration.
+	const hasCover = plan.nodes.some((n) => n.landCover);
+	const coverTotal = new Float64Array(hasCover ? days : 0);
+	if (hasCover) {
+		for (const i of nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
+			const r = sim.nodes[i]!;
+			for (let t = 0; t < days; t++) coverTotal[t]! += r.landCoverReduction[t]!;
+		}
+		push(null, 'landcover_reduction', 'Natural flow removed by land cover (invasive plants, forestry)', 'm³/day', coverTotal);
+	}
 	push(null, 'simulated_outflow', 'Simulated outflow', 'm³/day', simOutflow);
 	if (observedKind) {
 		push(
@@ -193,18 +236,22 @@ export function runModelWith(
 	// (./network/attribution.ts). Sites: the outlet first, then gauges by node id.
 	const gaugeSites = nodes
 		.flatMap((n, i) => (n.kind === 'gauge' && i !== topo.outflow ? [i] : []))
-		.sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+		.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	// A canonical order (network/topology.ts canonicalOrder), not the
+	// calculation order, which follows sortOrder: the attribution sums impacts
+	// in it, so the charges don't depend on the display order in their last bit.
+	const ranked = canonicalOrder(nodes, topo);
 	const attribution = attributeEwrShortfall({
 		days,
 		kind: plan.nodes.map((n) => n.kind),
 		upstream: plan.upstream,
-		order: plan.order,
+		order: ranked,
 		inflow: sim.nodes.map((r) => r.inflowUpstream),
 		runoff: sim.nodes.map((r) => r.runoff),
 		outflow: sim.nodes.map((r) => r.outflow),
 		supplied: sim.nodes.map((r) => r.supplied),
 		storage: sim.nodes.map((r) => r.storage),
-		consumptivePerSupplied: plan.nodes.map((n) => 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency)),
+		consumptivePerSupplied: plan.nodes.map(consumptivePerSupplied),
 		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
 		sites: [
 			...(topo.outflow >= 0 ? [{ node: topo.outflow, shortfall: ewrShort }] : []),
@@ -212,7 +259,7 @@ export function runModelWith(
 		]
 	});
 	const posInOrder = new Int32Array(nodes.length);
-	plan.order.forEach((node, k) => (posInOrder[node] = k));
+	ranked.forEach((node, k) => (posInOrder[node] = k));
 	for (const [si, site] of attribution.sites.entries()) {
 		const id = si === 0 && topo.outflow >= 0 ? null : nodes[site.node]!.id;
 		push(id, 'ewr_charged', 'EWR shortfall charged to the farms upstream (negative)', 'm³/day', site.charged);
@@ -264,16 +311,36 @@ export function runModelWith(
 		['balanceResidual', 'balance_residual', 'Balance check (should be 0)', 'm³/day']
 	];
 	const gaugeSeries = new Set<keyof NodeResult>(['inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
+	// An other water user (WP-1.33): what it wanted, took, returned and left in the river.
+	const userSeries = new Set<keyof NodeResult>(['demand', 'supplied', 'deficit', 'inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
+	// The senior users' requirement passing each node, only when a senior user's demand is passed down to it.
+	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
 		for (const [field, key, label] of farmSeries) {
 			if (node.kind === 'gauge' && !gaugeSeries.has(field)) continue;
-			push(node.id, key, label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
+			if (node.kind === 'user' && !userSeries.has(field)) continue;
+			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
+		}
+		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
+		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
+		if (plan.nodes[i]!.borehole) {
+			// Boreholes (WP-1.34): what they gave and what the river loses for it.
+			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
+			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
+			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
+			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
+		}
+		if (node.kind === 'user') {
+			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
+			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
+			return;
 		}
 		const w = sim.workings?.[i];
 		if (!w) return;
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
+		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
 		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
 		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
 	});
@@ -284,6 +351,9 @@ export function runModelWith(
 		for (let t = 0; t < a.length; t++) s += a[t]!;
 		return a.length ? s / a.length : 0;
 	};
+	/** A node with boreholes: its mean pumping and stream depletion (WP-1.34). */
+	const groundwaterMeans = (p: NetworkPlan['nodes'][number], r: NodeResult) =>
+		p.borehole ? { avgGroundwaterM3Day: mean(r.groundwater), avgBaseflowDepletionM3Day: mean(r.depletion) } : {};
 	const farms: FarmSummary[] = [];
 	nodes.forEach((node, i) => {
 		if (node.kind !== 'farm') return;
@@ -302,9 +372,38 @@ export function runModelWith(
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
+			flowShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
-			daysEwrNotMet: notMet
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
+		});
+	});
+
+	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
+
+	// Other water users (WP-1.33): whole-run means, like FarmSummary.
+	const users: UserSummary[] = [];
+	nodes.forEach((node, i) => {
+		if (node.kind !== 'user') return;
+		const r = sim.nodes[i]!;
+		const avgDemand = mean(r.demand);
+		const avgSupplied = mean(r.supplied);
+		const charge = attribution.charge[i]!;
+		let notMet = 0;
+		for (let t = 0; t < days; t++) if (charge[t]! < 0) notMet++;
+		users.push({
+			nodeId: node.id,
+			name: node.name,
+			priority: plan.nodes[i]!.senior ? 'senior' : 'junior',
+			avgDemandM3Day: avgDemand,
+			avgSuppliedM3Day: avgSupplied,
+			avgDeficitM3Day: avgDemand - avgSupplied,
+			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
+			avgReturnedM3Day: mean(r.userReturn),
+			avgEwrChargeM3Day: 0 - mean(charge),
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
 		});
 	});
 
@@ -339,6 +438,17 @@ export function runModelWith(
 			natural: site.natural
 		}))
 	);
+
+	if (users.length) {
+		curtailment.otherUsers = otherUserCurtailment(
+			nodes.flatMap((node, i) =>
+				node.kind === 'user'
+					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!) }]
+					: []
+			),
+			window
+		);
+	}
 
 	// Gauge and logger records measure the impacted river (farms, dams,
 	// abstraction), so they are compared with the simulated outflow.
@@ -409,6 +519,26 @@ export function runModelWith(
 		)
 	);
 
+	// Hydrologist plausibility checks (engine ≥ 0.25.0, ./plausibility): report and warn only.
+	const checked = plausibility?.({
+		input,
+		settings,
+		start,
+		days,
+		natural,
+		simOutflow,
+		observedKind,
+		aligned,
+		accumulation,
+		finalRain,
+		plan,
+		sim,
+		coverTotal,
+		ewrShort,
+		reserve: ewrAssurance.map((a) => a.report)
+	});
+	if (checked) warnings.push(...checked.warnings);
+
 	return {
 		engineVersion: ENGINE_VERSION,
 		startDate,
@@ -417,6 +547,8 @@ export function runModelWith(
 		series: out,
 		summary: {
 			farms,
+			...(users.length ? { users } : {}),
+			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days) } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
@@ -432,6 +564,7 @@ export function runModelWith(
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, areaMismatches: areas, doubleMass },
+			...(checked ? { plausibility: checked.checks } : {}),
 			chirpsCorrection,
 			zeroRainInfill: zeroRain?.infill ?? null,
 			rainAccumulation: accumulation?.info ?? null,
@@ -440,6 +573,74 @@ export function runModelWith(
 	};
 }
 
+
+/**
+ * The plausibility checks' inputs from a finished run (./plausibility): the
+ * observed records at the outlet, the calibration exclusions as a day mask,
+ * the dams' daily storage gain + evaporation − rain on them and the station
+ * rain days. Sums over nodes run in node-id order, so the result doesn't
+ * depend on how the network is listed.
+ */
+function runPlausibility(r: {
+	input: ModelInput;
+	settings: ProjectSettings;
+	start: number;
+	days: number;
+	natural: Float64Array;
+	simOutflow: Float64Array;
+	observedKind: CalibrationFlowKind | null;
+	aligned: (kind: SeriesKind) => (number | null)[];
+	accumulation: AccumulationRun | null;
+	finalRain: (number | null)[] | null;
+	plan: NetworkPlan;
+	sim: ReturnType<typeof simulateNetwork>;
+	coverTotal: Float64Array;
+	ewrShort: Float64Array;
+	reserve: EwrAssuranceSite[];
+}) {
+	const { input, settings, start, days, plan, sim } = r;
+	const series = input.series ?? {};
+	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
+	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = r.aligned(kind);
+	const excluded = new Uint8Array(days);
+	for (const x of exclusionRanges(settings.calibrationExclusions)) {
+		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
+	}
+	const nodes = input.model.nodes;
+	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	const dams = new Float64Array(days);
+	for (const i of byId) {
+		const w = sim.workings?.[i];
+		if (!w || plan.nodes[i]!.kind !== 'farm') continue;
+		const q = sim.nodes[i]!.storage;
+		let prev = plan.nodes[i]!.initialStorageM3;
+		for (let t = 0; t < days; t++) {
+			dams[t] = dams[t]! + (q[t]! - prev) + w.damEvaporation[t]! - w.rainOnDam[t]!;
+			prev = q[t]!;
+		}
+	}
+	const catchment = r.aligned('rain_catchment_mm');
+	const station = new Uint8Array(days);
+	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
+	return plausibilityChecks({
+		start,
+		days,
+		runoffModel: settings.runoffModel,
+		naturalM3Day: r.natural,
+		simulatedM3Day: r.simOutflow,
+		observed,
+		calibrationKind: r.observedKind,
+		excluded,
+		damsM3Day: dams,
+		landCoverM3Day: r.coverTotal,
+		rainMm: r.finalRain,
+		station,
+		hasStation: !!series.rain_catchment_mm,
+		ewrShortfall: r.ewrShort,
+		reserve: r.reserve,
+		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input)
+	});
+}
 
 /** The run's settings, window and aligned inputs: everything before natural flow. */
 export interface PreparedRun {
@@ -585,7 +786,8 @@ export function buildNetworkPlan(
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
-	for (const tr of model.transfers) {
+	// In id order: rules of one priority add into the same destination and draw on the same source.
+	for (const tr of [...model.transfers].sort((a, b) => cmpStr(a.id, b.id))) {
 		if (!tr.enabled) continue;
 		const from = indexById.get(tr.fromNodeId);
 		const to = indexById.get(tr.toNodeId);
@@ -633,6 +835,9 @@ export function buildNetworkPlan(
 		);
 	}
 
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings);
+	const cover = resolveLandCover(model, warnings);
+
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
@@ -640,14 +845,15 @@ export function buildNetworkPlan(
 		...(damRainMm ? { damRainMm } : {}),
 		// Sum each node's upstream in node-id order, not display order, so the
 		// float result can't depend on how the nodes are listed (review F8).
-		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
+		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))),
 		transfers,
 		month,
 		naturalFlow: natural,
 		ewr,
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
-			const cap = n.damCapacityM3;
+			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
+			const u = users.byNode.get(i);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -659,10 +865,14 @@ export function buildNetworkPlan(
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings),
 				...damLosses(n, warnings),
-				demand: demand[i]!.net,
+				demand: u?.demand ?? demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
-				soilWater: demand[i]!.soilWater
+				soilWater: demand[i]!.soilWater,
+				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
+				...boreholeOf(n, warnings),
+				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
+				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
 		})
 	};
@@ -670,6 +880,169 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * The land-cover summary (WP-1.35): the low-flow threshold, the mean and
+ * relative reduction, and per class its condensed area, mean reduction and
+ * mm per year over that area. The reduction is linear in the class weights,
+ * so each class's part is its own lowFlow × MIN(I0, q) + mar × (I0 − that),
+ * with I0 = the farm's runoff + its reduction (the natural runoff).
+ */
+function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float64Array, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, days: number): LandCoverSummary {
+	const cover = resolveLandCover(upgradeLegacyModel(input.model), []);
+	const qLow = lowFlowThreshold(natural);
+	const byClass = new Map<LandCoverClass, { condensedKm2: number; volume: number }>();
+	cover.forEach((u, i) => {
+		if (!u) return;
+		const r = sim.nodes[i]!;
+		const q = qLow * plan.nodes[i]!.share;
+		for (const [cls, w] of Object.entries(u.byClass) as [LandCoverClass, { mar: number; lowFlow: number }][]) {
+			let vol = 0;
+			for (let t = 0; t < days; t++) {
+				const i0 = r.runoff[t]! + r.landCoverReduction[t]!;
+				const low = Math.min(i0, Math.max(q, 0));
+				vol += w.lowFlow * low + w.mar * (i0 - low);
+			}
+			const c = byClass.get(cls) ?? { condensedKm2: 0, volume: 0 };
+			c.condensedKm2 += u.condensedKm2[cls] ?? 0;
+			c.volume += vol;
+			byClass.set(cls, c);
+		}
+	});
+	let sumNat = 0;
+	let sumRed = 0;
+	for (let t = 0; t < days; t++) {
+		sumNat += natural[t]!;
+		sumRed += total[t]!;
+	}
+	return {
+		lowFlowThresholdM3Day: qLow,
+		reductionM3Day: days ? sumRed / days : 0,
+		fractionOfNatural: sumNat > 0 ? sumRed / sumNat : null,
+		// In LAND_COVER_CLASSES order, whatever order the patches and nodes are listed in.
+		byClass: LAND_COVER_CLASSES.flatMap((k) => (byClass.has(k.id) ? [[k.id, byClass.get(k.id)!] as const] : [])).map(([coverClass, c]) => ({
+			coverClass,
+			condensedKm2: c.condensedKm2,
+			reductionM3Day: days ? c.volume / days : 0,
+			// m³ over km² → mm: ÷ (km² × 1000); per year: × 365.25 ÷ days.
+			mmPerYear: c.condensedKm2 > 0 && days ? ((c.volume / (c.condensedKm2 * 1000)) * 365.25) / days : null
+		}))
+	};
+}
+
+const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_observed_m3s || series.flow_logger_m3s);
+
+/**
+ * Run warnings for boreholes (WP-1.34): stream depletion the river could not
+ * give (it had no flow left at the node), and, when the project has an
+ * observed record, the double-counting caution: flows measured while these
+ * boreholes pumped already carry their depletion, so a calibration that
+ * leaves them out would fit natural flow too low and then take it off again.
+ */
+function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, observed: boolean, warnings: string[]) {
+	let unmet = 0;
+	let depleting = 0;
+	const names: string[] = [];
+	plan.nodes.forEach((p, i) => {
+		if (!p.borehole) return;
+		const r = sim.nodes[i]!;
+		let u = 0;
+		for (let t = 0; t < plan.days; t++) u += r.depletionUnmet[t]!;
+		if (u > 1e-9) {
+			unmet += u;
+			names.push(nodes[i]!.name);
+		}
+		if (p.borehole.depletionFrac > 0) depleting++;
+	});
+	if (unmet > 1e-9) {
+		warnings.push(
+			`stream depletion of ${unmet.toFixed(0)} m³ over the run could not be taken from the river, which had no flow left there; it is drawn from aquifer storage instead and not counted (${names.join('; ')})`
+		);
+	}
+	if (depleting && observed) {
+		warnings.push(
+			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
+		);
+	}
+}
+
+/** k: the share of what a node is supplied that it consumes, 1 − β(1 − e) for a farm (audit N1), 1 − r for an other user (WP-1.33). */
+function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
+	return n.kind === 'user' ? 1 - (n.userReturn ?? 0) : 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency);
+}
+
+/**
+ * Other water users (WP-1.33, docs/model.md §2.7c): each user node's daily
+ * demand (its monthly m³/day, water-year months), return share and priority,
+ * and the senior users' demand fragmented to the farms upstream of each by
+ * flow share (claims[farm][t] = Σ_u D_u[t] × share_farm / Σ upstream shares of
+ * u), the rule the EWR is fragmented by. A senior user with no farm share
+ * upstream can't be protected that way: it takes what reaches it, with a
+ * warning. Map keyed by node index; claims only for farms that carry one.
+ */
+interface OtherUser {
+	demand: Float64Array;
+	returnPct: number;
+	senior: boolean;
+	claimed: boolean;
+}
+
+function otherUsers(
+	nodes: readonly NetworkNode[],
+	topo: ReturnType<typeof buildTopology>,
+	share: Float64Array,
+	days: number,
+	month: Uint8Array,
+	warnings: string[]
+): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
+	const byNode = new Map<number, OtherUser>();
+	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	// Users in node-id order: a farm below two senior users adds their claims in that order.
+	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	for (const i of byId) {
+		const n = nodes[i]!;
+		if (n.kind !== 'user') continue;
+		const monthlyDemand = n.userDemandM3Day ?? null;
+		const demand = new Float64Array(days);
+		if (monthlyDemand) {
+			if (monthlyDemand.length !== 12) warnings.push(`user "${n.name}": demand should have 12 monthly values, has ${monthlyDemand.length}; missing months are 0`);
+			for (let t = 0; t < days; t++) {
+				const v = Number(monthlyDemand[waterYearIndex(month[t]!)]);
+				demand[t] = Number.isFinite(v) && v > 0 ? v : 0;
+			}
+		}
+		const r = n.userReturnPct ?? 0;
+		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
+		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
+		const senior = (n.userPriority ?? 'senior') !== 'junior';
+		let claimed = false;
+		if (senior && demand.some((v) => v > 0)) {
+			// Farms upstream of the user, and their flow shares.
+			const up: number[] = [];
+			const stack = [...topo.upstream[i]!];
+			while (stack.length) {
+				const j = stack.pop()!;
+				if (nodes[j]!.kind === 'farm' && share[j]! > 0) up.push(j);
+				stack.push(...topo.upstream[j]!);
+			}
+			// In node-id order, so the total (and every claim) is the same to the last bit however the nodes are listed.
+			up.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+			const total = up.reduce((s, j) => s + share[j]!, 0);
+			if (total > 0) {
+				claimed = true;
+				for (const j of up) {
+					const c = (claims[j] ??= new Float64Array(days));
+					const f = share[j]! / total;
+					for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
+				}
+			} else {
+				warnings.push(`senior user "${n.name}" has no farm with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+			}
+		}
+		byNode.set(i, { demand, returnPct, senior, claimed });
+	}
+	return { byNode, claims };
+}
 
 /**
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
@@ -810,7 +1183,12 @@ function assessEwrRules(
 			continue;
 		}
 		const natural = new Float64Array(days);
-		for (const f of siteOf.get(node)?.farms ?? []) {
+		// Summed in node-id order, not display order, so a month's natural volume (and the
+		// percentile and requirement it selects) is bit-identical however the network is listed:
+		// on a flat stretch of the table's natural curve a one-ulp difference moved the
+		// percentile from one % point to the next (fuzz seed 18472, engine 0.24.1).
+		const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+		for (const f of upstreamFarms) {
 			const r = sim.nodes[f]!.runoff;
 			for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
 		}
@@ -863,6 +1241,13 @@ export function resolveReportWindow(
 	}
 	return { from: a - runStart, to: b - runStart, reportStart: fromEpochDay(a), reportEnd: fromEpochDay(b) };
 }
+
+/** Series labels that read differently on an other water user (WP-1.33). */
+const USER_LABELS: Record<string, string> = {
+	demand: 'Demand from the river',
+	supplied: 'Taken from the river',
+	deficit: 'Demand not met'
+};
 
 const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'Observed flow',
@@ -1042,6 +1427,12 @@ function buildDemand(
 		cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings)
 	}));
 	const cropIds = new Set(crops.map((c) => c.id));
+	// Crops and crop areas are summed in id order (crop id, then area), not
+	// list order, so a farm's demand is the same to the last bit however the
+	// lists are ordered: a last-bit difference can tip a dam at its drought
+	// trigger or at empty (docs/model.md §6, order invariance).
+	crops.sort((a, b) => cmpStr(a.id, b.id));
+	const sortedAreas = [...cropAreas].sort((a, b) => cmpStr(a.nodeId, b.nodeId) || cmpStr(a.cropId, b.cropId) || a.areaM2 - b.areaM2);
 
 	// [Flow data] R "Use rain": first present of catchment / CHIRPS / forecast,
 	// zeroed at or below the rain threshold.
@@ -1064,7 +1455,7 @@ function buildDemand(
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
-		for (const ca of cropAreas) {
+		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
 			if (!cropIds.has(ca.cropId)) {
 				warnings.push(`farm "${node.name}" has an area for an unknown crop; ignored`);

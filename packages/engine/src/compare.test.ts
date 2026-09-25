@@ -339,6 +339,48 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists an other water user added, and a change of its demand, return share and priority (WP-1.33)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const town = { ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), userReturnPct: 0.6, userPriority: 'senior' as const };
+		b.model.nodes.push(town);
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1,200 m³/day on average over the months, drains into Outlet)']);
+		const c = structuredClone(b);
+		const t = c.model.nodes.find((n) => n.name === 'Town')!;
+		t.userDemandM3Day![0] = 1500;
+		t.userReturnPct = 0.5;
+		t.userPriority = 'junior';
+		expect(texts(b, c)).toEqual(['Town: share returned 60% → 50%', 'Town: priority senior → junior', 'Town: demand Oct 1,200 → 1,500 m³/day']);
+		// A farm snapshot from before WP-1.33 (no user fields) diffs clean against one that has the defaults.
+		const d = structuredClone(a);
+		for (const n of d.model.nodes) Object.assign(n, { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+		expect(texts(a, d)).toEqual([]);
+	});
+
+	it('lists a farm’s boreholes added and their depletion changed (WP-1.34)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const f = b.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		Object.assign(f, { boreholeCapacityM3Day: 500, boreholeRule: 'primary', streamDepletionFrac: 0.4, streamDepletionLagDays: 10 });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: borehole capacity none → 500 m³/day',
+			'Rooikloof: borehole rule supplemental → primary',
+			'Rooikloof: stream depletion share 0% → 40%',
+			'Rooikloof: stream depletion lag 0 days → 10 days'
+		]);
+	});
+
+	it('lists land cover added to, changed on and cleared from a farm, by farm and class (WP-1.35)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		b.model.landCover = [{ id: 'l', nodeId: 'copy-f1', coverClass: 'invasive', areaKm2: 2, densityPct: 0.5, factors: null }];
+		expect(texts(a, b)).toEqual(['Land cover "invasive" added to Rooikloof (1 km² condensed)']);
+		const c = structuredClone(b);
+		c.model.landCover![0]!.densityPct = 0.25;
+		expect(texts(b, c)).toEqual(['Rooikloof: land cover "invasive" 1 km² → 0.5 km² condensed']);
+		expect(texts(b, a)).toEqual(['Land cover "invasive" removed from Rooikloof (was 1 km² condensed)']);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

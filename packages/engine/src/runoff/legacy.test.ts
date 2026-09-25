@@ -18,7 +18,11 @@ describe('runoff model seam', () => {
 		input.settings = { runoffModel: 'legacy', calibration: { ...defaultProjectSettings().calibration, baseFlowInitial: 0 } };
 		input.series = { rain_catchment_mm: { startDate: '2020-03-01', values: rain } };
 		const out = runModel(input);
-		const area = input.model.nodes.filter((n) => n.kind === 'farm').reduce((t, n) => t + n.areaKm2, 0);
+		// Σ farm area in node-id order, as the engine adds it (engine ≥ 0.26.1, ../order.ts).
+		const area = input.model.nodes
+			.filter((n) => n.kind === 'farm')
+			.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+			.reduce((t, n) => t + n.areaKm2, 0);
 		const direct = computeNaturalFlow(
 			{ ...defaultProjectSettings().calibration, baseFlowInitial: 0, catchmentAreaKm2: area },
 			{ startDate: '2020-03-01', days: 400, rainCatchmentMm: rain, rainChirpsMm: [], rainForecastMm: [] }

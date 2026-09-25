@@ -53,6 +53,17 @@ unsaved input: while **Add data** holds a file that is read but not uploaded
 (or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
+Every `Dialog.svelte` dialog also has a **✕** in its top-right corner
+(`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
+Escape closes it. It is last in the DOM, so opening a dialog still focuses its
+first field (New project, New team).
+
+**Long tables.** A `.table-wrap` table (app.css) scrolls inside its own box,
+capped at 70 % of the window, and its whole `<thead>` is sticky, so the header
+stays in view while you read down a long table (the network table with many
+nodes, the curtailment table). The whole header sticks, not each cell, so a
+two-row header (group labels over the column names) stays stacked. A table
+shorter than the cap looks as before.
 
 ## Header: data freshness and "Add data"
 
@@ -172,6 +183,36 @@ personal copy (the Copy dialog says so).
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
   the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+- **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
+  **+ Add other user** (next to + Add node, in both layouts) adds a node of
+  kind *Other user* draining into the outlet, with no demand yet; any node's
+  Kind can also be switched to it. In the table a user's row shows "–" in
+  every farm column ("not used for an other water user"), and below the
+  network panel an **Other water users** panel lists each user (name, a
+  one-line summary: priority, mean demand, share returned, what it drains
+  into) with its **Priority** (senior: farms upstream pass its demand first;
+  junior: takes what reaches it), **Share returned** (%) and **demand per
+  month** (m³/day, Oct–Sep) with *Use October's demand for every month*
+  (`UserFields.svelte`, `users.ts`). The one-node form shows the same fields
+  under "Other water user" instead of the farm groups. The schematic draws a
+  user as an open diamond (legend "Other water user"). The client check
+  mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
+  return share in 0–100 %.
+- **Groundwater (boreholes)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
+  one-node form only (`detailOnly`), on farms and other users: borehole
+  capacity (m³/day, empty = none), **Borehole rule** (supplemental / primary /
+  drought), drought trigger (%), stream depletion (%) and depletion lag
+  (days). The client check refuses boreholes on a gauge and the drought rule
+  without a farm dam.
+- **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
+  one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
+  **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
+  each patch has a **Cover class**, **Area** (km²), **Condensed cover** (%)
+  and **Own reductions**, which replaces the class's indicative reductions
+  (shown otherwise) with two editable %s. Below the patches: the condensed
+  share of the farm, flagged when above 100 % (the run scales it down). The
+  field guide points table users to the one-node layout. Removing a farm
+  removes its patches (the confirm says how many).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
@@ -282,9 +323,9 @@ side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
 and the window's height, with the table filling what's left and only the rows
 in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
-The card header's **Preview data** button opens it with every column shown; a
+The card header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
-un-hidden, scrolled into view and highlighted. Alongside each series' own
+un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
@@ -292,7 +333,17 @@ for every flow series; **Rain used (model)** and its source (catchment / CHIRPS 
 forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. The derived columns are
+inside a Settings → *Calibration exclusions* period. Every column header,
+Date included, carries an ⓘ `HelpTip` saying where that number comes from, how
+it is derived and what it tells you: a raw series column reuses its kind's
+`series.<SeriesKind>` entry, and each derived column has its own
+`preview.<column>` entry (`preview.date`, `preview.flowM3Day`,
+`preview.rainUsed`, `preview.chirpsFactor`, `preview.chirpsCorrected`,
+`preview.excluded`), the key set per column in `series/preview.ts`. The bubble
+is a top-layer popover, so the sideways scroll and sticky header don't clip
+it, and Escape closes the tip without closing the dialog. A header shows its
+unit once: the m³/day columns name it in their label, so no second `(m³/day)`
+follows. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
 for any day outside the model's own run window. The search box takes a date
@@ -313,7 +364,10 @@ The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
 workbook's FarmTemplate order, the letter in each header
 (`Irrigation supplied [G] (m³/day)`), the working columns between them and the
-balance check `[V]` next to outflow. The **summary CSV** adds the self-checks,
+balance check `[V]` next to outflow. **Fragmented flow — all farms** and
+**Fragmented EWR — all farms** (only when the run has farms) put one series
+of every farm side by side, a date column then a column per farm, like
+the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets. The **summary CSV** adds the self-checks,
 the water balance per water year and a column guide giving each letter's
 formula ([api.md § Export](./api.md)).
 
@@ -551,11 +605,14 @@ value such as 250000.
   `aria-current="location"` (scroll spy: `activeSectionId`, the last section
   whose top has passed under the sticky header, or the last one at the
   bottom of the page). A long runs list scrolls inside its panel so the menu
-  stays in reach: its height is capped at `min(16rem, 25vh)`, so with 20
-  runs the rail still fits a 768px-tall window without clipping (below about
-  720px the rail scrolls on its own). Narrower, the rail stacks above the results and the menu
+  stays in reach: the rail is a column in which only the list shrinks (at
+  most 16rem, at least 7.5rem), so with 20 runs and every menu entry the rail
+  still fits a 768px-tall window without clipping, and a longer menu takes
+  its height from the list (once the list is at its minimum the rail scrolls
+  on its own). Narrower, the rail stacks above the results and the menu
   becomes wrapping chips. Farm detail appears only when the run has farms,
-  and Runoff model only for a GR4J run. The page's `scroll-padding-top`
+  Runoff model only for a GR4J run, and Plausibility checks only on a run
+  made by engine 0.25.0 or later. The page's `scroll-padding-top`
   keeps a jumped-to section, or a focused control, clear of the sticky
   header.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
@@ -624,6 +681,17 @@ value such as 250000.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
+  flow invasive plants and forestry took, its share of natural flow, the
+  low-flow threshold, and per class the condensed area, reduction and mm/yr
+  over that area (`RunSummaryView.svelte`).
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
+  a table of each one's mean pumping, its share of what was supplied, and the
+  stream depletion it causes (`RunSummaryView.svelte`).
+- **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
+  under the farms with each user's priority, demand, taken, deficit, % of
+  demand supplied (flagged below 95 %), returned and EWR charge, whole-run
+  means (`RunSummaryView.svelte`).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -640,14 +708,34 @@ value such as 250000.
   storage charge gets a "store less / pass inflow X m³/day" badge; a farm
   whose EWR cut exceeds its equitable share gets a warning badge. *Demand left*
   is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
-  demand, "<1%" / ">99%" at the ends. Below it, the **EWR sites** table (outlet first, then
+  demand, "<1%" / ">99%" at the ends. When the run has other water users, an
+  **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
+  returned, EWR charge, the supply cut, and the charge left standing, with
+  "junior (curtailed)" or "senior (not curtailed)"; they are not in the
+  equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* Then
-  the hydrograph (observed flow as
-  dots under natural and simulated, m³/s or m³/day, log scale, last 3 years or
-  the full period), the calibration panel (it opens with the same
+  the hydrograph (observed flow as a line
+  under simulated outflow, broken on every day without a reading and never
+  bridged, a lone reading between gaps shown as a dot; natural flow starts
+  hidden and its legend entry shows it, and a legend toggle survives the log
+  scale and unit switches; a switched-off entry is struck through in the
+  muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
+  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  into, as on every chart; **Shift+drag** moves the view back and forth
+  through the record at the same width, and **◀ Earlier / Later ▶** move it
+  by half a window (the non-drag route, and the only one on touch). Neither
+  goes past the ends of the record, and the window survives the log scale
+  and unit switches. The figure carries the visible range as
+  `data-view-start` / `data-view-end`. Every daily chart has the same moves
+  (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
+  there is somewhere to move to): EWR vs outflow, farm storage and supply vs
+  demand, Explore outputs, the model stores, the Data tab's series chart and
+  the run comparison. The m³/s ↔ m³/day switch sits on every flow chart
+  (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
+  flow series is picked), and one click sets all of them. Then the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
@@ -669,6 +757,41 @@ value such as 250000.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
+  and (placed in the calibration panel, under the fit record) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
+  `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
+  shown, `#res-uncertainty`, inside the calibration panel below the fit
+  record, whose menu entry is **Calibration & uncertainty** so the rail still
+  fits a laptop screen; helpers in `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
+  **decision rule** in a box above every band (thresholds, split date,
+  percentiles, the 30-set gate, coverage test, sample), a line with the
+  options (sets, seed, bounds, pan shift, rain sources, records, model, who
+  stored it), **Parameter sets kept** (with the rejections by reason) and
+  whether the run's own parameters pass, the **held-out coverage** per record
+  (a warning, in words, below 70 %), then the tables: 5 %, median, 95 % and
+  this run's own value for EWR days not met, the shortfall, natural and
+  outflow MAR and the Reserve compliance rate per site with a rule table; EWR
+  days not met by month (Oct … Sep); curtailment per farm (m³/day, negative =
+  cut); annual natural and outflow volumes per water year (collapsed); and
+  the **monthly flow-duration curve** of simulated outflow as a shaded 5–95 %
+  band with its median against the dashed EWR line, one month at a time from
+  a select (`uncertainty/BandFdcChart.svelte`, log flow axis; the chart's
+  title says at how many exceedance points the median falls below the EWR).
+  With fewer than 30 sets kept no percentiles are shown, only the note why.
+  An ensemble run on a newer engine than the run says so. **Reproduce in
+  this browser** re-runs the stored ensemble from its seed and options and
+  reports "Reproduced: the same … members, verdicts, outputs and coverage" or
+  the first differences. Below, **Every ensemble of this run** lists each one
+  ever started, newest first (who, when, stored or "started, never stored",
+  seed, sets, kept), each with how its rule differs from the shown one, and a
+  line counts the starts never stored. Editors get **Run an ensemble**: sets
+  (30–1 000, default 300), bounds (the fit's, typical or wide), lowest skill
+  kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
+  coefficient shift; **Run ensemble** asks the server to fix the rule and
+  draw the seed, runs every member in the calibration worker with a live
+  count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
+  server checks and stores it. A cancelled one stays in the list as never
+  stored,
   then **Run notes** under it on every run (`runs/RunNotes.svelte`,
   `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
   explanation of the run, the one thing about a run that can change after it
@@ -726,7 +849,27 @@ value such as 250000.
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
-  there is no table. Then farm detail (dam
+  there is no table. Then the **Plausibility checks** (`#res-plausibility`,
+  `runs/PlausibilityPanel.svelte`, its own chunk, helpers in
+  `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
+  only on runs that have them): the dry season in one sentence, a line per
+  check (*no finding*, *see below* or *not checked*, with a coloured edge and
+  the words), then (1) **Natural flow ≥ observed + net abstraction**: a row per
+  water year with natural, observed, the abstraction split into use, dams and
+  land cover, observed + abstraction, the gap as % of natural and passes /
+  fails / not judged (failing rows shaded); (2) **EWR days by rain source**:
+  the share of days not met in good-rain and fallback-rain years, the Reserve
+  months met split the same way per rule-table site, and, collapsed, each
+  water year's station days, rain, fallback shares and days not met; (3)
+  **Observed flow against rain (double mass)**: the whole-record runoff ratio
+  and a row per break with the observed and simulated ratios, the change
+  beyond the model overall and by season, and what it points to; (4) the
+  **dry-season low-flow duration curves** (log axis by default): gauge and
+  logger dashed, simulated outflow and natural flow, and the latest run of each
+  other runoff model's simulated outflow (fetched on demand, left out with a
+  note when it used another dry season); *Simulated outflow over* switches this
+  run's curve to one record's days; a verdict on the Q90 comparison and a
+  Q70 / Q90 / Q95 table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS

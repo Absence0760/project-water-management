@@ -83,4 +83,30 @@ describe('ModelEditor', () => {
 		ed.load({ nodes: [], crops: [{ id: 'x', name: 'x', cropFactor: [], sortOrder: 4 }], cropAreas: [], transfers: [] });
 		expect(ed.addCrop().sortOrder).toBe(5);
 	});
+
+	it('adds an other water user draining into the outlet, with no demand yet (WP-1.33)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const outlet = ed.addNode();
+		const u = ed.addUser();
+		expect(u).toMatchObject({ kind: 'user', downstreamNodeId: outlet.id, name: 'Other user 1', userReturnPct: 0, userPriority: 'senior' });
+		expect(u.userDemandM3Day).toEqual(new Array(12).fill(0));
+		// A new farm carries the inert user defaults.
+		expect(ed.addNode()).toMatchObject({ kind: 'farm', userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+	});
+
+	it('adds and removes land cover on a farm, and removing the farm removes its patches (WP-1.35)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.model.landCover).toEqual([]);
+		ed.addNode();
+		const farm = ed.addNode();
+		const p = ed.addLandCover(farm.id);
+		expect(p).toMatchObject({ nodeId: farm.id, coverClass: 'invasive', densityPct: 1, factors: null });
+		ed.addLandCover(farm.id);
+		ed.removeLandCover(p.id);
+		expect(ed.model.landCover).toHaveLength(1);
+		ed.removeNode(farm.id);
+		expect(ed.model.landCover).toEqual([]);
+	});
 });

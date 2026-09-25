@@ -11,7 +11,7 @@
 // client-catchment and blank [Shortfalls] columns; see docs/model.md §2.11 for the cell
 // formulas and the quirks this mirrors. Unlike the sheet nothing is rounded
 // or truncated (docs/engine-audit.md R1, Q14, Q15): the UI rounds for display.
-import type { CurtailmentFarm, CurtailmentSummary, EwrSiteSummary } from '../project';
+import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser, EwrSiteSummary } from '../project';
 
 /** m³/day → l/s: 1 m³/day = 1000 l / 86 400 s. The workbook divides by 86.4. */
 export const M3_PER_DAY_PER_LS = 86.4;
@@ -189,4 +189,51 @@ export function computeCurtailment(farms: CurtailmentInput[], window: ReportWind
 			volumeLeftM3Day: sum('volumeLeftM3Day')
 		}
 	};
+}
+
+/** An other water user's daily series (WP-1.33). */
+export interface CurtailmentUserInput {
+	nodeId: string;
+	name: string;
+	senior: boolean;
+	demand: ArrayLike<number>;
+	supplied: ArrayLike<number>;
+	returned: ArrayLike<number>;
+	/** ≤ 0. */
+	ewrCharge: ArrayLike<number>;
+	/** k = 1 − return share. */
+	consumptivePerSupplied: number;
+}
+
+/**
+ * The other water users' rows (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.11):
+ * window means; a junior user's supply cut −ΔG = MAX(charge ÷ k, −supplied)
+ * (k = 1 − return share: cutting ΔG removes k·ΔG of use), what the cut can't
+ * remove left standing; a senior user is not curtailed, so all of its charge
+ * stands.
+ */
+export function otherUserCurtailment(users: CurtailmentUserInput[], window: ReportWindow): CurtailmentUser[] {
+	const { from, to } = window;
+	return users.map((u) => {
+		const H = nz(windowMean(u.demand, from, to));
+		const I = nz(windowMean(u.supplied, from, to));
+		const R = nz(windowMean(u.ewrCharge, from, to));
+		const k = u.consumptivePerSupplied;
+		const cut = u.senior || !(k > 0) ? 0 : nz(Math.max(R / k, -I));
+		return {
+			nodeId: u.nodeId,
+			name: u.name,
+			priority: u.senior ? 'senior' : 'junior',
+			demandM3Day: H,
+			suppliedM3Day: I,
+			deficitM3Day: nz(I - H),
+			fractionSupplied: H === 0 ? null : I / H,
+			returnedM3Day: nz(windowMean(u.returned, from, to)),
+			ewrChargeM3Day: R,
+			curtailed: !u.senior,
+			supplyCutM3Day: cut,
+			supplyCutLs: nz(cut / M3_PER_DAY_PER_LS),
+			uncurtailedChargeM3Day: nz(Math.min(0, R - cut * k))
+		};
+	});
 }

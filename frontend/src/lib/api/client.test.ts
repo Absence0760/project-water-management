@@ -101,6 +101,25 @@ describe('createApi', () => {
 		expect(err.status).toBe(0);
 	});
 
+	it('reaches a run’s uncertainty ensembles under the run, encoding each id', async () => {
+		const f = mockFetch(200, { ensembles: [{ id: 'e' }], ensemble: { id: 'e' }, input: { settings: {} }, notes: [] });
+		const api = createApi('', f);
+		await expect(api.uncertainty.list('p', 'r/1')).resolves.toEqual([{ id: 'e' }]);
+		await api.uncertainty.get('p', 'r', 'e/1');
+		await expect(api.uncertainty.runInput('p', 'r')).resolves.toEqual({ settings: {} });
+		await api.uncertainty.start('p', 'r', { baselineId: 'b' });
+		await expect(api.uncertainty.complete('p', 'r', 'e', { members: [] })).resolves.toEqual({ id: 'e' });
+		const calls = f.mock.calls as unknown as [string, RequestInit][];
+		expect(calls.map(([url, init]) => `${init.method} ${url}`)).toEqual([
+			'GET /projects/p/runs/r%2F1/uncertainty',
+			'GET /projects/p/runs/r/uncertainty/e%2F1',
+			'GET /projects/p/runs/r/model-input',
+			'POST /projects/p/runs/r/uncertainty',
+			'POST /projects/p/runs/r/uncertainty/e/result'
+		]);
+		expect(JSON.parse(calls[3]![1].body as string)).toEqual({ baselineId: 'b' });
+	});
+
 	it('builds run-series query strings, omitting nodeId for catchment', async () => {
 		const f = mockFetch(200, { startDate: '2020-01-01', values: [] });
 		const api = createApi('', f);

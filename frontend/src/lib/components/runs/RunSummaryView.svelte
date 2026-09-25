@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Headline numbers, calibration fit and the per-farm table of one run.
 	import type { RunSummary } from '@water-management/engine';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
@@ -20,6 +21,10 @@
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
+	// Land cover, groundwater and other users' tables: a separate chunk (HumanImpactTables.svelte).
+	const loadHumanImpacts = () => import('./HumanImpactTables.svelte');
+	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
+	const pumping = $derived([...farms, ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
@@ -191,6 +196,14 @@
 		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
 		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
 	</p>
+{/if}
+
+{#if summary.landCover || summary.users?.length || pumping.length}
+	<Lazy load={loadHumanImpacts}>
+		{#snippet children(HumanImpactTables)}
+			<HumanImpactTables {summary} />
+		{/snippet}
+	</Lazy>
 {/if}
 
 <style>

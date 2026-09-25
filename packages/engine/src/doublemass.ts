@@ -153,11 +153,55 @@ export function doubleMass(
 	const judged = all.filter(([, y]) => y.days >= DOUBLE_MASS_MIN_DAYS && y.b >= DOUBLE_MASS_MIN_CHIRPS_MM);
 	if (judged.length < DOUBLE_MASS_MIN_YEARS) return null;
 
-	const n = judged.length;
-	const X = judged.map(([, y]) => y.b);
-	const Y = judged.map(([, y]) => y.a);
-	const D = judged.map(([, y]) => y.days);
-	const R = judged.map((_, i) => Y[i]! / X[i]!);
+	const points = judged.map(([waterYear, y]) => ({ waterYear, x: y.b, y: y.a, days: y.days }));
+	const { wholeSlope, segments, breaks } = doubleMassSegments(points);
+	const years: DoubleMassYear[] = [];
+	let cx = 0;
+	let cy = 0;
+	for (const p of points) {
+		cx += p.x;
+		cy += p.y;
+		years.push({
+			waterYear: p.waterYear,
+			days: p.days,
+			catchmentMm: p.y,
+			chirpsMm: p.x,
+			ratio: p.y / p.x,
+			cumChirpsMm: cx,
+			cumCatchmentMm: cy,
+			residualPct: cy > 0 ? ((cy - wholeSlope * cx) / cy) * 100 : null
+		});
+	}
+	const judgedSet = new Set(judged.map(([wy]) => wy));
+	return { years, skippedYears: all.map(([wy]) => wy).filter((wy) => !judgedSet.has(wy)), wholeSlope, segments, breaks };
+}
+
+/** One judged water year of a double-mass curve: y plotted against x. */
+export interface DoubleMassPoint {
+	waterYear: number;
+	/** The reference record's total (CHIRPS, or rain for the flow check); must be > 0. */
+	x: number;
+	/** The record being tested (catchment rain, or observed flow). */
+	y: number;
+	/** Days behind the totals. */
+	days: number;
+}
+
+/**
+ * The break detection behind every double-mass check: the segmentation of
+ * the annual ratios y/x (0, 1 or 2 breaks by BIC, each segment at least
+ * DOUBLE_MASS_MIN_SEGMENT_YEARS long, exhaustive search), keeping only the
+ * breaks that are big (DOUBLE_MASS_MIN_CHANGE) and real (Pettitt or the BIC
+ * gain), dropping the weakest failing one at a time. `points` are the judged
+ * years in order. Used by doubleMass (rain vs CHIRPS) and by the flow-vs-rain
+ * plausibility check (./plausibility/flowDoubleMass.ts).
+ */
+export function doubleMassSegments(points: readonly DoubleMassPoint[]): { wholeSlope: number; segments: DoubleMassSegment[]; breaks: DoubleMassBreak[] } {
+	const n = points.length;
+	const X = points.map((p) => p.x);
+	const Y = points.map((p) => p.y);
+	const D = points.map((p) => p.days);
+	const R = points.map((p) => p.y / p.x);
 	// Prefix sums: Σ X, Σ Y, Σ Y²/X (for the weighted SSE), Σ days.
 	const px = [0];
 	const py = [0];
@@ -231,7 +275,7 @@ export function doubleMass(
 			const before = slope(edges[j]!, c);
 			const after = slope(c, edges[j + 2]!);
 			return {
-				afterWaterYear: judged[c - 1]![0],
+				afterWaterYear: points[c - 1]!.waterYear,
 				slopeBefore: before,
 				slopeAfter: after,
 				change: before > 0 ? after / before - 1 : after > 0 ? Infinity : 0,
@@ -260,25 +304,10 @@ export function doubleMass(
 	for (let k = 0; k + 1 < edges.length; k++) {
 		const a = edges[k]!;
 		const b = edges[k + 1]!;
-		segments.push({ fromWaterYear: judged[a]![0], toWaterYear: judged[b - 1]![0], years: b - a, days: pd[b]! - pd[a]!, slope: slope(a, b) });
+		segments.push({ fromWaterYear: points[a]!.waterYear, toWaterYear: points[b - 1]!.waterYear, years: b - a, days: pd[b]! - pd[a]!, slope: slope(a, b) });
 	}
 	const wholeSlope = slope(0, n);
-	const years: DoubleMassYear[] = judged.map(([waterYear], i) => {
-		const cx = px[i + 1]!;
-		const cy = py[i + 1]!;
-		return {
-			waterYear,
-			days: D[i]!,
-			catchmentMm: Y[i]!,
-			chirpsMm: X[i]!,
-			ratio: R[i]!,
-			cumChirpsMm: cx,
-			cumCatchmentMm: cy,
-			residualPct: cy > 0 ? ((cy - wholeSlope * cx) / cy) * 100 : null
-		};
-	});
-	const judgedSet = new Set(judged.map(([wy]) => wy));
-	return { years, skippedYears: all.map(([wy]) => wy).filter((wy) => !judgedSet.has(wy)), wholeSlope, segments, breaks };
+	return { wholeSlope, segments, breaks };
 }
 
 const signedPct = (x: number) => (Number.isFinite(x) ? `${x >= 0 ? '+' : '−'}${Math.abs(Math.round(x * 100))} %` : 'from 0');

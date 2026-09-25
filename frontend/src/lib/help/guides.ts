@@ -384,7 +384,7 @@ export const GUIDES: Guide[] = [
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
-							'**Preview data** (card header) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
+							'**Preview all data** (card header) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
 						]
 					}
 				]
@@ -518,7 +518,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
 							'Save and run.',
-							'On the run, read the **Hydrograph** (observed flow as dots) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
+							'On the run, read the **Hydrograph** (observed flow against simulated outflow) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
 							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',
 							'Compare the run with the previous one to see what the change did.'
 						]
@@ -649,7 +649,7 @@ export const GUIDES: Guide[] = [
 							'**Where the water went**: the run’s yearly water balance, from rain to the outlet.',
 							'**Self-checks**: whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day** for one farm. See [[balance-check|the self-checks]].',
 							'**Curtailment**: each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites. See [[guide:curtailment-targets|Curtailment targets]].',
-							'**Hydrograph**: natural and simulated flow, with observed flow as dots. Try the log scale for low flows.',
+							'**Hydrograph**: simulated and observed flow; natural flow is hidden until you click it in the legend. Try the log scale for low flows.',
 							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
 							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
 							'**WR2012 check**, when set up.',

@@ -1499,6 +1499,24 @@ must build WP-2.15 Phase B.
 
 ### WP-3.15 Assessor and NGO access, comments, gaming resistance
 
+> **Uncertainty bands, built (engine 0.26.0, issue #4 phase 9; context for
+> the evidence-report design, issue #15).** A pack's bands come from
+> `run_uncertainty` ([data-model.md](../data-model.md), [model.md §2.10e](../model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)),
+> which is already un-cherry-pickable: the **database draws the seed** when
+> an ensemble is started, so an applicant can't try seeds until one is
+> kind; the resolved options and **thresholds are stored before anything
+> runs** and can't be edited; **every start is kept**, including cancelled
+> ones, so "ran five, showed one" is visible; the server regenerates the
+> sample and re-runs random members before storing, and summarises the bands
+> itself. Each stored ensemble prints its **decision rule** in one
+> paragraph, and run comparison diffs two ensembles' rules and bands the
+> **paired B − A difference** (the application's extra impact) over the
+> baseline's kept sets. What the pack must still add: cite one stored
+> ensemble per run by id (like the nominated run), list how many were
+> started for the run and what differed in their rules, and refuse a pack
+> whose bands use thresholds other than the project's declared ones (the
+> pre-declared rule set in [followups.md](../followups.md)).
+
 - **Goal.** Read-only access for NGOs and other parties to a submitted
   scenario or an issued pack. The published baseline is already shareable
   through WP-2.3. Comments for public participation. Gaming resistance is

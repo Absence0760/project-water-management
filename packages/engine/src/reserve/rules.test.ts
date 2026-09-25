@@ -119,9 +119,13 @@ describe('resolveEwrRules', () => {
 			expect.stringMatching(/^EWR rule table for site g1 skipped: it isn't usable \(Enter 2 to 20 % points\.\)$/),
 			expect.stringMatching(/^EWR rule table for the outlet skipped/)
 		]);
-		const w2: string[] = [];
-		expect(resolveEwrRules([table(), table({ scale: 2 })], w2)).toEqual([table()]);
-		expect(w2).toEqual(['a second EWR rule table for the outlet is ignored: each site has one']);
+		// Two tables for one site: neither is used, in either order (engine 0.24.1; keeping the
+		// first made a run depend on the list's order).
+		for (const list of [[table(), table({ scale: 2 })], [table({ scale: 2 }), table()]]) {
+			const w2: string[] = [];
+			expect(resolveEwrRules([...list, table({ siteNodeId: 'g1' })], w2)).toEqual([table({ siteNodeId: 'g1' })]);
+			expect(w2).toEqual(['2 EWR rule tables for the outlet: none is used, because each site has one']);
+		}
 	});
 
 	it('defaults a missing scale to 1 and drops a natural grid the run ignores', () => {

@@ -10,6 +10,10 @@
 //   transfer.<Transfer field>       series.<SeriesKind>
 //   summary.<FarmSummary field>     catchment.<RunSummary.catchment field>
 //   stats.<CalibrationStats field>  run.<run series key>
+//   preview.<column>                the Data tab's daily preview (series/preview.ts):
+//                                   date, flowM3Day, rainUsed, chirpsFactor,
+//                                   chirpsCorrected, excluded. Its raw series
+//                                   columns use series.<SeriesKind>.
 // A key belongs to exactly one entry (guarded by content.test.ts).
 
 export type HelpCategory =
@@ -217,6 +221,74 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Network sheet'
 	},
 	{
+		id: 'element-user',
+		term: 'Other water user',
+		short: 'A town, industry or unlisted irrigator that takes water from the river at its place in the network, with no land or dam of its own.',
+		long: 'Water taken by users that are not modelled farms would otherwise be handed to the farms and the EWR, over-stating both. An other user has a monthly demand (m³/day), a share of what it takes that comes back below it the same day (treated wastewater) and a priority.\n\nIt takes only from the river where it sits: what reaches it from upstream, after anything upstream has taken its share. It is charged for EWR shortfalls below it like a farm, by its net impact (what it takes less what it returns).\n\nOther users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR; a junior one is (Curtailment tab, "Other water users").',
+		category: 'network',
+		aliases: ['town', 'municipal', 'industry', 'unlisted user', 'abstraction'],
+		fields: ['node.userDemandM3Day', 'run.senior_requirement'],
+		related: ['user-priority', 'user-return', 'element-farm', 'ewr'],
+		source: 'docs/model.md §2.7c; roadmap WP-1.33'
+	},
+	{
+		id: 'user-priority',
+		term: 'User priority (senior / junior)',
+		short: 'Senior: farms and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		long: 'A senior user’s demand is a requirement every farm upstream of it passes before it fills its dam or irrigates, shared between those farms by flow share the way the EWR is (the farm diverts less, then lets inflow and its own runoff pass below the dam). A junior user upstream of a senior one leaves the senior demand in the river too.\n\nA junior user takes only what reaches it. Farms have no protected claim, so a junior user upstream of a farm still takes first: position in the river decides.\n\nA municipal allocation is usually senior, which is the default. Senior users are not curtailed for the EWR; their charge is reported and left standing.',
+		category: 'network',
+		aliases: ['seniority', 'senior', 'junior', 'priority'],
+		fields: ['node.userPriority', 'run.passed_for_senior'],
+		related: ['element-user'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
+		id: 'user-return',
+		term: 'Share returned (other user)',
+		short: 'Share of what an other water user takes that comes back to the river below it the same day, such as treated wastewater.',
+		long: 'A town returns part of what it abstracts through its wastewater works. That share joins the river directly below the user on the same day; the rest is consumed. 0 % means nothing comes back.',
+		units: '%',
+		category: 'network',
+		aliases: ['wastewater', 'return flow', 'effluent'],
+		fields: ['node.userReturnPct'],
+		related: ['element-user', 'return-flow'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
+		id: 'borehole',
+		term: 'Boreholes (groundwater)',
+		short: 'Groundwater a farm or other user pumps, up to a daily capacity, by a rule: supplemental, primary or drought.',
+		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Drought — supplemental, but only while the dam holds less than its trigger share of capacity at the start of the day (a farm with a dam only).\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',
+		units: 'm³/day',
+		category: 'network',
+		aliases: ['groundwater', 'borehole', 'well', 'aquifer', 'pumping'],
+		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'summary.avgGroundwaterM3Day'],
+		related: ['stream-depletion', 'element-farm', 'element-user'],
+		source: 'docs/model.md §2.7d; roadmap WP-1.34'
+	},
+	{
+		id: 'stream-depletion',
+		term: 'Stream depletion',
+		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
+		long: 'Pumping near a river lowers the dry-season base flow the EWR depends on. The model takes a share d of each day’s pumping from the flow leaving the node, delayed through a single linear store with time constant k days, so the river keeps losing water for a while after the pumps stop and, over a long run, loses d × the pumped volume in all.\n\nThe river never goes below 0: depletion due on a day with nothing left to take is reported as unmet (drawn from aquifer storage instead). A first estimate of k is the stream depletion factor, distance² × storativity ÷ transmissivity (Jenkins 1968).\n\nA gauge or logger record measured while the boreholes pumped already carries their depletion: keep them in the model when calibrating, so the fitted natural flow isn’t reduced twice.',
+		category: 'network',
+		aliases: ['base flow reduction', 'baseflow depletion', 'Glover', 'Jenkins', 'SDF'],
+		fields: ['node.streamDepletionFrac', 'node.streamDepletionLagDays', 'run.baseflow_depletion', 'run.depletion_unmet', 'run.depletion_store', 'summary.avgBaseflowDepletionM3Day'],
+		related: ['borehole', 'ewr'],
+		source: 'docs/model.md §2.7d; Jenkins (1968); Glover & Balmer (1954)'
+	},
+	{
+		id: 'land-cover',
+		term: 'Land cover (invasive plants, forestry)',
+		short: 'Invasive alien trees and plantations on a farm use more water than natural vegetation, so the farm passes on less runoff.',
+		long: 'Each patch has a cover class, an area and a condensed (canopy) cover: its share of the farm is area × cover ÷ the farm’s area. Each class removes a share of the runoff at full cover: one share of the low flows (the part of each day’s flow up to the flow exceeded 75 % of the days) and another of the rest, because trees take proportionally more of the dry-season flow.\n\nThe class values are indicative (after the South African afforestation reduction curves of Scott & Smith 1997, and Le Maitre et al. 2016 for invasive plants, who put the national loss to invasives at about 2.9 % of the mean annual runoff); confirm them for the catchment or enter a patch’s own.\n\nThe reduction is its own run series, never hidden in the calibration. To see what clearing a class gives back, copy the project, remove the patches and compare the two runs.',
+		category: 'network',
+		aliases: ['invasive alien plants', 'IAP', 'forestry', 'afforestation', 'plantation', 'streamflow reduction activity', 'wattle', 'eucalyptus', 'pine'],
+		fields: ['run.landcover_reduction'],
+		related: ['element-farm', 'natural-flow'],
+		source: 'docs/model.md §2.5a; Scott & Smith (1997); Le Maitre et al. (2016); roadmap WP-1.35'
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',
@@ -261,7 +333,7 @@ export const HELP: HelpEntry[] = [
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		aliases: ['fragmentation', 'fragmented flow', 'share'],
-		fields: ['settings.flowShareMethod', 'node.flowShareManual'],
+		fields: ['settings.flowShareMethod', 'node.flowShareManual', 'summary.flowShare'],
 		related: ['hi-lo-split', 'farm-area', 'natural-flow'],
 		source: 'b023 Farm spec; docs/model.md §2.5'
 	},
@@ -734,6 +806,16 @@ export const HELP: HelpEntry[] = [
 		source: 'Tolson & Shoemaker (2007); Klemeš (1986); Kling et al. (2012); docs/model.md §2.10b'
 	},
 	{
+		id: 'uncertainty-bands',
+		term: 'Uncertainty bands (behavioural ensemble)',
+		short: 'How far a run’s results move across every parameter set and forcing the data can’t rule out: 5–95 % bands, never below 30 kept sets.',
+		long: 'One calibrated run gives one number for EWR days not met, curtailment and the annual volumes, but many parameter sets fit the record nearly as well, and the pan coefficient, the rain and the observed record are uncertain too. The ensemble samples them all: a Latin hypercube across the parameter bounds (never the optimiser’s own path), a shift of the pan coefficient (GR4J), station rain with CHIRPS infill or CHIRPS alone, and the gauge or the logger to judge against, where the project has both.\n\nA set is kept only if it passes the rule printed next to the bands: a skill score (KGE′ by default) on the first half of its record, the WR2012 flag on its natural flow, and the low-flow bias. The bands are the 5th to 95th percentiles of the kept sets; with fewer than 30 kept none are shown. The second half of the record is held out: the share of its observations inside the daily band is the coverage, and below 70 % the band is too narrow to trust.\n\nThe server fixes the rule and draws the seed before anything runs, keeps every ensemble started, and re-runs members to check a result before storing it, so a band can’t be picked after the fact. Run comparison bands the difference between two runs member by member: the extra impact of an application, with its own uncertainty.',
+		category: 'fit',
+		aliases: ['GLUE', 'uncertainty', 'ensemble', 'Latin hypercube', 'behavioural', 'confidence band', 'coverage'],
+		related: ['auto-calibration', 'wr2012-check', 'calibration-bounds'],
+		source: 'Beven & Binley (1992); McKay et al. (1979); docs/model.md §2.10e; issue #4 phase 9'
+	},
+	{
 		id: 'calibration-bounds',
 		term: 'Bounds (automatic calibration)',
 		short: 'How far the search may roam per parameter: wide (each parameter’s full calibration range) or typical (Perrin et al.’s published 80 % range).',
@@ -1032,6 +1114,58 @@ export const HELP: HelpEntry[] = [
 		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
 	},
 	{
+		id: 'plausibility-checks',
+		term: 'Plausibility checks',
+		short: 'Four checks a reviewing hydrologist makes on a run: they only warn, and never change a result.',
+		long: 'Every run makes four checks and shows them in the Plausibility checks panel on Runs & results, in its warnings and in the summary CSV:\n\n1. natural flow is at least the observed flow plus the modelled net abstraction, in every water year;\n2. EWR days not met, split between good-rain years (rain mostly from the catchment station) and fallback-rain years (mostly CHIRPS, forecast, spread or blank days);\n3. the double-mass curve of observed flow against rain, to tell new use upstream from a failing gauge;\n4. dry-season low-flow duration curves of the gauge, the logger and the model, overlaid with the latest run of each other runoff model.\n\nThe dry season is the six calendar months in a row with the lowest mean flow: from the calibration record, else the other observed record, else the simulated natural flow. The thresholds are engine constants, each with its reason in docs/model.md §2.10d, for the hydrologist to confirm.',
+		category: 'results',
+		aliases: ['sanity checks', 'hydrologist checks', 'dry season', 'plausibility'],
+		related: ['plausibility-naturalised', 'plausibility-rain-source', 'plausibility-flow-double-mass', 'plausibility-low-flow'],
+		source: 'Not in the workbook; issue #4 phase 6 review; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-naturalised',
+		term: 'Natural flow ≥ observed + abstraction',
+		short: 'Observed flow plus what the network took out upstream is the natural flow the record implies; it can’t exceed the simulated natural flow.',
+		long: 'On each water year of the calibration record (300 or more observed days, calibration exclusions left out), the observed volume O plus the modelled net abstraction A rebuilds the natural flow the record implies. A is natural flow less the simulated outflow, from the network’s own water balance, split into use net of return flows (irrigation, other users, boreholes), dams (storage gained plus evaporation less rain on the dam) and land cover.\n\nA year fails when O + A exceeds the simulated natural flow by more than 10 % of the observed volume, the annual error of a well-rated gauging weir (at least 1 % of the record’s mean volume, so a near-dry year doesn’t fail on noise). Since A is natural less simulated outflow, that is the same as the simulated outflow falling short of the observed by that much. A failing year points to natural flow simulated too low (rain, parameters), abstraction over-estimated, or a problem in the record that year.',
+		units: 'Mm³ per water year',
+		category: 'results',
+		aliases: ['naturalised flow', 'naturalisation check', 'observed plus abstraction'],
+		related: ['plausibility-checks'],
+		source: 'Not in the workbook; Wessels & Rooseboom (2009); McMillan, Krueger & Freer (2012); docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-rain-source',
+		term: 'Good-rain and fallback-rain years',
+		short: 'EWR days not met, split by whether the water year’s rain came mostly from the catchment station or from fallback rain.',
+		long: 'A day’s rain is a station reading when the catchment rain series has a value the run used as recorded. It is fallback rain when bias-corrected CHIRPS or forecast rain filled it (a blank day, a zero run treated as missing, a listed missing period), when a multi-day accumulation was spread onto it, or when nothing filled it and it ran dry.\n\nA water year is a fallback-rain year when more than half its rain, or more than half its days, were fallback; every other year is a good-rain year. The panel gives the share of days the outlet EWR was not met in each group and, with a Reserve rule table, the share of months met. The run warns when the groups differ by 10 percentage points or more: part of the EWR result may then come from the rain source rather than the river. It can also be real climate, such as a station out of action through a drought.',
+		category: 'results',
+		aliases: ['fallback years', 'CHIRPS years', 'rain source', 'infilled rainfall years'],
+		related: ['plausibility-checks', 'zero-rain-runs', 'rain-accumulations', 'chirps-bias', 'reserve-compliance'],
+		source: 'Not in the workbook; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-flow-double-mass',
+		term: 'Double mass: observed flow vs rain',
+		short: 'Cumulative observed flow against cumulative rain: a kink means the catchment’s use or the gauge changed.',
+		long: 'While the catchment, its development and the gauge stay the same, cumulative observed flow plotted against cumulative catchment rain is a straight line; its slope is the runoff ratio. The check uses the calibration record’s water years with 300 or more days having both flow and rain and at least 100 mm of rain (10 such years or no result), and finds breaks as the rain-vs-CHIRPS double-mass check does.\n\nThe runoff ratio falls in a run of dry years on its own, so each break is compared with the simulated outflow over the same days, which has the same rain and fixed development. A change the model shows too is the rain’s. A fall the dry season takes more of points to new use upstream (abstraction and filling dams take a larger share of low flows); a fall the wet season takes more of, or a rise, points to the gauge (a rating change, or floods bypassing or drowning the weir). It is a hint: check the gauge’s records and the development history.',
+		category: 'results',
+		aliases: ['double mass curve flow', 'runoff ratio break', 'gauge failure', 'new upstream use', 'homogeneity of flow'],
+		related: ['plausibility-checks', 'double-mass'],
+		source: 'Not in the workbook; Searcy & Hardison 1960; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-low-flow',
+		term: 'Dry-season low-flow duration curve',
+		short: 'The flow duration curve of dry-season days only, for the gauge, the logger and each model’s simulated flow.',
+		long: 'Each curve gives the flow equalled or exceeded on a share of the dry-season days (Q90: 90 % of them). The gauge and the logger are drawn dashed, each on its own days; the simulated outflow and natural flow cover every dry-season day of the run, and the latest run of each other runoff model is drawn beside them when it used the same dry season. "Simulated outflow over" switches the model’s curve to one record’s days only, for a like-for-like comparison.\n\nThe run warns when, on the calibration record’s dry-season days, the simulated Q90 is more than twice or less than half the observed. Low flows are where a gauge is least certain (±50–100 %), so a factor of 2 is beyond gauging error. Flows under 0.001 m³/s count as 0.001.',
+		units: 'm³/s',
+		category: 'results',
+		aliases: ['low flow FDC', 'dry season FDC', 'Q90', 'Q95', 'low-flow duration'],
+		related: ['plausibility-checks'],
+		source: 'Not in the workbook; McMillan, Krueger & Freer (2012); calibration-research.md CR-16; docs/model.md §2.10d'
+	},
+	{
 		id: 'ewr-agreement',
 		term: 'EWR test against observed flow',
 		short: "Does the model fall below the EWR on the days the observed river did? A 2×2 table of observed days, with scores.",
@@ -1149,7 +1283,7 @@ export const HELP: HelpEntry[] = [
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm, used after the other rain series run out, to look ahead a few days.',
 		units: 'mm/day',
-		long: 'Treat results on forecast days as indicative only.',
+		long: 'Used on days neither catchment rain nor CHIRPS has a value, usually the days after the other records end. Treat results on forecast days as indicative only.',
 		category: 'data',
 		fields: ['series.rain_forecast_mm'],
 		related: ['rain-catchment'],
@@ -1178,6 +1312,74 @@ export const HELP: HelpEntry[] = [
 		fields: ['series.flow_reference_m3s'],
 		related: ['observed-flow', 'calibration'],
 		source: 'docs/model.md §2.10'
+	},
+	// The Data tab's daily preview ("Input time series — daily preview"): one
+	// entry per column it derives. Its raw series columns use series.<kind>.
+	{
+		id: 'preview-date',
+		term: 'Date (daily preview)',
+		short: 'One row per day, from the first day of the earliest loaded series to the last day of the latest. A blank cell means no reading.',
+		long: 'The rows come from the input series themselves, not from the simulation period: the table starts on the first day any loaded series has and ends on the last. Each series column shows its value for that day exactly as uploaded; a blank means that series has no reading that day, or the day is outside its period. A shaded value carries a data-check flag (negative, outlier or flat-line), found with the same rules as the Data checks, and screen readers read the flag with the value.\n\nThe search box narrows the rows by date prefix (2015, 2015-03) or by a value in the visible series (> 20, = 0); Missing only and Flagged only keep the days where a visible series is blank or flagged. Lining every input up by day is the quickest way to see a gap in one record that another fills, or a spike only one instrument recorded.',
+		category: 'data',
+		aliases: ['daily preview', 'preview data', 'series preview'],
+		fields: ['preview.date'],
+		related: ['gauge-logger-agreement', 'rain-catchment', 'observed-flow'],
+		source: 'Not in the workbook; docs/ui.md § Data tab (Preview)'
+	},
+	{
+		id: 'preview-flow-m3day',
+		term: 'Flow in m³/day (daily preview)',
+		short: 'The flow series’ m³/s value × 86 400: the unit the model works in, so the day reads directly against simulated flows.',
+		long: 'Flow records are uploaded in m³/s. The model converts them to m³/day (1 m³/s = 86 400 m³/day) before comparing them with the simulated outflow, which is in m³/day like every flow and volume inside the model. This column is that conversion, day by day, blank where the record has no reading. Use it to read an observed day against the daily results or the daily CSV export without converting by hand.\n\nFor gauge or logger flow this is the value calibration and the EWR comparison score against, when that record is the one chosen under “Compare with”. A reference gauge on another river is converted the same way, but the model never reads it.',
+		units: 'm³/day',
+		category: 'data',
+		fields: ['preview.flowM3Day'],
+		related: ['observed-flow', 'units', 'reference-gauge'],
+		source: 'docs/model.md §2.1, §7'
+	},
+	{
+		id: 'preview-rain-used',
+		term: 'Rain used (daily preview)',
+		short: 'The rain the model runs on each day: catchment rain if it has a reading, else bias-corrected CHIRPS, else forecast rain.',
+		long: 'It is worked out with the same code a run uses, so it is the rain that drives runoff and reduces irrigation demand. Catchment rain comes first, after the rain-gap settings: days of a zero run treated as missing count as blank, so CHIRPS fills them, and a multi-day accumulation is spread back over the days it covers. That is why this column can differ from the catchment rain column on a day that has a reading. Where catchment rain is blank, CHIRPS stands in (scaled by its month’s factor when the bias correction is on), then forecast rain.\n\nIt is blank outside the simulation period (Settings, simulation start and end) and on days no source has a value, which the model treats as dry. It is the rain before the legacy model’s rain threshold. Compare it with the uploaded columns to see which days were filled and from where; screen readers also read the source with each value.',
+		units: 'mm/day',
+		category: 'data',
+		aliases: ['rain used', 'gap-filled rain'],
+		fields: ['preview.rainUsed'],
+		related: ['rain-final', 'chirps-bias', 'zero-rain-runs', 'rain-accumulations'],
+		source: 'docs/model.md §2.4, §2.4b–d'
+	},
+	{
+		id: 'preview-chirps-factor',
+		term: 'CHIRPS bias factor (daily preview)',
+		short: 'The catchment ÷ CHIRPS rain factor for the day’s calendar month: what CHIRPS is multiplied by on days it fills a catchment gap.',
+		long: 'Fitted from the loaded records for each calendar month: catchment rain divided by CHIRPS rain, summed over the days both have a reading, leaving out suspect catchment rain (see CHIRPS bias correction). A month with fewer than 90 shared days, or less than 50 mm of CHIRPS on them, takes the factor pooled over all months, and factors are kept between 0.25 and 4. A dash means no factor could be fitted, so CHIRPS is used as it is.\n\nThe same factor shows on every day of that month in the simulation period, but it only changes a day where CHIRPS fills in for blank catchment rain, and not at all when Settings → CHIRPS bias correction is set to Raw CHIRPS (it is then shown for reference only). A factor well away from 1 says CHIRPS reads consistently wetter or drier than the catchment record in that month.',
+		units: '× (ratio)',
+		category: 'data',
+		fields: ['preview.chirpsFactor'],
+		related: ['chirps-bias', 'chirps', 'double-mass'],
+		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
+	},
+	{
+		id: 'preview-chirps-corrected',
+		term: 'CHIRPS corrected (daily preview)',
+		short: 'CHIRPS as the model reads it: × the month’s bias factor on days it fills blank catchment rain, as uploaded on every other day.',
+		long: 'Only CHIRPS the model actually uses is corrected. On a day with no catchment rain value (including the days of a zero run treated as missing) it is CHIRPS × that month’s factor; on a day catchment rain has a reading CHIRPS isn’t used, so it shows as uploaded. With Raw CHIRPS chosen, or no factor fitted, it is the uploaded value every day. Blank outside the simulation period.\n\nBeside the uploaded CHIRPS column it shows how much rain the correction added or took away on the filled days. It differs from a run’s corrected-CHIRPS output column, which applies the factor on every day.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['preview.chirpsCorrected'],
+		related: ['chirps-bias', 'preview-chirps-factor', 'preview-rain-used'],
+		source: 'Not in the workbook; docs/model.md §2.4b; engine-audit.md B1'
+	},
+	{
+		id: 'preview-excluded',
+		term: 'Excluded from calibration (daily preview)',
+		short: 'Marks days inside a calibration exclusion from Settings: they don’t count in Fit automatically or in a run’s calibration scores.',
+		long: 'Comes from Settings & calibration → Calibration exclusions: whole water years (1 October to 30 September) or date ranges, each with a reason. A day inside one reads Excluded, and screen readers also read the reason; every other day shows a dash. The model still simulates excluded days; only the scores leave them out, so Fit automatically and the run’s calibration statistics compare observed and simulated flow on the remaining days of the calibration window.\n\nUse it to check that an exclusion covers the days you meant, such as a gauge outage or a suspect rain year, and no more.',
+		category: 'data',
+		fields: ['preview.excluded'],
+		related: ['calibration-exclusions', 'calibration-window'],
+		source: 'Not in the workbook; docs/model.md §2.10'
 	},
 	{
 		id: 'wr90',

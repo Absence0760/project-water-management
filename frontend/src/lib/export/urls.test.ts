@@ -11,6 +11,8 @@ describe('exportUrls', () => {
 	it('builds the documented endpoint paths', () => {
 		expect(urls.runDaily(P, R)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/export/daily.csv`);
 		expect(urls.runDaily(P, R, N)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/export/daily.csv?nodeId=${N}`);
+		expect(urls.runFarms(P, R, 'runoff')).toBe(`http://localhost:3001/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
+		expect(urls.runFarms(P, R, 'ewr', { from: '2010-01-01' })).toMatch(/farms\.csv\?key=ewr&from=2010-01-01$/);
 		expect(urls.runSummary(P, R)).toBe(`http://localhost:3001/projects/${P}/runs/${R}/export/summary.csv`);
 		expect(urls.series(P, 'abc')).toBe(`http://localhost:3001/projects/${P}/series/abc/export.csv`);
 		expect(urls.project(P)).toBe(`http://localhost:3001/projects/${P}/export.json`);
@@ -40,6 +42,19 @@ describe('runDownloadItems', () => {
 			'Daily series — Gauge (CSV)'
 		]);
 		expect(items[2]!.url).toContain(`nodeId=${N}`);
+	});
+
+	it('adds the two all-farms fragmentation tables after the catchment when the run has farms', () => {
+		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], true);
+		expect(items.map((i) => i.label)).toEqual([
+			'Run summary (CSV)',
+			'Daily series — catchment (CSV)',
+			'Fragmented flow — all farms (CSV)',
+			'Fragmented EWR — all farms (CSV)',
+			'Daily series — Upper farm (CSV)'
+		]);
+		expect(items[2]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
+		expect(items[3]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`);
 	});
 });
 

@@ -59,6 +59,17 @@ describe('durationQuantile (Weibull plotting positions)', () => {
 });
 
 describe('lookupRequirement', () => {
+	it('reads the same requirement for flows one ulp apart on a flat stretch of the natural curve (engine 0.24.1, seed 18472)', () => {
+		const points = [10, 50, 70, 90];
+		const natural = [5, 2, 2, 1];
+		const ewr = [3, 1.5, 0.8, 0.4];
+		const at = lookupRequirement(2, points, natural, ewr);
+		const below = lookupRequirement(2 * (1 - Number.EPSILON), points, natural, ewr);
+		expect(below.percentile).toBeCloseTo(at.percentile, 9);
+		expect(below.required).toBeCloseTo(at.required, 9);
+		expect(at).toEqual({ percentile: 50, required: 1.5, beyond: null });
+	});
+
 	const P = [10, 50, 90];
 	const N = [3, 2, 1];
 	const T = [1.5, 1, 0.5];

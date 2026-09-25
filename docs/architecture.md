@@ -58,7 +58,11 @@ The same `runModel` runs:
   (`frontend/src/lib/calibration/autocal.worker.ts`): about a minute of model
   runs on the input from `GET /projects/:id/model-input`, with the unsaved
   Settings form in place of the saved settings. It fills the form and never
-  saves.
+  saves. The uncertainty ensemble (issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9))
+  runs in the same worker: hundreds of full `runModel`s on a run's own input
+  (`GET …/runs/:runId/model-input`), with options the server resolved and a
+  seed the database drew; the server re-runs a few members before storing
+  the result (`POST …/uncertainty/:uid/result`).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series. Stored runs are what users share and compare.
@@ -78,7 +82,9 @@ Runs & results) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and the Runs & results compliance panel, loaded for a
-run that has a report). uPlot and the
+run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
+`runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
+water users). uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 
@@ -105,7 +111,9 @@ across the bundle). The app already needs newer browsers than ES2022 does
 (HelpTip's popover needs Chrome 114, Safari 17, Firefox 125).
 
 The calibration worker (`lib/calibration/autocal.worker.ts`) bundles its own copy
-of the engine, about 25 KB. It was measured sharing the page's engine chunks
+of the engine, about 25 KB (50 KB from engine 0.26.0: the uncertainty ensemble
+runs full model runs in it, so it carries the run's whole output side; the
+bundle guard gives workers their own ceiling). It was measured sharing the page's engine chunks
 instead (issue #9): that only works if engine code sits in chunks of its own,
 and then a catchment’s cold open grows by about 23 KB, because a shared
 chunk carries the code of all its importers. A one-off download when a fit

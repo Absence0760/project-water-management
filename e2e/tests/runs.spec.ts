@@ -80,6 +80,129 @@ test('the results dashboard renders long records without locking the page', asyn
 	}
 });
 
+test('the hydrograph starts with natural flow hidden and keeps a legend toggle across a rebuild', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Hydrograph legend');
+	const days = 2 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Legend');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	await expect(chart.locator('canvas')).toBeVisible();
+	const entry = (name: RegExp) => chart.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: name }) });
+	await expect(entry(/^Natural/)).toHaveClass(/u-off/);
+	await expect(entry(/^Observed/)).not.toHaveClass(/u-off/);
+	await expect(entry(/^Simulated outflow/)).not.toHaveClass(/u-off/);
+
+	await entry(/^Natural/).click();
+	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
+	// Log scale rebuilds the chart; the user's choice survives it.
+	await chart.getByRole('button', { name: 'Log scale' }).click();
+	await expect(chart.getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(entry(/^Natural/)).not.toHaveClass(/u-off/);
+});
+
+test('the hydrograph view moves through the record by Shift+drag and by Earlier / Later, and a plain drag still zooms', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Hydrograph pan');
+	const days = 8 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Pan');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	await expect(chart.locator('canvas')).toBeVisible();
+	const earlier = chart.getByRole('button', { name: /Earlier/ });
+	const later = chart.getByRole('button', { name: /Later/ });
+	const range = async () => ({ start: (await chart.getAttribute('data-view-start'))!, end: (await chart.getAttribute('data-view-end'))! });
+	const daysBetween = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+
+	// Opens on the last 3 years, at the end of the record: nothing later.
+	const opened = await range();
+	expect(daysBetween(opened.start, opened.end)).toBeCloseTo(3 * 365, -1);
+	await expect(later).toBeDisabled();
+	await expect(earlier).toBeEnabled();
+
+	// Earlier moves half a window back, keeping the width; Later comes back.
+	await earlier.click();
+	await expect(chart).not.toHaveAttribute('data-view-end', opened.end);
+	const back = await range();
+	expect(daysBetween(back.end, opened.end)).toBeCloseTo(1.5 * 365, -1);
+	expect(daysBetween(back.start, back.end)).toBeCloseTo(daysBetween(opened.start, opened.end), 0);
+	await later.click();
+	await expect(chart).toHaveAttribute('data-view-end', opened.end);
+
+	// Shift+dragging right pulls earlier data into view.
+	const over = chart.locator('.u-over');
+	const box = (await over.boundingBox())!;
+	const y = box.y + box.height / 2;
+	await page.keyboard.down('Shift');
+	await page.mouse.move(box.x + box.width * 0.3, y);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.7, y, { steps: 5 });
+	await page.mouse.up();
+	await page.keyboard.up('Shift');
+	await expect(chart).not.toHaveAttribute('data-view-end', opened.end);
+	const dragged = await range();
+	expect(daysBetween(dragged.end, opened.end)).toBeGreaterThan(300);
+	expect(daysBetween(dragged.start, dragged.end)).toBeCloseTo(daysBetween(opened.start, opened.end), 0);
+
+	// The view survives a rebuild (log scale).
+	await chart.getByRole('button', { name: 'Log scale' }).click();
+	await expect(chart.getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(chart).toHaveAttribute('data-view-end', dragged.end);
+
+	// A plain drag still draws a box and zooms into it.
+	await page.mouse.move(box.x + box.width * 0.4, y);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 });
+	await page.mouse.up();
+	await expect.poll(async () => { const r = await range(); return daysBetween(r.start, r.end); }).toBeLessThan(daysBetween(dragged.start, dragged.end) / 2);
+});
+
+test('every daily results chart moves through the record like the hydrograph, and the flow charts share the m³/s ↔ m³/day switch', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Chart parity');
+	const days = 8 * 365;
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-10-01', values: syntheticRain(days) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2001-10-01', values: syntheticFlow(days) });
+	await createRun(page.request, project.id, 'Parity');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+
+	const figure = (title: RegExp) => page.locator('figure', { has: page.getByRole('img', { name: title }) });
+	const hydro = figure(/^Flow at the outflow gauge/);
+	const ewr = figure(/^EWR vs simulated outflow/);
+	const fdc = figure(/^Flow-duration curve/);
+	const explore = page.locator('#res-explore figure');
+	const farmSupply = figure(/^Supply vs demand/);
+
+	// Earlier / Later on every windowed daily chart, not just the hydrograph.
+	for (const chart of [ewr, explore, farmSupply]) {
+		await expect(chart.locator('canvas')).toBeVisible();
+		const end = await chart.getAttribute('data-view-end');
+		await expect(chart.getByRole('button', { name: /Later/ })).toBeDisabled();
+		await chart.getByRole('button', { name: /Earlier/ }).click();
+		await expect(chart).not.toHaveAttribute('data-view-end', end!);
+		await chart.getByRole('button', { name: /Later/ }).click();
+		await expect(chart).toHaveAttribute('data-view-end', end!);
+	}
+	// The flow-duration curve has no dates to move through.
+	await expect(fdc.getByRole('button', { name: /Earlier/ })).toHaveCount(0);
+
+	// The unit switch sits on each flow chart and drives them all.
+	for (const chart of [hydro, ewr, fdc, explore]) await expect(chart.getByRole('button', { name: 'm³/s' })).toHaveAttribute('aria-pressed', 'true');
+	await ewr.getByRole('button', { name: 'm³/day' }).click();
+	for (const chart of [hydro, ewr, fdc, explore]) {
+		await expect(chart.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
+		await expect(chart.locator('.u-legend')).toContainText('(m³/day)');
+	}
+	// A chart that isn't a flow has no flow-unit switch.
+	await expect(farmSupply.getByRole('button', { name: 'm³/s' })).toHaveCount(0);
+});
+
 test('the results menu jumps to each section below the sticky header', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Results menu');
@@ -92,13 +215,14 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Self-checks',
 		'Curtailment',
 		'Hydrograph',
-		'Calibration',
+		'Calibration & uncertainty',
 		'Runoff model',
 		'Notes & evidence',
 		'Flow duration',
 		'EWR vs outflow',
 		'EWR by month',
 		'EWR vs observed',
+		'Plausibility checks',
 		'Farm detail',
 		'Explore outputs'
 	]);

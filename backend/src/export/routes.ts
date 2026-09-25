@@ -22,7 +22,7 @@ import {
 	withLegacyComment,
 	type DailyColumn
 } from './csv.js';
-import { nodeColumnHeader, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
+import { FARM_SERIES_KEYS, nodeColumnHeader, seriesKeyOrder, summaryCsvLines } from './run-tables.js';
 
 /** A real calendar date: 2024-02-31 is rejected (Date.parse would roll it over). */
 const isoDate = z
@@ -31,6 +31,13 @@ const isoDate = z
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
 const DailyQuery = z
 	.object({ nodeId: z.string().uuid().optional(), from: isoDate.optional(), to: isoDate.optional() })
+	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
+const FarmsQuery = z
+	.object({
+		key: z.string().refine((k) => FARM_SERIES_KEYS.has(k), 'not a farm series'),
+		from: isoDate.optional(),
+		to: isoDate.optional()
+	})
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
 const WindowQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
@@ -101,9 +108,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 			rows.sort((a, b) => order(a.key, b.key));
 
 			let scope = 'catchment';
-			let kind: 'farm' | 'gauge' = 'farm';
+			let kind: 'farm' | 'gauge' | 'user' = 'farm';
 			if (q.nodeId) {
-				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
+				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' | 'user' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
 				const fromSummary = run.summary.farms.find((f) => f.nodeId === q.nodeId)?.name;
 				scope = n[0]?.name ?? fromSummary ?? 'node';
 				// A deleted node: a farm has a demand series, a gauge doesn't.
@@ -121,6 +128,39 @@ export const exportRoutes = new Hono<AuthEnv>()
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvResponse(c, body, exportFilename(name, parts, 'csv'));
+		});
+	})
+	// One farm series for every farm side by side (date + a column per farm, in
+	// the run's network order), like the workbook's [Fragmented flow] (key=runoff)
+	// and [Fragmented EWR] (key=ewr) sheets.
+	.get('/:id/runs/:runId/export/farms.csv', async (c) => {
+		const { id, runId } = c.req.param();
+		const q = FarmsQuery.parse(c.req.query());
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			const run = await loadRun(db, id, runId);
+			const name = await projectName(db, id);
+			const { rows } = await db.query<{ nodeId: string; nodeName: string | null; unit: string | null; values: (number | null)[] }>(
+				`SELECT s.node_id AS "nodeId", n.name AS "nodeName", s.meta->>'unit' AS unit, s."values"
+				 FROM run_series s LEFT JOIN node n ON n.id = s.node_id
+				 WHERE s.run_id = $1 AND s.key = $2 AND s.node_id = ANY($3::uuid[])`,
+				[runId, q.key, run.summary.farms.map((f) => f.nodeId)]
+			);
+			// The run's farm order, not the table's; a farm with no such series (e.g. a dam column on a farm without a dam) is left out.
+			const byNode = new Map(rows.map((r) => [r.nodeId, r]));
+			const farms = run.summary.farms.flatMap((f) => {
+				const r = byNode.get(f.nodeId);
+				return r ? [{ ...r, name: r.nodeName ?? f.name }] : [];
+			});
+			if (!farms.length) throw new ApiError(404, 'not found');
+			const columns: DailyColumn[] = farms.map((f) => ({ header: nodeColumnHeader(q.key, f.name, f.unit, 'farm'), values: f.values }));
+			const length = Math.max(...farms.map((f) => f.values.length));
+			const range = dayRange(run.startDate, length, q.from, q.to);
+			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
+
+			const body = collectCsv(withLegacyComment(run.legacy, dailyCsvLines(run.startDate, columns, range)));
+			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
+			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv'));
 		});
 	})
 	// Per-farm summary table + catchment + calibration, as one sheet.

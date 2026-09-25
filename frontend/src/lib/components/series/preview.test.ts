@@ -1,12 +1,15 @@
-import { defaultProjectSettings, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, SERIES_KINDS, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
+import { helpFor } from '$lib/help/content';
 import {
 	buildPreviewColumns,
 	buildPreviewRows,
 	filterPreviewRows,
+	headerUnit,
 	m3DayColumnId,
 	parseValueComparison,
+	PREVIEW_DATE_HELP_KEY,
 	seriesColumnId,
 	type PreviewRow
 } from './preview';
@@ -49,6 +52,28 @@ describe('buildPreviewColumns', () => {
 
 	it('always includes the "excluded from calibration" column, even with no series', () => {
 		expect(buildPreviewColumns([]).map((c) => c.id)).toEqual(['excluded']);
+	});
+
+	it('shows each header unit once: not again after a label that already ends with it', () => {
+		const cols = buildPreviewColumns(list);
+		const byId = (id: string) => cols.find((c) => c.id === id)!;
+		expect(headerUnit(byId(seriesColumnId('b')))).toBe('m³/s');
+		expect(byId(m3DayColumnId('b')).label).toBe('Flow — observed gauge · Gauge W7 (m³/day)');
+		expect(headerUnit(byId(m3DayColumnId('b')))).toBeNull();
+		expect(headerUnit(byId('rainUsed'))).toBe('mm');
+		expect(headerUnit(byId('excluded'))).toBeNull();
+	});
+
+	it('gives every column, for every series kind, a help key that resolves: series.<kind> for raw series, its own preview.* entry for each derived column', () => {
+		const all = SERIES_KINDS.map((kind, i) => meta({ id: `s${i}`, kind }));
+		const cols = buildPreviewColumns(all);
+		for (const c of cols) expect(helpFor(c.helpKey), `${c.id} → ${c.helpKey}`).toBeDefined();
+		for (const c of cols.filter((c) => c.group === 'series')) expect(c.helpKey).toBe(`series.${all.find((s) => s.id === c.seriesId)!.kind}`);
+		expect(helpFor(PREVIEW_DATE_HELP_KEY)).toBeDefined();
+		// Each derived column explains itself, not a neighbour's (or a raw series') text.
+		const derived = [PREVIEW_DATE_HELP_KEY, ...new Set(cols.filter((c) => c.group === 'derived').map((c) => c.helpKey))];
+		expect(derived).toEqual(['preview.date', 'preview.flowM3Day', 'preview.rainUsed', 'preview.chirpsFactor', 'preview.chirpsCorrected', 'preview.excluded']);
+		expect(new Set(derived.map((k) => helpFor(k)!.id)).size).toBe(derived.length);
 	});
 });
 
