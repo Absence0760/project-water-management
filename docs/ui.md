@@ -186,7 +186,7 @@ reorderable. A **demand preview** uses the engine's
 `grossFarmDemandM3PerDay`: m³/day per month, the mean, and Mm³/a per farm and
 for the catchment. It is gross demand, before the daily effective-rain
 reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0).
-The crop-factor intro says the factors are **× A-pan, not FAO Kc** (FAO-56 Kc
+The crop-factor intro says the factors are **× A-pan, not an FAO Kc** (FAO-56 Kc
 multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
 every crop and month with a factor above 1.0: a hint to check for an FAO Kc
 entered as it is, never a block on saving (`highCropFactors` in
@@ -284,9 +284,9 @@ un-hidden, scrolled into view and highlighted. Alongside each series' own
 column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
-for every flow series; **Rain used** and its source (catchment / CHIRPS /
+for every flow series; **Rain used (model)** and its source (catchment / CHIRPS /
 forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
-month and the **corrected CHIRPS** value (respecting Settings → *CHIRPS bias
+month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
 inside a Settings → *Calibration exclusions* period. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
@@ -389,7 +389,7 @@ value such as 108700.
   days in its warnings. Below it, **Zero-rain runs in the catchment rain**
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
-  **Flagged zero runs** picker ("Treat as missing", the default, or "Run as
+  **Flagged zero runs** picker ("Treat as missing (default)" or "Run as
   recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
   treat as missing** period lists. These share the calibration exclusions'
   editor (`common/PeriodList.svelte`), with the same required reason and the
