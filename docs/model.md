@@ -1378,7 +1378,12 @@ run with it (`RunSummary.wr2012`). It never changes model results.
   - |d| ≥ `notePct` (10 %): *note*.
 
   Each flag is a plain-language run warning. The thresholds must rise
-  (note ≤ query ≤ not usable, wetter ≤ query).
+  (note ≤ query ≤ not usable, wetter ≤ query). The explanation a *query* or
+  *not usable* flag asks for is the run's **notes** (`model_run.notes`, the
+  one editable field of a run, [data-model.md](./data-model.md)), shown under
+  the WR2012 panel and in run comparison. The summary CSV has a *WR2012 check*
+  block (reference, scaling, MAR ratios, monthly table, flag) that says
+  whether the run has one.
 - **Other warnings:** no complete water year inside the reference period;
   the scaled MAR larger than the rain on the modelled catchment.
 - **Calibration penalty** (`settings.wr2012.calibrationPenalty`, **off** by

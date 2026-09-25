@@ -950,8 +950,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > its simulated natural flow with them, scaled to the catchment, with
 > deviation flags as run warnings, and calibration can add a soft MAR
 > penalty (off by default). `packages/engine/src/reference/wr2012.ts`;
-> [model.md §2.10c](../model.md). A per-run written explanation is a
-> follow-up ([followups.md](../followups.md)).
+> [model.md §2.10c](../model.md). Each run carries a written explanation
+> (`model_run.notes`, 007_run_notes; editable under the WR2012 panel, shown in
+> run comparison), and the summary CSV has a WR2012 block with it.
 
 - **Goal:** fit `CalibrationParams` (a, b, rainThresholdMm, summerFactor,
   winterFactor, optionally baseResetRatio and the winter thresholds) to the
