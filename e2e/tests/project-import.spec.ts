@@ -74,7 +74,7 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	await expect(done.getByRole('status')).toHaveText(/Imported Droëvlei — imported into Import Hydrology\.\s+Its first run is ready on the Runs tab\./);
 	await expect(done.getByRole('alert')).toHaveCount(0);
 	// The list behind the dialog already has it, in the team's group.
-	await done.getByRole('button', { name: 'Close' }).click();
+	await done.getByRole('button', { name: 'Close', exact: true }).click();
 	const group = page.getByRole('region', { name: 'Import Hydrology' });
 	await expect(row(page, 'Droëvlei — imported')).toBeVisible();
 	await expect(group.getByRole('rowheader', { name: 'Droëvlei — imported' })).toBeVisible();
