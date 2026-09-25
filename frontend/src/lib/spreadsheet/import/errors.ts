@@ -17,8 +17,9 @@ export class WorkbookImportError extends Error {
 /**
  * Why a file couldn't be opened: not a zip at all (or an old .xls or a
  * password-protected file), an encrypted or ZIP64 archive, a zip compression
- * method other than stored or deflate, a damaged container, or SheetJS
- * failing on a part it read.
+ * method other than stored or deflate, a damaged container, or a part the
+ * reader needs that is malformed (not well-formed XML, a DTD, a dangling
+ * shared-string reference).
  */
 export type UnreadableReason = 'not-zip' | 'encrypted' | 'zip64' | 'method' | 'corrupt' | 'not-workbook';
 

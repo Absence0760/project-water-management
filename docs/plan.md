@@ -36,8 +36,8 @@ and [data-model.md](./data-model.md)):
   per series. Sessions use a JWT in an httpOnly cookie. Migrations are plain
   SQL. Charts use uPlot.
 - **Excel import:** **Import b023 workbook** reads the workbook in the browser
-  (a TypeScript port of the Python extractor on SheetJS, in a Web Worker,
-  WP-1.31). The Python extractor (`scripts/wbt-import`) stays for the
+  (a TypeScript port of the Python extractor on its own streaming workbook
+  reader, in a Web Worker, WP-1.31). The Python extractor (`scripts/wbt-import`) stays for the
   regression fixtures and `pnpm seed:demo`; both give the same `project.json`.
 - **The repo is public.** No secret, client workbook or client-derived data is
   ever committed. The workbooks live outside the repo (`../project-water-management-source/`); `data/` and `*.xlsm`/`*.xlsx` are
@@ -276,8 +276,9 @@ writing, or gives a ranked change list.
   preview while editing (roadmap WP-1.17).
 - ✅ **In-browser Excel import** with SheetJS (WP-1.31, 2026-09-25), loaded
   from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
-  advisories), in a Web Worker. The import needs no Python. Left open: peak
-  memory on the largest workbooks ([followups.md](./followups.md)).
+  advisories), in a Web Worker. The import needs no Python. Since then it
+  reads workbooks with its own streaming reader instead of SheetJS (peak
+  memory on the largest workbooks, [followups.md](./followups.md)).
 - 🚧 An audit log per project: who changed what, and which run used which
   inputs. Done: each run snapshots its inputs with a content hash per input
   series. Not built: the change log (roadmap WP-2.4).
