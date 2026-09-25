@@ -168,6 +168,17 @@
 //             Ensemble results are byte-identical (same seed, same output
 //             hash). The ceiling stays at 55 KB so the next ensemble or fit
 //             feature has ~4 KB of room. Headroom ~7 KB total.
+// 2026-09-25  total 503 → 511 KB; other ceilings unchanged. Four small UI
+//             additions taken from the redesign mockups (issue #17, current
+//             layout kept) plus the same day's pinned runs (#7) measure 505 KB
+//             on main @ c5f6c57: the Overview's Latest run strip and Needs
+//             attention panel (overview/LatestRun, NeedsAttention, ~3 KB, in
+//             the page chunk since the Overview is the first paint), the run
+//             summary sentence and supply bars (runs/runSentence), the
+//             schematic's colour-by-supply (network/supplyColour) and the
+//             Crops tab's stacked demand chart (MonthlyBars' stacked mode).
+//             Each alone fitted under 503; merged they don't. No new
+//             dependency; the largest chunk is 39 KB. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -179,7 +190,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 503,
+	totalCodeKb: 511,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestAssetKb: 100,
