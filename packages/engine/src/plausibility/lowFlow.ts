@@ -77,7 +77,7 @@ export interface LowFlowInput {
 	calibrationKind: CalibrationFlowKind | null;
 	simulatedM3Day: ArrayLike<number>;
 	naturalM3Day: ArrayLike<number>;
-	/** 1 on days the calibration exclusions leave out: not used for the observed records or their paired curves. */
+	/** 1 on days the calibration exclusions leave out: left out of the observed records and their paired curves. */
 	excluded: Uint8Array;
 }
 
