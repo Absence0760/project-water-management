@@ -1044,8 +1044,8 @@ role and not before it.
 
 ## Features left half-way
 
-- **Run comparison:**
-  - per-node series overlay;
+- **Run comparison** (the per-node daily series overlay is built, issue #8,
+  [run-comparison.md](./run-comparison.md)):
   - copies that remember their source nodes (renamed farms in a copy don't
     match);
   - a value change is not isolated when the dates also changed;
