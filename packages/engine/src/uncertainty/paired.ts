@@ -10,7 +10,7 @@
 // separate bands would suggest, and it is the honest statement of what the
 // change itself does. Members are judged once, on the baseline: the
 // application changes the network, not the observed history.
-import type { ModelInput } from '../project';
+import type { ModelInput, ModelOutput } from '../project';
 import { ENGINE_VERSION, prepareRun, runModel } from '../run';
 import { band, type Band } from './bands';
 import {
@@ -59,6 +59,15 @@ export function pairedRefusal(other: ModelInput, baseline: Pick<EnsembleResult, 
 	return null;
 }
 
+/** The other run's header: the baseline's days and water years, the other run's farms and Reserve sites. */
+export function pairedHeader(baseline: EnsembleHeader, output: ModelOutput): EnsembleHeader {
+	return {
+		...baseline,
+		farms: (output.summary.curtailment?.farms ?? []).map((f) => ({ nodeId: f.nodeId, name: f.name })),
+		reserveSites: (output.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name }))
+	};
+}
+
 /** Run the baseline's kept members on another run's inputs. Throws when pairedRefusal refuses. */
 export function runPairedEnsemble(
 	other: ModelInput,
@@ -74,11 +83,7 @@ export function runPairedEnsemble(
 	let cancelled = false;
 	for (const m of todo) {
 		const output = runModel(memberInput(ctx, m as EnsembleMember));
-		head ??= {
-			...baseline.header,
-			farms: (output.summary.curtailment?.farms ?? []).map((f) => ({ nodeId: f.nodeId, name: f.name })),
-			reserveSites: (output.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name }))
-		};
+		head ??= pairedHeader(baseline.header, output);
 		out.push({ index: m.index, metrics: memberMetrics(ctx, output) });
 		if (opts.onProgress?.({ done: out.length, total: todo.length, accepted: out.length }) === true) {
 			cancelled = true;

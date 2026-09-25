@@ -151,7 +151,7 @@ describe('resolveEnsembleOptions', () => {
 	});
 
 	it('puts the primary record first: the one the run calibrates against', () => {
-		const logger = { ...input, settings: { ...input.settings, calibrationFlowKind: 'flow_logger_m3s' } };
+		const logger = { ...input, settings: { ...input.settings, calibrationFlowKind: 'flow_logger_m3s' as const } };
 		expect(resolveEnsembleOptions(logger, { members: 40 }).options.records).toEqual(['flow_logger_m3s', 'flow_observed_m3s']);
 	});
 
@@ -388,7 +388,9 @@ describe('runEnsemble on a synthetic catchment', () => {
 	it('verifies an honest ensemble and catches a tampered one', () => {
 		const ctx = ensembleContext(input, options);
 		expect(sampleMismatches(ctx, result.members)).toEqual([]);
-		expect(verifyEnsemble(input, options, result.members, 3, new Rng(1).next.bind(new Rng(1)))).toEqual([]);
+		const verified = verifyEnsemble(input, options, result.members, 3, new Rng(1).next.bind(new Rng(1)));
+		expect(verified.mismatches).toEqual([]);
+		expect(verified.header).toEqual(result.header);
 		const moved = result.members.map((m, i) => (i === 7 ? { ...m, params: { ...m.params, x1: m.params.x1! * 1.01 } } : m));
 		expect(sampleMismatches(ctx, moved)[0]).toMatch(/^member 7 \.params\.x1|^member 7\.params\.x1/);
 		const kept = result.members.findIndex((m, i) => i > 0 && m.accepted);
@@ -447,9 +449,11 @@ describe('paired bands on the difference between a run and its baseline', () => 
 		expect(s.decisionRule).toMatch(/percentiles of the difference \(other − baseline\)/);
 		// The server's check agrees, and catches a forged pair.
 		const kept = baseline.members.filter((m) => m.accepted);
-		expect(verifyPaired(application, options, kept, paired.members, 3, new Rng(2).next.bind(new Rng(2)))).toEqual([]);
+		const verified = verifyPaired(application, options, baseline.header, kept, paired.members, 3, new Rng(2).next.bind(new Rng(2)));
+		expect(verified.mismatches).toEqual([]);
+		expect(verified.header).toEqual(paired.header);
 		const forged = paired.members.map((p) => ({ ...p, metrics: { ...p.metrics, ewrDaysNotMet: 0 } }));
-		expect(verifyPaired(application, options, kept, forged, 1, () => 0).join(' ')).toMatch(/ewrDaysNotMet/);
+		expect(verifyPaired(application, options, baseline.header, kept, forged, 1, () => 0).mismatches.join(' ')).toMatch(/ewrDaysNotMet/);
 	});
 
 	it('refuse two runoff models (never pooled) and two different periods', () => {

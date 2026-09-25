@@ -626,7 +626,8 @@ export function runMember(ctx: EnsembleContext, m: EnsembleMember): { result: Me
 // The ensemble
 // ---------------------------------------------------------------------------
 
-function header(ctx: EnsembleContext, first: ModelOutput): EnsembleHeader {
+/** The ensemble's header, from member 0's run (farm names, Reserve sites, the EWR line) and the context. */
+export function ensembleHeader(ctx: EnsembleContext, first: ModelOutput): EnsembleHeader {
 	const ewr = catchmentSeries(first, 'ewr');
 	return {
 		startDate: ctx.startDate,
@@ -665,7 +666,7 @@ export function runEnsemble(
 	let cancelled = false;
 	for (const m of members) {
 		const { result, output } = runMember(ctx, m);
-		head ??= header(ctx, output);
+		head ??= ensembleHeader(ctx, output);
 		results.push(result);
 		if (result.accepted) {
 			accepted++;

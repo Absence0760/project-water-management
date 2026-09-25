@@ -11,13 +11,23 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
  * may update. A run is evidence: everything but its note is immutable
  * (007_run_notes.sql).
  */
-const COLUMN_ONLY_UPDATE: Record<string, string[]> = { model_run: ['notes'] };
+const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
+	model_run: ['notes'],
+	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
+	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary']
+};
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
  * them. The evidence-nomination history is tamper evidence
  * (010_run_nomination.sql).
  */
 const APPEND_ONLY = new Set(['run_nomination']);
+/**
+ * Keep-forever tables: water_app may never remove a row (it goes only with
+ * its run or project). Every uncertainty ensemble started is kept, so a band
+ * can't be cherry-picked (014_run_uncertainty.sql).
+ */
+const NO_DELETE = new Set(['run_uncertainty']);
 
 let db: pg.Client;
 beforeAll(async () => {
@@ -55,6 +65,7 @@ describe('schema catalogue', () => {
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
+				if (NO_DELETE.has(t.relname) && priv === 'DELETE') continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
 			}
@@ -86,6 +97,19 @@ describe('schema catalogue', () => {
 				[`public.${table}`]
 			);
 			expect(rows.map((r) => r.column_name)).toEqual(allowed);
+		}
+	});
+
+	it('grants water_app no DELETE or TRUNCATE, and has no delete policy, on keep-forever tables (run_uncertainty)', async () => {
+		for (const table of NO_DELETE) {
+			for (const priv of ['DELETE', 'TRUNCATE']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: policies } = await db.query<{ polname: string }>(`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('d', '*')`, [
+				`public.${table}`
+			]);
+			expect(policies.map((p) => p.polname), `${table} delete policies`).toEqual([]);
 		}
 	});
 

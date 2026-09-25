@@ -150,6 +150,31 @@ In short:
     WP-3.14. The schema owner (`water`, migrations only) is not bound by the
     grants. A nomination proves what the project said and when, not that the
     run is right: that is the assessor's review.
+- **Uncertainty bands can't be cherry-picked or forged** (014_run_uncertainty,
+  [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9)).
+  An applicant could otherwise run an ensemble again and again, with other
+  seeds or looser thresholds, and keep only the kindest band, or post a band
+  the model never produced:
+  - the **database draws the seed** when the ensemble is started, before
+    anything runs, and stores the resolved options and thresholds with it;
+    neither is in the app's column grant, so neither can change later;
+  - every start is **kept** (no `DELETE` grant or policy): the Runs tab shows
+    how many ensembles a run had, abandoned ones included, and what differs
+    between their rules;
+  - a result is stored **once**, by whoever started it, and only after the
+    server has regenerated the whole Latin-hypercube sample from the seed and
+    re-run member 0 and **three members picked with `crypto.randomInt`**,
+    finding the same scores, verdicts and outputs (`verifyEnsemble`,
+    `verifyPaired`, tolerance 1e-6 relative); the bands are then summarised
+    on the server from the members, and the header (farms, sites, EWR line)
+    comes from the server's own run of member 0;
+  - limits: an unchecked member's outputs are taken on trust, so a forger
+    must alter members the server may not pick (each check has a chance of
+    catching it; forging many members is caught almost surely); the coverage
+    count needs every kept member's daily flow, so the server checks only
+    its consistency, and "Reproduce" in the Runs tab re-runs the whole
+    ensemble in any viewer's browser. The engine version must match: an
+    ensemble started on another version can't be completed.
 - The schema owner (`water`) is used only for migrations, never by the running
   API.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,

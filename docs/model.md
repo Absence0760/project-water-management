@@ -2112,7 +2112,7 @@ it never changes a run's results.
   assigns the seed and stores the resolved options before the browser runs
   anything, then stores the result only after regenerating the whole sample
   and re-running three randomly chosen members (`verifyEnsemble`,
-  `verifyPaired`; [security.md](./security.md#uncertainty-bands)). Storage:
+  `verifyPaired`; [security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Storage:
   [data-model.md](./data-model.md) (`run_uncertainty`).
 - **Cost.** Every member is a full `runModel`: 25–55 ms on the example
   catchments, so 300 members take 8–16 s in the browser's calibration worker.

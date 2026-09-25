@@ -10,17 +10,19 @@ import type { ModelInput } from '../project';
 import { runModel } from '../run';
 import {
 	ensembleContext,
+	ensembleHeader,
 	ensembleMembers,
 	memberInput,
 	memberMetrics,
 	runMember,
 	type EnsembleContext,
+	type EnsembleHeader,
 	type EnsembleMember,
 	type MemberMetrics,
 	type MemberResult,
 	type ResolvedEnsembleOptions
 } from './ensemble';
-import type { PairedMember } from './paired';
+import { pairedHeader, type PairedMember } from './paired';
 
 /** Relative tolerance: engine arithmetic is deterministic, but a browser's Math.exp/log may differ in the last place. */
 export const VERIFY_TOLERANCE = 1e-6;
@@ -120,28 +122,44 @@ export function pickCheckedMembers(members: readonly Pick<MemberResult, 'accepte
 	return [...a, ...draw(rest, k - a.length)].sort((x, y) => x - y);
 }
 
-/** Build the context and check the sample and `k` random members of a posted ensemble; empty = verified. */
-export function verifyEnsemble(input: ModelInput, options: ResolvedEnsembleOptions, posted: readonly MemberResult[], k: number, random: () => number): string[] {
+/**
+ * Check a posted ensemble: the whole sample, member 0 (whose run also gives
+ * the header, so the server never takes the client's) and `k` random members.
+ * `mismatches` empty = verified.
+ */
+export function verifyEnsemble(
+	input: ModelInput,
+	options: ResolvedEnsembleOptions,
+	posted: readonly MemberResult[],
+	k: number,
+	random: () => number
+): { mismatches: string[]; header: EnsembleHeader | null } {
 	const ctx = ensembleContext(input, options);
 	const sample = sampleMismatches(ctx, posted);
-	if (sample.length) return sample;
-	return memberMismatches(ctx, posted, pickCheckedMembers(posted, k, random));
+	if (sample.length) return { mismatches: sample, header: null };
+	const { output } = runMember(ctx, posted[0]!);
+	const header = ensembleHeader(ctx, output);
+	const rest = pickCheckedMembers(posted.slice(1), k, random).map((i) => i + 1);
+	return { mismatches: memberMismatches(ctx, posted, [0, ...rest]), header };
 }
 
-/** Check the pairing and `k` random pairs of a posted paired ensemble; empty = verified. */
+/** Check a posted paired ensemble: the pairing, the first pair (which gives the header) and `k` random pairs. */
 export function verifyPaired(
 	other: ModelInput,
 	options: ResolvedEnsembleOptions,
+	baselineHeader: EnsembleHeader,
 	baselineKept: readonly EnsembleMember[],
 	posted: readonly PairedMember[],
 	k: number,
 	random: () => number
-): string[] {
+): { mismatches: string[]; header: EnsembleHeader | null } {
+	if (!baselineKept.length) return { mismatches: ['the baseline kept no members'], header: null };
 	const ctx = ensembleContext(other, options, false);
-	const positions = pickCheckedMembers(
-		posted.map(() => ({ accepted: true })),
+	const header = pairedHeader(baselineHeader, runModel(memberInput(ctx, baselineKept[0]!)));
+	const rest = pickCheckedMembers(
+		posted.slice(1).map(() => ({ accepted: true })),
 		k,
 		random
-	);
-	return pairedMismatches(ctx, baselineKept, posted, positions);
+	).map((i) => i + 1);
+	return { mismatches: pairedMismatches(ctx, baselineKept, posted, [0, ...rest]), header };
 }
