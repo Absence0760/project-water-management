@@ -12,6 +12,7 @@ import { ApiError, handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
+import { evidenceRoutes } from './runs/evidence.js';
 import { runRoutes } from './runs/routes.js';
 import { seriesRoutes } from './series/routes.js';
 import { teamRoutes } from './teams/routes.js';
@@ -76,6 +77,7 @@ export function createApp() {
 	projects.route('/', modelRoutes);
 	projects.route('/', seriesRoutes);
 	projects.route('/', runRoutes);
+	projects.route('/', evidenceRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
 	app.route('/projects', projects);

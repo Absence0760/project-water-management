@@ -12,6 +12,12 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
  * (007_run_notes.sql).
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = { model_run: ['notes'] };
+/**
+ * Append-only tables: water_app may read and add rows, never change or remove
+ * them. The evidence-nomination history is tamper evidence
+ * (010_run_nomination.sql).
+ */
+const APPEND_ONLY = new Set(['run_nomination']);
 
 let db: pg.Client;
 beforeAll(async () => {
@@ -48,6 +54,7 @@ describe('schema catalogue', () => {
 			if (t.relname === 'schema_migrations') continue;
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
+				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
 				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
 			}
@@ -79,6 +86,28 @@ describe('schema catalogue', () => {
 				[`public.${table}`]
 			);
 			expect(rows.map((r) => r.column_name)).toEqual(allowed);
+		}
+	});
+
+	it('grants water_app no UPDATE, DELETE or TRUNCATE, table or column, on append-only tables (run_nomination)', async () => {
+		for (const table of APPEND_ONLY) {
+			for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: cols } = await db.query<{ attname: string }>(
+				`SELECT a.attname FROM pg_attribute a
+				 WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped
+				   AND has_column_privilege('water_app', a.attrelid, a.attnum, 'UPDATE')`,
+				[`public.${table}`]
+			);
+			expect(cols.map((c) => c.attname), `${table} column UPDATE`).toEqual([]);
+			// Nor any policy that would let a future grant through.
+			const { rows: policies } = await db.query<{ polname: string }>(
+				`SELECT polname FROM pg_policy WHERE polrelid = $1::regclass AND polcmd IN ('w', 'd', '*')`,
+				[`public.${table}`]
+			);
+			expect(policies.map((p) => p.polname), `${table} update/delete policies`).toEqual([]);
 		}
 	});
 

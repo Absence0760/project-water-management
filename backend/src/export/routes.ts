@@ -10,6 +10,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadProjectDocument } from '../projects/document.js';
+import { listNominations, runEvidence } from '../runs/evidence.js';
 import {
 	attachment,
 	collectCsv,
@@ -139,7 +140,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					createdAt: new Date(run.createdAt).toISOString(),
 					notes: run.notes,
 					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
-					notesUpdatedBy: run.notesUpdatedBy
+					notesUpdatedBy: run.notesUpdatedBy,
+					evidence: runEvidence(await listNominations(db, id), runId)
 				},
 				run.summary
 			);

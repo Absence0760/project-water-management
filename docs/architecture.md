@@ -132,7 +132,7 @@ sequenceDiagram
   A->>A: runModelChecked(input) ~20 ms
   A->>P: INSERT model_run (inputs snapshot, summary)
   A->>P: INSERT run_series × N (double precision[])
-  A->>P: DELETE runs beyond the newest 20
+  A->>P: DELETE runs beyond the newest 20 (nominated evidence runs exempt)
   A->>P: COMMIT
   A-->>B: 201 { run, removedRunIds }
   B->>A: GET /runs/:runId/series?key=…&nodeId=…

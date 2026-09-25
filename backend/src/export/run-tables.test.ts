@@ -7,6 +7,7 @@ import {
 	zeroRainLines,
 	doubleMassLines,
 	columnGuideLines,
+	evidenceLines,
 	nodeColumnHeader,
 	seriesKeyOrder,
 	summaryCsvLines,
@@ -513,5 +514,40 @@ describe('run notes and the WR2012 block', () => {
 		expect(cal).toBeGreaterThan(0);
 		expect(wr).toBeGreaterThan(cal);
 		expect(lines).toContain('Quaternary,X11A');
+	});
+});
+
+describe('the evidence nomination rows', () => {
+	const nominated = { nominatedAt: '2026-09-20T08:00:00.000Z', nominatedBy: 'Ann', reason: 'Calibrated GR4J' };
+
+	it('says "not nominated" for a run never nominated, in the run details', () => {
+		expect([...evidenceLines(null)]).toEqual(['Evidence nomination,not nominated']);
+		const lines = [...summaryCsvLines(meta, summary)];
+		const at = lines.indexOf('Evidence nomination,not nominated');
+		expect(at).toBeGreaterThan(lines.indexOf('Run notes,'));
+		expect(at).toBeLessThan(lines.indexOf(''));
+	});
+
+	it('gives the current nomination’s when, who and why', () => {
+		expect([...evidenceLines({ status: 'current', ...nominated, replacedBy: null })]).toEqual([
+			'Evidence nomination,the nominated evidence run',
+			'Nominated,2026-09-20T08:00:00.000Z,Ann,Calibrated GR4J'
+		]);
+	});
+
+	it('names what replaced a past nomination, and neutralises formula characters in user text', () => {
+		const lines = [
+			...evidenceLines({
+				status: 'past',
+				...nominated,
+				reason: '=HYPERLINK("x")',
+				replacedBy: { runId: 'b', runLabel: '', nominatedAt: '2026-09-21T08:00:00.000Z', nominatedBy: null, reason: 'Refit, see §3' }
+			})
+		];
+		expect(lines).toEqual([
+			'Evidence nomination,"nominated before, since replaced"',
+			`Nominated,2026-09-20T08:00:00.000Z,Ann,"'=HYPERLINK(""x"")"`,
+			'Replaced by,Untitled run,2026-09-21T08:00:00.000Z,,"Refit, see §3"'
+		]);
 	});
 });

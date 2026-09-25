@@ -13,6 +13,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
 
 /** "<projectId>:<runId>" */
 const RunRef = z
@@ -43,13 +44,15 @@ interface LoadedRun {
 	notes: string;
 	notesUpdatedAt: string | null;
 	notesUpdatedBy: string | null;
+	/** The run's place in its project's evidence history (010_run_nomination); null = never nominated. */
+	evidence: RunEvidence | null;
 }
 
 async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	// requireRole: 404 when the project is invisible (never 403 — viewer is the floor).
 	await requireRole(db, ref.projectId, 'viewer');
 	if (!UUID.test(ref.runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<LoadedRun & { projectName: string }>(
+	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string }>(
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 		        r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 		        r.summary, r.inputs, p.name AS "projectName",
@@ -69,7 +72,8 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,
 		[ref.runId]
 	);
-	const { projectName, ...run } = row;
+	const { projectName, ...rest } = row;
+	const run: LoadedRun = { ...rest, evidence: runEvidence(await listNominations(db, ref.projectId), ref.runId) };
 	return { project: { id: ref.projectId, name: projectName }, run, catchmentSeries: series };
 }
 
