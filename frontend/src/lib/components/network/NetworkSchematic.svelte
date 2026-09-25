@@ -11,6 +11,7 @@
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
 	import { arcPath, labelBox, schematicLayout, symbolBox, transferArc, type SchematicNode } from './schematic';
+	import { BAND_LABEL, bandsPresent, type SchematicSupply } from './supplyColour';
 
 	let {
 		nodes,
@@ -18,7 +19,8 @@
 		selectedId = null,
 		onselect,
 		editable = false,
-		onreparent
+		onreparent,
+		supply = null
 	}: {
 		nodes: NetworkNode[];
 		transfers?: Transfer[];
@@ -27,7 +29,12 @@
 		/** Allow dragging a node onto another to re-point "drains into". */
 		editable?: boolean;
 		onreparent?: (id: string, drainsInto: string) => void;
+		/** Colour farms by how much of their demand a run supplied (null = the plain drawing). */
+		supply?: SchematicSupply | null;
 	} = $props();
+
+	const supplyOf = (id: string) => supply?.byNode.get(id);
+	const bands = $derived(supply ? bandsPresent(supply.byNode) : []);
 
 	const short = (s: string, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 	const name = (n: NetworkNode) => n.name || '(unnamed)';
@@ -118,8 +125,10 @@
 		return `M${a.x},${a.y + 10} V${midY} H${b.x} V${b.y - 13}`;
 	}
 
-	const metaText = (ln: SchematicNode) =>
-		`${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}`;
+	const metaText = (ln: SchematicNode) => {
+		const s = supplyOf(ln.node.id);
+		return `${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}${s ? ` · ${s.text}` : ''}`;
+	};
 
 	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
 	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(name(ln.node)), metaText(ln))));
@@ -154,6 +163,11 @@
 				<marker id="sch-flow" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-river" />
 				</marker>
+				<!-- Fill for farms in the model but not in the run being coloured by. -->
+				<pattern id="sch-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+					<rect class="hatch-bg" width="4" height="4" />
+					<line class="hatch-line" x1="0" y1="0" x2="0" y2="4" />
+				</pattern>
 				<marker id="sch-transfer" viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
 					<path d="M0,0 L8,4 L0,8 z" class="arrow-transfer" />
 				</marker>
@@ -183,6 +197,7 @@
 				{@const p = pos.get(ln.node.id)!}
 				{@const n = ln.node}
 				{@const dam = hasDam(n)}
+				{@const sup = supplyOf(n.id)}
 				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 				<g
 					class="node"
@@ -192,6 +207,7 @@
 					class:drop-no={drag?.moved && drag.id !== n.id && !drag.valid.has(n.id)}
 					class:drop-over={drag?.moved && drag.over === n.id}
 					class:dragged={drag?.moved && drag.id === n.id}
+					data-supply={sup?.band}
 					transform="translate({p.x},{p.y})"
 					onclick={() => !editable && onselect?.(n.id)}
 					onpointerdown={(e) => onDown(e, n.id)}
@@ -199,7 +215,7 @@
 					onpointerup={onUp}
 					onpointercancel={() => (drag = null)}
 				>
-					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}</title>
+					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text} in run “${supply?.runName}”` : ''}</title>
 					<circle class="halo" r="17" />
 					{#if n.kind === 'user'}
 						<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
@@ -251,12 +267,28 @@
 		<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
 		<li class="muted">Line width grows with upstream area; labels show area incl. upstream.</li>
 	</ul>
+	{#if supply}
+		<!-- Read out (not aria-hidden): which run the colours come from. The
+		     bands themselves are also in each node's label and the drainage tree. -->
+		<div class="supply-legend">
+			<p class="supply-run">
+				Farms coloured by share of irrigation demand supplied in run “{supply.runName}”, ran {supply.ago}.
+				{#if supply.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+			</p>
+			<ul class="legend" aria-hidden="true">
+				{#each bands as b (b)}
+					<li data-supply={b}><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> {BAND_LABEL[b]}</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	<!-- Text equivalent of the drawing: each node under the node it drains into. -->
 	<ul class="visually-hidden" aria-label="Drainage tree">
 		{#each tree.rows as row (row.node.id)}
+			{@const sup = supplyOf(row.node.id)}
 			<li>
-				{name(row.node)}, {row.node.kind}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}
+				{name(row.node)}, {row.node.kind}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}{sup ? `, ${sup.text}` : ''}
 			</li>
 		{/each}
 	</ul>
@@ -381,6 +413,50 @@
 	}
 	.farm.dam {
 		fill: color-mix(in srgb, var(--sch-river) 30%, var(--sch-fill));
+	}
+	/* Colour by supply (data-supply on a node, or on a legend item). The three
+	   bands step in lightness as well as hue in both themes (light → mid →
+	   strong on the light surface, dark → mid → bright on the dark one), so
+	   they read apart without colour vision. Selection, hover and drop states
+	   live on the halo and on opacity, so they are untouched. */
+	[data-supply='met'] .farm {
+		fill: color-mix(in srgb, var(--success) 25%, var(--sch-fill));
+	}
+	[data-supply='short'] .farm {
+		fill: color-mix(in srgb, var(--warning) 60%, var(--sch-fill));
+	}
+	[data-supply='low'] .farm {
+		fill: var(--danger);
+	}
+	[data-supply='low'] .dam-water {
+		stroke: var(--sch-fill);
+	}
+	[data-supply='none'] .farm {
+		fill: var(--sch-fill);
+		stroke-dasharray: 2 2;
+	}
+	[data-supply='absent'] .farm {
+		fill: url(#sch-hatch);
+		stroke: var(--text-muted);
+		stroke-dasharray: 3 2;
+	}
+	.hatch-bg {
+		fill: var(--sch-fill);
+	}
+	.hatch-line {
+		stroke: var(--text-muted);
+		stroke-width: 1.2;
+	}
+	.supply-legend {
+		margin-top: 0.4rem;
+	}
+	.supply-run {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-2);
+	}
+	.supply-legend .legend {
+		margin-top: 0.3rem;
 	}
 	.dam-water {
 		fill: none;

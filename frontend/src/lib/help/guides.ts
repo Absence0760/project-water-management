@@ -245,7 +245,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down. Once the model has been run, **Colour farms by** › **Supply, latest run** shades each farm by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%); a farm added since the run is hatched.'
 					}
 				]
 			},
