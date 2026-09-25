@@ -185,8 +185,8 @@ formula would read as blank. Every cell an importer reads therefore holds a
 plain value, as if Excel had calculated and saved it. The only formulas are the
 [Transfers] formula row (row 7: the hand-written InOut formulas and the
 draw-from-dam formulas), with the same text as plain strings in row 8
-(`zTransfers_FormulasAsTxt`), as in b023. SheetJS drops a formula cell with no
-value unless you pass `sheetStubs: true`, and then gives it `t: 'z'`: treat it
+(`zTransfers_FormulasAsTxt`), as in b023. The TypeScript reader skips a
+formula cell with no value (as SheetJS did without `sheetStubs`), so it reads
 as blank, like the Python importer.
 
 What each part of the fixture exercises (the note text is in `synthetic_b023.notes.txt`):
@@ -243,8 +243,8 @@ path; the script runs in `backend/`).
 ## The TypeScript port (in-browser import)
 
 `frontend/src/lib/spreadsheet/import/` is a TypeScript port of
-`extract_project.py`'s project extraction and `calibration.py` on SheetJS, for
-the in-browser workbook import (roadmap WP-1.31): `await readWorkbook(bytes)` then
+`extract_project.py`'s project extraction and `calibration.py`, for the
+in-browser workbook import (roadmap WP-1.31): `await readWorkbook(bytes)` then
 `extractProject(wb, { fileName, gaugeAsReference })` gives `{ project, notes,
 unmapped }`. Per decision D17 the **TypeScript port is the user path** (the
 import in the UI), and the Python scripts stay for the regression fixtures
@@ -269,6 +269,23 @@ the other way round. Two tests hold it:
   Python with openpyxl (`PYTHON`, else the checkout's `.venv`, else
   `python3`), and takes about 15 s per client-workbook variant, most of it the
   Python.
+
+**The reader.** `readWorkbook` is the port's own streaming OOXML reader
+(`zip.ts`, `xml.ts`, `workbookParts.ts`, `sheet.ts`, `sharedStrings.ts`), not
+SheetJS, which the port used first: SheetJS held the whole [Flow data] XML
+and an object per cell, several hundred MB for the client workbook. The
+reader gives the parser exactly the cells SheetJS gave it (cached values, the
+number formats that mark a date, blanks for formula cells with no value,
+SheetJS's string decoding, `_xHHHH_` escapes included). Where SheetJS and
+openpyxl decode a string differently (`_xHHHH_` escapes, which openpyxl
+leaves as written, and a formula's cached text, which SheetJS decodes twice),
+the reader keeps SheetJS's reading; none of the workbooks seen so far has
+either in a cell the importer reads ([docs/followups.md](../../docs/followups.md)).
+A third test holds the reader to SheetJS: `readerParity.test.ts` (CI) reads
+the synthetic workbook, SheetJS-written workbooks and hand-written edge cases
+with both readers (SheetJS's in `sheetjsReference.ts`, test-only) and compares
+every cell through `B023Workbook`; `sourceWorkbooks.test.ts` does the same on
+the client workbooks.
 
 **In the UI.** **Import b023 workbook** on the project list runs the port in a
 Web Worker (`import.worker.ts`: the picked file goes in, progress per sheet
