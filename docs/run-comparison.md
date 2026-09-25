@@ -82,6 +82,20 @@ The page has these sections, top to bottom:
    period, source), the monthly means by month, the scaling rule, the
    dry-season months, each deviation threshold, and the calibration penalty,
    its weight and its MAR band (model.md §2.10c).
+
+   When either run has an **EWR rule table** (engine ≥ 0.21.0, model.md §2.9c),
+   *Reserve compliance by month* gives, per EWR site (the outlet first, then
+   gauges matched by id, then by name across a copy), the share of months
+   met, the months not met, the deficit (m³), the longest run of months not
+   met and the FDC check for A and B (`RunComparison.ewrAssurance`), and,
+   under it, the share of months met per month of the year. More months met
+   is better. A site with a table in one run only says so, and when the two
+   runs' tables differ (values, points, unit, scale or natural source) a note
+   says the rates measure against different rules. *What changed* lists each
+   table added or removed (*"EWR rule table at the outlet added ("Reserve
+   determination, table 4", 10 % points, natural percentile from the run)"*),
+   each field changed (source, what it covers, unit, natural source, scale,
+   % points) and the months whose EWR values or natural flows changed.
 4. **EWR test against observed flow** (issue #4). The two runoff models can
    disagree strongly on how many days the EWR is not met; the observed record
    settles it, because a gauge or logger measures the same outflow the EWR
@@ -107,7 +121,7 @@ better and red means worse (for example, less deficit or fewer EWR days not
 met). Grey means the change is neither: demand and flow are "just different".
 The better/worse judgement is also in the text read out by screen readers and
 in the tooltip, so colour is never the only cue. For percent bias, closer to 0
-is better; for the EWR frequency bias and a ratio to WR2012, closer to 1. A change that rounds to zero is shown as plain "0".
+is better; for the EWR frequency bias and a ratio to WR2012, closer to 1; for Reserve compliance, more months met. A change that rounds to zero is shown as plain "0".
 
 ## How runs are matched
 
@@ -119,6 +133,8 @@ name**:
   same farm (shown as "Rooikloof (was Farm 1)").
 - **Across a copy:** names match (trimmed, case-insensitive). A farm renamed
   *and* copied can't be matched, so it appears under "Only in run A / B".
+- **Reserve compliance** sites: the outlet with the outlet, a gauge by id,
+  then by name.
 - **Crop areas** are matched by (farm name, crop name). **Transfers** are
   matched by id, then by their "from → to" route.
 

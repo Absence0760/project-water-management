@@ -11,6 +11,7 @@
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import CompareChart from '$lib/components/compare/CompareChart.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
+	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
@@ -298,6 +299,13 @@
 							settingsB={data.b.run.inputs.settings}
 						/>
 					</section>
+
+					{#if data.comparison.ewrAssurance?.length}
+						<section class="panel" aria-labelledby="reserve-h">
+							<div class="panel-head"><h2 id="reserve-h">Reserve compliance by month</h2></div>
+							<EwrAssuranceCompare sites={data.comparison.ewrAssurance} />
+						</section>
+					{/if}
 
 					<section class="panel" aria-labelledby="ewr-agreement-h">
 						<div class="panel-head"><h2 id="ewr-agreement-h">EWR test against observed flow</h2></div>

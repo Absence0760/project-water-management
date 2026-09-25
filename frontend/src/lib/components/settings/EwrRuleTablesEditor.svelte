@@ -1,0 +1,339 @@
+<!--
+	The per-table editor of Settings → Reserve rule tables (EwrRulesSection.svelte,
+	which loads it only once the project has a table, so a project without one
+	downloads none of it): site, source, what it covers, unit, natural source,
+	scale, % points, the EWR and natural grids, paste from a spreadsheet, the
+	plausibility notes and Remove. Helpers in ./ewrRules.ts.
+-->
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import { EWR_ASSURANCE_MIN_YEARS, type EwrRuleTable } from '@water-management/engine';
+	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { applyPaste, parseGrid, parsePoints, setPoints, tableErrors, tableNotes, type SiteOption } from './ewrRules';
+
+	let {
+		value = $bindable(),
+		readonly = false,
+		options
+	}: {
+		value: EwrRuleTable[];
+		readonly?: boolean;
+		/** The EWR sites a table can be at (siteOptions). */
+		options: readonly SiteOption[];
+	} = $props();
+
+	const uid = $props.id();
+	const UNIT = { mcm: 'Mm³', m3s: 'm³/s' } as const;
+
+	// Text the user is typing into each table's points field and paste box, by position.
+	let pointsText = $state<string[]>(untrack(() => value.map((t) => t.points.join(', '))));
+	let pointsBad = $state<boolean[]>([]);
+	let pasteText = $state<string[]>([]);
+	let pasteNote = $state<{ ok: boolean; text: string }[]>([]);
+
+	// A new table, Discard or a save can change the tables under the typed points: follow them, unless the text is mid-edit and not yet valid.
+	$effect(() => {
+		value.forEach((t, i) => {
+			if (untrack(() => pointsBad[i])) return;
+			const typed = parsePoints(untrack(() => pointsText[i]) ?? '');
+			if (!typed || typed.join() !== t.points.join()) pointsText[i] = t.points.join(', ');
+		});
+		if (untrack(() => pointsText.length) > value.length) pointsText.length = value.length;
+	});
+
+	const siteLabel = (id: string | null) => options.find((o) => o.id === id)?.label ?? 'Outlet';
+
+	function remove(i: number) {
+		value.splice(i, 1);
+		for (const list of [pointsText, pointsBad, pasteText, pasteNote] as unknown[][]) list.splice(i, 1);
+	}
+
+	function onPoints(i: number, text: string) {
+		pointsText[i] = text;
+		const p = parsePoints(text);
+		pointsBad[i] = p === null;
+		if (p) value[i] = setPoints(value[i]!, p);
+	}
+
+	function setNaturalSource(i: number, source: EwrRuleTable['naturalSource']) {
+		const t = value[i]!;
+		t.naturalSource = source;
+		if (source === 'table' && !t.natural) t.natural = Array.from({ length: 12 }, () => t.points.map(() => null as unknown as number));
+	}
+
+	function paste(i: number, which: 'ewr' | 'natural') {
+		const g = parseGrid(pasteText[i] ?? '');
+		if ('error' in g) {
+			pasteNote[i] = { ok: false, text: g.error };
+			return;
+		}
+		const out = applyPaste(value[i]!, which, g);
+		if ('error' in out) {
+			pasteNote[i] = { ok: false, text: out.error };
+			return;
+		}
+		value[i] = out;
+		pointsText[i] = out.points.join(', ');
+		pointsBad[i] = false;
+		const what = which === 'ewr' ? 'EWR' : 'natural flow';
+		pasteNote[i] = {
+			ok: true,
+			text: [`Filled the ${what} values: 12 months × ${out.points.length} % points${g.monthLabels ? ' (rows matched by month name)' : ' (rows read as Oct … Sep)'}.`, ...g.notes].join(' ')
+		};
+		pasteText[i] = '';
+	}
+</script>
+
+{#each value as t, i (i)}
+	{@const errs = tableErrors(t)}
+	{@const notes = Object.keys(errs).length ? [] : tableNotes(t)}
+	{@const u = UNIT[t.unit] ?? t.unit}
+	<fieldset class="plain rule" aria-describedby="{uid}-{i}-status">
+		<legend>Rule table at {siteLabel(t.siteNodeId)}</legend>
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-{i}-site">EWR site</label>
+				<select id="{uid}-{i}-site" disabled={readonly} bind:value={t.siteNodeId}>
+					{#each options as o (o.id ?? '(outlet)')}
+						<option value={o.id} disabled={o.id !== t.siteNodeId && value.some((x) => x.siteNodeId === o.id)}>{o.label}</option>
+					{/each}
+				</select>
+			</div>
+			<div class="field wide">
+				<label for="{uid}-{i}-src">Source</label>
+				<input
+					id="{uid}-{i}-src"
+					readonly={readonly}
+					maxlength="500"
+					placeholder="Reserve determination, gazette notice, table"
+					bind:value={t.source}
+					aria-invalid={errs.source ? 'true' : undefined}
+					aria-describedby="{uid}-{i}-src-e"
+				/>
+				{#if errs.source}<span class="err" id="{uid}-{i}-src-e">{errs.source}</span>{/if}
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-comp">The table covers</label>
+				<select id="{uid}-{i}-comp" disabled={readonly} bind:value={t.component}>
+					<option value="total">Total flow (low and high flows)</option>
+					<option value="lowFlow">Low flows only</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-unit">Unit</label>
+				<select id="{uid}-{i}-unit" disabled={readonly} bind:value={t.unit} aria-describedby="{uid}-{i}-unit-h">
+					<option value="mcm">Mm³ per month</option>
+					<option value="m3s">m³/s (the month’s mean flow)</option>
+				</select>
+				<span class="hint" id="{uid}-{i}-unit-h">As the table gives it; the run compares in the same unit.</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-nat">Natural-flow percentile from</label>
+				<select
+					id="{uid}-{i}-nat"
+					disabled={readonly}
+					value={t.naturalSource}
+					onchange={(e) => setNaturalSource(i, e.currentTarget.value as EwrRuleTable['naturalSource'])}
+					aria-describedby="{uid}-{i}-nat-h"
+				>
+					<option value="run">The run’s natural flow at the site</option>
+					<option value="table">The table’s natural flows</option>
+				</select>
+				<span class="hint" id="{uid}-{i}-nat-h">
+					{t.naturalSource === 'run'
+						? `Each month is ranked among the same month in every complete year of the run; fewer than ${EWR_ASSURANCE_MIN_YEARS} years is flagged as coarse.`
+						: 'Enter the natural flow the determination gives at each point (its natural flow duration curve).'}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-scale">Scale the table by</label>
+				<NumberInput id="{uid}-{i}-scale" min={0} max={1000} nullable disabled={readonly} bind:value={t.scale} aria-describedby="{uid}-{i}-scale-h" />
+				<span class="hint" id="{uid}-{i}-scale-h">
+					{#if errs.scale}<span class="err">{errs.scale}</span>{:else}1 unless the table is for a different catchment size, e.g. site area ÷ table area.{/if}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-{i}-pts">% points</label>
+				<input
+					id="{uid}-{i}-pts"
+					readonly={readonly}
+					value={pointsText[i] ?? t.points.join(', ')}
+					oninput={(e) => onPoints(i, e.currentTarget.value)}
+					aria-invalid={pointsBad[i] || errs.points ? 'true' : undefined}
+					aria-describedby="{uid}-{i}-pts-h"
+				/>
+				<span class="hint" id="{uid}-{i}-pts-h">
+					{#if pointsBad[i]}<span class="err">Enter numbers separated by commas.</span>{:else if errs.points}<span class="err">{errs.points}</span>{:else}Exceedance %, rising (the DRM uses 10, 20 … 90, 99).{/if}
+				</span>
+			</div>
+		</div>
+
+		{#snippet grid(which: 'ewr' | 'natural', label: string)}
+			{@const rows = which === 'ewr' ? t.ewr : t.natural!}
+			<div class="table-wrap">
+				<table class="data compact rulegrid">
+					<caption>{label} at each % point <span class="u">({u})</span></caption>
+					<thead>
+						<tr>
+							<th scope="col" class="sticky">Month</th>
+							{#each t.points as p (p)}<th scope="col" class="num">{p} %</th>{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#each WATER_YEAR_MONTHS as m, r (m)}
+							<tr>
+								<th scope="row" class="sticky">{m}</th>
+								{#each t.points as p, c (p)}
+									<td>
+										<NumberInput
+											label="{label}, {m}, {p} %, {u}"
+											min={0}
+											nullable
+											disabled={readonly}
+											value={rows[r]?.[c] ?? null}
+											onchange={(v) => (rows[r]![c] = v as number)}
+										/>
+									</td>
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/snippet}
+		{@render grid('ewr', 'EWR')}
+		{#if errs.ewr}<p class="err" role="alert">{errs.ewr}</p>{/if}
+		{#if t.naturalSource === 'table' && t.natural}
+			{@render grid('natural', 'Natural flow')}
+			{#if errs.natural}<p class="err" role="alert">{errs.natural}</p>{/if}
+		{/if}
+
+		{#if !readonly}
+			<div class="paste">
+				<label for="{uid}-{i}-paste">Paste from a spreadsheet</label>
+				<textarea
+					id="{uid}-{i}-paste"
+					rows="4"
+					placeholder={'Copy the 12 month rows (Oct … Sep, or with month names in the first column), optionally with the heading row of % points, and paste here.'}
+					value={pasteText[i] ?? ''}
+					oninput={(e) => (pasteText[i] = e.currentTarget.value)}
+					aria-describedby="{uid}-{i}-status"
+				></textarea>
+				<div class="actions">
+					<button type="button" class="btn btn-sm" onclick={() => paste(i, 'ewr')}>Fill the EWR values</button>
+					{#if t.naturalSource === 'table'}
+						<button type="button" class="btn btn-sm" onclick={() => paste(i, 'natural')}>Fill the natural flows</button>
+					{/if}
+				</div>
+			</div>
+		{/if}
+		<p id="{uid}-{i}-status" class="small" class:err={pasteNote[i] && !pasteNote[i].ok} role="status">{pasteNote[i]?.text ?? ''}</p>
+		{#if notes.length}
+			<ul class="notes small" aria-label="Checks on this table">
+				{#each notes as n (n)}<li>Check: {n}.</li>{/each}
+			</ul>
+		{/if}
+		{#if !readonly}
+			<button type="button" class="btn btn-sm btn-ghost" onclick={() => remove(i)}>Remove the rule table at {siteLabel(t.siteNodeId)}</button>
+		{/if}
+	</fieldset>
+{/each}
+
+<style>
+	.small {
+		font-size: 0.8rem;
+	}
+	.u {
+		font-weight: 400;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+	}
+	.hint {
+		font-size: 0.8rem;
+		max-width: 75ch;
+	}
+	.fields {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 0 1.25rem;
+		margin-top: 0.5rem;
+	}
+	.field :global(input),
+	.field select {
+		width: 100%;
+	}
+	.field.wide {
+		grid-column: 1 / -1;
+		max-width: 60ch;
+	}
+	.plain {
+		border: 0;
+		padding: 0;
+		margin: 0.25rem 0 0.75rem;
+		min-width: 0;
+	}
+	.rule {
+		border-top: 1px solid var(--border);
+		padding-top: 0.75rem;
+		margin-top: 0.75rem;
+	}
+	.plain legend {
+		font-weight: 600;
+		font-size: 0.95rem;
+		color: var(--text-2);
+		margin-bottom: 0.35rem;
+		padding: 0;
+	}
+	caption {
+		text-align: left;
+		font-size: 0.85rem;
+		font-weight: 500;
+		padding: 0.5rem 0 0.25rem;
+	}
+	th.sticky {
+		position: sticky;
+		left: 0;
+		z-index: 2;
+		background: var(--surface);
+		white-space: nowrap;
+	}
+	thead th.sticky {
+		background: var(--surface-2);
+		z-index: 3;
+	}
+	.rulegrid td {
+		min-width: 78px;
+		padding-left: 0.3rem;
+		padding-right: 0.3rem;
+	}
+	.paste {
+		display: grid;
+		gap: 0.35rem;
+		margin-top: 0.75rem;
+		max-width: 75ch;
+	}
+	.paste label {
+		font-weight: 500;
+		font-size: 0.85rem;
+	}
+	.paste textarea {
+		width: 100%;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8rem;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.notes {
+		color: var(--warning);
+		margin: 0.25rem 0 0.5rem;
+		padding-left: 1.1rem;
+	}
+	.err {
+		color: var(--danger);
+		font-size: 0.8rem;
+	}
+</style>
