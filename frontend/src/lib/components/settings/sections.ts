@@ -1,6 +1,7 @@
 // The Settings & calibration page's in-page menu, one link per group in page
 // order, and the list of what blocks Save, each pointing at its group. The ids
-// are set on the panels in SettingsTab.svelte (and around Wr2012Section and EwrRulesSection).
+// are set on the panels in SettingsTab.svelte (and around Wr2012Section and EwrRulesSection,
+// and on DataFeedsPanel, which follows the form).
 
 export const SETTINGS_SECTIONS = [
 	{ id: 'set-demand', label: 'Demand' },
@@ -13,7 +14,9 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-ewr', label: 'EWR' },
 	{ id: 'set-reserve', label: 'Reserve rules' },
 	{ id: 'set-period', label: 'Simulation period' },
-	{ id: 'set-quality', label: 'Data quality' }
+	{ id: 'set-quality', label: 'Data quality' },
+	// After the settings form, saved on its own (feeds/DataFeedsPanel.svelte).
+	{ id: 'set-feeds', label: 'Data feeds' }
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];

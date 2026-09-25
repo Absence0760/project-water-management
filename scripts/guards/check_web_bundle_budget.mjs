@@ -241,6 +241,11 @@
 //             its own ceiling; together they measure 706 KB. No new
 //             dependency; the largest page chunk is 39 KB, both workers are
 //             unchanged. Headroom ~6 KB.
+// 2026-09-25  total 712 → 722 KB; other ceilings unchanged. Issue #10 part 2
+//             (data feeds, WP-2.10): Settings → Data feeds is its own lazy
+//             chunk (DataFeedsPanel + feeds.ts, ~5 KB gzip JS + <1 KB CSS),
+//             loaded only on the Settings tab; SettingsTab grows by the
+//             loader. No dependency. Measured 716 KB; headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -252,7 +257,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 712,
+	totalCodeKb: 722,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 107,

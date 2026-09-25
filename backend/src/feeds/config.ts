@@ -33,7 +33,7 @@ export const SOURCES: Record<FeedSource, SourceSpec> = {
 	// was issued in the last few days.
 	chirps_gefs: { label: 'CHIRPS-GEFS rainfall forecast', kinds: ['rain_forecast_mm'], unit: 'mm', staleAfterDays: -12 },
 	// Verified DWS flow lags by months (docs/architecture.md § Data feeds).
-	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm3/s', staleAfterDays: 240 }
+	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240 }
 };
 
 const Lat = z.number().finite().min(-60).max(60);

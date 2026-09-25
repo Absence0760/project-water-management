@@ -46,6 +46,10 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+
+	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
+	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 
 	let {
 		project,
@@ -812,6 +816,13 @@
 		</div>
 	{/if}
 </form>
+
+<!-- Outside the form: feeds save themselves, never through Save settings. -->
+<Lazy load={loadFeeds}>
+	{#snippet children(DataFeedsPanel)}
+		<DataFeedsPanel projectId={project.id} />
+	{/snippet}
+</Lazy>
 
 <style>
 	.small {

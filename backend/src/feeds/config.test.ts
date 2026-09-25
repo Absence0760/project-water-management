@@ -49,7 +49,7 @@ describe('FeedInput', () => {
 	it('every source has a unit and at least one kind', () => {
 		for (const s of Object.values(SOURCES)) {
 			expect(s.kinds.length).toBeGreaterThan(0);
-			expect(s.unit).toMatch(/^(mm|m3\/s)$/);
+			expect(s.unit).toMatch(/^(mm|m³\/s)$/);
 		}
 	});
 });

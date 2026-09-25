@@ -251,7 +251,7 @@ describe('the scheduler', () => {
 		expect(r.feeds).toEqual({ queued: 1, refused: 0 });
 		expect(r.done).toBeGreaterThanOrEqual(1);
 		const s = (await series(owner, pid, 'flow_observed_m3s'))!;
-		expect(s.unit).toBe('m3/s');
+		expect(s.unit).toBe('m³/s'); // as the Data tab's upload writes it (frontend series/kinds.ts)
 		expect(s.startDate).toBe(addDays(-400));
 		expect((await feedRow(id)).last_data_date).toBe(addDays(-90));
 	});
