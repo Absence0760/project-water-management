@@ -35,6 +35,7 @@ No env files to write. `backend/.env.development` and
 | `MIGRATION_DATABASE_URL` | `postgresql://water:water@127.0.0.1:5434/water` | Schema owner, used for migrations |
 | `AUTH_JWT_SECRET` | a dev-only string (≥ 32 chars) | Signs session cookies. Production uses a real secret. |
 | `ALLOWED_ORIGINS` | `http://localhost:7777` | CORS allow-list (with credentials) |
+| `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; local dev is plain http. Unset (Secure on) when deployed. |
 | `CLOUDFRONT_SHARED_SECRET` | empty | Empty turns the CloudFront header check off locally |
 | `SITE_URL` | `http://localhost:7777` | Base of the links in emails |
 | `MAIL_TRANSPORT` | `smtp` | `smtp` → Mailpit locally; `log` prints emails to the console; `ses` in production |
@@ -42,6 +43,7 @@ No env files to write. `backend/.env.development` and
 | `MAIL_FROM` | `Water Management <no-reply@localhost>` | Sender |
 | `RUNS_KEPT_PER_PROJECT` | `20` | Runs kept per project; each new run deletes the oldest beyond it (default 20 when unset or invalid) |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
+| `PUBLIC_SITE_URL` (frontend) | `http://localhost:7777` | Absolute URLs in Open Graph tags |
 
 To override something on your machine, create a gitignored
 `.env.development.local` next to the committed file. It wins.
@@ -113,9 +115,9 @@ the e2e stack uses `log`, so neither needs Mailpit.
 ## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
-quickest route is the demo seed. It extracts the client workbook and the blank b023
-sample into `data/` (also gitignored), then imports both as projects for a local
-demo user (details in `scripts/wbt-import/README.md`):
+quickest route is the demo seed. It runs `seed:examples`, extracts the client
+workbook into `data/` (also gitignored), then imports it as a project with one
+run for the local demo user (details in `scripts/wbt-import/README.md`):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install openpyxl
@@ -156,7 +158,7 @@ engine's regression test). The workbook must have been calculated and saved in
 Excel, because the importer reads cached values. Options are documented at the
 top of each script in `scripts/wbt-import/`. `import:project` creates the
 project for an existing user (`--password` also creates the user; local demo
-only). Open the project, press **Run**, and compare the Shortfalls table with the workbook's
+only; `--run` also stores one model run). Open the project, press **Run**, and compare the Shortfalls table with the workbook's
 `[Shortfalls]` sheet.
 
 A project downloaded from the app (**Download → Project (JSON)**, i.e.

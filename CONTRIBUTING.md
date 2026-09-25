@@ -41,13 +41,16 @@ Per the rule in `CLAUDE.md`: every PR that touches code also touches tests and d
 ## Running the checks locally
 
 ```
-pnpm install               # bootstrap (or the stack's equivalent)
+pnpm setup                 # bootstrap: install, local Postgres + migrations, Mailpit
 pnpm check                 # typecheck across workspaces
-pnpm test                  # unit / integration tests
+pnpm test                  # unit tests (no DB)
+pnpm test:backend:db       # API + RLS tests (needs pnpm dev:db:up)
+pnpm test:e2e              # Playwright end-to-end (see e2e/README.md)
+pre-commit install         # once: gitleaks + client-terms hooks on every commit
 pre-commit run --all-files # gitleaks, the client-terms guard and the other hygiene hooks
 ```
 
-Or, if Claude Code is available: `/check` runs all of the above in sequence and reports.
+The full command list is in `docs/STACK.md`. If Claude Code is available, `/check` runs the `code-reviewer`, `test-gap-checker` and `doc-hygiene-checker` agents over your diff (advisory; it doesn't run the commands above).
 
 ## Opening a PR
 
@@ -59,7 +62,7 @@ Or, if Claude Code is available: `/check` runs all of the above in sequence and 
 ## Reviewing a PR
 
 - Pull the branch locally, run the test suite, exercise the change manually if it's user-visible.
-- The `/code-reviewer` agent (in `.claude/agents/`) can produce a first-pass review. Use it as a starting point, not a substitute for human eyes.
+- The `code-reviewer` agent (in `.claude/agents/`) can produce a first-pass review. Use it as a starting point, not a substitute for human eyes.
 
 ## Security findings
 
