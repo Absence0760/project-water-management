@@ -1915,9 +1915,11 @@ means an engine bug, not bad data.
 
 The checks are a step *after* `runModel`, not inside it. On a 15-year example
 catchment they take about 15 ms against the model's 25 ms (measured
-2026-09-24 under load), and `runModel` has a 50 ms budget
-(`backend/src/model/examples.invariants.test.ts`) that the tests which re-run
-the model many times (order invariance, calibration) also rely on. Recording
+2026-09-24 under load), and `runModel` has a 50 ms budget, checked separately
+from the correctness suite (`backend/src/model/examples.perf.test.ts`,
+`pnpm test:backend:perf` — median of 7, run alone; see docs/STACK.md). The
+tests which re-run the model many times (order invariance, calibration) also
+rely on it staying in that ballpark. Recording
 the working columns stays inside `runModel` (about 8 ms on the same run).
 Keep the checks cheap all the same: series are looked up once per node, never
 per day.
@@ -1950,7 +1952,10 @@ They run on:
   checks run on 400 random parameter sets and forcings (`runoff/gr4j.test.ts`).
 - **The three example catchments** (`backend/src/model/examples.invariants.test.ts`),
   15 years each, through the full rain model, with legacy and with GR4J. A GR4J
-  run of one example must take under 50 ms (median of 7).
+  run of one example must take under 50 ms (median of 7,
+  `backend/src/model/examples.perf.test.ts`, its own `pnpm test:backend:perf`
+  target — not part of `pnpm test`, since a loaded machine trips a hard
+  wall-clock budget; docs/STACK.md).
   `backend/scripts/examples/catchments.test.ts` holds them, as seeded, to the
   current project schema and runs each one clean:
   every self-check passes and the only warnings are the ones the example is

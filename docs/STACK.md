@@ -9,15 +9,19 @@ sides share.
 ## Stack
 
 - **packages/engine**: `@water-management/engine`. Pure TypeScript model
-  (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest.
+  (`runModel`) and shared types (`src/project.ts`). No I/O. Tested with vitest,
+  two projects: `unit` (`pnpm test`) and `perf` (`*.perf.test.ts`, wall-clock
+  budgets, `pnpm test:perf` — median of several runs, run serially and alone,
+  not part of `pnpm test`/CI since a loaded machine trips a hard budget).
   Imported as source by frontend and backend.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
   URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`,
   and for email `nodemailer` (SMTP → Mailpit locally) / `@aws-sdk/client-sesv2`
   (SES in production), picked by `MAIL_TRANSPORT`.
   Plain SQL migrations live in `backend/migrations/`, run by
-  `backend/scripts/migrate.ts`. vitest has two projects: `unit` (no DB) and `db`
-  (needs Postgres).
+  `backend/scripts/migrate.ts`. vitest has three projects: `unit` (no DB),
+  `db` (needs Postgres) and `perf` (same wall-clock-budget caveat as the
+  engine's).
 - **frontend/**: SvelteKit 5 **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
   charts, vitest. Dev port `7777`. `frontend/.env.production` sets
@@ -59,9 +63,11 @@ pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026, 
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm check                  # typecheck all workspaces
-pnpm test                   # unit tests everywhere (no DB)
+pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend
 pnpm test:backend:db        # API + RLS tests, catalogue guards, route-auth inventory (water_test; needs dev:db:up)
+pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
+pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (also test:e2e:ui, check:e2e)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com, password demo-password)

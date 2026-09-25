@@ -675,8 +675,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     Email-first sign-up closes the last account-squatting gap, and is the
     recommendation if sign-up stays open.
   - **Skewed `TZ`:** no workspace sets one today: `frontend/vitest.config.ts`,
-    `packages/engine/vitest.config.ts` and `backend/vitest.workspace.ts` all
-    lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
+    `packages/engine/vitest.workspace.ts` and `backend/vitest.workspace.ts`
+    all lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
     add a CI leg with `TZ=America/Adak` (UTC−10). Fix any failures at the
     source (CLAUDE.md rule 7).
   - **Request sequencer (plan.md 1d):** list and series fetches in

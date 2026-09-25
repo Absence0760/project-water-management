@@ -14,6 +14,7 @@ import { shortfall } from './network/simulate';
 import { checkTransferLimits } from './verify/checks';
 import { netDailyDemandM3 } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
+import { loadClientCatchmentFixture, type Expected } from './testing/client-catchment-fixture';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -1296,113 +1297,23 @@ describe('runModel — end to end with the rain model', () => {
 // Workbook regression — client catchment (client data, local only)
 // ---------------------------------------------------------------------------
 
-interface Expected {
-	startDate: string;
-	days: number;
-	catchment: Record<string, (number | null)[]>;
-	nodes: Record<string, { kind: string } & Record<string, (number | null)[]>>;
-	shortfalls: {
-		periodStart: string;
-		periodEnd: string;
-		farms: ({ name: string; avgDemand: number; avgSupplied: number; avgEwrShortfall: number } & Partial<
-			Record<ShortfallCol, number | null>
-		>)[];
-		/** The totals row; present once extract_project.py reads the curtailment columns. */
-		totals?: Record<string, number | null>;
-	} | null;
-	/** [EWR shortfalls Pivot Data], written by the workbook's VBA (absent in older extracts). */
-	ewrPivot?: { year: number; month: number; farm: string; volM3: number; daysNotMet: number }[] | null;
-}
-/** [Shortfalls] curtailment columns in expected.json (scripts/wbt-import SHORTFALLS_COLS). */
-type ShortfallCol =
-	| 'deficit'
-	| 'fractionSupplied'
-	| 'target'
-	| 'reduceGain'
-	| 'reduceGainLs'
-	| 'targetFraction'
-	| 'totalChange'
-	| 'totalChangeLs'
-	| 'volumeLeft'
-	| 'fractionOfDemandLeft';
-interface ImportedProject {
-	settings: ModelInput['settings'];
-	model: ModelInput['model'];
-	series: { kind: string; startDate: string; values: (number | null)[] }[];
-}
+const clientCatchmentFixture = await loadClientCatchmentFixture();
 
-// No @types/node in this package: reach node:fs through an untyped dynamic import.
-type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
-const fsSpecifier = 'node:fs';
-const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
-const cwd = (globalThis as { process?: { cwd(): string } }).process?.cwd() ?? '.';
-const dataDir = ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment']
-	.map((p) => `${cwd}/${p}`)
-	.find((p) => fs.existsSync(`${p}/expected.json`));
-
-describe.skipIf(!dataDir)(
+describe.skipIf(!clientCatchmentFixture)(
 	'workbook regression: client catchment (needs data/client-catchment from scripts/wbt-import/extract_project.py)',
 	() => {
 		// vitest still runs a skipped describe's body to collect its tests: don't
 		// read the (absent) fixtures then, but register one test so the run
 		// reports the suite as skipped rather than silently empty.
-		if (!dataDir) {
+		if (!clientCatchmentFixture) {
 			it('needs data/client-catchment', () => {});
 			return;
 		}
-		const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
-		const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
-		// Q1 (engine ≥ 0.9.0): the engine puts pctUpstreamToDam of the upstream
-		// inflow INTO the dam, as the column's label says; the workbook's formula
-		// put it below the dam. Replay the workbook by feeding 1 − pct, so the
-		// comparison below still tests the port, not the corrected meaning.
-		// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
-		// store; the workbook has none. The replay switches it off (0 mm), which
-		// is bit for bit the workbook's rule; the N3 test below runs it on.
-		// B2 (engine ≥ 0.15.0): flagged zero-rain runs are treated as missing and
-		// CHIRPS fills them; the workbook runs them dry. The replay keeps them as
-		// recorded; the B2 test below runs the default.
-		// Q5 (engine ≥ 0.16.0): a dam's minimum operating level stops irrigation.
-		// The workbook's "min %" column is the transfer minimum, which each
-		// transfer rule already carries; migration 006 sets every stored value to
-		// 0 and the importer no longer fills it, so the replay does the same.
-		// N2 (engine ≥ 0.16.0): dams lose evaporation and seepage and gain the rain
-		// on their surface; the workbook's dams have none. The replay gives every
-		// dam a surface of 0 m² and no seepage, which is bit for bit the
-		// workbook's dam; the "N2:" test below runs the estimated areas.
-		const modelInput: ModelInput = {
-			// The workbook's natural flow is the legacy recession model's; GR4J is the default.
-			settings: {
-				...project.settings,
-				runoffModel: 'legacy',
-				effectiveRainStoreMm: 0,
-				zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [] }
-			},
-			model: {
-				...project.model,
-				nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0, damAreaFullM2: 0, damSeepagePerDay: 0 }))
-			},
-			series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
-		};
-		// B1: days where CHIRPS stands in for blank catchment rain. The engine
-		// bias-corrects CHIRPS there; the workbook uses it raw.
-		const chirpsFallback = (() => {
-			const d0 = toEpochDay(expected.startDate);
-			const at = (kind: string, t: number) => {
-				const s = project.series.find((x) => x.kind === kind);
-				if (!s) return null;
-				const v = s.values[d0 + t - toEpochDay(s.startDate)];
-				return typeof v === 'number' && Number.isFinite(v) ? v : null;
-			};
-			return Uint8Array.from({ length: expected.days }, (_, t) =>
-				at('rain_catchment_mm', t) === null && at('rain_chirps_mm', t) !== null ? 1 : 0
-			);
-		})();
-		// Feed the workbook's own natural flow so this isolates the network port from the rain model.
-		const natural = expected.catchment.natural_flow!.map((v) => v ?? 0);
-		const t0 = Date.now();
+		const { project, expected, modelInput, natural, chirpsFallback } = clientCatchmentFixture;
+		// Timing: see run.perf.test.ts, which builds the same fixture and takes
+		// the median of several runs against a budget — the unit suite here
+		// asserts nothing about wall-clock time (docs/followups.md, 2026-09-24).
 		const out = runModelWith(modelInput, () => ({ naturalFlowM3Day: natural }));
-		const elapsedMs = Date.now() - t0;
 		const idByName = new Map(project.model.nodes.map((n) => [n.name, n.id]));
 		const nodeByName = new Map(project.model.nodes.map((n) => [n.name, n]));
 		const topo = buildTopology(project.model.nodes);
@@ -1568,10 +1479,6 @@ describe.skipIf(!dataDir)(
 			expect(out.days).toBe(expected.days);
 		});
 
-		it('runs 13 nodes × 16k days well under a second', () => {
-			expect(elapsedMs).toBeLessThan(1000);
-		});
-
 		const keys = [
 			'demand',
 			'supplied',
@@ -1682,9 +1589,8 @@ describe.skipIf(!dataDir)(
 
 		it('end to end (natural flow from the rain model too) stays within the deviation list', () => {
 			// With the CHIRPS correction off, rain used is the workbook's: every year within E1/R1.
-			const t1 = Date.now();
+			// Timing for this call is checked separately in run.perf.test.ts.
 			const raw = runModel({ ...modelInput, settings: { ...modelInput.settings, chirpsBiasCorrection: 'none' } });
-			expect(Date.now() - t1).toBeLessThan(1000);
 			expect(naturalFlowYearsOff(raw).map((y) => y.text)).toEqual([]);
 			// With it on (the default), only water years that hold corrected fallback days may differ (B1).
 			const full = runModel(modelInput);
