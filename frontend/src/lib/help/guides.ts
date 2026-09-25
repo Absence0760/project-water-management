@@ -633,11 +633,14 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'**Summary**: mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged.',
+							'**Where the water went**: the run’s whole-period water balance as yearly averages, from rain on the catchment to outflow at the outlet.',
+							'**Self-checks**: whether the model’s daily accounting closes, the water balance by water year, and **Trace a day** for any farm-day or the catchment.',
 							'**Curtailment**: each farm’s supply against a fairness benchmark, and the cut that meets the EWR. See [[guide:curtailment-targets|Curtailment targets]].',
 							'**Hydrograph**: natural and simulated flow, with observed flow as dots. Try the log scale for low flows.',
 							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
 							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
 							'**WR2012 check**, when set up.',
+							'**Run notes**: the modeller’s written explanation of the run; editors can add or change it after the run is made.',
 							'**Flow duration**, **EWR vs outflow**, **EWR by month** and **EWR vs observed**.',
 							'**Farm detail**: dam storage and supply against demand, per farm.',
 							'**Explore outputs**: any stored daily series, by node.'
@@ -779,9 +782,10 @@ export const GUIDES: Guide[] = [
 							'Farm runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
 							'A [[transfer]] adds to or takes from the dam.',
-							'Irrigation takes the smaller of the demand and what the dam holds (yesterday’s storage plus today’s inflows).',
+							'Rain falls on the dam and adds to it; [[dam-evaporation|evaporation]] and [[dam-seepage|seepage]] act on yesterday’s storage.',
+							'Irrigation takes the smaller of the demand and what the dam holds above its [[dam-min|minimum operating level]] (yesterday’s storage plus today’s inflows, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is a share of the irrigation, back to the river the same day.',
-							'Outflow = spill + water passing below the dam not diverted + return flow. It is the next element’s upstream inflow.'
+							'Outflow = spill + water passing below the dam not diverted + seepage + return flow. It is the next element’s upstream inflow.'
 						]
 					}
 				]
@@ -791,11 +795,11 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'formula',
-						text: 'upstream inflow + runoff + transfer − irrigation × (1 − return share) − Δ storage = outflow'
+						text: 'upstream inflow + runoff + transfer + rain on dam − evaporation − seepage − irrigation × (1 − return share) − Δ storage = outflow'
 					},
 					{
 						type: 'p',
-						text: 'It closes to the cubic metre every day. Dam evaporation and seepage are not modelled, and the [[dam-min|minimum dam storage]] does not yet limit irrigation.'
+						text: 'It closes to the cubic metre every day. [[dam-evaporation|Dam evaporation]] and [[dam-seepage|seepage]] are modelled from the dam’s surface area, and the [[dam-min|minimum operating level]] limits what irrigation can draw.'
 					}
 				]
 			}

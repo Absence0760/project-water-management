@@ -30,7 +30,7 @@ export const TOUR: PictureStop[] = [
 			points: [
 				'Potential evaporation = pan coefficient (0.7 by default) × A-pan, spread over the days of each month.',
 				'The soil can only give up what it holds, so on dry days the [[actual-evaporation]] falls well below the potential.',
-				'Evaporation from the farm dams themselves is not modelled.'
+				'Farm dams evaporate too, from their own surface area — see [[dam-evaporation|dam evaporation]].'
 			],
 			shot: 'soil'
 		}

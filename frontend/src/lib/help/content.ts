@@ -285,12 +285,12 @@ export const HELP: HelpEntry[] = [
 		id: 'dam-capacity',
 		term: 'Dam capacity',
 		short: 'Combined full-supply volume of the farm’s dams, in m³. 0 means no storage: water not used the same day flows on.',
-		long: 'b023 treats a farm’s dams as one composite dam. Water above capacity spills downstream the same day. Dam evaporation and seepage are not modelled.',
+		long: 'b023 treats a farm’s dams as one composite dam. Water above capacity spills downstream the same day. Dam evaporation and seepage are modelled separately, from the dam’s surface area (engine ≥ 0.16.0).',
 		units: 'm³',
 		category: 'farm',
 		aliases: ['composite dam', 'storage capacity', 'full supply'],
 		fields: ['node.damCapacityM3'],
-		related: ['dam-initial', 'dam-min', 'spill', 'dam-storage'],
+		related: ['dam-initial', 'dam-min', 'spill', 'dam-storage', 'dam-evaporation', 'dam-seepage'],
 		source: 'b023 Farm spec'
 	},
 	{

@@ -60,10 +60,11 @@ button), so a scrolling table or a sticky header can't clip or cover them.
   input series. Click it for each series' end date. It turns amber when the
   newest data is more than 7 days old (`STALE_DAYS` in
   `series/freshness.ts`; a candidate for a project setting). Ages count
-  calendar days up to the viewer's **local** date (`localIsoDate`), the same
-  as the project list's badge, so the two never differ by a day around
-  midnight. Series dates are calendar days, so the UTC date would be wrong
-  for anyone east or west of UTC.
+  calendar days up to the viewer's **local** date (`localIsoDate`); the
+  project list's badge (`projects/freshness.ts`) counts the same way from its
+  own `daysSince`, so the two never differ by a day around midnight. Series
+  dates are calendar days, so the UTC date would be wrong for anyone east or
+  west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
   Dropping a CSV anywhere on the page opens it with that file.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
@@ -177,13 +178,6 @@ personal copy (the Copy dialog says so).
   order is `node.sortOrder`, which is display only: runs always use the
   topological order. Every list of nodes uses it (`lib/model/order.ts`).
 
-## Transfers
-
-Each rule has a **Priority** column (whole number, lower moves first; equal
-priorities share a source dam pro rata to their limits, [engine-audit
-Q18](./engine-audit.md)). A new rule starts after the existing ones (the
-highest priority + 1). The help explains the destination's room cap (N4).
-
 ## Crops & demand
 
 Crop factors run October to September and are reorderable. Planted areas
@@ -192,7 +186,7 @@ reorderable. A **demand preview** uses the engine's
 `grossFarmDemandM3PerDay`: m³/day per month, the mean, and Mm³/a per farm and
 for the catchment. It is gross demand, before the daily effective-rain
 reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0).
-The crop-factor intro says the factors are **× A-pan, not FAO Kc** (FAO-56 Kc
+The crop-factor intro says the factors are **× A-pan, not an FAO Kc** (FAO-56 Kc
 multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
 every crop and month with a factor above 1.0: a hint to check for an FAO Kc
 entered as it is, never a block on saving (`highCropFactors` in
@@ -211,7 +205,11 @@ the Network tab.
 One row per transfer rule: source and destination node, the months it runs
 (twelve toggles, water-year order, with **All**/**None**), a maximum rate
 (m³/s), an optional daily cap (m³), the minimum source-dam storage (%) below
-which it stops, and an enabled switch. The empty state says what a transfer
+which it stops, a **Priority** (whole number, lower moves first; equal
+priorities share a source dam pro rata to their limits, [engine-audit
+Q18](./engine-audit.md); a new rule starts after the existing ones, the
+highest priority + 1; the help explains the destination's room cap, N4), and
+an enabled switch. The empty state says what a transfer
 is (most catchments have none); with fewer than two nodes it links to the
 Network tab. On a phone (≤ 640 px) each rule becomes a card: "Transfer N" with
 its remove button on top, From and To side by side, the month toggles six to a
@@ -226,8 +224,9 @@ Each series shows its role in the model, its period, its last date and age,
 a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name) are marked. Clicking a row (or its View button) shows
 that series in the chart below. Below 640px wide each row becomes a card
-(series and role on top, then labelled Period / Data up to / Missing /
-Typical, the coverage strip, and the buttons wrapping underneath), so a phone
+(series and role on top, then labelled Period / Data up to / Missing (% of
+days) / Typical (mean), the coverage strip, and the buttons wrapping
+underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. For editors the
 **Upload CSV** form follows the series panels in reading order, so on a phone
@@ -285,10 +284,11 @@ un-hidden, scrolled into view and highlighted. Alongside each series' own
 column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
-for every flow series; **Rain used** and its source (catchment / CHIRPS /
-forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
-month and the **corrected CHIRPS** value (respecting Settings → *CHIRPS bias
-correction*); and **Excluded from calibration**, with its reason, for any day
+for every flow series; **Rain used (model)** and its source (catchment /
+CHIRPS / forecast / none) after gap-fill; the **CHIRPS bias factor** for that
+calendar month and the **CHIRPS (corrected)** value (respecting Settings →
+*CHIRPS bias correction*); and **Excluded from calibration**, with its reason,
+for any day
 inside a Settings → *Calibration exclusions* period. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
@@ -378,7 +378,7 @@ value such as 108700.
   the monthly factors and the number of days in its warnings. Below that,
   **Zero-rain runs in the catchment rain** (`settings/ZeroRainSection.svelte`,
   `settings.zeroRainRuns`, [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)):
-  a **Flagged zero runs** picker ("Treat as missing", the default, or "Run as
+  a **Flagged zero runs** picker ("Treat as missing (default)", or "Run as
   recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
   treat as missing** period lists. These share the calibration exclusions'
   editor (`common/PeriodList.svelte`), with the same required reason and the
@@ -387,20 +387,21 @@ value such as 108700.
   warns and leaves the year out when CHIRPS reads a lot of rain over a
   kept-dry run (engine ≥ 0.18.0, model.md §2.4b). The rest
   depends on the model:
-  - **Legacy**: a, b, rain threshold, summer and winter factors, and summer
-    months as toggles. **Advanced** holds the winter switch, the recession
-    parameters and the 80-value recession tables.
+  - **Legacy**: a, b, rain threshold, initial base flow, summer and winter
+    factors, and summer months as toggles. **Advanced** holds the winter
+    switch, the recession parameters and the 80-value recession tables.
   - **GR4J**: X1, X3 and X4, each with its typical and allowed range
     (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
     input refuses values outside those bounds. The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0. Above the monthly **pan coefficient**
-    row, a **preset** picker (Generic, Winter rainfall (e.g. Western Cape),
-    Summer rainfall — indicative, from FAO-56 Table 5 climate classes, Allen
-    et al. 1998; model.md §2.4a) fills the row with a starting point; the row
-    stays editable after, and nothing is stored about which preset (or
-    whether one) was picked. A warning appears under the row when a month
+    row, a **preset** picker (Generic (flat 0.70), Winter rainfall (e.g.
+    Western Cape), Summer rainfall — indicative, from FAO-56 Table 5 climate
+    classes, Allen et al. 1998; model.md §2.4a) fills the row with a starting
+    point; the row stays editable after, and nothing is stored about which
+    preset (or whether one) was picked. A warning appears under the row when
+    a month
     sits outside FAO-56's usual 0.6–0.85 range for a Class A pan — a
     plausibility check, not a hard limit, so a value further out still saves.
     A separate notice appears when A-pan × pan coefficient is 0 in every
