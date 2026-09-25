@@ -78,7 +78,9 @@ Runs & results) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and the Runs & results compliance panel, loaded for a
-run that has a report). uPlot and the
+run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
+`runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
+water users). uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 

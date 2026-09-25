@@ -160,7 +160,7 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
  * supplemental, for checkDoubledCropAreas. A drought rule pumps only while the
  * dam is low, so more demand, which empties the dam sooner, switches the
  * boreholes on earlier and can raise the supply fraction legitimately (fuzz
- * seed 1450, GR4J: n16 0.942 → 0.962). The property is a law of the rest of
+ * seed 4623, GR4J: n24 0.963 → 0.978; seed 1450 before the generator drew EWR rule tables). The property is a law of the rest of
  * the network, so it is checked with the trigger taken out.
  */
 export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {

@@ -107,6 +107,16 @@
 //             notes) measures 429 KB with #9's savings in. No new dependency.
 //             The largest chunk is 40 KB (the Runs tab), ~1 KB under, so the
 //             next Runs-tab feature must lazy-load. Headroom ~6 KB.
+// 2026-09-25  total 435 → 449 KB; largest chunk stays 41 KB. The human-impact
+//             work packages (WP-1.33 other water users, WP-1.34 groundwater,
+//             WP-1.35 land cover; engine 0.22–0.24) add 14 KB: the Network tab's
+//             user, borehole and land-cover editors, the schematic's user
+//             marker, model validation, the curtailment rows for users and
+//             help entries. Their Runs-tab tables are code-split
+//             (runs/HumanImpactTables.svelte, loaded only for a run that has
+//             any of them): inline, they took the Runs chunk to 42 KB, over
+//             its ceiling. Measured 443 KB; the largest chunk is 40 KB (the
+//             Runs tab). No new dependency. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -118,7 +128,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 435,
+	totalCodeKb: 449,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });
