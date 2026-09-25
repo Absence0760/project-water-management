@@ -10,6 +10,7 @@ import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { ApiError, handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
+import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
@@ -82,6 +83,7 @@ export function createApp() {
 	projects.route('/', evidenceRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
+	projects.route('/', jobRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();
