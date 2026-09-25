@@ -14,7 +14,10 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
 	const picked = list.getByRole('button', { name: /^Baseline/ });
 	await expect(picked).toHaveAttribute('aria-current', 'true');
-	await expect(picked).toContainText('2021-10-01 → 2022-01-28');
+	// A compact row: when it ran and the years; the full period is in the results header.
+	await expect(picked).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} · 2021–2022/);
+	await expect(picked).toContainText('latest');
+	await expect(page.locator('#res-h').locator('..')).toContainText('2021-10-01 → 2022-01-28');
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
@@ -288,6 +291,18 @@ test('with a long runs list the whole results menu stays in view on a laptop scr
 	const rail = page.getByRole('complementary');
 	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
 	for (const name of ['Summary', 'Explore outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
+
+	// A long list gets a filter over the labels.
+	const filter = page.getByRole('searchbox', { name: 'Filter runs by label' });
+	await filter.fill('RUN 07');
+	await expect(runs.getByRole('listitem')).toHaveCount(1);
+	await expect(runs.getByRole('button', { name: /^Run 07/ })).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'of 20 runs' })).toHaveText('1 of 20 runs');
+	await filter.fill('nothing like this');
+	await expect(runs.getByRole('listitem')).toHaveCount(0);
+	await expect(page.getByText('No run label matches.')).toBeVisible();
+	await filter.fill('');
+	await expect(runs.getByRole('listitem')).toHaveCount(20);
 });
 
 test('a run tells where its water went on the catchment picture', async ({ page, owner }) => {

@@ -26,6 +26,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultSections } from './sections';
+	import { filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
 	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
@@ -252,6 +253,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	// project's updatedAt; new data shows as a driver series reaching past the
 	// run's end (when no fixed simulation end is set).
 	const latest = $derived(runs[0] ?? null);
+	// The rail's filter over run labels (shown from RUN_FILTER_FROM runs up).
+	let runQuery = $state('');
+	const shownRuns = $derived(filterRuns(runs, runQuery));
 	const stale = $derived.by(() => {
 		if (!latest) return null;
 		const reasons: string[] = [];
@@ -377,27 +381,43 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			{:else if runs.length === 0}
 				<p class="empty">{canRun ? 'No runs yet. Run the model to see results.' : 'No runs yet.'}</p>
 			{:else}
+				{#if runs.length >= RUN_FILTER_FROM}
+					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} />
+					{#if runQuery.trim()}<p class="muted small filter-count" role="status">{shownRuns.length ? `${shownRuns.length} of ${runs.length} runs` : 'No run label matches.'}</p>{/if}
+				{/if}
+				<!-- Compact rows: the label (two lines at most, the full label on
+				     hover), when it ran and the years it covers, then small status
+				     tags. The full dates, author and engine are in the results header. -->
 				<ul class="runs">
-					{#each runs as r, i (r.id)}
+					{#each shownRuns as r (r.id)}
 						<li class:active={r.id === selectedId}>
-							<button type="button" class="pick" aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
-								<span class="lbl">{r.label || 'Untitled run'}{#if i === 0}<span class="latest">latest</span>{/if}{#if r.legacy}<span class="badge badge-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}{#if evidenceById.get(r.id) === 'current'}<span class="badge badge-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="badge" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}{#if r.pinned}<span class="badge" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}</span>
-								<span class="meta">{r.startDate} → {r.endDate}</span>
-								<span class="meta">{fmtDate(r.createdAt, true)}{r.createdBy ? ` · ${r.createdBy}` : ''} · engine {r.engineVersion}</span>
+							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
+								<span class="lbl">{r.label || 'Untitled run'}</span>
+								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned}
+									<span class="tags">
+										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
+										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}
+										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
+										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
+									</span>
+								{/if}
 							</button>
 							{#if canRun}
-								<button
-									type="button"
-									class="btn btn-icon pin"
-									aria-pressed={!!r.pinned}
-									aria-label="Pin run {r.label || fmtDate(r.createdAt, true)}"
-									title={r.pinned ? 'Unpin: newer runs can push it out again' : `Pin: newer runs never push it out (at most ${PINNED_RUNS_MAX} per project)`}
-									onclick={() => togglePin(r)}
-									><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
-								>
-							{/if}
-							{#if canRun && !evidenceById.has(r.id) && !r.pinned}
-								<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
+								<div class="acts">
+									<button
+										type="button"
+										class="btn btn-icon pin"
+										aria-pressed={!!r.pinned}
+										aria-label="Pin run {r.label || fmtDate(r.createdAt, true)}"
+										title={r.pinned ? 'Unpin: newer runs can push it out again' : `Pin: newer runs never push it out (at most ${PINNED_RUNS_MAX} per project)`}
+										onclick={() => togglePin(r)}
+										><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
+									>
+									{#if !evidenceById.has(r.id) && !r.pinned}
+										<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
+									{/if}
+								</div>
 							{/if}
 						</li>
 					{/each}
@@ -441,7 +461,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<span class="muted small">
-							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}
+							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}{detail.run.createdBy ? ` by ${detail.run.createdBy}` : ''} · engine {detail.run.engineVersion}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
 						</span>
 					</div>
@@ -716,7 +736,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		.rail .runs {
 			flex: 0 1 auto;
 			min-height: 7.5rem;
-			max-height: 16rem;
+			max-height: 24rem;
 			overflow-y: auto;
 		}
 	}
@@ -762,32 +782,58 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	.pick:hover {
 		background: var(--row-hover);
 	}
-	/* Labels wrap rather than truncate, so the "latest" and legacy badges stay readable in the narrow rail. */
+	/* A label shows at most two lines; the full label is the row's tooltip and the results heading. */
 	.lbl {
 		font-weight: 600;
 		overflow-wrap: anywhere;
-	}
-	.latest {
-		font-size: 0.68rem;
-		font-weight: 600;
-		margin-left: 0.4rem;
-		padding: 0 0.35rem;
-		border-radius: 999px;
-		background: var(--surface-2);
-		color: var(--text-2);
-		vertical-align: 1px;
-	}
-	.lbl .badge {
-		margin-left: 0.4rem;
-		vertical-align: 1px;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
 	}
 	.meta {
 		font-size: 0.75rem;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
-	.runs .btn-icon {
-		margin: 0.45rem 0.3rem 0 0;
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		margin-top: 0.15rem;
+	}
+	.tag {
+		font-size: 0.68rem;
+		font-weight: 600;
+		line-height: 1.5;
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		white-space: nowrap;
+		background: var(--surface-2);
+		color: var(--text-2);
+	}
+	.tag-owner {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.tag-warn {
+		background: var(--warning-soft);
+		color: var(--warning);
+	}
+	/* Pin above delete, in a narrow column, so the label keeps the rail's width. */
+	.acts {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.35rem 0.3rem 0 0;
+	}
+	.filter {
+		width: 100%;
+		margin-bottom: 0.4rem;
+	}
+	.filter-count {
+		margin: 0 0 0.4rem;
 	}
 	.pin svg {
 		fill: none;

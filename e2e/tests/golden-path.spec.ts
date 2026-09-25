@@ -123,7 +123,8 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 
 	const runs = page.getByRole('region', { name: 'Runs', exact: true });
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toHaveAttribute('aria-current', 'true');
-	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toContainText('2020-10-01 → 2022-09-30');
+	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toContainText('2020–2022');
+	await expect(page.locator('#res-h').locator('..')).toContainText('2020-10-01 → 2022-09-30');
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
