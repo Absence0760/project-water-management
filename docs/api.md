@@ -1,7 +1,7 @@
 # HTTP API
 
 Backend: Hono (`backend/src/app.ts`), dev on `http://localhost:3001`, prod behind
-CloudFront at `/api`. All bodies are JSON. Shared TypeScript shapes live in
+CloudFront at `/api`. All bodies are JSON, except the CSV exports. Shared TypeScript shapes live in
 `packages/engine/src/project.ts` — both the backend and the frontend import them.
 
 ## Auth
@@ -13,7 +13,7 @@ storage.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
@@ -68,12 +68,19 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 
 ## Errors
 
-Non-2xx responses are `{ error: string, details?: unknown }`. `401` = not signed
+Non-2xx responses are `{ error: string, details?: unknown }`
+(`backend/src/http/errors.ts`). `401` = not signed
 in; `404` = not found **or** not a member (RLS hides the project — the API never
-reveals that a project exists); `403` = member without the needed role; `400` =
-validation (`details` = zod issues); `409` = conflict (duplicate name, last owner);
-`429` = an email was sent to this address moments ago, or sign-in is locked
-for this address (with `Retry-After`).
+reveals that a project exists); `403` = member without the needed role (also a
+cross-origin form post rejected by the CSRF check, a write RLS refused, or, in
+production, a request that didn't come through CloudFront); `400` =
+validation (`details` = zod issues); `409` = conflict (duplicate name or email,
+already a member, last owner/admin); `413` = request body over 4 MB, a series
+over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
+address moments ago, or sign-in is locked for this address (with
+`Retry-After`). Database errors are mapped to fixed messages and anything
+unexpected is `500 { error: "Internal server error" }`; raw database error
+text never reaches the client.
 
 ## Projects
 
@@ -87,7 +94,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects` | – | `{ projects: ProjectSummary[] }` | – |
+| GET | `/projects` | – | `{ projects: ProjectSummary[] }` (most recently updated first) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team you're in; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, settings?, teamId? }` | `{ project }` | editor (owner when `teamId` is sent) |
@@ -139,7 +146,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
   one field of a group keeps the group's other stored fields; top-level
-  values, and each `wr2012` group, are replaced whole.
+  values, each `wr2012` group and `fitRecord` are replaced whole. Unknown
+  keys pass through, and the settings patch is capped at 64 000 characters
+  of JSON.
   `chirpsBiasCorrection` is `monthly` (the default: CHIRPS rain that fills in
   for blank catchment rain is scaled by a per-month catchment / CHIRPS factor,
   engine ≥ 0.7.0) or `none` (raw CHIRPS); [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction).
@@ -165,10 +174,14 @@ alongside teams, e.g. to give an outside client `viewer` access.
   budget, evaluations, cancelled, free, params, startParams, flowKind,
   simulatedKey, calibrationStart, calibrationEnd, exclusions, validate,
   validationRecord, fit, before, splitSample, differential, independentRecord,
-  marPenalty, notes, editedParams, forcing }`, each key required except
+  marPenalty, notes, editedParams, forcing, starts, startResults }`, each key
+  required except
   `marPenalty` (the WR2012 MAR penalty result — `weight, targetMarMm3,
   marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
-  off, the default), `editedParams` and `forcing`, and no others. `bounds` is
+  off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
+  `startResults` (`{ seed, params, score, best }[]`, one per start) for a
+  multi-start fit (absent on a record made before those, i.e. one start), and
+  no others. `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
   (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
   chirpsBiasCorrection, zeroRainRuns }`, `panCoefficient`/`apanMm` each 12
@@ -196,9 +209,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites) | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
-| DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | – |
+| DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves) | viewer |
+
+`409 a project must keep at least one owner` when demoting or removing the
+last direct owner (including the last owner leaving).
 
 These are **direct** members only. People who reach a team project through the
 team are listed by `GET /teams/:id`, not here.
@@ -275,10 +291,12 @@ nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
 (nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
 
-Validation on `PUT`: node names unique; every `downstreamNodeId`, crop-area and
+Validation on `PUT`: ids unique, node and crop names unique (ignoring case),
+one crop area per node + crop; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a
 tree (no cycles) with exactly one node whose `downstreamNodeId` is `null`
-(the outflow gauge) — unless the model is empty.
+(the outflow gauge) — unless the model is empty. A failure is
+`400 { error: "invalid model", details: string[] }`, one message per problem.
 
 ## Time series
 
@@ -291,6 +309,10 @@ Daily series, `values[i]` = value on `startDate + i` days, `null` = missing.
 | PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (upsert on kind+name) | editor |
 | POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
+
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt }` —
+`updatedAt` is when the values last changed (upload or merge), so the UI can
+tell there is new data since the last run.
 
 `merge` is for daily or batch appends (loggers, CHIRPS, forecasts): the days
 sent are merged into the existing series by date. Incoming values win on
@@ -326,8 +348,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   with the engine's reason, and nothing is stored: no rainfall series, a
   simulation end before its start, or (engine ≥ 0.11.1) a GR4J run with no
   potential evaporation (A-pan × pan coefficient 0 in every month).
-- A project keeps its newest **20** runs (`RUNS_KEPT_PER_PROJECT`); each new
-  run deletes the oldest beyond that, with their outputs.
+- A project keeps its newest **20** runs (env `RUNS_KEPT_PER_PROJECT`,
+  default 20); each new run deletes the oldest beyond that, with their
+  outputs.
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy }` —
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
@@ -501,7 +524,7 @@ CSV format: RFC 4180 (CRLF, fields with `,` `"` or line breaks quoted, `"`
 doubled), a **UTF-8 BOM** so Excel reads `m³` correctly, ISO `YYYY-MM-DD`
 dates, full-precision numbers, and **empty cells for missing days**. Column
 headers are `label (unit)` (a node's: `label [letter] (unit)`), in the engine's output order. Text cells that start
-with `= + - @` get a leading `'` so a spreadsheet never runs them as formulas.
+with `= + - @`, a tab or a CR get a leading `'` so a spreadsheet never runs them as formulas.
 `from`/`to` are inclusive ISO dates, clamped to the series; `400` if they are
 not real dates, `from > to`, or the window misses the series entirely.
 
