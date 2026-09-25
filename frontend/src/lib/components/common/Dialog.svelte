@@ -64,7 +64,9 @@
 	dialog::backdrop {
 		background: rgb(0 0 0 / 0.35);
 	}
-	.body :global(input),
+	/* Text fields fill the dialog; checkboxes and radios keep their own size, or a
+	   stretched box pushes its label across the row (the series preview's column picker). */
+	.body :global(input:not([type='checkbox']):not([type='radio'])),
 	.body :global(textarea) {
 		width: 100%;
 	}

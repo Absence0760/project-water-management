@@ -120,3 +120,19 @@ test('the preview fills the viewport and renders rows to the bottom of its talle
 	});
 	expect(bottomCell).toMatch(/^2020-\d\d-\d\d$/);
 });
+
+test('the column picker keeps each checkbox beside its label', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview picker');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: previewValues(40) });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await page.getByRole('button', { name: 'Preview data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await dialog.getByText('Columns', { exact: true }).click();
+
+	// A checkbox stretched to the row's width would sit far from its label.
+	const box = dialog.getByRole('checkbox', { name: 'Rain used (model)' });
+	await expect(box).toBeVisible();
+	const size = await box.boundingBox();
+	expect(size?.width).toBeLessThan(30);
+});
