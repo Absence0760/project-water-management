@@ -7,7 +7,8 @@
 // reads, which peaked at about a gigabyte of memory. This reads the central
 // directory, then inflates only the entries asked for, with the platform's
 // `DecompressionStream('deflate-raw')` (native zlib; browsers, workers and
-// Node alike). readWorkbook() packs those into a small stored zip for SheetJS.
+// Node alike), and streams them: readWorkbook() parses each part as its
+// chunks come out (./xml.ts), so no sheet is ever held whole.
 //
 // The file is untrusted. Every offset and length is bounds-checked against
 // the buffer; each inflated entry and the total are capped before anything is
@@ -167,12 +168,8 @@ export class ZipArchive {
 		return [start, stop];
 	}
 
-	/**
-	 * One entry, inflated. The entry's declared size is checked against the
-	 * per-entry cap and the remaining total before anything is allocated, and
-	 * inflation stops the moment it produces more than that declared size.
-	 */
-	async read(name: string): Promise<Uint8Array> {
+	/** The checks read() and stream() share: flags, method, and the size caps against the declared size. */
+	private checked(name: string): ZipEntryInfo {
 		const e = this.info(name);
 		if (!e) throw unreadable('corrupt', `it has no part ${name}`);
 		if (e.flags & 0x2041) throw unreadable('encrypted', 'it is encrypted');
@@ -180,18 +177,83 @@ export class ZipArchive {
 		const { maxEntryBytes, maxTotalBytes } = this.limits;
 		if (e.size > maxEntryBytes) throw new WorkbookTooLargeError('unpacked', e.size, maxEntryBytes);
 		if (this.inflated + e.size > maxTotalBytes) throw new WorkbookTooLargeError('unpacked', this.inflated + e.size, maxTotalBytes);
+		return e;
+	}
+
+	/**
+	 * One entry, inflated chunk by chunk into `sink`, never held whole: how
+	 * the reader parses a 40 MB sheet in a chunk's worth of memory. The same
+	 * checks as read(): the declared size against the caps before anything is
+	 * inflated, inflation stopped the moment it passes that size, and the
+	 * CRC-32 checked at the end (the sink has seen the data by then, so a
+	 * caller discards what it built when this throws). An error the sink
+	 * throws stops inflation and propagates unchanged.
+	 */
+	async stream(name: string, sink: (chunk: Uint8Array) => void): Promise<void> {
+		const e = this.checked(name);
 		const [start, stop] = this.dataRange(e);
 		const packed = this.bytes.subarray(start, stop);
-		let out: Uint8Array;
+		let crc = 0;
+		let n = 0;
+		const feed = (chunk: Uint8Array) => {
+			if (n + chunk.length > e.size) throw unreadable('corrupt', `a part of it (${e.name}) unpacks to more than its zip header says`);
+			crc = crc32(chunk, crc);
+			n += chunk.length;
+			sink(chunk);
+		};
 		if (e.method === 0) {
 			if (e.compressedSize !== e.size) throw unreadable('corrupt', `a part of it (${e.name}) is damaged`);
-			out = packed.slice();
+			for (let i = 0; i < packed.length; i += STORED_CHUNK) feed(packed.subarray(i, Math.min(packed.length, i + STORED_CHUNK)));
 		} else {
-			out = await inflateRaw(packed, e.size, e.name);
+			await inflateRawChunks(packed, e.name, feed);
 		}
-		if (crc32(out) !== e.crc) throw unreadable('corrupt', `a part of it (${e.name}) is damaged (checksum mismatch)`);
-		this.inflated += out.length;
+		if (n !== e.size) throw unreadable('corrupt', `a part of it (${e.name}) is shorter than its zip header says`);
+		if (crc !== e.crc) throw unreadable('corrupt', `a part of it (${e.name}) is damaged (checksum mismatch)`);
+		this.inflated += n;
+	}
+
+	/** One entry, inflated whole (the small parts: content types, relationships, workbook, styles). */
+	async read(name: string): Promise<Uint8Array> {
+		const out = new Uint8Array(this.checked(name).size);
+		let n = 0;
+		await this.stream(name, (chunk) => {
+			out.set(chunk, n);
+			n += chunk.length;
+		});
 		return out;
+	}
+}
+
+/** Stored entries go to a stream() sink in slices of this size, as inflated ones arrive in chunks. */
+const STORED_CHUNK = 64 * 1024;
+
+/**
+ * Raw inflate, each chunk handed to `feed` as it comes out. A failure of the
+ * compressed data itself is UnreadableWorkbookError 'corrupt'; whatever
+ * `feed` throws cancels the inflater and propagates as it is.
+ */
+async function inflateRawChunks(packed: Uint8Array, name: string, feed: (chunk: Uint8Array) => void): Promise<void> {
+	const source = new ReadableStream<Uint8Array>({
+		start(c) {
+			c.enqueue(packed);
+			c.close();
+		}
+	});
+	const reader = source.pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+	for (;;) {
+		let step: ReadableStreamReadResult<Uint8Array>;
+		try {
+			step = await reader.read();
+		} catch {
+			throw unreadable('corrupt', `a part of it (${name}) is damaged`);
+		}
+		if (step.done) return;
+		try {
+			feed(step.value);
+		} catch (e) {
+			await reader.cancel().catch(() => {});
+			throw e;
+		}
 	}
 }
 
@@ -201,29 +263,12 @@ export class ZipArchive {
  */
 export async function inflateRaw(packed: Uint8Array, size: number, name = 'a part'): Promise<Uint8Array> {
 	const out = new Uint8Array(size);
-	const source = new ReadableStream<Uint8Array>({
-		start(c) {
-			c.enqueue(packed);
-			c.close();
-		}
-	});
-	const reader = source.pipeThrough(new DecompressionStream('deflate-raw')).getReader();
 	let n = 0;
-	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (n + value.length > size) {
-				await reader.cancel().catch(() => {});
-				throw unreadable('corrupt', `a part of it (${name}) unpacks to more than its zip header says`);
-			}
-			out.set(value, n);
-			n += value.length;
-		}
-	} catch (e) {
-		if (e instanceof UnreadableWorkbookError) throw e;
-		throw unreadable('corrupt', `a part of it (${name}) is damaged`);
-	}
+	await inflateRawChunks(packed, name, (chunk) => {
+		if (n + chunk.length > size) throw unreadable('corrupt', `a part of it (${name}) unpacks to more than its zip header says`);
+		out.set(chunk, n);
+		n += chunk.length;
+	});
 	if (n !== size) throw unreadable('corrupt', `a part of it (${name}) is shorter than its zip header says`);
 	return out;
 }
@@ -236,9 +281,9 @@ export interface StoredEntry {
 }
 
 /**
- * The entries as a zip with no compression, for SheetJS to open. Stored
- * entries cost SheetJS a slice each, where deflated ones would be inflated a
- * second time.
+ * The entries as a zip with no compression: test support, and the SheetJS
+ * reference reader the parity tests compare against (./sheetjsReference.ts).
+ * The import itself no longer hands SheetJS anything.
  */
 export function storedZip(entries: readonly StoredEntry[]): Uint8Array {
 	const enc = new TextEncoder();

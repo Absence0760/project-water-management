@@ -10,19 +10,21 @@ import { extractProject } from './extract';
 import { type FromWorker, type ToWorker, toFailure } from './messages';
 import { handle, type WorkerDeps, type WorkerState } from './protocol';
 import { WorkbookImportCancelled, WorkbookImportFailed, createWorkbookImport, type WorkerLike } from './runner';
+import { sheetjsSource } from './sheetjsReference';
+import type { WorkbookSource } from './source';
 import { readWorkbook } from './workbook';
 
 const FIXTURE = new URL('../../../../../scripts/wbt-import/fixtures/synthetic_b023.xlsx', import.meta.url);
 const fixture = () => new Blob([readFileSync(FIXTURE)]);
 
-const deps: WorkerDeps<XLSX.WorkBook> = {
+const deps: WorkerDeps<WorkbookSource> = {
 	read: async (file, onProgress) => readWorkbook(await file.arrayBuffer(), { onProgress }),
 	extract: extractProject
 };
 
 async function drive(messages: ToWorker[], d = deps): Promise<FromWorker[]> {
 	const out: FromWorker[] = [];
-	const state: WorkerState<XLSX.WorkBook> = { workbook: null, fileName: '' };
+	const state: WorkerState<WorkbookSource> = { workbook: null, fileName: '' };
 	for (const m of messages) await handle(m, state, (x) => out.push(x), d);
 	return out;
 }
@@ -98,7 +100,7 @@ describe('handle: the worker protocol', () => {
 
 /** A fake worker that answers through handle(), asynchronously like a real one. */
 function fakeWorker(d = deps) {
-	const state: WorkerState<XLSX.WorkBook> = { workbook: null, fileName: '' };
+	const state: WorkerState<WorkbookSource> = { workbook: null, fileName: '' };
 	const w: WorkerLike & { terminated: boolean; posted: ToWorker[] } = {
 		terminated: false,
 		posted: [],
@@ -142,7 +144,7 @@ describe('createWorkbookImport: the page side', () => {
 
 	it('cancel terminates the worker and rejects the pending read at once', async () => {
 		let release: () => void = () => {};
-		const slow: WorkerDeps<XLSX.WorkBook> = { ...deps, read: () => new Promise((resolve) => (release = () => resolve(XLSX.utils.book_new()))) };
+		const slow: WorkerDeps<WorkbookSource> = { ...deps, read: () => new Promise((resolve) => (release = () => resolve(sheetjsSource(XLSX.utils.book_new())))) };
 		const w = fakeWorker(slow);
 		const session = createWorkbookImport(() => w);
 		const p = session.parse(file(), {});

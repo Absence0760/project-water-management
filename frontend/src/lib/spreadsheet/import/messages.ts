@@ -3,7 +3,7 @@
 // WorkbookImportError becomes a plain object with its code and the fields
 // the UI needs (the missing named ranges, the sheet and cell), since class
 // instances don't survive postMessage. Type-only imports and ./errors (no
-// SheetJS), so the page side stays light.
+// parser), so the page side stays light.
 import { InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, WorkbookImportError, WorkbookTooLargeError, type WorkbookImportErrorCode } from './errors';
 import type { ImportResult } from './extract';
 import type { GaugeScaling } from './gauge';

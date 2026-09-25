@@ -1,8 +1,8 @@
-// Just enough of the OOXML package structure (ECMA-376 Part 2) to pick the
-// zip entries readWorkbook() hands SheetJS: the content types say where the
-// workbook, shared strings and styles are, and the workbook and its
-// relationships say which worksheet part holds which sheet. Attribute-level
-// scanning only; SheetJS does the real parsing of the parts it's given.
+// Just enough of the OOXML package structure (ECMA-376 Part 2) to find the
+// zip entries readWorkbook() reads: the content types say where the
+// workbook, shared strings and styles are, and the workbook's relationships
+// say which part each sheet's r:id points at. Attribute-level scanning of
+// these small parts only; ./workbookParts.ts and ./sheet.ts read the rest.
 
 /** One XML element's attributes (prefixes kept, values entity-decoded). */
 function attributes(tag: string): Record<string, string> {
@@ -33,7 +33,7 @@ const WANTED_TYPES: Record<string, 'workbook' | 'strings' | 'styles' | 'other'> 
 	'application/vnd.ms-excel.template.macroEnabled.main+xml': 'workbook',
 	'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml': 'strings',
 	'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml': 'styles',
-	// SheetJS reads these without a guard when the content types list them, so they must be present.
+	// SheetJS read these without a guard when the content types listed them (the reference reader still does).
 	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml': 'other',
 	'application/vnd.ms-excel.person+xml': 'other'
 };
@@ -49,11 +49,20 @@ export interface PackageParts {
 	strings: string[];
 	/** Styles, metadata and people parts. */
 	support: string[];
+	/** The first styles part (number formats: how a date cell is told from a number). */
+	styles: string | null;
+	/** The <Types> element's namespace (SheetJS refused any but the OPC content-types one). */
+	namespace: string | null;
 }
+
+/** The namespace [Content_Types].xml must be in. */
+export const CONTENT_TYPES_NAMESPACE = 'http://schemas.openxmlformats.org/package/2006/content-types';
 
 /** Read [Content_Types].xml. */
 export function packageParts(contentTypes: string): PackageParts {
-	const out: PackageParts = { workbook: null, binary: false, strings: [], support: [] };
+	const out: PackageParts = { workbook: null, binary: false, strings: [], support: [], styles: null, namespace: null };
+	const types = /<(?:([\w.-]+):)?Types\b[^>]*>/.exec(contentTypes);
+	if (types) out.namespace = attributes(types[0])[types[1] ? `xmlns:${types[1]}` : 'xmlns'] ?? null;
 	for (const o of tags(contentTypes, 'Override')) {
 		const part = (o.PartName ?? '').replace(/^\//, '');
 		if (!part) continue;
@@ -61,7 +70,10 @@ export function packageParts(contentTypes: string): PackageParts {
 		const role = WANTED_TYPES[o.ContentType ?? ''];
 		if (role === 'workbook') out.workbook ??= part;
 		else if (role === 'strings') out.strings.push(part);
-		else if (role) out.support.push(part);
+		else if (role) {
+			out.support.push(part);
+			if (role === 'styles') out.styles ??= part;
+		}
 	}
 	return out;
 }
@@ -83,23 +95,13 @@ export function resolveTarget(owner: string, target: string): string {
 }
 
 /**
- * Sheet name → its part in the zip, from workbook.xml's <sheet name r:id>
- * and the workbook's relationships. Sheets whose relationship is missing or
- * external are left out (SheetJS can't read them either).
+ * Relationship id → the part it targets, from the workbook's relationships
+ * (external targets left out: a sheet can't live outside the file).
  */
-export function sheetParts(workbookPart: string, workbookXml: string, relsXml: string): { names: string[]; parts: Map<string, string> } {
+export function relTargets(owner: string, relsXml: string): Map<string, string> {
 	const targets = new Map<string, string>();
 	for (const r of tags(relsXml, 'Relationship')) {
-		if (r.Id && r.Target && r.TargetMode !== 'External') targets.set(r.Id, resolveTarget(workbookPart, r.Target));
+		if (r.Id && r.Target && r.TargetMode !== 'External') targets.set(r.Id, resolveTarget(owner, r.Target));
 	}
-	const names: string[] = [];
-	const parts = new Map<string, string>();
-	for (const s of tags(workbookXml, 'sheet')) {
-		if (s.name === undefined) continue;
-		names.push(s.name);
-		const idKey = Object.keys(s).find((k) => /(^|:)id$/.test(k) && k !== 'sheetId');
-		const target = idKey ? targets.get(s[idKey]!) : undefined;
-		if (target) parts.set(s.name, target);
-	}
-	return { names, parts };
+	return targets;
 }

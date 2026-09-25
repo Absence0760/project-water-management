@@ -143,12 +143,14 @@ since SheetJS's own browser deflate made files ~2.5 times larger. It imports
 SheetJS's mini build (`xlsx/dist/xlsx.mini.min`: `.xlsx` without the legacy
 formats and codepages, 87 KB instead of 112 KB). The bundle guard gives
 spreadsheet workers (`export.worker` and the workbook import's
-`import.worker`) their own ceiling, apart from the calibration worker's.
+`import.worker`) their own ceiling, apart from the calibration worker's;
+since the import stopped carrying SheetJS, that ceiling is the export
+worker's.
 
 The in-browser b023 workbook import (WP-1.31) is built the same way:
-`lib/spreadsheet/import/import.worker.ts` (101 KB gzip) is the only code that
-imports the parser (`lib/spreadsheet/import/`, SheetJS's mini build, which
-reads `.xlsm` as well as `.xlsx`). The import dialog dynamically imports a
+`lib/spreadsheet/import/import.worker.ts` (25 KB gzip) is the only code that
+imports the parser and its workbook reader (`lib/spreadsheet/import/`; it
+reads `.xlsm` and `.xlsx` alike). The import dialog dynamically imports a
 ~1 KB runner (`lib/spreadsheet/import/runner.ts`) when a workbook is picked,
 which starts the worker the same way (`worker-src 'self'`) and posts it the
 `File` itself, so the bytes are read in the worker, not copied from the page.
@@ -158,10 +160,22 @@ again with other options (the gauge as a reference) from the workbook the
 worker still holds, in milliseconds; a failure comes back as a plain object
 with the typed error's code and fields (the missing named ranges, sheet and
 cell). Cancel, closing the dialog and a finished import terminate the worker.
-Before SheetJS sees the file, `zip.ts` unpacks only the parts the importer
-reads, with the browser's `DecompressionStream('deflate-raw')` and hard caps
-([security.md § Input handling](./security.md#input-handling)); SheetJS's own
-reader would inflate the whole ~600 MB of a client-size workbook first.
+The reader is the import's own, not SheetJS: `zip.ts` inflates only the
+parts the importer reads, with the browser's
+`DecompressionStream('deflate-raw')` and hard caps ([security.md § Input
+handling](./security.md#input-handling)), and streams each one through a
+small XML tokenizer (`xml.ts`) into readers for the workbook and styles
+(`workbookParts.ts`), the sheets (`sheet.ts`: each cell a few typed-array
+slots) and the shared strings (`sharedStrings.ts`: only the ones those
+sheets use). No sheet is ever held whole: on the client workbook the memory
+the read adds over the file itself is about 90% lower than on SheetJS
+(which built a string of the ~40 MB [Flow data] XML and an object per cell),
+and it reads in half the time.
+It reproduces the cells SheetJS gave the parser (its reference reader,
+`sheetjsReference.ts`, is kept for the tests, which compare the two readers
+cell by cell on the synthetic workbook, on hand-written edge cases and,
+locally, on the client workbooks); where SheetJS read markup as text, the
+reader departs from it, as its modules' headers say.
 
 The trade-off: split chunks compress a little worse than one big chunk, so the
 total shipped JS+CSS grows by a few percent, in exchange for a cold open of a

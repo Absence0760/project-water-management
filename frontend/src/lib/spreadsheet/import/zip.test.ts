@@ -158,6 +158,53 @@ describe('ZipArchive: malformed and hostile archives', () => {
 	});
 });
 
+describe('ZipArchive.stream', () => {
+	const collect = async (z: ZipArchive, name: string) => {
+		const chunks: Uint8Array[] = [];
+		await z.stream(name, (c) => chunks.push(c.slice()));
+		return chunks;
+	};
+
+	it('hands an entry over in chunks that add up to it, deflated or stored', async () => {
+		const data = enc.encode(Array.from({ length: 50_000 }, (_, i) => `<c r="A${i}"><v>${i * 7}</v></c>`).join(''));
+		const deflated = ZipArchive.open(oneDeflated(data).bytes);
+		const chunks = await collect(deflated, 'a.xml');
+		expect(chunks.length).toBeGreaterThan(1);
+		expect(new TextDecoder().decode(Buffer.concat(chunks))).toBe(new TextDecoder().decode(data));
+		expect(deflated.inflatedBytes).toBe(data.length);
+		const stored = ZipArchive.open(storedZip([{ name: 's.xml', data, crc: crc32(data) }]));
+		const storedChunks = await collect(stored, 's.xml');
+		expect(storedChunks.length).toBeGreaterThan(1);
+		expect(Buffer.concat(storedChunks).equals(Buffer.from(data))).toBe(true);
+	});
+
+	it("stops at once on the sink's error and passes it on unchanged", async () => {
+		const z = ZipArchive.open(oneDeflated(new Uint8Array(4_000_000).fill(0x41)).bytes);
+		const mine = new Error('the parser gave up');
+		let calls = 0;
+		await expect(
+			z.stream('a.xml', () => {
+				calls++;
+				throw mine;
+			})
+		).rejects.toBe(mine);
+		expect(calls).toBe(1);
+		expect(z.inflatedBytes).toBe(0);
+	});
+
+	it('stops a bomb mid-stream and checks the checksum at the end', async () => {
+		const bomb = oneDeflated(new Uint8Array(16 * 1024 * 1024));
+		bomb.view.setUint32(bomb.cd + 24, 100_000, true);
+		let seen = 0;
+		expect(await reasonOf(ZipArchive.open(bomb.bytes).stream('a.xml', (c) => (seen += c.length)))).toBe('corrupt');
+		expect(seen).toBeLessThanOrEqual(100_000);
+		const bad = oneDeflated(enc.encode('hello world'));
+		bad.view.setUint32(bad.cd + 16, 1234, true);
+		expect(await reasonOf(ZipArchive.open(bad.bytes).stream('a.xml', () => {}))).toBe('corrupt');
+		expect(await reasonOf(ZipArchive.open(oneDeflated(new Uint8Array(2_000_000)).bytes, { maxEntryBytes: 1_000_000 }).stream('a.xml', () => {}))).toBe('too-large:unpacked');
+	});
+});
+
 describe('inflateRaw', () => {
 	it('inflates into exactly the declared size', async () => {
 		const data = enc.encode('abc'.repeat(1000));
