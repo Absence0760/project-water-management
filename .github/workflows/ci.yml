@@ -381,6 +381,32 @@ jobs:
       - name: Committed env files point at the local stack only
         run: node scripts/guards/check_env_isolation.mjs
 
+  # The Python workbook importer's tests, including the synthetic b023 fixture's
+  # drift test (generator + extractor output == the committed fixture). The
+  # TypeScript importer's parity test reads that fixture, so without this job
+  # a Python-side change could silently change what "parity" means.
+  wbt-import:
+    name: Workbook importer (Python)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.14'
+
+      - name: Install openpyxl
+        run: python -m pip install -r scripts/wbt-import/requirements.txt
+
+      - name: unittest
+        run: python -m unittest discover -s scripts/wbt-import
+
   # Credential-free Terraform checks (fmt, validate, plan-only `terraform
   # test` with mocked providers) + Trivy IaC. Called, so every job in it
   # fans into the gate. Same checks as `pnpm check:infra` locally.
@@ -414,7 +440,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, env-isolation, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, env-isolation, wbt-import, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:

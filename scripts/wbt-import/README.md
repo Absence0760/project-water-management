@@ -14,10 +14,10 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 
 ## Setup
 
-The scripts need Python 3.10+ and `openpyxl`:
+The scripts need Python 3.10+ and `openpyxl` (pinned in `requirements.txt`):
 
 ```sh
-python3 -m venv .venv && .venv/bin/pip install openpyxl
+python3 -m venv .venv && .venv/bin/pip install -r scripts/wbt-import/requirements.txt
 ```
 
 ## Tests
@@ -26,7 +26,8 @@ python3 -m venv .venv && .venv/bin/pip install openpyxl
 .venv/bin/python -m unittest discover -s scripts/wbt-import
 ```
 
-CI doesn't run these yet; run them locally after touching anything here.
+CI runs them in the `wbt-import` job (Python 3.14, `.github/workflows/ci.yml`),
+which fans into `CI gate`.
 
 ## Run
 
