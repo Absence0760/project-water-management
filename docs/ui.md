@@ -581,11 +581,14 @@ value such as 250000.
   `aria-current="location"` (scroll spy: `activeSectionId`, the last section
   whose top has passed under the sticky header, or the last one at the
   bottom of the page). A long runs list scrolls inside its panel so the menu
-  stays in reach: its height is capped at `min(16rem, 25vh)`, so with 20
-  runs the rail still fits a 768px-tall window without clipping (below about
-  720px the rail scrolls on its own). Narrower, the rail stacks above the results and the menu
+  stays in reach: the rail is a column in which only the list shrinks (at
+  most 16rem, at least 7.5rem), so with 20 runs and every menu entry the rail
+  still fits a 768px-tall window without clipping, and a longer menu takes
+  its height from the list (once the list is at its minimum the rail scrolls
+  on its own). Narrower, the rail stacks above the results and the menu
   becomes wrapping chips. Farm detail appears only when the run has farms,
-  and Runoff model only for a GR4J run. The page's `scroll-padding-top`
+  Runoff model only for a GR4J run, and Plausibility checks only on a run
+  made by engine 0.25.0 or later. The page's `scroll-padding-top`
   keeps a jumped-to section, or a focused control, clear of the sticky
   header.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
@@ -771,7 +774,27 @@ value such as 250000.
   totals), a per-month table (Oct … Sep, every month listed, months without
   observed days shown as dashes) and, collapsed, a per-water-year table. A run
   without a gauge or logger record, or saved before engine 0.5.3, says why
-  there is no table. Then farm detail (dam
+  there is no table. Then the **Plausibility checks** (`#res-plausibility`,
+  `runs/PlausibilityPanel.svelte`, its own chunk, helpers in
+  `runs/plausibility.ts`; engine ≥ 0.25.0, [model.md §2.10d](./model.md);
+  only on runs that have them): the dry season in one sentence, a line per
+  check (*no finding*, *see below* or *not checked*, with a coloured edge and
+  the words), then (1) **Natural flow ≥ observed + net abstraction**: a row per
+  water year with natural, observed, the abstraction split into use, dams and
+  land cover, observed + abstraction, the gap as % of natural and passes /
+  fails / not judged (failing rows shaded); (2) **EWR days by rain source**:
+  the share of days not met in good-rain and fallback-rain years, the Reserve
+  months met split the same way per rule-table site, and, collapsed, each
+  water year's station days, rain, fallback shares and days not met; (3)
+  **Observed flow against rain (double mass)**: the whole-record runoff ratio
+  and a row per break with the observed and simulated ratios, the change
+  beyond the model overall and by season, and what it points to; (4) the
+  **dry-season low-flow duration curves** (log axis by default): gauge and
+  logger dashed, simulated outflow and natural flow, and the latest run of each
+  other runoff model's simulated outflow (fetched on demand, left out with a
+  note when it used another dry season); *Simulated outflow over* switches this
+  run's curve to one record's days; a verdict on the Q90 comparison and a
+  Q70 / Q90 / Q95 table. Then farm detail (dam
   storage as % of capacity, supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS

@@ -1100,6 +1100,58 @@ export const HELP: HelpEntry[] = [
 		source: 'Hughes & Münster (2000); Sawunyama & Hughes (2010); Pollard et al. (2011); Riddell et al. (2014); docs/model.md §2.9c'
 	},
 	{
+		id: 'plausibility-checks',
+		term: 'Plausibility checks',
+		short: 'Four checks a reviewing hydrologist makes on a run: they only warn, and never change a result.',
+		long: 'Every run makes four checks and shows them in the Plausibility checks panel on Runs & results, in its warnings and in the summary CSV:\n\n1. natural flow is at least the observed flow plus the modelled net abstraction, in every water year;\n2. EWR days not met, split between good-rain years (rain mostly from the catchment station) and fallback-rain years (mostly CHIRPS, forecast, spread or blank days);\n3. the double-mass curve of observed flow against rain, to tell new use upstream from a failing gauge;\n4. dry-season low-flow duration curves of the gauge, the logger and the model, overlaid with the latest run of each other runoff model.\n\nThe dry season is the six calendar months in a row with the lowest mean flow: from the calibration record, else the other observed record, else the simulated natural flow. The thresholds are engine constants, each with its reason in docs/model.md §2.10d, for the hydrologist to confirm.',
+		category: 'results',
+		aliases: ['sanity checks', 'hydrologist checks', 'dry season', 'plausibility'],
+		related: ['plausibility-naturalised', 'plausibility-rain-source', 'plausibility-flow-double-mass', 'plausibility-low-flow'],
+		source: 'Not in the workbook; issue #4 phase 6 review; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-naturalised',
+		term: 'Natural flow ≥ observed + abstraction',
+		short: 'Observed flow plus what the network took out upstream is the natural flow the record implies; it can’t exceed the simulated natural flow.',
+		long: 'On each water year of the calibration record (300 or more observed days, calibration exclusions left out), the observed volume O plus the modelled net abstraction A rebuilds the natural flow the record implies. A is natural flow less the simulated outflow, from the network’s own water balance, split into use net of return flows (irrigation, other users, boreholes), dams (storage gained plus evaporation less rain on the dam) and land cover.\n\nA year fails when O + A exceeds the simulated natural flow by more than 10 % of the observed volume, the annual error of a well-rated gauging weir (at least 1 % of the record’s mean volume, so a near-dry year doesn’t fail on noise). Since A is natural less simulated outflow, that is the same as the simulated outflow falling short of the observed by that much. A failing year points to natural flow simulated too low (rain, parameters), abstraction over-estimated, or a problem in the record that year.',
+		units: 'Mm³ per water year',
+		category: 'results',
+		aliases: ['naturalised flow', 'naturalisation check', 'observed plus abstraction'],
+		related: ['plausibility-checks'],
+		source: 'Not in the workbook; Wessels & Rooseboom (2009); McMillan, Krueger & Freer (2012); docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-rain-source',
+		term: 'Good-rain and fallback-rain years',
+		short: 'EWR days not met, split by whether the water year’s rain came mostly from the catchment station or from fallback rain.',
+		long: 'A day’s rain is a station reading when the catchment rain series has a value the run used as recorded. It is fallback rain when bias-corrected CHIRPS or forecast rain filled it (a blank day, a zero run treated as missing, a listed missing period), when a multi-day accumulation was spread onto it, or when nothing filled it and it ran dry.\n\nA water year is a fallback-rain year when more than half its rain, or more than half its days, were fallback; every other year is a good-rain year. The panel gives the share of days the outlet EWR was not met in each group and, with a Reserve rule table, the share of months met. The run warns when the groups differ by 10 percentage points or more: part of the EWR result may then come from the rain source rather than the river. It can also be real climate, such as a station out of action through a drought.',
+		category: 'results',
+		aliases: ['fallback years', 'CHIRPS years', 'rain source', 'infilled rainfall years'],
+		related: ['plausibility-checks', 'zero-rain-runs', 'rain-accumulations', 'chirps-bias', 'reserve-compliance'],
+		source: 'Not in the workbook; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-flow-double-mass',
+		term: 'Double mass: observed flow vs rain',
+		short: 'Cumulative observed flow against cumulative rain: a kink means the catchment’s use or the gauge changed.',
+		long: 'While the catchment, its development and the gauge stay the same, cumulative observed flow plotted against cumulative catchment rain is a straight line; its slope is the runoff ratio. The check uses the calibration record’s water years with 300 or more days having both flow and rain and at least 100 mm of rain (10 such years or no result), and finds breaks as the rain-vs-CHIRPS double-mass check does.\n\nThe runoff ratio falls in a run of dry years on its own, so each break is compared with the simulated outflow over the same days, which has the same rain and fixed development. A change the model shows too is the rain’s. A fall the dry season takes more of points to new use upstream (abstraction and filling dams take a larger share of low flows); a fall the wet season takes more of, or a rise, points to the gauge (a rating change, or floods bypassing or drowning the weir). It is a hint: check the gauge’s records and the development history.',
+		category: 'results',
+		aliases: ['double mass curve flow', 'runoff ratio break', 'gauge failure', 'new upstream use', 'homogeneity of flow'],
+		related: ['plausibility-checks', 'double-mass'],
+		source: 'Not in the workbook; Searcy & Hardison 1960; docs/model.md §2.10d'
+	},
+	{
+		id: 'plausibility-low-flow',
+		term: 'Dry-season low-flow duration curve',
+		short: 'The flow duration curve of dry-season days only, for the gauge, the logger and each model’s simulated flow.',
+		long: 'Each curve gives the flow equalled or exceeded on a share of the dry-season days (Q90: 90 % of them). The gauge and the logger are drawn dashed, each on its own days; the simulated outflow and natural flow cover every dry-season day of the run, and the latest run of each other runoff model is drawn beside them when it used the same dry season. "Simulated outflow over" switches the model’s curve to one record’s days only, for a like-for-like comparison.\n\nThe run warns when, on the calibration record’s dry-season days, the simulated Q90 is more than twice or less than half the observed. Low flows are where a gauge is least certain (±50–100 %), so a factor of 2 is beyond gauging error. Flows under 0.001 m³/s count as 0.001.',
+		units: 'm³/s',
+		category: 'results',
+		aliases: ['low flow FDC', 'dry season FDC', 'Q90', 'Q95', 'low-flow duration'],
+		related: ['plausibility-checks'],
+		source: 'Not in the workbook; McMillan, Krueger & Freer (2012); calibration-research.md CR-16; docs/model.md §2.10d'
+	},
+	{
 		id: 'ewr-agreement',
 		term: 'EWR test against observed flow',
 		short: "Does the model fall below the EWR on the days the observed river did? A 2×2 table of observed days, with scores.",

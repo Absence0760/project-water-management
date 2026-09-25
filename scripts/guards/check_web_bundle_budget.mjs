@@ -117,6 +117,17 @@
 //             any of them): inline, they took the Runs chunk to 42 KB, over
 //             its ceiling. Measured 443 KB; the largest chunk is 40 KB (the
 //             Runs tab). No new dependency. Headroom ~6 KB.
+// 2026-09-25  total 449 → 458 KB; largest chunk stays 41 KB. The hydrologist
+//             plausibility checks (engine 0.25.0, model.md §2.10d) measure
+//             452 KB: the Runs tab's Plausibility checks panel is its own
+//             chunk (runs/PlausibilityPanel.svelte, 6.2 KB: four tables and
+//             the dry-season low-flow chart, loaded only for a run that has
+//             the checks, on the shared uPlot LineChart), five help entries
+//             ~1.5 KB in the help chunk, and the Runs chunk's lazy hook and
+//             menu entry ~0.4 KB. The Runs chunk is 40.8 KB, just under its
+//             41 KB ceiling, so the next Runs-tab feature must lazy-load or
+//             move something out. The engine checks run on the server only
+//             and add nothing here. No new dependency. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -128,7 +139,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 449,
+	totalCodeKb: 458,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });

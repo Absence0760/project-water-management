@@ -99,6 +99,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'EWR vs outflow',
 		'EWR by month',
 		'EWR vs observed',
+		'Plausibility checks',
 		'Farm detail',
 		'Explore outputs'
 	]);

@@ -7,7 +7,7 @@ export interface ResultSection {
 	label: string;
 }
 
-export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance'>): ResultSection[] {
+export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance' | 'plausibility'>): ResultSection[] {
 	const out: ResultSection[] = [
 		{ id: 'res-summary', label: 'Summary' },
 		{ id: 'res-water', label: 'Where the water went' },
@@ -28,7 +28,9 @@ export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'w
 		// Reserve compliance by month: only when the project has a rule table (engine ≥ 0.21.0).
 		...(summary.ewrAssurance?.length ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
 		{ id: 'res-ewr-grid', label: 'EWR by month' },
-		{ id: 'res-ewr-agreement', label: 'EWR vs observed' }
+		{ id: 'res-ewr-agreement', label: 'EWR vs observed' },
+		// Hydrologist plausibility checks: runs made by engine ≥ 0.25.0.
+		...(summary.plausibility ? [{ id: 'res-plausibility', label: 'Plausibility checks' }] : [])
 	];
 	// Farm detail is only drawn when the run has farms.
 	if (summary.farms?.length) out.push({ id: 'res-farm', label: 'Farm detail' });

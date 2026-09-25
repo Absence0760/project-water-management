@@ -30,6 +30,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { activeSectionId, resultSections } from './sections';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
+	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
+	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 
 	let {
 		projectId,
@@ -505,6 +507,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					<div class="panel" id="res-ewr-agreement">
 						<EwrAgreementTable {summary} />
 					</div>
+					{#if summary.plausibility}
+						<div class="panel" id="res-plausibility">
+							<Lazy load={loadPlausibilityPanel}>
+								{#snippet children(PlausibilityPanel)}
+									<PlausibilityPanel checks={summary.plausibility!} {projectId} runId={shownRunId} runoffModel={shownRun.runoffModel} {runs} />
+								{/snippet}
+							</Lazy>
+						</div>
+					{/if}
 				{/snippet}
 			</RunCharts>
 		{:else if loading || detailLoading || (runs.length > 0 && selectedId)}
@@ -631,10 +642,27 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			overflow-y: auto;
 			overscroll-behavior: contain;
 		}
-		/* A long runs list scrolls inside its panel, capped by the window height, so
-		   the menu below stays in view even on a laptop screen. */
+		/* A long runs list scrolls inside its panel and gives up height to the menu
+		   below, so the whole menu stays in view on a laptop screen however many
+		   sections it lists: the rail is a column where only the list shrinks (a
+		   fixed 25vh cap overflowed once the menu grew a line). */
+		.rail {
+			display: flex;
+			flex-direction: column;
+		}
+		.rail .list {
+			flex: 0 1 auto;
+			min-height: 0;
+			display: flex;
+			flex-direction: column;
+		}
+		.rail .sections {
+			flex: none;
+		}
 		.rail .runs {
-			max-height: min(16rem, 25vh);
+			flex: 0 1 auto;
+			min-height: 7.5rem;
+			max-height: 16rem;
 			overflow-y: auto;
 		}
 	}
