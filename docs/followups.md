@@ -880,6 +880,35 @@ the suggested order (the IDs carry the detail):
       curve (now summed in node-id order, and a flow within 1e-12 of a curve
       point counts as reaching it). Seeds 3238, 6191, 17126, 18472 pinned in
       `run.invariants.test.ts`; the flat-curve case in `assurance.test.ts`.
+- [x] **Order invariance: list-order float sums tipped thresholds (engine
+      0.26.1, 2026-09-25).** The first 20 000-case soak generating other
+      users, boreholes and land cover (engines 0.22–0.24) failed order
+      invariance on 11 legacy and 16 GR4J seeds with real differences
+      (outflow 7988 vs 8469 m³/day, a dam's area 73.6 vs 0, a user's EWR days
+      not met 209 vs 210). One mechanism throughout: sums over lists in
+      display order (the farms' flow shares and the catchment area Σ farm
+      area, a farm's crops and crop areas, the senior users' claims and
+      upstream share totals, land-cover patches, transfer rules, the EWR
+      attribution's impacts) differed in their last bit when the lists were
+      reordered, and a threshold turned the ulp into a result: a dam sitting
+      exactly at its drought-borehole trigger (seed 3899: 481.22408531730883
+      vs …088 m³, 116 938 m³ pumped in one order, none in the other), a dam
+      running dry in one order and keeping a residue with a surface in the
+      other (5703, 15208, 17002), the catchment area and so every natural
+      flow (7094). None of the new elements had an order rule of its own
+      that was wrong (users are served by position, boreholes are per node,
+      patches add linearly); the noise predates them, they only added the
+      thresholds that amplify it (and 14313 above was the same class).
+      **Fixed at the source:** every sum feeding the balance runs in id
+      order (`packages/engine/src/order.ts`; model.md §6 "The ordering
+      rule"), and `checkOrderInvariance` now requires every daily series to
+      be **bit-identical** in any display order, so a new list-order sum is
+      caught even where no threshold amplifies it (the summary keeps its
+      float tolerance). No documented result changed (engine-audit.md
+      unchanged): only last bits and the tied threshold days move. Tests:
+      `order.test.ts` (one case per sum, on values whose sum depends on the
+      order), `run.invariants.test.ts` › "engine 0.26.1: …" pins the seeds
+      of both models; `runoff/legacy.test.ts` now adds the area in id order.
 - [ ] **Dam area exponent above 1.** Validation allows 0 < b ≤ 3
       (migration 006's check, `backend/src/model/validate.ts`,
       `frontend/src/lib/model/validate.ts`, `run.ts` `damLosses`,

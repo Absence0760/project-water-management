@@ -848,6 +848,9 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
   patches, compared with the baseline (run comparison lists land cover added,
   changed and removed per farm and class). Clearing every patch gives the
   unreduced run back exactly (tested).
+- **Order**: a unit's patches are added up in patch-id order, not list
+  order, so `MAR_u` and `LOW_u` are the same to the last bit however the
+  patches are listed (engine ≥ 0.26.1, §6 "The ordering rule").
 - **Checks** (`checkLandCover`): runoff + reduction = natural × share,
   0 ≤ reduction ≤ that, the reduction follows the formula from the run's own
   natural flow, and the catchment series and summary add up.
@@ -1145,6 +1148,9 @@ R_f     = MAX over the sites f is upstream of of A_f,s   (series ewr_charge = �
 - **Order-free.** Pro rata is symmetric, sums run over sets, and ties go by
   position in the network, so listing the nodes, sites or transfers in another
   order gives the same charges (the order-invariance check has no exemption).
+  Σ impacts is added in a canonical order (furthest from the outlet first,
+  then by node id; engine ≥ 0.26.1, §6 "The ordering rule"), so the charges
+  are the same to the last bit, not just within float noise.
 
 **Irrigation and storage parts (audit Q13).** A licence condition has to be
 something the user can comply with, so each day's charge `A = R_f` splits by
@@ -1236,7 +1242,10 @@ and the river below it changes. It does not make a farm release stored water,
 so a senior user can still be short when the farms upstream are dry. A senior
 user with no farm flow share upstream of it can't be protected this way: it
 takes what reaches it, and the run warns. Several senior users in series are
-served by position (the upstream one first). A junior user upstream of a farm
+served by position (the upstream one first), never by list order: the claims
+of several senior users on one farm, and each user's Σ upstream shares, are
+added in node-id order (engine ≥ 0.26.1, §6 "The ordering rule"), and junior
+users take by position too, since each node reads only what reaches it. A junior user upstream of a farm
 still takes first: farms have no protected claim, the same as the EWR, which
 the model reports rather than protects.
 
@@ -1307,6 +1316,13 @@ U  = R + S + T + seepage − Dep
 
 The farm balance gains groundwater in and depletion out:
 `(H + I + J + Pd + GW) − (G − T) − E − ΔQ − U − Dep = 0` (column V).
+
+The drought trigger is a strict threshold on yesterday's storage, so the
+storage must not depend on how the network is listed even in its last bit: a
+dam that settles exactly at the trigger pumps in one order and not in the
+other otherwise (fuzz seed 3899, engine 0.26.0). Each node's boreholes are its
+own (no borehole order), and every sum feeding the storage runs in id order
+(engine ≥ 0.26.1, §6 "The ordering rule").
 
 **Method: a lagged, linear-reservoir draw on the river at the borehole's
 node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
@@ -2700,12 +2716,33 @@ text:
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
-| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
+| `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
+
+**The ordering rule (engine ≥ 0.26.1).** Floating-point addition is not
+associative, so a sum over a list in display order can change in its last bit
+when the user reorders the list. On its own that is noise, but the balance has
+thresholds that turn one ulp into a different result: a drought-borehole
+trigger (§2.7d), a dam that runs dry (whose area–storage power then gives a
+residue a surface, §2.7a), the stream-depletion clamp. The first 20 000-case
+soak with other users, boreholes and land cover found it (seed 3899: a dam
+sat at its drought trigger, 481.22408531730883 against …088 m³, and its
+boreholes pumped 116 938 m³ in one order and nothing in the other; 7094: the
+catchment area, and with it every natural flow, differed in the last bit; 27
+seeds over both runoff models). So every sum that feeds the daily balance runs
+in **id order** (`packages/engine/src/order.ts`), never list order: the
+farms' flow shares (area and hi/lo totals), the catchment area Σ farm area,
+each farm's crops and crop areas (crop id, then area), the land-cover patches
+on a unit (patch id, §2.5a), the senior users' claims on a farm and each
+user's upstream share total (node id, §2.7c), the transfer rules (id, §2.6),
+each node's upstream inflows (node id, review F8) and the EWR attribution's
+impacts (`canonicalOrder`: furthest from the outlet first, then by id, §2.7b).
+Whatever sums over a list in a new feature follows the same rule, and the
+bit-exact check catches one that doesn't even when no threshold amplifies it.
 
 The runoff models have their own checks, stated on the model alone (rain and
 PET in, mm out), in `testing/runoff.ts`. Every model offered must pass them
