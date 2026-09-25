@@ -67,6 +67,9 @@ export function setPoints(t: EwrRuleTable, points: number[]): EwrRuleTable {
 	return { ...t, points, ewr: move(t.ewr)!, natural: move(t.natural) };
 }
 
+/** Every cell of a grid is a number ≥ 0 (a blank is null or NaN). */
+export const naturalComplete = (grid: readonly (readonly (number | null)[])[]) => grid.every((row) => row.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0));
+
 /** "10, 20, 30" or "10 20 30" or "10%;20%" → numbers; null when a part isn't a number. */
 export function parsePoints(text: string): number[] | null {
 	const parts = text.split(/[\s,;]+/).map((p) => p.replace(/%$/, '')).filter(Boolean);

@@ -10,7 +10,7 @@
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { applyPaste, parseGrid, parsePoints, setPoints, tableErrors, tableNotes, type SiteOption } from './ewrRules';
+	import { applyPaste, naturalComplete, parseGrid, parsePoints, setPoints, tableErrors, tableNotes, type SiteOption } from './ewrRules';
 
 	let {
 		value = $bindable(),
@@ -60,6 +60,8 @@
 		const t = value[i]!;
 		t.naturalSource = source;
 		if (source === 'table' && !t.natural) t.natural = Array.from({ length: 12 }, () => t.points.map(() => null as unknown as number));
+		// From the run, the natural grid isn't used: keep a complete one (switching back restores it), drop a half-typed one so it can't block Save.
+		if (source === 'run' && t.natural && !naturalComplete(t.natural)) t.natural = null;
 	}
 
 	function paste(i: number, which: 'ewr' | 'natural') {

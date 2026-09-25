@@ -1,6 +1,6 @@
 import { blankEwrRuleTable, type EwrRuleTable } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyPaste, newTable, parseGrid, parsePoints, rulesError, setPoints, siteOptions, tableErrors, type ParsedGrid } from './ewrRules';
+import { applyPaste, naturalComplete, newTable, parseGrid, parsePoints, rulesError, setPoints, siteOptions, tableErrors, type ParsedGrid } from './ewrRules';
 
 // Synthetic tables only: invented, round numbers (public repo).
 const WY = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
@@ -129,5 +129,14 @@ describe('applyPaste', () => {
 			error: 'The paste has 2 values a row but the table has 3 % points: paste the heading row too, or change the points first.'
 		});
 		expect((applyPaste(table(), 'ewr', parsed(WY.map(() => '3 2 1').join('\n'))) as EwrRuleTable).ewr[11]).toEqual([3, 2, 1]);
+	});
+});
+
+describe('naturalComplete', () => {
+	it('is true only when every cell is a number of 0 or more', () => {
+		expect(naturalComplete([[1, 0], [2, 3]])).toBe(true);
+		expect(naturalComplete([[1, null], [2, 3]])).toBe(false);
+		expect(naturalComplete([[1, NaN]])).toBe(false);
+		expect(naturalComplete([[-1]])).toBe(false);
 	});
 });
