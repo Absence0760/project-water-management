@@ -40,6 +40,11 @@
 		gap: 0.5rem;
 		font-size: 0.9rem;
 	}
+	/* The action link sits in running text, so it is underlined like links in
+	   paragraphs (app.css), not told apart by colour alone (WCAG 1.4.1). */
+	li a {
+		text-decoration: underline;
+	}
 	/* A shape as well as a colour: the text says what's wrong either way. */
 	.mark {
 		flex: none;
