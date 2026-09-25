@@ -6,6 +6,10 @@ import {
 	DOUBLE_MASS_MIN_YEARS,
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
+	FLOW_DM_MIN_DAYS,
+	FLOW_DM_MIN_YEARS,
+	LOW_FLOW_MIN_DAYS,
+	LOW_FLOW_WARN_FACTOR,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
 	type RunSummary,
@@ -224,6 +228,165 @@ export function* doubleMassLines(dm: NonNullable<RunSummary['dataQuality']>['dou
 	if (dm.skippedYears.length) yield csvRow(['Water years too short to judge', dm.skippedYears.join(' ')]);
 }
 
+type Plausibility = NonNullable<RunSummary['plausibility']>;
+const RECORD_TEXT: Record<string, string> = {
+	flow_observed_m3s: 'observed gauge',
+	flow_logger_m3s: 'logger',
+	simulated_outflow: 'simulated outflow',
+	natural_flow: 'simulated natural flow'
+};
+const HINT_TEXT: Record<string, string> = {
+	rain: 'the model shows it with the same rain',
+	newUse: 'new use upstream (the dry season lost more)',
+	gauge: 'the gauge (the wet season lost more, or a rise)',
+	unclear: 'unclear'
+};
+const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
+
+/**
+ * The hydrologist plausibility checks (engine ≥ 0.25.0, model.md §2.10d): the
+ * dry season, then natural vs observed + abstraction per water year, EWR days
+ * by rain source, the double-mass check of observed flow against rain and the
+ * dry-season low-flow duration curves. Unrounded.
+ */
+export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
+	yield csvRow(['Plausibility checks']);
+	if (p === undefined) {
+		yield csvRow(['Run made before engine 0.25.0: no plausibility checks']);
+		return;
+	}
+	yield csvRow([
+		'Dry season (months)',
+		p.drySeason ? p.drySeason.months.map((m) => MONTH_NAMES[m - 1]).join(' ') : 'none: no record covers every calendar month',
+		p.drySeason ? `lowest mean flow in the ${RECORD_TEXT[p.drySeason.source]}` : ''
+	]);
+	yield '';
+	yield* naturalisedLines(p.naturalised);
+	yield '';
+	yield* rainSourceLines(p.rainSource);
+	yield '';
+	yield* flowDoubleMassLines(p.flowDoubleMass);
+	yield '';
+	yield* lowFlowLines(p.lowFlow);
+}
+
+function* naturalisedLines(c: Plausibility['naturalised']): Generator<string> {
+	yield csvRow(['Natural flow vs observed flow + net abstraction']);
+	if (!c) {
+		yield csvRow(['Not checked: the run has no observed flow record']);
+		return;
+	}
+	yield csvRow(['Record', RECORD_TEXT[c.flowKind]]);
+	yield csvRow(['Tolerance (% of observed)', pct(c.tolerance) as Cell, 'floor (% of the record mean over the same days)', pct(c.floor) as Cell, 'judged with days ≥', c.minDays]);
+	yield csvRow(['Water years judged', c.judgedYears, 'failed', c.failedYears.length]);
+	yield csvRow([
+		'Water year',
+		'Observed days',
+		'Natural N (Mm³)',
+		'Observed O (Mm³)',
+		'Net abstraction A = N − S (Mm³)',
+		'of which dams (Mm³)',
+		'land cover (Mm³)',
+		'use net of returns (Mm³)',
+		'O + A (Mm³)',
+		'Gap O + A − N (Mm³)',
+		'Gap (% of N)',
+		'Tolerance (Mm³)',
+		'Passed'
+	]);
+	for (const y of c.years) {
+		yield csvRow([
+			waterYearText(y.waterYear),
+			y.days,
+			y.naturalMm3,
+			y.observedMm3,
+			y.abstractionMm3,
+			y.damsMm3,
+			y.landCoverMm3,
+			y.useMm3,
+			y.naturalisedMm3,
+			y.gapMm3,
+			y.gapPct,
+			y.toleranceMm3,
+			y.judged ? yesNo(y.passed) : 'not judged'
+		]);
+	}
+}
+
+function* rainSourceLines(r: Plausibility['rainSource']): Generator<string> {
+	yield csvRow(['EWR days not met by rain source']);
+	if (!r) {
+		yield csvRow(['Not checked: the run has no rainfall series']);
+		return;
+	}
+	yield csvRow(['Group', 'Water years', 'Days', 'Days EWR not met', 'Days EWR not met (%)']);
+	yield csvRow(['Good-rain years', r.good.years, r.good.days, r.good.ewrDaysNotMet, pct(r.good.fractionNotMet) as Cell]);
+	yield csvRow(['Fallback-rain years', r.fallback.years, r.fallback.days, r.fallback.ewrDaysNotMet, pct(r.fallback.fractionNotMet) as Cell]);
+	for (const s of r.reserve) {
+		const name = s.isOutlet ? `${s.name} (outlet)` : s.name;
+		yield csvRow(['Reserve months met', name, 'good-rain years', s.good.met, 'of', s.good.months, pct(s.good.rate) as Cell, 'fallback-rain years', s.fallback.met, 'of', s.fallback.months, pct(s.fallback.rate) as Cell]);
+	}
+	yield csvRow(['Water year', 'Days', 'Station days', 'Rain (mm)', 'Fallback rain (mm)', 'Fallback rain (%)', 'Fallback days (%)', 'Fallback year', 'Days EWR not met']);
+	for (const y of r.years) {
+		yield csvRow([waterYearText(y.waterYear), y.days, y.stationDays, y.rainMm, y.fallbackRainMm, pct(y.fallbackRainShare) as Cell, pct(y.fallbackDayShare) as Cell, yesNo(y.fallback), y.ewrDaysNotMet]);
+	}
+}
+
+function* flowDoubleMassLines(dm: Plausibility['flowDoubleMass']): Generator<string> {
+	yield csvRow(['Double-mass check: observed flow vs rain']);
+	if (!dm) {
+		yield csvRow([`Not checked: needs an observed flow record, rain and a catchment area, with at least ${FLOW_DM_MIN_YEARS} water years of ${FLOW_DM_MIN_DAYS}+ days with both`]);
+		return;
+	}
+	yield csvRow(['Record', RECORD_TEXT[dm.flowKind]]);
+	yield csvRow(['Whole-record slope: observed / rain (runoff ratio)', dm.wholeSlope]);
+	yield csvRow(['Segment from water year', 'to water year', 'Years', 'Days', 'Slope']);
+	for (const s of dm.segments) yield csvRow([s.fromWaterYear, s.toWaterYear, s.years, s.days, s.slope]);
+	if (dm.breaks.length) {
+		yield csvRow(['Break after water year', 'Slope before', 'Slope after', 'Change (%)', 'Pettitt p', 'BIC gain', 'Simulated slope before', 'Simulated slope after', 'Beyond the model (%)', 'Dry season beyond the model (%)', 'Wet season beyond the model (%)', 'Points to']);
+		for (const b of dm.breaks) {
+			yield csvRow([
+				b.afterWaterYear,
+				b.slopeBefore,
+				b.slopeAfter,
+				pct(b.change) as Cell,
+				b.pettittP,
+				b.bicGain,
+				b.simulatedSlopeBefore,
+				b.simulatedSlopeAfter,
+				pct(b.unexplained) as Cell,
+				pct(b.unexplainedDry) as Cell,
+				pct(b.unexplainedWet) as Cell,
+				HINT_TEXT[b.hint] ?? b.hint
+			]);
+		}
+	} else {
+		yield csvRow(['No break found']);
+	}
+	yield csvRow(['Water year', 'Days', 'Rain (mm)', 'Observed (mm)', 'Simulated (mm)', 'Ratio', 'Cumulative rain (mm)', 'Cumulative observed (mm)', 'Cumulative simulated (mm)']);
+	for (const y of dm.years) yield csvRow([y.waterYear, y.days, y.rainMm, y.observedMm, y.simulatedMm, y.ratio, y.cumRainMm, y.cumObservedMm, y.cumSimulatedMm]);
+	if (dm.skippedYears.length) yield csvRow(['Water years too short to judge', dm.skippedYears.join(' ')]);
+}
+
+function* lowFlowLines(lf: Plausibility['lowFlow']): Generator<string> {
+	yield csvRow(['Dry-season low-flow duration curves (m³/s)']);
+	if (!lf) {
+		yield csvRow(['Not computed: no dry season']);
+		return;
+	}
+	yield csvRow(['Runoff model', lf.runoffModel]);
+	if (lf.comparison) {
+		const c = lf.comparison;
+		yield csvRow(['Q90 on the calibration record\'s dry-season days', RECORD_TEXT[c.flowKind], 'days', c.days, 'observed', c.observedQ90M3s, 'simulated', c.simulatedQ90M3s, 'ratio', c.ratio, `within a factor of ${LOW_FLOW_WARN_FACTOR}`, yesNo(c.withinFactor)]);
+	}
+	if (!lf.curves.length) {
+		yield csvRow([`No curve: every source has fewer than ${LOW_FLOW_MIN_DAYS} dry-season days`]);
+		return;
+	}
+	yield csvRow(['Curve', 'On the days of', 'Days', ...lf.points.map((p) => `Q${p}`)]);
+	for (const c of lf.curves) yield csvRow([RECORD_TEXT[c.source] ?? c.source, c.pairedWith ? RECORD_TEXT[c.pairedWith] : 'every dry-season day', c.days, ...c.flowsM3s]);
+}
+
 /** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */
 export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<string> {
 	yield csvRow(['Catchment rain treated as missing']);
@@ -407,6 +570,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
+	yield '';
+
+	yield* plausibilityLines(summary.plausibility);
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
