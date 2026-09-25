@@ -199,9 +199,12 @@
 					onpointerup={onUp}
 					onpointercancel={() => (drag = null)}
 				>
-					<title>{name(n)} ({n.kind}{isOutlet(n) ? ', outflow gauge' : ''}) · {fmtNum(n.areaKm2, 2)} km²{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}</title>
+					<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}</title>
 					<circle class="halo" r="17" />
-					{#if n.kind === 'gauge'}
+					{#if n.kind === 'user'}
+						<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
+						<path class="user" d="M0,-10 L10,0 L0,10 L-10,0 Z" />
+					{:else if n.kind === 'gauge'}
 						<path class="gauge" class:outlet={isOutlet(n)} d={isOutlet(n) ? 'M-12,-9 H12 L0,11 Z' : 'M-9,-7 H9 L0,9 Z'} />
 					{:else if dam}
 						<rect class="farm dam" x="-9" y="-9" width="18" height="18" rx="3" />
@@ -244,6 +247,7 @@
 		</li>
 		<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
 		<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow gauge</li>
+		{#if nodes.some((n) => n.kind === 'user')}<li><svg width="16" height="16" viewBox="-11 -11 22 22"><path class="user" d="M0,-9 L9,0 L0,9 L-9,0 Z" /></svg> Other water user</li>{/if}
 		<li><svg width="26" height="10" viewBox="0 0 26 10"><path class="transfer" d="M1,5 H24" /></svg> Transfer</li>
 		<li class="muted">Line width grows with upstream area; labels show area incl. upstream.</li>
 	</ul>
@@ -391,6 +395,12 @@
 	}
 	.gauge.outlet {
 		fill: var(--sch-node);
+	}
+	.user {
+		fill: var(--sch-fill);
+		stroke: var(--warning);
+		stroke-width: 1.8;
+		stroke-linejoin: round;
 	}
 	.label {
 		font-size: 12.5px;

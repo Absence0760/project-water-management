@@ -1,14 +1,14 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 export function emptyModel(): ProjectModel {
-	return { nodes: [], crops: [], cropAreas: [], transfers: [] };
+	return { nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] };
 }
 
 export function newNode(sortOrder: number, downstreamNodeId: string | null): NetworkNode {
@@ -33,7 +33,10 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
 		damAreaFullM2: null,
 		damAreaExponent: DAM_AREA_EXPONENT,
-		damSeepagePerDay: 0
+		damSeepagePerDay: 0,
+		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
+		...USER_DEFAULTS,
+		...BOREHOLE_DEFAULTS
 	};
 }
 
@@ -73,7 +76,9 @@ export class ModelEditor {
 			nodes: bySortOrder(m.nodes ?? []),
 			crops: bySortOrder(m.crops ?? []),
 			cropAreas: m.cropAreas ?? [],
-			transfers: m.transfers ?? []
+			transfers: m.transfers ?? [],
+			// Land cover (WP-1.35); an older API or document has none.
+			landCover: m.landCover ?? []
 		};
 		this.model = clone(normalised);
 		this.#saved = JSON.stringify(this.model);
@@ -101,6 +106,24 @@ export class ModelEditor {
 		return node;
 	}
 
+	/** An other water user (WP-1.33) draining into the outlet: no land, dam or crops, no demand until it is entered. */
+	addUser() {
+		const nodes = this.model.nodes;
+		const outlet = nodes.find((n) => n.downstreamNodeId === null);
+		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
+		const node = newNode(sort, outlet?.id ?? null);
+		node.kind = 'user';
+		node.pctUpstreamToDam = 0;
+		node.irrigationEfficiency = 1;
+		node.lossReturnFraction = 0;
+		node.userDemandM3Day = new Array(12).fill(0);
+		node.userReturnPct = 0;
+		node.userPriority = 'senior';
+		node.name = `Other user ${nodes.filter((n) => n.kind === 'user').length + 1}`;
+		nodes.push(node);
+		return node;
+	}
+
 	removeNode(id: string) {
 		const m = this.model;
 		const removed = m.nodes.find((n) => n.id === id);
@@ -111,6 +134,19 @@ export class ModelEditor {
 		m.nodes = m.nodes.filter((n) => n.id !== id);
 		m.cropAreas = m.cropAreas.filter((a) => a.nodeId !== id);
 		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
+		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
+	}
+
+	// --- land cover (WP-1.35) --------------------------------------------
+	/** A new patch on a farm: invasive trees at full condensed cover, no area yet. */
+	addLandCover(nodeId: string): LandCoverPatch {
+		const p: LandCoverPatch = { id: crypto.randomUUID(), nodeId, coverClass: 'invasive', areaKm2: 0, densityPct: 1, factors: null };
+		(this.model.landCover ??= []).push(p);
+		return p;
+	}
+
+	removeLandCover(id: string) {
+		this.model.landCover = (this.model.landCover ?? []).filter((p) => p.id !== id);
 	}
 
 	// --- crops ----------------------------------------------------------

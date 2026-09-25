@@ -101,9 +101,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 			rows.sort((a, b) => order(a.key, b.key));
 
 			let scope = 'catchment';
-			let kind: 'farm' | 'gauge' = 'farm';
+			let kind: 'farm' | 'gauge' | 'user' = 'farm';
 			if (q.nodeId) {
-				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
+				const { rows: n } = await db.query<{ name: string; kind: 'farm' | 'gauge' | 'user' }>('SELECT name, kind FROM node WHERE id = $1', [q.nodeId]);
 				const fromSummary = run.summary.farms.find((f) => f.nodeId === q.nodeId)?.name;
 				scope = n[0]?.name ?? fromSummary ?? 'node';
 				// A deleted node: a farm has a demand series, a gauge doesn't.

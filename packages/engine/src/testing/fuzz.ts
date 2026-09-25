@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import { irrigationFromReturnFlow, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
+import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -135,6 +135,10 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		f.areaHiKm2 = f.areaKm2 / 2;
 		f.areaLoKm2 = f.areaKm2 / 2;
 	}
+	// Other water users (WP-1.33), from their own stream so the rest of a seed's network is what it was.
+	addUsers(new Rng(seed ^ 0x510e527f), nodes);
+	// Boreholes and stream depletion (WP-1.34), likewise from their own stream.
+	addBoreholes(new Rng(seed ^ 0x9b05688c), nodes);
 	const farmIds = nodes.filter((x) => x.kind === 'farm').map((x) => x.id);
 
 	// --- crops -------------------------------------------------------------------
@@ -297,7 +301,95 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		});
 	}
 
-	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
+	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
+	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}) }, series };
+}
+
+/**
+ * Land-cover patches (WP-1.35) in 30 % of seeds: on random nodes (gauges and
+ * users too, which the engine skips), any class, from a sliver to more than
+ * the unit (scaled down), any density, the class defaults or overrides at the
+ * edges 0 and 1.
+ */
+function randomLandCover(g: Rng, nodes: NetworkNode[]): LandCoverPatch[] {
+	if (!g.bool(0.3)) return [];
+	return Array.from({ length: g.int(1, 6) }, (_, k) => {
+		const n = g.pick(nodes);
+		return {
+			id: `lc${k}`,
+			nodeId: n.id,
+			coverClass: g.pick(LAND_COVER_CLASSES.map((c) => c.id)),
+			areaKm2: g.bool(0.1) ? 0 : g.bool(0.1) ? n.areaKm2 * 3 + 1 : g.float(0, Math.max(n.areaKm2, 0.1)),
+			densityPct: g.frac(0.1, 0.3),
+			factors: g.bool(0.6) ? null : { mar: g.frac(0.2, 0.2), lowFlow: g.frac(0.2, 0.2) }
+		};
+	});
+}
+
+/**
+ * Boreholes (WP-1.34) on farms and other users in 30 % of seeds: each node has
+ * them half the time, with a capacity from a trickle to more than any demand,
+ * any rule (drought on a dam-less node too, which runs as supplemental), a
+ * trigger from 0 to 1, stream depletion none, some or all, with no lag, a
+ * short one or one far longer than the run.
+ */
+function addBoreholes(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind === 'gauge' || !g.bool(0.5)) continue;
+		n.boreholeCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), 1e9]);
+		n.boreholeRule = g.pick(['supplemental', 'primary', 'drought'] as const);
+		n.boreholeTriggerPct = g.frac(0.1, 0.1);
+		n.streamDepletionFrac = g.frac(0.25, 0.25);
+		n.streamDepletionLagDays = g.pick([0, 0, g.float(0.1, 5), g.logFloat(1, 5000)]);
+	}
+}
+
+/**
+ * Up to three other water users (WP-1.33) in 30 % of seeds: each drains into
+ * a random node, and half the time takes one of that node's upstream nodes
+ * in-line above it. Demand from none to far more than the river carries,
+ * months without any, no demand at all; any return share, the edges 0 and 1
+ * over-weighted; senior or junior.
+ */
+function addUsers(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	const count = g.int(1, 3);
+	for (let k = 0; k < count; k++) {
+		const into = g.pick(nodes);
+		const id = `u${k}`;
+		if (g.bool(0.5)) {
+			const ups = nodes.filter((x) => x.downstreamNodeId === into.id);
+			if (ups.length) g.pick(ups).downstreamNodeId = id;
+		}
+		const scale = g.pick([0, 10, 1e3, 1e5, 1e7]);
+		nodes.push({
+			id,
+			name: `User ${k}`,
+			kind: 'user',
+			downstreamNodeId: into.id,
+			sortOrder: nodes.length,
+			areaKm2: 0,
+			areaHiKm2: 0,
+			areaLoKm2: 0,
+			flowShareManual: null,
+			pctUpstreamToDam: 0,
+			pctRunoffToDam: 0,
+			damCapacityM3: 0,
+			damInitialPct: 0,
+			damMinPct: 0,
+			divertCapacityM3Day: 0,
+			irrigationEfficiency: 1,
+			lossReturnFraction: 0,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0,
+			userDemandM3Day: g.bool(0.1) ? null : Array.from({ length: 12 }, () => (g.bool(0.2) ? 0 : g.float(0, scale))),
+			userReturnPct: g.frac(0.25, 0.25),
+			userPriority: g.pick(['senior', 'senior', 'junior'] as const)
+		});
+	}
 }
 
 /**
@@ -364,6 +456,7 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	rng.shuffle(m.transfers);
 	// Rule tables (engine ≥ 0.21.0) are assessed outlet first, then by site id, whatever their order.
 	if (Array.isArray(x.settings.ewrRules)) rng.shuffle(x.settings.ewrRules);
+	if (m.landCover) rng.shuffle(m.landCover);
 	return x;
 }
 
@@ -377,6 +470,11 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 	for (let k = 0; k < m.transfers.length; k++) {
 		const x = cloneInput(input);
 		x.model.transfers.splice(k, 1);
+		yield x;
+	}
+	for (let k = 0; k < (m.landCover?.length ?? 0); k++) {
+		const x = cloneInput(input);
+		x.model.landCover!.splice(k, 1);
 		yield x;
 	}
 	const hasUpstream = new Set(m.nodes.map((nd) => nd.downstreamNodeId).filter((v): v is string => v !== null));

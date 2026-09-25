@@ -61,7 +61,8 @@ function canonical(out: ModelOutput) {
 		summary: {
 			...s,
 			farms: byNode(s.farms),
-			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms) },
+			users: s.users && byNode(s.users),
+			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms), otherUsers: s.curtailment.otherUsers && byNode(s.curtailment.otherUsers) },
 			ewrCompliance: s.ewrCompliance && { ...s.ewrCompliance, farms: byNode(s.ewrCompliance.farms) },
 			dataQuality: s.dataQuality && { ...s.dataQuality, areaMismatches: s.dataQuality.areaMismatches && byNode(s.dataQuality.areaMismatches) },
 			// Warnings name elements in input order; compare them as a multiset of
@@ -154,6 +155,20 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	return c2 > c1 + slack ? `doubling crop areas raised the catchment supply fraction ${c1} → ${c2}` : null;
 }
 
+/**
+ * The same model with every drought borehole rule (WP-1.34) run as
+ * supplemental, for checkDoubledCropAreas. A drought rule pumps only while the
+ * dam is low, so more demand, which empties the dam sooner, switches the
+ * boreholes on earlier and can raise the supply fraction legitimately (fuzz
+ * seed 1450, GR4J: n16 0.942 → 0.962). The property is a law of the rest of
+ * the network, so it is checked with the trigger taken out.
+ */
+export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
+	const x = cloneInput(input);
+	for (const n of x.model.nodes) if (n.boreholeRule === 'drought') n.boreholeRule = 'supplemental';
+	return x;
+}
+
 /** runModel + every invariant, including the ones that re-run the model. */
 export function checkAll(input: ModelInput, seed = 1): string | null {
 	let out: ModelOutput;
@@ -165,5 +180,5 @@ export function checkAll(input: ModelInput, seed = 1): string | null {
 	const bad = checkInvariants(input, out);
 	if (bad) return bad;
 	if (JSON.stringify(runModel(input)) !== JSON.stringify(out)) return 'not deterministic';
-	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(input);
+	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(droughtBoreholesAsSupplemental(input));
 }

@@ -17,19 +17,25 @@ export type NodeNumberKey =
 	| 'divertCapacityM3Day'
 	| 'irrigationEfficiency'
 	| 'lossReturnFraction'
-	| 'flowShareManual';
+	| 'flowShareManual'
+	| 'boreholeCapacityM3Day'
+	| 'boreholeTriggerPct'
+	| 'streamDepletionFrac'
+	| 'streamDepletionLagDays';
 
 export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×';
-	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×' | 'days';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
 	help: string;
 	/** Farm-only: gauges only pass upstream flow through. */
 	farmOnly?: boolean;
+	/** Farms and other water users, not gauges (boreholes, WP-1.34). */
+	notGauge?: boolean;
 	nullable?: boolean;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
@@ -40,7 +46,8 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	dam: 'Farm dam',
 	routing: 'Routing',
 	irrigation: 'Irrigation',
-	share: 'Flow share'
+	share: 'Flow share',
+	groundwater: 'Groundwater (boreholes)'
 };
 
 export const NODE_FIELDS: NodeField[] = [
@@ -180,11 +187,61 @@ export const NODE_FIELDS: NodeField[] = [
 		nullable: true,
 		aria: (n) => `Manual flow share of ${n}, %`,
 		help: "This farm's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; farm shares should add up to 100 %."
+	},
+	{
+		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
+		detailOnly: true,
+		notGauge: true,
+		label: 'Borehole capacity',
+		unit: 'm³/day',
+		group: 'groundwater',
+		nullable: true,
+		aria: (n) => `Borehole capacity of ${n}, m³/day`,
+		help: 'Most that the boreholes can pump in a day. Empty (or 0) means no boreholes. Groundwater counts as supply; the rule below says when it is used.'
+	},
+	{
+		key: 'boreholeTriggerPct',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Drought trigger',
+		unit: '%',
+		group: 'groundwater',
+		aria: (n) => `Borehole drought trigger of ${n}, % of dam capacity`,
+		help: 'Drought rule only: the boreholes run while the dam holds less than this share of its capacity at the start of the day.'
+	},
+	{
+		key: 'streamDepletionFrac',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Stream depletion',
+		unit: '%',
+		group: 'groundwater',
+		aria: (n) => `Share of pumping taken from the river at ${n}, %`,
+		help: 'Share of the pumped volume that the river below eventually loses (base flow the pumping captures). Near 100 % for a borehole close to the river in a connected aquifer; lower where the pumping draws on storage or other outflows.'
+	},
+	{
+		key: 'streamDepletionLagDays',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Depletion lag',
+		unit: 'days',
+		group: 'groundwater',
+		aria: (n) => `Stream depletion lag of ${n}, days`,
+		help: 'How slowly the river feels the pumping: the time constant of the delay (0 = the same day). The depletion carries on after pumping stops. A stream depletion factor (distance² × storativity ÷ transmissivity) is a first estimate.'
 	}
 ];
 
 /** The fields the node table shows as columns; the one-node form shows every field. */
 export const TABLE_FIELDS: NodeField[] = NODE_FIELDS.filter((f) => !f.detailOnly);
+
+/**
+ * Write a numeric field from its input. The fields the engine added later
+ * (boreholes, WP-1.34) are optional on NetworkNode, so the form writes
+ * through this rather than binding the union directly.
+ */
+export function setNodeField(node: NetworkNode, key: NodeNumberKey, v: number | null): void {
+	(node as unknown as Record<NodeNumberKey, number | null>)[key] = v;
+}
 
 export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
 /** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */

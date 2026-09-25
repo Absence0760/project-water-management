@@ -44,8 +44,10 @@ import {
 import { doubleMass as doubleMassOf, doubleMassCheck, doubleMassRunWarning, type DoubleMass } from './doublemass';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, type Monthly } from './calendar';
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
-import { computeCurtailment, type ReportWindow } from './network/curtailment';
+import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
+import { boreholeOf } from './network/boreholes';
+import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -62,6 +64,7 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	DAM_AREA_EXPONENT,
+	LAND_COVER_CLASSES,
 	defaultProjectSettings,
 	ESTIMATED_DAM_DEPTH_M,
 	panCoefficientOutOfRange,
@@ -71,6 +74,9 @@ import {
 	type CalibrationFlowKind,
 	type DailySeries,
 	type FarmSummary,
+	type UserSummary,
+	type LandCoverClass,
+	type LandCoverSummary,
 	type ModelInput,
 	type NetworkNode,
 	type ModelOutput,
@@ -79,7 +85,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.21.1';
+export const ENGINE_VERSION = '0.24.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -173,6 +179,13 @@ export function runModelWith(
 	}
 
 	push(null, 'natural_flow', 'Natural flow', 'm³/day', natural);
+	// Land cover (WP-1.35): the catchment's total reduction, its own series so it is never hidden in calibration.
+	const hasCover = plan.nodes.some((n) => n.landCover);
+	const coverTotal = new Float64Array(hasCover ? days : 0);
+	if (hasCover) {
+		for (const r of sim.nodes) for (let t = 0; t < days; t++) coverTotal[t]! += r.landCoverReduction[t]!;
+		push(null, 'landcover_reduction', 'Natural flow removed by land cover (invasive plants, forestry)', 'm³/day', coverTotal);
+	}
 	push(null, 'simulated_outflow', 'Simulated outflow', 'm³/day', simOutflow);
 	if (observedKind) {
 		push(
@@ -204,7 +217,7 @@ export function runModelWith(
 		outflow: sim.nodes.map((r) => r.outflow),
 		supplied: sim.nodes.map((r) => r.supplied),
 		storage: sim.nodes.map((r) => r.storage),
-		consumptivePerSupplied: plan.nodes.map((n) => 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency)),
+		consumptivePerSupplied: plan.nodes.map(consumptivePerSupplied),
 		transfers: plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
 		sites: [
 			...(topo.outflow >= 0 ? [{ node: topo.outflow, shortfall: ewrShort }] : []),
@@ -264,16 +277,36 @@ export function runModelWith(
 		['balanceResidual', 'balance_residual', 'Balance check (should be 0)', 'm³/day']
 	];
 	const gaugeSeries = new Set<keyof NodeResult>(['inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
+	// An other water user (WP-1.33): what it wanted, took, returned and left in the river.
+	const userSeries = new Set<keyof NodeResult>(['demand', 'supplied', 'deficit', 'inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
+	// The senior users' requirement passing each node, only when a senior user's demand is passed down to it.
+	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
 		for (const [field, key, label] of farmSeries) {
 			if (node.kind === 'gauge' && !gaugeSeries.has(field)) continue;
-			push(node.id, key, label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
+			if (node.kind === 'user' && !userSeries.has(field)) continue;
+			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
+		}
+		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
+		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
+		if (plan.nodes[i]!.borehole) {
+			// Boreholes (WP-1.34): what they gave and what the river loses for it.
+			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
+			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
+			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
+			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
+		}
+		if (node.kind === 'user') {
+			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
+			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
+			return;
 		}
 		const w = sim.workings?.[i];
 		if (!w) return;
 		// The intermediate columns (engine ≥ 0.12.0), so any day can be redone by hand (verify/columns.ts).
 		for (const [field, key, label, unit] of WORKING_SERIES) push(node.id, key, label, unit, w[field]);
+		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
 		push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
 		push(node.id, 'ewr_charge_irrigation', 'EWR charge met by irrigating less (negative)', 'm³/day', attribution.chargeIrrigation[i]!);
 	});
@@ -284,6 +317,9 @@ export function runModelWith(
 		for (let t = 0; t < a.length; t++) s += a[t]!;
 		return a.length ? s / a.length : 0;
 	};
+	/** A node with boreholes: its mean pumping and stream depletion (WP-1.34). */
+	const groundwaterMeans = (p: NetworkPlan['nodes'][number], r: NodeResult) =>
+		p.borehole ? { avgGroundwaterM3Day: mean(r.groundwater), avgBaseflowDepletionM3Day: mean(r.depletion) } : {};
 	const farms: FarmSummary[] = [];
 	nodes.forEach((node, i) => {
 		if (node.kind !== 'farm') return;
@@ -304,7 +340,35 @@ export function runModelWith(
 			avgCropRequirementM3Day: avgCrop,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
-			daysEwrNotMet: notMet
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
+		});
+	});
+
+	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
+
+	// Other water users (WP-1.33): whole-run means, like FarmSummary.
+	const users: UserSummary[] = [];
+	nodes.forEach((node, i) => {
+		if (node.kind !== 'user') return;
+		const r = sim.nodes[i]!;
+		const avgDemand = mean(r.demand);
+		const avgSupplied = mean(r.supplied);
+		const charge = attribution.charge[i]!;
+		let notMet = 0;
+		for (let t = 0; t < days; t++) if (charge[t]! < 0) notMet++;
+		users.push({
+			nodeId: node.id,
+			name: node.name,
+			priority: plan.nodes[i]!.senior ? 'senior' : 'junior',
+			avgDemandM3Day: avgDemand,
+			avgSuppliedM3Day: avgSupplied,
+			avgDeficitM3Day: avgDemand - avgSupplied,
+			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
+			avgReturnedM3Day: mean(r.userReturn),
+			avgEwrChargeM3Day: 0 - mean(charge),
+			daysEwrNotMet: notMet,
+			...groundwaterMeans(plan.nodes[i]!, r)
 		});
 	});
 
@@ -339,6 +403,17 @@ export function runModelWith(
 			natural: site.natural
 		}))
 	);
+
+	if (users.length) {
+		curtailment.otherUsers = otherUserCurtailment(
+			nodes.flatMap((node, i) =>
+				node.kind === 'user'
+					? [{ nodeId: node.id, name: node.name, senior: !!plan.nodes[i]!.senior, demand: sim.nodes[i]!.demand, supplied: sim.nodes[i]!.supplied, returned: sim.nodes[i]!.userReturn, ewrCharge: attribution.charge[i]!, consumptivePerSupplied: consumptivePerSupplied(plan.nodes[i]!) }]
+					: []
+			),
+			window
+		);
+	}
 
 	// Gauge and logger records measure the impacted river (farms, dams,
 	// abstraction), so they are compared with the simulated outflow.
@@ -417,6 +492,8 @@ export function runModelWith(
 		series: out,
 		summary: {
 			farms,
+			...(users.length ? { users } : {}),
+			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days) } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
@@ -633,6 +710,9 @@ export function buildNetworkPlan(
 		);
 	}
 
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings);
+	const cover = resolveLandCover(model, warnings);
+
 	const plan: NetworkPlan = {
 		days,
 		order: topo.order,
@@ -647,7 +727,8 @@ export function buildNetworkPlan(
 		ewr,
 		nodes: nodes.map((n, i) => {
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
-			const cap = n.damCapacityM3;
+			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
+			const u = users.byNode.get(i);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -659,10 +740,14 @@ export function buildNetworkPlan(
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings),
 				...damLosses(n, warnings),
-				demand: demand[i]!.net,
+				demand: u?.demand ?? demand[i]!.net,
 				grossDemand: demand[i]!.gross,
 				rainOffset: demand[i]!.rainOffset,
-				soilWater: demand[i]!.soilWater
+				soilWater: demand[i]!.soilWater,
+				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
+				...boreholeOf(n, warnings),
+				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
+				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
 		})
 	};
@@ -670,6 +755,164 @@ export function buildNetworkPlan(
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * The land-cover summary (WP-1.35): the low-flow threshold, the mean and
+ * relative reduction, and per class its condensed area, mean reduction and
+ * mm per year over that area. The reduction is linear in the class weights,
+ * so each class's part is its own lowFlow × MIN(I0, q) + mar × (I0 − that),
+ * with I0 = the farm's runoff + its reduction (the natural runoff).
+ */
+function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float64Array, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, days: number): LandCoverSummary {
+	const cover = resolveLandCover(upgradeLegacyModel(input.model), []);
+	const qLow = lowFlowThreshold(natural);
+	const byClass = new Map<LandCoverClass, { condensedKm2: number; volume: number }>();
+	cover.forEach((u, i) => {
+		if (!u) return;
+		const r = sim.nodes[i]!;
+		const q = qLow * plan.nodes[i]!.share;
+		for (const [cls, w] of Object.entries(u.byClass) as [LandCoverClass, { mar: number; lowFlow: number }][]) {
+			let vol = 0;
+			for (let t = 0; t < days; t++) {
+				const i0 = r.runoff[t]! + r.landCoverReduction[t]!;
+				const low = Math.min(i0, Math.max(q, 0));
+				vol += w.lowFlow * low + w.mar * (i0 - low);
+			}
+			const c = byClass.get(cls) ?? { condensedKm2: 0, volume: 0 };
+			c.condensedKm2 += u.condensedKm2[cls] ?? 0;
+			c.volume += vol;
+			byClass.set(cls, c);
+		}
+	});
+	let sumNat = 0;
+	let sumRed = 0;
+	for (let t = 0; t < days; t++) {
+		sumNat += natural[t]!;
+		sumRed += total[t]!;
+	}
+	return {
+		lowFlowThresholdM3Day: qLow,
+		reductionM3Day: days ? sumRed / days : 0,
+		fractionOfNatural: sumNat > 0 ? sumRed / sumNat : null,
+		// In LAND_COVER_CLASSES order, whatever order the patches and nodes are listed in.
+		byClass: LAND_COVER_CLASSES.flatMap((k) => (byClass.has(k.id) ? [[k.id, byClass.get(k.id)!] as const] : [])).map(([coverClass, c]) => ({
+			coverClass,
+			condensedKm2: c.condensedKm2,
+			reductionM3Day: days ? c.volume / days : 0,
+			// m³ over km² → mm: ÷ (km² × 1000); per year: × 365.25 ÷ days.
+			mmPerYear: c.condensedKm2 > 0 && days ? ((c.volume / (c.condensedKm2 * 1000)) * 365.25) / days : null
+		}))
+	};
+}
+
+const observedKindPresent = (series: ModelInput['series']) => !!(series.flow_observed_m3s || series.flow_logger_m3s);
+
+/**
+ * Run warnings for boreholes (WP-1.34): stream depletion the river could not
+ * give (it had no flow left at the node), and, when the project has an
+ * observed record, the double-counting caution: flows measured while these
+ * boreholes pumped already carry their depletion, so a calibration that
+ * leaves them out would fit natural flow too low and then take it off again.
+ */
+function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, observed: boolean, warnings: string[]) {
+	let unmet = 0;
+	let depleting = 0;
+	const names: string[] = [];
+	plan.nodes.forEach((p, i) => {
+		if (!p.borehole) return;
+		const r = sim.nodes[i]!;
+		let u = 0;
+		for (let t = 0; t < plan.days; t++) u += r.depletionUnmet[t]!;
+		if (u > 1e-9) {
+			unmet += u;
+			names.push(nodes[i]!.name);
+		}
+		if (p.borehole.depletionFrac > 0) depleting++;
+	});
+	if (unmet > 1e-9) {
+		warnings.push(
+			`stream depletion of ${unmet.toFixed(0)} m³ over the run could not be taken from the river, which had no flow left there; it is drawn from aquifer storage instead and not counted (${names.join('; ')})`
+		);
+	}
+	if (depleting && observed) {
+		warnings.push(
+			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
+		);
+	}
+}
+
+/** k: the share of what a node is supplied that it consumes, 1 − β(1 − e) for a farm (audit N1), 1 − r for an other user (WP-1.33). */
+function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
+	return n.kind === 'user' ? 1 - (n.userReturn ?? 0) : 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency);
+}
+
+/**
+ * Other water users (WP-1.33, docs/model.md §2.7c): each user node's daily
+ * demand (its monthly m³/day, water-year months), return share and priority,
+ * and the senior users' demand fragmented to the farms upstream of each by
+ * flow share (claims[farm][t] = Σ_u D_u[t] × share_farm / Σ upstream shares of
+ * u), the rule the EWR is fragmented by. A senior user with no farm share
+ * upstream can't be protected that way: it takes what reaches it, with a
+ * warning. Map keyed by node index; claims only for farms that carry one.
+ */
+interface OtherUser {
+	demand: Float64Array;
+	returnPct: number;
+	senior: boolean;
+	claimed: boolean;
+}
+
+function otherUsers(
+	nodes: readonly NetworkNode[],
+	topo: ReturnType<typeof buildTopology>,
+	share: Float64Array,
+	days: number,
+	month: Uint8Array,
+	warnings: string[]
+): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
+	const byNode = new Map<number, OtherUser>();
+	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	nodes.forEach((n, i) => {
+		if (n.kind !== 'user') return;
+		const monthlyDemand = n.userDemandM3Day ?? null;
+		const demand = new Float64Array(days);
+		if (monthlyDemand) {
+			if (monthlyDemand.length !== 12) warnings.push(`user "${n.name}": demand should have 12 monthly values, has ${monthlyDemand.length}; missing months are 0`);
+			for (let t = 0; t < days; t++) {
+				const v = Number(monthlyDemand[waterYearIndex(month[t]!)]);
+				demand[t] = Number.isFinite(v) && v > 0 ? v : 0;
+			}
+		}
+		const r = n.userReturnPct ?? 0;
+		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
+		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
+		const senior = (n.userPriority ?? 'senior') !== 'junior';
+		let claimed = false;
+		if (senior && demand.some((v) => v > 0)) {
+			// Farms upstream of the user, and their flow shares.
+			const up: number[] = [];
+			const stack = [...topo.upstream[i]!];
+			while (stack.length) {
+				const j = stack.pop()!;
+				if (nodes[j]!.kind === 'farm' && share[j]! > 0) up.push(j);
+				stack.push(...topo.upstream[j]!);
+			}
+			const total = up.reduce((s, j) => s + share[j]!, 0);
+			if (total > 0) {
+				claimed = true;
+				for (const j of up) {
+					const c = (claims[j] ??= new Float64Array(days));
+					const f = share[j]! / total;
+					for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
+				}
+			} else {
+				warnings.push(`senior user "${n.name}" has no farm with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+			}
+		}
+		byNode.set(i, { demand, returnPct, senior, claimed });
+	});
+	return { byNode, claims };
+}
 
 /**
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
@@ -863,6 +1106,13 @@ export function resolveReportWindow(
 	}
 	return { from: a - runStart, to: b - runStart, reportStart: fromEpochDay(a), reportEnd: fromEpochDay(b) };
 }
+
+/** Series labels that read differently on an other water user (WP-1.33). */
+const USER_LABELS: Record<string, string> = {
+	demand: 'Demand from the river',
+	supplied: 'Taken from the river',
+	deficit: 'Demand not met'
+};
 
 const OBSERVED_LABEL: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'Observed flow',

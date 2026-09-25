@@ -8,6 +8,9 @@
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
+import { boreholeOf } from '../network/boreholes';
+import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
+import { flowShares } from '../network/shares';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -61,6 +64,19 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 				return `${n.id} day ${t}: routed inflow ${H} ≠ upstream sum`;
 		}
 		if (n.kind === 'gauge') continue;
+		if (n.kind === 'user') {
+			const bad = checkUserDay(n, get, ups.map((u) => u.id), out.days);
+			if (bad) return bad;
+			const G = get.get(`${n.id}|supplied`)!;
+			const T = get.get(`${n.id}|return_flow`)!;
+			const GW = get.get(`${n.id}|groundwater_used`);
+			const DEP = get.get(`${n.id}|baseflow_depletion`);
+			for (let t = 0; t < out.days; t++) {
+				totOut += G[t]! - T[t]! + (DEP?.[t] ?? 0);
+				totIn += GW?.[t] ?? 0;
+			}
+			continue;
+		}
 		const g = (k: string) => get.get(`${n.id}|${k}`)!;
 		const [F, G, W, H, I, J, Q, R, AA, Z, ABs] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff', 'transfer', 'dam_storage', 'spill', 'ewr_shortfall', 'ewr_cumulative', 'ewr_shortfall_incremental'].map(g) as number[][];
 		// The engine keeps full precision (docs/engine-audit.md R1): no rounding here either.
@@ -73,12 +89,17 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
 		const Sp = get.get(`${n.id}|dam_seepage`);
+		// Boreholes (WP-1.34): groundwater comes in with the supply, stream depletion leaves with the river.
+		const GW = get.get(`${n.id}|groundwater_used`);
+		const DEP = get.get(`${n.id}|baseflow_depletion`);
 		for (let t = 0; t < out.days; t++) {
 			const T = G![t]! * returnPerSupplied;
 			const pd = Pd?.[t] ?? 0;
 			const ev = Ev?.[t] ?? 0;
-			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev;
+			const gw = GW?.[t] ?? 0;
+			const dep = DEP?.[t] ?? 0;
+			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
@@ -99,8 +120,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const AB = ABs![t]!;
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
-			totIn += I![t]! + pd;
-			totOut += G![t]! - T + ev;
+			totIn += I![t]! + pd + gw;
+			totOut += G![t]! - T + ev + dep;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -121,6 +142,50 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		if (sh > 0 || Math.abs(sh - Math.min(sim[t]! - e, 0)) > 1e-12 * Math.max(Math.abs(sim[t]!), Math.abs(e))) return `day ${t}: catchment EWR shortfall ${sh}`;
 	}
 	if (Math.abs(totIn - totOut) > 1e-6 * Math.max(1, totIn)) return `catchment mass balance: in ${totIn} ≠ out ${totOut}`;
+	return null;
+}
+
+/**
+ * One other water user's day (WP-1.33, docs/model.md §2.7c): it takes
+ * 0 ≤ G ≤ D from what reaches it, G = MIN(D, H) when senior and
+ * MIN(D, MAX(0, H − Zs)) when junior (Zs = the senior requirement passing it);
+ * it returns T = r × G; U = H − G + T; deficit = D − G; its EWR shortfall is
+ * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
+ * a senior user takes its demand out of the senior requirement below it.
+ */
+function checkUserDay(n: ModelInput['model']['nodes'][number], get: SeriesMap, ups: string[], days: number): string | null {
+	const g = (k: string) => get.get(`${n.id}|${k}`);
+	const [D, G, W, H, U, T, Z, AA] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'outflow', 'return_flow', 'ewr_cumulative', 'ewr_shortfall'].map(g);
+	if (!D || !G || !W || !H || !U || !T || !Z || !AA) return `${n.id}: user series missing`;
+	const r = Math.min(Math.max(Number.isFinite(n.userReturnPct) ? n.userReturnPct! : 0, 0), 1);
+	const senior = (n.userPriority ?? 'senior') !== 'junior';
+	const Zs = g('senior_requirement');
+	const upZs = ups.map((u) => get.get(`${u}|senior_requirement`));
+	// Boreholes (WP-1.34): G = river take + groundwater; the river part follows the priority rule.
+	const GW = g('groundwater_used');
+	const DEP = g('baseflow_depletion');
+	const bore = boreholeOf(n, []).borehole;
+	for (let t = 0; t < days; t++) {
+		const where = `${n.id} day ${t}`;
+		let zIn = 0;
+		for (const a of upZs) zIn += a?.[t] ?? 0;
+		const h = H[t]!;
+		const d = D[t]!;
+		const gw = GW?.[t] ?? 0;
+		const dep = DEP?.[t] ?? 0;
+		const river = senior ? h : Math.max(0, h - zIn);
+		// Primary boreholes pump first; otherwise the river goes first and groundwater tops it up.
+		const wantGw = !bore ? 0 : bore.rule === 1 ? Math.min(bore.capacityM3Day, d) : Math.min(bore.capacityM3Day, d - Math.min(river, d));
+		const want = (bore?.rule === 1 ? Math.min(river, d - wantGw) : Math.min(d, river)) + wantGw;
+		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − senior requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
+		if (Math.abs(gw - wantGw) > tol(d)) return `${where}: user pumped ${gw} ≠ ${wantGw} (borehole rule)`;
+		if (Math.abs(W[t]! - (d - G[t]!)) > tol(d)) return `${where}: user deficit ≠ demand − taken`;
+		if (Math.abs(T[t]! - r * G[t]!) > tol(G[t]!)) return `${where}: user return ${T[t]} ≠ ${r} × taken ${G[t]}`;
+		if (Math.abs(U[t]! - (h - (G[t]! - gw) + T[t]! - dep)) > tol(Math.max(h, gw))) return `${where}: user balance: outflow ${U[t]} ≠ inflow ${h} − taken from the river ${G[t]! - gw} + returned ${T[t]} − depletion ${dep}`;
+		const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z[t]!));
+		if (AA[t]! > 0 || Math.abs(AA[t]! - Math.min(U[t]! - Z[t]!, 0)) > tol(U[t]!) + noise) return `${where}: EWR shortfall ${AA[t]}`;
+		if (Zs && (Zs[t]! < 0 || Zs[t]! > zIn + tol(zIn))) return `${where}: senior requirement ${Zs[t]} below the user outside [0, ${zIn}]`;
+	}
 	return null;
 }
 
@@ -343,6 +408,11 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		const sp = sum(get.get(`${f.nodeId}|supplied`)!) / out.days;
 		if (!close(f.avgDemandM3Day, dm) || !close(f.avgSuppliedM3Day, sp)) return `farm summary ${f.nodeId}: means differ from the daily series`;
 		if (f.fractionSupplied < 0 || f.fractionSupplied > 1 + 1e-12) return `farm summary ${f.nodeId}: fraction supplied ${f.fractionSupplied}`;
+		// Boreholes (WP-1.34): means present exactly when the farm has them.
+		const gwS = get.get(`${f.nodeId}|groundwater_used`);
+		if (!!gwS !== (f.avgGroundwaterM3Day !== undefined)) return `farm summary ${f.nodeId}: groundwater mean ${gwS ? 'missing' : 'without boreholes'}`;
+		if (gwS && (!close(f.avgGroundwaterM3Day!, sum(gwS) / out.days) || !close(f.avgBaseflowDepletionM3Day!, sum(get.get(`${f.nodeId}|baseflow_depletion`)!) / out.days)))
+			return `farm summary ${f.nodeId}: groundwater means differ from the daily series`;
 	}
 
 	// Curtailment over its reporting window.
@@ -398,6 +468,48 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 	if (!close(k.totals.demandM3Day, sumH) || !close(k.totals.suppliedM3Day, sumI)) return `curtailment totals ${k.totals.demandM3Day}/${k.totals.suppliedM3Day} ≠ Σ farms ${sumH}/${sumI}`;
 	if (sumH === 0 ? k.equitableFraction !== null : !close(k.equitableFraction!, sumI / sumH)) return `curtailment equitable fraction ${k.equitableFraction} ≠ ${sumI}/${sumH}`;
 	if (sumH > 0 && !close(sumM, sumI, 1e-12 * Math.max(1, k.farms.length))) return `curtailment targets Σ ${sumM} do not redistribute the supplied ${sumI}`;
+	return checkUserReports(input, out, get, from, to);
+}
+
+/**
+ * Other water users' summaries and curtailment rows (WP-1.33): present exactly
+ * when the network has users; whole-run and window means of the daily series;
+ * 0 ≤ supplied ≤ demand; a senior user is never cut and keeps its whole
+ * charge; a junior user's cut −ΔG = MAX(charge ÷ k, −supplied) ≤ 0 with
+ * k = 1 − return share, and the charge left standing = MIN(0, charge − k·cut).
+ */
+function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, from: number, to: number): string | null {
+	const users = input.model.nodes.filter((n) => n.kind === 'user');
+	const sum = (a: number[], a0 = 0, b = a.length - 1) => {
+		let x = 0;
+		for (let t = a0; t <= b; t++) x += a[t]!;
+		return x;
+	};
+	const close = (a: number, b: number) => Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b)) + 1e-12;
+	const us = out.summary.users;
+	const rows = out.summary.curtailment?.otherUsers;
+	if (!users.length) return us || rows ? 'user summaries without user nodes' : null;
+	if (!us || !rows || us.length !== users.length || rows.length !== users.length) return 'user summaries missing for the user nodes';
+	const n = to - from + 1;
+	for (const u of users) {
+		const s = us.find((x) => x.nodeId === u.id);
+		const row = rows.find((x) => x.nodeId === u.id);
+		if (!s || !row) return `user ${u.id}: no summary or curtailment row`;
+		const col = (k: string) => get.get(`${u.id}|${k}`)!;
+		const [D, G, T, C] = ['demand', 'supplied', 'return_flow', 'ewr_charge'].map(col) as number[][];
+		if (!close(s.avgDemandM3Day, sum(D!) / out.days) || !close(s.avgSuppliedM3Day, sum(G!) / out.days) || !close(s.avgReturnedM3Day, sum(T!) / out.days) || !close(s.avgEwrChargeM3Day, -sum(C!) / out.days))
+			return `user summary ${u.id}: means differ from the daily series`;
+		if (s.fractionSupplied < 0 || s.fractionSupplied > 1 + 1e-12) return `user summary ${u.id}: fraction supplied ${s.fractionSupplied}`;
+		const w = `curtailment user ${u.id}`;
+		if (!close(row.demandM3Day, sum(D!, from, to) / n) || !close(row.suppliedM3Day, sum(G!, from, to) / n) || !close(row.ewrChargeM3Day, sum(C!, from, to) / n)) return `${w}: window means differ from the daily series`;
+		if (row.suppliedM3Day > row.demandM3Day || row.ewrChargeM3Day > 0) return `${w}: supplied ${row.suppliedM3Day} > demand or charge ${row.ewrChargeM3Day} > 0`;
+		const k = 1 - Math.min(Math.max(u.userReturnPct ?? 0, 0), 1);
+		const senior = (u.userPriority ?? 'senior') !== 'junior';
+		const cut = senior || !(k > 0) ? 0 : Math.max(row.ewrChargeM3Day / k, -row.suppliedM3Day);
+		if (row.curtailed === senior || !close(row.supplyCutM3Day, cut) || row.supplyCutM3Day > 0) return `${w}: supply cut ${row.supplyCutM3Day} ≠ ${cut} (${senior ? 'senior: not curtailed' : 'junior'})`;
+		if (!close(row.uncurtailedChargeM3Day, Math.min(0, row.ewrChargeM3Day - cut * k))) return `${w}: charge left standing ${row.uncurtailedChargeM3Day}`;
+		if (!close(row.supplyCutLs, row.supplyCutM3Day / 86.4)) return `${w}: l/s ≠ m³/day ÷ 86.4`;
+	}
 	return null;
 }
 
@@ -505,6 +617,17 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const missing = keys.find((_, i) => !cols[i]);
 		if (missing) return `${n.id}: working column ${missing} missing`;
 		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, AREA, PD, EV, SP, P, Q, R, S, T, U, V] = cols as number[][];
+		// The senior users' requirement (WP-1.33): present only when a senior user's demand is passed down.
+		const ZS = g('senior_requirement');
+		const PASSED = g('passed_for_senior');
+		if (ZS && !PASSED) return `${n.id}: working column passed_for_senior missing`;
+		const upZS = input.model.nodes.filter((u) => u.downstreamNodeId === n.id).map((u) => get.get(`${u.id}|senior_requirement`));
+		// Boreholes (WP-1.34).
+		const bore = boreholeOf(n, []).borehole;
+		const GW = g('groundwater_used');
+		const DEP = g('baseflow_depletion');
+		if (bore && (!GW || !DEP)) return `${n.id}: groundwater columns missing for a farm with boreholes`;
+		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream node has no senior_requirement series`;
 		// The dam's area–storage relation, as runModel resolves it (audit N2).
 		const areaFull = n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0;
 		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
@@ -539,19 +662,141 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (s0 + j < -tol(qPrev)) return `${where}: the dam losses and transfers take it below empty (${s0 + j})`;
 			const avail = s0 + m + o + k + j;
 			const availScale = Math.max(Math.abs(qPrev), pd, ev, sp, m, o, k, Math.abs(j), dead, d);
-			if (!near(gg, Math.min(Math.max(avail - dead, 0), d), availScale))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dead storage ${dead}, 0), D ${d})`;
-			if (!near(p, avail - gg, Math.max(availScale, gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G`;
+			const surface = Math.max(avail - dead, 0);
+			const gw = GW?.[t] ?? 0;
+			const dep = DEP?.[t] ?? 0;
+			// Boreholes: primary pump first; supplemental (and drought, while the dam is below its trigger) top up what the dam leaves.
+			let wantGw = 0;
+			let wantGs = Math.min(surface, d);
+			if (bore?.rule === 1) {
+				wantGw = Math.min(bore.capacityM3Day, d);
+				wantGs = Math.min(surface, d - wantGw);
+			} else if (bore && (bore.rule === 0 || qPrev < bore.triggerM3)) wantGw = Math.min(bore.capacityM3Day, d - wantGs);
+			if (!near(gw, wantGw, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${wantGw} (borehole rule, capacity ${bore?.capacityM3Day})`;
+			if (!near(gg - gw, wantGs, availScale))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dead storage ${dead}, 0), D ${d})${bore ? ` + groundwater ${gw}` : ''}`;
+			if (!near(p, avail - (gg - gw), Math.max(availScale, gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
+			if (ZS) {
+				// Senior users below (WP-1.33): the farm passes MIN(Zs, H + I) below the dam, and keeps nothing back without them.
+				let zIn = 0;
+				for (const a of upZS) zIn += a![t]!;
+				const zs = ZS[t]!;
+				const pass = PASSED![t]!;
+				if (zs < zIn - tol(zIn)) return `${where}: senior requirement ${zs} below the ${zIn} arriving from upstream`;
+				if (ss < Math.min(zs, h + i) - tol(Math.max(h + i, zs))) return `${where}: below-dam flow S ${ss} does not pass the senior requirement MIN(${zs}, H + I)`;
+				if (pass < -tol(0) || (zs === 0 && pass !== 0)) return `${where}: kept back ${pass} for a senior requirement of ${zs}`;
+			}
 			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
-			if (!near(u, r + ss + tt + sp, Math.max(r, ss, tt, sp))) return `${where}: outflow ${u} ≠ R + S + T + seepage`;
-			const vv = h + i + j + pd - (gg - tt) - ev - (q - qPrev) - u;
-			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev);
+			if (!near(u, r + ss + tt + sp - dep, Math.max(r, ss, tt, sp))) return `${where}: outflow ${u} ≠ R + S + T + seepage${bore ? ' − stream depletion' : ''}`;
+			const vv = h + i + j + pd + gw - (gg - tt) - ev - (q - qPrev) - u - dep;
+			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
 		}
 	}
+	return null;
+}
+
+/**
+ * Boreholes and stream depletion (WP-1.34, docs/model.md §2.7d), on every farm
+ * and other user with boreholes:
+ * - 0 ≤ groundwater ≤ the borehole capacity, and ≤ supplied;
+ * - the lag store S[t] = S[t−1] + d × pumped − due, due = α × (S[t−1] + d × pumped),
+ *   S ≥ 0, starting empty;
+ * - taken + unmet = due, both ≥ 0, and taken ≤ the flow the node would have
+ *   passed without it (outflow + taken), so the river never goes negative;
+ * - the lag conserves volume: d × Σ pumped = Σ taken + Σ unmet + S at the end.
+ * A node without boreholes has none of these columns.
+ */
+export function checkGroundwater(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	for (const n of input.model.nodes) {
+		const b = boreholeOf(n, []).borehole;
+		const g = (k: string) => get.get(`${n.id}|${k}`);
+		if (!b) {
+			if (g('groundwater_used')) return `${n.id}: groundwater series without boreholes`;
+			continue;
+		}
+		const [GW, DEP, UN, ST, G, U] = ['groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store', 'supplied', 'outflow'].map(g);
+		if (!GW || !DEP || !UN || !ST || !G || !U) return `${n.id}: groundwater series missing`;
+		let prev = 0;
+		let pumped = 0;
+		let gone = 0;
+		for (let t = 0; t < out.days; t++) {
+			const where = `${n.id} day ${t}`;
+			const gw = GW[t]!;
+			if (gw < 0 || gw > b.capacityM3Day + tol(b.capacityM3Day) || gw > G[t]! + tol(G[t]!)) return `${where}: groundwater ${gw} outside [0, MIN(capacity ${b.capacityM3Day}, supplied ${G[t]})]`;
+			const inStore = prev + b.depletionFrac * gw;
+			const due = b.depletionAlpha * inStore;
+			const scale = Math.max(inStore, U[t]! + DEP[t]!);
+			if (DEP[t]! < 0 || UN[t]! < -tol(0) || Math.abs(DEP[t]! + UN[t]! - due) > tol(scale)) return `${where}: depletion ${DEP[t]} + unmet ${UN[t]} ≠ due ${due}`;
+			if (Math.abs(ST[t]! - (inStore - due)) > tol(scale) || ST[t]! < -tol(scale)) return `${where}: depletion store ${ST[t]} ≠ ${inStore - due}`;
+			if (U[t]! < -tol(scale)) return `${where}: stream depletion took the river below 0 (outflow ${U[t]})`;
+			if (UN[t]! > tol(scale) && U[t]! > tol(scale)) return `${where}: depletion left unmet (${UN[t]}) while ${U[t]} still flowed`;
+			pumped += gw;
+			gone += DEP[t]! + UN[t]!;
+			prev = ST[t]!;
+		}
+		const total = b.depletionFrac * pumped;
+		if (Math.abs(total - gone - prev) > 1e-9 * Math.max(1, total)) return `${n.id}: the depletion lag does not conserve volume: d × Σ pumped ${total} ≠ Σ due ${gone} + still to come ${prev}`;
+	}
+	return null;
+}
+
+/**
+ * Land-cover streamflow reductions (WP-1.35, docs/model.md §2.5a), from the
+ * run's own natural flow and the model's patches:
+ * - a farm with land cover: runoff I + reduction = natural flow × its share,
+ *   0 ≤ reduction ≤ that natural runoff, and the reduction is
+ *   lowFlow × MIN(I0, q) + mar × MAX(I0 − q, 0) with q = share × the natural
+ *   flow exceeded 75 % of the days;
+ * - the catchment `landcover_reduction` is the sum over the farms, and the
+ *   summary's mean and class split add up to it;
+ * - without land cover there is no reduction series or summary.
+ */
+export function checkLandCover(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const cover = resolveLandCover(input.model, []);
+	const total = get.get('null|landcover_reduction');
+	const any = cover.some(Boolean);
+	if (!any) return total || out.summary.landCover ? 'land-cover reduction reported without land cover' : null;
+	if (!total || !out.summary.landCover) return 'land-cover reduction series or summary missing';
+	const natural = get.get('null|natural_flow')!;
+	const d = defaultProjectSettings();
+	const method = ['area', 'hiLo', 'manual'].includes(String(input.settings.flowShareMethod)) ? (input.settings.flowShareMethod as 'area' | 'hiLo' | 'manual') : d.flowShareMethod;
+	const share = flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((input.settings.hiLoSplit as object | undefined) ?? {}) }).share;
+	const q0 = lowFlowThreshold(natural);
+	if (Math.abs(out.summary.landCover.lowFlowThresholdM3Day - q0) > tol(q0)) return `land-cover low-flow threshold ${out.summary.landCover.lowFlowThresholdM3Day} ≠ ${q0}`;
+	const sum = new Float64Array(out.days);
+	for (const [i, n] of input.model.nodes.entries()) {
+		const u = cover[i];
+		const red = get.get(`${n.id}|landcover_reduction`);
+		if (!u) {
+			if (red) return `${n.id}: land-cover reduction without land cover`;
+			continue;
+		}
+		if (!red) return `${n.id}: land-cover reduction series missing`;
+		const I = get.get(`${n.id}|runoff`)!;
+		for (let t = 0; t < out.days; t++) {
+			const where = `${n.id} day ${t}`;
+			const i0 = natural[t]! * share[i]!;
+			if (Math.abs(I[t]! + red[t]! - i0) > tol(i0)) return `${where}: runoff ${I[t]} + land-cover reduction ${red[t]} ≠ natural × share ${i0}`;
+			const want = landCoverReduction(i0, q0 * share[i]!, u);
+			if (red[t]! < 0 || red[t]! > i0 + tol(i0) || Math.abs(red[t]! - want) > tol(i0)) return `${where}: land-cover reduction ${red[t]} ≠ ${want}`;
+			sum[t]! += red[t]!;
+		}
+	}
+	let tot = 0;
+	for (let t = 0; t < out.days; t++) {
+		if (Math.abs(total[t]! - sum[t]!) > tol(sum[t]!)) return `day ${t}: catchment land-cover reduction ${total[t]} ≠ Σ farms ${sum[t]}`;
+		tot += total[t]!;
+	}
+	const lc = out.summary.landCover;
+	const mean = out.days ? tot / out.days : 0;
+	const byClass = lc.byClass.reduce((a, c) => a + c.reductionM3Day, 0);
+	if (Math.abs(lc.reductionM3Day - mean) > 1e-9 * Math.max(1, mean) || Math.abs(byClass - mean) > 1e-9 * Math.max(1, mean)) return `land-cover summary ${lc.reductionM3Day} (classes ${byClass}) ≠ the series mean ${mean}`;
 	return null;
 }
 
@@ -637,7 +882,8 @@ export function checkSoilWater(input: ModelInput, out: ModelOutput): string | nu
 export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
 	const nodes = input.model.nodes;
-	const farms = nodes.filter((n) => n.kind === 'farm');
+	// Farms and other water users (WP-1.33) are charged; gauges only measure.
+	const farms = nodes.filter((n) => n.kind !== 'gauge');
 	if (farms.length && !get.has(`${farms[0]!.id}|ewr_charge`)) return null;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null);
 	if (!outlet) return null;
@@ -672,7 +918,16 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		};
 	});
 	for (const s of siteInfo) if (!s.charged || !s.natural) return `EWR site ${s.name}: no ewr_charged / ewr_natural series`;
-	const F = new Map(farms.map((f) => [f.id, { H: col(f.id, 'inflow_upstream'), I: col(f.id, 'runoff'), J: col(f.id, 'transfer'), U: col(f.id, 'outflow'), G: col(f.id, 'supplied'), R: col(f.id, 'ewr_charge'), Ri: col(f.id, 'ewr_charge_irrigation'), k: 1 - f.lossReturnFraction * (1 - f.irrigationEfficiency) }]));
+	const zeros = new Array<number>(out.days).fill(0);
+	const F = new Map(
+		farms.map((f) => {
+			const user = f.kind === 'user';
+			const G = col(f.id, 'supplied');
+			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - f.lossReturnFraction * (1 - f.irrigationEfficiency);
+			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).
+			return [f.id, { H: col(f.id, 'inflow_upstream'), I: user ? zeros : col(f.id, 'runoff'), J: user ? zeros : col(f.id, 'transfer'), U: col(f.id, 'outflow'), G, R: col(f.id, 'ewr_charge'), Ri: user ? zeros : col(f.id, 'ewr_charge_irrigation'), k }];
+		})
+	);
 	const allExact = new Map(farms.map((f) => [f.id, siteInfo.every((s) => s.exact || !s.farms.includes(f))]));
 	const best = new Map<string, number>();
 	for (let t = 0; t < out.days; t++) {
@@ -730,6 +985,8 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkRunoffBalance(input, out) ??
 		checkTransferLimits(input, out) ??
 		checkReportTotals(input, out) ??
-		checkEwrAttribution(input, out)
+		checkEwrAttribution(input, out) ??
+		checkGroundwater(input, out) ??
+		checkLandCover(input, out)
 	);
 }

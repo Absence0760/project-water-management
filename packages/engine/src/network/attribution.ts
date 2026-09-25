@@ -13,6 +13,8 @@
 //   D*_s  = MIN(D_s, E_s)                        charged to farms
 //   N_s   = D_s − D*_s                           natural: not caused by use
 //   A_f,s = D*_s · MAX(e_f,s, 0) / E_s           (0 when E_s = 0)
+// Other water users (engine ≥ 0.22.0, WP-1.33) are charged the same way as
+// farms: their net impact is e = H − U = what they take less what they return.
 // A farm upstream of several sites carries R_f = max_s A_f,s (not the sum: a
 // cut upstream raises the flow at every site below it), and the site that
 // sets it is its binding site (on a tie, the most downstream one).
@@ -33,7 +35,8 @@ export interface AttributionSite {
 
 export interface AttributionInput {
 	days: number;
-	kind: readonly ('farm' | 'gauge')[];
+	/** Farms and other water users (WP-1.33) are charged; gauges only measure. */
+	kind: readonly ('farm' | 'gauge' | 'user')[];
 	/** upstream[i] = nodes draining directly into node i. */
 	upstream: readonly ArrayLike<number>[];
 	/** Calculation order: every node after all of its upstream nodes (the outlet last). */
@@ -105,7 +108,7 @@ export function attributeEwrShortfall(input: AttributionInput, opts: { perSite?:
 			for (let u = 0; u < ups.length; u++) stack.push(ups[u]!);
 		}
 		const farms: number[] = [];
-		for (let i = 0; i < n; i++) if (inF[i] && kind[i] === 'farm') farms.push(i);
+		for (let i = 0; i < n; i++) if (inF[i] && kind[i] !== 'gauge') farms.push(i);
 		const internal = transfers.filter((tr) => inF[tr.from] && inF[tr.to]);
 		return { site, farms: Int32Array.from(farms), internal };
 	});

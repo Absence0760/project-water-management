@@ -846,7 +846,16 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
-	['lossReturnFraction', 'share of losses returning', pct]
+	['lossReturnFraction', 'share of losses returning', pct],
+	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
+	['userReturnPct', 'share returned', pct],
+	['userPriority', 'priority', plain],
+	// Boreholes (WP-1.34).
+	['boreholeCapacityM3Day', 'borehole capacity', withUnit('m³/day', 0)],
+	['boreholeRule', 'borehole rule', plain],
+	['boreholeTriggerPct', 'borehole drought trigger', pct],
+	['streamDepletionFrac', 'stream depletion share', pct],
+	['streamDepletionLagDays', 'stream depletion lag', withUnit('days')]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
@@ -874,7 +883,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			area: 'network',
 			kind: 'added',
 			subject: n.name,
-			text: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
+			text:
+				n.kind === 'user'
+					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${into ? `, drains into ${into}` : ''})`
+					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}
 	for (const [x, y] of nodes.pairs) {
@@ -882,6 +894,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) parts.push(`renamed from "${x.name}"`);
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
+		}
+		if (x.kind === 'user' || y.kind === 'user') {
+			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
+			if (d) parts.push(`demand ${d}`);
 		}
 		const da = na.node(x.downstreamNodeId);
 		const db = nb.node(y.downstreamNodeId);
@@ -897,6 +913,35 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" renamed from "${x.name}"` });
 		const c = monthlyChange((x as CropDef).cropFactor, (y as CropDef).cropFactor, '');
 		if (c) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" crop factor: ${c}` });
+	}
+
+	// --- land cover (WP-1.35), keyed by (farm name, class) so copies line up ---
+	{
+		const nodeRenameLc = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
+		const key = (farm: string, cls: string) => `${nameKey(farm)}\u0000${cls}`;
+		const group = (m: ProjectModel, farmOf: (id: string) => string) => {
+			const g = new Map<string, { farm: string; cls: string; km2: number; condensed: number; factors: string }>();
+			for (const p of m.landCover ?? []) {
+				const farm = farmOf(p.nodeId);
+				const k = key(farm, p.coverClass);
+				const cur = g.get(k) ?? { farm, cls: p.coverClass, km2: 0, condensed: 0, factors: '' };
+				cur.km2 += p.areaKm2;
+				cur.condensed += p.areaKm2 * p.densityPct;
+				cur.factors += p.factors ? `${p.factors.mar}/${p.factors.lowFlow};` : 'default;';
+				g.set(k, cur);
+			}
+			return g;
+		};
+		const ga = group(a, (id) => nodeRenameLc.get(id) ?? na.node(id) ?? '');
+		const gb = group(b, (id) => nb.node(id) ?? '');
+		const km2 = (v: number) => `${fmtValue(v, 3)} km²`;
+		for (const [k, x] of ga) if (!gb.has(k)) out.push({ area: 'network', kind: 'removed', subject: x.farm, text: `Land cover "${x.cls}" removed from ${x.farm} (was ${km2(x.condensed)} condensed)` });
+		for (const [k, y] of gb) {
+			const x = ga.get(k);
+			if (!x) out.push({ area: 'network', kind: 'added', subject: y.farm, text: `Land cover "${y.cls}" added to ${y.farm} (${km2(y.condensed)} condensed)` });
+			else if (!same(x.condensed, y.condensed) || x.factors !== y.factors)
+				out.push({ area: 'network', kind: 'changed', subject: y.farm, text: `${y.farm}: land cover "${y.cls}" ${km2(x.condensed)} → ${km2(y.condensed)} condensed${x.factors !== y.factors ? ', reductions changed' : ''}` });
+		}
 	}
 
 	// --- crop areas, keyed by (farm name, crop name) so copies line up ---
@@ -972,6 +1017,8 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 }
 
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+/** Mean of a monthly table (0 without one). */
+const meanOf = (v: readonly number[] | null | undefined) => (v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0);
 
 const SERIES_LABELS: Record<string, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',

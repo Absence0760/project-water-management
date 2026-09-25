@@ -59,6 +59,33 @@ Tick items off (or move them into an issue) as they are done.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
+      Built 2026-09-25, off by default, on the engineering decisions below,
+      not client sign-off. Put each to the hydrologist as "confirm or change":
+      - WP-1.33 other water users (engine 0.22.0): are there towns, industry
+        or unlisted irrigators upstream of the logger, and what do they take
+        (monthly m³/day) and return? Priority: a senior user's demand is
+        passed down by the farms upstream (fragmented by flow share like the
+        EWR; farms divert less, then pass inflow below the dam), and it is
+        **not curtailed** for the EWR (its charge stands, not moved onto
+        farms); a junior user takes what reaches it and is curtailed like a
+        farm. Confirm both rules and which priority each user has. Known
+        limit: a farm never releases stored water for a senior user, and
+        development (users, their demand) can't vary within a run.
+      - WP-1.34 boreholes (engine 0.23.0): do boreholes matter in the client
+        catchment, and is there any data on pumping volumes, distances from
+        the river or aquifer tests? Confirm the method (a lagged linear
+        reservoir with capture share d and time constant k, not a Glover/Hunt
+        kernel) and the values; depletion the river can't give is dropped,
+        not carried over. If the calibration record was measured while they
+        pumped, calibrate with them in the model (model.md §2.7d).
+      - WP-1.35 land cover (engine 0.24.0): which covers matter in the client
+        catchment (invasives, plantations, riparian stands) and their
+        condensed areas? The class reductions are indicative mature-stand
+        values (model.md §2.5a); confirm them, or supply the Scott & Smith /
+        Gush curves by age and site the CMA uses. Confirm the daily split
+        (low-flow share on each day's flow up to the Q75 natural flow, the
+        other share above it) and whether orchards and vineyards need a class.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),

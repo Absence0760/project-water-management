@@ -184,7 +184,7 @@ export interface RunDay {
 	date: string;
 	nodeId: string;
 	name: string;
-	kind: 'farm' | 'gauge';
+	kind: 'farm' | 'gauge' | 'user';
 	/** Dam storage at the end of the day before (the run's initial storage on its first day); null for gauges. */
 	previousStorageM3: number | null;
 	/**

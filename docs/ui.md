@@ -172,6 +172,36 @@ personal copy (the Copy dialog says so).
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
   the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+- **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
+  **+ Add other user** (next to + Add node, in both layouts) adds a node of
+  kind *Other user* draining into the outlet, with no demand yet; any node's
+  Kind can also be switched to it. In the table a user's row shows "–" in
+  every farm column ("not used for an other water user"), and below the
+  network panel an **Other water users** panel lists each user (name, a
+  one-line summary: priority, mean demand, share returned, what it drains
+  into) with its **Priority** (senior: farms upstream pass its demand first;
+  junior: takes what reaches it), **Share returned** (%) and **demand per
+  month** (m³/day, Oct–Sep) with *Use October's demand for every month*
+  (`UserFields.svelte`, `users.ts`). The one-node form shows the same fields
+  under "Other water user" instead of the farm groups. The schematic draws a
+  user as an open diamond (legend "Other water user"). The client check
+  mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
+  return share in 0–100 %.
+- **Groundwater (boreholes)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
+  one-node form only (`detailOnly`), on farms and other users: borehole
+  capacity (m³/day, empty = none), **Borehole rule** (supplemental / primary /
+  drought), drought trigger (%), stream depletion (%) and depletion lag
+  (days). The client check refuses boreholes on a gauge and the drought rule
+  without a farm dam.
+- **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
+  one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
+  **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
+  each patch has a **Cover class**, **Area** (km²), **Condensed cover** (%)
+  and **Own reductions**, which replaces the class's indicative reductions
+  (shown otherwise) with two editable %s. Below the patches: the condensed
+  share of the farm, flagged when above 100 % (the run scales it down). The
+  field guide points table users to the one-node layout. Removing a farm
+  removes its patches (the confirm says how many).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The
@@ -624,6 +654,17 @@ value such as 250000.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
+  flow invasive plants and forestry took, its share of natural flow, the
+  low-flow threshold, and per class the condensed area, reduction and mm/yr
+  over that area (`RunSummaryView.svelte`).
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
+  a table of each one's mean pumping, its share of what was supplied, and the
+  stream depletion it causes (`RunSummaryView.svelte`).
+- **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
+  under the farms with each user's priority, demand, taken, deficit, % of
+  demand supplied (flagged below 95 %), returned and EWR charge, whole-run
+  means (`RunSummaryView.svelte`).
 - Then come, in order: **curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -640,7 +681,11 @@ value such as 250000.
   storage charge gets a "store less / pass inflow X m³/day" badge; a farm
   whose EWR cut exceeds its equitable share gets a warning badge. *Demand left*
   is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
-  demand, "<1%" / ">99%" at the ends. Below it, the **EWR sites** table (outlet first, then
+  demand, "<1%" / ">99%" at the ends. When the run has other water users, an
+  **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
+  returned, EWR charge, the supply cut, and the charge left standing, with
+  "junior (curtailed)" or "senior (not curtailed)"; they are not in the
+  equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges

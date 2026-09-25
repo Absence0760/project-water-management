@@ -65,12 +65,14 @@ describe('TABLE_FIELDS', () => {
 		expect(keys).not.toContain('damAreaExponent');
 		expect(keys).not.toContain('damSeepagePerDay');
 		expect(keys).toContain('irrigationEfficiency');
-		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 3);
+		// … and the boreholes (WP-1.34), which apply to few nodes.
+		for (const k of ['boreholeCapacityM3Day', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays']) expect(keys).not.toContain(k);
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 7);
 	});
 });
 
 describe('isVolume', () => {
 	it('marks the m³ and m³/day fields, whose columns need room for large values', () => {
-		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'divertCapacityM3Day']);
+		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'divertCapacityM3Day', 'boreholeCapacityM3Day']);
 	});
 });
