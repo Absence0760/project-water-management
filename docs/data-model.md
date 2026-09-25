@@ -16,6 +16,9 @@ frontend (forms) share them. The HTTP contract is in [api.md](./api.md).
 ```mermaid
 erDiagram
   app_user ||--o{ project_member : "is member"
+  app_user ||--o{ team_member : "is member"
+  team     ||--o{ team_member : has
+  team     |o--o{ project : "owns (nullable)"
   project  ||--o{ project_member : has
   project  ||--o{ node : has
   project  ||--o{ crop : has
@@ -35,13 +38,15 @@ erDiagram
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
-| `project` | One catchment/place. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`) |
+| `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
+| `team_member` | (team, user, team role) | none |
+| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm` or `gauge`, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
-| `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) | `[Crop demand]` crop table |
+| `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
-| `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
+| `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS`. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb` | A "Calc. Model" press plus the `[Log]` entry |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 
@@ -61,13 +66,13 @@ erDiagram
 | `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate capacity ÷ 3 m and warn (W6). The importer writes NULL |
 | `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3, default 0.7 (Liebe et al. 2005) |
 | `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow |
-| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
+| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, floored at 0.01, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
 | `loss_return_fraction` | (1 when r > 0, else 0) | Share β (0–1) of the application losses `(1 − e) × supplied` that returns to the river the same day; default 0.5. Migration 006 backfilled both from `return_flow_pct` and dropped that column |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
 
-Ordering: `sort_order` is only for display. The engine works out the
+Ordering: `sort_order` (on `node`, and on `crop` since 003) is only for display. The engine works out the
 calculation order from the tree (upstream first, with `sort_order` as the
 tie-break). The workbook's row-order rule ("upstream elements must be listed
 first") therefore disappears.
@@ -190,8 +195,12 @@ higher of the two** (`app_project_role()`). Every project policy goes through
 project-scoped tables at once. The team's creator becomes its first admin and a
 team always keeps at least one admin (same trigger pattern as project owners).
 Deleting a team keeps its projects with their direct members (`ON DELETE SET
-NULL`); the creator of a project is always a direct owner. A project can only be
-created in, or moved into, a team the user belongs to (moving needs owner).
+NULL`). No project is orphaned, because the keep-owner trigger counts direct
+`project_member` rows only: the creator starts as a direct owner, and a project
+always keeps at least one. A project can only be created in, or moved into, a
+team the user belongs to (the `project_insert` / `project_update` policies).
+Moving needs owner (checked by the backend) and keeps the mover as a direct
+owner, so they don't lose access by moving it out of their team.
 
 ### Two database roles
 
@@ -214,8 +223,11 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `app_project_role()` (direct `project_member` row or team membership).
 - Policies on `project`, `project_member` and every model-data table (`node`,
   `crop`, `crop_area`, `transfer`, `time_series`, `model_run`, `run_series`):
-  SELECT needs `viewer`; INSERT/UPDATE/DELETE on model data need `editor`;
-  member management and project delete need `owner`.
+  SELECT needs `viewer`; INSERT/UPDATE/DELETE on model data and project UPDATE
+  need `editor`; member management and project delete need `owner`. Creating a
+  project needs only `created_by` = the current user.
+- `team` / `team_member`: members read (`app_team_role()` not null); admins
+  rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
   `404`, never `403`, so it doesn't reveal that the project exists.
 - **Cross-project references are blocked** by `assert_same_project()` triggers.
@@ -232,7 +244,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 
 | Table / column | Holds |
 | --- | --- |
-| `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (pre-003 accounts were backfilled as verified) |
+| `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (accounts that predate 004 were backfilled as verified) |
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`; unique per (project, email) / (team, email) |
@@ -240,11 +252,11 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
   functions: `app_issue_email_token()` (per-address cooldown, replaces older
   tokens of the purpose) and `app_consume_email_token()` (deletes = single
-  use; `NULL` if unknown/expired). The RLS policies on `email_token` only allow
+  use; `NULL` if unknown/expired; also clears tokens expired over 7 days). The RLS policies on `email_token` only allow
   a signed-in user their own rows.
 - `invite` RLS: project owners (via `app_has_role(…, 'owner')`) or team admins
-  (`app_team_role(…) = 'admin'`) read, create, refresh and delete; inserts must
-  have `invited_by` = the current user. `app_invite_for_token()` answers the
+  (`app_team_role(…) = 'admin'`) read, create, refresh and delete; inserts and
+  updates must leave `invited_by` = the current user. `app_invite_for_token()` answers the
   public "what is this link for?" lookup; `app_accept_invites(user)` converts
   every live invite for the user's **verified** address into
   `project_member` / `team_member` rows and deletes those invites. Invites
