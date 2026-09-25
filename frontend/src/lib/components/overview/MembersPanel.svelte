@@ -126,7 +126,7 @@
 		<p class="muted small team-note">
 			Everyone in
 			{#if team.name}<a href="{base}/teams/{team.id}">{team.name}</a>{:else}the owning team{/if}
-			also has access (admins as owners, members as editors). Add people here to share outside the team.
+			also has access (admins as owners, members as editors, viewers as viewers). Add people here to share outside the team.
 		</p>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}

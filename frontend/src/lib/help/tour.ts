@@ -16,7 +16,8 @@ export const TOUR: PictureStop[] = [
 			points: [
 				'Each day takes the first series with a value: catchment rain, then CHIRPS, then forecast rain.',
 				'CHIRPS is scaled per calendar month by catchment ÷ CHIRPS rain, fitted on the days both have a reading.',
-				'A missing day should be blank, not 0: a 0 reads as a dry day and stops CHIRPS filling the gap. Long wet-season runs of zeros are the exception: by default a run treats them as missing.'
+				'A missing day should be blank, not 0: a 0 reads as a dry day and stops CHIRPS filling the gap. Long wet-season runs of zeros are the exception: by default a run treats them as missing.',
+				'A large reading after dry days that CHIRPS says were wet looks like several days read at once: by default a run spreads its total over those days.'
 			],
 			diagram: 'rain-sources'
 		}
