@@ -8,7 +8,8 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { farmDemands, highCropFactors } from './demand';
+	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
+	import { catchmentDemand, cropStacks, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
 
 	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
 
@@ -38,11 +39,25 @@
 			farms.map((f) => f.id)
 		)
 	);
-	const demandTotal = $derived({
-		monthly: WATER_YEAR_MONTHS.map((_, m) => demand.reduce((s, d) => s + (d.monthlyM3Day[m] ?? 0), 0)),
-		mean: demand.reduce((s, d) => s + d.meanM3Day, 0),
-		annual: demand.reduce((s, d) => s + d.annualMm3, 0)
-	});
+	const demandTotal = $derived(catchmentDemand(demand));
+	// Farms with nothing planted (unsaved edits included): their demand is zero.
+	const unplantedNote = $derived(noPlantedAreaNote(farms.filter((f) => rowTotal(f.id) === 0).map((f) => f.name || '(unnamed)')));
+
+	// Stacked chart above the demand table: the same numbers, split by crop.
+	// Colours come from theme tokens (light and dark); past six crops the
+	// smallest are grouped as "Other" in a neutral grey.
+	const PALETTE = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--brand-node)', 'var(--warning)', 'var(--accent)'];
+	const stacks = $derived(
+		cropStacks(demand, crops, PALETTE.length).map((s, i) => ({
+			...s,
+			color: s.id === 'other' ? 'var(--text-muted)' : PALETTE[i]!
+		}))
+	);
+	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));
+	const chartLabel = $derived(
+		`Catchment irrigation demand by month, stacked by crop (${stacks.map((s) => s.name).join(', ')}). ` +
+			`Peak in ${WATER_YEAR_MONTHS[peakMonth]} at ${fmtNum(demandTotal.monthly[peakMonth])} m³/day. The table below holds the values.`
+	);
 	const peak = $derived(Math.max(1e-9, ...demand.flatMap((d) => d.monthlyM3Day)));
 	const shade = (v: number) => `--i: ${Math.round((v / peak) * 100)}%`;
 
@@ -212,6 +227,7 @@
 				</tfoot>
 			</table>
 		</div>
+		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
 	{/if}
 </section>
 
@@ -236,6 +252,11 @@
 	{#if farms.length === 0}
 		<p class="muted">No farms yet.</p>
 	{:else}
+		{#if stacks.length && demandTotal.annual > 0}
+			<figure class="demand-chart">
+				<MonthlyBars {stacks} unit="m³/day" label="Irrigation demand" ariaLabel={chartLabel} />
+			</figure>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact demand">
 				<thead>
@@ -348,6 +369,10 @@
 	}
 	.strong {
 		font-weight: 600;
+	}
+	.demand-chart {
+		margin: 0 0 1rem;
+		max-width: 420px;
 	}
 	.after {
 		margin: 0.75rem 0 0;

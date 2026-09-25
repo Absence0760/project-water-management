@@ -43,8 +43,13 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await page.getByRole('textbox', { name: 'Crop name' }).fill('Vines');
 	await page.getByLabel('Vines crop factor, Jan').fill('0.8');
 	await page.getByLabel('Vines crop factor, Feb').fill('0.75');
+	const unplanted = page.getByText(/have? no planted area, so (its|their) irrigation demand counts as zero\.$/);
+	await expect(unplanted).toHaveText('Hilltop farm and Valley farm have no planted area, so their irrigation demand counts as zero.');
 	await page.getByLabel('Vines on Hilltop farm, ha').fill('25');
+	// The note follows the unsaved edit.
+	await expect(unplanted).toHaveText('Valley farm has no planted area, so its irrigation demand counts as zero.');
 	await page.getByLabel('Vines on Valley farm, ha').fill('8');
+	await expect(unplanted).toBeHidden();
 	const totals = page.getByRole('row', { name: /^Total/ });
 	await expect(totals).toContainText('33.00 ha');
 

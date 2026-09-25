@@ -315,7 +315,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
 							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
-							'Check the **Irrigation demand preview**: gross demand in m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
+							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any farm with nothing planted, whose demand is zero.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'

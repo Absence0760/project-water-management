@@ -1,6 +1,6 @@
 import type { ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { annualMm3, farmDemands, highCropFactors } from './demand';
+import { annualMm3, catchmentDemand, cropStacks, farmDemands, highCropFactors, joinNames, noPlantedAreaNote } from './demand';
 
 const apan = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
 
@@ -61,5 +61,99 @@ describe('highCropFactors', () => {
 
 	it('lets exactly 1.0 pass: a pan factor of 1 is high but plausible', () => {
 		expect(highCropFactors([{ id: 'a', name: 'X', cropFactor: new Array(12).fill(1) }], months)).toEqual([]);
+	});
+});
+
+describe('catchmentDemand and cropStacks', () => {
+	// Seven crops with uneven factors and apan, over three farms (one unplanted).
+	const apanVaried = [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110];
+	const crops = Array.from({ length: 7 }, (_, i) => ({
+		id: `c${i}`,
+		name: `Crop ${i}`,
+		cropFactor: Array.from({ length: 12 }, (_, m) => ((i + m) % 5) * 0.2)
+	}));
+	const model: ProjectModel = {
+		nodes: [],
+		crops,
+		cropAreas: [
+			...crops.map((c, i) => ({ nodeId: 'f1', cropId: c.id, areaM2: 10_000 * (i + 1) })),
+			...crops.slice(0, 3).map((c, i) => ({ nodeId: 'f2', cropId: c.id, areaM2: 7_500 * (i + 2) }))
+		],
+		transfers: []
+	};
+	const demand = farmDemands(model, apanVaried, 28.25, ['f1', 'f2', 'f3']);
+	const totals = catchmentDemand(demand);
+	const sumOf = (stacks: { values: number[] }[]) => Array.from({ length: 12 }, (_, m) => stacks.reduce((s, x) => s + x.values[m]!, 0));
+
+	it('splits each farm by crop into parts that sum to its monthly demand', () => {
+		for (const d of demand) {
+			const parts = [...d.byCrop.values()];
+			sumOf(parts.map((values) => ({ values }))).forEach((v, m) => expect(v).toBeCloseTo(d.monthlyM3Day[m]!, 9));
+		}
+		expect(demand[2]!.byCrop.size).toBe(0);
+	});
+
+	it('totals the farms like the table footer', () => {
+		totals.monthly.forEach((v, m) => expect(v).toBeCloseTo(demand.reduce((s, d) => s + d.monthlyM3Day[m]!, 0), 9));
+		expect(totals.annual).toBeCloseTo(annualMm3(totals.monthly), 9);
+		expect(totals.mean).toBeCloseTo((totals.annual * 1e6) / 365.25, 6);
+	});
+
+	it('stacks every crop when there are few enough, and the stacks sum to the table totals', () => {
+		const stacks = cropStacks(demand, crops, 10);
+		expect(stacks.map((s) => s.id)).toEqual(crops.map((c) => c.id));
+		sumOf(stacks).forEach((v, m) => expect(v).toBeCloseTo(totals.monthly[m]!, 9));
+	});
+
+	it('groups the smallest crops as "Other" past the colour limit, still summing to the totals', () => {
+		const stacks = cropStacks(demand, crops, 6);
+		expect(stacks).toHaveLength(6);
+		expect(stacks[5]!.id).toBe('other');
+		expect(stacks[5]!.name).toBe('Other (2 crops)');
+		// Kept crops stay in crop order.
+		const kept = stacks.slice(0, 5).map((s) => crops.findIndex((c) => c.id === s.id));
+		expect(kept).toEqual([...kept].sort((a, b) => a - b));
+		sumOf(stacks).forEach((v, m) => expect(v).toBeCloseTo(totals.monthly[m]!, 9));
+	});
+
+	it('leaves out crops with no demand', () => {
+		const m2: ProjectModel = { ...model, cropAreas: model.cropAreas.filter((a) => a.cropId === 'c1') };
+		expect(cropStacks(farmDemands(m2, apanVaried, 28.25, ['f1']), crops).map((s) => s.id)).toEqual(['c1']);
+		expect(cropStacks(farmDemands(m2, new Array(12).fill(0), 28.25, ['f1']), crops)).toEqual([]);
+	});
+});
+
+describe('joinNames', () => {
+	it('joins with commas and a final "and"', () => {
+		expect(joinNames([])).toBe('');
+		expect(joinNames(['A'])).toBe('A');
+		expect(joinNames(['A', 'B'])).toBe('A and B');
+		expect(joinNames(['A', 'B', 'C'])).toBe('A, B and C');
+	});
+});
+
+describe('noPlantedAreaNote', () => {
+	it('is null when every farm is planted', () => {
+		expect(noPlantedAreaNote([])).toBeNull();
+	});
+
+	it('uses the singular for one farm', () => {
+		expect(noPlantedAreaNote(['Farm 5'])).toBe('Farm 5 has no planted area, so its irrigation demand counts as zero.');
+	});
+
+	it('uses the plural and a joined list for several', () => {
+		expect(noPlantedAreaNote(['Farm 5', 'Farm 6', 'Farm 8'])).toBe(
+			'Farm 5, Farm 6 and Farm 8 have no planted area, so their irrigation demand counts as zero.'
+		);
+	});
+
+	it('names at most five, then "and N more"', () => {
+		const names = Array.from({ length: 8 }, (_, i) => `F${i + 1}`);
+		expect(noPlantedAreaNote(names)).toBe(
+			'F1, F2, F3, F4, F5 and 3 more have no planted area, so their irrigation demand counts as zero.'
+		);
+		expect(noPlantedAreaNote(names.slice(0, 5))).toBe(
+			'F1, F2, F3, F4 and F5 have no planted area, so their irrigation demand counts as zero.'
+		);
 	});
 });
