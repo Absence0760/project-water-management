@@ -905,11 +905,10 @@ the suggested order (the IDs carry the detail):
       the step-1 roadmap.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
-- [ ] **FarmDay help diagram is behind the engine** (2026-09-25):
-      `components/help/diagrams/FarmDay.svelte` draws no rain on the dam, dam
-      evaporation or seepage (engine ≥ 0.16.0; seepage joins the outflow). The
-      "A day on a farm" guide text covers them. Fix: add the three flows to
-      the drawing, then to its `aria-label`, in the same change.
+- [x] **FarmDay help diagram is behind the engine** (fixed 2026-09-25):
+      `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
+      open-water evaporation and seepage to the river below the wall, and its
+      `aria-label` says so.
 
 ## Roles and what each member sees
 
