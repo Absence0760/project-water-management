@@ -136,6 +136,25 @@ personal copy (the Copy dialog says so).
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
+- **Colour farms by** (above the schematic, offered once the project has a
+  run and a farm): **Nothing** (the default, the plain drawing) or **Supply,
+  latest run**. The choice is component state, not kept in the URL. On, it
+  fetches the newest run's summary (`api.runs.get`, sharing the Runs tab's
+  `detailCache`; a quiet status line covers loading, and a failure offers
+  Retry without touching editing) and fills each farm by `fractionSupplied`
+  (`network/supplyColour.ts`): **≥ 95 %** (`SUPPLY_TARGET`, the farm table's
+  flag), **70–95 %** and **under 70 %** (`LOW_SUPPLY`, this view's own lower break, so "short" separates from "badly short"), in success / warning / danger
+  mixes that step in lightness as well as hue in both themes. A boundary
+  value falls in the higher band. A farm with no irrigation demand in the
+  run (the engine reports it as 100 %) is "no demand", dashed and unfilled;
+  a farm in the model but not in the run (added since, or a gauge then) is
+  "not in this run", hatched with a dashed outline. The share is also on the
+  node's label line, its tooltip and the drainage-tree text, so nothing is
+  colour-only. A second legend row lists the bands present and names the
+  run ("… in run “label”, ran 2 days ago", by the viewer's calendar); with
+  unsaved model edits it adds that the colours show the run, not the edits.
+  Gauges and other water users are not coloured. Selection, hover and drop
+  states are unchanged (they live on the halo and opacity).
 - **Table** (the default from 900px wide) or **One node** (the default
   below it), switched by the Layout buttons: every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
