@@ -75,6 +75,7 @@ Non-2xx responses are `{ error: string, details?: unknown }`. `401` = not signed
 in; `404` = not found **or** not a member (RLS hides the project — the API never
 reveals that a project exists); `403` = member without the needed role; `400` =
 validation (`details` = zod issues); `409` = conflict (duplicate name, last owner);
+`413` = request body, a merged series or an export exceeded its size cap;
 `429` = an email was sent to this address moments ago, or sign-in is locked
 for this address (with `Retry-After`).
 
@@ -132,7 +133,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   years, start ≤ end), `mapMm` (> 0 or `null`), `source` 1–500 chars `}`),
   `scaling` (`area` | `areaRain`), `lowFlowMonths` (calendar months 1–12, at
   least one, or `null` = from each run), `flags` (the whole `{ notePct,
-  queryPct, queryWetterPct, unusablePct }`, each 0–1 000 %, note ≤ query ≤
+  queryPct, queryWetterPct, unusablePct }`, each above 0 and at most 1 000 %, note ≤ query ≤
   unusable and wetter ≤ query) and `calibrationPenalty` (`{ enabled, weight,
   marLowMm3, marHighMm3 }`, weight 0–10, `marLowMm3` / `marHighMm3` each
   `null` or a number ≥ 0, already at the modelled catchment's scale — both

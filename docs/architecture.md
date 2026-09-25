@@ -40,7 +40,7 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, members, the model document, series, runs. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801`. |
@@ -98,16 +98,19 @@ sliding back into the page chunk.
 
 1. CloudFront adds `X-CloudFront-Shared-Secret`, and the backend rejects
    requests without it (the check is off locally when the secret is empty).
-2. Session middleware verifies the `wm_session` JWT (HS256, jose), checks it
+2. CORS (credentials, origin from `ALLOWED_ORIGINS`), Hono's `csrf()`
+   middleware (rejects a cross-origin non-safe request whose `Origin` isn't
+   allowed) and a 4 MB request-body cap all run globally, ahead of routing.
+3. Session middleware verifies the `wm_session` JWT (HS256, jose), checks it
    was issued after the user's `sessions_revoked_at` watermark (one indexed
    `app_user` lookup), and sets `userId`.
-3. Project routes open **one transaction** on a pooled `pg` connection as
+4. Project routes open **one transaction** on a pooled `pg` connection as
    `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
-4. zod validates the input. The model document is saved in one transaction
+5. zod validates the input. The model document is saved in one transaction
    (rows missing from a `PUT` are deleted). Tree validation runs before the
    write.
-5. Errors map to `{ error, details? }` with 400/401/403/404/409
+6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429
    ([api.md](./api.md)).
 
 ## Data flow of a model run
