@@ -640,6 +640,33 @@ the result is stored only after the server has checked it.
 - Nothing about a stored ensemble can change and none can be deleted
   ([data-model.md](./data-model.md), "Uncertainty bands").
 
+## Jobs
+
+Background work (the job queue, [architecture.md § Background work](./architecture.md#background-work)).
+A job runs later, in the worker, as the editor who queued it.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
+| POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field | editor |
+
+- `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy }`.
+  Never the payload, and nothing about the worker's lease.
+- `status`: `queued` (due at `runAfter`) → `running` → `done`; or `failed`
+  (an attempt failed; the next is due at `runAfter`, `2^attempts` minutes on)
+  → … → `dead` (out of attempts, or a failure no retry can fix).
+  `finishedAt` is set for `done` and `dead`. Finished jobs are deleted after
+  30 days.
+- `error` is written by the server, never raw database text: an engine
+  refusal as `model run failed: …` (the same reason `POST /runs` gives),
+  `the user who queued this job no longer has the editor role on the project`
+  when the queuer lost the role before it ran (the job fails closed and
+  writes nothing), or a generic `an internal error` /
+  `a database error (SQLSTATE …)`.
+- A queued re-run is `POST /runs` off the request path: the same engine run,
+  the same 20-run cap, as the editor who queued it. It appears in
+  `GET /runs` once the job is `done`.
+
 ## Compare runs
 
 Compare two runs, from the same project or from two projects you can see (for

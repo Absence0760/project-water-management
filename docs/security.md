@@ -175,8 +175,22 @@ In short:
     its consistency, and "Reproduce" in the Runs tab re-runs the whole
     ensemble in any viewer's browser. The engine version must match: an
     ensemble started on another version can't be completed.
+- **Background jobs run as a person, never as the system** (016_jobs,
+  [architecture.md § Background work](./architecture.md#background-work)).
+  A job is queued by an editor, as themselves (RLS; the insert trigger stamps
+  the acting user and resets every lifecycle field, so a forged `done` or
+  another user's id doesn't stick), and the worker runs it inside
+  `withUser(acting user)`: normal RLS, and a role check first that fails the
+  job closed (dead, nothing written) if the user was demoted or removed
+  since. There is no RLS-bypassing principal. The only cross-project steps
+  (claim, finish, purge, queue stats) are `SECURITY DEFINER` functions with a
+  pinned `search_path`, executable by `water_app` only, that return routing
+  columns and never a payload; the worker reads the payload as the acting
+  user and validates it as untrusted input. `water_app` has no `UPDATE` or
+  `DELETE` on `job`. A job's stored error is written by the server, never
+  database text, and SQS messages carry a job id only.
 - The schema owner (`water`) is used only for migrations, never by the running
-  API.
+  API or the job worker.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
   and its catalogue test (`backend/src/db/catalogue.db.test.ts`) checks that
   every table has RLS and policies, `water_app` owns nothing and can't bypass

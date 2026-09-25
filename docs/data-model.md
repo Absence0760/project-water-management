@@ -35,6 +35,8 @@ erDiagram
   model_run ||--o{ run_uncertainty : "uncertainty ensembles"
   run_uncertainty |o--o{ run_uncertainty : "paired on (baseline)"
   node     |o--o{ run_series : "per node (null = catchment)"
+  project  ||--o{ job : "background jobs"
+  app_user ||--o{ job : "acts as"
 ```
 
 ## Tables and their workbook origin
@@ -330,7 +332,7 @@ the mapping compares the role as text for that reason.
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -355,6 +357,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `run_uncertainty` (uncertainty ensembles): SELECT needs `viewer`, INSERT and
   the one completing UPDATE `editor`; no DELETE for anyone (see § Uncertainty
   bands above).
+- `job` (the background job queue): SELECT needs `viewer`; INSERT needs
+  `editor` and `acting_user_id` = the current user; no UPDATE or DELETE for
+  anyone (see § Jobs below).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
@@ -404,6 +409,47 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   password reset). A deny-all policy (`USING (false)`) closes direct access.
   Rows untouched for a day are deleted on the next attempt. Numbers:
   [security.md § Authentication](./security.md#authentication).
+
+### Jobs (016_jobs.sql)
+
+The background job queue's source of truth ([architecture.md § Background work](./architecture.md#background-work)).
+
+| Column | Holds |
+| --- | --- |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change) |
+| `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
+| `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running` |
+| `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
+| `locked_until`, `lease_token` | A running job's lease and its fencing token (set together, only while `running`) |
+| `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
+| `acting_user_id` | The editor who queued it (stamped by the insert trigger). The job runs as this user under RLS |
+| `created_at`, `started_at`, `finished_at` | `finished_at` is set exactly when `done` or `dead` |
+
+- **Enqueue** is a plain INSERT as the signed-in editor. The `job_enqueue`
+  trigger stamps the acting user and resets every lifecycle column (a forged
+  `status: 'done'` becomes `queued`), clamps `run_after` to now at the
+  earliest and refuses more than 7 days out. A statement trigger NOTIFYs
+  `job_queued` at commit, which wakes the local worker.
+- **Everything else** goes through `SECURITY DEFINER` functions executable by
+  `water_app` only (revoked from `PUBLIC`), documented next to
+  `app_accept_invites` as helpers that act across projects:
+  - `app_claim_jobs(limit, lease)`: due `queued`/`failed` jobs and `running`
+    jobs whose lease ran out, `FOR UPDATE SKIP LOCKED`, skipping a job whose
+    dedupe key has one running; sets `running`, bumps `attempts`, draws a new
+    `lease_token`. Returns routing columns only (id, project, kind, acting
+    user, lease, attempts), never the payload. A lease that ran out with no
+    attempts left becomes `dead` instead.
+  - `app_finish_job(id, lease, ok, error, retry)`: only with the current
+    lease (a stale worker gets `NULL` and rolls back); `done`, `failed` with
+    backoff, or `dead`.
+  - `app_purge_jobs(age)`: deletes `done`/`dead` jobs finished longer ago
+    than `age` (at least a day; the tick passes 30 days).
+  - `app_job_stats()`: counts and the oldest due job's age, for the
+    production backlog alarm.
+- Cascades: a job goes with its project or its acting user's account.
+- Indexes: `(status, run_after)` for the claim; `(project_id, created_at)`,
+  `acting_user_id` (covering the foreign keys); the dedupe index; and
+  `finished_at` (partial) for the purge.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role

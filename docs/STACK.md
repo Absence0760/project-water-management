@@ -17,7 +17,10 @@ sides share.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
   URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`,
   and for email `nodemailer` (SMTP → Mailpit locally) / `@aws-sdk/client-sesv2`
-  (SES in production), picked by `MAIL_TRANSPORT`.
+  (SES in production), picked by `MAIL_TRANSPORT`. Background jobs
+  (`src/jobs/`) queue in a Postgres `job` table; a local worker process runs
+  them (`JOB_TRANSPORT=inprocess`), and in production a worker Lambda woken
+  through SQS (`@aws-sdk/client-sqs`) and a 5-minute schedule.
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has three projects: `unit` (no DB),
   `db` (needs Postgres) and `perf` (same wall-clock-budget caveat as the
@@ -41,7 +44,9 @@ sides share.
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored.
 - **infra/**: Terraform: S3 + CloudFront (+ `/api/*` → Lambda) + WAF + Lambda
-  (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`) + RDS Postgres 17
+  (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
+  worker, `backend/src/lambda-worker.ts`, with its SQS queue + DLQ and
+  EventBridge tick) + RDS Postgres 17
   in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
   ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
@@ -53,8 +58,11 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ```bash
 pnpm setup                  # install, start Postgres, apply migrations, start Mailpit (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up; the backend applies pending migrations first)
+pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only)
 pnpm dev:run:frontend       # one side only
 pnpm dev:run:backend
+pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LISTEN job_queued
+pnpm dev:jobs:tick          # run every due job once and exit
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -157,7 +165,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   ([data-model.md § Migrations](./data-model.md#migrations)).
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it
-  out.
+  out. The same pair for the job worker: `jobs/worker.ts` (local, dotenv) and
+  `lambda-worker.ts` (AWS, never dotenv); `infra/scripts/package-lambdas.sh`
+  refuses a Lambda bundle that contains dotenv.
 - **Static SPA frontend only.** No SSR adapters. Routes render client-side from
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
