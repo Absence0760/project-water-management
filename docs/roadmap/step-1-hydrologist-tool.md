@@ -745,8 +745,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - linked from register, sign-in and the footer;
     - "Download my data" and "Delete my account" on `/account`.
   - **migration (next free NNN, expand):**
-    - `project.created_by`, `team.created_by` and `model_run.created_by`
-      become NULLable with `ON DELETE SET NULL`, shown as "Deleted user"
+    - `project.created_by`, `team.created_by`, `model_run.created_by` and
+      `project_import.imported_by` (017) become NULLable with
+      `ON DELETE SET NULL`, shown as "Deleted user"
       (review the triggers and the `project_insert` policy that read
       `created_by`);
     - a `SECURITY DEFINER app_delete_account(uid)` with a pinned
@@ -760,7 +761,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - **backend:**
     - `GET /account/export.json`: profile (no hash), memberships, team
       memberships, invites sent and pending for the address, runs created
-      (ids and labels), plus links to each visible project's `export.json`;
+      (ids and labels), imports made (project, file name, when; the
+      `project_import` row), plus links to each visible project's `export.json`;
     - `DELETE /account { password, confirm: "delete" }`: checks the
       password, dry-run by default (`?dryRun=1` lists what will go), then
       clears the cookie;
@@ -1570,8 +1572,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   (SheetJS CE mini build plus the TypeScript port, 101 KB gzip, the
   spreadsheet-worker ceiling) and submits through `POST /projects/import`;
   the review shows the counts, the importer's notes, the unmapped report
-  and the gauge-as-reference option (ui.md § Import a b023 workbook).
-  Departures from the plan below:
+  and the gauge-as-reference option (ui.md § Import a b023 workbook). The
+  notes and unmapped report are kept with the project (017_project_import,
+  `GET /projects/:id/import-report`) and shown on its Overview's Import
+  record (ui.md § Overview). Departures from the plan below:
   - the limits are 150 MB and 250 sheets, not 30 MB (the client workbook is
     about 90 MB);
   - `readWorkbook` reads the zip itself and unpacks only the parts the

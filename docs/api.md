@@ -244,7 +244,8 @@ into an environment with no database access, such as production (WP-1.8).
 
 - **Body:** the document as JSON (`ProjectFile` in
   `backend/src/projects/document.ts`): `{ name, description?, settings?,
-  model, series? }`. An export posts as-is: unknown top-level keys
+  model, series? }`, plus an optional `importReport` ([Import
+  report](#import-report)). An export posts as-is: unknown top-level keys
   (`format`, `version`, `exportedAt`, `engineVersion`) are ignored. To import
   under another name, change `name` in the body. Series take the same bounds
   as `PUT /projects/:id/series` (a real `YYYY-MM-DD` start date, a unit of
@@ -254,8 +255,8 @@ into an environment with no database access, such as production (WP-1.8).
   `POST /projects`: `404 team not found` if you're not in it, `403 requires
   team member` for a team viewer, omitted = personal. `run=1` (or `true`)
   runs the model once after the import.
-- **Atomic:** validation, the project row, the model and every series go in
-  one `withUser` transaction as you (RLS applies, and the existing trigger
+- **Atomic:** validation, the project row, the model, every series and the
+  import report go in one `withUser` transaction as you (RLS applies, and the existing trigger
   makes you owner). Any failure rolls it all back, so nothing partial is left.
   Every row gets a fresh id, so one file can be imported any number of times.
   The fresh ids are random but sort in the same order as the file's (the
@@ -274,7 +275,9 @@ into an environment with no database access, such as production (WP-1.8).
   (`details` = zod issues); `400 { error: "invalid project file", details:
   [{ message }] }` for the structural model rules (`modelProblems`: one
   outflow node, no cycles, references that resolve, …) and two series with
-  the same kind and name; `400 invalid JSON`; `404 team not found`; `401`
+  the same kind and name; `400 { error: "invalid request", details }` with
+  paths under `importReport` for a report over its caps (nothing is created);
+  `400 invalid JSON`; `404 team not found`; `401`
   signed out; `413 { error: "project file larger than 5 MB — remove series
   the model doesn't need from the file, import it, then upload those series
   as CSV" }`.
@@ -292,6 +295,58 @@ If projects outgrow the cap, add `Content-Encoding: gzip` (a
 binary body reaches Lambda base64-encoded (+33 %), so the compressed cap has
 to stay near 4.4 MB. `import.test.ts` fails if the export cap is raised past
 the import cap, which is the trigger to do this.
+
+### Import report
+
+What the importer flagged when a project was imported: the notes and the
+unmapped report the browser's import review showed, kept with the project
+(`project_import`, [data-model.md § Import reports](./data-model.md#import-reports-017_project_importsql))
+so the hydrologist, and later a licensing assessor, can see what it
+interpreted or couldn't map long after the import. Code:
+`backend/src/projects/importReport.ts`.
+
+**Sent with the import.** `POST /projects/import` takes it as an optional
+top-level `importReport` key beside the document, so a body that is exactly a
+`ProjectFile` (every existing caller, `pnpm import:project`, an export) works
+as before and stores no report:
+
+```jsonc
+{
+  "name": "…", "model": { … }, "series": [ … ],     // the ProjectFile, unchanged
+  "importReport": {
+    "source": "b023-workbook",                      // or "project-file"
+    "fileName": "catchment_WBT_b023.xlsm",          // 1–255 characters
+    "importerVersion": "b023 browser importer (web build …)",  // 1–100
+    "notes": [{ "code": "dam-area-unknown", "severity": "info", "message": "…", "sheet": "Farm spec", "cell": "B4", "element": "Echo Farm" }],
+    "unmapped": [{ "code": "transfer-inout-formula", "message": "…", "sheet": "Transfers", "cell": "T7", "element": "Echo Farm", "text": "=S7*0.9-V7" }],
+    "notesOmitted": 0, "unmappedOmitted": 0         // items beyond what was kept (default 0)
+  }
+}
+```
+
+- **Caps** (zod; the frontend trims to the same before sending,
+  `components/import/importReport.ts`): at most **500** notes and 500 unmapped
+  items; `code` lower-case letters, digits and hyphens, ≤ 64; `message`
+  1–2000; `sheet` ≤ 100; `cell` ≤ 20; `element` ≤ 200; `text` ≤ 8192 (Excel's
+  formula limit); no NUL characters; and the two lists together at most
+  **512 KB** of JSON, well inside the route's 5 MB body cap. Over any cap:
+  `400 invalid request` and nothing is created. Unknown keys are dropped, not
+  stored.
+- **Stored in the import's transaction**, stamped with you and the time. The
+  database refuses a report for any project that transaction didn't create, so
+  there is no other way to write one.
+
+**`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
+the newest import's report: the fields above plus `importedAt` (ISO time) and
+`importedBy` (the importer's display name). `404 { error: "no import report" }`
+when the project wasn't imported through the dialog (made by hand, copied, or
+imported with no report); `404 not found` for a project you can't see.
+
+**Not in `export.json`.** The export is the project's inputs, the document
+that imports back into a project. An import report describes one import of a
+*different* file; inside an export it would ride into the next import and be
+stored as though the export had come from the workbook. So the export leaves it
+out, and a re-import of an export records itself as a `project-file` import.
 
 ### Members
 
@@ -880,8 +935,9 @@ round-trips export → import:
 }
 ```
 
-Runs are not included (re-run after importing, or pass `run=1` / `--run`).
-The importer gives every row a fresh id.
+Runs are not included (re-run after importing, or pass `run=1` / `--run`),
+nor is the import report ([why](#import-report)). The importer gives every row
+a fresh id.
 
 **Size cap — 413.** Production serves the API through Lambda's *buffered*
 response mode, which fails any response over **6 MB**. Every export body is

@@ -91,8 +91,8 @@ shorter than the cap looks as before.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
-a "Needs attention" list, eight headline facts, project details, team and
-members.
+a "Needs attention" list, eight headline facts, project details, the import
+record (an imported project only), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -134,10 +134,22 @@ members.
   Crops, transfers to Transfers, time series to Data, runs to Runs). The
   whole tile is the click target (the label's link is stretched over it), and
   a focused tile gets an outline.
-- **Layout**: Project details on the left; on the right, "who has access":
-  Team above Members (or "Shared directly with" for a team project), so the
-  two panels that refer to each other sit together. Below 900 px it is one
-  column in the order details, team, members.
+- **Import record** (`overview/ImportReportPanel.svelte`, 017_project_import),
+  under Project details, only for a project imported through the import dialog
+  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
+  shows nothing). "Imported from the b023 workbook *file* on *date time* by
+  *name*.", the importer and web build, then the review's two lists, shared
+  with it (`import/ImportReportLists.svelte`): **Importer notes** and the
+  **Unmapped report** (a workbook's only), each with its count sentence and
+  the list behind a *Show the N notes* / *Show the N items* disclosure, closed
+  at first. Items the client trimmed past the caps show as "And N more …, not
+  kept." Every member sees it, viewers included, so a reviewer or assessor
+  can check what the importer interpreted long after the import. All the text
+  came from the file and renders as text only.
+- **Layout**: Project details (and the import record) on the left; on the
+  right, "who has access": Team above Members (or "Shared directly with" for a
+  team project), so the two panels that refer to each other sit together. Below
+  900 px it is one column in the order details, import record, team, members.
 - The **description** box grows with its text (up to about 24rem) instead of
   hiding it behind an inner scrollbar (`field-sizing: content`; browsers
   without it keep four rows).
@@ -237,6 +249,12 @@ workbook part is `WorkbookReview.svelte`.
 4. **Importing, Done, Failed:** as for a `.json` file (the server's 400 and
    413 messages included). *Open project* goes to it, and a first run's
    result is on the Runs tab.
+
+The notes and unmapped report go with the import (`importReport`,
+`import/importReport.ts`, trimmed to the server's caps) and are kept with the
+project: its Overview's **Import record** shows them afterwards
+([Overview](#overview)). A `.json` import sends its own record
+(`source: 'project-file'`, with the notes the preview showed, if any).
 
 Everything from the file (farm and sheet names, notes, formula text, error
 messages) is rendered as text, never `{@html}`

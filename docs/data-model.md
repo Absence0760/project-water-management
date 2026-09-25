@@ -36,6 +36,8 @@ erDiagram
   run_uncertainty |o--o{ run_uncertainty : "paired on (baseline)"
   node     |o--o{ run_series : "per node (null = catchment)"
   project  ||--o{ job : "background jobs"
+  project  ||--o{ project_import : "import reports"
+  app_user ||--o{ project_import : "imported"
   app_user ||--o{ job : "acts as"
 ```
 
@@ -56,6 +58,7 @@ erDiagram
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS`. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made | A "Calc. Model" press plus the `[Log]` entry |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
+| `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
 ### Field mapping details
 
@@ -299,6 +302,54 @@ parameters, marked when they were edited by hand after the fit. Both keys ride
 the existing `project` and `model_run` RLS (viewer reads, editor writes), so
 they add no policy. They are small: a fit record is a few KB.
 
+### Import reports (017_project_import.sql)
+
+When a project is imported in the browser (a b023 workbook, or a project
+file), the review lists the importer's **notes** and the **unmapped report**
+(plan.md 1b): what it interpreted, and what it couldn't carry across as the
+workbook meant. Workbooks are hand-made and have mistakes, so that list is the
+audit trail of what was flagged; the hydrologist, and later a licensing
+assessor, needs it long after the import. `POST /projects/import` stores it in
+the import's own transaction ([api.md § Import report](./api.md#import-report)).
+
+- **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
+  `imported_by` (→ `app_user`; no `ON DELETE`, like `model_run.created_by`:
+  there is no account deletion yet, and WP-1.13 makes both `SET NULL`),
+  `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
+  `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
+  `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and
+  `notes_omitted` / `unmapped_omitted` (items found beyond the kept 500 per
+  list). CHECKs: both lists are arrays of at most 500, and together at most
+  1 MiB of jsonb text (the API's own cap is 512 KB of JSON, so the CHECK is only
+  a backstop). Indexes cover both foreign keys, `(project_id, imported_at DESC)`
+  leading the newest-first lookup.
+- **Its own table, not a `project` column.** It is written once and never
+  changed, which a column on a table editors update freely can't promise (the
+  grant below can); it keeps up to ~1 MB of notes off every `GET /projects`
+  row; and one row per import leaves room for re-importing a workbook into an
+  existing project later.
+- **One row per import, no uniqueness.** Today a project is imported once, so
+  it has at most one row; `GET /projects/:id/import-report` returns the newest.
+  A future re-import would add rows (the newest is the current report, the rest
+  its history) and needs only the trigger's same-transaction rule relaxed.
+- **Written only by the import.** The `project_import_stamp` BEFORE INSERT
+  trigger (`search_path` pinned; runs as the caller, so its project lookup is
+  under RLS too) stamps `imported_by` and `imported_at` from the session and
+  refuses (`insufficient_privilege`) unless the project was created by that user
+  **in the same transaction** (`project.created_at = now()`, the transaction's
+  start). A report can't be attached to, or forged onto, an existing project,
+  even by its owner.
+- **Append-only by privilege.** `water_app` has `SELECT` and `INSERT` only (the
+  catalogue test's `APPEND_ONLY`); no update or delete policy. Rows go with
+  their project. Copying a project (`POST /projects/:id/copy`) doesn't copy the
+  report: the copy wasn't imported.
+- **RLS:** viewers read (`project_import_select`); an owner inserts, as
+  themselves (`project_import_insert`: `app_has_role(project_id, 'owner') AND
+  imported_by = app_current_user_id()`). The importer is always the new
+  project's owner.
+- The strings are the file's (farm names, formula text): untrusted, capped by
+  the API and rendered as text only ([security.md § Import reports](./security.md#import-reports)).
+
 ## Access control
 
 ### Roles
@@ -382,6 +433,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `job` (the background job queue): SELECT needs `viewer`; INSERT needs
   `editor` and `acting_user_id` = the current user; no UPDATE or DELETE for
   anyone (see § Jobs below).
+- `project_import` (import reports): SELECT needs `viewer`; INSERT needs
+  `owner`, as yourself, and only in the transaction that created the project;
+  no UPDATE or DELETE for anyone (see § Import reports above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
