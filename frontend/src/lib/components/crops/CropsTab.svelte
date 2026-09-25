@@ -224,7 +224,7 @@
 		Gross demand = Σ area × A-pan × crop factor, spread over the days in each month (February {fmtNum(settings.februaryDays, 2)}
 		days). On each simulated day the model then subtracts effective rainfall ({fmtPct(settings.effectiveRainFraction, 0)} of rain on the
 		cropped area{#if settings.effectiveRainStoreMm > 0}, with what the crop can't use that day carried over in a
-			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net demand the farm's dam and river must supply. Uses saved A-pan values and the crops and areas above,
+			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the farm abstracts that ÷ its irrigation efficiency. Uses saved A-pan values and the crops and areas above,
 		including unsaved edits.
 	</p>
 	{#if !apanSet}

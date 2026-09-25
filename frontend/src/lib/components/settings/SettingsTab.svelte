@@ -669,8 +669,8 @@
 		</div>
 		<p class="hint muted">
 			The flow that must stay in the river for the ecosystem (the Ecological Reserve). b023's <em>pragmatic</em> EWR is one fixed
-			flow per month, so farmers can plan for it; the model reports days when simulated outflow falls below it, and splits it
-			between farms by flow share.
+			flow per month, so farmers can plan for it; the model checks it at the EWR sites (the outlet and every gauge) and charges
+			each shortfall to the farms upstream by their net impact that day.
 		</p>
 		<div class="ewr">
 			<div class="table-wrap">
@@ -757,7 +757,7 @@
 	<section class="panel" id="set-quality" aria-labelledby="dq-h">
 		<div class="panel-head">
 			<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
-			<span class="muted small">Gauge vs logger check on the Time series tab and in run warnings</span>
+			<span class="muted small">Gauge vs logger check on the Data tab and in run warnings</span>
 		</div>
 		<div class="fields">
 			<div class="field">
