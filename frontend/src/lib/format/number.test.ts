@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtNum, fmtPct, localIsoDate, parseNum } from './number';
+import { fmtDate, fmtDay, fmtNum, fmtPct, fmtReading, localIsoDate, parseNum } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -13,6 +13,13 @@ describe('fmtNum', () => {
 		expect(fmtNum(null)).toBe('–');
 		expect(fmtNum(NaN)).toBe('–');
 		expect(fmtNum(Infinity)).toBe('–');
+	});
+});
+
+describe('fmtReading', () => {
+	it('gives a day’s reading the decimals its size needs', () => {
+		expect([1234.4, 100, 12.345, 1, 0.0123, 0.01, 0.00012, -250.6].map(fmtReading)).toEqual(['1,234', '100', '12.35', '1.00', '0.012', '0.010', '0.0001', '-251']);
+		expect([null, undefined, NaN].map(fmtReading)).toEqual(['–', '–', '–']);
 	});
 });
 

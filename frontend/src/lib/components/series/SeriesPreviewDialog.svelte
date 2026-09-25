@@ -19,7 +19,7 @@
 	import type { ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtReading } from '$lib/format/number';
 	import type { Daily } from './coverage';
 	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag } from './preview';
 
@@ -112,12 +112,7 @@
 	const bottomH = $derived((filtered.length - endIdx) * ROW_H);
 	const colCount = $derived(visibleColumns.length + 1);
 
-	function digitsFor(v: number): number {
-		// Mirrors LineChart's tooltip precision, for the same "one day's reading" display.
-		const a = Math.abs(v);
-		return a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4;
-	}
-	const numText = (v: number | null) => fmtNum(v, v == null ? 0 : digitsFor(v));
+	const numText = fmtReading;
 	const flagList = (flags: PreviewFlag[]) => flags.map((f) => FLAG_LABEL[f]).join(', ');
 
 	// Focus the search when it appears. `autofocus` alone only works if the

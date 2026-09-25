@@ -7,7 +7,7 @@
 	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import uPlot from 'uplot';
 	import 'uplot/dist/uPlot.min.css';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { alignDaily, fmtCompact, isolatedIndices, panWindow, type ChartSeries } from './series';
 
 	let {
@@ -81,10 +81,6 @@
 		return getComputedStyle(host).getPropertyValue(name).trim() || fallback;
 	}
 
-	function digitsFor(v: number) {
-		const a = Math.abs(v);
-		return a >= 100 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 3 : 4;
-	}
 
 	const isDecade = (v: number) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
 	const utc = (ts: number) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
@@ -109,7 +105,7 @@
 			spanGaps: false,
 			// Gaps stay gaps; a lone reading between two gets a dot so it isn't lost.
 			points: { show: false, filter: isolatedIndices(plotted[i] ?? []), size: 4, width: 0, fill: stroke },
-			value: (_u: uPlot, v: number | null) => (v == null ? '–' : fmtNum(v, digitsFor(v)))
+			value: (_u: uPlot, v: number | null) => fmtReading(v)
 		};
 		if (s.style === 'points') {
 			return { ...base, width: 0, paths: () => null, points: { show: true, size: 3, width: 0, fill: stroke, stroke } };
