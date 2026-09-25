@@ -224,6 +224,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			day: (id: string, runId: string, nodeId: string, date: string) =>
 				request<RunDay>('GET', `${p(id)}/runs/${enc(runId)}/day?${new URLSearchParams({ nodeId, date })}`),
 			remove: (id: string, runId: string) => request<void>('DELETE', `${p(id)}/runs/${enc(runId)}`),
+			/** Replace the run's written explanation ('' clears it); answers with the run's metadata and the new stamp. */
+			setNotes: (id: string, runId: string, notes: string) =>
+				request<{ run: RunMeta }>('PATCH', `${p(id)}/runs/${enc(runId)}`, { notes }).then((r) => r.run),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},

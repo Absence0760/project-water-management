@@ -232,8 +232,22 @@
 					<section class="panel" aria-labelledby="sides-h" aria-busy={loading}>
 						<h2 id="sides-h" class="visually-hidden">Runs compared</h2>
 						<dl class="sides">
-							<div><dt>A</dt><dd>{describe(data.a)}</dd></div>
-							<div><dt>B</dt><dd>{describe(data.b)}</dd></div>
+							<div>
+								<dt>A</dt>
+								<dd>
+									{describe(data.a)}
+									<!-- The modeller's written explanation of the run (007_run_notes). -->
+									{#if data.a.run.notes}<span class="run-notes"><span class="lbl">Run notes:</span> {data.a.run.notes}</span>{/if}
+								</dd>
+							</div>
+							<div>
+								<dt>B</dt>
+								<dd>
+									{describe(data.b)}
+									<!-- The modeller's written explanation of the run (007_run_notes). -->
+									{#if data.b.run.notes}<span class="run-notes"><span class="lbl">Run notes:</span> {data.b.run.notes}</span>{/if}
+								</dd>
+							</div>
 						</dl>
 						{#if sameRun}
 							<div class="alert alert-info" role="status">Both sides are the same run, so nothing has changed. Pick a different run for A or B.</div>
@@ -346,6 +360,16 @@
 	.sides dd {
 		margin: 0;
 		overflow-wrap: anywhere;
+	}
+	.run-notes {
+		display: block;
+		white-space: pre-wrap;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		max-width: 90ch;
+	}
+	.run-notes .lbl {
+		font-weight: 500;
 	}
 	.small {
 		font-size: 0.8rem;

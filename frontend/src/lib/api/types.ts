@@ -109,7 +109,19 @@ export interface RunMeta {
 	createdBy: string | null;
 	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
 	legacy: boolean;
+	/**
+	 * The modeller's written explanation of the run ('' = none), e.g. why a
+	 * WR2012 flag stands. The one thing about a run an editor may change
+	 * (PATCH …/runs/:runId). Absent from an older API.
+	 */
+	notes?: string;
+	/** When and by whom (display name) the notes last changed; null = never written. */
+	notesUpdatedAt?: string | null;
+	notesUpdatedBy?: string | null;
 }
+
+/** Longest run note, in characters (backend RUN_NOTES_MAX, 007_run_notes.sql). */
+export const RUN_NOTES_MAX = 4000;
 
 export interface Run extends RunMeta {
 	summary: RunSummary;

@@ -23,6 +23,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Wr2012Panel from './Wr2012Panel.svelte';
+	import RunNotes from './RunNotes.svelte';
 	import { activeSectionId, resultSections } from './sections';
 
 	let {
@@ -168,6 +169,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			clearInterval(timer);
 			running = false;
 		}
+	}
+
+	/** A run's notes were saved: the shown run, its cached detail and its row in the list take the new note and stamp. */
+	function notesSaved(updated: RunMeta) {
+		const fields = { notes: updated.notes, notesUpdatedAt: updated.notesUpdatedAt, notesUpdatedBy: updated.notesUpdatedBy };
+		if (detail?.run.id === updated.id) detail = { ...detail, run: { ...detail.run, ...fields } };
+		const cached = detailCache.get(updated.id);
+		if (cached) detailCache.set(updated.id, { ...cached, run: { ...cached.run, ...fields } });
+		runs = runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r));
+		onRunsChange?.(runs);
 	}
 
 	async function remove(r: RunMeta) {
@@ -387,6 +398,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			{@const runSettings = shownSettings ?? project.settings}
 			{@const runSeries = detail.series}
 			{@const shownRunId = detail.run.id}
+			{@const shownRun = detail.run}
 			<RunCharts
 				{projectId}
 				runId={detail.run.id}
@@ -422,6 +434,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<Wr2012Panel report={summary.wr2012} />
 						</div>
 					{/if}
+					<div class="panel" id="res-notes">
+						{#key shownRunId}
+							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
+						{/key}
+					</div>
 				{/snippet}
 				{#snippet afterFlowViews()}
 					<div class="panel" id="res-ewr-grid">
