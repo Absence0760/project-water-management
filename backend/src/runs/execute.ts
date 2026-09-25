@@ -71,8 +71,16 @@ export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n
  * A kept run (RUN_KEPT_SQL: pinned, or nominated as evidence now or before)
  * is never trimmed and doesn't count against the cap: the cap keeps the
  * newest `keep` runs that are neither.
+ *
+ * One trim at a time per project, held to the end of the caller's
+ * transaction (as the pin limit's trigger does, 015_run_pinned.sql). Without
+ * it, runs saved at the same moment each trimmed before the others had
+ * committed, so none saw the full count and the project kept more than
+ * `keep`. With it, the second waits for the first to commit and its DELETE
+ * (a new statement, READ COMMITTED) sees that run.
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('model_run_trim:' || $1::text, 0))`, [projectId]);
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
 			SELECT r.id FROM model_run r

@@ -3,6 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runModelChecked } from '@water-management/engine';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+import { executeRun, trimRuns } from './execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -76,6 +78,42 @@ describe('run storage cap', () => {
 		// Its outputs went with it; the kept runs still have theirs (positive control).
 		expect(await asOwner('SELECT 1 FROM run_series WHERE run_id = $1', [ids[0]])).toHaveLength(0);
 		expect((await asOwner('SELECT 1 FROM run_series WHERE run_id = $1', [ids[1]])).length).toBeGreaterThan(0);
+	});
+
+	it('holds the cap when two runs are saved at the same moment: the second trim waits for the first to commit', async () => {
+		const u = await signUp('Racer');
+		const projectId = await runnable(u);
+		for (const label of ['old 1', 'old 2']) expect((await u.call('POST', `/projects/${projectId}/runs`, { label })).status).toBe(201);
+		// Two saves in flight at once, as when two people press Run together. The first has saved
+		// and trimmed but not committed; the second saves and trims before the first commits.
+		let commitFirst = () => {};
+		const firstMayCommit = new Promise<void>((r) => (commitFirst = r));
+		let firstTrimmed = () => {};
+		const firstHasTrimmed = new Promise<void>((r) => (firstTrimmed = r));
+		const first = withUser(u.id, async (db) => {
+			await executeRun(db, projectId, 'new 1');
+			const removed = await trimRuns(db, projectId, 2);
+			firstTrimmed();
+			await firstMayCommit;
+			return removed;
+		});
+		await firstHasTrimmed;
+		let secondDone = false;
+		const second = withUser(u.id, async (db) => {
+			await executeRun(db, projectId, 'new 2');
+			return trimRuns(db, projectId, 2);
+		}).finally(() => (secondDone = true));
+		// Let the first commit once the second has finished (no lock) or is waiting on the trim lock.
+		const waitingOnTrim = async () =>
+			(await asOwner(`SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`)).length > 0;
+		await expect.poll(async () => secondDone || (await waitingOnTrim()), { timeout: 10_000 }).toBe(true);
+		commitFirst();
+		const removed = [...(await first), ...(await second)];
+		// 4 runs, cap 2: both old runs go, each reported once.
+		expect(removed).toHaveLength(2);
+		expect(new Set(removed).size).toBe(2);
+		const kept = (await u.call('GET', `/projects/${projectId}/runs`)).body.runs.map((r: { label: string }) => r.label);
+		expect(kept.sort()).toEqual(['new 1', 'new 2']);
 	});
 
 	it('trims only the project it runs in', async () => {

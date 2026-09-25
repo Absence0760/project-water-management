@@ -27,8 +27,10 @@ test('a pinned baseline survives the 20-run cap; an editor pins and unpins it, a
 	await expect(row('Baseline').getByRole('button', { name: /^Delete run/ })).toHaveCount(0);
 
 	// RUNS_KEPT_PER_PROJECT is 20 (backend/.env.development): 20 newer runs push out Scratch, not the pinned Baseline.
-	const newer: string[] = [];
-	for (let i = 1; i <= 20; i++) newer.push(await createRun(page.request, project.id, `Newer ${String(i).padStart(2, '0')}`));
+	// Sent together: the full local suite shares one API process, and 20 runs awaited one by one each
+	// queue behind the other workers' heavy runs (this setup alone reached the 30 s timeout). Scratch was
+	// made first, so it stays the oldest unpinned run whatever order these finish in; `newer` keeps label order.
+	const newer = await Promise.all(Array.from({ length: 20 }, (_, i) => createRun(page.request, project.id, `Newer ${String(i + 1).padStart(2, '0')}`)));
 	await page.reload();
 	await expect(row('Newer 20')).toBeVisible();
 	await expect(row('Baseline').getByText('Pinned', { exact: true })).toBeVisible();
