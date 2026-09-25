@@ -39,18 +39,18 @@ Tick items off (or move them into an issue) as they are done.
 
 ## Hydrologist
 
-- [ ] **Calibration record:** gauge G1 vs logger A1 from 2014/15, tracked in
-      [#1](https://github.com/Absence0760/project-water-management/issues/1).
-      Research done: the gauge column is a neighbouring river's gauge, and the
-      logger (already the project's calibration record) is the verified
-      target ([model.md §2.10](./model.md)). The code and doc items (plan 1–3:
-      no silent default pick, a neutral agreement warning, the findings in
-      model.md) have landed. The question in [plan.md](./plan.md) is now a
-      confirmation (logger as target, gauge as regional index) plus the
-      rating, area and short-record questions, with the client flow volumes
-      it used to quote removed (2026-09-24). Still open: the hydrologist's
-      yes, then record it (dated) in plan.md and close #1.
-      The runoff-ratio check needs the client workbook back in
+- [x] **Calibration record:** gauge G1 vs logger A1 from 2014/15,
+      [#1](https://github.com/Absence0760/project-water-management/issues/1)
+      (closed 2026-09-25). Decided: the logger is the calibration and
+      validation target, and the gauge column (a neighbouring river's gauge,
+      area-scaled from 2010) is a regional wet/dry index only
+      ([model.md §2.10](./model.md), [plan.md § Questions](./plan.md#model-and-hydrology-for-the-hydrologist)).
+      The hydrologist's agreement was assumed by the operator, not given in
+      writing; reopen #1 if they disagree. Plan items 1–3 (no silent default
+      pick, a neutral agreement warning, the findings in model.md) landed
+      earlier. Still open, and separate: the rating, area and short-record
+      questions (plan.md questions 2–4), and the runoff-ratio check, which
+      needs the client workbook back in
       `../project-water-management-source/Original/`.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
@@ -619,20 +619,17 @@ the suggested order (the IDs carry the detail):
       ([e2e/README.md](../e2e/README.md)). Specs that already navigate between
       tabs in the app rather than with repeated `page.goto` can stay as they
       are: that is how a user moves around anyway.
-- [ ] **e2e runs from parallel worktrees share one `water_e2e` database and
-      fixed ports** (:3101 and :7801). When two sessions run `pnpm test:e2e` at
-      once, unrelated specs fail (seen 2026-09-24: `sharing.spec.ts` and
-      `teams.spec.ts` failed, then passed on re-run). The durable fix is a
-      per-checkout e2e database name and ports, derived from the worktree
-      path or an env override, set up in the e2e global setup. Until then,
-      don't run e2e in two worktrees at the same time.
-      Seen again 2026-09-24 in a full 2-worker run at load average ~6 while
-      another session was debugging e2e: `chirps-bias.spec.ts` (the Settings
-      select missing after `page.reload()`) and `data-quality.spec.ts` (the
-      gauge-vs-logger table missing after navigating to the Time series tab)
-      failed, then passed when rerun alone. Neither touches the runs page;
-      if either fails alone, look for a missing readiness signal on reload
-      rather than a longer timeout.
+- [x] **e2e runs from parallel worktrees share one `water_e2e` database and
+      fixed ports** (:3101 and :7801). Fixed 2026-09-25: each checkout gets a
+      slot (`e2e/support/env.ts`): the main checkout and CI keep :3101, :7801
+      and `water_e2e`; a git worktree gets :3101+slot, :7801+slot and
+      `water_e2e_<slot>` from a hash of its path; `E2E_SLOT` overrides. A
+      slot clash fails on the port at start-up, before global setup touches
+      the database. CI runs the suite as 14 shards on one shared build
+      (e2e/README.md § CI). The flakes seen under load (`chirps-bias`,
+      `data-quality`, 2026-09-24) were never reproduced alone; if either fails
+      on its own, look for a missing readiness signal on reload rather than a
+      longer timeout.
 - [x] **Wall-clock test flakes under load** (2026-09-24): the timing
       checks moved out of the unit suite into `*.perf.test.ts` vitest
       `perf` projects (median of 7 after a warm-up, serial), run with

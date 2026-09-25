@@ -426,10 +426,13 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Model and hydrology (for the hydrologist)
 
-> **Ask this first: confirm the calibration record ([#1](https://github.com/Absence0760/project-water-management/issues/1)).**
+> **Calibration record ([#1](https://github.com/Absence0760/project-water-management/issues/1), closed).**
 >
-> **Proposed decision: calibrate and validate on the logger. The workbook's
-> gauge column is used only as a regional wet/dry index.** This is what the
+> **Decided 2026-09-25: calibrate and validate on the logger. The workbook's
+> gauge column is used only as a regional wet/dry index.** Question 1 below
+> was answered yes by the operator on the hydrologist's behalf (their
+> agreement assumed, not yet written down by them); if the hydrologist later
+> disagrees, reopen #1. This is what the
 > workbook and the imported settings already do. The research behind it
 > ([model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)):
 > the gauge column is a DWS weir on a neighbouring river, upstream of its
@@ -443,7 +446,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >
 > 1. **Confirm:** the logger is the calibration and validation target, and the
 >    neighbouring gauge is a regional wet/dry index only (ranking water years
->    for the dry→wet test). Yes or no?
+>    for the dry→wet test). **Yes (2026-09-25, assumed on the hydrologist's
+>    behalf; see above).**
 > 2. **Rating (CR-18):** what is the highest field gauging at the logger, and
 >    which rating curve converts its stage to flow? Flows above that gauging
 >    are extrapolated, so peak days and wet-season volumes are uncertain; the
@@ -456,8 +460,8 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >    proxy-basin model of the gauged neighbour (CR-9). Is that acceptable for
 >    now, with the uncertainty reported?
 >
-> A yes to 1 closes #1. Questions 2–4 don't hold up that sign-off; each opens
-> its own follow-up.
+> The yes to 1 closed #1. Questions 2–4 are still open and don't reopen it;
+> each is its own follow-up.
 
 
 1. **Which model should the app be built on?** b023 is complete and in use. The
