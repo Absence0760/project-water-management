@@ -137,7 +137,15 @@ export interface RunMeta {
 	 * replaced, null never nominated. Absent from an older API.
 	 */
 	evidence?: EvidenceStatus | null;
+	/**
+	 * Pinned by an editor (015_run_pinned): the storage cap never trims it and
+	 * it can't be deleted until unpinned. Absent from an older API.
+	 */
+	pinned?: boolean;
 }
+
+/** Most pinned runs per project (backend PINNED_RUNS_PER_PROJECT_MAX, 015_run_pinned.sql). */
+export const PINNED_RUNS_MAX = 10;
 
 /** Longest run note, in characters (backend RUN_NOTES_MAX, 007_run_notes.sql). */
 export const RUN_NOTES_MAX = 4000;

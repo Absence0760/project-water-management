@@ -240,6 +240,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Replace the run's written explanation ('' clears it); answers with the run's metadata and the new stamp. */
 			setNotes: (id: string, runId: string, notes: string) =>
 				request<{ run: RunMeta }>('PATCH', `${p(id)}/runs/${enc(runId)}`, { notes }).then((r) => r.run),
+			/** Pin or unpin a run (the storage cap keeps a pinned run; 409 past PINNED_RUNS_MAX). Answers with the run's metadata. */
+			setPinned: (id: string, runId: string, pinned: boolean) =>
+				request<{ run: RunMeta }>('PATCH', `${p(id)}/runs/${enc(runId)}`, { pinned }).then((r) => r.run),
 			/** The project's evidence history, oldest first (the last entry is the current nomination). */
 			nominations: (id: string) => request<{ nominations: Nomination[] }>('GET', `${p(id)}/evidence`).then((r) => r.nominations),
 			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
