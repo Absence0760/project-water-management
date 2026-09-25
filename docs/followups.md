@@ -1058,6 +1058,12 @@ role and not before it.
       SheetJS's own output), but no one has opened a generated file in Excel
       or LibreOffice yet to confirm there is no repair prompt (LibreOffice
       isn't installed on the dev machine, so no headless smoke test either).
+      A second implementation does read it: on 2026-09-25 two synthetic
+      workbooks from `buildWorkbook` (the unit test's input, and a 3-year,
+      2-farm synthetic run) passed Python's `zipfile.testzip()` (every CRC)
+      and opened in openpyxl 3.1.5 with no warnings, keeping full-precision
+      values, real dates and the `#,##0.00` display formats. Excel's repair
+      check is stricter than either, so the manual open stays open.
       Trigger: before the first client handover of a workbook.
     - [x] **Smaller files** (2026-09-25): the workbook is zipped with the
       platform's `CompressionStream('deflate-raw')` (`zip.ts`) instead of
