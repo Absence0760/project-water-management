@@ -10,14 +10,19 @@
 	//     never in a page chunk), with progress per sheet and Cancel, and its
 	//     review adds the gauge option, the importer's notes and the unmapped
 	//     report (WorkbookReview).
+	// The notes and unmapped report the review showed (a project file's notes,
+	// for a .json) go with the POST as `importReport` and are kept with the
+	// project (importReport.ts; the Overview's Import record shows them).
 	// `source` only picks the wording and what the picker offers; the file's
 	// type decides how it is read, so either entry point takes either kind.
+	import { version } from '$app/environment';
 	import { base } from '$app/paths';
 	import { api, ApiError, type ImportResult, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
 	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
 	import ImportPreview from './ImportPreview.svelte';
+	import { buildImportReport, importerVersion, projectFileNotes } from './importReport';
 	import { IMPORT_ACCEPT, importBody, importTooLarge, readImportFile, type ParsedImport } from './projectFile';
 	import WorkbookReview from './WorkbookReview.svelte';
 	import {
@@ -197,7 +202,15 @@
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		if (!parsed || !name.trim() || updating || optionsError) return;
-		const body = importBody(parsed.file, name);
+		const source = report ? 'b023-workbook' : 'project-file';
+		const importReport = buildImportReport({
+			source,
+			fileName,
+			importerVersion: importerVersion(source, version),
+			notes: report ? report.notes : projectFileNotes(parsed.notes),
+			unmapped: report ? report.unmapped : []
+		});
+		const body = importBody(parsed.file, name, importReport);
 		const tooLarge = importTooLarge(body.bytes);
 		if (tooLarge) {
 			failure = { message: tooLarge, created: 'no' };
@@ -209,7 +222,7 @@
 		// late answer then mustn't overwrite what the user is doing now.
 		const mine = attempt;
 		try {
-			const r = await api.projects.importProject(body.file, { teamId: teamId || null, run });
+			const r = await api.projects.importProject(body.file, { teamId: teamId || null, run, report: importReport });
 			if (mine !== attempt) {
 				onimported?.(r);
 				return;

@@ -120,4 +120,22 @@ describe('importBody', () => {
 		expect(importTooLarge(bytes)).toBeNull();
 		expect(importTooLarge(IMPORT_MAX_BYTES + 1)).toMatch(/^The file is 5\.00 MB; a project file can be at most 5 MB\./);
 	});
+
+	it('counts the import report that rides beside the document', () => {
+		const file = parseProjectFileText(JSON.stringify(exported)).file;
+		const report = {
+			source: 'project-file' as const,
+			fileName: 'catchment.json',
+			importerVersion: 'project file (web build 1)',
+			notes: [],
+			unmapped: [],
+			notesOmitted: 0,
+			unmappedOmitted: 0
+		};
+		const plain = importBody(file, 'P');
+		const withReport = importBody(file, 'P', report);
+		expect(withReport.file).toEqual(plain.file);
+		expect(withReport.bytes).toBe(new TextEncoder().encode(JSON.stringify({ ...plain.file, importReport: report })).length);
+		expect(withReport.bytes).toBeGreaterThan(plain.bytes);
+	});
 });

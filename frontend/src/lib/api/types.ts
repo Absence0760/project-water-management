@@ -15,6 +15,7 @@ import type {
 	RunInputsSnapshot,
 	RunSummary
 } from '@water-management/engine';
+import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
 export type Role = 'viewer' | 'editor' | 'owner';
 export const ROLES: readonly Role[] = ['viewer', 'editor', 'owner'];
@@ -84,6 +85,32 @@ export interface ImportResult {
 	runId?: string;
 	/** Why the requested run failed; the project was still imported. */
 	runError?: string;
+}
+
+/**
+ * What the importer flagged, sent beside the document on POST /projects/import
+ * (`importReport`) and kept with the project (017_project_import; docs/api.md §
+ * Import report). The server caps every list and string
+ * (backend/src/projects/importReport.ts); components/import/importReport.ts
+ * trims to the same caps before sending.
+ */
+export interface ImportReport {
+	source: 'b023-workbook' | 'project-file';
+	fileName: string;
+	/** Which importer (and engine) made the report. */
+	importerVersion: string;
+	notes: ImportNote[];
+	unmapped: UnmappedItem[];
+	/** Items found beyond what was kept. */
+	notesOmitted: number;
+	unmappedOmitted: number;
+}
+
+/** GET /projects/:id/import-report: the newest import's report, with who imported it and when. */
+export interface StoredImportReport extends ImportReport {
+	importedAt: string;
+	/** The importer's display name. */
+	importedBy: string;
 }
 
 export interface Member {

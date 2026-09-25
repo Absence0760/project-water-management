@@ -3,9 +3,10 @@
 // scripts/wbt-import/fixtures/) in a Web Worker, shows the review (counts,
 // the importer's notes, the unmapped report with Echo Farm's hand-written
 // InOut formula), imports it with a first run, and the project opens with
-// results. A workbook that isn't b023 names the ranges it lacks; a farm name
-// that looks like HTML shows as text; and the review passes axe in both
-// themes and on a phone.
+// results, whose Overview keeps the import record (the same notes and
+// unmapped report, 017_project_import). A workbook that isn't b023 names the
+// ranges it lacks; a farm name that looks like HTML shows as text; and the
+// review and the import record pass axe in both themes and on a phone.
 import { readFileSync } from 'node:fs';
 import { AxeBuilder } from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
@@ -71,13 +72,43 @@ async function expectReportLists(notes: Locator, unmapped: Locator) {
 	);
 }
 
+/** The project's Overview shows the import record: file, date and importer, then both lists behind their disclosures. */
+async function expectImportRecord(page: Page, importedBy: string) {
+	const record = page.getByRole('region', { name: 'Import record' });
+	await expect(record.getByRole('paragraph').first()).toHaveText(
+		new RegExp(`^Imported from the b023 workbook synthetic_b023\\.xlsx on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${importedBy}\\.$`)
+	);
+	const notes = record.getByRole('region', { name: 'Importer notes' });
+	const unmapped = record.getByRole('region', { name: /^Unmapped report/ });
+	// Closed at first: the count sentences show, the lists don't.
+	await expect(notes.getByRole('listitem').first()).toBeHidden();
+	await expect(unmapped.getByRole('table')).toBeHidden();
+	await notes.getByText('Show the 12 notes').click();
+	await unmapped.getByText('Show the 8 items').click();
+	await expect(notes.getByRole('listitem')).toHaveCount(12);
+	await expect(notes.getByRole('listitem').filter({ hasText: 'transfer Alpha Farm -> Zulu Farm names an unknown element; skipped' })).toHaveCount(1);
+	const echo = unmapped.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Echo Farm', exact: true }) }).filter({ hasText: '=S7*0.9-V7' });
+	await expect(echo.getByRole('code')).toHaveText('=S7*0.9-V7');
+	await expectReportLists(notes, unmapped);
+	return record;
+}
+
+/** Import the synthetic workbook through the dialog (no run) and open the project's Overview. */
+async function importAndOpen(page: Page) {
+	await page.goto('/');
+	const dialog = await openWorkbookImport(page);
+	await review(dialog, synthetic(), 'synthetic_b023');
+	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'synthetic_b023' })).toBeVisible();
+}
+
 async function expectNoViolations(page: Page) {
 	const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
 	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
 test('imports the synthetic workbook with a first run, and the project opens with results', async ({ page, owner }) => {
-	void owner;
 	await page.goto('/');
 	const dialog = await openWorkbookImport(page);
 	await review(dialog, synthetic(), 'synthetic_b023');
@@ -116,6 +147,10 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await expect(done.getByRole('alert')).toHaveCount(0);
 	await done.getByRole('link', { name: 'Open project' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Synthetic — from the workbook' })).toBeVisible();
+
+	// The Overview keeps what the importer flagged: the same notes and unmapped report, each list closed at first.
+	await expectImportRecord(page, owner.displayName);
+
 	await page.goto(`${page.url().split('?')[0]}?tab=runs`);
 	await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
 
@@ -206,6 +241,14 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			await expect(dialog.getByLabel('Scale factor (optional)')).toBeVisible();
 			await expectNoViolations(page);
 		});
+
+		test('the Overview import record has no violations, open or closed', async ({ page, owner }) => {
+			await importAndOpen(page);
+			await expect(page.getByRole('region', { name: 'Import record' }).getByText('Show the 12 notes')).toBeVisible();
+			await expectNoViolations(page);
+			await expectImportRecord(page, owner.displayName);
+			await expectNoViolations(page);
+		});
 	});
 }
 
@@ -221,6 +264,15 @@ test.describe('phone', () => {
 		expect(box.x).toBeLessThanOrEqual(16 + 2);
 		expect(box.x + box.width).toBeGreaterThanOrEqual(390 - 16 - 2);
 		expect(await dialog.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+		await expectNoViolations(page);
+	});
+
+	test('the Overview import record fits the width, the wide table scrolling inside its own box', async ({ page, owner }) => {
+		await importAndOpen(page);
+		const record = await expectImportRecord(page, owner.displayName);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+		const box = (await record.boundingBox())!;
+		expect(box.x + box.width).toBeLessThanOrEqual(390);
 		await expectNoViolations(page);
 	});
 });

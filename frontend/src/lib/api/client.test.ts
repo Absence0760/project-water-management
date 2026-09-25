@@ -264,6 +264,32 @@ describe('teams client', () => {
 		expect(call(h, 0).url).toBe('/projects/import?run=1');
 	});
 
+	it('sends the import report beside the document, replacing any the file carries', async () => {
+		const file = { name: 'P', model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, importReport: { forged: true } };
+		const report = {
+			source: 'b023-workbook' as const,
+			fileName: 'synthetic_b023.xlsx',
+			importerVersion: 'b023 browser importer (web build 1)',
+			notes: [],
+			unmapped: [{ code: 'transfer-inout-formula' as const, message: 'hand-written', text: '=S7*0.9-V7' }],
+			notesOmitted: 0,
+			unmappedOmitted: 0
+		};
+		const f = mockFetch(201, { project: { id: 'p1' } });
+		await createApi('', f).projects.importProject(file, { report });
+		expect(call(f, 0).body).toEqual({ ...file, importReport: report });
+	});
+
+	it('reads a project’s import report, null when it has none, and throws on any other 404', async () => {
+		const stored = { importedAt: '2026-09-25T10:00:00.000Z', importedBy: 'Owner', source: 'project-file', fileName: 'c.json', importerVersion: 'v', notes: [], unmapped: [], notesOmitted: 0, unmappedOmitted: 0 };
+		const f = mockFetch(200, { report: stored });
+		await expect(createApi('http://x', f).projects.importReport('p/1')).resolves.toEqual(stored);
+		expect(call(f, 0)).toMatchObject({ url: 'http://x/projects/p%2F1/import-report', method: 'GET' });
+		await expect(createApi('', mockFetch(404, { error: 'no import report' })).projects.importReport('p')).resolves.toBeNull();
+		const err = await createApi('', mockFetch(404, { error: 'not found' })).projects.importReport('p').catch((e) => e);
+		expect(err.status).toBe(404);
+	});
+
 	it('surfaces an import’s model problems and the 413 hint', async () => {
 		const file = { name: 'P', model: { nodes: [], crops: [], cropAreas: [], transfers: [] } };
 		const bad = mockFetch(400, { error: 'invalid project file', details: [{ message: 'duplicate series rain_catchment_mm' }] });

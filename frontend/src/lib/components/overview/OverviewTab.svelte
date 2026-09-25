@@ -8,6 +8,7 @@
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { attention } from './attention';
+	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { pickRuns } from './latestRun';
@@ -236,6 +237,8 @@
 				{/if}
 			</form>
 		</section>
+		<!-- An imported project's record of what the importer flagged; nothing for any other. -->
+		<ImportReportPanel projectId={project.id} />
 	</div>
 
 	<!-- Who can open the project: the owning team, then the people shared directly. -->

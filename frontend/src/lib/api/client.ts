@@ -14,6 +14,7 @@ import type {
 import type {
 	AddMemberResult,
 	Ensemble,
+	ImportReport,
 	ImportResult,
 	EnsembleDetail,
 	EnsembleStart,
@@ -25,6 +26,7 @@ import type {
 	Role,
 	Run,
 	RunCompareResponse,
+	StoredImportReport,
 	RunMeta,
 	RunCatchmentDay,
 	RunDay,
@@ -34,6 +36,9 @@ import type {
 	TeamRole,
 	User
 } from './types';
+
+/** GET /projects/:id/import-report's 404 message when the project has no report (projects/routes.ts). */
+const NO_IMPORT_REPORT = 'no import report';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -164,6 +169,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				}
 			) => request<{ project: Project }>('PATCH', p(id), patch).then((r) => r.project),
 			remove: (id: string) => request<void>('DELETE', p(id)),
+			/**
+			 * What the importer flagged when the project was imported; null when it
+			 * wasn't (the server's 404 "no import report"). Any other 404 (no such
+			 * project, or not a member) still throws.
+			 */
+			importReport: (id: string) =>
+				request<{ report: StoredImportReport }>('GET', `${p(id)}/import-report`).then(
+					(r) => r.report,
+					(e: unknown) => {
+						if (e instanceof ApiError && e.status === 404 && e.message === NO_IMPORT_REPORT) return null;
+						throw e;
+					}
+				),
 			copy: (id: string, name: string) =>
 				request<{ project: Project }>('POST', `${p(id)}/copy`, { name }).then((r) => r.project),
 			/**
@@ -171,12 +189,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * file): one transaction, so a failure creates nothing. `teamId` puts it in
 			 * a team you may add to; `run` runs it after the import commits, and a run
 			 * that fails comes back as `runError` with the project still created.
+			 * `report` (the review's notes and unmapped report) is stored with the
+			 * project in the same transaction; it replaces any `importReport` the
+			 * file itself carries.
 			 */
-			importProject: (file: ProjectFile, opts: { teamId?: string | null; run?: boolean } = {}) => {
+			importProject: (file: ProjectFile, opts: { teamId?: string | null; run?: boolean; report?: ImportReport } = {}) => {
 				const q = new URLSearchParams();
 				if (opts.teamId) q.set('teamId', opts.teamId);
 				if (opts.run) q.set('run', '1');
-				return request<ImportResult>('POST', `/projects/import${q.size ? `?${q}` : ''}`, file).then((r) => ({
+				const body = opts.report ? { ...file, importReport: opts.report } : file;
+				return request<ImportResult>('POST', `/projects/import${q.size ? `?${q}` : ''}`, body).then((r) => ({
 					project: r.project,
 					...(r.runId ? { runId: r.runId } : {}),
 					...(r.runError ? { runError: r.runError } : {})

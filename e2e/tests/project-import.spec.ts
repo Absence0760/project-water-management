@@ -1,6 +1,7 @@
 // Import a project file from the project list (WP-1.8, POST /projects/import):
 // an invented example catchment, exactly as `pnpm seed:examples` builds it,
-// goes in through the dialog and comes out as a project with a run; a broken
+// goes in through the dialog and comes out as a project with a run and an
+// import record on its Overview; a broken
 // file creates nothing; and the dialog passes axe at each step, in both themes.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +51,6 @@ async function expectNoViolations(page: Page) {
 }
 
 test('imports an example catchment into a team and runs it', async ({ page, owner }) => {
-	void owner;
 	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Import Hydrology' } });
 	expect(res.status()).toBe(201);
 	await page.goto('/');
@@ -82,6 +82,13 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	// Open it: the workspace shows the imported catchment and its run.
 	await row(page, 'Droëvlei — imported').getByRole('link', { name: 'Open' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Droëvlei — imported' })).toBeVisible();
+	// The Overview's import record names the project file; a file has no unmapped report, and this one no notes.
+	const record = page.getByRole('region', { name: 'Import record' });
+	await expect(record.getByRole('paragraph').first()).toHaveText(
+		new RegExp(`^Imported from the project file droevlei_project\\.json on \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} by ${owner.displayName}\\.$`)
+	);
+	await expect(record.getByRole('region', { name: 'Importer notes' }).getByRole('paragraph')).toHaveText('None.');
+	await expect(record.getByRole('region', { name: /^Unmapped report/ })).toHaveCount(0);
 	await page.goto(`${page.url().split('?')[0]}?tab=runs`);
 	await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
 });

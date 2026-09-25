@@ -15,7 +15,8 @@
 		idPrefix = 'wb',
 		collapsible = false,
 		notesOmitted = 0,
-		unmappedOmitted = 0
+		unmappedOmitted = 0,
+		showUnmapped = true
 	}: {
 		notes: ImportNote[];
 		unmapped: UnmappedItem[];
@@ -26,6 +27,8 @@
 		/** Items the importer found beyond what was kept. */
 		notesOmitted?: number;
 		unmappedOmitted?: number;
+		/** The unmapped report is a workbook's; a project file's record leaves it out. */
+		showUnmapped?: boolean;
 	} = $props();
 
 	const warnings = $derived(notes.filter((n) => n.severity === 'warning').length);
@@ -85,25 +88,27 @@
 	{/if}
 </section>
 
-<section class="report" aria-labelledby="{idPrefix}-unmapped-h">
-	<h3 id="{idPrefix}-unmapped-h">Unmapped report: not carried across as the workbook meant</h3>
-	{#if unmapped.length}
-		<p class="hint muted">
-			The importer couldn't map {unmapped.length === 1 ? 'this' : `these ${unmapped.length} items`} onto the app's model exactly.
-			It never changes a value on its own: check each against the workbook, and fix the project after importing if needed.
-		</p>
-		{#if collapsible}
-			<details>
-				<summary>Show the {unmapped.length === 1 ? 'item' : `${unmapped.length} items`}</summary>
+{#if showUnmapped}
+	<section class="report" aria-labelledby="{idPrefix}-unmapped-h">
+		<h3 id="{idPrefix}-unmapped-h">Unmapped report: not carried across as the workbook meant</h3>
+		{#if unmapped.length}
+			<p class="hint muted">
+				The importer couldn't map {unmapped.length === 1 ? 'this' : `these ${unmapped.length} items`} onto the app's model exactly.
+				It never changes a value on its own: check each against the workbook, and fix the project after importing if needed.
+			</p>
+			{#if collapsible}
+				<details>
+					<summary>Show the {unmapped.length === 1 ? 'item' : `${unmapped.length} items`}</summary>
+					{@render unmappedTable()}
+				</details>
+			{:else}
 				{@render unmappedTable()}
-			</details>
+			{/if}
 		{:else}
-			{@render unmappedTable()}
+			<p class="hint muted">Nothing: everything in the workbook was mapped.</p>
 		{/if}
-	{:else}
-		<p class="hint muted">Nothing: everything in the workbook was mapped.</p>
-	{/if}
-</section>
+	</section>
+{/if}
 
 <style>
 	.report h3 {
