@@ -99,6 +99,43 @@ pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
 `-`, `_` or `+` rather than mid-word on a phone.
 
+## Project list
+
+`/` lists your projects, grouped by owner (personal, each team, shared with
+you), with a search box, an owner filter and a sort, all kept in the URL. Its
+header has **New project** and **Import project file (.json)**.
+
+### Import a project file
+
+The import dialog (`lib/components/import/ImportProjectDialog.svelte`, WP-1.8)
+turns a project document into a new project through `POST /projects/import`:
+
+1. **Pick** a `.json` file: a project's *Download project (JSON)* or the
+   workbook importer's `project.json`. It's read in the browser
+   (`import/projectFile.ts`); a file that isn't JSON, isn't a project document
+   or is over the 5 MB cap is refused here, before anything is sent.
+2. **Preview** (`ImportPreview.svelte`): the importer's notes first (for
+   example, a file with no time series), then the name (editable, prefilled
+   from the file), *Belongs to* (only when you're a member or admin of a team;
+   preselected when the list is filtered to one), what's in the file
+   (farms, gauges and other water users, crops and planted areas, transfers,
+   and a table of the time series with their days and dates) and *Run the
+   model after importing*.
+3. **Importing:** a status line; the controls are disabled.
+4. **Done:** "Imported *name*", plus "Its first run is ready on the Runs tab"
+   after a run, or a warning with the reason when the run failed (the project
+   is still imported). *Open project* goes to it; the list behind has already
+   reloaded.
+5. **Failed:** the server's message (zod or model problems are listed) and
+   "Nothing was created." When the server couldn't be reached, it says the
+   import may or may not have gone through and to check the list first. *Back
+   to the preview* keeps the file and choices.
+
+The dialog is the wide variant: full width less the page gutter on a phone.
+Its preview and submit steps take an already-parsed document
+(`ParsedImport = { file, notes }`), so a second source (the in-browser b023
+workbook import, WP-1.31) only has to produce one.
+
 ## Teams
 
 `/teams` lists your teams with your role; `/teams/:id` shows members, pending

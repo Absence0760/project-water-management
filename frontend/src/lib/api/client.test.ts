@@ -233,6 +233,40 @@ describe('teams client', () => {
 		expect(err.message).toBe('a team must keep at least one admin');
 	});
 
+	it('imports a project file: the document is the body, teamId and run go in the query', async () => {
+		const file = { name: 'P', model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: [], format: 'water-management/project' };
+		const project = { id: 'p1', name: 'P' };
+		const f = mockFetch(201, { project });
+		const api = createApi('http://x', f);
+		await expect(api.projects.importProject(file)).resolves.toEqual({ project });
+		expect(call(f, 0)).toEqual({ url: 'http://x/projects/import', method: 'POST', body: file });
+
+		const g = mockFetch(201, { project, runId: 'r1' });
+		await expect(createApi('', g).projects.importProject(file, { teamId: 't/1', run: true })).resolves.toEqual({ project, runId: 'r1' });
+		expect(call(g, 0).url).toBe('/projects/import?teamId=t%2F1&run=1');
+
+		// A failed run still answers 201 with the project, and says why.
+		const h = mockFetch(201, { project, runError: 'model run failed: no A-pan' });
+		await expect(createApi('', h).projects.importProject(file, { teamId: null, run: true })).resolves.toEqual({
+			project,
+			runError: 'model run failed: no A-pan'
+		});
+		expect(call(h, 0).url).toBe('/projects/import?run=1');
+	});
+
+	it('surfaces an import’s model problems and the 413 hint', async () => {
+		const file = { name: 'P', model: { nodes: [], crops: [], cropAreas: [], transfers: [] } };
+		const bad = mockFetch(400, { error: 'invalid project file', details: [{ message: 'duplicate series rain_catchment_mm' }] });
+		const err = await createApi('', bad).projects.importProject(file).catch((e) => e);
+		expect(err.status).toBe(400);
+		expect(err.message).toBe('invalid project file (duplicate series rain_catchment_mm)');
+		const big = mockFetch(413, { error: 'project file larger than 5 MB — remove series …' });
+		expect((await createApi('', big).projects.importProject(file).catch((e) => e)).message).toBe('project file larger than 5 MB — remove series …');
+		// A 413 from in front of the API (no JSON body) still reads as too large.
+		const bare = mockFetch(413, undefined, 'Payload Too Large');
+		expect((await createApi('', bare).projects.importProject(file).catch((e) => e)).message).toBe('That is too large to send');
+	});
+
 	it('encodes both run refs for the compare endpoint', async () => {
 		const f = mockFetch(200, { changes: [] });
 		await createApi('http://x', f).compare.runs('p1:r1', 'p2:r2');

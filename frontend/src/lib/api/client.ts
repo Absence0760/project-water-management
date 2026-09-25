@@ -14,11 +14,13 @@ import type {
 import type {
 	AddMemberResult,
 	Ensemble,
+	ImportResult,
 	EnsembleDetail,
 	EnsembleStart,
 	Member,
 	Nomination,
 	Project,
+	ProjectFile,
 	ProjectSummary,
 	Role,
 	Run,
@@ -62,6 +64,8 @@ function statusText(status: number): string {
 			return 'Not found';
 		case 409:
 			return 'That conflicts with existing data';
+		case 413:
+			return 'That is too large to send';
 		default:
 			return status >= 500 ? 'The server had a problem' : `Request failed (${status})`;
 	}
@@ -161,7 +165,23 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			) => request<{ project: Project }>('PATCH', p(id), patch).then((r) => r.project),
 			remove: (id: string) => request<void>('DELETE', p(id)),
 			copy: (id: string, name: string) =>
-				request<{ project: Project }>('POST', `${p(id)}/copy`, { name }).then((r) => r.project)
+				request<{ project: Project }>('POST', `${p(id)}/copy`, { name }).then((r) => r.project),
+			/**
+			 * Create a project from a project document (docs/api.md § Import a project
+			 * file): one transaction, so a failure creates nothing. `teamId` puts it in
+			 * a team you may add to; `run` runs it after the import commits, and a run
+			 * that fails comes back as `runError` with the project still created.
+			 */
+			importProject: (file: ProjectFile, opts: { teamId?: string | null; run?: boolean } = {}) => {
+				const q = new URLSearchParams();
+				if (opts.teamId) q.set('teamId', opts.teamId);
+				if (opts.run) q.set('run', '1');
+				return request<ImportResult>('POST', `/projects/import${q.size ? `?${q}` : ''}`, file).then((r) => ({
+					project: r.project,
+					...(r.runId ? { runId: r.runId } : {}),
+					...(r.runError ? { runError: r.runError } : {})
+				}));
+			}
 		},
 		members: {
 			list: (id: string) =>

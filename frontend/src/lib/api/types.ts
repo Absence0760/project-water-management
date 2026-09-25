@@ -7,6 +7,7 @@ import type {
 	MemberResult,
 	PairedMember,
 	PairedSummary,
+	ProjectModel,
 	ProjectSettings,
 	RecordCoverage,
 	ResolvedEnsembleOptions,
@@ -52,6 +53,37 @@ export interface ProjectSummary {
 
 export interface Project extends ProjectSummary {
 	settings: ProjectSettings;
+}
+
+/**
+ * A portable project document: the body of POST /projects/import, as
+ * GET /projects/:id/export.json writes it (plus informational keys the
+ * server ignores) and the workbook importers produce. The server validates
+ * it in full (backend/src/projects/document.ts).
+ */
+export interface ProjectFile {
+	name: string;
+	description?: string;
+	settings?: Partial<ProjectSettings> & Record<string, unknown>;
+	model: ProjectModel;
+	series?: ProjectFileSeries[];
+	[informational: string]: unknown;
+}
+
+export interface ProjectFileSeries {
+	kind: string;
+	name?: string;
+	unit: string;
+	startDate: string;
+	values: (number | null)[];
+}
+
+/** POST /projects/import. `runId` / `runError` only when a run was asked for. */
+export interface ImportResult {
+	project: Project;
+	runId?: string;
+	/** Why the requested run failed; the project was still imported. */
+	runError?: string;
 }
 
 export interface Member {
