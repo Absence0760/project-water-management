@@ -8,7 +8,9 @@ import {
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
 	GAUGE_COLUMNS,
 	type RunSummary,
-	type WaterBalanceRow
+	type WaterBalanceRow,
+	type Wr2012FlagLevel,
+	type Wr2012Scaling
 } from '@water-management/engine';
 import { csvRow } from './csv.js';
 
@@ -73,6 +75,11 @@ export interface SummaryMeta {
 	startDate: string;
 	endDate: string;
 	createdAt: string;
+	/** The modeller's written explanation of the run (007_run_notes); '' or absent = none. */
+	notes?: string;
+	/** When and by whom the notes last changed (ISO timestamp, display name). */
+	notesUpdatedAt?: string | null;
+	notesUpdatedBy?: string | null;
 }
 
 /**
@@ -233,7 +240,8 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 /**
  * The run summary as one CSV sheet of blocks separated by a blank line: run
  * details, the per-farm table, the catchment figures, the CHIRPS bias factors,
- * the catchment rain treated as missing, the double-mass check, calibration, warnings.
+ * the catchment rain treated as missing, the double-mass check, calibration,
+ * the WR2012 check, the column guide, warnings. The run details carry the run notes.
  * Fields the engine adds to the summary later still appear (under their key).
  */
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
@@ -243,6 +251,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield csvRow(['Engine version', meta.engineVersion]);
 	yield csvRow(['Period start', meta.startDate]);
 	yield csvRow(['Period end', meta.endDate]);
+	// Always written, so the row is there (empty) for a reader looking for it.
+	yield csvRow(['Run notes', meta.notes ?? '']);
+	if (meta.notes && meta.notesUpdatedAt) yield csvRow(['Notes last changed', meta.notesUpdatedAt, meta.notesUpdatedBy ?? '']);
 	yield '';
 
 	yield* verificationLines(summary.verification);
@@ -294,8 +305,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	} else {
 		yield csvRow(['No observed flow series — calibration not computed']);
 	}
-
 	yield '';
+
+	yield* wr2012Lines(summary.wr2012, meta.notes ?? '');
+	yield '';
+
 	yield* columnGuideLines();
 
 	if (summary.warnings.length) {
@@ -454,6 +468,77 @@ export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<st
 	for (const r of [...wb.years, wb.total]) {
 		const year = r.waterYear === null ? 'Whole run' : `${r.waterYear}/${String((r.waterYear + 1) % 100).padStart(2, '0')}`;
 		yield csvRow([year, ...BALANCE_COLUMNS.map(([, f]) => f(r))]);
+	}
+}
+
+const WR2012_FLAG_TEXT: Record<Wr2012FlagLevel, string> = {
+	ok: 'within the note threshold',
+	note: 'note the difference',
+	query: 'query',
+	unusable: 'not usable for EWR findings'
+};
+const SCALING_TEXT: Record<Wr2012Scaling, string> = { area: 'area ratio', areaRain: 'area and rainfall ratio' };
+/** Water year labelled by the calendar year it starts in: 2001 → "2001/02". */
+const waterYearText = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+
+/**
+ * The WR2012 check (model.md §2.10c): reference, scaling, the MAR ratios over
+ * the overlapping years and the whole run, the 12 monthly means, the dry
+ * season, the pattern correlation and the flag. A query or not-usable flag
+ * says whether the run carries a written explanation (the run notes, in the
+ * run details block at the top).
+ */
+export function* wr2012Lines(w: RunSummary['wr2012'], notes: string): Generator<string> {
+	yield csvRow(['WR2012 check: simulated natural flow vs WR2012 naturalised flow']);
+	if (!w) {
+		yield csvRow(['Not checked: no WR2012 reference in the settings the run used']);
+		return;
+	}
+	yield csvRow(['Quaternary', w.quaternary]);
+	yield csvRow(['Source', w.source]);
+	yield csvRow(['Reference period (water years)', waterYearText(w.referencePeriod.start), waterYearText(w.referencePeriod.end)]);
+	const s = w.scaling;
+	const fell = s.rule !== s.requested ? ` (${SCALING_TEXT[s.requested]} asked for; its data is missing)` : '';
+	yield csvRow(['Scaling', `${SCALING_TEXT[s.rule]}${fell}`]);
+	yield csvRow(['Scaling factor', s.factor]);
+	yield csvRow(['Area factor', s.areaFactor, 'Modelled area (km²)', s.modelAreaKm2, 'Quaternary area (km²)', s.referenceAreaKm2]);
+	yield csvRow(['Rainfall factor', s.rainFactor, 'Modelled MAP (mm)', s.modelMapMm, 'Quaternary MAP (mm)', s.referenceMapMm]);
+	yield csvRow(['WR2012 MAR (Mm³/a)', w.referenceMarMm3]);
+	yield csvRow(['WR2012 MAR scaled to the modelled catchment (Mm³/a)', w.scaledMarMm3]);
+	yield csvRow(['Over', 'Water years', 'Simulated natural MAR (Mm³/a)', 'Scaled WR2012 MAR (Mm³/a)', 'Ratio (simulated ÷ WR2012)']);
+	if (w.overlap) {
+		const y = w.overlap.years;
+		yield csvRow(['Overlapping years', `${waterYearText(y[0]!)} to ${waterYearText(y[y.length - 1]!)} (${y.length})`, w.overlap.simulatedMarMm3, w.scaledMarMm3, w.overlap.ratio]);
+	} else {
+		yield csvRow(['Overlapping years', 'no complete water year inside the reference period']);
+	}
+	yield csvRow(['Whole run', `${w.whole.days} days`, w.whole.simulatedMarMm3, w.scaledMarMm3, w.whole.ratio]);
+	yield csvRow([`Monthly means over ${w.monthlyBasis === 'overlap' ? 'the overlapping years' : 'the whole run'} (Mm³ per month)`]);
+	yield csvRow(['Month', 'Simulated natural (Mm³)', 'Scaled WR2012 (Mm³)', 'Ratio', 'Dry season']);
+	for (const m of w.months) yield csvRow([MONTH_NAMES[m.month - 1]!, m.simulatedMm3, m.referenceMm3, m.ratio, m.lowFlow ? 'yes' : 'no']);
+	yield csvRow([
+		'Dry-season ratio',
+		w.lowFlowRatio,
+		w.lowFlowMonths.map((m) => MONTH_NAMES[m - 1]).join(' '),
+		w.lowFlowSource === 'setting' ? 'months set in Settings' : 'the months the run’s natural flow is lowest'
+	]);
+	yield csvRow(['Monthly pattern correlation (Pearson r)', w.patternCorrelation]);
+	const f = w.flag;
+	yield csvRow(['Flag', WR2012_FLAG_TEXT[f.level], 'judged on', f.basis === 'overlap' ? 'the overlapping years' : 'the whole run', 'Deviation (%)', f.deviationPct]);
+	yield csvRow([
+		'Thresholds (%)',
+		'note',
+		f.thresholds.notePct,
+		'query',
+		f.thresholds.queryPct,
+		'query if wetter by',
+		f.thresholds.queryWetterPct,
+		'not usable',
+		f.thresholds.unusablePct
+	]);
+	if (f.text) yield csvRow(['Flag detail', f.text]);
+	if (f.level === 'query' || f.level === 'unusable') {
+		yield csvRow(['Written explanation', notes ? 'see Run notes at the top of this file' : 'none recorded for this run']);
 	}
 }
 

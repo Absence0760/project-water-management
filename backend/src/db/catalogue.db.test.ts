@@ -6,6 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
 /** Tables deliberately without RLS: app_user is needed before sign-in. */
 const NO_RLS = new Set(['app_user', 'schema_migrations']);
+/**
+ * Tables water_app may UPDATE only column by column, and the only columns it
+ * may update. A run is evidence: everything but its note is immutable
+ * (007_run_notes.sql).
+ */
+const COLUMN_ONLY_UPDATE: Record<string, string[]> = { model_run: ['notes'] };
 
 let db: pg.Client;
 beforeAll(async () => {
@@ -36,14 +42,15 @@ describe('schema catalogue', () => {
 	});
 
 	it('grants every app table to water_app, which owns nothing and cannot bypass RLS', async () => {
+		// Each privilege on its own: has_table_privilege with a list is true if *any* is held.
 		const missing = [];
 		for (const t of await tables()) {
 			if (t.relname === 'schema_migrations') continue;
-			const { rows } = await db.query<{ ok: boolean }>(
-				`SELECT has_table_privilege('water_app', $1, 'SELECT, INSERT, UPDATE, DELETE') AS ok`,
-				[`public.${t.relname}`]
-			);
-			if (!rows[0]!.ok) missing.push(t.relname);
+			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
+				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${t.relname}`, priv]);
+				if (!rows[0]!.ok) missing.push(`${t.relname} ${priv}`);
+			}
 		}
 		expect(missing).toEqual([]);
 		const { rows: role } = await db.query(
@@ -54,6 +61,25 @@ describe('schema catalogue', () => {
 			`SELECT relname FROM pg_class WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = 'water_app')`
 		);
 		expect(owned).toEqual([]);
+	});
+
+	it('limits water_app UPDATE to the listed columns on column-only tables (model_run: notes)', async () => {
+		for (const [table, allowed] of Object.entries(COLUMN_ONLY_UPDATE)) {
+			const { rows: tableLevel } = await db.query<{ ok: boolean }>(
+				`SELECT EXISTS (SELECT 1 FROM information_schema.table_privileges
+				 WHERE grantee = 'water_app' AND table_schema = 'public' AND table_name = $1 AND privilege_type = 'UPDATE') AS ok`,
+				[table]
+			);
+			expect(tableLevel[0]!.ok, `${table} has a table-level UPDATE grant`).toBe(false);
+			const { rows } = await db.query<{ column_name: string }>(
+				`SELECT a.attname AS column_name FROM pg_attribute a
+				 WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped
+				   AND has_column_privilege('water_app', a.attrelid, a.attnum, 'UPDATE')
+				 ORDER BY a.attname`,
+				[`public.${table}`]
+			);
+			expect(rows.map((r) => r.column_name)).toEqual(allowed);
+		}
 	});
 
 	it('pins search_path on every function in public', async () => {

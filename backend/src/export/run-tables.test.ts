@@ -11,7 +11,8 @@ import {
 	seriesKeyOrder,
 	summaryCsvLines,
 	verificationLines,
-	waterBalanceLines
+	waterBalanceLines,
+	wr2012Lines
 } from './run-tables.js';
 
 const meta = {
@@ -69,8 +70,8 @@ describe('summary sheet', () => {
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
 		// EWR sites, water balance, CHIRPS factors, rain treated as missing, double-mass check,
-		// calibration, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(12);
+		// calibration, WR2012 check, column guide, warnings)
+		expect(lines.filter((l) => l === '').length).toBe(13);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 
@@ -408,5 +409,109 @@ describe('farm column guide', () => {
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
 		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U; 0 up to float noise');
+	});
+});
+
+describe('run notes and the WR2012 block', () => {
+	const report = (level: 'ok' | 'query' | 'unusable', overlap = true): NonNullable<RunSummary['wr2012']> => ({
+		quaternary: 'X11A',
+		source: 'WR2012, synthetic',
+		referencePeriod: { start: 1920, end: 2009 },
+		compared: 'natural_flow',
+		scaling: {
+			rule: 'area',
+			requested: 'areaRain',
+			factor: 0.25,
+			areaFactor: 0.25,
+			rainFactor: null,
+			modelAreaKm2: 10,
+			referenceAreaKm2: 40,
+			modelMapMm: null,
+			referenceMapMm: 700
+		},
+		referenceMarMm3: 8,
+		scaledMarMm3: 2,
+		overlap: overlap ? { years: [2001, 2002, 2003], simulatedMarMm3: 2.6, ratio: 1.3 } : null,
+		whole: { days: 1461, simulatedMarMm3: 2.5, ratio: 1.25 },
+		monthlyBasis: overlap ? 'overlap' : 'whole',
+		months: [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((month) => ({
+			month,
+			simulatedMm3: 0.2,
+			referenceMm3: month === 7 ? 0 : 0.16,
+			ratio: month === 7 ? null : 1.25,
+			lowFlow: [6, 7, 8].includes(month)
+		})),
+		lowFlowMonths: [6, 7, 8],
+		lowFlowSource: 'simulated',
+		lowFlowRatio: 0.9,
+		patternCorrelation: 0.95,
+		flag: {
+			level,
+			basis: overlap ? 'overlap' : 'whole',
+			deviationPct: 30,
+			thresholds: { notePct: 10, queryPct: 25, queryWetterPct: 15, unusablePct: 50 },
+			text: level === 'ok' ? null : 'The simulated MAR is 30 % above the scaled WR2012 MAR: query.'
+		}
+	});
+
+	it('puts the run notes (and who last changed them) in the run details, empty when there are none', () => {
+		const noted = { ...meta, notes: 'Irrigated tributary, not in the model', notesUpdatedAt: '2026-09-24T10:00:00.000Z', notesUpdatedBy: 'Ann' };
+		const withNotes = [...summaryCsvLines(noted, summary)];
+		expect(withNotes).toContain('Run notes,"Irrigated tributary, not in the model"');
+		expect(withNotes).toContain('Notes last changed,2026-09-24T10:00:00.000Z,Ann');
+		const without = [...summaryCsvLines(meta, summary)];
+		expect(without).toContain('Run notes,');
+		expect(without.some((l) => l.startsWith('Notes last changed'))).toBe(false);
+		// A note is user text: a leading formula character is neutralised.
+		expect([...summaryCsvLines({ ...meta, notes: '=1+1' }, summary)]).toContain("Run notes,'=1+1");
+	});
+
+	it('says when the run has no WR2012 check', () => {
+		expect([...wr2012Lines(undefined, '')]).toEqual([
+			'WR2012 check: simulated natural flow vs WR2012 naturalised flow',
+			'Not checked: no WR2012 reference in the settings the run used'
+		]);
+	});
+
+	it('writes the reference, scaling, MAR ratios, monthly table and flag', () => {
+		const lines = [...wr2012Lines(report('query'), 'explained')];
+		expect(lines).toContain('Quaternary,X11A');
+		expect(lines).toContain('Reference period (water years),1920/21,2009/10');
+		expect(lines).toContain('Scaling,area ratio (area and rainfall ratio asked for; its data is missing)');
+		expect(lines).toContain('Scaling factor,0.25');
+		expect(lines).toContain('Rainfall factor,,Modelled MAP (mm),,Quaternary MAP (mm),700');
+		expect(lines).toContain('WR2012 MAR scaled to the modelled catchment (Mm³/a),2');
+		expect(lines).toContain('Overlapping years,2001/02 to 2003/04 (3),2.6,2,1.3');
+		expect(lines).toContain('Whole run,1461 days,2.5,2,1.25');
+		// 12 months in water-year order; a zero reference month has no ratio.
+		const header = lines.indexOf('Month,Simulated natural (Mm³),Scaled WR2012 (Mm³),Ratio,Dry season');
+		expect(lines.slice(header + 1, header + 13).map((l) => l.split(',')[0])).toEqual(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+		expect(lines).toContain('Jul,0.2,0,,yes');
+		expect(lines).toContain('Oct,0.2,0.16,1.25,no');
+		expect(lines).toContain('Dry-season ratio,0.9,Jun Jul Aug,the months the run’s natural flow is lowest');
+		expect(lines).toContain('Monthly pattern correlation (Pearson r),0.95');
+		expect(lines).toContain('Flag,query,judged on,the overlapping years,Deviation (%),30');
+		expect(lines).toContain('Thresholds (%),note,10,query,25,query if wetter by,15,not usable,50');
+		expect(lines).toContain('Flag detail,The simulated MAR is 30 % above the scaled WR2012 MAR: query.');
+		expect(lines).toContain('Written explanation,see Run notes at the top of this file');
+	});
+
+	it('says when a query or not-usable flag has no written explanation; an ok flag needs none', () => {
+		const noOverlap = [...wr2012Lines(report('unusable', false), '')];
+		expect(noOverlap).toContain('Written explanation,none recorded for this run');
+		expect(noOverlap).toContain('Overlapping years,no complete water year inside the reference period');
+		expect(noOverlap.some((l) => l.startsWith('Monthly means over the whole run'))).toBe(true);
+		const ok = [...wr2012Lines(report('ok'), '')];
+		expect(ok.some((l) => l.startsWith('Written explanation'))).toBe(false);
+		expect(ok.some((l) => l.startsWith('Flag detail'))).toBe(false);
+	});
+
+	it('is part of the summary sheet, after calibration', () => {
+		const lines = [...summaryCsvLines(meta, { ...summary, wr2012: report('query') })];
+		const cal = lines.indexOf('Calibration (outflow gauge vs observed)');
+		const wr = lines.indexOf('WR2012 check: simulated natural flow vs WR2012 naturalised flow');
+		expect(cal).toBeGreaterThan(0);
+		expect(wr).toBeGreaterThan(cal);
+		expect(lines).toContain('Quaternary,X11A');
 	});
 });
