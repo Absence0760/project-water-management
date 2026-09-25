@@ -211,6 +211,25 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 	};
 }
 
+/**
+ * A dam's surface area, rain on it, open-water evaporation and seepage today
+ * (audit N2), all from yesterday's storage and before any cap: the routing
+ * caps evaporation and seepage at what is in the dam once today's transfer
+ * has landed, and the transfer room (N4) counts them as they are. Zero for a
+ * node without a dam or an empty one.
+ */
+function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64Array | undefined, damRainMm: Float64Array | undefined): { A: number; Pd: number; E: number; Sp: number } {
+	const cap = node.damCapacityM3;
+	if (!(cap > 0 && qPrev > 0)) return { A: 0, Pd: 0, E: 0, Sp: 0 };
+	const A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), node.damAreaExponent);
+	return {
+		A,
+		Pd: damRainMm ? (damRainMm[t]! * A) / 1000 : 0,
+		E: lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0,
+		Sp: node.damSeepagePerDay * qPrev
+	};
+}
+
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map(() => allocNode(days));
@@ -234,9 +253,15 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 		// doesn't irrigate first). Each rule moves
 		//   v = MAX(0, MIN(source free, destination room, max daily))
 		// with source free = Q_src[t−1] − drawn today − reserve and destination
-		// room = cap_dst − Q_dst[t−1] + D_dst[t] − scheduled into it today, so a
-		// transfer never pumps into a full dam only to spill, and one to a farm
-		// with no dam still serves its demand (audit N4). Rules run by priority,
+		// room = cap_dst − (Q_dst[t−1] + rain on it − evaporation − seepage)
+		// + D_dst[t] − scheduled into it today, so a transfer never pumps into a
+		// full dam only to spill, and one to a farm with no dam still serves its
+		// demand (audit N4). The dam's own gains and losses today (N2) count:
+		// they follow yesterday's storage alone, so they are known before the
+		// transfer, and a room that ignored them left a leaking dam short of
+		// its demand by a fixed volume while the source had water to spare,
+		// which a larger demand would have hidden (engine 0.19.0; fuzz seed
+		// 921, "doubling crop areas raised the supply fraction"). Rules run by priority,
 		// lowest first (Q18); within a priority, rules into one destination share
 		// its room and rules from one source share its free water, each pro rata
 		// to its own limit, so the result never depends on the list order.
@@ -262,7 +287,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				const tr = transfers[k]!;
 				const total = sumBy[tr.to]!;
 				const dst = nodes[tr.to]!;
-				const room = Math.max(0, dst.damCapacityM3 - prevQ(tr.to) + dst.demand[t]! / dst.irrigationEfficiency - intoToday[tr.to]!);
+				const q = prevQ(tr.to);
+				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
+				const room = Math.max(0, dst.damCapacityM3 - (q + loss.Pd - loss.E - loss.Sp) + dst.demand[t]! / dst.irrigationEfficiency - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
 			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
@@ -349,18 +376,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
 			const cap = node.damCapacityM3;
-			let A = 0;
-			let E = 0;
-			let Pd = 0;
-			let Sp = 0;
-			if (cap > 0 && qPrev > 0) {
-				A = node.damAreaFullM2 * Math.pow(Math.min(qPrev / cap, 1), node.damAreaExponent);
-				Pd = damRainMm ? (damRainMm[t]! * A) / 1000 : 0;
-				// A transfer out never takes more than yesterday's storage, so this is ≥ 0 up to float noise.
-				const there = Math.max(qPrev + Pd + J, 0);
-				E = Math.min(lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0, there);
-				Sp = Math.min(node.damSeepagePerDay * qPrev, there - E);
-			}
+			const day = damDay(node, qPrev, t, lakeEvapMmDay, damRainMm);
+			const A = day.A;
+			const Pd = day.Pd;
+			// A transfer out never takes more than yesterday's storage, so this is ≥ 0 up to float noise.
+			const there = Math.max(qPrev + Pd + J, 0);
+			const E = Math.min(day.E, there);
+			const Sp = Math.min(day.Sp, there - E);
 			const qStart = qPrev + Pd - E - Sp;
 			const avail = qStart + M + O + K + J;
 			// Irrigation draws only what is above the dam's minimum operating

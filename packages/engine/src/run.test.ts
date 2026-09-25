@@ -11,6 +11,7 @@ import { toEpochDay, waterYearIndex } from './calendar';
 import { zeroRainRuns } from './quality';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
+import { checkTransferLimits } from './verify/checks';
 import { netDailyDemandM3 } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 
@@ -704,6 +705,44 @@ describe('runModel — transfers', () => {
 		expect(get(out, 'R', 'transfer')).toEqual([100]);
 		expect(get(out, 'R', 'supplied')).toEqual([100]);
 		expect(get(out, 'R', 'deficit')).toEqual([0]);
+	});
+
+	it("counts the destination dam's own losses today in its room (N4 with N2, engine 0.19.0; fuzz seed 921)", () => {
+		// R: 900 of 1000 m³, dead storage 800, loses half its storage to seepage
+		// (450) before irrigating, needs 100 m³/day. Room = 1000 − (900 − 450) +
+		// 100 = 650, which S (1000 above its reserve, 864 a day) can send: R
+		// irrigates in full and ends the day full. Up to 0.18.0 the room ignored
+		// the seepage (1000 − 900 + 100 = 200): R had 450 + 200 = 650 m³, under
+		// its dead storage, so it supplied nothing while S kept water it was free
+		// to send. That shortfall (the seepage) did not grow with the demand, so
+		// doubling R's crop area raised its supply fraction.
+		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
+		const fixture = (areaM2: number) => ({
+			nodes: nodes().map((n) => (n.id === 'R' ? { ...n, damCapacityM3: 1000, damInitialPct: 0.9, damMinPct: 0.8, damSeepagePerDay: 0.5 } : n)),
+			crops,
+			cropAreas: [{ nodeId: 'R', cropId: 'c', areaM2 }],
+			transfers: [transfer()],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0],
+			startDate: '2021-01-01'
+		});
+		const out = run(fixture(1000));
+		expect(get(out, 'R', 'dam_seepage')).toEqual([450]);
+		expect(get(out, 'R', 'transfer')).toEqual([650]);
+		expect(get(out, 'R', 'supplied')).toEqual([100]);
+		expect(get(out, 'R', 'deficit')).toEqual([0]);
+		expect(get(out, 'R', 'dam_storage')).toEqual([1000]);
+		expect(get(out, 'R', 'spill')).toEqual([0]);
+		expect(checkTransferLimits(input(fixture(1000)), out)).toBeNull();
+		// The transfers self-check reads the room the same way: the old 200 m³ is water held back.
+		const held = structuredClone(out);
+		held.series.find((s) => s.nodeId === 'S' && s.key === 'transfer')!.values[0] = -200;
+		held.series.find((s) => s.nodeId === 'R' && s.key === 'transfer')!.values[0] = 200;
+		expect(checkTransferLimits(input(fixture(1000)), held)).toMatch(/sent only 200; the rules and the destinations' room allowed 650/);
+		// Twice the area is served in full too: the supply fraction stays 1.
+		const doubled = run(fixture(2000));
+		expect(get(doubled, 'R', 'transfer')).toEqual([750]);
+		expect(get(doubled, 'R', 'supplied')).toEqual([200]);
 	});
 
 	it('shares a destination\'s room pro rata between two sources of the same priority (N4)', () => {

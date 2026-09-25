@@ -141,7 +141,8 @@ interface Rule {
  *   today's outgoing rules (never below 0); a rule's reserve is the source
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
  * - room at the destination (audit N4): a farm that sends nothing receives
- *   at most MAX(0, capacity − yesterday's storage + today's demand D);
+ *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
+ *   evaporation − seepage) + today's demand D);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ over its destinations
  *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
@@ -176,8 +177,20 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	const farmD = farms.map((f) => get.get(`${f.id}|demand`)!);
-	/** A destination's room that day (audit N4): capacity − yesterday's storage + today's demand D. */
-	const roomOf = (fi: number, t: number) => farms[fi]!.damCapacityM3 - storage(farms[fi]!.id, t) + farmD[fi]![t]!;
+	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
+	/**
+	 * A destination's room that day (audit N4): capacity − (yesterday's storage
+	 * + rain on the dam − evaporation − seepage) + today's demand D (engine ≥
+	 * 0.19.0 counts the dam's gains and losses, N2). The reported evaporation
+	 * and seepage are capped at what the dam held with the transfer in; on the
+	 * days that cap bites the room read here is smaller than the engine's but
+	 * still at least capacity + the volume that moved + D, so neither check
+	 * below can trip on it.
+	 */
+	const roomOf = (fi: number, t: number) => {
+		const [pd, e, sp] = farmLoss[fi]!.map((v) => v?.[t] ?? 0);
+		return farms[fi]!.damCapacityM3 - (storage(farms[fi]!.id, t) + pd! - e! - sp!) + farmD[fi]![t]!;
+	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
 		const { active, ins: insOf, outs: outsOf } = byMonth[month]!;
@@ -199,7 +212,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			if (-J > outCap + tol(outCap)) return `${where}: sent ${-J} > MIN(limit ${outMax}, storage ${prev} − reserve) = ${outCap}`;
 			if (outs.length === 0 && J > 0) {
 				const room = roomOf(fi, t);
-				if (J > Math.max(0, room) + tol(Math.max(Math.abs(room), J))) return `${where}: received ${J} > its room ${room} (capacity − storage + demand)`;
+				if (J > Math.max(0, room) + tol(Math.max(Math.abs(room), J))) return `${where}: received ${J} > its room ${room} (capacity − storage after the dam's gains and losses + demand)`;
 			}
 		}
 		// Identifiable sources: every destination is fed by this source alone and sends nothing.
