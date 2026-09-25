@@ -12,8 +12,22 @@ import { executeRun, loadModelInput, trimRuns } from './execute.js';
 // engine's compareRuns() uses (packages/engine/src/compare.ts effectiveSettings).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
-	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy`;
-const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by`;
+	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy"`;
+const FROM_RUN = `FROM model_run r JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by`;
+
+/** Longest run note, in characters (007_run_notes.sql CHECK). */
+export const RUN_NOTES_MAX = 4000;
+const NotesBody = z
+	.object({
+		notes: z
+			.string()
+			.trim()
+			.max(RUN_NOTES_MAX)
+			// Postgres text can't hold NUL; refuse it here rather than surface a database error.
+			.refine((s) => !s.includes('\u0000'), 'notes cannot contain NUL characters')
+	})
+	.strict();
 
 export const runRoutes = new Hono<AuthEnv>()
 	.post('/:id/runs', async (c) => {
@@ -144,6 +158,21 @@ export const runRoutes = new Hono<AuthEnv>()
 				params: pick(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as Record<string, unknown>, DAY_PARAMS),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});
+		});
+	})
+	// The run's written explanation (007_run_notes): the one thing about a run
+	// that may change after it is made. The column grant makes every other
+	// column read-only to the app, whatever this handler does.
+	.patch('/:id/runs/:runId', async (c) => {
+		const { id, runId } = c.req.param();
+		const body = NotesBody.parse(await c.req.json().catch(() => ({})));
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			const { rowCount } = await db.query('UPDATE model_run SET notes = $3 WHERE project_id = $1 AND id = $2', [id, runId, body.notes]);
+			if (!rowCount) throw new ApiError(404, 'not found');
+			const { rows } = await db.query(`SELECT ${RUN_META} ${FROM_RUN} WHERE r.id = $1`, [runId]);
+			return c.json({ run: rows[0] });
 		});
 	})
 	.delete('/:id/runs/:runId', async (c) => {

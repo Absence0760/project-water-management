@@ -600,6 +600,15 @@ value such as 108700.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
+  then **Run notes** under it on every run (`runs/RunNotes.svelte`,
+  `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
+  explanation of the run, the one thing about a run that can change after it
+  is made. Editors get a textarea with a character count (4 000 at most) and
+  **Save notes** (`PATCH …/runs/:runId`); viewers see the text, or "No notes on
+  this run". When the WR2012 flag is *query* or *not usable* and there is no
+  note, a prompt asks for the reason. "Last changed … by …" shows under a
+  note. Saving updates the shown run, its cached detail and its row in the
+  runs list; the note also appears on the compare page and in the summary CSV,
   the flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
   EWR against outflow, the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the

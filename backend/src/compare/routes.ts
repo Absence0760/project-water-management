@@ -39,6 +39,10 @@ interface LoadedRun {
 	inputs: RunInputsSnapshot;
 	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
 	legacy: boolean;
+	/** The modeller's written explanation (007_run_notes); '' = none. */
+	notes: string;
+	notesUpdatedAt: string | null;
+	notesUpdatedBy: string | null;
 }
 
 async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
@@ -49,10 +53,12 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 		        r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 		        r.summary, r.inputs, p.name AS "projectName",
-		        COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy
+		        COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+		        r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy"
 		 FROM model_run r
 		 JOIN project p ON p.id = r.project_id
 		 JOIN app_user u ON u.id = r.created_by
+		 LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 		 WHERE r.project_id = $1 AND r.id = $2`,
 		[ref.projectId, ref.runId]
 	);

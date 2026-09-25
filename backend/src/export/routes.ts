@@ -61,6 +61,9 @@ interface RunRow {
 	summary: RunSummary;
 	/** settings.runoffModel === 'legacy' (absent → legacy, for runs saved before the setting existed). */
 	legacy: boolean;
+	notes: string;
+	notesUpdatedAt: Date | null;
+	notesUpdatedBy: string | null;
 }
 
 async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: string): Promise<RunRow> {
@@ -68,7 +71,9 @@ async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: s
 	const { rows } = await db.query<RunRow>(
 		`SELECT label, engine_version AS "engineVersion", start_date AS "startDate", end_date AS "endDate",
 			created_at AS "createdAt", summary,
-			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
+			notes, notes_updated_at AS "notesUpdatedAt",
+			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy"
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -131,7 +136,10 @@ export const exportRoutes = new Hono<AuthEnv>()
 					engineVersion: run.engineVersion,
 					startDate: run.startDate,
 					endDate: run.endDate,
-					createdAt: new Date(run.createdAt).toISOString()
+					createdAt: new Date(run.createdAt).toISOString(),
+					notes: run.notes,
+					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
+					notesUpdatedBy: run.notesUpdatedBy
 				},
 				run.summary
 			);

@@ -42,7 +42,7 @@ erDiagram
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb` | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007, the only column that changes after the run is made) | A "Calc. Model" press plus the `[Log]` entry |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 
 ### Field mapping details
@@ -143,6 +143,22 @@ have no hash. `GET /compare/runs` returns the whole snapshot, and
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.
 
+**Run notes (007_run_notes.sql).** A run is evidence, so it is immutable
+except for one column: `model_run.notes` (text, `''` = none, at most 4 000
+characters by `CHECK`), the modeller's written explanation, e.g. why a WR2012
+*query* or *not usable* flag stands. `notes_updated_at` / `notes_updated_by`
+(→ `app_user`, `ON DELETE SET NULL`, indexed) record the last change; the
+`model_run_stamp_notes` BEFORE UPDATE trigger sets them whenever `notes`
+changes and restores them on any other update, so the stamp can't be forged.
+Immutability is enforced by privilege, not just by the API: `water_app` has
+**no table-level `UPDATE` on `model_run`**, only `GRANT UPDATE (notes)`, so an
+`UPDATE` naming any other column fails with `insufficient_privilege` whoever
+runs it. The `model_run_update` policy (re-created in 007 with the same
+editor-on-both-sides rule) limits even that to editors and owners; a viewer's
+`UPDATE` matches no row. `PATCH /projects/:id/runs/:runId` is the only writer
+([api.md](./api.md#runs)); the catalogue test pins `model_run`'s updatable
+columns to exactly `notes`.
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
@@ -166,7 +182,7 @@ they add no policy. They are small: a fit record is a few KB.
 | Role | Can |
 | --- | --- |
 | `viewer` | Read the project, its model, series, runs and members |
-| `editor` | Everything a viewer can, plus change settings and model data, upload series, run the model, delete runs |
+| `editor` | Everything a viewer can, plus change settings and model data, upload series, run the model, write a run's notes, delete runs |
 | `owner` | Everything an editor can, plus add/remove members, change roles, delete the project |
 
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
@@ -198,7 +214,7 @@ created in, or moved into, a team the user belongs to (moving needs owner).
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime | `SELECT/INSERT/UPDATE/DELETE` on the app tables only. **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real

@@ -20,7 +20,10 @@ as B.
 
 The page has these sections, top to bottom:
 
-1. **Runs compared.** Label, project, period and time of each run. There is a
+1. **Runs compared.** Label, project, period and time of each run, and
+   under each its **run notes** when it has any: the modeller's written
+   explanation (e.g. why a WR2012 query stands), so a reviewer comparing
+   two runs reads each one's reason with it. There is a
    warning when the two runs cover **different periods**, because every result
    is a daily average over the run's own period, so some of the change comes
    from the dates. There is a note when the **engine version** differs, a

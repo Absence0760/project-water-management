@@ -110,6 +110,10 @@ In short:
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known.
 - A **last-owner guard** means a project can't be orphaned.
+- **Runs are immutable by privilege.** `water_app` may `UPDATE` only
+  `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
+  rewrite a run's inputs, outputs or label after the fact; who last changed
+  the note is stamped by a trigger. The catalogue test pins that column list.
 - The schema owner (`water`) is used only for migrations, never by the running
   API.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`.
