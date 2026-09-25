@@ -15,8 +15,9 @@
 #     migrations/*.sql                read by scripts/migrate.ts from <dirname>/../migrations
 #     rds-global-bundle.pem
 #
-# @aws-sdk/* stays external: the nodejs24.x runtime provides it, and only the
-# migrate Lambda uses it (Secrets Manager).
+# @aws-sdk/* stays external: the nodejs24.x runtime provides it. The migrate
+# Lambda uses it for Secrets Manager and the API Lambda for SES v2 (email), so
+# in production both run the runtime's SDK version, not the lockfile's.
 set -euo pipefail
 
 repo_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"

@@ -154,7 +154,7 @@ file is written), never from tfvars. The operator runs the `sops` commands by
 hand.
 
 ```bash
-cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region <region>
+cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1
 cd ~/github/infra-secrets && sops water-management/prod.sops.yaml
 ```
 
