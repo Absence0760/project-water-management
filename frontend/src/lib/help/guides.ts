@@ -127,7 +127,7 @@ export const GUIDES: Guide[] = [
 							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each farm plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
 							'**Transfers** (optional): pipelines or canals from one farm’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
 							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
-							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
+							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, how rain gaps are filled, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
 							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
 							'**Iterate**: improve the calibration, run again, and compare runs. Copy the project to try a what-if without touching the original. See [[guide:compare-runs|Compare runs and try what-ifs]].'
 						]
@@ -168,7 +168,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Open **Projects** in the header and press **New project**.',
-							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it.',
+							'Give it a name, usually the catchment or river. Under **Belongs to**, pick a team if others will work on it, and press **Create**.',
 							'The project opens on its **Overview** tab. Work through the setup checklist from the top.'
 						]
 					},
@@ -184,7 +184,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On the Projects page, choose **Copy** on the project’s row, and name the copy.',
+							'On the Projects page, choose **Copy** on the project’s row, and name the copy. The model and the data are copied; runs are not.',
 							'Name it after the change you plan, for example “Raise dam 3 by 20 %”.',
 							'Make the change in the copy and run it. The original and its runs are untouched.',
 							'Compare the copy’s run with the original’s. See [[guide:compare-runs|Compare runs and try what-ifs]].'
@@ -197,7 +197,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Editors change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”.'
+						text: 'Editors change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project.'
 					}
 				]
 			}
@@ -290,7 +290,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'formula',
-						text: 'effective rain Pe = cropped area × rain above the threshold × effective-rain fraction; crop requirement = gross − min(soil store + Pe, gross)'
+						text: 'effective rain Pe = cropped area × the day’s rain (0 at or below the threshold) × effective-rain fraction; crop requirement = gross − min(soil store + Pe, gross)'
 					},
 					{
 						type: 'formula',
@@ -316,7 +316,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
 							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
 							'Check the **Irrigation demand preview**: gross demand in m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]].',
+							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
 						]
@@ -380,7 +380,8 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'Coverage per year, % missing and the last date of each series.',
-							'**Data checks**: negative values, outliers, flat stretches and suspect zero rain.',
+							'**Data checks**: negative values, outliers, flat stretches, suspect zero rain and breaks in catchment rain’s ratio to CHIRPS, which the [[double-mass|double-mass]] chart shows by water year.',
+							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
 							'A [[reference-gauge]] on a neighbouring river is kept for ranking wet and dry years only. The model never reads it.',
 							'**Preview data** (card header) or a row’s own **Preview** opens every series’ daily values side by side, searchable by date or value, plus how the model used each day: rain used and its source after gap-fill, the CHIRPS bias factor and corrected value, flow in m³/day, and any calibration exclusion.'
@@ -606,7 +607,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'The run compares simulated **natural** flow (never the outflow) with the scaled reference: the MAR ratio, the 12 monthly ratios with dry-season months marked, and the correlation of the monthly pattern. A MAR off by 10 % is noted, by 25 % queried, and by 50 % makes the run unusable for EWR findings until explained. The thresholds are editable.'
+						text: 'The run compares simulated **natural** flow (never the outflow) with the scaled reference: the MAR ratio, the 12 monthly ratios with dry-season months marked, and the correlation of the monthly pattern. A MAR off by 10 % is noted, by 25 % (or 15 % too wet) queried, and by 50 % makes the run unusable for EWR findings until explained. The thresholds are editable.'
 					},
 					{
 						type: 'p',
@@ -652,6 +653,7 @@ export const GUIDES: Guide[] = [
 							'**Calibration**: the fit statistics and annual volumes over the calibration window, and **Where the parameters came from**.',
 							'**Runoff model** (GR4J runs): where the rain went (evaporation, flow, storage) and the stores through time.',
 							'**WR2012 check**, when set up.',
+							'**Notes & evidence**: the run’s notes, and whether it is the project’s evidence run. See below.',
 							'**Flow duration**, **EWR vs outflow**, **EWR by month** and **EWR vs observed**.',
 							'**Farm detail**: dam storage and supply against demand, per farm.',
 							'**Explore outputs**: any stored daily series, by node.'
@@ -661,6 +663,24 @@ export const GUIDES: Guide[] = [
 						type: 'note',
 						tone: 'tip',
 						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report.'
+					}
+				]
+			},
+			{
+				heading: 'Notes and the evidence run',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Under **Run notes**, write why the run’s results stand, for example why a WR2012 query stands, and press **Save notes**. Everyone who can see the project reads them, in run comparison and in the summary CSV too.'
+					},
+					{
+						type: 'p',
+						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on. A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model (badged **Workbook comparison**) can’t be nominated.'
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'A project keeps its newest runs (20 by default) and deletes the oldest when a new run goes over that. Evidence runs, current or former, are never deleted.'
 					}
 				]
 			}
@@ -694,7 +714,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The comparison’s address holds both runs, so a comparison can be bookmarked or shared with anyone who can see both projects.'
+						text: 'Each side shows its run notes, and the page says when either run is, or was, the project’s evidence run. The comparison’s address holds both runs, so a comparison can be bookmarked or shared with anyone who can see both projects.'
 					}
 				]
 			}
@@ -794,7 +814,7 @@ export const GUIDES: Guide[] = [
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
 							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any farm irrigates.',
 							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
-							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows, less evaporation and seepage).',
+							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the returning share of the irrigation losses, back to the river the same day.',
 							'Outflow = spill + water passing below the dam not diverted + seepage + return flow. It is the next element’s upstream inflow.'
 						]
@@ -991,6 +1011,10 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
+						text: 'A large reading after days of 0 or blank, on a day CHIRPS reads little although it saw rain over those days, looks like several days read at once ([[rain-accumulations|a multi-day accumulation]]). By default a run keeps its recorded total and spreads it over the days it covers in proportion to bias-corrected CHIRPS. Under **Multi-day accumulations** on the same panel you can run them as recorded, keep readings you know were one day’s rain, or list accumulations the check misses.'
+					},
+					{
+						type: 'p',
 						text: 'The result is the [[rain-final|final catchment rainfall]], which both runoff models and the effective-rain part of demand use. The daily CSV export puts it beside CHIRPS as uploaded and bias-corrected CHIRPS, so filled days can be checked.'
 					}
 				]
@@ -1005,7 +1029,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'Water years the rain checks flag (long zero runs, far below CHIRPS) are left out, because their catchment rain is suspect.',
+							'Water years that read far below CHIRPS are left out whole, and so are the days of flagged zero runs (unless kept dry), of periods listed as missing and of multi-day accumulations, because their catchment rain is suspect.',
 							'A month with fewer than 90 shared days, or under 50 mm of CHIRPS on them, uses the factor pooled over all months.',
 							'Factors are kept between 0.25 and 4. Each run lists them in its warnings and the summary CSV.'
 						]
