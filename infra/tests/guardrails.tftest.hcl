@@ -625,8 +625,8 @@ run "alarms" {
     error_message = "SES alarms must fire before AWS's review thresholds (5% bounce, 0.1% complaint)."
   }
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "50"
-    error_message = "A $50 monthly budget exists by default."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "60"
+    error_message = "A $60 monthly budget exists by default."
   }
   assert {
     condition     = aws_sns_topic_subscription.alerts_email[0].endpoint == "ops@example.com" && aws_sns_topic_subscription.alerts_us_east_1_email[0].endpoint == "ops@example.com"

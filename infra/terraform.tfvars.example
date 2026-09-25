@@ -26,7 +26,7 @@ bootstrap_slug = "water-management"
 
 # Budget + alarm notifications. Budget needs IAM billing access enabled on the
 # member account (one-time root toggle) — set 0 until then.
-budget_monthly_usd = 50
+budget_monthly_usd = 60
 budget_alert_email = "you+aws-alerts@example.com"
 
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS

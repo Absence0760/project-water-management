@@ -20,7 +20,10 @@ browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-manageme
                                     CachingDisabled, all methods, cookies forwarded)
                                         │
                                         ├─► RDS PostgreSQL 17 (private subnets; migrate Lambda applies migrations)
-                                        └─► SES API via VPC endpoint (verification / reset / invite email)
+                                        ├─► SES API via VPC endpoint (verification / reset / invite email)
+                                        └─► SQS `jobs` via VPC endpoint (job wake-ups)
+                                                 │
+EventBridge rate(5 minutes) ──────────────► worker Lambda ──► RDS (as water_app, RLS)
 ```
 
 - **One origin.** The browser only ever talks to the site's domain. CloudFront
@@ -35,6 +38,8 @@ browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-manageme
   ([plan.md 6b](./plan.md#6b-terraform-additions-infra),
   [infra/README.md](../infra/README.md)). The backend connects as `water_app` (RLS-bound);
   migrations run as the owner role.
+- **Background jobs:** the worker Lambda runs the job queue (§ Background
+  jobs below).
 - **Region:** the operator's choice (`aws_region` has no default). The
   recommendation is `af-south-1` for everything regional, SES included; see
   [Region recommendation](#region-recommendation). The CloudFront certificate
@@ -91,11 +96,11 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $48–52/month | ≈ $41–43/month | ≈ $40/month |
+| Idle cost (infra/README.md § Cost) | ≈ $57–62/month | ≈ $49–51/month | ≈ $48/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (raise `budget_monthly_usd` to ~70), the opt-in step, and a
+and storage (raise `budget_monthly_usd` to ~80), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -287,6 +292,7 @@ variables and secrets:
 | `CLOUDFRONT_DISTRIBUTION_ID` | `cloudfront_distribution_id` |
 | `LAMBDA_FUNCTION_NAME` | `lambda_function_name` |
 | `MIGRATE_FUNCTION_NAME` | `migrate_function_name` |
+| `WORKER_FUNCTION_NAME` | `worker_function_name` (the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
@@ -307,12 +313,16 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   `secrets.tf`).
 - No CORS block on the Function URL (the browser never calls it).
 - SES (above), CloudFront security headers and CSP, PriceClass_All.
+- Background jobs (`jobs.tf`, § Background jobs below): the SQS `jobs`
+  queue + DLQ, the worker Lambda, its 5-minute EventBridge tick and the SQS
+  interface endpoint.
 - Budget and alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / free storage / connections / freeable memory, SES
-  bounce and complaint rates, CloudFront 5xx, and a log metric filter + alarm
+  bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line (a saved run
   failing one of the engine's own invariant checks — docs/security.md §
-  Infrastructure); all to the SNS topics that email `budget_alert_email`.
+  Infrastructure), and the job queue's four (DLQ depth, worker errors,
+  backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
@@ -382,8 +392,9 @@ the real plan stays an operator step
   published: the workflow updates and synchronously invokes the migrate
   Lambda, and stops if it fails. Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
-  release. After the API update, the job calls `/api/health` through
-  CloudFront and fails unless it answers `{"ok":true}`.
+  release. The worker Lambda's code is updated right after the API's. Then
+  the job calls `/api/health` through CloudFront and fails unless it answers
+  `{"ok":true}`.
 
 ### Releasing
 
@@ -440,6 +451,42 @@ nothing. Step by step:
 8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`
    and `-migrate.zip`, or `web-X.Y.Z-build.zip`).
 
+## Background jobs
+
+The job queue ([architecture.md § Background work](./architecture.md#background-work))
+runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf, Terraform
+plan-only until the first deploy):
+
+- **The `job` table stays the source of truth.** SQS carries only wake-ups
+  (`{ v: 1, type: "wake", jobId }`, never a payload): after queueing a job the
+  API sends one to the `jobs` queue, whose event source triggers the worker
+  Lambda. An **EventBridge rule ticks the worker every 5 minutes** as well,
+  which runs retries whose backoff has passed and anything whose wake-up was
+  lost, so a failed `SendMessage` (logged, never an error to the user) delays
+  a job by at most one tick.
+- **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
+  `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
+  concurrency 2, connecting as `water_app` (pool of 2) with verified TLS.
+  Each invocation runs one tick within its remaining time (less a minute);
+  jobs lease for 6 minutes, longer than the function can run.
+- **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
+  default 1) whose policy lets only the API role send to, and the worker role
+  use, the `jobs` queue. No NAT.
+- **Retries and the DLQ:** a job's own failure is recorded in the table (with
+  backoff, then `dead`), not thrown, so it never redelivers a message. A tick
+  that itself fails (the database unreachable) fails the batch; SQS retries
+  it, and after 5 receives it lands in the `jobs-dlq` (14 days' retention).
+  The jobs are still in the table and run on the next good tick; inspect the
+  worker's logs, then redrive or purge the DLQ.
+- **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
+  the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
+  (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
+  CloudWatch embedded metric in `water-management/Jobs`); and any dead job
+  (a metric filter on the worker's `job_dead` log line). Until WP-2.13 emails
+  a project's owners, the dead-job alarm is how anyone hears of one.
+- **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
+  short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same
@@ -456,10 +503,10 @@ nothing. Step by step:
 ## Costs (rough, idle to light use)
 
 CloudFront, S3, Lambda and SES sending are cents. WAF is ~$7/month. The DB is
-the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' two interface
-endpoints (Secrets Manager, SES API) cost ~$7.30/month each per AZ, which is
-still cheaper than a NAT (~$33/month plus data). Total ≈ $40/month in
-us-east-1, ≈ $48–52 in af-south-1; the breakdown is in
+the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
+endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
+still cheaper than a NAT (~$33/month plus data). Total ≈ $48/month in
+us-east-1, ≈ $57–62 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
-is set from `budget_monthly_usd` (default 50; raise it to ~70 for
+is set from `budget_monthly_usd` (default 60; raise it to ~80 for
 af-south-1).
