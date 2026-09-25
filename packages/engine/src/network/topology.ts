@@ -2,6 +2,7 @@
 // calculation order, like the b023 [Network] sheet ("upstream nodes
 // referenced must be in the list above the current node").
 import type { NetworkNode } from '../project';
+import { cmpStr } from '../order';
 
 export interface Topology {
 	/** Node indices (into the input array), every node after all of its upstream nodes. */
@@ -97,4 +98,24 @@ export function buildTopology(nodes: readonly NetworkNode[]): Topology {
 		outflow,
 		warnings
 	};
+}
+
+/**
+ * A calculation order that doesn't depend on how the nodes are listed or on
+ * their sortOrder: the nodes furthest from the outflow first, and nodes at
+ * the same distance by id. Every node still comes after all of its upstream
+ * nodes (they are further out). The daily balance can run in `order`, since
+ * each node reads only its upstream results; the EWR attribution sums the
+ * farms' impacts in the order it is given (./attribution.ts), so runModel
+ * gives it this one and Σ impacts is the same to the last bit whatever the
+ * display order (docs/model.md §6, order invariance).
+ */
+export function canonicalOrder(nodes: readonly NetworkNode[], topo: Pick<Topology, 'order' | 'upstream'>): Int32Array {
+	const depth = new Int32Array(nodes.length);
+	// Reverse calculation order visits every node before its upstream nodes.
+	for (let k = topo.order.length - 1; k >= 0; k--) {
+		const i = topo.order[k]!;
+		for (const u of topo.upstream[i]!) depth[u] = depth[i]! + 1;
+	}
+	return Int32Array.from(topo.order).sort((a, b) => depth[b]! - depth[a]! || cmpStr(nodes[a]!.id, nodes[b]!.id));
 }

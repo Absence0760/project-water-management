@@ -13,6 +13,7 @@
 // reductions separately; the WR2012 / Pitman approach applies them per unit).
 // Pure: runModel and the self-checks both read patches through here.
 import { LAND_COVER_CLASSES, type LandCoverClass, type NetworkNode, type ProjectModel } from '../project';
+import { cmpStr } from '../order';
 
 export interface UnitLandCover {
 	/** Share of the part of each day's flow above the low-flow threshold that is removed, 0–1. */
@@ -36,7 +37,9 @@ const clamp01 = (v: unknown, fallback: number) => (typeof v === 'number' && Numb
 export function resolveLandCover(model: Pick<ProjectModel, 'nodes' | 'landCover'>, warnings: string[]): (UnitLandCover | undefined)[] {
 	const nodes = model.nodes;
 	const out: (UnitLandCover | undefined)[] = nodes.map(() => undefined);
-	const patches = model.landCover ?? [];
+	// Patches in (node id, patch id) order, so a unit's weights add up the same
+	// to the last bit however the patches are listed (../order.ts).
+	const patches = [...(model.landCover ?? [])].sort((a, b) => cmpStr(String(a.nodeId), String(b.nodeId)) || cmpStr(String(a.id), String(b.id)));
 	if (!patches.length) return out;
 	const index = new Map(nodes.map((n, i) => [n.id, i]));
 	const cover = new Map<number, { f: number; cls: LandCoverClass; mar: number; lowFlow: number }[]>();

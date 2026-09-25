@@ -51,6 +51,18 @@ function sameValue(a: unknown, b: unknown, path: string, scale = 1, volume = 1):
 	return a === b ? null : `${path}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`;
 }
 
+/** Two daily series, value for value to the last bit (NaN equals NaN; so do 0 and −0). */
+function sameBits(a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined, path: string): string | null {
+	if (!a || !b) return a === b ? null : `${path}: missing in one run`;
+	if (a.length !== b.length) return `${path}: length ${a.length} vs ${b.length}`;
+	for (let t = 0; t < a.length; t++) {
+		const p = a[t]!;
+		const q = b[t]!;
+		if (p !== q && !(Number.isNaN(p) && Number.isNaN(q))) return `${path}[${t}]: ${p} vs ${q}`;
+	}
+	return null;
+}
+
 /** The output with every list that follows input order put into a canonical order. */
 function canonical(out: ModelOutput) {
 	const byNode = <T extends { nodeId: string | null }>(xs: T[]) => [...xs].sort((p, q) => String(p.nodeId).localeCompare(String(q.nodeId)));
@@ -75,10 +87,22 @@ const sortNameLists = (w: string) => w.replace(/\(([^()]*;[^()]*)\)/g, (_, inner
 
 /**
  * Display order must not matter: the node array and every sortOrder, the crop
- * list, the crop-area rows and the transfer rules give the same results.
+ * list, the crop-area rows, the transfer rules, the land-cover patches and the
+ * EWR rule tables give the same results.
  * Transfer rules run by their priority, and rules of equal priority share a
  * dam pro rata (engine ≥ 0.16.0, docs/model.md Q18), so shuffling them is
  * no exception any more.
+ *
+ * Every daily series must be identical to the last bit (engine ≥ 0.26.1):
+ * every sum that feeds the balance runs in id order (../order.ts), so a list
+ * order can't even change float noise. It has to be exact, not within noise,
+ * because the balance has thresholds that turn one ulp into a real
+ * difference: a dam sitting exactly at its drought-borehole trigger pumped
+ * 116 938 m³ in one order and nothing in the other (fuzz seed 3899), and a
+ * dam that ran dry in one order kept a residue in the other, whose area–
+ * storage power then gave it a surface (seeds 5703, 15208). The summary
+ * (window means, totals over farms in list order) is compared within float
+ * noise, as before.
  */
 export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: number): string | null {
 	const x = scrambleOrder(input, seed);
@@ -88,16 +112,15 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 	} catch (e) {
 		return `order invariance: scrambled input threw ${(e as Error).message}`;
 	}
-	// Every series is a volume (or flow) of the same catchment, so their common
-	// scale is the largest magnitude in either run: a residue of 1e-7 m³ from
-	// cancelling two 10⁹ m³ sums is rounding, whatever series it lands in.
+	// The summary's volumes are of the same catchment, so their common scale is
+	// the largest magnitude in any series of either run.
 	let scale = 1;
 	for (const o of [out, y]) for (const s of o.series) for (const v of s.values) if (Number.isFinite(v)) scale = Math.max(scale, Math.abs(v));
 	const ca = canonical(out);
 	const cb = canonical(y);
 	let d: string | null = null;
 	for (const k of new Set([...Object.keys(ca.series), ...Object.keys(cb.series)])) {
-		d ??= sameValue(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`, scale, scale);
+		d ??= sameBits(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`);
 	}
 	d ??= sameValue({ ...ca, series: null }, { ...cb, series: null }, 'output', 1, scale);
 	return d ? `order invariance (seed ${seed}): ${d}` : null;

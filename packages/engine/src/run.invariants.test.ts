@@ -150,6 +150,27 @@ describe('engine invariants on random networks', () => {
 			expect(checkEwrAttribution(input, runModel(input)), `seed ${seed}`).toBeNull();
 		}
 	});
+
+	it('engine 0.26.1: list-order float sums no longer tip a dam at its drought trigger or at empty (the first human-impact soak)', () => {
+		// The first 20 000-case soak with other water users, boreholes and land cover
+		// failed order invariance with real differences: sums over the nodes (flow
+		// shares, the catchment area), crops, crop areas, senior claims, land-cover
+		// patches and transfers ran in list order, their last bit followed the
+		// display order, and a threshold made it a result. Seed 3899: a dam sat
+		// exactly at its drought trigger, 481.22408531730883 vs …088 m³, so its
+		// boreholes pumped 116 938 m³ in one order and nothing in the other; 7094:
+		// the catchment area, and so every natural flow, differed in the last bit;
+		// 5703, 15208: a dam ran dry in one order and kept a residue with a surface
+		// in the other; 17355: an other user's EWR days not met, 209 vs 210.
+		for (const seed of [3899, 5703, 6326, 7077, 7094, 7599, 10525, 15208, 17002, 17355, 19035]) {
+			const input = randomInput(seed);
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
+		}
+		for (const seed of [3321, 4260, 9912, 18288, 18330, 19214, 3899, 7094]) {
+			const input = randomInput(seed, { runoffModel: 'gr4j' });
+			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}, GR4J`).toBeNull();
+		}
+	});
 });
 
 // ---------------------------------------------------------------------------

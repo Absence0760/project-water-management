@@ -56,7 +56,8 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { exclusionRanges, sanitizeExclusions } from './calibrate/provenance';
 import { calibrationStats } from './network/stats';
-import { buildTopology } from './network/topology';
+import { buildTopology, canonicalOrder } from './network/topology';
+import { cmpStr } from './order';
 import { resolveWr2012, runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes, resolveEwrRules } from './reserve/rules';
 import { assessSite, assuranceWarnings, type EwrAssuranceSite } from './reserve/assurance';
@@ -86,7 +87,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.26.0';
+export const ENGINE_VERSION = '0.26.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -184,7 +185,10 @@ export function runModelWith(
 	const hasCover = plan.nodes.some((n) => n.landCover);
 	const coverTotal = new Float64Array(hasCover ? days : 0);
 	if (hasCover) {
-		for (const r of sim.nodes) for (let t = 0; t < days; t++) coverTotal[t]! += r.landCoverReduction[t]!;
+		for (const i of nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
+			const r = sim.nodes[i]!;
+			for (let t = 0; t < days; t++) coverTotal[t]! += r.landCoverReduction[t]!;
+		}
 		push(null, 'landcover_reduction', 'Natural flow removed by land cover (invasive plants, forestry)', 'm³/day', coverTotal);
 	}
 	push(null, 'simulated_outflow', 'Simulated outflow', 'm³/day', simOutflow);
@@ -207,12 +211,16 @@ export function runModelWith(
 	// (./network/attribution.ts). Sites: the outlet first, then gauges by node id.
 	const gaugeSites = nodes
 		.flatMap((n, i) => (n.kind === 'gauge' && i !== topo.outflow ? [i] : []))
-		.sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+		.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	// A canonical order (network/topology.ts canonicalOrder), not the
+	// calculation order, which follows sortOrder: the attribution sums impacts
+	// in it, so the charges don't depend on the display order in their last bit.
+	const ranked = canonicalOrder(nodes, topo);
 	const attribution = attributeEwrShortfall({
 		days,
 		kind: plan.nodes.map((n) => n.kind),
 		upstream: plan.upstream,
-		order: plan.order,
+		order: ranked,
 		inflow: sim.nodes.map((r) => r.inflowUpstream),
 		runoff: sim.nodes.map((r) => r.runoff),
 		outflow: sim.nodes.map((r) => r.outflow),
@@ -226,7 +234,7 @@ export function runModelWith(
 		]
 	});
 	const posInOrder = new Int32Array(nodes.length);
-	plan.order.forEach((node, k) => (posInOrder[node] = k));
+	ranked.forEach((node, k) => (posInOrder[node] = k));
 	for (const [si, site] of attribution.sites.entries()) {
 		const id = si === 0 && topo.outflow >= 0 ? null : nodes[site.node]!.id;
 		push(id, 'ewr_charged', 'EWR shortfall charged to the farms upstream (negative)', 'm³/day', site.charged);
@@ -573,7 +581,7 @@ function runPlausibility(r: {
 		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
 	}
 	const nodes = input.model.nodes;
-	const byId = nodes.map((_, i) => i).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	const dams = new Float64Array(days);
 	for (const i of byId) {
 		const w = sim.workings?.[i];
@@ -752,7 +760,8 @@ export function buildNetworkPlan(
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
-	for (const tr of model.transfers) {
+	// In id order: rules of one priority add into the same destination and draw on the same source.
+	for (const tr of [...model.transfers].sort((a, b) => cmpStr(a.id, b.id))) {
 		if (!tr.enabled) continue;
 		const from = indexById.get(tr.fromNodeId);
 		const to = indexById.get(tr.toNodeId);
@@ -810,7 +819,7 @@ export function buildNetworkPlan(
 		...(damRainMm ? { damRainMm } : {}),
 		// Sum each node's upstream in node-id order, not display order, so the
 		// float result can't depend on how the nodes are listed (review F8).
-		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0))),
+		upstream: topo.upstream.map((ups) => Int32Array.from(ups).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))),
 		transfers,
 		month,
 		naturalFlow: natural,
@@ -962,8 +971,11 @@ function otherUsers(
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
-	nodes.forEach((n, i) => {
-		if (n.kind !== 'user') return;
+	// Users in node-id order: a farm below two senior users adds their claims in that order.
+	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+	for (const i of byId) {
+		const n = nodes[i]!;
+		if (n.kind !== 'user') continue;
 		const monthlyDemand = n.userDemandM3Day ?? null;
 		const demand = new Float64Array(days);
 		if (monthlyDemand) {
@@ -987,6 +999,8 @@ function otherUsers(
 				if (nodes[j]!.kind === 'farm' && share[j]! > 0) up.push(j);
 				stack.push(...topo.upstream[j]!);
 			}
+			// In node-id order, so the total (and every claim) is the same to the last bit however the nodes are listed.
+			up.sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 			const total = up.reduce((s, j) => s + share[j]!, 0);
 			if (total > 0) {
 				claimed = true;
@@ -1000,7 +1014,7 @@ function otherUsers(
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed });
-	});
+	}
 	return { byNode, claims };
 }
 
@@ -1147,7 +1161,7 @@ function assessEwrRules(
 		// percentile and requirement it selects) is bit-identical however the network is listed:
 		// on a flat stretch of the table's natural curve a one-ulp difference moved the
 		// percentile from one % point to the next (fuzz seed 18472, engine 0.24.1).
-		const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => (nodes[a]!.id < nodes[b]!.id ? -1 : nodes[a]!.id > nodes[b]!.id ? 1 : 0));
+		const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 		for (const f of upstreamFarms) {
 			const r = sim.nodes[f]!.runoff;
 			for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
@@ -1387,6 +1401,12 @@ function buildDemand(
 		cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings)
 	}));
 	const cropIds = new Set(crops.map((c) => c.id));
+	// Crops and crop areas are summed in id order (crop id, then area), not
+	// list order, so a farm's demand is the same to the last bit however the
+	// lists are ordered: a last-bit difference can tip a dam at its drought
+	// trigger or at empty (docs/model.md §6, order invariance).
+	crops.sort((a, b) => cmpStr(a.id, b.id));
+	const sortedAreas = [...cropAreas].sort((a, b) => cmpStr(a.nodeId, b.nodeId) || cmpStr(a.cropId, b.cropId) || a.areaM2 - b.areaM2);
 
 	// [Flow data] R "Use rain": first present of catchment / CHIRPS / forecast,
 	// zeroed at or below the rain threshold.
@@ -1409,7 +1429,7 @@ function buildDemand(
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
-		for (const ca of cropAreas) {
+		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
 			if (!cropIds.has(ca.cropId)) {
 				warnings.push(`farm "${node.name}" has an area for an unknown crop; ignored`);
