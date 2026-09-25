@@ -20,9 +20,10 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * Append-only tables: water_app may read and add rows, never change or remove
  * them. The evidence-nomination history is tamper evidence
  * (010_run_nomination.sql). A job's row changes only through the queue's
- * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql).
+ * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql). An import
+ * report is the record of what the importer flagged (017_project_import.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band

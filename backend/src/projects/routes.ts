@@ -12,6 +12,7 @@ import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
+import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
 
 type ProjectRow = {
 	id: string;
@@ -99,7 +100,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// A project document (what GET /:id/export.json writes, or the workbook
-	// importer's project.json) as a new project: one transaction, fresh ids.
+	// importer's project.json) as a new project: one transaction, fresh ids,
+	// with the import report (importReport.ts) when the client sends one.
 	// Its own body cap, the export cap, so anything the app exports imports
 	// back (app.ts leaves this path out of the general 4 MB cap).
 	.post(
@@ -116,15 +118,31 @@ export const projectRoutes = new Hono<AuthEnv>()
 		}),
 		async (c) => {
 			const query = ImportQuery.parse(c.req.query());
-			const data = parseProjectFile(await readJson(c));
+			const raw = await readJson(c);
+			const data = parseProjectFile(raw);
+			// The optional `importReport` beside the document (the review's notes
+			// and unmapped report): validated before anything is written, and
+			// stored in the same transaction, so a failure keeps neither.
+			const report = parseImportReport(raw);
 			const userId = c.get('userId');
-			const project = await withUser(userId, async (db) =>
-				full(await getProject(db, await insertProjectFile(db, data, { teamId: query.teamId ?? null })))
-			);
+			const project = await withUser(userId, async (db) => {
+				const id = await insertProjectFile(db, data, { teamId: query.teamId ?? null });
+				if (report) await insertImportReport(db, id, report);
+				return full(await getProject(db, id));
+			});
 			// After the commit: a run that fails leaves the import standing (runError).
 			const run = query.run === '1' || query.run === 'true' ? await runImported(userId, project.id) : {};
 			return c.json({ project, ...run }, 201);
 		}
+	)
+	// What the importer flagged when the project was imported (017_project_import).
+	.get('/:id/import-report', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			await requireRole(db, c.req.param('id'), 'viewer');
+			const report = await latestImportReport(db, c.req.param('id'));
+			if (!report) throw new ApiError(404, 'no import report');
+			return c.json({ report });
+		})
 	)
 	.get('/:id', async (c) =>
 		withUser(c.get('userId'), async (db) => {
