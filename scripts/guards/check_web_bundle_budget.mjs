@@ -250,6 +250,13 @@
 //             grows; the menu's Preview button and the RunsTab hook add
 //             ~0.3 KB. No new dependency; the largest page chunk is 40 KB.
 //             Headroom ~6 KB.
+// 2026-09-25  total 720 → 722 KB; other ceilings unchanged. Issue #10 part 2
+//             (data feeds, WP-2.10): Settings → Data feeds is its own lazy
+//             chunk (DataFeedsPanel + feeds.ts, ~5 KB gzip JS + <1 KB CSS),
+//             loaded only on the Settings tab; SettingsTab grows by the
+//             loader. No dependency. Merged with the all-farms preview above it
+//             measures 722 KB: no headroom left, so the next growth must
+//             trim (issue #9) rather than raise this again.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -261,7 +268,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 720,
+	totalCodeKb: 722,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 107,

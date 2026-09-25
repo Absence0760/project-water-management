@@ -786,6 +786,50 @@ A job runs later, in the worker, as the editor who queued it.
 - A queued re-run is `POST /runs` off the request path: the same engine run,
   the same 20-run cap, as the editor who queued it. It appears in
   `GET /runs` once the job is `done`.
+- `GET /jobs` also lists the data feeds' `feed_fetch` / `feed_ingest` jobs
+  ([§ Data feeds](#data-feeds)); they are queued by the server, never through
+  `POST /jobs`.
+
+## Data feeds
+
+Scheduled fetches of CHIRPS rainfall, the CHIRPS-GEFS forecast or a DWS
+gauge, merged into one series each ([architecture.md § Data feeds](./architecture.md#data-feeds)).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/feeds` | – | `{ feeds: FeedMeta[], sources, schedules, mode, canEdit, canRun }`. `sources`: `{ source, label, kinds, unit }[]` (what the form offers); `mode`: `fixtures` or `live` (whether this server reads synthetic files); `canEdit` (owner), `canRun` (editor) | viewer |
+| POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds | owner |
+| PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health | owner |
+| DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`. `409` for a switched-off feed | editor |
+
+- `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled? }`,
+  strict (unknown fields are `400`):
+  - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
+  - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
+    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
+    `{ station }`, a code like `A2H012` (letter, digit, letter, three digits;
+    upper-cased). Both take optional `startDate` (the first fetch's first day)
+    and `staleAfterDays` (overrides the source's staleness threshold);
+  - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
+    `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
+    `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
+    first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
+    `hourly`; `enabled` (default true).
+- `FeedMeta = { id, source, config, targetKind, targetName, enabled, schedule,
+  createdAt, updatedAt, actingUser, lastAttemptAt, lastSuccessAt,
+  lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health }`.
+  `actingUser` is the display name fetches run as (null once that account is
+  deleted: save the feed again). `lastDataDate` is a calendar day
+  (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
+  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`).
+- `health = { state, stale, staleAfterDays, message }`, `state` ∈ `ok`,
+  `stale`, `failing`, `pending`, `disabled`; `message` is a sentence for the
+  panel. `lastError` and `message` are written by the server, never an
+  upstream body or database text, e.g. `the source is unreachable: HTTP 503`
+  or `the source’s data could not be read: the grid has no data at …`.
+- Strangers get `404`; a viewer's writes and an editor's attach / change /
+  remove get `403`.
 
 ## Compare runs
 

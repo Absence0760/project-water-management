@@ -8,6 +8,7 @@
 		"dev": "tsx watch --include './migrations/*.sql' scripts/dev-server.ts",
 		"worker": "tsx src/jobs/worker.ts",
 		"jobs:tick": "tsx src/jobs/worker.ts --once",
+		"feeds:run": "tsx src/jobs/worker.ts --once --all-feeds",
 		"build": "esbuild src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/lambda.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --project unit",

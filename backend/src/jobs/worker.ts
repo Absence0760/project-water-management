@@ -4,6 +4,8 @@
 //                          once when LISTEN job_queued fires (the job
 //                          table's insert trigger NOTIFYs at commit)
 //   pnpm dev:jobs:tick     one tick, print what it did, exit (scripts, e2e)
+//   pnpm dev:feeds:run     one tick that first queues EVERY enabled data feed,
+//                          due or not, then runs it all and exits (--all-feeds)
 //
 // It connects as water_app (DATABASE_URL), like the API, and runs each job as
 // its acting user (runner.ts). Killing it mid-job is safe: the job's lease
@@ -19,12 +21,13 @@ import { closePool } from '../db/pool.js';
 import { envInt, runTick, type TickResult } from './runner.js';
 
 const summary = (r: TickResult) =>
+	(r.feeds ? `feeds: ${r.feeds.queued} queued${r.feeds.refused ? `, ${r.feeds.refused} refused` : ''}; ` : '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;
 
 if (process.argv.includes('--once')) {
 	try {
-		console.log(summary(await runTick()));
+		console.log(summary(await runTick({ allFeeds: process.argv.includes('--all-feeds') })));
 	} finally {
 		await closePool();
 	}

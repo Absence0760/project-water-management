@@ -1225,6 +1225,38 @@ security.md (a new trust boundary: API keys), data-model.md, run-locally.md.
 
 ### WP-2.10 Scheduled fetchers: CHIRPS, CHIRPS-GEFS forecast, DWS
 
+> **Status: built** (issue #10 part 2; `018_feeds.sql`, `backend/src/feeds/`,
+> the `feed_fetch` / `feed_ingest` handlers, `lambda-fetcher.ts`,
+> `infra/feeds.tf` (plan only), Settings → Data feeds;
+> [architecture.md § Data feeds](../architecture.md#data-feeds)). Where the
+> build departs from the design below, and why:
+> - **Sources.** CHIRPS is **v3** (`daily/final/sat`, falling back to
+>   `daily/prelim/sat`), the only CHIRPS with a daily preliminary product;
+>   GEFS is CHIRPS-GEFS v3. Both are read by range requests with a small
+>   GeoTIFF reader of our own, **not the `geotiff` package**: one codec (LZW)
+>   and one layout, checked against the live files, so no dependency to audit.
+>   DWS follows the format two open-source clients parse, because the site
+>   answers our network with HTTP 403; it is unverified live (followups.md).
+> - **Fixtures** are JSON (`chirps-sample.json`, `gefs-sample.json`) encoded
+>   into real LZW GeoTIFFs at request time, plus `dws-sample.html`, all
+>   re-dated to today, so a dev feed shows healthy.
+> - **Config**: cells only (1–25, weighted), no `bbox` yet. Optional
+>   `startDate` and `staleAfterDays`. One feed per series (unique target).
+> - **RLS**: as designed (viewer reads, owner writes), plus: the health
+>   columns can't be written directly (a trigger keeps them; a `SECURITY
+>   DEFINER` function that re-checks editor writes them), and the acting user
+>   is `ON DELETE SET NULL` (the feed stays, skipped until an owner saves it).
+> - **Scheduling**: the tick claims due feeds with `app_claim_due_feeds`
+>   (stamping `last_scheduled_at`) instead of a per-day dedupe key, so a
+>   running fetch isn't queued twice; failing feeds retry on a backoff.
+> - **API**: `PATCH` merges the fields sent; `run-now` as designed.
+> - **Merging** adds `keepOnNull` to the shared merge: a day the source has no
+>   value for never erases an existing one.
+> - **Not built**: the `series.merged` audit event (WP-2.4 isn't built), the
+>   debounced re-run (WP-2.11), the Data tab's "from CHIRPS feed" marker.
+> - **Infra**: the fetcher has a 120 s timeout (60 s in the design), because
+>   a CHIRPS catch-up reads up to 120 days.
+
 **Goal.** Rainfall and gauge flow arrive by themselves. When a feed stops,
 someone hears about it.
 

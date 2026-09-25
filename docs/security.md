@@ -188,13 +188,23 @@ In short:
   columns and never a payload; the worker reads the payload as the acting
   user and validates it as untrusted input. `water_app` has no `UPDATE` or
   `DELETE` on `job`. A job's stored error is written by the server, never
-  database text, and SQS messages carry a job id only.
+  database text, and wake messages carry a job id only.
 - **An import report can't be forged or rewritten** (017_project_import). What
   the importer flagged is the audit trail of a workbook's mistakes, so only the
   import that created the project may write it (the insert trigger checks the
   project was created by that user in the same transaction and stamps who and
   when), and `water_app` has no `UPDATE` or `DELETE` on it. Viewers read it.
   See [§ Import reports](#import-reports).
+- **Data feeds run as the owner who configured them** (018_feeds,
+  [architecture.md § Data feeds](./architecture.md#data-feeds)). Owners
+  attach and change feeds (RLS); saving stamps the saver as the feed's acting
+  user, and every fetch is a job queued as that user, so the merge into the
+  series is an ordinary RLS write that fails closed once they lose the editor
+  role. The scheduler's claim, the health update and the production
+  ingest-results routing are `SECURITY DEFINER` functions for `water_app`
+  only; the health update re-checks that the caller is an editor of the
+  feed's project, and a direct write can never set the health columns (the
+  `data_feed_stamp` trigger), so an owner can't make a dead feed look fresh.
 - The schema owner (`water`) is used only for migrations, never by the running
   API or the job worker.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
@@ -259,6 +269,36 @@ In short:
   integrity hash in `pnpm-lock.yaml`. Do not use the stale npm `xlsx` 0.18.5,
   which has known advisories. Dependabot and `pnpm audit` don't track a URL
   dependency, so check the SheetJS release notes and bump it by hand.
+- **Outbound fetches and their answers are untrusted (data feeds, WP-2.10).**
+  A new trust boundary: the app now downloads from third parties
+  (data.chc.ucsb.edu for CHIRPS / CHIRPS-GEFS, www.dws.gov.za for DWS).
+  No personal data goes to either: a request carries a public file path or a
+  station code and dates, never a user, project or catchment name, so neither
+  host is a sub-processor. (Cell coordinates aren't sent as such: a grid is
+  read by byte range, which shows only which grid rows, i.e. latitude bands,
+  a feed reads.)
+  - Only fixed hosts are fetched: the URL is built from the source and a
+    validated config (cells as numbers in range, a station matching
+    `^[A-Z]\d[A-Z]\d{3}$`), never from user text, so a feed can't be pointed
+    at an arbitrary URL (no SSRF). `FEED_SOURCE=fixtures` is the default
+    everywhere but the production fetcher, so dev and CI never fetch.
+  - Every response is bounded: 20 s timeout, 4 MB cap whether declared or
+    streamed, range reads for the grids. A GeoTIFF is parsed by our own
+    bounds-checked reader (dimensions, strip sizes and LZW codes checked;
+    anything outside the known layout refused), and a DWS page by a strict
+    parser that refuses a changed header, impossible or duplicate dates and
+    the site's HTTP-200 error page. Values must be finite and non-negative
+    (a DWS gap is null, never a zero); rainfall over 2 000 mm/day is refused.
+  - Errors stored on the feed and shown in the panel are ours
+    (`feeds/errors.ts`), never an upstream body.
+  - In production the fetch happens in the **fetcher Lambda, outside the VPC
+    and with no database access**: its role may only receive fetch requests and
+    send results. The worker validates each result again (`FetchResult`: size,
+    dates, values, a flat `meta`), checks it answers a real `feed_fetch` job of
+    that feed, and drops one for a feed changed since, before anything merges
+    as the feed's acting user. A compromised fetcher could at worst send wrong
+    numbers for feeds that asked it, into the series those feeds already
+    target.
 - Svelte escapes output by default. Don't use `{@html}` with user-supplied names
   (farms, crops, projects).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
@@ -409,7 +449,12 @@ readable by anyone. The rules:
 - **Database** (`infra/rds.tf`, not yet applied): RDS in private subnets, no
   public endpoint, encryption at rest, TLS enforced (`rds.force_ssl`),
   automated backups + PITR (7–35 days), deletion protection. Only the API and
-  migrate Lambdas' security groups can reach it.
+  migrate Lambdas' security groups can reach it (and the job worker's).
+- **The fetcher Lambda** (data feeds, `infra/feeds.tf`) is the only Lambda
+  with internet access and the only one outside the VPC. It has no database
+  URL or secret; its role can receive from `fetch-requests` and send to
+  `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
+  policy lets the worker, and only the worker, reach those two queues.
 - **Blast radius:** Lambda reserved concurrency is capped. There is a budget
   alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
 - **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a

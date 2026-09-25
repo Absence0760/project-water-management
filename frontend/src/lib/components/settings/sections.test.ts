@@ -6,7 +6,9 @@ describe('SETTINGS_SECTIONS', () => {
 		const ids = SETTINGS_SECTIONS.map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids[0]).toBe('set-demand');
-		expect(ids.at(-1)).toBe('set-quality');
+		// Data feeds sits after the form: it saves on its own, never through the save bar.
+		expect(ids.at(-1)).toBe('set-feeds');
+		expect(ids.at(-2)).toBe('set-quality');
 	});
 });
 

@@ -3,7 +3,7 @@
 # see: runtime/sizing of the Lambdas, the DB's durability + privacy settings,
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
-# background-job queues / worker / SQS endpoint policy, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC, the alarms, the deploy role's trust pin, and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -229,6 +229,61 @@ override_resource {
   values = {
     arn = "arn:aws:sqs:af-south-1:000000000000:water-management-jobs-dlq"
     url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-jobs-dlq"
+  }
+}
+
+# Data feeds (feeds.tf, WP-2.10)
+override_resource {
+  target          = aws_sqs_queue.fetch_requests
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.fetch_requests_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-fetch-requests-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-fetch-requests-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.ingest_results
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-ingest-results"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-ingest-results"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.ingest_results_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-ingest-results-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-ingest-results-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_function.fetcher
+  override_during = plan
+  values = {
+    arn           = "arn:aws:lambda:af-south-1:000000000000:function:water-management-fetcher"
+    function_name = "water-management-fetcher"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.fetcher_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-fetcher-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-fetcher-lambda"
   }
 }
 
@@ -609,6 +664,9 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.worker_errors,
       aws_cloudwatch_metric_alarm.jobs_backlog,
       aws_cloudwatch_metric_alarm.job_dead,
+      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth,
+      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth,
+      aws_cloudwatch_metric_alarm.fetcher_errors,
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])])
     error_message = "Every regional alarm must notify the alerts SNS topic."
   }
@@ -747,9 +805,10 @@ run "background_jobs" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
-      toset(s.resources) == toset([aws_sqs_queue.jobs.arn]) && alltrue([for a in s.actions : !strcontains(a, "*")])
+      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn], one(s.resources)) &&
+      alltrue([for a in s.actions : !strcontains(a, "*")])
     ])
-    error_message = "The SQS endpoint policy must name only the jobs queue, with no wildcard actions."
+    error_message = "The SQS endpoint policy must name only the jobs and data-feed queues, one per statement, with no wildcard actions."
   }
   assert {
     condition = toset(flatten([for s in data.aws_iam_policy_document.sqs_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
@@ -780,6 +839,125 @@ run "background_jobs" {
   assert {
     condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
     error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Data feeds (feeds.tf, WP-2.10)
+# ---------------------------------------------------------------------------
+
+run "data_feeds" {
+  command = plan
+
+  # --- Queues: SSE, a DLQ after 5 receives, visibility past the consumer's timeout ---
+  assert {
+    condition     = alltrue([for q in [aws_sqs_queue.fetch_requests, aws_sqs_queue.fetch_requests_dlq, aws_sqs_queue.ingest_results, aws_sqs_queue.ingest_results_dlq] : q.sqs_managed_sse_enabled])
+    error_message = "Every data-feed queue must be encrypted (SSE-SQS)."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.fetch_requests.redrive_policy).deadLetterTargetArn == aws_sqs_queue.fetch_requests_dlq.arn &&
+      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.ingest_results.redrive_policy).deadLetterTargetArn == aws_sqs_queue.ingest_results_dlq.arn
+    )
+    error_message = "Both data-feed queues must dead-letter to their own DLQ after 5 receives."
+  }
+  assert {
+    condition = (
+      aws_sqs_queue.fetch_requests.visibility_timeout_seconds >= 6 * aws_lambda_function.fetcher.timeout &&
+      aws_sqs_queue.ingest_results.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+    )
+    error_message = "Visibility must be at least 6x the consuming Lambda's timeout."
+  }
+
+  # --- The fetcher: outside the VPC, small, capped, live sources only --------------
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.runtime == "nodejs24.x" &&
+      aws_lambda_function.fetcher.handler == "lambda-fetcher.handler" &&
+      aws_lambda_function.fetcher.memory_size == 512 &&
+      aws_lambda_function.fetcher.timeout == 120 &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions == 2
+    )
+    error_message = "Fetcher Lambda: nodejs24.x, lambda-fetcher.handler, 512 MB, 120 s, reserved concurrency 2."
+  }
+  assert {
+    condition     = length(aws_lambda_function.fetcher.vpc_config) == 0
+    error_message = "The fetcher runs outside the VPC: it is what keeps the feeds from needing a NAT."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.environment[0].variables["FEED_SOURCE"] == "live" &&
+      aws_lambda_function.fetcher.environment[0].variables["INGEST_RESULTS_QUEUE_URL"] == aws_sqs_queue.ingest_results.url &&
+      length(aws_lambda_function.fetcher.environment[0].variables) == 2
+    )
+    error_message = "The fetcher gets the live sources and the ingest-results queue, and nothing else (no DATABASE_URL, no secrets)."
+  }
+  assert {
+    condition = (
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : s.sid != "SendIngestResults" || toset(s.actions) == toset(["sqs:SendMessage"])]) &&
+      alltrue([for s in data.aws_iam_policy_document.fetcher_lambda.statement : alltrue([for a in s.actions : startswith(a, "sqs:") && !strcontains(a, "*")])])
+    )
+    error_message = "The fetcher's role reaches the two feed queues only: receive fetch-requests, send ingest-results."
+  }
+  assert {
+    condition     = aws_iam_role_policy_attachment.fetcher_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+    error_message = "The fetcher gets basic logging only (no VPC or other managed policy)."
+  }
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.fetcher_requests.event_source_arn == aws_sqs_queue.fetch_requests.arn &&
+      aws_lambda_event_source_mapping.fetcher_requests.function_name == aws_lambda_function.fetcher.arn &&
+      aws_lambda_event_source_mapping.fetcher_requests.batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.fetcher_requests.function_response_types, "ReportBatchItemFailures")
+    )
+    error_message = "fetch-requests triggers the fetcher, one request at a time, retrying only failed sends."
+  }
+
+  # --- The worker's side ------------------------------------------------------------
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["FEED_FETCHER"] == "sqs" &&
+      aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.fetch_requests.url &&
+      !contains(keys(aws_lambda_function.worker.environment[0].variables), "FEED_SOURCE")
+    )
+    error_message = "The worker hands fetches to the fetcher (it has no internet) and never fetches itself."
+  }
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.worker_ingest_results.event_source_arn == aws_sqs_queue.ingest_results.arn &&
+      aws_lambda_event_source_mapping.worker_ingest_results.function_name == aws_lambda_function.worker.arn
+    )
+    error_message = "ingest-results triggers the worker."
+  }
+  assert {
+    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_feeds.statement : s.resources])) == toset([aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn])
+    error_message = "The worker's feed policy reaches the two feed queues only."
+  }
+  assert {
+    condition     = toset(flatten([for s in data.aws_iam_policy_document.sqs_endpoint.statement : s.resources if contains(flatten([for p in s.principals : p.identifiers]), aws_iam_role.lambda.arn)])) == toset([aws_sqs_queue.jobs.arn])
+    error_message = "Through the endpoint, the API reaches the jobs queue only, never the feed queues."
+  }
+  assert {
+    condition     = contains(flatten([for s in data.aws_iam_policy_document.github_deploy.statement : s.resources if s.sid == "LambdaUpdate"]), aws_lambda_function.fetcher.arn)
+    error_message = "The deploy role must be able to update the fetcher's code."
+  }
+
+  # --- Alarms -----------------------------------------------------------------------
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.fetch_requests_dlq.name &&
+      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.ingest_results_dlq.name &&
+      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.threshold == 0
+    )
+    error_message = "Each feed DLQ must alarm on depth > 0."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.fetcher_errors.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name
+    error_message = "Fetcher errors must alarm."
   }
 }
 

@@ -121,7 +121,7 @@ variable "waf_rate_limit_per_ip" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$48 in us-east-1 and ~$57–62 in af-south-1 (infra/README.md § Cost): 60 fits us-east-1; raise it to ~80 for af-south-1 or the forecast alert fires every month. Set to 0 to skip budget creation (NOT recommended for prod)."
+  description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$49 in us-east-1 and ~$58–63 in af-south-1 (infra/README.md § Cost): 60 fits us-east-1; raise it to ~80 for af-south-1 or the forecast alert fires every month. Set to 0 to skip budget creation (NOT recommended for prod)."
   type        = number
   default     = 60
 }
@@ -197,6 +197,12 @@ variable "sqs_endpoint_az_count" {
     condition     = var.sqs_endpoint_az_count >= 1 && var.sqs_endpoint_az_count <= 2
     error_message = "Must be 1 or 2."
   }
+}
+
+variable "fetcher_reserved_concurrency" {
+  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  type        = number
+  default     = 2
 }
 
 variable "jobs_backlog_alarm_seconds" {

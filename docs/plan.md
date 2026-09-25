@@ -217,8 +217,13 @@ rows exist for this.
 - ✅ Merge endpoint (above) — the building block for every feed.
 - ⬜ **API keys per project** (hashed, scoped to `series:write`, revocable) so a
   logger gateway or script can push without a user session.
-- ⬜ **Scheduled fetchers** (EventBridge → Lambda): CHIRPS daily rainfall for the
-  catchment polygon; the DWS gauge record where one exists.
+- ✅ **Scheduled fetchers** (issue #10, WP-2.10; [architecture.md § Data feeds](./architecture.md#data-feeds)):
+  CHIRPS daily rainfall and the CHIRPS-GEFS forecast for grid cells over the
+  catchment, and a DWS gauge's daily flow, on the job queue, with health and
+  stale-feed warnings in Settings → Data feeds. Synthetic fixtures locally;
+  in production a fetcher Lambda outside the VPC (Terraform plan only). By
+  cells, not a polygon yet; DWS unverified against the live site
+  ([followups.md](./followups.md)).
 - ⬜ **Auto re-run** after new data (debounced), keeping earlier runs for comparison;
   "new data since last run" banner.
 - ⬜ **Partial recompute** from the first changed day, reusing stored state
