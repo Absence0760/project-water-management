@@ -135,7 +135,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run.'
+						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Overview shows the newest run’s headline results, each with its change from the run before, and a **Needs attention** list: farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed.'
 					}
 				]
 			},

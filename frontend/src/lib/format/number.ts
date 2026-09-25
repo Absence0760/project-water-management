@@ -41,6 +41,19 @@ export function fmtDate(iso: string | null | undefined, withTime = false): strin
 	return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A calendar day (YYYY-MM-DD, e.g. a series or run date) → "1 Oct 2021".
+ * Read from the string, never through Date, so no time zone can shift it.
+ * Anything that isn't a calendar day is returned unchanged.
+ */
+export function fmtDay(iso: string): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+	const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+	return m && month ? `${Number(m[3])} ${month} ${m[1]}` : iso;
+}
+
 /**
  * Today's calendar date where the viewer is (YYYY-MM-DD). Series dates are
  * calendar days, so a data age is counted against the viewer's local date,
