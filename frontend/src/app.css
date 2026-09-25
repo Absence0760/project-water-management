@@ -346,8 +346,12 @@ textarea {
 }
 
 /* ---- Tables ----------------------------------------------------------- */
+/* A long table scrolls inside its box, so its header row stays in view while
+   you read down it (the sticky thead below needs a scrolling ancestor with a
+   height). Short tables are shorter than the cap and never get a scrollbar. */
 .table-wrap {
-	overflow-x: auto;
+	overflow: auto;
+	max-height: 70vh;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	background: var(--surface);
@@ -363,9 +367,14 @@ table.data td {
 	border-bottom: 1px solid var(--border);
 	vertical-align: middle;
 }
-table.data thead th {
+/* The whole header sticks, not each cell, so a two-row header (a group row
+   over the column names) stays stacked instead of both rows sitting at top 0. */
+table.data thead {
 	position: sticky;
 	top: 0;
+	z-index: 2;
+}
+table.data thead th {
 	background: var(--surface-2);
 	font-weight: 600;
 	font-size: 0.8rem;

@@ -53,6 +53,17 @@ unsaved input: while **Add data** holds a file that is read but not uploaded
 (or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
+Every `Dialog.svelte` dialog also has a **✕** in its top-right corner
+(`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
+Escape closes it. It is last in the DOM, so opening a dialog still focuses its
+first field (New project, New team).
+
+**Long tables.** A `.table-wrap` table (app.css) scrolls inside its own box,
+capped at 70 % of the window, and its whole `<thead>` is sticky, so the header
+stays in view while you read down a long table (the network table with many
+nodes, the curtailment table). The whole header sticks, not each cell, so a
+two-row header (group labels over the column names) stays stacked. A table
+shorter than the cap looks as before.
 
 ## Header: data freshness and "Add data"
 
@@ -312,9 +323,9 @@ side, in a near full-screen dialog (`Dialog`'s `full` size: up to 1600px wide
 and the window's height, with the table filling what's left and only the rows
 in view rendered), one row per day across the union of their periods, plus columns for how
 the model actually used that day's data — not only what checkSeries flags.
-The card header's **Preview data** button opens it with every column shown; a
+The card header's **Preview all data** button opens it with every column shown; a
 row's own **Preview** button opens the same dialog with that series' column
-un-hidden, scrolled into view and highlighted. Alongside each series' own
+un-hidden, scrolled into view and highlighted. Number columns have right-aligned headers, so each value sits under its own header; the date and the Excluded column stay left-aligned. Alongside each series' own
 column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
@@ -718,7 +729,13 @@ value such as 250000.
   by half a window (the non-drag route, and the only one on touch). Neither
   goes past the ends of the record, and the window survives the log scale
   and unit switches. The figure carries the visible range as
-  `data-view-start` / `data-view-end` (`LineChart`'s `pannable` prop), the calibration panel (it opens with the same
+  `data-view-start` / `data-view-end`. Every daily chart has the same moves
+  (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
+  there is somewhere to move to): EWR vs outflow, farm storage and supply vs
+  demand, Explore outputs, the model stores, the Data tab's series chart and
+  the run comparison. The m³/s ↔ m³/day switch sits on every flow chart
+  (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
+  flow series is picked), and one click sets all of them. Then the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
