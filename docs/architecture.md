@@ -66,6 +66,34 @@ Because the engine is pure and deterministic, there is only one implementation
 to regression-test against the workbook, and the browser and the stored result
 can never drift apart. Every run records `ENGINE_VERSION`.
 
+## Code splitting (frontend)
+
+SvelteKit already gives every route its own chunk. The catchment workspace
+(`routes/projects/[id]`) is split further, because it carries most of the app:
+only the Overview tab (the default view) ships in the route's chunk, and each
+other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
+Runs & results) is a dynamic `import()` of its component, as are the two
+on-demand dialogs (Add data, and the Data tab's series preview). uPlot and the
+engine code the tabs use land in shared chunks that load with the first tab
+that needs them.
+
+- `lib/components/common/lazy.ts` memoises each loader, so a hover prefetch,
+  the render and a later remount share one request, and a remount renders at
+  once. A failed import is forgotten so "Try again" refetches.
+- `lib/components/common/Lazy.svelte` renders the standard `LoadState` while
+  the chunk loads (or an error with "Try again"), then the component through a
+  typed snippet, so the tab's props are still type-checked.
+- The open tab's chunk starts downloading alongside the project data, and a
+  tab link warms its chunk on hover or focus, so switching tabs rarely shows
+  the loading state.
+
+The trade-off: split chunks compress a little worse than one big chunk, so the
+total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
+catchment downloading about 90 KB (gzip) instead of about 300 KB. The bundle
+guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
+holds the largest single chunk down, which is what catches a tab's code
+sliding back into the page chunk.
+
 ## Request lifecycle (backend)
 
 1. CloudFront adds `X-CloudFront-Shared-Secret`, and the backend rejects

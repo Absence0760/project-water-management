@@ -1,3 +1,20 @@
+<script module lang="ts">
+	// Only the Overview tab (the default, first paint) ships in this page's
+	// chunk. Every other tab, and the Add data dialog, is its own chunk, fetched
+	// when first shown and warmed when its tab link is hovered or focused
+	// (docs/architecture.md § Code splitting). Module scope keeps each loader's
+	// identity stable, which is what lazy.ts memoises on.
+	const LOAD = {
+		network: () => import('$lib/components/network/NetworkTab.svelte'),
+		crops: () => import('$lib/components/crops/CropsTab.svelte'),
+		transfers: () => import('$lib/components/transfers/TransfersTab.svelte'),
+		series: () => import('$lib/components/series/SeriesTab.svelte'),
+		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
+		runs: () => import('$lib/components/runs/RunsTab.svelte')
+	};
+	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+</script>
+
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
@@ -7,21 +24,16 @@
 	import { api, ApiError, hasRole, type Project, type RunMeta } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import CropsTab from '$lib/components/crops/CropsTab.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
-	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
-	import RunsTab from '$lib/components/runs/RunsTab.svelte';
-	import AddDataDialog from '$lib/components/series/AddDataDialog.svelte';
 	import { describeAge } from '$lib/components/series/coverage';
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
-	import SeriesTab from '$lib/components/series/SeriesTab.svelte';
 	import type { UploadResult } from '$lib/components/series/upload';
 	import { localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
-	import SettingsTab from '$lib/components/settings/SettingsTab.svelte';
-	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 
 	// Workflow order: describe the catchment, feed it data, calibrate, run.
@@ -88,6 +100,8 @@
 	});
 	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
 	let addOpen = $state(false);
+	// The dialog's chunk is fetched the first time it's wanted; then it stays mounted.
+	let addMounted = $state(false);
 	let droppedFile = $state.raw<File | null>(null);
 	let dragDepth = $state(0);
 	let banner = $state<{ text: string; added: number } | null>(null);
@@ -99,12 +113,14 @@
 
 	function openAddData(file: File | null = null) {
 		droppedFile = file;
+		addMounted = true;
 		addOpen = true;
 	}
 	const hasFiles = (e: DragEvent) => canEdit && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
 		e.preventDefault();
+		if (dragDepth === 0) prefetch(loadAddData);
 		dragDepth++;
 	}
 	function onDragOver(e: DragEvent) {
@@ -226,6 +242,13 @@
 		await goto(`${base}/`);
 	}
 
+	// Start the open tab's chunk alongside the project fetch; warm the others
+	// when their tab link is hovered or focused.
+	function warmTab(id: TabId) {
+		if (id !== 'overview') prefetch(LOAD[id]);
+	}
+	$effect(() => warmTab(tab));
+
 	// Keep the active tab in view in the scrolling strip (phones).
 	let tabStrip: HTMLElement | undefined = $state();
 	$effect(() => {
@@ -288,7 +311,13 @@
 						<span class="fresh-none muted">No data yet</span>
 					{/if}
 					{#if canEdit}
-						<button type="button" class="btn btn-primary add" onclick={() => openAddData()}>
+						<button
+							type="button"
+							class="btn btn-primary add"
+							onclick={() => openAddData()}
+							onpointerenter={() => prefetch(loadAddData)}
+							onfocus={() => prefetch(loadAddData)}
+						>
 							<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2 11v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
 							Add data
 						</button>
@@ -320,6 +349,8 @@
 						data-sveltekit-noscroll
 						aria-current={tab === t.id ? 'page' : undefined}
 						onkeydown={(e) => tabKeydown(e, i)}
+						onpointerenter={() => warmTab(t.id)}
+						onfocus={() => warmTab(t.id)}
 					>
 						{t.label}
 						{#if MODEL_TABS.includes(t.id) && editor.issues.some((x) => x.area === t.id)}
@@ -357,34 +388,58 @@
 					/>
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
-					<NetworkTab {editor} settings={project.settings} readonly={!canEdit} />
+					<Lazy load={LOAD.network}>
+						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} />{/snippet}
+					</Lazy>
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
-					<CropsTab {editor} settings={project.settings} readonly={!canEdit} />
+					<Lazy load={LOAD.crops}>
+						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} />{/snippet}
+					</Lazy>
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
-					<TransfersTab {editor} readonly={!canEdit} />
+					<Lazy load={LOAD.transfers}>
+						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} />{/snippet}
+					</Lazy>
 				{:else if tab === 'settings'}
-					<SettingsTab {project} {editor} seriesKinds={series?.map((x) => x.kind) ?? null} readonly={!canEdit} {onProjectChange} />
+					<Lazy load={LOAD.settings}>
+						{#snippet children(SettingsTab)}
+							<SettingsTab project={project!} {editor} seriesKinds={series?.map((x) => x.kind) ?? null} readonly={!canEdit} {onProjectChange} />
+						{/snippet}
+					</Lazy>
 				{:else if tab === 'series'}
-					<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} settings={project.settings} onSeriesChange={(l) => (series = l)} />
+					<Lazy load={LOAD.series}>
+						{#snippet children(SeriesTab)}
+							<SeriesTab {projectId} readonly={!canEdit} initial={series} {runs} settings={project!.settings} onSeriesChange={(l) => (series = l)} />
+						{/snippet}
+					</Lazy>
 				{:else if tab === 'runs'}
-					<RunsTab
-						{projectId}
-						{project}
-						{editor}
-						{series}
-						{runs}
-						canRun={canEdit}
-						modelDirty={editor.dirty}
-						onRunsChange={(l) => (runs = l)}
-					/>
+					<Lazy load={LOAD.runs}>
+						{#snippet children(RunsTab)}
+							<RunsTab
+								{projectId}
+								project={project!}
+								{editor}
+								{series}
+								{runs}
+								canRun={canEdit}
+								modelDirty={editor.dirty}
+								onRunsChange={(l) => (runs = l)}
+							/>
+						{/snippet}
+					</Lazy>
 				{/if}
 			</section>
 
 			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} />
 			{#if canEdit}
-				<AddDataDialog bind:open={addOpen} {projectId} list={series ?? []} file={droppedFile} onuploaded={onUploaded} />
+				{#if addMounted}
+					<Lazy load={loadAddData}>
+						{#snippet children(AddDataDialog)}
+							<AddDataDialog bind:open={addOpen} {projectId} list={series ?? []} file={droppedFile} onuploaded={onUploaded} />
+						{/snippet}
+					</Lazy>
+				{/if}
 				{#if dragDepth > 0}
 					<div class="drop" aria-hidden="true"><div>Drop the CSV to add daily data to {project.name}</div></div>
 				{/if}

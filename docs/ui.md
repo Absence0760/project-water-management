@@ -24,7 +24,12 @@ the input-series list and the runs list behind one loading gate, so no tab
 renders empty and then fills in. The Overview, Data and Runs tabs take those
 lists as props and report changes back, so an upload or a run made on one tab
 shows in the others (the Overview's counts and checklist included) without a
-refetch. Tabs follow the modelling workflow:
+refetch. Only the Overview ships with the page; every other tab's code is
+fetched the first time that tab opens (started alongside the data load when
+the URL names the tab, and warmed when its link is hovered or focused), with
+the standard "Loading…" state in the meantime
+([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+Tabs follow the modelling workflow:
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
