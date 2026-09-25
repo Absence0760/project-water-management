@@ -2318,9 +2318,11 @@ silt and weed), and low-flow discharge uncertainty runs to ±50–100 %
 (McMillan, Krueger & Freer 2012), so a factor of 2 is outside what gauging
 error explains (CR-16's low-flow FDC bias).
 
-**Not yet** (followups): a Q90 comparison for the other observed record (it
-may be a different river), a check per gauge node inside the network (the
-observed records are the outlet's), and the checks in the run comparison.
+Checks 1, 3 and the Q90 comparison use the calibration record only, by
+design: the other record may be a different river (§2.10a). **Not yet**
+([followups.md](./followups.md)): the checks at a gauge node inside the
+network (the observed records are the outlet's), and the checks in the run
+comparison.
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

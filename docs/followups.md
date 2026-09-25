@@ -542,14 +542,42 @@ the reports):
       warning when a later run uses another runoff model
       ([data-model.md](./data-model.md), [security.md](./security.md)). The
       assessor rated this Medium.
-- [ ] **Hydrologist plausibility checks** (as run warnings or a report):
+- [x] **Hydrologist plausibility checks** (as run warnings or a report).
+      Done 2026-09-25, engine 0.25.0
+      ([model.md §2.10d](./model.md#210d-hydrologist-plausibility-checks-engine--0250-issue-4-phase-6)):
+      `RunSummary.plausibility`, run warnings, a *Plausibility checks* block
+      in the summary CSV and a lazy-loaded panel on Runs & results
+      ([ui.md](./ui.md)):
       - natural flow ≥ impacted observed flow + modelled abstraction in every
-        water year;
-      - EWR days reported separately for good-rain and fallback-rain years;
+        water year (A = natural − simulated outflow, split into use, dams and
+        land cover; 10 % of the observed volume allowed for gauging error,
+        floor 1 % of the record's mean; judged with 300+ observed days);
+      - EWR days reported separately for good-rain and fallback-rain years
+        (a fallback year has more than half its rain, or its days, from
+        CHIRPS, forecast, spread or blank days), with the Reserve months met
+        split the same way; warns at a 10-point difference;
       - a double-mass curve of gauge flow against rain, to tell new upstream
-        use from a failing gauge;
+        use from a failing gauge (the rain-vs-CHIRPS break detection,
+        `doubleMassSegments`; each break set against the simulated outflow,
+        with a seasonal hint);
       - dry-season low-flow duration curves overlaid for gauge, logger and
-        each model.
+        each model (the latest run of each other runoff model), warning when
+        the simulated Q90 is more than a factor of 2 from the observed.
+
+      For the hydrologist: confirm the dry-season rule (six months of lowest
+      mean flow), the 10 % / 1 % tolerance, the fallback-year rule and its
+      10-point warning, the seasonal hint's 10-point margin and the factor of
+      2 on Q90 (every value and its reasoning is in model.md §2.10d).
+      Still open, each with its trigger:
+      - [ ] **Checks on a gauge node inside the network.** The observed
+            records are the outlet's, so the checks run there only. The
+            durable fix is attaching an observed record to a gauge node
+            (a series per node) and running check 1 and 4 at each. Trigger:
+            a project with a second gauged site.
+      - [ ] **The checks in the run comparison.** Compare shows neither the
+            failing years nor the Q90 ratio side by side. Trigger: the
+            hydrologist asks to compare the checks between runs (for
+            example before and after a refit).
 - [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
       hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
