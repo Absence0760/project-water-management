@@ -52,7 +52,7 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS`. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007, the only column that changes after the run is made) | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made | A "Calc. Model" press plus the `[Log]` entry |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 
 ### Field mapping details
@@ -129,10 +129,13 @@ its `inputs` snapshot plus `engine_version`.
   `RUNS_KEPT_PER_PROJECT` (default **20**; unset or invalid → 20), with their
   `run_series` (cascade). It runs in the same transaction as the new run, as
   the signed-in editor, so RLS applies. `POST …/runs` returns the removed ids
-  (`removedRunIds`). There is no pinning yet: a labelled baseline is trimmed
-  like any other run once 20 newer ones exist. The exception is a run the
-  evidence history names (current or past nomination, see **Evidence
-  nomination** below): it is never trimmed and doesn't count against the cap.
+  (`removedRunIds`). A **kept** run is never trimmed and doesn't count
+  against the cap: one an editor **pinned** (see **Pinned runs** below), or
+  one the evidence history names (current or past nomination, see **Evidence
+  nomination** below). Both go through one exemption, `RUN_KEPT_SQL` in
+  `backend/src/runs/execute.ts`, which `trimRuns` and the `DELETE` route
+  share. So a project holds at most 20 unpinned, unnominated runs, plus at
+  most 10 pinned, plus the runs its (at most 50) nominations name.
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -178,7 +181,25 @@ runs it. The `model_run_update` policy (re-created in 007 with the same
 editor-on-both-sides rule) limits even that to editors and owners; a viewer's
 `UPDATE` matches no row. `PATCH /projects/:id/runs/:runId` is the only writer
 ([api.md](./api.md#runs)); the catalogue test pins `model_run`'s updatable
-columns to exactly `notes`.
+columns to exactly `notes` and `pinned` (below).
+
+**Pinned runs (015_run_pinned.sql).** `model_run.pinned` (boolean, default
+`false`) keeps a run, typically a baseline, past the storage cap: `trimRuns`
+skips it and it doesn't count against `RUNS_KEPT_PER_PROJECT`, and
+`DELETE …/runs/:runId` answers `409` until it is unpinned. It is the second
+column `water_app` may update (`GRANT UPDATE (pinned)`, next to `notes`); the
+`model_run_update` policy is unchanged, so only editors and owners can pin
+and a viewer's `UPDATE` matches no row. **Ceiling: 10 pinned runs per
+project**, so storage stays bounded (a long run is up to a few tens of MB, so
+10 pins add at most half the cap again). The `model_run_pin_limit` BEFORE
+UPDATE OF `pinned` trigger (`SECURITY DEFINER`, `search_path` pinned) refuses
+an 11th pin with `check_violation`, under a per-project advisory lock so two
+pins can't race past it; the API checks first and answers `409` with the
+reason. `PINNED_RUNS_PER_PROJECT_MAX` in `backend/src/runs/execute.ts` holds
+the same number. Pinning doesn't touch the note's stamp. A partial index
+(`model_run_pinned_idx`, `WHERE pinned`) keeps counting a project's pins
+cheap. `pinned` is on every run's metadata (`RunMeta`), so a feature that needs
+a kept base run (scenarios, issue #18) can read it from the run list.
 
 **Evidence nomination (010_run_nomination.sql).** Which run, and so which
 runoff model, the project stands behind as evidence, so an applicant can't
@@ -211,16 +232,17 @@ B on … because …". A run can be nominated again later (A, B, A).
 - **A nominated run is kept for good**, current or past. The foreign key is
   `NO ACTION`, so deleting the run fails (`DELETE …/runs/:runId` answers `409`
   first); `trimRuns` skips it, and it does not count against
-  `RUNS_KEPT_PER_PROJECT` (the cap keeps the newest 20 runs that were never
-  nominated). `NO ACTION` rather than `RESTRICT` is checked at the end of the
+  `RUNS_KEPT_PER_PROJECT` (the cap keeps the newest 20 runs that are neither
+  nominated nor pinned). `NO ACTION` rather than `RESTRICT` is checked at the end of the
   statement, so deleting the whole project (owner only) still cascades to
   both tables. The 50-nomination limit bounds how many runs can be kept this
   way.
 - No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
   is no account deletion yet. When there is, it must keep the history (for
   example a tombstone user), not cascade it away.
-- Migration 009 is reserved for pinned runs (issue #7). The runner applies
-  every unapplied file in name order, so 010 applying first is harmless.
+- Migration 009 was reserved for pinned runs (issue #7), which landed as
+  015 instead. 009 is an unused gap; the runner applies every unapplied file
+  in name order, so the gap is harmless.
 
 **Uncertainty bands (014_run_uncertainty.sql).** One row per ensemble a
 run's editor starts ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)):

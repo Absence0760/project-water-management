@@ -135,7 +135,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run.'
+						text: 'The **Overview** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Overview shows the newest run’s headline results, each with its change from the run before, and a **Needs attention** list: farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed.'
 					}
 				]
 			},
@@ -245,7 +245,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. **Sort by flow path** orders the table from each headwater down. Once the model has been run, **Colour farms by** › **Supply, latest run** shades each farm by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%); a farm added since the run is hatched.'
 					}
 				]
 			},
@@ -315,7 +315,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
 							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
-							'Check the **Irrigation demand preview**: gross demand in m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
+							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any farm with nothing planted, whose demand is zero.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
@@ -645,7 +645,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged.',
+							'**Summary**: a sentence or two in plain words first (how often the river’s requirement was met, which farms fell short, and the fit when there is observed flow), then mean natural flow and outflow, EWR days not met, irrigation supplied, NSE and PBIAS (in-sample), then the per-farm table. Farms under 95 % supplied are flagged, and a small bar beside each farm’s % shows its share at a glance.',
 							'**Where the water went**: the run’s yearly water balance, from rain to the outlet.',
 							'**Self-checks**: whether each farm’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day** for one farm. See [[balance-check|the self-checks]].',
 							'**Curtailment**: each farm’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites. See [[guide:curtailment-targets|Curtailment targets]].',

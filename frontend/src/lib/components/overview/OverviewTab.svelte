@@ -1,13 +1,18 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { api, type Project, type RunMeta } from '$lib/api';
+	import { api, type Project, type Run, type RunMeta } from '$lib/api';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
+	import { detailCache } from '$lib/components/runs/cache';
 	import { downloads } from '$lib/export';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { attention } from './attention';
 	import { checklist } from './checklist';
+	import LatestRun from './LatestRun.svelte';
+	import { pickRuns } from './latestRun';
 	import MembersPanel from './MembersPanel.svelte';
+	import NeedsAttention from './NeedsAttention.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 
@@ -56,6 +61,79 @@
 		checklist({ model: editor.model, settings: project.settings, series, runs, updatedAt: project.updatedAt })
 	);
 
+	// --- latest run: its headline figures and what needs attention ----------
+	// The run list is the page's; the full records (summaries) are fetched here
+	// through the Runs tab's cache, so opening that tab next shows the run at once.
+	const pick = $derived(pickRuns(runs));
+	let latestRun = $state.raw<Run | null>(null);
+	let previousRun = $state.raw<Run | null>(null);
+	let runLoading = $state(false);
+	let runError = $state<string | null>(null);
+	let previousError = $state<string | null>(null);
+	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+	async function fetchRun(id: string): Promise<Run> {
+		const hit = detailCache.get(id);
+		if (hit) return hit.run;
+		const d = await api.runs.get(project.id, id);
+		detailCache.set(id, d);
+		return d.run;
+	}
+
+	let loadKey = '';
+	async function loadRuns(latestId: string, previousId: string | null) {
+		const key = (loadKey = `${latestId}|${previousId ?? ''}`);
+		// Cached records paint on the first frame; the rest arrive in parallel.
+		latestRun = detailCache.get(latestId)?.run ?? null;
+		previousRun = previousId ? (detailCache.get(previousId)?.run ?? null) : null;
+		runError = null;
+		previousError = null;
+		runLoading = !latestRun;
+		const prev = previousId && !previousRun ? fetchRun(previousId) : null;
+		try {
+			const r = await fetchRun(latestId);
+			if (loadKey === key) latestRun = r;
+		} catch (e) {
+			if (loadKey === key) runError = msg(e);
+		} finally {
+			if (loadKey === key) runLoading = false;
+		}
+		if (prev) {
+			try {
+				const p = await prev;
+				if (loadKey === key) previousRun = p;
+			} catch (e) {
+				// Shown under the cards: they stand without the changes.
+				if (loadKey === key) previousError = msg(e);
+			}
+		}
+	}
+	const retryRuns = () => pick && loadRuns(pick.latest.id, pick.previous?.id ?? null);
+
+	// Reload only when the pair of runs changes (the page refreshes its list
+	// after a run or a note edit; the same ids need no refetch).
+	$effect(() => {
+		const latestId = pick?.latest.id ?? null;
+		const previousId = pick?.previous?.id ?? null;
+		untrack(() => {
+			if (!latestId) {
+				loadKey = '';
+				latestRun = previousRun = null;
+			} else if (`${latestId}|${previousId ?? ''}` !== loadKey) loadRuns(latestId, previousId);
+		});
+	});
+
+	const today = localIsoDate();
+	const attentionItems = $derived(
+		attention({
+			model: editor.model,
+			series,
+			latest: pick?.latest ?? null,
+			summary: latestRun && latestRun.id === pick?.latest.id ? latestRun.summary : null,
+			today
+		})
+	);
+
 	const stats = $derived.by(() => {
 		const m = editor.model;
 		const farms = m.nodes.filter((n) => n.kind === 'farm');
@@ -101,6 +179,22 @@
 </script>
 
 <SetupChecklist {steps} />
+
+{#if pick}
+	<LatestRun
+		meta={pick.latest}
+		run={latestRun}
+		previousMeta={pick.previous}
+		previous={previousRun}
+		evidence={pick.evidence}
+		loading={runLoading}
+		error={runError}
+		{previousError}
+		retry={retryRuns}
+	/>
+{/if}
+
+<NeedsAttention items={attentionItems} />
 
 <!-- Each fact links to the tab where it is edited or looked at; the link is
      stretched over the whole tile, so the tile is the click target. -->

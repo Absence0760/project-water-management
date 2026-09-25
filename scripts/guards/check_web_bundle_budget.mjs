@@ -177,6 +177,17 @@
 //             Ensemble results are byte-identical (same seed, same output
 //             hash). The ceiling stays at 55 KB so the next ensemble or fit
 //             feature has ~4 KB of room. Headroom ~7 KB total.
+// 2026-09-25  total 503 → 511 KB; other ceilings unchanged. Four small UI
+//             additions taken from the redesign mockups (issue #17, current
+//             layout kept) plus the same day's pinned runs (#7) measure 505 KB
+//             on main @ c5f6c57: the Overview's Latest run strip and Needs
+//             attention panel (overview/LatestRun, NeedsAttention, ~3 KB, in
+//             the page chunk since the Overview is the first paint), the run
+//             summary sentence and supply bars (runs/runSentence), the
+//             schematic's colour-by-supply (network/supplyColour) and the
+//             Crops tab's stacked demand chart (MonthlyBars' stacked mode).
+//             Each alone fitted under 503; merged they don't. No new
+//             dependency; the largest chunk is 39 KB. Headroom ~6 KB.
 // 2026-09-25  total 503 → 591 KB; new largestSpreadsheetWorkerKb 95 KB; the
 //             page ceiling (41 KB) and the calibration worker's (55 KB) are
 //             unchanged. The .xlsx run export (WP-1.28, issue #11): SheetJS
@@ -222,6 +233,14 @@
 //             ~6 KB on both. The durable way down is the streaming sheet
 //             reader in followups.md (WP-1.31 peak memory): it would drop
 //             SheetJS from this worker altogether.
+// 2026-09-25  total 702 → 712 KB; other ceilings unchanged. Merge of issue
+//             #11 (spreadsheets: the .xlsx export and b023 import workers,
+//             692 KB on its own after the fragmentation exports merged) with
+//             the same day's parallel work on origin (the entry above, 503 →
+//             511, and the compare per-node daily overlay, #8). Each fitted
+//             its own ceiling; together they measure 706 KB. No new
+//             dependency; the largest page chunk is 39 KB, both workers are
+//             unchanged. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -233,7 +252,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 702,
+	totalCodeKb: 712,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 107,

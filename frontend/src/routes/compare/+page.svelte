@@ -10,7 +10,6 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
-	import CompareChart from '$lib/components/compare/CompareChart.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
@@ -25,6 +24,8 @@
 
 	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
 	const loadPairedUncertainty = () => import('$lib/components/uncertainty/PairedUncertaintyPanel.svelte');
+	// The per-node daily series overlay (issue #8): its own chunk too.
+	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
 	type Side = 'a' | 'b';
@@ -344,8 +345,10 @@
 					</section>
 
 					<section class="panel" aria-labelledby="chart-h">
-						<div class="panel-head"><h2 id="chart-h">Hydrograph</h2></div>
-						<CompareChart {data} />
+						<div class="panel-head"><h2 id="chart-h">Daily series</h2></div>
+						<Lazy load={loadOverlay}>
+							{#snippet children(CompareOverlay)}<CompareOverlay data={data!} />{/snippet}
+						</Lazy>
 					</section>
 				{/if}
 			</LoadState>

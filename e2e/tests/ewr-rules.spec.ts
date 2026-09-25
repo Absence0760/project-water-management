@@ -117,6 +117,8 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByText('Reserve rules met')).toBeVisible();
 	await expect(summary.getByText('33 of 36 months at the outlet')).toBeVisible();
+	// The plain-words summary above the cards leads with the same measure.
+	await expect(summary.getByText(/^The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\./)).toBeVisible();
 	await expect(summary.getByText('Days below the pragmatic EWR')).toBeVisible();
 
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Reserve compliance' }).click();

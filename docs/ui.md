@@ -71,10 +71,11 @@ shorter than the cap looks as before.
   input series. Click it for each series' end date. It turns amber when the
   newest data is more than 7 days old (`STALE_DAYS` in
   `series/freshness.ts`; a candidate for a project setting). Ages count
-  calendar days up to the viewer's **local** date (`localIsoDate`), the same
-  as the project list's badge, so the two never differ by a day around
-  midnight. Series dates are calendar days, so the UTC date would be wrong
-  for anyone east or west of UTC.
+  calendar days up to the viewer's **local** date (`localIsoDate`); the
+  project list's badge (`projects/freshness.ts`) counts the same way from its
+  own `daysSince`, so the two never differ by a day around midnight. Series
+  dates are calendar days, so the UTC date would be wrong for anyone east or
+  west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
   Dropping a CSV anywhere on the page opens it with that file.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
@@ -89,8 +90,44 @@ shorter than the cap looks as before.
 
 ## Overview
 
-The setup checklist (`overview/checklist.ts`), eight headline facts, project
-details, team and members.
+The setup checklist (`overview/checklist.ts`), the latest run's results,
+a "Needs attention" list, eight headline facts, project details, team and
+members.
+
+- **Latest run** (`overview/LatestRun.svelte`, rules in
+  `overview/latestRun.ts`), shown once the project has a run. It is the
+  **newest run by `createdAt`**, even when an older run is the nominated
+  evidence: the Overview answers "what does the model say now?", and only
+  the newest run reflects the latest data and edits. When the evidence run is
+  a different run, a line under the context names and links it, so the two
+  can't be confused. A context line gives the label, the run period
+  (`fmtDay`, e.g. "1 Oct 2021 – 28 Jan 2022"), the engine version and "ran …
+  ago" (`describeAge`, by the viewer's calendar), with badges for a legacy run
+  (*Workbook comparison*, plus a note that its figures are for workbook
+  comparison only, not evidence) and the evidence run. **Open in Runs** links
+  to `?tab=runs&run=<id>`. Four cards, the same figures and labels as the Runs
+  tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
+  site from `headlineSite`) or, without a rule table, *EWR not met* (days below
+  the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
+  M farms below" `SUPPLY_TARGET`); *Calibration NSE* (in-sample; "–" without
+  observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
+  is only in a run's daily series, not its summary, so it has no card. Each
+  card shows its change from the previous run (the one before it by
+  `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
+  better/worse, so colour is never the only cue), only when both runs have the
+  figure: the Reserve only at the same site, the pragmatic EWR only when
+  neither run headlines a rule table. The full records come through the Runs
+  tab's `detailCache`, so only this section shows a loading or error state
+  (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
+  cards in a row, 2 × 2 below 760 px.
+- **Needs attention** (`overview/NeedsAttention.svelte`, rules in
+  `overview/attention.ts`): one sentence and one link per item, hidden when
+  there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
+  worst named, links to the run), the latest run's warnings, rainfall the
+  latest run hasn't used (`newDataSinceRun`, links to Runs to re-run), input
+  data older than `STALE_DAYS` (`freshness`, links to Data), and farms with no
+  planted area once anything is planted (links to Crops; before that the
+  checklist's crops step covers it). Run items wait for the run's summary.
 
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to
@@ -234,6 +271,25 @@ personal copy (the Copy dialog says so).
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
+- **Colour farms by** (above the schematic, offered once the project has a
+  run and a farm): **Nothing** (the default, the plain drawing) or **Supply,
+  latest run**. The choice is component state, not kept in the URL. On, it
+  fetches the newest run's summary (`api.runs.get`, sharing the Runs tab's
+  `detailCache`; a quiet status line covers loading, and a failure offers
+  Retry without touching editing) and fills each farm by `fractionSupplied`
+  (`network/supplyColour.ts`): **≥ 95 %** (`SUPPLY_TARGET`, the farm table's
+  flag), **70–95 %** and **under 70 %** (`LOW_SUPPLY`, this view's own lower break, so "short" separates from "badly short"), in success / warning / danger
+  mixes that step in lightness as well as hue in both themes. A boundary
+  value falls in the higher band. A farm with no irrigation demand in the
+  run (the engine reports it as 100 %) is "no demand", dashed and unfilled;
+  a farm in the model but not in the run (added since, or a gauge then) is
+  "not in this run", hatched with a dashed outline. The share is also on the
+  node's label line, its tooltip and the drainage-tree text, so nothing is
+  colour-only. A second legend row lists the bands present and names the
+  run ("… in run “label”, ran 2 days ago", by the viewer's calendar); with
+  unsaved model edits it adds that the colours show the run, not the edits.
+  Gauges and other water users are not coloured. Selection, hover and drop
+  states are unchanged (they live on the halo and opacity).
 - **Table** (the default from 900px wide) or **One node** (the default
   below it), switched by the Layout buttons: every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
@@ -330,6 +386,23 @@ multiplies ET₀, about 0.7–0.85 × pan), and a warning under the table names
 every crop and month with a factor above 1.0: a hint to check for an FAO Kc
 entered as it is, never a block on saving (`highCropFactors` in
 `components/crops/demand.ts`).
+
+Under Planted areas, a muted note names every farm whose planted area adds up
+to zero ("Farm 5, Farm 6 and Farm 8 have no planted area, so their irrigation
+demand counts as zero."), at most five names then "and N more"
+(`noPlantedAreaNote`). Like the rest of the tab it follows unsaved edits.
+
+Above the demand table, a compact stacked bar chart shows the catchment's
+gross demand per water-year month (Oct → Sep, m³/day), one part per crop
+(`MonthlyBars` in stacked mode). The parts come from the same per-farm
+computation as the table: `farmDemands` splits each farm's engine demand by
+crop, `catchmentDemand` gives the footer totals and `cropStacks` the chart's
+parts, which sum to them. Colours are theme tokens (`--series-1…3`,
+`--brand-node`, `--warning`, `--accent`), so they follow light and dark mode;
+with more than six crops the five largest by annual demand keep a colour and
+the rest are grouped as "Other" in grey. The chart is an image whose label
+names the crops and the peak month; the table stays the accessible data
+source. It is hidden while there is no demand (no A-pan, crops or areas).
 
 On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
@@ -736,7 +809,22 @@ value such as 250000.
   Viewing an older run, the header offers "go to latest".
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
-- **Summary** (the "Run summary" region): headline cards give mean natural
+- **Pinned runs** (015_run_pinned). Each row has a pin toggle for editors
+  (`aria-pressed`, labelled "Pin run <label>"): a pinned run is badged
+  **Pinned**, is never pushed out by newer runs, and loses its ✕ until it is
+  unpinned. A project holds at most 10 pinned runs; pinning an 11th shows the
+  server's `409` reason in the tab's error. Viewers see the badge but no
+  toggle. The compare page's run pickers add "· pinned" to a pinned run's
+  option (read only).
+- **Summary** (the "Run summary" region): it opens with one to three plain
+  sentences (`runs/runSentence.ts`, built only from the stored summary so they
+  always agree with the cards): the river measure the cards lead with (Reserve
+  rules met in X % of months at the headline site when there is a rule table,
+  else the % of days below the pragmatic EWR at the outflow gauge), then the
+  farms (how many got less than 95 % of their demand and the lowest one, or
+  "Every farm got at least 95 %"; left out when the run has no farms), then,
+  only when the run was scored against observed flow, the in-sample NSE and
+  PBIAS with PBIAS in `rating.ts`'s plain words (NSE unrated). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
@@ -747,7 +835,11 @@ value such as 250000.
   scored on the days the parameters were tuned on. When the parameters came
   from Fit automatically, the fit's validation scores sit beside the in-sample
   one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
-  order by default, with farms under 95 % supplied flagged in text.
+  order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
+  badge and a tinted row). The **Supplied % of demand** column has a small bar
+  beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
+  green at or above 95 %, amber below; themed tokens, so it follows dark mode, and
+  solid `CanvasText` under forced colours); the number stays the content.
 - **Where the water went** (`#res-water`, `runs/WaterStoryPanel.svelte`, figures
   from `runs/waterStory.ts`): the run's whole-period water balance
   (`summary.waterBalance.total`, engine ≥ 0.11.0) as yearly averages on the help
@@ -844,9 +936,10 @@ value such as 250000.
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
   demand, Explore outputs, the model stores, the Data tab's series chart and
-  the run comparison. The m³/s ↔ m³/day switch sits on every flow chart
+  the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
-  flow series is picked), and one click sets all of them. Then the calibration panel (it opens with the same
+  flow series is picked), and one click sets all of them; the run comparison's
+  overlay has its own while a flow series is picked. Then the calibration panel (it opens with the same
   in-sample note, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in

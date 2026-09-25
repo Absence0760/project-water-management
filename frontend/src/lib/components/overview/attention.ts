@@ -1,0 +1,110 @@
+// Overview → "Needs attention": the few things worth acting on, gathered from
+// signals the app already computes (the latest run's summary, the series
+// freshness checks, the model being edited). Each item links to the tab where
+// it is fixed or read. An empty list hides the panel.
+import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
+import type { RunMeta } from '$lib/api/types';
+import { SUPPLY_TARGET } from '$lib/components/runs/results';
+import { describeAge } from '$lib/components/series/coverage';
+import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
+import { fmtDay, fmtNum, fmtPct } from '$lib/format/number';
+
+export type AttentionId = 'short-farms' | 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
+
+export interface AttentionItem {
+	id: AttentionId;
+	/** One sentence: what is wrong. */
+	text: string;
+	/** The link's words: what to do about it. */
+	action: string;
+	/** `?tab=…` (and `&run=…` for a run). */
+	href: string;
+}
+
+export interface AttentionInput {
+	model: ProjectModel;
+	/** null while loading (the data items wait). */
+	series: SeriesMeta[] | null;
+	/** The run the Overview shows (overview/latestRun.ts pickRuns), null without runs. */
+	latest: RunMeta | null;
+	/** Its summary; null until loaded (the run items wait). */
+	summary: RunSummary | null;
+	/** The viewer's calendar date (YYYY-MM-DD). */
+	today: string;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
+
+/** "A", "A and B", "A, B and C", "A, B, C and 2 more". */
+export function nameList(names: readonly string[], max = 3): string {
+	if (names.length <= max) return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+	return `${names.slice(0, max).join(', ')} and ${fmtNum(names.length - max)} more`;
+}
+
+export const runHref = (runId: string) => `?tab=runs&run=${encodeURIComponent(runId)}`;
+
+export function attention(input: AttentionInput): AttentionItem[] {
+	const { model, series, latest, summary, today } = input;
+	const out: AttentionItem[] = [];
+
+	if (latest && summary) {
+		const farms = summary.farms ?? [];
+		const short = farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET);
+		if (short.length) {
+			const worst = short.reduce((a, f) => (f.fractionSupplied < a.fractionSupplied ? f : a));
+			const target = fmtPct(SUPPLY_TARGET, 0);
+			const worstText = `${worst.name || 'An unnamed farm'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
+			out.push({
+				id: 'short-farms',
+				text:
+					short.length === 1
+						? `${worstText}, below the ${target} target.`
+						: `${worstText}, the least of the ${fmtNum(short.length)} farms below ${target} (of ${fmtNum(farms.length)}).`,
+				action: 'See the farm results',
+				href: runHref(latest.id)
+			});
+		}
+		const warnings = summary.warnings?.length ?? 0;
+		if (warnings)
+			out.push({
+				id: 'run-warnings',
+				text: `The latest run has ${plural(warnings, 'warning')}.`,
+				action: warnings === 1 ? 'Read it' : 'Read them',
+				href: runHref(latest.id)
+			});
+	}
+
+	if (series) {
+		const behind = latest ? newDataSinceRun(series, latest) : [];
+		if (behind.length)
+			out.push({
+				id: 'new-data',
+				text: `${plural(behind.length, 'rainfall series', 'rainfall series')} ${behind.length === 1 ? 'has' : 'have'} data the latest run hasn’t used.`,
+				action: 'Run the model again',
+				href: '?tab=runs'
+			});
+		const fresh = freshness(series, today);
+		if (fresh?.stale)
+			out.push({
+				id: 'stale-data',
+				text: `The newest input data ends ${fmtDay(fresh.latest)} (${describeAge(fresh.age)}), more than ${plural(STALE_DAYS, 'day')} ago.`,
+				action: 'Add data',
+				href: '?tab=series'
+			});
+	}
+
+	// Farms nothing is planted on draw no irrigation water. Only once something
+	// is planted: before that, the setup checklist's crops step says so.
+	const planted = new Set(model.cropAreas.filter((a) => a.areaM2 > 0).map((a) => a.nodeId));
+	if (planted.size) {
+		const bare = model.nodes.filter((n) => n.kind === 'farm' && !planted.has(n.id)).map((n) => n.name || 'Unnamed farm');
+		if (bare.length)
+			out.push({
+				id: 'unplanted',
+				text: `${nameList(bare)} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
+				action: 'Set crop areas',
+				href: '?tab=crops'
+			});
+	}
+	return out;
+}

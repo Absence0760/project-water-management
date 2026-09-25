@@ -122,8 +122,28 @@ The page has these sections, top to bottom:
    shortfall AB there, so compare runs of the same engine).
    Click a column heading to sort by that change. Farms that exist in only one
    run are listed underneath.
-6. **Hydrograph.** One catchment series (simulated outflow by default) from
-   both runs on the same chart.
+6. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, its own
+   chunk). Pick a **node** and one of its **series** (outflow, dam storage,
+   supplied, EWR charge, …), and run A and run B are drawn on one chart, with
+   **B − A** on a second chart underneath. It opens on the catchment's
+   simulated outflow; switching node keeps the same kind of series when the
+   new node has it, else its outflow. Nodes are matched the way the rest of
+   the page matches them (below): by id, then by name across a copy, listed
+   in network order with a renamed node shown as "Rooikloof (was Farm 1)".
+   Only series both runs stored with the same unit are offered. A node only
+   one run has can't be overlaid, and a note under the chart names it ("Only
+   in run B, so nothing to overlay: New farm."), as it does a node whose
+   series share nothing. Under the overlay a sentence reads the pair out over
+   the days both runs have a value: mean A, mean B, mean B − A, the days B is
+   higher and lower, and the day of the largest change (three significant
+   figures, so a small daily change doesn't round to 0). The charts behave
+   like every daily chart: Earlier / Later and Shift+drag pan through the
+   record, the last three years or the full period, and on a flow series the
+   log scale and the m³/s ↔ m³/day switch (the read-out follows the unit). A
+   day either run has no value for is a gap in B − A, never zero. Series come
+   from the existing `GET /projects/:id/runs/:runId` (which series a run
+   stored) and `…/series?key&nodeId` (the values, one pair at a time); no
+   compare-specific route.
 
 **Uncertainty** (engine ≥ 0.26.0, issue #4 phase 9, [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9);
 `uncertainty/PairedUncertaintyPanel.svelte`, its own chunk), after the
@@ -227,7 +247,7 @@ fitted values"*). A parameter edit itself still has its own line. Settings keys 
 | `compareRuns`, `diffInputs`, types | `packages/engine/src/compare.ts` (pure, unit-tested in `compare.test.ts`) |
 | `GET /compare/runs` | `backend/src/compare/routes.ts`, contract in [api.md § Compare runs](./api.md#compare-runs) |
 | Page | `frontend/src/routes/compare/+page.svelte` |
-| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note) |
+| Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note, `overlay.ts` the daily series overlay's node matching, B − A and read-out, exported for reuse by scenario comparison, issue #18) |
 | Uncertainty and paired bands | `packages/engine/src/uncertainty/paired.ts`; `frontend/src/lib/components/uncertainty/PairedUncertaintyPanel.svelte` |
 
 Access follows the usual rules. You need at least **viewer** on both projects.

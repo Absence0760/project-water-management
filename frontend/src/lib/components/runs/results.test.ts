@@ -1,7 +1,7 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunSeriesRef } from '$lib/api/types';
-import { m3DayToMm3a, seriesGroups, sortFarms, storagePct, toDisplayUnit } from './results';
+import { m3DayToMm3a, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
 	nodeId,
@@ -71,5 +71,14 @@ describe('units', () => {
 	it('expresses dam storage as % of capacity', () => {
 		expect(storagePct([500, null, 1000], 1000)).toEqual([50, null, 100]);
 		expect(storagePct([1], 0.15)).toBeNull();
+	});
+});
+
+describe('supplyBarFraction', () => {
+	it('is the fraction supplied, clamped to 0–1, and 0 when not a number', () => {
+		expect(supplyBarFraction(0.62)).toBe(0.62);
+		expect(supplyBarFraction(1.2)).toBe(1);
+		expect(supplyBarFraction(-0.1)).toBe(0);
+		expect(supplyBarFraction(Number.NaN)).toBe(0);
 	});
 });

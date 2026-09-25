@@ -1,6 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { flowShares, type NodeKind, type ProjectSettings } from '@water-management/engine';
+	import { onMount, untrack } from 'svelte';
+	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
+	import { api, type RunMeta } from '$lib/api';
+	import { detailCache } from '$lib/components/runs/cache';
+	import { fmtDate } from '$lib/format/number';
+	import { ranAgo, supplyByNode, type SchematicSupply } from './supplyColour';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
@@ -18,8 +22,17 @@
 	let {
 		editor,
 		settings,
-		readonly
-	}: { editor: ModelEditor; settings?: ProjectSettings; readonly: boolean } = $props();
+		readonly,
+		projectId = '',
+		runs = null
+	}: {
+		editor: ModelEditor;
+		settings?: ProjectSettings;
+		readonly: boolean;
+		projectId?: string;
+		/** The project's runs, newest first (null = not loaded). Enables "Colour farms by". */
+		runs?: RunMeta[] | null;
+	} = $props();
 
 	const nodes = $derived(editor.model.nodes);
 	const outletCount = $derived(nodes.filter((n) => n.downstreamNodeId === null).length);
@@ -30,6 +43,53 @@
 	const shares = $derived(flowShares(nodes, method, settings?.hiLoSplit ?? { hi: 0.81, lo: 0.19 }));
 	const shareOf = (i: number) => (nodes[i]?.kind === 'farm' ? (shares.share[i] ?? 0) : null);
 	const METHOD_LABEL = { area: 'by area', hiLo: 'high/low MAP split', manual: 'manual shares' } as const;
+
+	// --- colour farms by the latest run's supply (view option, component state) ---
+	let colourBy = $state<'none' | 'supply'>('none');
+	const latestRun = $derived(runs?.[0] ?? null);
+	let supplyRun = $state<{ id: string; summary: RunSummary } | null>(null);
+	let supplyLoading = $state(false);
+	let supplyError = $state(false);
+	let supplyFor = '';
+
+	async function loadSupply(id: string) {
+		supplyFor = id;
+		const hit = detailCache.get(id);
+		if (hit) {
+			supplyRun = { id, summary: hit.run.summary };
+			return;
+		}
+		supplyLoading = true;
+		supplyError = false;
+		try {
+			const d = await api.runs.get(projectId, id);
+			detailCache.set(id, d);
+			if (supplyFor === id) supplyRun = { id, summary: d.run.summary };
+		} catch {
+			if (supplyFor === id) supplyError = true;
+		} finally {
+			if (supplyFor === id) supplyLoading = false;
+		}
+	}
+
+	// Fetch when colouring is switched on or a newer run lands; only then, so
+	// a failed load doesn't retry itself (the status line offers a retry).
+	$effect(() => {
+		const id = colourBy === 'supply' ? latestRun?.id : undefined;
+		untrack(() => {
+			if (id && id !== supplyFor) void loadSupply(id);
+		});
+	});
+
+	const supply = $derived.by((): SchematicSupply | null => {
+		if (colourBy !== 'supply' || !latestRun || !farms.length || supplyRun?.id !== latestRun.id) return null;
+		return {
+			byNode: supplyByNode(nodes, supplyRun.summary),
+			runName: latestRun.label || fmtDate(latestRun.createdAt, true),
+			ago: ranAgo(latestRun.createdAt),
+			unsaved: editor.dirty
+		};
+	});
 
 	// Table (all nodes, every field) on wide screens; one node at a time with
 	// help text on phones. Either can be picked.
@@ -147,6 +207,25 @@
 			{/if}
 		</span>
 	</div>
+	{#if latestRun && farms.length}
+		<div class="colour-by">
+			<label for="sch-colour">Colour farms by</label>
+			<select id="sch-colour" bind:value={colourBy}>
+				<option value="none">Nothing</option>
+				<option value="supply">Supply, latest run</option>
+			</select>
+			{#if colourBy === 'supply'}
+				<span class="muted small" role="status">
+					{#if supplyLoading}
+						Loading the latest run’s results…
+					{:else if supplyError}
+						Couldn’t load the latest run’s results.
+						<button type="button" class="btn btn-sm" onclick={() => latestRun && loadSupply(latestRun.id)}>Retry</button>
+					{/if}
+				</span>
+			{/if}
+		</div>
+	{/if}
 	<NetworkSchematic
 		{nodes}
 		transfers={editor.model.transfers}
@@ -154,6 +233,7 @@
 		onselect={select}
 		editable={!readonly}
 		onreparent={reparent}
+		{supply}
 	/>
 </section>
 
@@ -385,6 +465,17 @@
 {/if}
 
 <style>
+	.colour-by {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.6rem;
+		margin: 0 0 0.6rem;
+		font-size: 0.85rem;
+	}
+	.colour-by label {
+		font-weight: 600;
+	}
 	.user-card {
 		border-top: 1px solid var(--border);
 		padding: 0.5rem 0;

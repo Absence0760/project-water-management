@@ -50,6 +50,16 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ notes: 'why' });
 	});
 
+	it('PATCHes only the pin to pin or unpin a run', async () => {
+		const run = { id: 'r/1', pinned: true };
+		const f = mockFetch(200, { run });
+		await expect(createApi('', f).runs.setPinned('p1', 'r/1', true)).resolves.toEqual(run);
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/projects/p1/runs/r%2F1');
+		expect(init.method).toBe('PATCH');
+		expect(JSON.parse(init.body as string)).toEqual({ pinned: true });
+	});
+
 	it('reads the evidence history and POSTs a nomination, answering with the whole history', async () => {
 		const nominations = [{ id: 'n1', runId: 'r1', reason: 'why' }];
 		const get = mockFetch(200, { nominations });

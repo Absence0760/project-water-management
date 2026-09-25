@@ -5,7 +5,8 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
-	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, type FarmSortKey } from './results';
+	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from './results';
+	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 
 	let {
@@ -36,6 +37,8 @@
 	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project has a rule table.
 	const reserve = $derived(headlineSite(summary));
 	const c = $derived(summary.catchment);
+	// The cards below in one or two plain sentences (runs/runSentence.ts).
+	const lede = $derived(runSentence(summary));
 
 	let sortKey = $state<FarmSortKey>('network');
 	let sortDir = $state<'asc' | 'desc'>('asc');
@@ -67,6 +70,8 @@
 		<ul>{#each summary.warnings as w, i (i)}<li>{w}</li>{/each}</ul>
 	</div>
 {/if}
+
+<p class="lede">{lede}</p>
 
 <h3>Catchment</h3>
 <dl class="stats">
@@ -173,7 +178,12 @@
 						<td class="num">{fmtNum(f.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(f.avgSuppliedM3Day)}</td>
 						<td class="num" class:neg={f.avgDeficitM3Day > 0.5}>{fmtNum(f.avgDeficitM3Day)}</td>
-						<td class="num" class:short>{fmtPct(f.fractionSupplied)}</td>
+						<td class="num" class:short>
+							<span class="supply">
+								<span class="bar" aria-hidden="true"><span class="fill" style:width="{supplyBarFraction(f.fractionSupplied) * 100}%"></span></span>
+								{fmtPct(f.fractionSupplied)}
+							</span>
+						</td>
 						<td class="num">{fmtNum(f.avgEwrShortfallM3Day)}</td>
 						<td class="num">{fmtNum(f.daysEwrNotMet)}</td>
 					</tr>
@@ -207,6 +217,13 @@
 {/if}
 
 <style>
+	.lede {
+		margin: 0 0 0.9rem;
+		max-width: 72ch;
+		color: var(--text-2);
+		font-size: 1rem;
+		line-height: 1.55;
+	}
 	h3 {
 		margin-top: 1.1rem;
 	}
@@ -287,6 +304,43 @@
 	td.neg {
 		color: var(--warning);
 		font-weight: 600;
+	}
+	/* Supplied % of demand: a small bar beside the number (the number is the content; the bar is aria-hidden). */
+	.supply {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.4rem;
+	}
+	.bar {
+		flex: none;
+		width: 3.5rem;
+		height: 0.45rem;
+		border-radius: 999px;
+		background: var(--surface-2);
+		box-shadow: inset 0 0 0 1px var(--border);
+		overflow: hidden;
+	}
+	.fill {
+		display: block;
+		height: 100%;
+		background: var(--success);
+	}
+	td.short .fill {
+		background: var(--warning);
+	}
+	@media (max-width: 640px) {
+		.bar {
+			width: 2.25rem;
+		}
+	}
+	@media (forced-colors: active) {
+		.bar {
+			border: 1px solid CanvasText;
+		}
+		.fill {
+			background: CanvasText;
+		}
 	}
 	.badge {
 		margin-left: 0.35rem;

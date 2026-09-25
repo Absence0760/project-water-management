@@ -382,7 +382,7 @@ export const HELP: HelpEntry[] = [
 		category: 'farm',
 		aliases: ['composite dam', 'storage capacity', 'full supply'],
 		fields: ['node.damCapacityM3'],
-		related: ['dam-initial', 'dam-min', 'spill', 'dam-storage'],
+		related: ['dam-initial', 'dam-min', 'spill', 'dam-storage', 'dam-evaporation', 'dam-seepage'],
 		source: 'b023 Farm spec'
 	},
 	{

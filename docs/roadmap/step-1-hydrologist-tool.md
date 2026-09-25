@@ -634,6 +634,15 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.11 Pinned runs
 
+- **Status:** built (issue #7, `015_run_pinned.sql`), differently from the
+  plan below: a `model_run.pinned` boolean with a column grant beside `notes`
+  (not `pinned_at`/`pinned_by`: 007 revoked the table-level UPDATE, so a
+  grant was needed); a ceiling of **10** per project, in a trigger as well as
+  the API; the PATCH takes `{ notes?, pinned? }` (no label: runs stay
+  immutable); `RunMeta.pinned`; the badge reads "Pinned"; the ceiling's `409`
+  shows in the Runs tab's error. The compare picker marks pinned runs but
+  doesn't yet default A to the newest pinned run. See
+  [data-model.md](../data-model.md) § Pinned runs.
 - **Goal:** a baseline survives the 20-run cap (`RUNS_KEPT_PER_PROJECT`).
 - **Changes:**
   - **migration (next free NNN):**
@@ -1375,10 +1384,12 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   across two runs, and close the other comparison gaps in followups.md.
 - **Changes:**
   - **frontend:**
-    - `compare/CompareChart.svelte` gains a node picker fed by
-      `compareRuns`' farm matching (id, then name);
-    - it fetches `GET /projects/:id/runs/:runId/series?key&nodeId` per side
-      and lists only keys present on both.
+    - **Built (issue #8):** `compare/CompareOverlay.svelte` replaced
+      `CompareChart.svelte`: a node picker matched by id, then name
+      (`compare/overlay.ts`, on the engine's `matchByIdThenName`), A vs B
+      and B − A, fetched per side from
+      `GET /projects/:id/runs/:runId/series?key&nodeId`, listing only keys
+      present on both ([run-comparison.md](../run-comparison.md)).
   - **Copies remember sources:**
     - migration: `node.copied_from_node_id uuid NULL`. This is a lineage
       tag with **no FK**, deliberately: the source may be in another

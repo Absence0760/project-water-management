@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -43,8 +43,13 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await page.getByRole('textbox', { name: 'Crop name' }).fill('Vines');
 	await page.getByLabel('Vines crop factor, Jan').fill('0.8');
 	await page.getByLabel('Vines crop factor, Feb').fill('0.75');
+	const unplanted = page.getByText(/(has|have) no planted area, so (its|their) irrigation demand counts as zero\.$/);
+	await expect(unplanted).toHaveText('Hilltop farm and Valley farm have no planted area, so their irrigation demand counts as zero.');
 	await page.getByLabel('Vines on Hilltop farm, ha').fill('25');
+	// The note follows the unsaved edit.
+	await expect(unplanted).toHaveText('Valley farm has no planted area, so its irrigation demand counts as zero.');
 	await page.getByLabel('Vines on Valley farm, ha').fill('8');
+	await expect(unplanted).toBeHidden();
 	const totals = page.getByRole('row', { name: /^Total/ });
 	await expect(totals).toContainText('33.00 ha');
 
@@ -289,4 +294,37 @@ test.describe('network layout', () => {
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 		});
 	});
+});
+
+test('the schematic can colour farms by the latest run’s supply, and says which run', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Supply colours');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=network`);
+
+	const colourBy = page.getByLabel('Colour farms by');
+	await expect(colourBy.locator('option:checked')).toHaveText('Nothing');
+	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
+	await expect(upper).not.toHaveAttribute('data-supply');
+
+	await colourBy.selectOption({ label: 'Supply, latest run' });
+	await expect(page.getByText(/^Farms coloured by share of irrigation demand supplied in run “Baseline”, ran today\./)).toBeVisible();
+	await expect(upper).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
+	// Not colour-only: the share (or "no demand") is on the node's label and in the drainage tree.
+	await expect(upper).toContainText(/(\d+% supplied|no demand)/);
+	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText(/(\d+% supplied|no demand)/);
+	// Gauges are never coloured.
+	await expect(page.locator('svg.schematic g.node').filter({ hasText: 'Outflow gauge' })).not.toHaveAttribute('data-supply');
+
+	// A farm added since the run shows as "not in this run", and the colours are said to be the run's, not the edit's.
+	await page.getByRole('button', { name: '+ Add node' }).click();
+	const added = page.locator('svg.schematic g.node[data-supply="absent"]');
+	await expect(added).toHaveCount(1);
+	await expect(added).toContainText('not in this run');
+	await expect(page.getByText('The colours show that run, not your unsaved changes.')).toBeVisible();
+
+	// Back to Nothing: today's plain drawing.
+	await colourBy.selectOption({ label: 'Nothing' });
+	await expect(page.locator('svg.schematic g.node[data-supply]')).toHaveCount(0);
+	await expect(page.getByText(/^Farms coloured by/)).toHaveCount(0);
 });

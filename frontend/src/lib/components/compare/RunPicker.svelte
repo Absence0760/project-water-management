@@ -58,7 +58,7 @@
 			{:else}
 				{#if !runSelected}<option value="" disabled>Choose a run…</option>{/if}
 				{#each runs ?? [] as r (r.id)}
-					<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true))}</option>
+					<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true))}{r.pinned ? ' · pinned' : ''}</option>
 				{/each}
 			{/if}
 		</select>
