@@ -1,14 +1,14 @@
 // The portable "project document": everything needed to recreate a project
 // (settings, model, input series). `GET /projects/:id/export.json` writes it and
-// `pnpm import:project` (scripts/import-project.ts) reads it, so a project
-// round-trips export → import. The Python workbook importer
+// `POST /projects/import` / `pnpm import:project` read it (projects/import.ts),
+// so a project round-trips export → import. The Python workbook importer
 // (scripts/wbt-import) emits the same shape.
 import { ENGINE_VERSION, SERIES_KINDS, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
-import { MAX_SERIES_VALUES } from '../series/routes.js';
+import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
@@ -26,10 +26,12 @@ export const ProjectFile = z.object({
 				// Same kinds as PUT /projects/:id/series, so a typo in a workbook
 				// import fails loudly instead of storing a series no run reads.
 				kind: z.enum(SERIES_KINDS),
-				name: z.string().default(''),
-				unit: z.string(),
-				startDate: z.string(),
-				values: z.array(z.number().nullable()).max(MAX_SERIES_VALUES)
+				// The same bounds as PUT /projects/:id/series, so an import can't
+				// store a series the series routes would refuse.
+				name: z.string().trim().max(100).default(''),
+				unit: z.string().trim().min(1).max(20),
+				startDate: SeriesStartDate,
+				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES)
 			})
 		)
 		.default([])

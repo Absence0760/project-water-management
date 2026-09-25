@@ -8,7 +8,7 @@ import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
-import { ApiError, handleError } from './http/errors.js';
+import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { modelRoutes } from './model/routes.js';
 import { projectRoutes } from './projects/routes.js';
@@ -65,7 +65,10 @@ export function createApp() {
 	// form posts (the only cross-site writes a browser can make without CORS).
 	app.use('*', csrf({ origin: allowedOrigins }));
 	// Largest legitimate body is a time-series upload (60k values ≈ 1 MB JSON).
-	app.use('*', bodyLimit({ maxSize: 4 * 1024 * 1024, onError: () => { throw new ApiError(413, 'request too large'); } }));
+	// POST /projects/import carries a whole project and sets its own cap (the
+	// export cap, IMPORT_MAX_BYTES) on the route; only that exact path skips this one.
+	const generalBodyLimit = bodyLimit({ maxSize: 4 * 1024 * 1024, onError: (c) => c.json({ error: 'request too large' }, 413) });
+	app.use('*', (c, next) => (c.req.method === 'POST' && c.req.path === '/projects/import' ? next() : generalBodyLimit(c, next)));
 
 	app.get('/health', (c) => c.json({ ok: true }));
 

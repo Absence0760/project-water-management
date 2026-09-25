@@ -6,6 +6,7 @@
 	import { api, hasTeamRole, type ProjectSummary, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import ImportProjectDialog from '$lib/components/import/ImportProjectDialog.svelte';
 	import GetStarted from '$lib/components/projects/GetStarted.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import {
@@ -30,6 +31,8 @@
 	let newDescription = $state('');
 	let newTeamId = $state('');
 	let creating = $state(false);
+
+	let importOpen = $state(false);
 
 	let copyOpen = $state(false);
 	let copySource = $state<ProjectSummary | null>(null);
@@ -163,7 +166,10 @@
 			<h1>Projects</h1>
 			<p class="muted sub">Each project models one catchment: its river network, farms, dams and data.</p>
 		</div>
-		<button type="button" class="btn btn-primary" onclick={openCreate}>New project</button>
+		<div class="head-actions">
+			<button type="button" class="btn" onclick={() => (importOpen = true)}>Import project file (.json)</button>
+			<button type="button" class="btn btn-primary" onclick={openCreate}>New project</button>
+		</div>
 	</div>
 
 	{#if actionError && !createOpen && !copyOpen}
@@ -310,6 +316,13 @@
 	{/snippet}
 </Dialog>
 
+<ImportProjectDialog
+	bind:open={importOpen}
+	teams={addableTeams}
+	defaultTeamId={canAddTo(selectedTeam?.id) ? selectedTeam!.id : ''}
+	onimported={() => load()}
+/>
+
 <Dialog bind:open={copyOpen} title="Copy project">
 	<form id="copy-form" onsubmit={copy}>
 		{#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
@@ -341,6 +354,12 @@
 		justify-content: space-between;
 		gap: 1rem;
 		margin-bottom: 1.25rem;
+	}
+	.head-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		justify-content: flex-end;
 	}
 	.page-head h1 {
 		margin: 0 0 0.2rem;
@@ -471,6 +490,9 @@
 		.page-head {
 			flex-direction: column;
 			align-items: stretch;
+		}
+		.head-actions {
+			flex-direction: column-reverse;
 		}
 		.page-head .btn {
 			justify-content: center;

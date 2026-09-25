@@ -324,6 +324,12 @@ describe('time series', () => {
 		expect((await put([1, 2, 3])).body.length).toBe(3);
 		expect((await u.call('GET', `/projects/${projectId}/series`)).body.series).toHaveLength(1);
 		expect((await put(['x'])).status).toBe(400);
+		// Not on the calendar: a 400, not the 500 Postgres would give it (the merge route too).
+		for (const [method, path] of [['PUT', `/projects/${projectId}/series`], ['POST', `/projects/${projectId}/series/merge`]] as const) {
+			const bad = await u.call(method, path, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-02-30', values: [1] });
+			expect(bad.status, method).toBe(400);
+			expect(bad.body.details[0]).toMatchObject({ path: ['startDate'], message: 'not a calendar date' });
+		}
 		expect(
 			(await u.call('PUT', `/projects/${projectId}/series`, { kind: 'bogus', unit: 'x', startDate: '2020-01-01', values: [1] })).status
 		).toBe(400);

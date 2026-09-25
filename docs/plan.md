@@ -110,7 +110,11 @@ departure, and it lists each affected column with its finding ID.
   is `data/<name>/project.json` (the `ProjectModel` + settings + series shape).
 - ✅ `pnpm import:project <project.json> --email …` creates a project from
   `project.json`, and `pnpm seed:demo` extracts and imports the local
-  workbooks for a demo user. Still to come: an import action in the UI.
+  workbooks for a demo user.
+- ✅ **Import project file (.json)** on the project list (WP-1.8,
+  `POST /projects/import`) takes the same `project.json`, or a project's own
+  download, into any account, including production. Still to come: reading
+  the `.xlsm` itself in the browser (WP-1.31).
 - ⬜ The importer reports whatever it could not map: hand-written transfer
   formulas that don't fit the rule shape, or a Specific method with no values.
 

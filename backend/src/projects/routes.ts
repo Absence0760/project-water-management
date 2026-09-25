@@ -10,6 +10,8 @@ import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 import { readJson } from '../http/body.js';
+import { bodyLimit } from 'hono/body-limit';
+import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 
 type ProjectRow = {
 	id: string;
@@ -62,6 +64,12 @@ const PatchBody = z.object({
 	settings: SettingsPatch.optional()
 });
 const RoleEnum = z.enum(['viewer', 'editor', 'owner']);
+const ImportQuery = z.object({
+	teamId: z.string().uuid().optional(),
+	/** `run=1`: run the model once after the import commits. */
+	run: z.enum(['1', 'true', '0', 'false']).optional()
+});
+const IMPORT_MB = (IMPORT_MAX_BYTES / 1024 / 1024).toFixed(0);
 
 async function getProject(db: import('../db/tx.js').Db, id: string) {
 	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
@@ -90,6 +98,34 @@ export const projectRoutes = new Hono<AuthEnv>()
 			return c.json({ project: full(await getProject(db, id)) }, 201);
 		});
 	})
+	// A project document (what GET /:id/export.json writes, or the workbook
+	// importer's project.json) as a new project: one transaction, fresh ids.
+	// Its own body cap, the export cap, so anything the app exports imports
+	// back (app.ts leaves this path out of the general 4 MB cap).
+	.post(
+		'/import',
+		bodyLimit({
+			maxSize: IMPORT_MAX_BYTES,
+			onError: (c) =>
+				c.json(
+					{
+						error: `project file larger than ${IMPORT_MB} MB — remove series the model doesn't need from the file, import it, then upload those series as CSV`
+					},
+					413
+				)
+		}),
+		async (c) => {
+			const query = ImportQuery.parse(c.req.query());
+			const data = parseProjectFile(await readJson(c));
+			const userId = c.get('userId');
+			const project = await withUser(userId, async (db) =>
+				full(await getProject(db, await insertProjectFile(db, data, { teamId: query.teamId ?? null })))
+			);
+			// After the commit: a run that fails leaves the import standing (runError).
+			const run = query.run === '1' || query.run === 'true' ? await runImported(userId, project.id) : {};
+			return c.json({ project, ...run }, 201);
+		}
+	)
 	.get('/:id', async (c) =>
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
@@ -149,7 +185,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				if (hasTeamRole(rows[0]?.role, 'member')) teamId = src.team_id;
 			}
 			// Fresh node ids for the copy; settings that name a node (the EWR rule tables' sites) follow them.
-			const { model: copied, ids } = remapIds(await loadModel(db, srcId));
+			const { model: copied, ids } = freshIds(await loadModel(db, srcId));
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id)
 				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
@@ -266,24 +302,4 @@ async function assertNotLastOwner(db: import('../db/tx.js').Db, projectId: strin
  */
 async function requireTeamContributor(db: import('../db/tx.js').Db, teamId: string) {
 	await requireTeamRole(db, teamId, 'member', 'team not found');
-}
-
-/** Fresh ids for a copied model, keeping every internal reference intact; `ids` maps old → new. */
-function remapIds(model: import('@water-management/engine').ProjectModel) {
-	const map = new Map<string, string>();
-	const id = (old: string) => {
-		let n = map.get(old);
-		if (!n) map.set(old, (n = crypto.randomUUID()));
-		return n;
-	};
-	return {
-		model: {
-			nodes: model.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
-			crops: model.crops.map((c) => ({ ...c, id: id(c.id) })),
-			cropAreas: model.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
-			transfers: model.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId) })),
-			landCover: (model.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) }))
-		},
-		ids: map as ReadonlyMap<string, string>
-	};
 }

@@ -133,7 +133,7 @@ sliding back into the page chunk.
    empty).
 2. App-wide middleware: CORS (only `ALLOWED_ORIGINS`, with credentials),
    Hono's CSRF check (cross-origin form posts get `403`) and a 4 MB body
-   limit (`413`).
+   limit (`413`; `POST /projects/import` has its own 5 MB cap instead).
 3. On every route except the public ones (`/health`, and the sign-in and
    emailed-link `/auth/*` routes), `requireUser` verifies the `wm_session`
    JWT (HS256, jose), checks it was issued after the user's
