@@ -6,6 +6,9 @@ describe('zip', () => {
 	it('computes the standard CRC-32', () => {
 		expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
 		expect(crc32(new Uint8Array())).toBe(0);
+		// Continued over chunks, it is the CRC of the whole.
+		const bytes = new TextEncoder().encode('123456789');
+		expect(crc32(bytes.subarray(4), crc32(bytes.subarray(0, 4)))).toBe(0xcbf43926);
 	});
 
 	it('deflates for real: a repetitive part shrinks a lot', async () => {

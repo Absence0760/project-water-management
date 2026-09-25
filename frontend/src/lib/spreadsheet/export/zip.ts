@@ -26,9 +26,12 @@ const CRC_TABLE = (() => {
 	return t;
 })();
 
-/** CRC-32 (ISO 3309, the zip checksum). */
-export function crc32(data: Uint8Array): number {
-	let c = 0xffffffff;
+/**
+ * CRC-32 (ISO 3309, the zip checksum). Pass the CRC of the bytes before
+ * `data` as `crc` to continue it over data that arrives in chunks.
+ */
+export function crc32(data: Uint8Array, crc = 0): number {
+	let c = (crc ^ 0xffffffff) >>> 0;
 	for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]!) & 0xff]! ^ (c >>> 8);
 	return (c ^ 0xffffffff) >>> 0;
 }
