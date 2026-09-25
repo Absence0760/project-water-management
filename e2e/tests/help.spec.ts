@@ -66,6 +66,54 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await expect(page.getByRole('article', { name: 'Farm element' })).toBeInViewport();
 });
 
+test('a help tip works from the keyboard alone and is announced to screen readers', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Help tip keys');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network`);
+
+	const tip = page.getByRole('button', { name: 'About capacity', exact: true }).first();
+	const controls = (await tip.getAttribute('aria-controls'))!;
+	const live = page.locator(`[id="${controls}"]`);
+	await expect(live).toHaveAttribute('role', 'status');
+	await expect(live).toHaveAttribute('aria-live', 'polite');
+	await expect(live).toBeEmpty();
+	await expect(tip).toHaveAttribute('aria-expanded', 'false');
+	await expect(tip).not.toHaveAttribute('aria-describedby');
+
+	// Enter opens: the text lands in the live region and describes the button.
+	await tip.focus();
+	await page.keyboard.press('Enter');
+	await expect(tip).toHaveAttribute('aria-expanded', 'true');
+	await expect(tip).toHaveAttribute('aria-describedby', controls);
+	await expect(live.locator('.term')).toHaveText('Dam capacity');
+	await expect(live.locator('.short')).not.toBeEmpty();
+	await expect(live.locator('.units')).toHaveText('Units: m³');
+
+	// Space toggles it shut and open again, focus staying on the button.
+	await page.keyboard.press('Space');
+	await expect(tip).toHaveAttribute('aria-expanded', 'false');
+	await expect(live).toBeEmpty();
+	await page.keyboard.press('Space');
+	await expect(tip).toHaveAttribute('aria-expanded', 'true');
+
+	// Tab reaches the glossary link inside the bubble; Escape from there closes and returns focus.
+	await page.keyboard.press('Tab');
+	await expect(live.getByRole('link', { name: 'More in the glossary' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(live).toBeEmpty();
+	await expect(tip).toBeFocused();
+	await expect(tip).toHaveAttribute('aria-expanded', 'false');
+
+	// Tabbing out of an open tip closes it.
+	await page.keyboard.press('Enter');
+	await expect(tip).toHaveAttribute('aria-expanded', 'true');
+	await page.keyboard.press('Tab');
+	await page.keyboard.press('Tab');
+	await expect(tip).toHaveAttribute('aria-expanded', 'false');
+	await expect(live).toBeEmpty();
+});
+
 test('neighbouring help tips show their own close-up, with their feature ringed', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Help tip pictures');

@@ -75,17 +75,38 @@
 //             and ~3 KB on Settings (without the split the Runs chunk hit the
 //             41 KB ceiling). No new dependency. Headroom ~5 KB on the total;
 //             the largest chunk is 38 KB (the Runs tab), ~3 KB under.
-// 2026-09-25  total 429 → 441 KB; largest chunk stays 41 KB. Merging the
-//             three features built in parallel today measures 435 KB: the
-//             Reserve compliance work above (measured alone on an older main),
-//             plus the nominated evidence run (Runs tab Evidence panel, badges,
-//             compare notes) and multi-day rain accumulations (engine 0.20.0
-//             detector + spreading in the page and the calibration worker,
-//             the Settings section, Data-tab shading, help). No new dependency.
-//             The largest chunk is now 40 KB (the Runs tab), ~1 KB under, so
-//             the next Runs-tab feature must lazy-load. Headroom ~6 KB on the
-//             total. Bringing it down is issue #9 (the engine shipped twice,
-//             help text on demand), which should ratchet this back.
+// 2026-09-25  total 411 → 419 KB (issue #9). main @ 657e39e measured 407 KB;
+//             by merge time main @ 354bea0 measured 419 KB, already over 411:
+//             the multi-day rain accumulations (B4: engine, Settings, Data tab)
+//             and the day's help text had landed without a ceiling change. The
+//             work below takes 6 KB off (419 → 413 KB), and the ceiling is
+//             413 + the usual ~6 KB. Measured on 657e39e (407 → 401 KB):
+//             Vite's build.target is now es2022 (frontend/vite.config.ts); the
+//             default target down-levelled Svelte 5's class fields into
+//             defineProperty/WeakMap helpers. Every page's cold load ~3 KB lighter (a catchment 88 → 85 KB,
+//             sign-in 56 → 53). HelpTip now fetches the help text (a 26 KB
+//             chunk) off the critical path instead of importing it, which
+//             doesn't move the total (the chunk is still shipped and counted)
+//             but takes it out of every page and tab with a tooltip: the
+//             Network tab 51 → 25 KB on top of the page, Crops 40 → 14,
+//             Transfers 36 → 11, Data and Settings −26 each, compare 144 →
+//             116 KB cold. Measured and rejected: sharing the engine between
+//             the page and the calibration worker (the worker importing the
+//             page's calibrate chunk by URL). With Rollup's own grouping the
+//             worker drags in app chunks (Svelte runtime, help text) and the
+//             fit fails ("window is not defined"); with the engine forced into
+//             chunks of its own (the only safe way) the total drops 13 KB but a
+//             catchment's cold load grows 88 → 111 KB and compare's 144 → 159,
+//             since a shared chunk carries what every importer needs.
+//             experimentalMinChunkSize: 1–4 KB off the total for 1–2 KB more
+//             on cold loads, not worth it.
+// 2026-09-25  total 419 → 435 KB; largest chunk stays 41 KB. Merging #9
+//             with the features built in parallel the same day (the Reserve
+//             compliance entry above, measured alone on an older main; the
+//             nominated evidence run: Runs-tab Evidence panel, badges, compare
+//             notes) measures 429 KB with #9's savings in. No new dependency.
+//             The largest chunk is 40 KB (the Runs tab), ~1 KB under, so the
+//             next Runs-tab feature must lazy-load. Headroom ~6 KB.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -97,7 +118,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 441,
+	totalCodeKb: 435,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });
