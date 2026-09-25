@@ -89,9 +89,28 @@ that needs them.
   tab link warms its chunk on hover or focus, so switching tabs rarely shows
   the loading state.
 
+Help tooltips (`components/help/HelpTip.svelte`) don't import the help text
+either. It is a 26 KB (gzip) chunk that the first HelpTip starts fetching when
+its module loads, off the page's critical path, and every HelpTip shares it.
+Until it arrives a tip renders nothing, as it does for an unknown key. Without
+this, every tab with a tooltip carried the whole glossary: the Network tab adds
+25 KB on top of the page instead of 51 KB.
+
+The build targets ES2022 (`frontend/vite.config.ts`). Vite's default target
+down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 KB
+across the bundle). The app already needs newer browsers than ES2022 does
+(HelpTip's popover needs Chrome 114, Safari 17, Firefox 125).
+
+The calibration worker (`lib/calibration/autocal.worker.ts`) bundles its own copy
+of the engine, about 25 KB. It was measured sharing the page's engine chunks
+instead (issue #9): that only works if engine code sits in chunks of its own,
+and then a catchment’s cold open grows by about 23 KB, because a shared
+chunk carries the code of all its importers. A one-off download when a fit
+starts costs less than that on every open.
+
 The trade-off: split chunks compress a little worse than one big chunk, so the
 total shipped JS+CSS grows by a few percent, in exchange for a cold open of a
-catchment downloading about 90 KB (gzip) instead of about 300 KB. The bundle
+catchment downloading about 85 KB (gzip) instead of about 300 KB. The bundle
 guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
 holds the largest single chunk down, which is what catches a tab's code
 sliding back into the page chunk.
