@@ -14,13 +14,12 @@ export function resultSections(summary: Pick<RunSummary, 'farms' | 'runoff' | 'w
 		{ id: 'res-checks', label: 'Self-checks' },
 		{ id: 'res-curtailment', label: 'Curtailment' },
 		{ id: 'res-hydrograph', label: 'Hydrograph' },
-		{ id: 'res-calibration', label: 'Calibration' },
+		// The calibration statistics, the fit record and the uncertainty bands (issue #4 phase 9): one panel, one entry.
+		{ id: 'res-calibration', label: 'Calibration & uncertainty' },
 		// Runoff model balance: conceptual models (GR4J) only.
 		...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 		// WR2012 check: only when the project has a reference.
 		...(summary.wr2012 ? [{ id: 'res-wr2012', label: 'WR2012 check' }] : []),
-		// Uncertainty bands (issue #4 phase 9): every run, whether or not one is stored yet.
-		{ id: 'res-uncertainty', label: 'Uncertainty' },
 		// The run's written explanation, under the WR2012 check, and whether it is
 		// the project's nominated evidence run (one panel, so the rail's menu
 		// still fits a laptop screen beside a full runs list): every run.

@@ -89,7 +89,8 @@ export function abandonedText(list: readonly Ensemble[]): string | null {
 	const own = list.filter((e) => !e.baselineId);
 	const n = own.filter((e) => e.status === 'started').length;
 	if (!n) return null;
-	return `${n} of the ${own.length} ensemble${own.length === 1 ? '' : 's'} started for this run ${n === 1 ? 'was' : 'were'} never stored (cancelled or abandoned). Every start is kept, with its seed and rule.`;
+	const which = own.length === 1 ? 'The one ensemble' : `${n} of the ${own.length} ensembles`;
+	return `${which} started for this run ${n === 1 ? 'was' : 'were'} never stored (cancelled or abandoned). Every start is kept, with its seed and rule.`;
 }
 
 // ---------------------------------------------------------------------------

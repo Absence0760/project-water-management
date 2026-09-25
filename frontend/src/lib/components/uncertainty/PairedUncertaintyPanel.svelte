@@ -77,7 +77,8 @@
 			const [base, input] = await Promise.all([api.uncertainty.get(projectA, runA, bandA.id), api.uncertainty.runInput(projectB, runB)]);
 			const r = base.result as Extract<EnsembleDetail['result'], { coverage: unknown }>;
 			progress = { done: 0, total: bandA.accepted ?? 0 };
-			handle = startEnsemble({ kind: 'paired', input, baseline: { options: bandA.options, header: r.header, members: r.members } }, (p) => (progress = p));
+			// bandA is reactive state: post the worker a plain copy (a proxy can't be cloned).
+			handle = startEnsemble({ kind: 'paired', input, baseline: { options: $state.snapshot(bandA.options), header: r.header, members: r.members } }, (p) => (progress = p));
 			const result = await handle.result;
 			await api.uncertainty.complete(projectB, runB, ensemble.id, { members: result.members });
 		} catch (err) {

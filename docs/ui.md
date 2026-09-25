@@ -714,11 +714,12 @@ value such as 250000.
   years and whole run: simulated, scaled WR2012, ratio), the 12-month table
   (simulated, WR2012 scaled, ratio) with dry-season months marked "dry", the
   dry-season ratio and the monthly pattern correlation,
-  then **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
+  and (placed in the calibration panel, under the fit record) the **Uncertainty bands** on every run (engine ≥ 0.26.0, issue #4 phase 9,
   [model.md §2.10d](./model.md#210d-uncertainty-bands-engine--0260-issue-4-phase-9);
   `uncertainty/UncertaintyPanel.svelte`, its own chunk loaded when a run is
-  shown, `#res-uncertainty`, menu entry **Uncertainty**, helpers in
-  `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
+  shown, `#res-uncertainty`, inside the calibration panel below the fit
+  record, whose menu entry is **Calibration & uncertainty** so the rail still
+  fits a laptop screen; helpers in `uncertainty/bands.ts`). It shows the run's newest stored ensemble: the
   **decision rule** in a box above every band (thresholds, split date,
   percentiles, the 30-set gate, coverage test, sample), a line with the
   options (sets, seed, bounds, pan shift, rain sources, records, model, who

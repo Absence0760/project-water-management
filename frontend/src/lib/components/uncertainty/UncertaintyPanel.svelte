@@ -136,7 +136,8 @@
 			const [detail, input] = await Promise.all([api.uncertainty.get(projectId, runId, shown.id), api.uncertainty.runInput(projectId, runId)]);
 			const stored = detail.result as Extract<EnsembleDetail['result'], { coverage: unknown }>;
 			progress = { done: 0, total: shown.members + 1, accepted: 0 };
-			handle = startEnsemble({ kind: 'ensemble', input, options: shown.options }, (p) => (progress = p));
+			// The list is reactive state: post the worker a plain copy (a proxy can't be cloned).
+			handle = startEnsemble({ kind: 'ensemble', input, options: $state.snapshot(shown.options) }, (p) => (progress = p));
 			const r = await handle.result;
 			const lines = [...valueDiffs('members', r.members, stored.members), ...valueDiffs('coverage', r.coverage, stored.coverage)];
 			reproduced = { id: shown.id, ok: lines.length === 0, lines };
@@ -195,7 +196,7 @@
 		</dl>
 		{#each summary.coverage as c (c.record)}
 			<p class={c.warning ? 'alert alert-warning' : 'small'} role={c.warning ? 'alert' : undefined} data-testid="coverage">
-				{coverageText(c, shown.options.minMembers)}{#if c.warning} Below {pct(shown.options.coverageWarning)}: the band is too narrow to trust.{/if}
+				{coverageText(c, shown.options.minMembers)}{#if c.warning}{' '}Below {pct(shown.options.coverageWarning)}: the band is too narrow to trust.{/if}
 			</p>
 		{/each}
 		{#each summary.notes.filter((n) => !/held-out/.test(n)) as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
@@ -396,8 +397,9 @@
 						</select>
 					</div>
 					<div class="field">
-						<label for="{uid}-l"><input type="checkbox" bind:checked={lowFlowOn} disabled={busy} /> Low-flow bias within ± %</label>
+						<label for="{uid}-l">Largest low-flow bias kept (± %)</label>
 						<input id="{uid}-l" type="number" min="0" max="10000" step="5" bind:value={maxLowFlow} disabled={busy || !lowFlowOn} />
+						<label class="check"><input type="checkbox" bind:checked={lowFlowOn} disabled={busy} /> Check the low-flow bias</label>
 					</div>
 					<div class="field">
 						<label for="{uid}-p">Pan coefficient ± (GR4J)</label>
@@ -481,5 +483,13 @@
 	}
 	h4 {
 		margin: 1rem 0 0.5rem;
+	}
+	.check {
+		display: flex;
+		gap: 0.35rem;
+		align-items: center;
+		font-weight: 400;
+		font-size: 0.85rem;
+		margin-top: 0.25rem;
 	}
 </style>

@@ -310,7 +310,7 @@
 						/>
 					</section>
 
-					<section class="panel" aria-label="Uncertainty">
+					<div class="panel">
 						<Lazy load={loadPairedUncertainty}>
 							{#snippet children(PairedUncertaintyPanel)}
 								<PairedUncertaintyPanel
@@ -324,7 +324,7 @@
 								/>
 							{/snippet}
 						</Lazy>
-					</section>
+					</div>
 
 					{#if data.comparison.ewrAssurance?.length}
 						<section class="panel" aria-labelledby="reserve-h">

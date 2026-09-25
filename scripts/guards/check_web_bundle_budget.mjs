@@ -126,7 +126,7 @@
 // 2026-09-25  total 449 → 484 KB; largest page chunk stays 41 KB; new
 //             largestWorkerKb 55 KB. Uncertainty bands (issue #4 phase 9,
 //             engine 0.26.0, model.md §2.10d). Measured on the base
-//             48c2fe7 → this change: 443 → 478 KB. The calibration worker
+//             48c2fe7 → this change: 443 → 479 KB. The calibration worker
 //             30.6 → 49.6 KB: the ensemble runs in the same worker (one engine
 //             copy, not two) and every member is a full runModel, so the
 //             worker now carries the run's whole output side (curtailment,
@@ -139,7 +139,7 @@
 //             panel, the engine's summary / diff code they share, help text.
 //             The worker now dwarfs every page chunk, so it moves to its own
 //             ceiling (above) rather than lifting the page ceiling for it.
-//             No new dependency. Headroom ~6 KB total, ~5 KB on the worker.
+//             No new dependency. Headroom ~5 KB total, ~5 KB on the worker.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.

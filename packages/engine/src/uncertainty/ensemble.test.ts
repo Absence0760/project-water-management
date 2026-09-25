@@ -418,6 +418,19 @@ describe('runEnsemble on a synthetic catchment', () => {
 	});
 });
 
+describe('a run shorter than a year', () => {
+	it('has no flow-duration curve for the months it has no day in, and nothing that does not survive JSON', () => {
+		const input = synthetic({ years: 0.33 });
+		const { options } = resolveEnsembleOptions(input, { members: 30, thresholds: { minSkill: -10, maxLowFlowBiasPct: null } });
+		const r = runEnsemble(input, options);
+		expect(JSON.parse(JSON.stringify(r))).toEqual(r);
+		const m = r.members[0]!.metrics!;
+		expect(m.fdcM3Day.map((x) => x.length)).toEqual([10, 10, 10, 10, 0, 0, 0, 0, 0, 0, 0, 0]);
+		expect(r.header.monthDays.slice(0, 5)).toEqual([31, 30, 31, 29, 0]); // 0.33 × 365.25 = 121 days from 1 Oct: to 29 Jan
+		expect(summariseEnsemble(r).bands.fdc.map((f) => f.month)).toEqual([10, 11, 12, 1]);
+	});
+});
+
 describe('paired bands on the difference between a run and its baseline', () => {
 	const base = synthetic({ years: 5 });
 	const withDam = synthetic({ years: 5, dam: true });

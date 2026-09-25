@@ -463,6 +463,16 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
+						<!-- Uncertainty bands (issue #4 phase 9): with the calibration they come from, one menu entry so the rail still fits a laptop screen. -->
+						<div class="uncertainty" id="res-uncertainty">
+							<Lazy load={loadUncertaintyPanel}>
+								{#snippet children(UncertaintyPanel)}
+									{#key shownRunId}
+										<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
+									{/key}
+								{/snippet}
+							</Lazy>
+						</div>
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
@@ -474,15 +484,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<Wr2012Panel report={summary.wr2012} />
 						</div>
 					{/if}
-					<div class="panel" id="res-uncertainty">
-						<Lazy load={loadUncertaintyPanel}>
-							{#snippet children(UncertaintyPanel)}
-								{#key shownRunId}
-									<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
-								{/key}
-							{/snippet}
-						</Lazy>
-					</div>
 					<div class="panel" id="res-notes">
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
@@ -545,7 +546,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
-	.provenance {
+	.provenance,
+	.uncertainty {
 		margin-top: 1rem;
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);

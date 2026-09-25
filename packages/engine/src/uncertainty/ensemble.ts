@@ -177,7 +177,7 @@ export interface MemberMetrics {
 	curtailmentM3Day: Record<string, number>;
 	/** Monthly compliance with the Reserve's assurance rules (0–1) per site with a rule table. */
 	reserveRate: Record<string, number | null>;
-	/** Simulated outflow's flow-duration curve per water-year month, at FDC_POINTS, m³/day. */
+	/** Simulated outflow's flow-duration curve per water-year month, at FDC_POINTS, m³/day; [] for a month the run has no day in. */
 	fdcM3Day: number[][];
 }
 
@@ -198,6 +198,8 @@ export interface EnsembleHeader {
 	farms: { nodeId: string; name: string }[];
 	reserveSites: { key: string; name: string }[];
 	fdcPoints: number[];
+	/** Run days in each water-year month (0 = Oct): a month without any has no flow-duration curve. */
+	monthDays: number[];
 	/** Mean outlet EWR per water-year month, m³/day: the line the flow-duration curves are read against. */
 	ewrByMonthM3Day: number[];
 	records: { record: CalibrationFlowKind; acceptanceDays: number; heldOutDays: number }[];
@@ -545,6 +547,7 @@ export function memberMetrics(ctx: EnsembleContext, out: ModelOutput): MemberMet
 	const reserve: Record<string, number | null> = {};
 	for (const site of s.ewrAssurance ?? []) reserve[site.nodeId ?? 'outlet'] = site.overall.rate === null ? null : r6(site.overall.rate);
 	const fdc = ctx.monthDays.map((idx) => {
+		if (!idx.length) return [];
 		const x = Float64Array.from(idx, (t) => outflow[t] ?? 0)
 			.sort()
 			.reverse();
@@ -637,6 +640,7 @@ export function ensembleHeader(ctx: EnsembleContext, first: ModelOutput): Ensemb
 		farms: (first.summary.curtailment?.farms ?? []).map((f) => ({ nodeId: f.nodeId, name: f.name })),
 		reserveSites: (first.summary.ewrAssurance ?? []).map((s) => ({ key: s.nodeId ?? 'outlet', name: s.name })),
 		fdcPoints: [...FDC_POINTS],
+		monthDays: ctx.monthDays.map((idx) => idx.length),
 		ewrByMonthM3Day: ctx.monthDays.map((idx) => (idx.length ? r6(idx.reduce((a, t) => a + (ewr[t] ?? 0), 0) / idx.length) : 0)),
 		records: [...ctx.records.entries()].map(([record, r]) => ({ record, acceptanceDays: r.accept.length, heldOutDays: r.held.length })),
 		wr2012Band: ctx.wr2012Band,
@@ -726,7 +730,7 @@ export interface EnsembleBands {
 	annual: { waterYear: number; days: number; natural: Band; outflow: Band }[];
 	curtailment: { nodeId: string; name: string; band: Band }[];
 	reserve: { key: string; name: string; band: Band }[];
-	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order, at `fdcPoints` exceedance %. */
+	/** Monthly flow-duration curves of simulated outflow against the EWR, water-year order, at `fdcPoints` exceedance %; only months the run has days in. */
 	fdc: { month: number; ewrM3Day: number; points: Band[] }[];
 	fdcPoints: number[];
 }
@@ -791,7 +795,9 @@ export function summariseEnsemble(r: Pick<EnsembleResult, 'options' | 'header' |
 		annual: h.waterYears.map((y, i) => ({ ...y, natural: b((x) => x.annualNaturalMm3[i]), outflow: b((x) => x.annualOutflowMm3[i]) })),
 		curtailment: h.farms.map((f) => ({ ...f, band: b((x) => x.curtailmentM3Day[f.nodeId]) })),
 		reserve: h.reserveSites.map((s) => ({ ...s, band: b((x) => x.reserveRate[s.key]) })),
-		fdc: h.ewrByMonthM3Day.map((ewrM3Day, i) => ({ month: calendarMonthOf(i), ewrM3Day, points: h.fdcPoints.map((_, j) => b((x) => x.fdcM3Day[i]?.[j])) })),
+		fdc: h.ewrByMonthM3Day.flatMap((ewrM3Day, i) =>
+			h.monthDays[i] ? [{ month: calendarMonthOf(i), ewrM3Day, points: h.fdcPoints.map((_, j) => b((x) => x.fdcM3Day[i]?.[j])) }] : []
+		),
 		fdcPoints: [...h.fdcPoints]
 	};
 	const gated = kept.length < o.minMembers;
