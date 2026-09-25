@@ -22,6 +22,7 @@ import {
 	ENGINE_VERSION,
 	IRRIGATION_SYSTEMS,
 	NEW_FARM_IRRIGATION,
+	USER_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -217,7 +218,9 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			// Full-supply area from a surveyed mean depth (audit N2); drives dam evaporation and rain on the dam.
 			damAreaFullM2: cap > 0 && depth !== null ? Math.round(cap / depth) : null,
 			damAreaExponent: DAM_AREA_EXPONENT,
-			damSeepagePerDay: f.seepage ?? 0
+			damSeepagePerDay: f.seepage ?? 0,
+			// Not an other water user (WP-1.33): the inert defaults.
+			...USER_DEFAULTS
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>

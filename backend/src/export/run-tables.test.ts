@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
 	curtailmentLines,
+	otherUserLines,
 	ewrSiteLines,
 	zeroRainLines,
 	doubleMassLines,
@@ -168,6 +169,18 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'demand_pct_note'))).toEqual(['no_demand', 'below_floor', '']);
 		expect(['None', 'Tiny', 'Big'].map((n) => cell(n, 'Demand left [V] (%)'))).toEqual(['', '12.3456789', '0.4']);
 		expect(cell('Big', 'EWR cut beyond equitable share (m³/day)')).toBe('12.5');
+	});
+
+	it('WP-1.33: lists other water users and whether each is curtailed', () => {
+		const users = [{ nodeId: 'u', name: 'Town', priority: 'senior' as const, avgDemandM3Day: 100, avgSuppliedM3Day: 90, avgDeficitM3Day: 10, fractionSupplied: 0.9, avgReturnedM3Day: 45, avgEwrChargeM3Day: 5, daysEwrNotMet: 3 }];
+		const otherUsers = [
+			{ nodeId: 'u', name: 'Town', priority: 'senior' as const, demandM3Day: 100, suppliedM3Day: 90, deficitM3Day: -10, fractionSupplied: 0.9, returnedM3Day: 45, ewrChargeM3Day: -5, curtailed: false, supplyCutM3Day: 0, supplyCutLs: 0, uncurtailedChargeM3Day: -5 }
+		];
+		const lines = [...otherUserLines({ users, curtailment: { ...c, otherUsers } } as unknown as RunSummary)];
+		expect(lines[0]).toBe('Other water users (whole run)');
+		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
+		expect(lines).toContain('Town,senior,100,90,45,-5,no (senior),0,0,-5');
+		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {

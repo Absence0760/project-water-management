@@ -197,6 +197,40 @@ export const HELP: HelpEntry[] = [
 		source: 'b023 Network sheet'
 	},
 	{
+		id: 'element-user',
+		term: 'Other water user',
+		short: 'A town, industry or unlisted irrigator that takes water from the river at its place in the network, with no land or dam of its own.',
+		long: 'Water taken by users that are not modelled farms would otherwise be handed to the farms and the EWR, over-stating both. An other user has a monthly demand (m³/day), a share of what it takes that comes back below it the same day (treated wastewater) and a priority.\n\nIt takes only from the river where it sits: what reaches it from upstream, after anything upstream has taken its share. It is charged for EWR shortfalls below it like a farm, by its net impact (what it takes less what it returns).\n\nOther users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR; a junior one is (Curtailment tab, "Other water users").',
+		category: 'network',
+		aliases: ['town', 'municipal', 'industry', 'unlisted user', 'abstraction'],
+		fields: ['node.userDemandM3Day', 'run.senior_requirement'],
+		related: ['user-priority', 'user-return', 'element-farm', 'ewr'],
+		source: 'docs/model.md §2.7c; roadmap WP-1.33'
+	},
+	{
+		id: 'user-priority',
+		term: 'User priority (senior / junior)',
+		short: 'Senior: farms and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		long: 'A senior user’s demand is a requirement every farm upstream of it passes before it fills its dam or irrigates, shared between those farms by flow share the way the EWR is (the farm diverts less, then lets inflow and its own runoff pass below the dam). A junior user upstream of a senior one leaves the senior demand in the river too.\n\nA junior user takes only what reaches it. Farms have no protected claim, so a junior user upstream of a farm still takes first: position in the river decides.\n\nA municipal allocation is usually senior, which is the default. Senior users are not curtailed for the EWR; their charge is reported and left standing.',
+		category: 'network',
+		aliases: ['seniority', 'senior', 'junior', 'priority'],
+		fields: ['node.userPriority', 'run.passed_for_senior'],
+		related: ['element-user'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
+		id: 'user-return',
+		term: 'Share returned (other user)',
+		short: 'Share of what an other water user takes that comes back to the river below it the same day, such as treated wastewater.',
+		long: 'A town returns part of what it abstracts through its wastewater works. That share joins the river directly below the user on the same day; the rest is consumed. 0 % means nothing comes back.',
+		units: '%',
+		category: 'network',
+		aliases: ['wastewater', 'return flow', 'effluent'],
+		fields: ['node.userReturnPct'],
+		related: ['element-user', 'return-flow'],
+		source: 'docs/model.md §2.7c'
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',

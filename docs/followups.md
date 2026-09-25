@@ -52,6 +52,19 @@ Tick items off (or move them into an issue) as they are done.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
+      Built 2026-09-25, off by default, on the engineering decisions below,
+      not client sign-off. Put each to the hydrologist as "confirm or change":
+      - WP-1.33 other water users (engine 0.22.0): are there towns, industry
+        or unlisted irrigators upstream of the logger, and what do they take
+        (monthly m³/day) and return? Priority: a senior user's demand is
+        passed down by the farms upstream (fragmented by flow share like the
+        EWR; farms divert less, then pass inflow below the dam), and it is
+        **not curtailed** for the EWR (its charge stands, not moved onto
+        farms); a junior user takes what reaches it and is curtailed like a
+        farm. Confirm both rules and which priority each user has. Known
+        limit: a farm never releases stored water for a senior user, and
+        development (users, their demand) can't vary within a run.
 - [ ] **Engine audit decisions to confirm** ([engine-audit.md](./engine-audit.md)).
       Implemented 2026-09-24 on simulated hydrologist and CMA-assessor
       recommendations (reports in gitignored `reviews/persona-*-audit-decisions.md`),

@@ -10,6 +10,8 @@ export interface FarmColumn {
 	letter: string | null;
 	/** How the engine computes it, in the column letters. */
 	formula: string;
+	/** Only in runs that use the feature that makes it (other water users, boreholes, land cover): absent otherwise. */
+	optional?: true;
 }
 
 export const FARM_COLUMNS: readonly FarmColumn[] = [
@@ -54,7 +56,33 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		formula:
 			"−(largest over the EWR sites below it of D × MAX(e, 0) ÷ Σ MAX(e, 0)), with D = MIN(site shortfall, Σ MAX(e, 0)) and e = H + I + J − U counting only transfers with both ends upstream of the site (audit Q17)"
 	},
-	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' }
+	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' },
+	{
+		key: 'senior_requirement',
+		letter: 'Zs',
+		formula: "Σ Zs of the elements directly upstream + this farm's share of the senior users' demand below it (demand × share ÷ Σ shares upstream of the user); only with senior users (WP-1.33)",
+		optional: true
+	},
+	{
+		key: 'passed_for_senior',
+		letter: null,
+		formula: 'kept out of the dam so S ≥ MIN(Zs, H + I): O is cut first, then K and M pro rata; 0 without senior users (WP-1.33)',
+		optional: true
+	}
+];
+
+/** Other water users (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.7c). No letters: the workbook has no such element. */
+export const USER_COLUMNS: readonly FarmColumn[] = [
+	{ key: 'demand', letter: null, formula: 'the monthly demand from the river (m³/day) for the day’s month' },
+	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
+	{ key: 'supplied', letter: 'G', formula: 'senior: MIN(demand, H); junior: MIN(demand, MAX(0, H − Σ upstream Zs))' },
+	{ key: 'return_flow', letter: 'T', formula: 'return share × G' },
+	{ key: 'outflow', letter: 'U', formula: 'H − G + T' },
+	{ key: 'deficit', letter: null, formula: 'demand − G' },
+	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Σ Z of the elements directly upstream (a user has no EWR share)' },
+	{ key: 'ewr_shortfall', letter: 'AA', formula: 'MIN(U − Z, 0)' },
+	{ key: 'ewr_charge', letter: null, formula: 'as a farm’s, with net impact e = H − U = G − T' },
+	{ key: 'senior_requirement', letter: 'Zs', formula: 'senior: MAX(0, Σ upstream Zs − demand); junior: Σ upstream Zs; only with senior users', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */
@@ -64,7 +92,8 @@ export const GAUGE_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr_cumulative', letter: 'H', formula: 'Σ Z of the elements directly upstream' },
 	{ key: 'ewr_shortfall', letter: 'I', formula: 'MIN(flow − required EWR, 0)' },
 	{ key: 'ewr_charged', letter: null, formula: '−MIN(shortfall, Σ MAX(e, 0)) over the farms upstream, e = H + I + J − U with only the transfers inside the gauge’s catchment (audit Q17)' },
-	{ key: 'ewr_natural', letter: null, formula: 'shortfall − charged: the part natural flow already missed' }
+	{ key: 'ewr_natural', letter: null, formula: 'shortfall − charged: the part natural flow already missed' },
+	{ key: 'senior_requirement', letter: 'Zs', formula: 'Σ Zs of the elements directly upstream; only with senior users (WP-1.33)', optional: true }
 ];
 
 // The catchment's runoff-model columns (node_id NULL in run_series), in the

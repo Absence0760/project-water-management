@@ -134,6 +134,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		f.areaHiKm2 = f.areaKm2 / 2;
 		f.areaLoKm2 = f.areaKm2 / 2;
 	}
+	// Other water users (WP-1.33), from their own stream so the rest of a seed's network is what it was.
+	addUsers(new Rng(seed ^ 0x510e527f), nodes);
 	const farmIds = nodes.filter((x) => x.kind === 'farm').map((x) => x.id);
 
 	// --- crops -------------------------------------------------------------------
@@ -266,6 +268,52 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	}
 
 	return { settings, model: { nodes, crops, cropAreas, transfers }, series };
+}
+
+/**
+ * Up to three other water users (WP-1.33) in 30 % of seeds: each drains into
+ * a random node, and half the time takes one of that node's upstream nodes
+ * in-line above it. Demand from none to far more than the river carries,
+ * months without any, no demand at all; any return share, the edges 0 and 1
+ * over-weighted; senior or junior.
+ */
+function addUsers(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	const count = g.int(1, 3);
+	for (let k = 0; k < count; k++) {
+		const into = g.pick(nodes);
+		const id = `u${k}`;
+		if (g.bool(0.5)) {
+			const ups = nodes.filter((x) => x.downstreamNodeId === into.id);
+			if (ups.length) g.pick(ups).downstreamNodeId = id;
+		}
+		const scale = g.pick([0, 10, 1e3, 1e5, 1e7]);
+		nodes.push({
+			id,
+			name: `User ${k}`,
+			kind: 'user',
+			downstreamNodeId: into.id,
+			sortOrder: nodes.length,
+			areaKm2: 0,
+			areaHiKm2: 0,
+			areaLoKm2: 0,
+			flowShareManual: null,
+			pctUpstreamToDam: 0,
+			pctRunoffToDam: 0,
+			damCapacityM3: 0,
+			damInitialPct: 0,
+			damMinPct: 0,
+			divertCapacityM3Day: 0,
+			irrigationEfficiency: 1,
+			lossReturnFraction: 0,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0,
+			userDemandM3Day: g.bool(0.1) ? null : Array.from({ length: 12 }, () => (g.bool(0.2) ? 0 : g.float(0, scale))),
+			userReturnPct: g.frac(0.25, 0.25),
+			userPriority: g.pick(['senior', 'senior', 'junior'] as const)
+		});
+	}
 }
 
 /**

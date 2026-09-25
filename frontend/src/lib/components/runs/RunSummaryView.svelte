@@ -179,6 +179,42 @@
 	</p>
 {/if}
 
+{#if summary.users?.length}
+	<h3>Other water users</h3>
+	<p class="muted small">Towns, industry and unlisted users taking water from the river (daily averages over the run).</p>
+	<div class="table-wrap">
+		<table class="data users">
+			<thead>
+				<tr>
+					<th scope="col">User</th>
+					<th scope="col">Priority</th>
+					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Taken<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Deficit<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Supplied<br /><span class="u">% of demand</span></th>
+					<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">EWR charge<br /><span class="u">m³/day</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each summary.users as u (u.nodeId)}
+					{@const short = u.fractionSupplied < SUPPLY_TARGET}
+					<tr class:flag={short}>
+						<th scope="row">{u.name}{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}</th>
+						<td>{u.priority}</td>
+						<td class="num">{fmtNum(u.avgDemandM3Day)}</td>
+						<td class="num">{fmtNum(u.avgSuppliedM3Day)}</td>
+						<td class="num" class:neg={u.avgDeficitM3Day > 0.5}>{fmtNum(u.avgDeficitM3Day)}</td>
+						<td class="num" class:short>{fmtPct(u.fractionSupplied)}</td>
+						<td class="num">{fmtNum(u.avgReturnedM3Day)}</td>
+						<td class="num">{fmtNum(u.avgEwrChargeM3Day)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
+
 <style>
 	h3 {
 		margin-top: 1.1rem;

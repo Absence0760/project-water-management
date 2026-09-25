@@ -6,6 +6,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
 	import { damHints, GROUPS, isPct, NODE_FIELDS, systemOf, type NodeField } from './fields';
+	import UserFields from './UserFields.svelte';
 
 	let {
 		node,
@@ -34,6 +35,8 @@
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
 			if (f.farmOnly && node.kind !== 'farm') continue;
+			// An other water user has no land, dam or routing of its own (WP-1.33).
+			if (node.kind === 'user') continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
@@ -54,6 +57,7 @@
 			<select id={id('kind')} disabled={readonly} bind:value={node.kind}>
 				<option value={'farm' satisfies NodeKind}>Farm (or stand-alone dam)</option>
 				<option value={'gauge' satisfies NodeKind}>Gauge</option>
+				<option value={'user' satisfies NodeKind}>Other water user (town, industry, unlisted)</option>
 			</select>
 		</div>
 		<div class="field">
@@ -81,6 +85,14 @@
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
 		</p>
+	{:else if node.kind === 'user'}
+		<p class="hint gauge-note">
+			An other water user takes its demand from the river where it sits, with no land, dam or crops of its own.
+		</p>
+		<fieldset>
+			<legend>Other water user</legend>
+			<UserFields {node} {readonly} />
+		</fieldset>
 	{/if}
 
 	{#each groups as [g, fields] (g)}

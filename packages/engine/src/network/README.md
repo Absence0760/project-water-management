@@ -78,6 +78,16 @@ results don't depend on how the nodes are listed.
 Capacity is `damCapacityM3`; initial storage is `damInitialPct × capacity`
 (the workbook rounds both to whole m³).
 
+An **other water user** (node kind `user`, engine ≥ 0.22.0, WP-1.33;
+docs/model.md §2.7c) takes G = MIN(D, H) (senior) or MIN(D, MAX(0, H − Zs))
+(junior) from the river, returns T = r × G, and passes U = H − G + T. A senior
+user's demand is fragmented to the farms upstream by flow share (`seniorClaim`,
+built in `../run.ts` `otherUsers`); each farm keeps MIN(Zs, H + I) below its
+dam (O cut first, then K and M pro rata; working column `passed_for_senior`),
+and Zs (`senior_requirement`) accumulates like Z and drops by D below the
+senior user. Users are EWR contributors in `attribution.ts` (e = H − U) and
+get their own curtailment rows (`curtailment.ts` `otherUserCurtailment`).
+
 A **gauge** passes its upstream through: `outflow` = Σ upstream U,
 `ewr_cumulative` = Σ upstream Z, `ewr_shortfall` = MIN(outflow − ewr_cumulative, 0).
 (The workbook's gauge sums the upstream AA, which overstates the shortfall at a

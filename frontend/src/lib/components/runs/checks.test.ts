@@ -105,7 +105,10 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		ewr_shortfall: 0,
 		ewr_shortfall_incremental: 0,
 		ewr_charge: 0,
-		ewr_charge_irrigation: 0
+		ewr_charge_irrigation: 0,
+		// Present in a run with senior other water users (WP-1.33); none here.
+		senior_requirement: 0,
+		passed_for_senior: 0
 	}).map(([key, value]) => ({ key, label: key, unit: 'm³/day', value })),
 	...over
 });
@@ -127,6 +130,18 @@ describe('day trace', () => {
 		expect(rows.slice(2).map((r) => r.key)).toEqual(FARM_COLUMNS.map((c) => c.key));
 		// An older API or run: no row, rather than a made-up 0.
 		expect(traceRows(farmDay({ previousSoilWaterMm: null })).map((r) => r.key)).not.toContain('previous_soil_water');
+	});
+
+	it('traces an other water user’s day with its own columns (WP-1.33)', () => {
+		const day: RunDay = {
+			...farmDay(),
+			kind: 'user',
+			previousStorageM3: null,
+			columns: ['demand', 'inflow_upstream', 'supplied', 'return_flow', 'outflow', 'deficit', 'ewr_cumulative', 'ewr_shortfall', 'ewr_charge'].map((key) => ({ key, label: key, unit: 'm³/day', value: 1 }))
+		};
+		const rows = traceRows(day);
+		expect(rows.map((r) => r.key)).toEqual(['demand', 'inflow_upstream', 'supplied', 'return_flow', 'outflow', 'deficit', 'ewr_cumulative', 'ewr_shortfall', 'ewr_charge']);
+		expect(rows.find((r) => r.key === 'outflow')).toMatchObject({ letter: 'U', formula: 'H − G + T' });
 	});
 
 	it('leaves out working columns a pre-0.11 run does not have', () => {

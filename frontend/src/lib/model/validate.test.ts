@@ -123,4 +123,20 @@ describe('validateModel', () => {
 			'"A": the dam area can\'t be negative.'
 		]);
 	});
+
+	it('checks an other water user as the API does (WP-1.33)', () => {
+		const town: NetworkNode = { ...node('u', 'Town', 'g'), kind: 'user', userDemandM3Day: new Array(12).fill(10), userReturnPct: 0.5, userPriority: 'senior' };
+		expect(messages(model([node('g', 'Gauge', null), town, node('a', 'A', 'u')]))).toEqual([]);
+		const bad = model([node('g', 'Gauge', null), { ...town, userReturnPct: 2, userDemandM3Day: [1, -1] }, node('a', 'A', 'u')], {
+			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }],
+			cropAreas: [{ nodeId: 'u', cropId: 'c', areaM2: 100 }],
+			transfers: [{ id: 't', fromNodeId: 'a', toNodeId: 'u', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }]
+		});
+		expect(messages(bad)).toEqual([
+			'"Town": the share returned must be between 0% and 100%.',
+			'"Town": demand needs 12 monthly values, none negative.',
+			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
+			'"Town" is an other water user: transfers run between farm dams.'
+		]);
+	});
 });

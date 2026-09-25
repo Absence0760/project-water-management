@@ -953,6 +953,98 @@ invariance. The per-run check recomputes a site exactly where no transfer
 crosses its catchment boundary (always the outlet), because per-rule transfer
 volumes are not run series.
 
+### 2.7c Other water users (engine ≥ 0.22.0, roadmap WP-1.33)
+
+**Why.** b023 has only farms and gauges, so water a town, industry or an
+unlisted irrigator takes from the river stays in the model and is handed to
+the listed farms and to the EWR, over-stating both. The logger measures the
+impacted river, so a missing user also biases calibration (issue #4,
+question 3 for the hydrologist). **Off by default**: a network with no node of
+kind `user` runs exactly as before (no new series or summary fields).
+
+**The element.** A node of kind `user` (`NetworkNode.kind = 'user'`) has:
+
+| Field | Meaning |
+| --- | --- |
+| `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
+| `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
+| `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+
+It has no area, flow share, dam, crops, transfers or EWR share; the API
+refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+
+**Each day** (network/simulate.ts), with H = Σ upstream outflow and Zs_in =
+Σ upstream senior requirement (below):
+
+```
+G  = MIN(D, H)                    senior
+G  = MIN(D, MAX(0, H − Zs_in))    junior: leaves the senior users' water in the river
+T  = r × G                        returned below it
+U  = H − G + T
+deficit = D − G
+Z  = Σ upstream Z                 (no EWR share of its own; its shortfall MIN(U − Z, 0) is shown like a gauge's)
+```
+
+**Priority against the farms: the senior requirement.** The network is
+solved upstream first, so without a rule a user below a farm could only have
+what the farm leaves. A senior user's demand is instead a requirement the
+farms upstream of it must pass, fragmented to them by flow share the way the
+pragmatic EWR is (§2.5):
+
+```
+Y_f  = Σ over senior users u downstream of f of D_u × share_f / Σ_{g upstream of u} share_g
+Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
+Zs   = MAX(0, Σ upstream Zs − D_u)      below a senior user; junior users and gauges pass it on
+```
+
+A farm then keeps MIN(Zs, H + I) below its dam before it fills the dam:
+it diverts less first (O), then takes less of the upstream inflow and its own
+runoff into the dam (K, M) pro rata, so the below-dam flow S = L + N − O is
+at least MIN(Zs, H + I) (working column `passed_for_senior` = what was kept
+out). This is the usual "pass inflow up to the downstream requirement"
+condition on a dam, and for a dam-less farm it is real-time curtailment of its
+river take. It never breaks the farm balance: only the split between the dam
+and the river below it changes. It does not make a farm release stored water,
+so a senior user can still be short when the farms upstream are dry. A senior
+user with no farm flow share upstream of it can't be protected this way: it
+takes what reaches it, and the run warns. Several senior users in series are
+served by position (the upstream one first). A junior user upstream of a farm
+still takes first: farms have no protected claim, the same as the EWR, which
+the model reports rather than protects.
+
+**EWR attribution (net impact).** Users are charged for EWR shortfalls
+exactly like farms (§2.7b): their net impact is `e = H − U = G − T` (what they
+take less what they return), so a site's charged part is split between farms
+and users pro rata. A user's whole charge is met by taking less (no storage
+part). The EWR sites table's "farms upstream" and "charged" include the users.
+
+**Curtailment (decided, pending the hydrologist).** Other users are **outside
+the irrigation equitable-share benchmark** (§2.11): their demand is not
+irrigation, and the benchmark's totals and fraction stay farms only. They get
+their own rows (`CurtailmentSummary.otherUsers`):
+
+- a **junior** user is curtailed for its EWR charge like a farm: supply cut
+  −ΔG = MAX(R ÷ (1 − r), −supplied) (taking ΔG less removes (1 − r)·ΔG of
+  use), and whatever the cut can't remove stands;
+- a **senior** user is **not** curtailed: its charge is reported and left
+  standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
+  which would charge irrigators for the town's use.
+
+**Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
+`inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
+`ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any senior user's
+demand is passed down, at every node, with the farms' `passed_for_senior`).
+`summary.users` has the whole-run means; the water balance gains
+`otherUseM3` = Σ (taken − returned) and closes with it (§6).
+
+**Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
+U = H − G + T, deficit, shortfall), the farm keeps MIN(Zs, H + I) below its
+dam and holds nothing back without a requirement, Zs never grows past a user,
+the attribution check counts users as contributors, and the summaries and
+curtailment rows are the means of the series. The fuzz generator adds up to
+three users (senior or junior, any return share, demand from none to far more
+than the river) to 30 % of networks.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
@@ -1698,11 +1790,17 @@ volume per user category (the way DWS gazettes restrictions), and a re-run of
 the network would check it is feasible; it would ship as a new, separately
 labelled table, not a silent redefinition of M.
 
+**Other water users (engine ≥ 0.22.0, WP-1.33).** Users are not rows of this
+table and not in its totals or equitable fraction. `CurtailmentSummary.otherUsers`
+lists each over the same window: demand, taken, returned, the mean EWR charge,
+whether it is curtailed (junior) and its supply cut and the charge left
+standing (§2.7c).
+
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
 N, O, R, S and U (and, from engine 0.17.0, R_irr, R_store, −ΔG and the cut
 beyond the equitable share).
 `CurtailmentSummary.ewrSites` lists each EWR site over the same window (outlet
-first, then gauges by node id): farms upstream, days not met, and the mean
+first, then gauges by node id): farms (and, from engine 0.22.0, other water users) upstream, days not met, and the mean
 shortfall, charged and natural parts (≤ 0; charged + natural = shortfall);
 `ewrAttribution` names the rule (`netImpactProRata`). (The sheet's l/s total is the sum of the *truncated* farm
 values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
@@ -1876,11 +1974,11 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow; rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. |
+| `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow; rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area, rain on it, evaporation and seepage follow §2.7a; G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
-| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
+| `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Where no transfer crosses a site's catchment boundary (always the outlet) the site is recomputed from H, I, J and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops and the crop-area rows gives the same results: counts exactly, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). |
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is 10⁻¹² float noise). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). |
@@ -1932,8 +2030,10 @@ and over the run, the catchment rain (`rain_final`), natural flow as depth and
 runoff coefficient, the GR4J store balance (AET, exchange, Δstorage and its
 residual in mm), and the network balance in m³: start storage + farm runoff +
 transfers + rain on dams = consumptive use (supplied − return flow) + dam
-evaporation + outflow + end storage + residual (the dam terms from engine
-0.16.0, §2.7a; seepage is inside the outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
+evaporation + other users' use (taken − returned, engine ≥ 0.22.0, §2.7c,
+`otherUseM3`, only when the network has users) + outflow + end storage +
+residual (the dam terms from engine 0.16.0, §2.7a; seepage is inside the
+outflow). Farm runoff equals natural flow only when the farm shares sum to 1,
 so both are shown. The residual is float noise; anything else is a bug.
 
 The results page shows both (Self-checks panel, [ui.md](./ui.md#self-checks)),
@@ -2027,6 +2127,7 @@ step when a definition changes.
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor. |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
 | **Spill** | Water that overflows a full dam and continues downstream. |
+| **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a senior/junior priority (engine ≥ 0.22.0, §2.7c). |
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |
 | **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.16.0). Abstraction demand = crop requirement ÷ efficiency. |

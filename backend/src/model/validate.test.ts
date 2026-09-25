@@ -32,6 +32,28 @@ describe('modelProblems', () => {
 	});
 });
 
+describe('other water users (WP-1.33)', () => {
+	it('accepts a user node and fills the inert defaults on a farm; refuses crops and transfers on a user', () => {
+		const out = node('Gauge', null);
+		const town = node('Town', out.id, { kind: 'user', userDemandM3Day: new Array(12).fill(100), userReturnPct: 0.5, userPriority: 'junior' });
+		const farm = node('A', town.id);
+		const parsed = ModelBody.parse({ nodes: [out, town, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ kind: 'user', userReturnPct: 0.5, userPriority: 'junior' });
+		expect(parsed.nodes[2]).toMatchObject({ userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+		const m = model([out, town, farm]);
+		expect(modelProblems(m)).toEqual([]);
+		m.transfers = [{ id: 't', fromNodeId: farm.id, toNodeId: town.id, months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }];
+		m.crops = [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }];
+		m.cropAreas = [{ nodeId: town.id, cropId: 'c', areaM2: 1 }];
+		const problems = modelProblems(m).join(' | ');
+		expect(problems).toMatch(/transfer t involves an other water user/);
+		expect(problems).toMatch(/crop area on other water user "Town"/);
+		for (const bad of [{ userDemandM3Day: [1] }, { userDemandM3Day: new Array(12).fill(-1) }, { userReturnPct: 1.5 }, { userPriority: 'first' }]) {
+			expect(ModelBody.safeParse({ nodes: [out, { ...town, ...bad }, farm], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
+		}
+	});
+});
+
 describe('ModelBody (PUT /model, project documents)', () => {
 	const body = (nodes: Record<string, unknown>[]) => ({ nodes, crops: [], cropAreas: [], transfers: [] });
 

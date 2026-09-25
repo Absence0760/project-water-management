@@ -345,8 +345,26 @@ export const PAN_COEFFICIENT_PRESETS: PanCoefficientPreset[] = [
 	}
 ];
 
-/** A b023 network element. A "farm" can also model a stand-alone dam or natural area. */
-export type NodeKind = 'farm' | 'gauge';
+/**
+ * A b023 network element. A "farm" can also model a stand-alone dam or natural
+ * area. A "user" (engine ≥ 0.22.0, WP-1.33) is any other abstraction from the
+ * river: a town or municipal scheme, industry, an unlisted irrigator. It has a
+ * monthly demand, a share returned downstream and a priority, and no land,
+ * dam, crops or rain of its own (docs/model.md §2.7c).
+ */
+export type NodeKind = 'farm' | 'gauge' | 'user';
+
+/**
+ * An other water user's priority against the farms (WP-1.33, docs/model.md
+ * §2.7c). 'senior' (the default: a municipal allocation is usually senior):
+ * its demand is a requirement every farm and junior user upstream of it must
+ * pass before filling its dam or taking water, fragmented to the farms by flow
+ * share like the EWR; it is not curtailed for the EWR. 'junior': it takes only
+ * what reaches it after the senior requirements below it, and its EWR charge
+ * is curtailed like a farm's.
+ */
+export const USER_PRIORITIES = ['senior', 'junior'] as const;
+export type UserPriority = (typeof USER_PRIORITIES)[number];
 
 /**
  * Time-series kinds a project can hold. Values are daily, starting at `startDate`.
@@ -418,7 +436,19 @@ export interface NetworkNode {
 	damAreaExponent: number;
 	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
 	damSeepagePerDay: number;
+	/**
+	 * kind 'user' only (engine ≥ 0.22.0, WP-1.33): demand from the river, m³/day
+	 * per water-year month (Oct–Sep). null / absent = no demand.
+	 */
+	userDemandM3Day?: number[] | null;
+	/** kind 'user' only: share (0–1) of what it takes that returns below it the same day (treated wastewater). Default 0. */
+	userReturnPct?: number;
+	/** kind 'user' only: priority against the farms. Default 'senior'. */
+	userPriority?: UserPriority;
 }
+
+/** What a user node without the fields runs as (WP-1.33). */
+export const USER_DEFAULTS = { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' } as const;
 
 /** Default exponent of the dam area–storage relation (Liebe et al. 2005). */
 export const DAM_AREA_EXPONENT = 0.7;
@@ -483,6 +513,10 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;
 				n.damAreaExponent ??= DAM_AREA_EXPONENT;
 				n.damSeepagePerDay ??= 0;
+				// Other water users (WP-1.33): off unless set.
+				if (n.userDemandM3Day === undefined) n.userDemandM3Day = USER_DEFAULTS.userDemandM3Day;
+				n.userReturnPct ??= USER_DEFAULTS.userReturnPct;
+				n.userPriority ??= USER_DEFAULTS.userPriority;
 				return n;
 			})
 		: model.nodes;
@@ -591,6 +625,56 @@ export interface FarmSummary {
 	avgEwrShortfallM3Day: number;
 	/** Days the farm was charged (engine ≥ 0.17.0); before, days its AB was below 0. */
 	daysEwrNotMet: number;
+}
+
+/**
+ * An other water user over the whole run (engine ≥ 0.22.0, WP-1.33), m³/day
+ * means like FarmSummary.
+ */
+export interface UserSummary {
+	nodeId: string;
+	name: string;
+	priority: UserPriority;
+	avgDemandM3Day: number;
+	/** Taken from the river. */
+	avgSuppliedM3Day: number;
+	avgDeficitM3Day: number;
+	/** avg supplied / avg demand, 0–1 (1 without demand). */
+	fractionSupplied: number;
+	/** Returned below it (treated wastewater). */
+	avgReturnedM3Day: number;
+	/** Mean EWR charge (positive): its share of the shortfall at the EWR sites below it, net-impact pro rata like a farm's. */
+	avgEwrChargeM3Day: number;
+	daysEwrNotMet: number;
+}
+
+/**
+ * An other water user's row of the curtailment report (engine ≥ 0.22.0,
+ * WP-1.33, docs/model.md §2.11). Other users are outside the irrigation
+ * equitable-share benchmark (their demand is not irrigation). A junior user
+ * is curtailed for its EWR charge like a farm (supply cut = charge ÷ its
+ * consumptive share, never more than it took); a senior one is not: its
+ * charge is reported and left standing. Window means, m³/day; ≤ 0 = reduce.
+ */
+export interface CurtailmentUser {
+	nodeId: string;
+	name: string;
+	priority: UserPriority;
+	demandM3Day: number;
+	suppliedM3Day: number;
+	/** supplied − demand, ≤ 0. */
+	deficitM3Day: number;
+	fractionSupplied: number | null;
+	returnedM3Day: number;
+	/** Mean EWR charge, ≤ 0. */
+	ewrChargeM3Day: number;
+	/** Junior users only. */
+	curtailed: boolean;
+	/** −ΔG ≤ 0: the cut in what it takes that removes the charge (0 for a senior user). */
+	supplyCutM3Day: number;
+	supplyCutLs: number;
+	/** The charge the cut does not remove, ≤ 0: all of it for a senior user, the part beyond what it took for a junior one. */
+	uncurtailedChargeM3Day: number;
 }
 
 /** Observed vs simulated volume in one water year (paired days only). */
@@ -843,6 +927,8 @@ export interface CurtailmentSummary {
 	ewrAttribution?: 'netImpactProRata';
 	/** The EWR sites (outlet first, then gauges by node id) over the window; absent on older runs. */
 	ewrSites?: EwrSiteSummary[];
+	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. Not in the totals row. */
+	otherUsers?: CurtailmentUser[];
 	/** The workbook's totals row: plain sums of the farm columns. */
 	totals: {
 		demandM3Day: number;
@@ -886,6 +972,8 @@ export interface RunoffBalance {
 
 export interface RunSummary {
 	farms: FarmSummary[];
+	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
+	users?: UserSummary[];
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
 	catchment: {
@@ -1028,10 +1116,12 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
+	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
+	otherUseM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams − consumptive use − dam evaporation − other use − outflow − closing. */
 	residualM3: number;
 }
 

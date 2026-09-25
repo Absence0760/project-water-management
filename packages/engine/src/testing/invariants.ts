@@ -61,7 +61,8 @@ function canonical(out: ModelOutput) {
 		summary: {
 			...s,
 			farms: byNode(s.farms),
-			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms) },
+			users: s.users && byNode(s.users),
+			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms), otherUsers: s.curtailment.otherUsers && byNode(s.curtailment.otherUsers) },
 			ewrCompliance: s.ewrCompliance && { ...s.ewrCompliance, farms: byNode(s.ewrCompliance.farms) },
 			dataQuality: s.dataQuality && { ...s.dataQuality, areaMismatches: s.dataQuality.areaMismatches && byNode(s.dataQuality.areaMismatches) },
 			// Warnings name elements in input order; compare them as a multiset of

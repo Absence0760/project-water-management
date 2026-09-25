@@ -27,7 +27,7 @@ export function shortfall(a: number, b: number, scale: number): number {
 }
 
 export interface PlanNode {
-	kind: 'farm' | 'gauge';
+	kind: 'farm' | 'gauge' | 'user';
 	/** Fraction of natural flow / EWR generated on this farm's land. */
 	share: number;
 	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
@@ -58,8 +58,24 @@ export interface PlanNode {
 	damAreaExponent: number;
 	/** Seepage per day as a fraction of the storage at the start of the day (audit N2). */
 	damSeepagePerDay: number;
-	/** Daily crop water requirement (F, net irrigation need); zeros for gauges. */
+	/** Daily crop water requirement (F, net irrigation need); zeros for gauges; a user's own demand from the river (WP-1.33). */
 	demand: Float64Array;
+	/** A user's share of what it takes that returns below it the same day (WP-1.33); 0 for other kinds. */
+	userReturn?: number;
+	/**
+	 * A senior user whose demand is fragmented to the farms upstream of it
+	 * (WP-1.33): the requirement it takes out of the senior claims passing it.
+	 * False for a junior user, and for a senior one with no farm share upstream.
+	 */
+	seniorClaimed?: boolean;
+	/** A user's priority (WP-1.33): a senior user takes what reaches it; a junior one leaves the senior requirement passing it. */
+	senior?: boolean;
+	/**
+	 * A farm's share of the senior users' demand below it, m³/day (WP-1.33):
+	 * Σ over senior users u downstream of D_u × share / Σ upstream shares of u,
+	 * the EWR's fragmentation rule. Absent = none.
+	 */
+	seniorClaim?: Float64Array;
 	/**
 	 * Gross demand before effective rain, the effective rain used against it
 	 * (m³/day) and the soil-water store at the end of the day (mm); only
@@ -130,6 +146,14 @@ export interface NodeResult {
 	ewrCumulative: Float64Array; // Z
 	ewrShortfall: Float64Array; // AA
 	ewrShortfallIncremental: Float64Array; // AB
+	/**
+	 * The senior users' requirement still to pass below this node (WP-1.33):
+	 * Zs = own senior claim + Σ upstream Zs, less a senior user's own demand.
+	 * All zeros without senior users.
+	 */
+	seniorRequirement: Float64Array;
+	/** A user's return below it, r × supplied (WP-1.33); zeros for farms (theirs is a working column) and gauges. */
+	userReturn: Float64Array;
 }
 
 /**
@@ -159,6 +183,11 @@ export interface FarmWorkings {
 	damSeepage: Float64Array;
 	/** V, signed: (H + I + J + rain on dam) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U. Float noise only. */
 	balanceResidual: Float64Array;
+	/**
+	 * Flow kept out of the dam so the senior users' requirement passes below
+	 * it (WP-1.33): the cut in O, then in K and M, that makes S ≥ MIN(Zs, H + I).
+	 */
+	passedForSenior: Float64Array;
 }
 
 export interface NetworkResult {
@@ -185,7 +214,9 @@ function allocNode(days: number): NodeResult {
 		ewr: f(),
 		ewrCumulative: f(),
 		ewrShortfall: f(),
-		ewrShortfallIncremental: f()
+		ewrShortfallIncremental: f(),
+		seniorRequirement: f(),
+		userReturn: f()
 	};
 }
 
@@ -207,7 +238,8 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 		damEvaporation: f(),
 		rainOnDam: f(),
 		damSeepage: f(),
-		balanceResidual: f()
+		balanceResidual: f(),
+		passedForSenior: f()
 	};
 }
 
@@ -327,6 +359,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			const ups = upstream[i]!;
 			let sumU = 0;
 			let sumZ = 0;
+			let sumZs = 0;
 			let sumAA = 0;
 			// Magnitude of the upstream shortfalls, the scale of their float noise.
 			let absAA = 0;
@@ -334,6 +367,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				const ur = res[ups[u]!]!;
 				sumU += ur.outflow[t]!;
 				sumZ += ur.ewrCumulative[t]!;
+				sumZs += ur.seniorRequirement[t]!;
 				sumAA += ur.ewrShortfall[t]!;
 				absAA += Math.abs(ur.ewrShortfall[t]!);
 			}
@@ -348,6 +382,31 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				r.outflow[t] = sumU;
 				r.ewrCumulative[t] = sumZ;
 				r.ewrShortfall[t] = shortfall(sumU, sumZ, Math.max(sumU, sumZ));
+				r.seniorRequirement[t] = sumZs;
+				continue;
+			}
+
+			if (node.kind === 'user') {
+				// An other water user (WP-1.33, docs/model.md §2.7c) draws from the
+				// river at its position only. A senior user takes what reaches it; a
+				// junior one leaves the senior requirement passing it for the senior
+				// users below. What it returns (treated wastewater) joins its outflow
+				// the same day. Like a gauge it has no EWR share of its own.
+				const D = node.demand[t]!;
+				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
+				const G = Math.min(D, avail);
+				const T = (node.userReturn ?? 0) * G;
+				const U = sumU - G + T;
+				r.demand[t] = D;
+				r.supplied[t] = G;
+				r.deficit[t] = D - G;
+				r.inflowUpstream[t] = sumU;
+				r.outflow[t] = U;
+				r.userReturn[t] = T;
+				r.ewrCumulative[t] = sumZ;
+				r.ewrShortfall[t] = shortfall(U, sumZ, Math.max(U, sumZ));
+				// A senior user takes its own demand out of the requirement; float noise can't make it negative.
+				r.seniorRequirement[t] = node.seniorClaimed ? Math.max(0, sumZs - D) : sumZs;
 				continue;
 			}
 
@@ -363,11 +422,44 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			// round (L = H × %), against its own label and [Models] sheet; the
 			// client confirmed the label's meaning (engine 0.9.0, model.md §3 Q1).
 			// A split never exceeds the volume it splits.
-			const K = Math.min(H * node.pctUpstreamToDam, H);
-			const L = H - K;
-			const M = Math.min(I * node.pctRunoffToDam, I);
-			const N = I - M;
-			const O = Math.min(node.divertCapacityM3Day, L + N);
+			let K = Math.min(H * node.pctUpstreamToDam, H);
+			let L = H - K;
+			let M = Math.min(I * node.pctRunoffToDam, I);
+			let N = I - M;
+			let O = Math.min(node.divertCapacityM3Day, L + N);
+			// Senior users below (WP-1.33): the farm passes their requirement Zs
+			// below the dam (S) before it fills the dam, as far as its inflow
+			// allows: it diverts less first, then takes less of the upstream
+			// inflow and its own runoff into the dam, pro rata. Zs = 0 changes nothing.
+			const Zs = sumZs + (node.seniorClaim ? node.seniorClaim[t]! : 0);
+			let passed = 0;
+			if (Zs > 0) {
+				let short = Math.min(Zs, H + I) - (L + N - O);
+				if (short > 0) {
+					const dO = Math.min(short, O);
+					O -= dO;
+					short -= dO;
+					passed += dO;
+					const into = K + M;
+					if (short > 0 && into > 0) {
+						const cut = Math.min(short, into);
+						if (cut >= into) {
+							// Everything passes: exactly nothing enters the dam (a pro-rata cut
+							// would leave a float residue there, which an emptying dam's
+							// area–storage power then magnifies; fuzz seed 360).
+							K = 0;
+							M = 0;
+						} else {
+							const dK = (cut * K) / into;
+							K = Math.max(0, K - dK);
+							M = Math.max(0, M - (cut - dK));
+						}
+						L = H - K;
+						N = I - M;
+						passed += cut;
+					}
+				}
+			}
 			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
 			// Dam losses and gains before irrigation (audit N2). The surface area
 			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
@@ -418,6 +510,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 			r.ewrCumulative[t] = Z;
 			r.ewrShortfall[t] = AA;
 			r.ewrShortfallIncremental[t] = AB;
+			r.seniorRequirement[t] = Zs;
 			const w = work?.[i];
 			if (w) {
 				w.upstreamToDam[t] = K;
@@ -433,6 +526,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 				w.rainOnDam[t] = Pd;
 				w.damSeepage[t] = Sp;
 				w.balanceResidual[t] = H + I + J + Pd - (G - T) - E - (Q - qPrev) - U;
+				w.passedForSenior[t] = passed;
 			}
 		}
 	}

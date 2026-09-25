@@ -83,4 +83,15 @@ describe('ModelEditor', () => {
 		ed.load({ nodes: [], crops: [{ id: 'x', name: 'x', cropFactor: [], sortOrder: 4 }], cropAreas: [], transfers: [] });
 		expect(ed.addCrop().sortOrder).toBe(5);
 	});
+
+	it('adds an other water user draining into the outlet, with no demand yet (WP-1.33)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const outlet = ed.addNode();
+		const u = ed.addUser();
+		expect(u).toMatchObject({ kind: 'user', downstreamNodeId: outlet.id, name: 'Other user 1', userReturnPct: 0, userPriority: 'senior' });
+		expect(u.userDemandM3Day).toEqual(new Array(12).fill(0));
+		// A new farm carries the inert user defaults.
+		expect(ed.addNode()).toMatchObject({ kind: 'farm', userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+	});
 });

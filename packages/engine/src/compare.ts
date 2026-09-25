@@ -731,7 +731,10 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
-	['lossReturnFraction', 'share of losses returning', pct]
+	['lossReturnFraction', 'share of losses returning', pct],
+	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
+	['userReturnPct', 'share returned', pct],
+	['userPriority', 'priority', plain]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
@@ -759,7 +762,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			area: 'network',
 			kind: 'added',
 			subject: n.name,
-			text: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
+			text:
+				n.kind === 'user'
+					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${into ? `, drains into ${into}` : ''})`
+					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}
 	for (const [x, y] of nodes.pairs) {
@@ -767,6 +773,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) parts.push(`renamed from "${x.name}"`);
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
+		}
+		if (x.kind === 'user' || y.kind === 'user') {
+			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
+			if (d) parts.push(`demand ${d}`);
 		}
 		const da = na.node(x.downstreamNodeId);
 		const db = nb.node(y.downstreamNodeId);
@@ -857,6 +867,8 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 }
 
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+/** Mean of a monthly table (0 without one). */
+const meanOf = (v: readonly number[] | null | undefined) => (v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0);
 
 const SERIES_LABELS: Record<string, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',

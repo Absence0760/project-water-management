@@ -10,6 +10,8 @@
 	import { GROUPS, isPct, isVolume, NODE_FIELDS, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import NodeDetail from './NodeDetail.svelte';
+	import UserFields from './UserFields.svelte';
+	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
 	import { formOffScreen } from './scroll';
 
@@ -22,6 +24,8 @@
 	const nodes = $derived(editor.model.nodes);
 	const outletCount = $derived(nodes.filter((n) => n.downstreamNodeId === null).length);
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
+	const users = $derived(nodes.filter((n) => n.kind === 'user'));
+	const gauges = $derived(nodes.filter((n) => n.kind === 'gauge'));
 	const method = $derived(settings?.flowShareMethod ?? 'area');
 	const shares = $derived(flowShares(nodes, method, settings?.hiLoSplit ?? { hi: 0.81, lo: 0.19 }));
 	const shareOf = (i: number) => (nodes[i]?.kind === 'farm' ? (shares.share[i] ?? 0) : null);
@@ -55,6 +59,12 @@
 				(row?.querySelector('input') as HTMLInputElement | null)?.focus({ preventScroll: true });
 			});
 		}
+	}
+
+	function addUser() {
+		const n = editor.addUser();
+		selectedId = n.id;
+		queueMicrotask(() => document.getElementById(view === 'table' ? `user-name-${n.id}` : `nd-name-${n.id}`)?.focus());
 	}
 
 	function add() {
@@ -128,7 +138,8 @@
 		<h2 id="sch-h">Schematic</h2>
 		<span class="muted small">
 			{#if nodes.length}
-				{farms.length} farm{farms.length === 1 ? '' : 's'} · {nodes.length - farms.length} gauge{nodes.length - farms.length === 1 ? '' : 's'} ·
+				{farms.length} farm{farms.length === 1 ? '' : 's'} · {gauges.length} gauge{gauges.length === 1 ? '' : 's'} ·
+				{#if users.length}{users.length} other user{users.length === 1 ? '' : 's'} ·{/if}
 				{fmtNum(farmArea, 1)} km² of farm area
 			{:else}
 				Water flows down the page to the outflow gauge
@@ -229,6 +240,7 @@
 								<select aria-label="Kind of {label}" disabled={readonly} bind:value={node.kind}>
 									<option value={'farm' satisfies NodeKind}>Farm</option>
 									<option value={'gauge' satisfies NodeKind}>Gauge</option>
+									<option value={'user' satisfies NodeKind}>Other user</option>
 								</select>
 							</td>
 							<td>
@@ -245,8 +257,9 @@
 								</select>
 							</td>
 							{#each TABLE_FIELDS as f (f.key)}
-								{#if f.farmOnly && node.kind !== 'farm'}
-									<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for a gauge"><span aria-hidden="true">–</span><span class="visually-hidden">not used for a gauge</span></td>
+								{#if (f.farmOnly && node.kind !== 'farm') || node.kind === 'user'}
+									{@const what = node.kind === 'user' ? 'an other water user' : 'a gauge'}
+									<td class="num na" class:pct={isPct(f)} class:vol={isVolume(f)} title="Not used for {what}"><span aria-hidden="true">–</span><span class="visually-hidden">not used for {what}</span></td>
 								{:else}
 								<td class:pct={isPct(f)} class:vol={isVolume(f)}>
 									<NumberInput
@@ -291,6 +304,7 @@
 		{#if !readonly}
 			<div class="toolbar after">
 				<button type="button" class="btn" onclick={add}>+ Add node</button>
+				{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
 				<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
 					Sort by flow path
 				</button>
@@ -300,7 +314,7 @@
 		<details class="guide">
 			<summary>Field guide</summary>
 			<dl>
-				<div><dt>Kind</dt><dd>A <strong>farm</strong> generates runoff, has irrigation demand and may have a dam (a stand-alone dam or natural area is also a farm). A <strong>gauge</strong> is a measuring point that passes upstream flow through.</dd></div>
+				<div><dt>Kind</dt><dd>A <strong>farm</strong> generates runoff, has irrigation demand and may have a dam (a stand-alone dam or natural area is also a farm). A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
 				<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
 				{#each NODE_FIELDS as f (f.key)}
 					<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
@@ -321,7 +335,10 @@
 			<button type="button" class="btn" aria-label="Next node" disabled={selectedIndex >= nodes.length - 1} onclick={() => (selectedId = nodes[selectedIndex + 1]!.id)}>›</button>
 		</div>
 		{#if !readonly}
-			<div class="toolbar add-one"><button type="button" class="btn" onclick={add}>+ Add node</button></div>
+			<div class="toolbar add-one">
+				<button type="button" class="btn" onclick={add}>+ Add node</button>
+				{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
+			</div>
 		{/if}
 		{#key selected.id}
 			<NodeDetail
@@ -339,7 +356,51 @@
 	{/if}
 </section>
 
+{#if view === 'table' && users.length}
+	<section class="panel" aria-labelledby="users-h">
+		<div class="panel-head">
+			<h2 id="users-h">Other water users <HelpTip key="node.userDemandM3Day" /></h2>
+			<span class="muted small">Towns, industry and unlisted users taking water from the river. They have no land, dam or crops.</span>
+		</div>
+		{#each users as u (u.id)}
+			<details class="user-card" open={u.id === selectedId || users.length === 1}>
+				<summary>
+					<span class="user-name">{u.name || 'unnamed user'}</span>
+					<span class="muted small">{describeUser(u)} · drains into {u.downstreamNodeId ? labelOf(u.downstreamNodeId) : 'nothing (it is the outlet)'}</span>
+				</summary>
+				<div class="field user-name-field">
+					<label for="user-name-{u.id}">User name</label>
+					<input id="user-name-{u.id}" maxlength="100" readonly={readonly} bind:value={u.name} />
+				</div>
+				<UserFields node={u} {readonly} />
+			</details>
+		{/each}
+	</section>
+{/if}
+
 <style>
+	.user-card {
+		border-top: 1px solid var(--border);
+		padding: 0.5rem 0;
+	}
+	.user-card summary {
+		cursor: pointer;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: baseline;
+		min-height: 32px;
+	}
+	.user-name {
+		font-weight: 600;
+	}
+	.user-name-field {
+		max-width: 320px;
+		margin: 0.25rem 0;
+	}
+	.user-name-field input {
+		width: 100%;
+	}
 	.small {
 		font-size: 0.8rem;
 	}

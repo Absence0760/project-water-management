@@ -1626,6 +1626,12 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.33 Other water users (towns, unlisted users)
 
+> **Built 2026-09-25 (engine 0.22.0, migration 011), off by default.** As
+> specified, with two decisions made pending WP-1.1: a senior user's demand is
+> passed down by the farms upstream (fragmented by flow share, like the EWR),
+> and senior users are not curtailed for the EWR while junior ones are.
+> [model.md §2.7c](../model.md).
+
 - **Goal:** water taken from the river by users that aren't modelled farms
   (a town or municipal scheme, industry, unlisted or unlawful irrigators) is
   accounted for, so the model stops handing that water to the listed farms

@@ -56,6 +56,15 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
 			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });
 		}
+		// Other water users (WP-1.33), as the API checks them.
+		if (n.kind === 'user') {
+			if (!inRange(n.userReturnPct ?? 0, 0, 1)) issues.push({ area: 'network', message: `${label}: the share returned must be between 0% and 100%.` });
+			if (n.userDemandM3Day && (n.userDemandM3Day.length !== 12 || n.userDemandM3Day.some((v) => !inRange(v, 0, Infinity))))
+				issues.push({ area: 'network', message: `${label}: demand needs 12 monthly values, none negative.` });
+			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });
+			if (transfers.some((t) => t.fromNodeId === n.id || t.toNodeId === n.id))
+				issues.push({ area: 'transfers', message: `${label} is an other water user: transfers run between farm dams.` });
+		}
 	}
 
 	// Exactly one outlet (unless empty)

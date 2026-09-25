@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { DAM_AREA_EXPONENT, NEW_FARM_IRRIGATION, USER_DEFAULTS, type CropDef, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -33,7 +33,9 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
 		damAreaFullM2: null,
 		damAreaExponent: DAM_AREA_EXPONENT,
-		damSeepagePerDay: 0
+		damSeepagePerDay: 0,
+		// Not an other water user until its kind says so (WP-1.33).
+		...USER_DEFAULTS
 	};
 }
 
@@ -97,6 +99,24 @@ export class ModelEditor {
 		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
 		const node = newNode(sort, nodes.length === 0 ? null : (outlet?.id ?? nodes[0]!.id));
 		node.name = nodes.length === 0 ? 'Outflow gauge' : `Farm ${nodes.length}`;
+		nodes.push(node);
+		return node;
+	}
+
+	/** An other water user (WP-1.33) draining into the outlet: no land, dam or crops, no demand until it is entered. */
+	addUser() {
+		const nodes = this.model.nodes;
+		const outlet = nodes.find((n) => n.downstreamNodeId === null);
+		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
+		const node = newNode(sort, outlet?.id ?? null);
+		node.kind = 'user';
+		node.pctUpstreamToDam = 0;
+		node.irrigationEfficiency = 1;
+		node.lossReturnFraction = 0;
+		node.userDemandM3Day = new Array(12).fill(0);
+		node.userReturnPct = 0;
+		node.userPriority = 'senior';
+		node.name = `Other user ${nodes.filter((n) => n.kind === 'user').length + 1}`;
 		nodes.push(node);
 		return node;
 	}

@@ -334,6 +334,24 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists an other water user added, and a change of its demand, return share and priority (WP-1.33)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const town = { ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), userReturnPct: 0.6, userPriority: 'senior' as const };
+		b.model.nodes.push(town);
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1,200 m³/day on average over the months, drains into Outlet)']);
+		const c = structuredClone(b);
+		const t = c.model.nodes.find((n) => n.name === 'Town')!;
+		t.userDemandM3Day![0] = 1500;
+		t.userReturnPct = 0.5;
+		t.userPriority = 'junior';
+		expect(texts(b, c)).toEqual(['Town: share returned 60% → 50%', 'Town: priority senior → junior', 'Town: demand Oct 1,200 → 1,500 m³/day']);
+		// A farm snapshot from before WP-1.33 (no user fields) diffs clean against one that has the defaults.
+		const d = structuredClone(a);
+		for (const n of d.model.nodes) Object.assign(n, { userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+		expect(texts(a, d)).toEqual([]);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

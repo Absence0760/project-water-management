@@ -1,4 +1,4 @@
-import { upgradeLegacyModel, type ProjectModel } from '@water-management/engine';
+import { upgradeLegacyModel, USER_PRIORITIES, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -18,7 +18,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				name: z.string().trim().min(1).max(100),
-				kind: z.enum(['farm', 'gauge']),
+				kind: z.enum(['farm', 'gauge', 'user']),
 				downstreamNodeId: uuid.nullable(),
 				sortOrder: z.number().int(),
 				areaKm2: nonNeg,
@@ -37,7 +37,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
 				damAreaFullM2: nonNeg.nullable(),
 				damAreaExponent: z.number().gt(0).max(3),
-				damSeepagePerDay: frac
+				damSeepagePerDay: frac,
+				// Other water users (WP-1.33): monthly demand (water-year months), return share, priority.
+				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				userReturnPct: frac.default(0),
+				userPriority: z.enum(USER_PRIORITIES).default('senior')
 			})
 		)
 		.max(500),
@@ -78,6 +82,7 @@ export function modelProblems(m: ProjectModel): string[] {
 	const problems: string[] = [];
 	const nodeIds = new Set(m.nodes.map((n) => n.id));
 	const cropIds = new Set(m.crops.map((c) => c.id));
+	const byId = new Map(m.nodes.map((n) => [n.id, n]));
 
 	const dupes = (xs: string[]) => [...new Set(xs.filter((x, i) => xs.indexOf(x) !== i))];
 	for (const d of dupes(m.nodes.map((n) => n.id))) problems.push(`duplicate node id ${d}`);
@@ -93,10 +98,13 @@ export function modelProblems(m: ProjectModel): string[] {
 	}
 	for (const a of m.cropAreas) {
 		if (!nodeIds.has(a.nodeId)) problems.push(`crop area references unknown node ${a.nodeId}`);
+		if (byId.get(a.nodeId)?.kind === 'user') problems.push(`crop area on other water user "${byId.get(a.nodeId)!.name}": a user's demand is its monthly demand, not crops`);
 		if (!cropIds.has(a.cropId)) problems.push(`crop area references unknown crop ${a.cropId}`);
 	}
 	for (const t of m.transfers) {
 		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) problems.push(`transfer ${t.id} references an unknown node`);
+		// A user has no dam to send from or fill (WP-1.33).
+		if (byId.get(t.fromNodeId)?.kind === 'user' || byId.get(t.toNodeId)?.kind === 'user') problems.push(`transfer ${t.id} involves an other water user: transfers run between farm dams`);
 		if (t.fromNodeId === t.toNodeId) problems.push(`transfer ${t.id} goes from a node to itself`);
 	}
 

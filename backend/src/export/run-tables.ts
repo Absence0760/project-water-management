@@ -7,6 +7,7 @@ import {
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
 	GAUGE_COLUMNS,
+	USER_COLUMNS,
 	type RunSummary,
 	type WaterBalanceRow,
 	type Wr2012FlagLevel,
@@ -63,8 +64,8 @@ export function seriesKeyOrder(scope: 'catchment' | 'node') {
  * "Irrigation supplied [G] (m³/day)". The summary CSV's column guide gives
  * each letter's formula.
  */
-export function nodeColumnHeader(key: string, label: string, unit: string | null | undefined, kind: 'farm' | 'gauge'): string {
-	const letter = (kind === 'gauge' ? GAUGE_COLUMNS : FARM_DAILY_COLUMNS).find((c) => c.key === key)?.letter;
+export function nodeColumnHeader(key: string, label: string, unit: string | null | undefined, kind: 'farm' | 'gauge' | 'user'): string {
+	const letter = (kind === 'gauge' ? GAUGE_COLUMNS : kind === 'user' ? USER_COLUMNS : FARM_DAILY_COLUMNS).find((c) => c.key === key)?.letter;
 	const withLetter = letter ? `${label} [${letter}]` : label;
 	return unit ? `${withLetter} (${unit})` : withLetter;
 }
@@ -300,6 +301,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* curtailmentLines(summary.curtailment);
+	if (summary.users?.length || summary.curtailment?.otherUsers?.length) {
+		yield '';
+		yield* otherUserLines(summary);
+	}
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
@@ -446,7 +451,8 @@ export function* verificationLines(v: RunSummary['verification']): Generator<str
 	}
 }
 
-const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | null][] = [
+/** A column marked optional appears only when some row has it (a term only some networks have, WP-1.33–1.35). */
+const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | null, optional?: true][] = [
 	['Days', (r) => r.days],
 	['Rain (mm)', (r) => r.rainMm],
 	['Natural flow (mm)', (r) => r.naturalFlowMm],
@@ -465,6 +471,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Transfers, net (m³)', (r) => r.transfersM3],
 	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
 	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
+	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
 	['Spill (m³)', (r) => r.spillM3],
 	['Outflow (m³)', (r) => r.outflowM3],
 	['Dam storage at end (m³)', (r) => r.closingStorageM3],
@@ -484,10 +491,12 @@ export function* waterBalanceLines(wb: RunSummary['waterBalance']): Generator<st
 		return;
 	}
 	yield csvRow(['Start storage + farm runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage + residual; the residual should be 0']);
-	yield csvRow(['Water year', ...BALANCE_COLUMNS.map(([h]) => h)]);
-	for (const r of [...wb.years, wb.total]) {
+	const rows = [...wb.years, wb.total];
+	const cols = BALANCE_COLUMNS.filter(([, f, optional]) => !optional || rows.some((r) => f(r) !== null));
+	yield csvRow(['Water year', ...cols.map(([h]) => h)]);
+	for (const r of rows) {
 		const year = r.waterYear === null ? 'Whole run' : `${r.waterYear}/${String((r.waterYear + 1) % 100).padStart(2, '0')}`;
-		yield csvRow([year, ...BALANCE_COLUMNS.map(([, f]) => f(r))]);
+		yield csvRow([year, ...cols.map(([, f]) => f(r))]);
 	}
 }
 
@@ -567,4 +576,26 @@ export function* columnGuideLines(): Generator<string> {
 	yield csvRow(['Farm daily columns (the daily CSV of a farm)']);
 	yield csvRow(['Column', 'Series', 'Formula']);
 	for (const c of FARM_DAILY_COLUMNS) yield csvRow([c.letter ?? '', c.key, c.formula]);
+}
+
+/**
+ * Other water users (engine ≥ 0.22.0, WP-1.33): the whole-run means, then the
+ * reporting window's EWR charge and whether it is curtailed (a senior user is
+ * not; docs/model.md §2.11). Only in runs that have users.
+ */
+export function* otherUserLines(summary: RunSummary): Generator<string> {
+	yield csvRow(['Other water users (whole run)']);
+	yield csvRow(['User', 'Priority', 'Average demand (m³/day)', 'Average taken (m³/day)', 'Average deficit (m³/day)', 'Demand supplied (%)', 'Average returned (m³/day)', 'Average EWR charge (m³/day)', 'Days charged for the EWR']);
+	for (const u of summary.users ?? []) {
+		yield csvRow([u.name, u.priority, u.avgDemandM3Day, u.avgSuppliedM3Day, u.avgDeficitM3Day, pct(u.fractionSupplied) as Cell, u.avgReturnedM3Day, u.avgEwrChargeM3Day, u.daysEwrNotMet]);
+	}
+	const rows = summary.curtailment?.otherUsers ?? [];
+	if (!rows.length) return;
+	yield '';
+	yield csvRow(['Other water users: EWR charge and curtailment (reporting window)']);
+	yield csvRow(['User', 'Priority', 'Demand (m³/day)', 'Taken (m³/day)', 'Returned (m³/day)', 'EWR charge (m³/day)', 'Curtailed', 'Supply cut (m³/day)', 'Supply cut (l/s)', 'Charge not removed by a cut (m³/day)']);
+	for (const r of rows) {
+		yield csvRow([r.name, r.priority, r.demandM3Day, r.suppliedM3Day, r.returnedM3Day, r.ewrChargeM3Day, r.curtailed ? 'yes' : 'no (senior)', r.supplyCutM3Day, r.supplyCutLs, r.uncurtailedChargeM3Day]);
+	}
+	yield csvRow(['Other water users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR: its charge stands, and is not moved onto the farms.']);
 }
