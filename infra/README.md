@@ -77,7 +77,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms |
+| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, backend `self_check_failed` log metric filter + alarm |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
 | `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
@@ -216,7 +216,7 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 12 alarms, logs, RDS log export | ~1.70 |
+| CloudWatch: 13 alarms (incl. the self-check-failed log metric filter), logs, RDS log export | ~1.70 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $40** |
 
@@ -362,7 +362,9 @@ and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
 security-headers policies and the CSP directives; SES identity, DKIM (global
 and regional DKIM domains), MAIL FROM, DMARC, TLS-required configuration set,
 the least-privilege `ses:SendEmail` policy and the VPC endpoint; every alarm
-wired to SNS; the budget; the deploy policy having no wildcards; and the
+wired to SNS, including the `self_check_failed` log metric filter (pattern
+and metric name) and its alarm; the budget; the deploy policy having no
+wildcards; and the
 deploy role's trust postcondition, with negative runs for a branch subject, a
 `StringLike` wildcard and another repo (and a positive run for GitHub's
 immutable-claims subject).

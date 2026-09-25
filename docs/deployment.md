@@ -295,8 +295,10 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 - SES (above), CloudFront security headers and CSP, PriceClass_All.
 - Budget and alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / free storage / connections / freeable memory, SES
-  bounce and complaint rates, CloudFront 5xx; all to the SNS topics that email
-  `budget_alert_email`.
+  bounce and complaint rates, CloudFront 5xx, and a log metric filter + alarm
+  on the backend's `self_check_failed` structured log line (a saved run
+  failing one of the engine's own invariant checks — docs/security.md §
+  Infrastructure); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,

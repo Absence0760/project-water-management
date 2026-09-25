@@ -231,6 +231,14 @@ readable by anyone. The rules:
   deletion protection.
 - **Blast radius:** Lambda reserved concurrency is capped. There is a budget
   alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
+- **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a
+  structured `{ event: "self_check_failed", projectId, runId, checks }` line
+  — failed check ids only, never a farm name, date or value — when a saved
+  run fails one of the engine's self-checks (docs/model.md § Verification).
+  A CloudWatch log metric filter + alarm on that line (`infra/alarms.tf`,
+  `self_check_failed`) notifies the same alerts SNS topic as every other
+  alarm, so a model bug in production is paged, not just shown as a warning
+  on the one run.
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
