@@ -1136,9 +1136,11 @@ role and not before it.
 - Releases are `web@X.Y.Z` / `backend@X.Y.Z` GitHub releases, run through a
   preflight → build → `production` approval → deploy pipeline
   ([deployment.md §4](./deployment.md)).
+- [x] Dependabot's `pip` entry watched the repo root, which has no Python
+      manifest; since 2026-09-25 it watches `brand/` and `scripts/wbt-import/`
+      (the openpyxl pin the importer CI job installs).
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
-      - drop the Dependabot `pip` entry, which watches nothing;
       - a CodeQL Python leg for `scripts/wbt-import`.
 
 ## Housekeeping
