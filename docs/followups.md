@@ -1,4 +1,4 @@
-# Follow-ups: open work (updated 2026-09-24, after the Phase 6 persona review)
+# Follow-ups: open work (updated 2026-09-24, after the engine 0.19.0 / run notes round)
 
 Everything below is known, unfinished work. Longer-term features live in
 [planned-work.md](./planned-work.md); client and hydrologist questions are in
@@ -466,10 +466,8 @@ the reports):
         each model.
 - [ ] **Phases 7 and 10 of issue #4:** Phase 7 (IHACRES) only if the
       hydrologist asks for it. Phase 10 (remove legacy) after sign-off.
-- [ ] **Persona tooling:** `pnpm -C packages/engine exec tsx` fails because
-      the engine workspace has no `tsx`. The persona agents are told to use
-      it (`.claude/agents/persona-*.md`); either add `tsx` as an engine dev
-      dependency or point the agents at the backend's copy.
+- [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
+      (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
 ## Calibration research (2026-09-24)
 
@@ -634,7 +632,10 @@ the suggested order (the IDs carry the detail):
       if either fails alone, look for a missing readiness signal on reload
       rather than a longer timeout.
 - [ ] **Wall-clock test flakes under load.** "a GR4J run of an example
-      catchment takes under 50 ms" failed once (2026-09-24) while all three
+      catchment takes under 50 ms" failed once (2026-09-24), and "runs 13
+      nodes × 16k days well under a second" (`run.test.ts`, client
+      catchment, < 1 000 ms) failed twice on 2026-09-24 in a full parallel
+      `pnpm test`, passing alone while all three
       workspaces' tests ran at once; it normally takes about 21 ms. The
       durable fix: move the timing check to a separate `bench` / soak target,
       or take the median of several runs against a budget measured on the
@@ -649,12 +650,14 @@ the suggested order (the IDs carry the detail):
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
       0.13.0: only the default 400 cases ran. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
-      A 2 000-case run on engine 0.17.0 (2026-09-24) found **seed 921
-      failing "doubling crop areas raised the supply fraction"**, the same on
-      0.16.0, so it came in with N1–N4 or earlier, not attribution. Bisect
-      over 0.13.0 → 0.16.0, find which rule lets more demand be supplied a
-      larger fraction (candidates: the transfer room cap using the
-      receiver's demand, or the soil-water store), and fix at the source.
+      **Seed 921 fixed in engine 0.19.0** (2026-09-24): the transfer room
+      cap (N4) ignored the receiving dam's own rain, evaporation and
+      seepage, so a leaky dam was topped up short by a fixed volume and
+      doubling demand raised its supply fraction. The room is now
+      `cap − (Q[t−1] + Pd − E − Sp) + D − scheduled` (model.md §2.6),
+      `checkTransferLimits` reads it the same way, and a named seed-921
+      test pins it. A 2 000-case soak on 0.19.0 passed for both runoff
+      models; the 20 000-case soak is still owed.
 - [ ] **Excel audit workbook export** (the strongest independent check). The
       farm daily CSV has every column but the hydrologist still types the
       formulas. An `.xlsx` for one farm: inputs as values, each working column
@@ -666,20 +669,20 @@ the suggested order (the IDs carry the detail):
       About a day. Also settles the `verify/` Python cross-check question
       above: this would replace it. Trigger: after the client catchment run
       (first item) and the hydrologist persona review (below) confirm it's wanted.
-- [ ] **Trace the runoff side.** "Trace a day" covers farms and gauges only.
-      With GR4J the default, most surprises are upstream: how rain becomes
-      natural flow. Add a catchment trace: rain used, PET, AET, production
-      and routing stores before and after, exchange, unit-hydrograph water in
-      transit, natural flow out, and the day's store balance. The series are
-      already stored (`production_store`, `routing_store`, `uh_store`, `aet`,
-      `pet`, `exchange`), so it's the `/day` endpoint accepting the catchment
-      (no `nodeId`) plus a GR4J column catalogue beside `verify/columns.ts`.
-- [ ] **Alert on a failed self-check in production.** A failed check is a
-      model bug, but today it is only a warning on that run. Log a
-      structured line from `executeRun` (`{ event: "self_check_failed",
-      projectId, runId, checks }`, no user data) and add a CloudWatch metric
-      filter + alarm to the budget/alarms stack in `infra/`. `terraform plan`
-      only; apply is the operator's call.
+- [x] **Trace the runoff side** (2026-09-24): `/day` without `nodeId`
+      traces the catchment (GR4J stores before/after, exchange, UH, natural
+      flow, and the store balance with its residual; legacy runs list the
+      [Flow data] columns). Column catalogues `GR4J_COLUMNS` /
+      `LEGACY_RUNOFF_COLUMNS` in `verify/columns.ts` (ui.md, api.md).
+- [ ] **Per-store starting values on a run's first day.** Only the total
+      storage after the warm-up is saved, so day one's catchment trace
+      shows each store's "before" as "–" and balances on the total. Saving
+      each store at the end of the warm-up is an engine change (bump
+      `ENGINE_VERSION`). Trigger: the hydrologist asks for day-one detail.
+- [x] **Alert on a failed self-check in production** (2026-09-24):
+      `executeRun` logs `{ event: "self_check_failed", projectId, runId,
+      checks }` (check ids only), and `infra/alarms.tf` has a metric filter
+      + alarm on the alerts SNS topic (plan-tested; not applied).
 - [ ] **Hydrologist persona review of the Self-checks panel and exports.**
       Run `persona-hydrologist` on the panel, the farm daily CSV and the
       summary CSV: do they answer what a hydrologist checks first? Log gaps
@@ -688,8 +691,8 @@ the suggested order (the IDs carry the detail):
       the Data tab's Preview dialog joins every input series by day with
       rain used and its source, CHIRPS factor and corrected value, flow in
       m³/day, per-series flags and calibration exclusions (ui.md). Its e2e
-      spec `e2e/tests/series-preview.spec.ts` has not been run yet (the e2e
-      ports were busy); run it.
+      spec `e2e/tests/series-preview.spec.ts` passes (2026-09-24); the dialog
+      is now near full-screen (`Dialog` `full` size).
 - [ ] **More columns in the Data tab downloads** (the original request that
       led to the self-checks). `GET /series/:id/export.csv` still writes only
       `date` + the uploaded value. Add how the model used each series: for
@@ -706,8 +709,10 @@ the suggested order (the IDs carry the detail):
 
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
       original ask was spaces (300 000). Pick one app-wide.
-- [ ] **"Sign out everywhere" button.** `POST /auth/logout-everywhere` exists,
-      but the header has no account menu for it yet.
+- [x] **"Sign out everywhere" button** (2026-09-24): the header's account
+      menu has *Sign out* and *Sign out everywhere*. The rest of WP-1.9
+      (`/account` page, password change, `PATCH /auth/me`) is still open in
+      the step-1 roadmap.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
 
@@ -793,20 +798,13 @@ role and not before it.
   - forecast days flagged (plan.md §1e).
 - **Data quality:** gap filling.
 - **WR2012 check (issue #4 phase 8, model.md §2.10c):**
-  - [ ] **A written explanation per run.** An assessor wants the modeller's
-        reason next to a *query* or *not usable* flag (e.g. "the quaternary
-        includes an irrigated tributary outside the model"). Runs are
-        immutable today: `model_run` has no editable field besides the label
-        set at creation, and no `PATCH` route. The durable fix is a
-        `model_run.notes` text column (migration with its RLS: editor may
-        update only that column, via a column-level `GRANT UPDATE (notes)`),
-        `PATCH /projects/:id/runs/:runId { notes }`, shown and editable under
-        the WR2012 panel and carried into run comparison and the summary CSV.
-        Trigger: before the first licence-application use, or when the
-        licensing-assessor review asks for it.
-  - [ ] **Summary CSV export** (`backend/src/export/run-tables.ts`) doesn't
-        carry the WR2012 report yet; add a block (reference, scaling, MAR
-        ratios, monthly table, flag) with the explanation above.
+  - [x] **A written explanation per run** (2026-09-24): migration 007
+        adds `model_run.notes` (+ who/when stamp by trigger); the app may
+        `UPDATE` only that column; `PATCH /projects/:id/runs/:runId`; the
+        Run notes panel under WR2012, run comparison and the summary CSV
+        carry it (data-model.md § Run notes).
+  - [x] **Summary CSV export** carries the WR2012 block (reference, scaling,
+        MAR ratios, monthly table, flag) and the run notes (2026-09-24).
   - [ ] **SA-only help tag.** The WR2012 help entries are South African;
         tag them when `HelpEntry.countries` lands (international.md WP-I.12).
 - **Workbook import in the browser.** It is the Python CLI only today.
