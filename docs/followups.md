@@ -674,8 +674,9 @@ the suggested order (the IDs carry the detail):
       → ~89 KB. The total was already 383 KB against a 295 KB ceiling on
       main (help centre, new tabs' code, engine code), so its ceiling went
       *up* to 411 KB (405 KB measured).
-- [x] **Bring the total bundle down** (issue #9, 2026-09-25): 407 → 401 KB
-      and the ceiling 411 → 407 KB, from `build.target: 'es2022'`. Help tips
+- [x] **Bring the total bundle down** (issue #9, 2026-09-25): −6 KB (419 →
+      413 KB on main at merge; main had already passed the old 411 KB ceiling,
+      now 419), from `build.target: 'es2022'`. Help tips
       load the help text off the critical path (−26 KB on each tab with a
       tooltip; the total doesn't move). Measured and rejected, with the numbers
       in the guard's change log: sharing the engine with the calibration

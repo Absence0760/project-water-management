@@ -62,11 +62,15 @@
 //             the guard deliberately counts every lazy chunk. Headroom ~6 KB
 //             on the total and ~4 KB on the chunk, so a tab's code sliding
 //             back into the page chunk, or the next feature, fails here.
-// 2026-09-25  total 411 → 407 KB (down; issue #9). main @ 657e39e measured
-//             407 KB. Vite's build.target is now es2022 (frontend/
-//             vite.config.ts): the default target down-levelled Svelte 5's
-//             class fields into defineProperty/WeakMap helpers. 401 KB total,
-//             and every page's cold load ~3 KB lighter (a catchment 88 → 85 KB,
+// 2026-09-25  total 411 → 419 KB (issue #9). main @ 657e39e measured 407 KB;
+//             by merge time main @ 354bea0 measured 419 KB, already over 411:
+//             the multi-day rain accumulations (B4: engine, Settings, Data tab)
+//             and the day's help text had landed without a ceiling change. The
+//             work below takes 6 KB off (419 → 413 KB), and the ceiling is
+//             413 + the usual ~6 KB. Measured on 657e39e (407 → 401 KB):
+//             Vite's build.target is now es2022 (frontend/vite.config.ts); the
+//             default target down-levelled Svelte 5's class fields into
+//             defineProperty/WeakMap helpers. Every page's cold load ~3 KB lighter (a catchment 88 → 85 KB,
 //             sign-in 56 → 53). HelpTip now fetches the help text (a 26 KB
 //             chunk) off the critical path instead of importing it, which
 //             doesn't move the total (the chunk is still shipped and counted)
@@ -82,7 +86,7 @@
 //             catchment's cold load grows 88 → 111 KB and compare's 144 → 159,
 //             since a shared chunk carries what every importer needs.
 //             experimentalMinChunkSize: 1–4 KB off the total for 1–2 KB more
-//             on cold loads, not worth it. Headroom ~6 KB, as before.
+//             on cold loads, not worth it.
 //
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
@@ -94,7 +98,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 407,
+	totalCodeKb: 419,
 	largestChunkKb: 41,
 	largestAssetKb: 100,
 });
