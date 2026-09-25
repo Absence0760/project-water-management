@@ -175,8 +175,28 @@ In short:
     its consistency, and "Reproduce" in the Runs tab re-runs the whole
     ensemble in any viewer's browser. The engine version must match: an
     ensemble started on another version can't be completed.
+- **Background jobs run as a person, never as the system** (016_jobs,
+  [architecture.md § Background work](./architecture.md#background-work)).
+  A job is queued by an editor, as themselves (RLS; the insert trigger stamps
+  the acting user and resets every lifecycle field, so a forged `done` or
+  another user's id doesn't stick), and the worker runs it inside
+  `withUser(acting user)`: normal RLS, and a role check first that fails the
+  job closed (dead, nothing written) if the user was demoted or removed
+  since. There is no RLS-bypassing principal. The only cross-project steps
+  (claim, finish, purge, queue stats) are `SECURITY DEFINER` functions with a
+  pinned `search_path`, executable by `water_app` only, that return routing
+  columns and never a payload; the worker reads the payload as the acting
+  user and validates it as untrusted input. `water_app` has no `UPDATE` or
+  `DELETE` on `job`. A job's stored error is written by the server, never
+  database text, and SQS messages carry a job id only.
+- **An import report can't be forged or rewritten** (017_project_import). What
+  the importer flagged is the audit trail of a workbook's mistakes, so only the
+  import that created the project may write it (the insert trigger checks the
+  project was created by that user in the same transaction and stamps who and
+  when), and `water_app` has no `UPDATE` or `DELETE` on it. Viewers read it.
+  See [§ Import reports](#import-reports).
 - The schema owner (`water`) is used only for migrations, never by the running
-  API.
+  API or the job worker.
 - The DB test suite (`pnpm test:backend:db`) checks these rules as `water_app`,
   and its catalogue test (`backend/src/db/catalogue.db.test.ts`) checks that
   every table has RLS and policies, `water_app` owns nothing and can't bypass
@@ -260,6 +280,33 @@ In short:
   the file name is the summary CSV's server-made ASCII slug. The worker loads
   from `'self'` only (`worker-src 'self'`), and SheetJS only writes here; it
   never parses anything uploaded.
+
+### Import reports
+
+The import dialog sends the review's notes and unmapped report with the
+project (`importReport` on `POST /projects/import`,
+[api.md § Import report](./api.md#import-report)), and the database keeps them
+for every member to read later. Every string in them came from the workbook
+(farm and sheet names, a hand-written formula verbatim) through the client, so
+the whole report is **untrusted text stored server-side**:
+
+- **Capped by zod before anything is written** (`backend/src/projects/importReport.ts`):
+  at most 500 notes and 500 unmapped items, each string bounded (a message
+  2000 characters, formula text 8192, a name 200, a sheet 100, a cell 20),
+  codes restricted to `[a-z0-9-]`, no NUL, unknown keys dropped, and the two
+  lists at most 512 KB of JSON together. A hostile client can store about
+  half a megabyte per project it imports, never megabytes; the rest of the
+  body stays under the route's 5 MB cap. Over a cap the whole import is a
+  `400` and nothing is created. The table's CHECKs (array lengths, 1 MiB of
+  jsonb text) back the API up.
+- **Rendered as text only**: the Overview's Import record and the review share
+  `ImportReportLists.svelte`, plain Svelte interpolation, never `{@html}`. The
+  e2e suite imports a workbook whose farm name is an `<img onerror>` payload
+  and checks it shows literally.
+- **Never evaluated**: formula text is displayed in a `<code>` element, never
+  run or parsed.
+- Not in `export.json`, so an export can't carry one project's report into
+  another's import.
 
 ## Public repo hygiene
 

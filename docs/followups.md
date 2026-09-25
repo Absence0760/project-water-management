@@ -42,7 +42,7 @@ Tick items off (or move them into an issue) as they are done.
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 70 and set `dmarc_report_email`.
+      `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
 
 ## Hydrologist
 
@@ -1120,12 +1120,15 @@ role and not before it.
         Trigger: a user reports the import failing on a phone or low-memory
         machine, or a workbook with a longer record than the client's. It
         would also drop SheetJS from the import worker (101 KB gzip).
-  - [ ] **The notes and unmapped report aren't kept.** They are shown on the
-        import review only; once imported, the project has no record of what
-        the importer couldn't map. Durable fix: store them with the project
-        (a `project.import_report` jsonb, shown on the Overview until
-        dismissed). Trigger: the first workbook the client imports
-        themselves, since they won't have the Python output to go back to.
+  - [x] **The notes and unmapped report are kept** (2026-09-25). The import
+        dialog sends them beside the document (`importReport` on
+        `POST /projects/import`, capped by zod) and they are stored in the
+        import's transaction in their own append-only table, one row per
+        import, rather than a `project` jsonb column (migration 017
+        `project_import`; data-model.md § Import reports). Viewers read them
+        through `GET /projects/:id/import-report` and on the Overview's
+        Import record, both lists collapsed at first; not dismissible, since
+        it is the audit trail. Not in `export.json` (api.md § Import report).
   - [ ] **Measured in a real browser.** The memory figures above are Node
         with SheetJS on its browser code paths; no one has profiled the
         client workbook's import in Chrome or Safari, or on a phone. Trigger:

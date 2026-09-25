@@ -1,5 +1,6 @@
 # ----------------------------------------------------------------------------
-# Two Lambdas, both in the private subnets, both nodejs24.x on arm64:
+# Two Lambdas, both in the private subnets, both nodejs24.x on arm64 (the
+# third, the background-job worker, lives in jobs.tf):
 #
 #   - `water-management-backend` — the Hono API (backend/src/lambda.ts).
 #     Connects as the RLS-bound `water_app` role. Exposed only through the
@@ -80,8 +81,9 @@ resource "aws_iam_role" "lambda" {
 }
 
 # Logs + the EC2 ENI permissions a VPC Lambda needs. The API reads its config
-# from environment variables; its only AWS call is SES SendEmail, granted
-# separately and scoped to one identity + From address (ses.tf).
+# from environment variables; its only AWS calls are SES SendEmail, granted
+# separately and scoped to one identity + From address (ses.tf), and SQS
+# SendMessage to the jobs queue (jobs.tf).
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -127,6 +129,11 @@ resource "aws_lambda_function" "backend" {
       MAIL_FROM             = "${var.mail_from_display_name} <${local.mail_from_address}>"
       SITE_URL              = local.site_origin
       SES_CONFIGURATION_SET = aws_sesv2_configuration_set.main.configuration_set_name
+
+      # Background jobs (jobs.tf): after queueing a job the API sends a wake-up
+      # to the jobs queue; the EventBridge tick catches any that are lost.
+      JOB_TRANSPORT  = "sqs"
+      JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
     }
   }
 
@@ -134,7 +141,9 @@ resource "aws_lambda_function" "backend" {
     aws_cloudwatch_log_group.lambda,
     aws_iam_role_policy_attachment.lambda_vpc,
     aws_iam_role_policy.lambda_ses,
+    aws_iam_role_policy.lambda_jobs_send,
     aws_vpc_endpoint.ses,
+    aws_vpc_endpoint.sqs,
   ]
 
   lifecycle {

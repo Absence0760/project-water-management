@@ -4,7 +4,7 @@
 // document in full and answers with every problem, so this never duplicates
 // its rules. A workbook source (WP-1.31) adds its own branch to
 // `readImportFile` and returns the same `ParsedImport`, with its notes.
-import type { ProjectFile } from '$lib/api';
+import type { ImportReport, ProjectFile } from '$lib/api';
 
 /** File types the picker offers. */
 export const IMPORT_ACCEPT = '.json,application/json';
@@ -106,10 +106,13 @@ function addDays(iso: string, n: number): string | null {
 	return Number.isNaN(ms) ? null : new Date(ms + n * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** The document as it will be sent: the preview's name, and its size against the server's cap. */
-export function importBody(file: ProjectFile, name: string): { file: ProjectFile; bytes: number } {
+/**
+ * The document as it will be sent: the preview's name, and the body's size
+ * against the server's cap, counting the import report that rides beside it.
+ */
+export function importBody(file: ProjectFile, name: string, report?: ImportReport): { file: ProjectFile; bytes: number } {
 	const out = { ...file, name: name.trim() };
-	return { file: out, bytes: new TextEncoder().encode(JSON.stringify(out)).length };
+	return { file: out, bytes: new TextEncoder().encode(JSON.stringify(report ? { ...out, importReport: report } : out)).length };
 }
 
 export function importTooLarge(bytes: number): string | null {

@@ -21,17 +21,24 @@ flowchart LR
     L[Lambda · Hono<br/>Function URL]
     EL[engine<br/>stored runs]
     DB[(RDS PostgreSQL 17<br/>private subnets)]
+    Q[[SQS jobs<br/>+ DLQ]]
+    T[EventBridge<br/>every 5 min]
+    W[Worker Lambda<br/>background jobs]
     L --- EL
   end
 
   UI -- "GET /*" --> CF --> S3
   UI -- "/api/* (cookie)" --> CF -- "+ shared-secret header" --> L
   L -- "SQL as water_app<br/>RLS per request" --> DB
+  L -- "wake-up" --> Q --> W
+  T --> W
+  W -- "SQL as water_app<br/>RLS as the job's acting user" --> DB
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
 (`@hono/node-server`) on `:3001`, and Postgres 17 in docker on `:5434`
-(plus Mailpit, which catches all email). The
+(plus Mailpit, which catches all email; the background-job worker is an
+opt-in Node process, `pnpm dev:run:worker`, polling the same Postgres). The
 browser calls the backend directly on `:3001` (CORS with credentials). In
 production, CloudFront serves the site and **proxies `/api/*` from the same
 origin**, so the session cookie is first-party.
@@ -41,12 +48,12 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
-| `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL and the migrate Lambda (both in a VPC), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
+| `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
 
 ## Why one engine in two places
 
@@ -206,6 +213,62 @@ sequenceDiagram
   A-->>B: { startDate, values }  (one series per chart)
 ```
 
+## Background work
+
+Work that shouldn't run inside a request, or can't fit the API Lambda's 30 s,
+goes through one job queue (roadmap WP-2.8; `backend/src/jobs/`,
+`016_jobs.sql`). Today its one consumer is `rerun` (a model run off the
+request path, `POST /projects/:id/jobs`); step 2's feeds, auto re-runs, alerts
+and reports plug in as further kinds.
+
+- **The `job` table is the source of truth in every environment**: status,
+  `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
+  last error. A transport only wakes a worker ("look at the table now"), so a
+  lost wake-up delays a job by one poll or tick and never loses it.
+- **Transports** (`JOB_TRANSPORT`, `jobs/transport.ts`):
+  - `inprocess`, the default: the local worker process
+    (`pnpm dev:run:worker`, or `pnpm dev:full` with the app) ticks every
+    `JOB_POLL_SECONDS` (15) and at once on `LISTEN job_queued`, which the
+    table's insert trigger NOTIFYs at commit. Postgres only; no AWS, no
+    LocalStack. `pnpm dev:jobs:tick` runs one tick and exits.
+  - `memory`, for tests: the enqueueing request runs the tick inline.
+  - `sqs`, production: the API sends a wake message to the `jobs` queue,
+    which triggers the worker Lambda; an EventBridge schedule also ticks it
+    every 5 minutes (infra/jobs.tf).
+- **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
+  then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
+  SKIP LOCKED`, a lease) and runs each.
+- **Each job runs as its acting user**, the editor who queued it: the worker
+  opens `withUser(acting_user_id)`, checks the user still holds the handler's
+  role (and fails the job closed, dead with no retry, if not), reads and
+  validates the payload under RLS, runs the handler, and records `done` via
+  `app_finish_job` **in the same transaction**, so the work and its "done"
+  commit together. There is no principal that bypasses RLS: only claim,
+  finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
+  functions that never return a payload.
+- **Failure**: the transaction rolls back, and the failure is recorded in a new
+  one. Retries back off `2^attempts` minutes; after `max_attempts` (default
+  5), or on a failure no retry can fix (bad input, a lost role, no handler),
+  the job is `dead` and logs `job_dead`, which alarms in production (email to
+  the owners comes with WP-2.13). The stored error is written by us
+  (`jobs/errors.ts`), never database text.
+- **A worker that dies** mid-job leaves it `running` until its lease
+  (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
+  lease token fences the old worker: if it wakes up and tries to finish, it
+  gets nothing and rolls its work back.
+- **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
+  job per `(project, dedupe_key)`, and a pending job isn't claimed while one
+  with its key is running. That departs from the roadmap's index over
+  `('queued','running')`: with that one, new data arriving *during* a re-run
+  would be dropped as a duplicate of the run already reading the old data.
+  Here it queues, and runs once the first finishes.
+
+Adding a kind: write `jobs/handlers/<kind>.ts` with `defineHandler({ role,
+payload, run })` (`jobs/registry.ts` documents the contract) and list it in
+`jobs/handlers/index.ts`. The kind must be one of the table's CHECK list,
+which already names every step-2 kind (`feed_fetch`, `feed_ingest`, `rerun`,
+`alert_eval`, `report_render`).
+
 ## Key choices
 
 | Choice | Why |
@@ -217,6 +280,7 @@ sequenceDiagram
 | **uPlot** | Draws decades-long daily series quickly, and it's small. |
 | **Static frontend** | Cheap hosting on S3 + CloudFront, and no server-side rendering to secure. |
 | **Python importer first** | openpyxl reads a large `.xlsm` reliably in read-only mode. An in-browser SheetJS importer comes later ([plan.md](./plan.md)). |
+| **A Postgres job table as the queue**, SQS only as a wake-up | One source of truth for status, debounce, dedupe and history the UI can show, with the same code locally (no SQS emulator) and in production. SQS adds the wake-up, a DLQ and the bridge to the non-VPC fetcher step 2 needs. |
 | **Lambda + RDS PostgreSQL 17 (t4g.micro)** | Low, predictable cost for a low-traffic expert tool. Always warm, and the same `pg` code path as local. Trade-offs in [plan.md 6b](./plan.md#6b-terraform-additions-infra). |
 
 ## Repo layout

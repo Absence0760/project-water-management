@@ -40,6 +40,12 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/runs/:runId/series/bulk')).toBe(false);
 	});
 
+	// The import report kept with a project (017_project_import): auth-gated like every project read.
+	it('inventories the import-report route as auth-gated', () => {
+		expect(routes).toContain('GET /projects/:id/import-report');
+		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');

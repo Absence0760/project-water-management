@@ -18,6 +18,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                                                                    │ owner creds       ▼
                                                    Secrets Manager ◄┘ (VPC endpoint)  RDS PostgreSQL 17
                                                    (RDS-managed master secret)        db.t4g.micro, single-AZ
+                                                                                      ▲
+   API ──SendMessage (SQS VPC endpoint)──► SQS jobs ──► worker Lambda ────────────────┤ water_app, RLS as
+   EventBridge rate(5 minutes) ─────────────────────────► (jobs.tf)                      the job's acting user
+                                            └─► jobs-dlq (after 5 receives; alarms)
 ```
 
 - **Single origin.** The browser only calls the site's own domain. `/api/*` is
@@ -37,11 +41,13 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   JSON into `index.html`.
 - **Private-only VPC.** Two private subnets with no internet gateway, no NAT
   and no public subnet. Nothing needs the internet, and Lambda log delivery
-  doesn't go through the function's ENI. The VPC reaches exactly two AWS APIs,
-  each through its own interface endpoint and security group: **SES** (the API
-  Lambda's only outbound call, `SendEmail`; `ses.tf`) and **Secrets Manager**
-  (the migrate Lambda only; its endpoint policy allows reading the RDS master
-  secret and nothing else). If a future feature needs egress, add the
+  doesn't go through the function's ENI. The VPC reaches exactly three AWS
+  APIs, each through its own interface endpoint and security group: **SES**
+  (the API Lambda's `SendEmail`; `ses.tf`), **Secrets Manager** (the migrate
+  Lambda only; its endpoint policy allows reading the RDS master secret and
+  nothing else) and **SQS** (the API sends job wake-ups, the worker uses the
+  queue; its endpoint policy names only those two roles and the `jobs` queue;
+  `jobs.tf`). If a future feature needs egress, add the
   matching VPC endpoint for an AWS service. Reach for a NAT (~$33/month) only
   for genuinely external hosts.
 - **Email (SES).** Domain identity for the site hostname with Easy DKIM
@@ -51,16 +57,20 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   counts to CloudWatch. The API role may call `ses:SendEmail` on that identity
   and configuration set only, and only with `From = no-reply@<domain>`.
   Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
-- **Two Lambdas.** `water-management-backend` is the API. It connects as the
+- **Three Lambdas.** `water-management-backend` is the API. It connects as the
   RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
   concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
   reads the owner credentials at run time, creates or re-passwords
   `water_app`, and applies `backend/migrations/*.sql`. It has 512 MB, a 300 s
-  timeout, reserved concurrency 1 and no URL.
+  timeout, reserved concurrency 1 and no URL. `water-management-worker`
+  (`backend/src/lambda-worker.ts`, `jobs.tf`) runs the background job queue
+  as `water_app`: 1024 MB, 300 s, reserved concurrency 2, triggered by the
+  SQS `jobs` queue and an EventBridge tick every 5 minutes
+  ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
-  `NODE_EXTRA_CA_CERTS` points Node at it. `rds.force_ssl = 1` in the
+  `NODE_EXTRA_CA_CERTS` points Node at it (the worker's zip too). `rds.force_ssl = 1` in the
   parameter group.
 
 ## Files
@@ -73,6 +83,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `network.tf` | VPC, 2 private subnets, security groups, Secrets Manager endpoint |
 | `rds.tf` | Subnet group, pg17 parameter group, log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
+| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / backlog / dead-job alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
@@ -80,11 +91,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, backend `self_check_failed` log metric filter + alarm |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
-| `scripts/package-lambdas.sh` | Builds + zips both Lambdas (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
+| `scripts/package-lambdas.sh` | Builds + zips the three Lambdas (and refuses a Lambda bundle that carries dotenv) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
-| `certs/rds-global-bundle.pem` | RDS CA bundle shipped in both zips |
+| `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (13 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (15 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -211,24 +222,28 @@ Idle to light use, on-demand, us-east-1:
 | RDS backups (free up to the provisioned size) | 0 |
 | Secrets Manager interface endpoint, 1 AZ | 7.30 |
 | SES API interface endpoint, 1 AZ | 7.30 |
+| SQS interface endpoint, 1 AZ (job wake-ups, `jobs.tf`) | 7.30 |
+| SQS + EventBridge (the 5-minute tick: ~8,600 invocations) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (RDS master secret) | 0.40 |
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 13 alarms (incl. the self-check-failed log metric filter), logs, RDS log export | ~1.70 |
+| CloudWatch: 17 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric), logs, RDS log export | ~2.10 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $40** |
+| **Total** | **≈ $48** |
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $48–52/month**. Check the AWS pricing calculator before
-you commit to it. At that level the default `budget_monthly_usd = 50` sits
+which comes to **≈ $57–62/month**. Check the AWS pricing calculator before
+you commit to it. At that level the default `budget_monthly_usd = 60` sits
 right on the baseline and the forecast alert would fire every month, so
-**raise it to ~70 for af-south-1**. Main levers: the two endpoint AZ counts
-(`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`, both 1 by
-default), and dropping WAF, which is not recommended because it is the spend
-and brute-force guard for the API. A NAT instead of the two endpoints would
-cost more (~$33 + data).
+**raise it to ~80 for af-south-1**. Main levers: the three endpoint AZ counts
+(`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
+`sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
+recommended because it is the spend and brute-force guard for the API. A NAT
+instead of the endpoints would cost more (~$33 + data), and the fetcher
+Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
+needing one.
 
 ## Operator steps
 
@@ -248,7 +263,8 @@ Claude does not run any of these, and none of them print a secret. Replace
    then poll `aws account get-region-opt-status --region-name af-south-1 --profile water-management`
    until it shows `ENABLED`.
 3. **Lambda concurrency quota** (a new account has 10, and any reservation
-   fails until it is raised; otherwise set both `*_reserved_concurrency = -1`):
+   fails until it is raised; otherwise set every `*_reserved_concurrency = -1`,
+   the worker's included):
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
@@ -294,7 +310,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
    `CLOUDFRONT_DOMAIN_NAME` (unused by the workflows) as variables, and
    `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` (debugging only) as
    secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
@@ -363,7 +379,12 @@ and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
 (public-access block, OAC-only policy, ACLs off); TLS minimums; both
 security-headers policies and the CSP directives; SES identity, DKIM (global
 and regional DKIM domains), MAIL FROM, DMARC, TLS-required configuration set,
-the least-privilege `ses:SendEmail` policy and the VPC endpoint; every alarm
+the least-privilege `ses:SendEmail` policy and the VPC endpoint; the
+background-job stack (queue SSE, the DLQ after 5 receives, visibility ≥ 6×
+the worker timeout, the worker's runtime / size / concurrency / VPC / env and
+no owner credentials, the 5-minute tick and its invoke permission, the SQS
+event source, the SQS endpoint's policy naming only the two roles and the
+jobs queue, and the deploy role's right to update the worker); every alarm
 wired to SNS, including the `self_check_failed` log metric filter (pattern
 and metric name) and its alarm; the budget; the deploy policy having no
 wildcards; and the
@@ -371,7 +392,8 @@ deploy role's trust postcondition, with negative runs for a branch subject, a
 `StringLike` wildcard and another repo (and a positive run for GitHub's
 immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
-`dmarc_policy` fail the plan.
+`dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
+below two ticks does.
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 

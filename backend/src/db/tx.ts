@@ -16,7 +16,11 @@ export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): P
 	});
 }
 
-/** Transaction with no user context — only for app_user lookups during auth. */
+/**
+ * Transaction with no user context: app_user lookups during auth, and the job
+ * queue's cross-project SECURITY DEFINER calls (claim, failed finish, purge,
+ * stats; jobs/runner.ts). Project data is never read here: RLS shows nothing.
+ */
 export async function withoutUser<T>(fn: (db: Db) => Promise<T>): Promise<T> {
 	return inTransaction(fn);
 }

@@ -13,6 +13,9 @@ importers:
       '@aws-sdk/client-sesv2':
         specifier: 3.1138.0
         version: 3.1138.0
+      '@aws-sdk/client-sqs':
+        specifier: 3.1138.0
+        version: 3.1138.0
       '@water-management/engine':
         specifier: workspace:*
         version: link:../packages/engine
@@ -139,6 +142,10 @@ packages:
     resolution: {integrity: sha512-26JZ2Cwtml45+GnF/u1m0humPG/5ZUiGdUsz5A4beqUs2RT9grN4a7qNnPSdtPFqob+xLN/LZOYP5HC7AF2olg==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-sqs@3.1138.0':
+    resolution: {integrity: sha512-7S9KekgQHlFp6l5FVo+SF3hbHO3267KGPhoI2rRkGImZ6mMQthUr8sAhh0wiq6DVtKbwuenEL/1XtTI2uNQWYw==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/core@3.978.1':
     resolution: {integrity: sha512-LbY9aGsEiznDWmUc30Nwv3aIX/+dbwTx8KfS0yOC3NPYMO+O91e6jkT1azf34FwjOndq8/Q+RcVVZz5xnerwdg==}
     engines: {node: '>=20.0.0'}
@@ -173,6 +180,10 @@ packages:
 
   '@aws-sdk/credential-provider-web-identity@3.972.78':
     resolution: {integrity: sha512-/y9WvNtlcPBGLR0qc1a+9J/xtYZfVczvLUOuXaVWylzttH7ewsxwHtjmiJSolNrVSDorIxHGHMU61CbonRkmwA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.43':
+    resolution: {integrity: sha512-0V1bKYPfAnhA6fW9r04uZfXB7DkwT149wKL14BKCC7zUryxIBecgDyvxKIUsZApmvSXpEzPL66uzO/Yc55s74g==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.997.46':
@@ -1395,6 +1406,18 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-sqs@3.1138.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/middleware-sdk-sqs': 3.972.43
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
   '@aws-sdk/core@3.978.1':
     dependencies:
       '@aws-sdk/types': 3.974.6
@@ -1485,6 +1508,13 @@ snapshots:
     dependencies:
       '@aws-sdk/core': 3.978.1
       '@aws-sdk/nested-clients': 3.997.46
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.43':
+    dependencies:
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0

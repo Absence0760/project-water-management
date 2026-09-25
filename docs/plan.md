@@ -128,7 +128,9 @@ departure, and it lists each affected column with its finding ID.
   types, number cells holding text (the TypeScript port's `unmapped` list,
   [scripts/wbt-import/README.md](../scripts/wbt-import/README.md#the-typescript-port-in-browser-import)).
   The import review shows it as its own section, with sheet, cell and
-  element (WP-1.31).
+  element (WP-1.31), and the notes and unmapped report are kept with the
+  project: its Overview's **Import record** shows them long after the
+  import (017_project_import, [api.md § Import report](./api.md#import-report)).
 
 **Acceptance:** importing the client catchment gives a project whose run reproduces the
 workbook (as in 1a) with **no manual edits**.

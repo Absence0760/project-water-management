@@ -244,7 +244,8 @@ into an environment with no database access, such as production (WP-1.8).
 
 - **Body:** the document as JSON (`ProjectFile` in
   `backend/src/projects/document.ts`): `{ name, description?, settings?,
-  model, series? }`. An export posts as-is: unknown top-level keys
+  model, series? }`, plus an optional `importReport` ([Import
+  report](#import-report)). An export posts as-is: unknown top-level keys
   (`format`, `version`, `exportedAt`, `engineVersion`) are ignored. To import
   under another name, change `name` in the body. Series take the same bounds
   as `PUT /projects/:id/series` (a real `YYYY-MM-DD` start date, a unit of
@@ -254,8 +255,8 @@ into an environment with no database access, such as production (WP-1.8).
   `POST /projects`: `404 team not found` if you're not in it, `403 requires
   team member` for a team viewer, omitted = personal. `run=1` (or `true`)
   runs the model once after the import.
-- **Atomic:** validation, the project row, the model and every series go in
-  one `withUser` transaction as you (RLS applies, and the existing trigger
+- **Atomic:** validation, the project row, the model, every series and the
+  import report go in one `withUser` transaction as you (RLS applies, and the existing trigger
   makes you owner). Any failure rolls it all back, so nothing partial is left.
   Every row gets a fresh id, so one file can be imported any number of times.
   The fresh ids are random but sort in the same order as the file's (the
@@ -274,7 +275,9 @@ into an environment with no database access, such as production (WP-1.8).
   (`details` = zod issues); `400 { error: "invalid project file", details:
   [{ message }] }` for the structural model rules (`modelProblems`: one
   outflow node, no cycles, references that resolve, …) and two series with
-  the same kind and name; `400 invalid JSON`; `404 team not found`; `401`
+  the same kind and name; `400 { error: "invalid request", details }` with
+  paths under `importReport` for a report over its caps (nothing is created);
+  `400 invalid JSON`; `404 team not found`; `401`
   signed out; `413 { error: "project file larger than 5 MB — remove series
   the model doesn't need from the file, import it, then upload those series
   as CSV" }`.
@@ -292,6 +295,58 @@ If projects outgrow the cap, add `Content-Encoding: gzip` (a
 binary body reaches Lambda base64-encoded (+33 %), so the compressed cap has
 to stay near 4.4 MB. `import.test.ts` fails if the export cap is raised past
 the import cap, which is the trigger to do this.
+
+### Import report
+
+What the importer flagged when a project was imported: the notes and the
+unmapped report the browser's import review showed, kept with the project
+(`project_import`, [data-model.md § Import reports](./data-model.md#import-reports-017_project_importsql))
+so the hydrologist, and later a licensing assessor, can see what it
+interpreted or couldn't map long after the import. Code:
+`backend/src/projects/importReport.ts`.
+
+**Sent with the import.** `POST /projects/import` takes it as an optional
+top-level `importReport` key beside the document, so a body that is exactly a
+`ProjectFile` (every existing caller, `pnpm import:project`, an export) works
+as before and stores no report:
+
+```jsonc
+{
+  "name": "…", "model": { … }, "series": [ … ],     // the ProjectFile, unchanged
+  "importReport": {
+    "source": "b023-workbook",                      // or "project-file"
+    "fileName": "catchment_WBT_b023.xlsm",          // 1–255 characters
+    "importerVersion": "b023 browser importer (web build …)",  // 1–100
+    "notes": [{ "code": "dam-area-unknown", "severity": "info", "message": "…", "sheet": "Farm spec", "cell": "B4", "element": "Echo Farm" }],
+    "unmapped": [{ "code": "transfer-inout-formula", "message": "…", "sheet": "Transfers", "cell": "T7", "element": "Echo Farm", "text": "=S7*0.9-V7" }],
+    "notesOmitted": 0, "unmappedOmitted": 0         // items beyond what was kept (default 0)
+  }
+}
+```
+
+- **Caps** (zod; the frontend trims to the same before sending,
+  `components/import/importReport.ts`): at most **500** notes and 500 unmapped
+  items; `code` lower-case letters, digits and hyphens, ≤ 64; `message`
+  1–2000; `sheet` ≤ 100; `cell` ≤ 20; `element` ≤ 200; `text` ≤ 8192 (Excel's
+  formula limit); no NUL characters; and the two lists together at most
+  **512 KB** of JSON, well inside the route's 5 MB body cap. Over any cap:
+  `400 invalid request` and nothing is created. Unknown keys are dropped, not
+  stored.
+- **Stored in the import's transaction**, stamped with you and the time. The
+  database refuses a report for any project that transaction didn't create, so
+  there is no other way to write one.
+
+**`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
+the newest import's report: the fields above plus `importedAt` (ISO time) and
+`importedBy` (the importer's display name). `404 { error: "no import report" }`
+when the project wasn't imported through the dialog (made by hand, copied, or
+imported with no report); `404 not found` for a project you can't see.
+
+**Not in `export.json`.** The export is the project's inputs, the document
+that imports back into a project. An import report describes one import of a
+*different* file; inside an export it would ride into the next import and be
+stored as though the export had come from the workbook. So the export leaves it
+out, and a re-import of an export records itself as a `project-file` import.
 
 ### Members
 
@@ -705,6 +760,33 @@ the result is stored only after the server has checked it.
 - Nothing about a stored ensemble can change and none can be deleted
   ([data-model.md](./data-model.md), "Uncertainty bands").
 
+## Jobs
+
+Background work (the job queue, [architecture.md § Background work](./architecture.md#background-work)).
+A job runs later, in the worker, as the editor who queued it.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
+| POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field | editor |
+
+- `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy }`.
+  Never the payload, and nothing about the worker's lease.
+- `status`: `queued` (due at `runAfter`) → `running` → `done`; or `failed`
+  (an attempt failed; the next is due at `runAfter`, `2^attempts` minutes on)
+  → … → `dead` (out of attempts, or a failure no retry can fix).
+  `finishedAt` is set for `done` and `dead`. Finished jobs are deleted after
+  30 days.
+- `error` is written by the server, never raw database text: an engine
+  refusal as `model run failed: …` (the same reason `POST /runs` gives),
+  `the user who queued this job no longer has the editor role on the project`
+  when the queuer lost the role before it ran (the job fails closed and
+  writes nothing), or a generic `an internal error` /
+  `a database error (SQLSTATE …)`.
+- A queued re-run is `POST /runs` off the request path: the same engine run,
+  the same 20-run cap, as the editor who queued it. It appears in
+  `GET /runs` once the job is `done`.
+
 ## Compare runs
 
 Compare two runs, from the same project or from two projects you can see (for
@@ -853,8 +935,9 @@ round-trips export → import:
 }
 ```
 
-Runs are not included (re-run after importing, or pass `run=1` / `--run`).
-The importer gives every row a fresh id.
+Runs are not included (re-run after importing, or pass `run=1` / `--run`),
+nor is the import report ([why](#import-report)). The importer gives every row
+a fresh id.
 
 **Size cap — 413.** Production serves the API through Lambda's *buffered*
 response mode, which fails any response over **6 MB**. Every export body is
