@@ -74,7 +74,27 @@ export interface PreviewColumn {
 	group: 'series' | 'derived';
 	/** Set for a `series` column and its `m3day:` companion — which series row it highlights. */
 	seriesId?: string;
+	/**
+	 * The header's HelpTip key ($lib/help/content): `series.<SeriesKind>` for a
+	 * raw series, `preview.<column>` for a derived one. The Date column's own
+	 * key is PREVIEW_DATE_HELP_KEY.
+	 */
+	helpKey: string;
 }
+
+/**
+ * The unit the column header shows after its label, or null when there's none
+ * or the label already names it (a flow series' m³/day column is labelled
+ * "… (m³/day)" so the column picker can tell it from the m³/s column; its
+ * header shouldn't then read "(m³/day)(m³/day)").
+ */
+export function headerUnit(col: Pick<PreviewColumn, 'label' | 'unit'>): string | null {
+	if (!col.unit || col.label.endsWith(`(${col.unit})`)) return null;
+	return col.unit;
+}
+
+/** The Date column's HelpTip key (the Date column isn't a PreviewColumn). */
+export const PREVIEW_DATE_HELP_KEY = 'preview.date';
 
 const SEC_PER_DAY = 86_400;
 const EMPTY_MODEL: ProjectModel = { nodes: [], crops: [], cropAreas: [], transfers: [] };
@@ -86,21 +106,35 @@ export const m3DayColumnId = (seriesId: string): string => `m3day:${seriesId}`;
 /** One column per series in `list` (same order, labels and units as the Input time series table), plus a m³/day column for each flow series and the derived "how the model used it" columns. */
 export function buildPreviewColumns(list: readonly SeriesMeta[]): PreviewColumn[] {
 	const label = (s: SeriesMeta) => `${kindLabel(s.kind)}${s.name ? ` · ${s.name}` : ''}`;
-	const seriesCols: PreviewColumn[] = list.map((s) => ({ id: seriesColumnId(s.id), label: label(s), unit: s.unit, group: 'series', seriesId: s.id }));
+	const seriesCols: PreviewColumn[] = list.map((s) => ({
+		id: seriesColumnId(s.id),
+		label: label(s),
+		unit: s.unit,
+		group: 'series',
+		seriesId: s.id,
+		helpKey: `series.${s.kind}`
+	}));
 	const flowCols: PreviewColumn[] = list
 		.filter((s) => s.kind.startsWith('flow_'))
-		.map((s) => ({ id: m3DayColumnId(s.id), label: `${label(s)} (m³/day)`, unit: 'm³/day', group: 'derived', seriesId: s.id }));
+		.map((s) => ({
+			id: m3DayColumnId(s.id),
+			label: `${label(s)} (m³/day)`,
+			unit: 'm³/day',
+			group: 'derived',
+			seriesId: s.id,
+			helpKey: 'preview.flowM3Day'
+		}));
 	const hasRain = list.some((s) => s.kind.startsWith('rain_'));
 	const hasChirps = list.some((s) => s.kind === 'rain_chirps_mm');
 	const derivedCols: PreviewColumn[] = [
-		...(hasRain ? [{ id: 'rainUsed', label: 'Rain used (model)', unit: 'mm', group: 'derived' as const }] : []),
+		...(hasRain ? [{ id: 'rainUsed', label: 'Rain used (model)', unit: 'mm', group: 'derived' as const, helpKey: 'preview.rainUsed' }] : []),
 		...(hasChirps
 			? [
-					{ id: 'chirpsFactor', label: 'CHIRPS bias factor', unit: '×', group: 'derived' as const },
-					{ id: 'chirpsCorrected', label: 'CHIRPS (corrected)', unit: 'mm', group: 'derived' as const }
+					{ id: 'chirpsFactor', label: 'CHIRPS bias factor', unit: '×', group: 'derived' as const, helpKey: 'preview.chirpsFactor' },
+					{ id: 'chirpsCorrected', label: 'CHIRPS (corrected)', unit: 'mm', group: 'derived' as const, helpKey: 'preview.chirpsCorrected' }
 				]
 			: []),
-		{ id: 'excluded', label: 'Excluded from calibration', unit: '', group: 'derived' as const }
+		{ id: 'excluded', label: 'Excluded from calibration', unit: '', group: 'derived' as const, helpKey: 'preview.excluded' }
 	];
 	return [...seriesCols, ...flowCols, ...derivedCols];
 }
