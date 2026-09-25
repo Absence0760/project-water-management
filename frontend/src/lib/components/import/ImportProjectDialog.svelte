@@ -205,12 +205,21 @@
 			return;
 		}
 		step = 'importing';
+		// Closing (or reopening) the dialog mid-request moves `attempt` on; a
+		// late answer then mustn't overwrite what the user is doing now.
+		const mine = attempt;
 		try {
-			result = await api.projects.importProject(body.file, { teamId: teamId || null, run });
+			const r = await api.projects.importProject(body.file, { teamId: teamId || null, run });
+			if (mine !== attempt) {
+				onimported?.(r);
+				return;
+			}
+			result = r;
 			step = 'done';
 			closeSession();
 			onimported?.(result);
 		} catch (err) {
+			if (mine !== attempt) return;
 			// A response from the server means its transaction rolled back; no
 			// response (status 0) means we can't know whether it went through.
 			const reached = err instanceof ApiError && err.status !== 0;

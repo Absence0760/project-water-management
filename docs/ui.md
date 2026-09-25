@@ -193,7 +193,9 @@ workbook part is `WorkbookReview.svelte`.
 Everything from the file (farm and sheet names, notes, formula text, error
 messages) is rendered as text, never `{@html}`
 ([security.md § Input handling](./security.md#input-handling)). Closing the
-dialog, Cancel and a finished import terminate the worker.
+dialog, Cancel and a finished import terminate the worker. An import still in
+flight when the dialog closes finishes (the list reloads) but never takes over
+a reopened dialog.
 
 ## Teams
 

@@ -132,6 +132,34 @@ test('a workbook that is not b023 names the ranges it lacks, and Cancel leaves n
 	expect(list.projects).toEqual([]);
 });
 
+test('closing the dialog mid-import: the late answer never overwrites a new pick', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	let release: () => void = () => {};
+	const held = new Promise<void>((r) => (release = r));
+	let posted: () => void = () => {};
+	const reached = new Promise<void>((r) => (posted = r));
+	await page.route('**/projects/import**', async (route) => {
+		posted();
+		await held;
+		await route.continue();
+	});
+	const dialog = await openWorkbookImport(page);
+	await review(dialog, synthetic(), 'synthetic_b023');
+	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+	await reached;
+	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	const again = await openWorkbookImport(page);
+	const answered = page.waitForResponse((r) => r.url().includes('/projects/import'));
+	release();
+	await answered;
+	// The list reloads with the project the first import made …
+	await expect(page.getByRole('rowheader', { name: 'synthetic_b023', exact: true })).toBeVisible();
+	// … and the reopened dialog is still at its file picker.
+	await expect(again.getByLabel('b023 workbook (.xlsm or .xlsx)')).toBeEnabled();
+	await expect(page.getByRole('dialog', { name: 'Project imported' })).toHaveCount(0);
+});
+
 test('names from the workbook are shown as text, never as HTML', async ({ page, owner }) => {
 	void owner;
 	const payload = '<img src=x onerror="document.body.dataset.xss=1">Echo';
