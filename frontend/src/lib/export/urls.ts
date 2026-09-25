@@ -18,6 +18,8 @@ export interface DownloadItem {
 	hint?: string;
 	/** Build this run's .xlsx workbook in a Web Worker instead of fetching `url` ($lib/spreadsheet/export). */
 	workbook?: WorkbookRequest;
+	/** When set, the menu offers a Preview beside the entry, which calls this (the in-page table). */
+	preview?: () => void;
 }
 
 /** What the workbook export worker needs to fetch a run. */
@@ -25,6 +27,14 @@ export interface WorkbookRequest {
 	apiBase: string;
 	projectId: string;
 	runId: string;
+}
+
+/** The all-farms tables the run menu offers (farms.csv?key=…), and what a preview of one needs. */
+export interface FarmTableItem {
+	key: 'runoff' | 'ewr';
+	label: string;
+	url: string;
+	hint: string;
 }
 
 export function exportUrls(baseUrl: string) {
@@ -62,18 +72,38 @@ export function exportUrls(baseUrl: string) {
 export type ExportUrls = ReturnType<typeof exportUrls>;
 
 /**
+ * The workbook's two fragmentation sheets for one run: every farm side by
+ * side, [Fragmented flow] (runoff I) and [Fragmented EWR] (EWR share Y).
+ */
+export function farmTableItems(urls: ExportUrls, projectId: string, runId: string): FarmTableItem[] {
+	return [
+		{
+			key: 'runoff',
+			label: 'Fragmented flow — all farms (CSV)',
+			url: urls.runFarms(projectId, runId, 'runoff'),
+			hint: 'Each farm’s runoff [I], a column per farm, like the workbook sheet'
+		},
+		{
+			key: 'ewr',
+			label: 'Fragmented EWR — all farms (CSV)',
+			url: urls.runFarms(projectId, runId, 'ewr'),
+			hint: 'Each farm’s EWR share [Y], a column per farm, like the workbook sheet'
+		}
+	];
+}
+
+/**
  * Menu entries for one run: the whole-run workbook, the summary sheet, the
- * catchment table, the workbook's two fragmentation sheets (all farms side by
- * side, only when the run has farms), then one daily table per node (in the
- * order given — pass
- * them in network order).
+ * catchment table, the workbook's two fragmentation sheets (only when the run has farms; with
+ * `onPreview`, each also offers an in-page preview), then one daily table per
+ * node (in the order given — pass them in network order).
  */
 export function runDownloadItems(
 	urls: ExportUrls,
 	projectId: string,
 	runId: string,
 	nodes: readonly { id: string; name: string }[] = [],
-	hasFarms = false
+	farms: { onPreview?: (item: FarmTableItem) => void } | null = null
 ): DownloadItem[] {
 	return [
 		{
@@ -84,19 +114,11 @@ export function runDownloadItems(
 		},
 		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-farm table, catchment and calibration' },
 		{ label: 'Daily series — catchment (CSV)', url: urls.runDaily(projectId, runId), hint: 'Natural flow, outflow, EWR, rain…' },
-		...(hasFarms
-			? [
-					{
-						label: 'Fragmented flow — all farms (CSV)',
-						url: urls.runFarms(projectId, runId, 'runoff'),
-						hint: 'Each farm’s runoff [I], a column per farm, like the workbook sheet'
-					},
-					{
-						label: 'Fragmented EWR — all farms (CSV)',
-						url: urls.runFarms(projectId, runId, 'ewr'),
-						hint: 'Each farm’s EWR share [Y], a column per farm, like the workbook sheet'
-					}
-				]
+		...(farms
+			? farmTableItems(urls, projectId, runId).map((f) => {
+					const onPreview = farms.onPreview;
+					return { label: f.label, url: f.url, hint: f.hint, ...(onPreview ? { preview: () => onPreview(f) } : {}) };
+				})
 			: []),
 		...nodes.map((n) => ({ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) }))
 	];

@@ -4,5 +4,5 @@ import { PUBLIC_API_URL } from '$env/static/public';
 import { exportUrls } from './urls';
 
 export const downloads = exportUrls(PUBLIC_API_URL);
-export { exportUrls, runDownloadItems, filenameFromDisposition, fallbackFilename } from './urls';
-export type { DailyWindow, DownloadItem, ExportUrls, WorkbookRequest } from './urls';
+export { exportUrls, farmTableItems, runDownloadItems, filenameFromDisposition, fallbackFilename } from './urls';
+export type { DailyWindow, DownloadItem, ExportUrls, FarmTableItem, WorkbookRequest } from './urls';
