@@ -4,6 +4,8 @@
 // workbooks do: the importer must find everything through the named ranges.
 import { toEpochDay } from '@water-management/engine';
 import * as XLSX from 'xlsx';
+import { sheetjsSource } from './sheetjsReference';
+import type { WorkbookSource } from './source';
 
 export type TestValue = number | string | boolean | null | { date: string; fmt?: string } | { serial: number; fmt: string } | { error: number };
 
@@ -65,8 +67,13 @@ export class WorkbookBuilder {
 		return this;
 	}
 
-	/** A sparse (non-dense) WorkBook, as XLSX.utils makes by default. */
-	build(): XLSX.WorkBook {
+	/** The workbook as the parser reads it (a SheetJS workbook behind WorkbookSource). */
+	build(): WorkbookSource {
+		return sheetjsSource(this.book());
+	}
+
+	/** A sparse (non-dense) SheetJS WorkBook, as XLSX.utils makes by default. */
+	book(): XLSX.WorkBook {
 		const wb = XLSX.utils.book_new();
 		for (const [name, cells] of this.sheets) {
 			const ws: XLSX.WorkSheet = {};
@@ -87,7 +94,7 @@ export class WorkbookBuilder {
 
 	/** The workbook as .xlsx bytes, for readWorkbook(). */
 	toFile(): Uint8Array {
-		return XLSX.write(this.build(), { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+		return XLSX.write(this.book(), { type: 'array', bookType: 'xlsx' }) as Uint8Array;
 	}
 }
 

@@ -3,7 +3,9 @@
 // ../project-water-management-source/Original/, beside the checkout). For each
 // it runs scripts/wbt-import/extract_project.py into a temp directory outside
 // the repo and asserts the TypeScript importer gives the same project.json
-// and notes. It skips when the workbooks or Python with openpyxl are absent,
+// and notes, and that the streaming reader reads every cell of the sheets it
+// parses as the SheetJS reader did (./sheetjsReference.ts; the failure names a
+// cell address, never a value). It skips when the workbooks or Python with openpyxl are absent,
 // so it never runs in CI. Client data stays out of the repo: nothing is
 // written under it, and tests are named by position, not by file name.
 //
@@ -16,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { type ExtractOptions, type GaugeScaling, extractProject, readWorkbook } from './index';
 import { jsonDiff, projectNotes } from './parity';
+import { readWorkbookWithSheetJS, readerDifference } from './sheetjsReference';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../../../..');
@@ -111,6 +114,12 @@ describe.skipIf(!available)('parity with extract_project.py on the source workbo
 			const args = ['--gauge-as-reference', '--gauge-scaling-from', scaling.scalingFrom, '--gauge-scale-factor', String(scaling.scaleFactor)];
 			variants.push(["--gauge-as-reference with the seed's scaling", args, { gaugeAsReference: scaling }]);
 		}
+		it(`${label}: the streaming reader reads every cell as SheetJS did`, { timeout: 180_000 }, async () => {
+			const bytes = new Uint8Array(readFileSync(path));
+			const reference = await readWorkbookWithSheetJS(bytes);
+			// The difference names a sheet and cell address only, never a value.
+			expect(readerDifference(reference.source, await readWorkbook(bytes))).toBeNull();
+		});
 		for (const [variant, args, opts] of variants) {
 			it(`${label}, ${variant}`, { timeout: 180_000 }, async () => {
 				const py = runPython(path, args);

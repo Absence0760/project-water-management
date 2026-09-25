@@ -7,7 +7,7 @@
 // `note:` / `WARNING:` lines, same text, same order (the parity tests check
 // both). `unmapped` is TypeScript-only (plan.md 1b).
 import type { CalibrationParams, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
-import type * as XLSX from 'xlsx';
+import type { WorkbookSource } from './source';
 import { clean, num, pyStr } from './cells';
 import { extractCalibration, extractCalibrationWindow, summerMonthsNote } from './calibration';
 import { readCropAreas, readCrops } from './crops';
@@ -103,7 +103,7 @@ function checkVersion(wb: B023Workbook): void {
  * a project, with the importer's notes and the unmapped report. Throws a
  * WorkbookImportError subclass when the file can't be imported.
  */
-export function extractProject(workbook: XLSX.WorkBook, opts: ExtractOptions): ImportResult {
+export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): ImportResult {
 	const wb = new B023Workbook(workbook);
 	const reference = opts.gaugeAsReference ?? false;
 	const scaling = typeof reference === 'object' ? validateScaling(reference) : null;
