@@ -10,6 +10,7 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 | `extract_project.py WORKBOOK OUTDIR [--gauge-as-reference …]` | `OUTDIR/project.json` holds a project: `{ name, description, settings, model, series }`, with `settings` = `ProjectSettings`, `model` = `ProjectModel` and `series` = `[{ kind, name, unit, startDate, values }]` (see `packages/engine/src/project.ts`). `OUTDIR/expected.json` holds the workbook's own daily results per Element sheet plus the catchment columns, for the engine regression test. |
 | `calibration.py WORKBOOK` | Prints the [Flow Calibration Cfg] parameters. `extract_project.py` uses it for `settings.calibration`. |
 | `extract_flow_fixture.py WORKBOOK OUT.json` | The rain-model fixture for `packages/engine/src/flow.test.ts`, which reads `data/fixtures/client-catchment-flow.json`. |
+| `frontend/src/lib/spreadsheet/import/` (TypeScript) | The same `project.json` and notes in the browser, plus an unmapped report; see [The TypeScript port](#the-typescript-port-in-browser-import). |
 | `make_synthetic_workbook.py [OUTDIR]` | The **synthetic** b023 workbook of an invented catchment and `extract_project.py`'s output for it, committed in `fixtures/` (see [The synthetic workbook](#the-synthetic-workbook)). |
 
 ## Setup
@@ -238,10 +239,65 @@ scripts/wbt-import/fixtures/synthetic_b023.project.json --email
 synthetic@example.com --password synthetic-password --run` (use an absolute
 path; the script runs in `backend/`).
 
+## The TypeScript port (in-browser import)
+
+`frontend/src/lib/spreadsheet/import/` is a TypeScript port of
+`extract_project.py`'s project extraction and `calibration.py` on SheetJS, for
+the in-browser workbook import (roadmap WP-1.31): `readWorkbook(bytes)` then
+`extractProject(wb, { fileName, gaugeAsReference })` gives `{ project, notes,
+unmapped }`. Per decision D17 the **TypeScript port is the user path** (the
+import in the UI), and the Python scripts stay for the regression fixtures
+(`expected.json`, `extract_flow_fixture.py`), `pnpm seed:demo` and the
+synthetic fixture's committed output.
+
+**Parity rule.** For the same workbook and options, `project` equals the
+Python's `project.json` key for key and value for value, and `notes` are its
+`note:` / `WARNING:` lines, same text and order (less "no Element sheet …",
+which is about `expected.json`). A change to what `extract_project.py` or
+`calibration.py` writes or prints lands in the port in the same change, and
+the other way round. Two tests hold it:
+
+- `fixture.test.ts` (CI) runs the port on `fixtures/synthetic_b023.xlsx` and
+  compares it with the committed `.project.json` and `.notes.txt`, with and
+  without the gauge-reference options;
+- `sourceWorkbooks.test.ts` (local only) runs `extract_project.py` on every
+  workbook in `$WBT_SOURCE_DIR/Original/` (default
+  `../project-water-management-source/Original/`) into a temp directory
+  outside the repo and compares, with no options, `--gauge-as-reference`, and
+  the seed's scaling from `wbt-import.env`. It skips without the workbooks or
+  Python with openpyxl (`PYTHON`, else the checkout's `.venv`, else
+  `python3`), and takes about 15 s per client-workbook variant, most of it the
+  Python.
+
+What the port does beyond the Python:
+
+- **The unmapped report** (plan.md 1b): what it couldn't carry across as the
+  workbook meant, each with a code, the sheet and cell: [Transfers] InOut and
+  draw-from-dam formulas that don't fit the rule shape (read from the
+  plain-text copy b023 keeps in `zTransfers_FormulasAsTxt`, so nothing is
+  parsed from formulas), a farm in a transfer with no InOut column, a draw
+  column with a rate but no destination (the workbook still takes that water
+  from the source dam), a destination with no rate, the M1 month lists, a
+  blank share under the Specific method, an element type other than Farm or
+  Gauge, a [Farm spec] farm not in [Network], and number cells holding text or
+  errors (read as 0 or blank, as in the Python). It never changes a value.
+- **Typed errors**: not a b023 workbook (the named ranges it lacks), an
+  unsupported build (AppSettings `zAppVer` other than b02x), a file over 150 MB
+  or 250 sheets, and the Python's own stops (non-consecutive dates, an unknown
+  upstream element …).
+- It parses only the sheets the named ranges point at, never the Element
+  sheets. The client workbook (about 90 MB) reads in about 2.5 s in Node.
+
+Differences no b023 workbook reaches: Python's `\d` also matches non-ASCII
+digits in a month list; a cell SheetJS reads as an ISO date (`t="d"`, which
+Excel doesn't write) or with an error code it doesn't know; and repr() of a
+whole number of 10¹⁵ or more in a note's text.
+
 ## Known limits
 
 - Transfer "InOut" columns are hand-written formulas in each workbook. The
-  importer assumes the standard pattern: add to the destination, subtract from
-  the source.
+  Python importer assumes the standard pattern: add to the destination,
+  subtract from the source. The TypeScript port assumes the same and lists
+  every formula that differs in its unmapped report.
 - The blank template holds one day of data and no rainfall, so the engine
   refuses to run it ("no rainfall series").
