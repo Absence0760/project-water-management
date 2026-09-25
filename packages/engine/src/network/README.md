@@ -26,7 +26,7 @@ workbook cells.
 | `shares.ts` | [Farm spec] "Selected fragmentation" | Each farm's share of natural flow and EWR (area / hiLo / manual). Warns if the shares don't sum to 1 ±0.0002. |
 | `../demand.ts` | [Crop demand], [Farm demand], [Irrigation Demand] | Gross and net irrigation demand. |
 | `simulate.ts` | Element sheets (FarmTemplate/GaugeTemplate row 17), [Transfers], [Fragmented flow], [Fragmented EWR] | The daily loop. |
-| `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes; `moriasiRating`. |
+| `stats.ts` | [Flow Calibration Cfg] | Calibration statistics over the calibration window: NSE, PBIAS, RMSE, KGE (r, α, β), R², log-NSE, volume error, annual volumes. |
 | `curtailment.ts` | [Shortfalls] | Per-farm target volume, reduce/gain, the EWR charge and its irrigation / storage split, and total change (m³/day, l/s) over the reporting window, plus the EWR sites table → `RunSummary.curtailment`. |
 | `ewr.ts` | [EWR shortfalls Pivot Data] | Water-year × month EWR compliance grid (days not met, shortfall m³) for the outlet and each farm (from engine 0.17.0 the farm's EWR charge). |
 | `attribution.ts` | – (replaces the use of Element sheet AB) | Who is charged for an EWR shortfall (engine ≥ 0.17.0, audit Q17): each EWR site's (outlet, gauges) shortfall pro rata to the upstream farms' net impact, the natural remainder, each farm's largest charge and its irrigation part. docs/model.md §2.7b. |
@@ -102,14 +102,26 @@ node's `outflow` is the catchment `simulated_outflow`.
 
 ## Transfers
 
-Settled at the start of each day, before any farm. In an active month, the
-volume is `fGetTrfVolCapped`:
+Settled at the start of each day from yesterday's storage, before any farm
+irrigates (the source included). The workbook's `fGetTrfVolCapped` is
 
     MIN(MAX(source storage yesterday − capacity × minStoragePct, 0), maxRateM3s × 86400)
 
-further capped by `dailyCapM3` when set. It is added to the destination's J
-and subtracted from the source's. Transfers involving a gauge are skipped with a
-warning.
+per rule on its own. The engine (≥ 0.16.0, audit N4 / Q3 / Q18) moves, in an
+active month,
+
+    v = MAX(0, MIN(srcFree, dstRoom, maxDaily))
+    srcFree = source storage yesterday − drawn from it today − reserve
+    reserve = capacity × MAX(minStoragePct, the source dam's damMinPct)   (Q5)
+    dstRoom = capacity_dst − (storage_dst yesterday + rain on the dam − evaporation − seepage)
+              + D_dst today − already scheduled into it today              (dam terms from 0.19.0)
+
+with `maxDaily` = `maxRateM3s` × 86 400, lowered by `dailyCapM3` when set.
+Rules run by `priority`, lowest first; within a priority, rules into one
+destination share its room and rules from one source share its free water,
+each pro rata to its own limit, so the list order never matters. The volume is
+added to the destination's J and subtracted from the source's. Transfers
+involving a gauge are skipped with a warning.
 
 ## EWR and summary
 
@@ -122,15 +134,20 @@ warning.
   month and per water year ([model.md §2.9b](../../../../docs/model.md)).
 - `FarmSummary`: averages over the whole run of demand, supplied and deficit
   (demand − supplied); `fractionSupplied` = supplied / demand (1 when there is
-  no demand); `avgEwrShortfallM3Day` = −mean(AB), a positive volume (the
-  workbook shows it negative); `daysEwrNotMet` = days with AB < 0.
+  no demand); `avgCropRequirementM3Day` = mean F; `avgEwrShortfallM3Day` =
+  −mean(EWR charge), a positive volume (the workbook shows −mean(AB));
+  `daysEwrNotMet` = days the farm is charged (engine ≥ 0.17.0, audit Q17;
+  before, days with AB < 0).
 - `curtailment` ([Shortfalls]): over `settings.reportStart … reportEnd`
   (`resolveReportWindow` in `../run.ts`: null = run start/end, clipped to the
   run with a warning, a disjoint or reversed window falls back to the whole
-  run). Per farm: H/I/R = mean demand / supplied / AB; equitable
-  fraction = ΣI / ΣH; target M = H × that; reduce/gain N = M − I;
-  total change S = N + R; volume left U = M + R; l/s = ÷ 86.4 (all unrounded;
-  the sheet rounds and truncates).
+  run). Per farm: H/I/R = mean demand D / supplied / EWR charge (the
+  workbook: F / G / AB); equitable fraction = ΣI / ΣH; target M = H × that;
+  reduce/gain N = M − I; R splits into an irrigation part R_irr and a
+  storage part; supply cut ΔG = R_irr / (1 − β(1 − e)); total change
+  S = N − ΔG; volume left U = MAX(M − ΔG, 0) (engine ≥ 0.17.0, audit Q13;
+  the sheet has S = N + R, U = M + R); l/s = ÷ 86.4 (all unrounded; the sheet
+  rounds and truncates). Also the EWR sites table (`ewrSites`).
   Workbook signs (negative = reduce). Full table and quirks:
   [docs/model.md §2.11](../../../../docs/model.md#211-curtailment-targets-shortfalls).
 - Calibration: over days with an observation inside
@@ -139,7 +156,8 @@ warning.
   `flow_logger_m3s`. PBIAS = 100 × Σ(obs − sim) / Σ obs, so positive means the
   model under-estimates. Formulas: [docs/model.md §2.10](../../../../docs/model.md#210-calibration-statistics-flow-calibration-cfg).
 - `ewrCompliance`: per water year × month, days where the outlet's
-  `ewr_shortfall` (and each farm's `ewr_shortfall_incremental`) is below zero,
+  `ewr_shortfall` (and each farm's `ewr_charge`, engine ≥ 0.17.0; before,
+  `ewr_shortfall_incremental`) is below zero,
   and the summed shortfall volume. The workbook pivot's running-total count is
   available as `countMethod: 'runningTotal'`
   ([docs/model.md §2.9](../../../../docs/model.md#29-ewr-compliance-grid-ewr-shortfalls-pivot-data--ewr-analysis)).
