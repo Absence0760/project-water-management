@@ -29,6 +29,11 @@
 	<h2 id={titleId}>{title}</h2>
 	<div class="body">{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
+	<!-- A visible way out for people who don't know Esc closes it. Last in the DOM so
+	     showModal() still focuses the dialog's first real control; drawn top right. -->
+	<button type="button" class="x" aria-label="Close dialog" title="Close (Esc)" onclick={() => (open = false)}>
+		<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+	</button>
 </dialog>
 
 <style>
@@ -60,6 +65,43 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+	/* Room for the close button so a long title never runs under it. */
+	h2 {
+		padding-right: 2.25rem;
+	}
+	.x {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-2);
+		cursor: pointer;
+	}
+	.x:hover {
+		background: var(--surface-2);
+		border-color: var(--border);
+		color: var(--text);
+	}
+	.x:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	@media (max-width: 640px) {
+		.x {
+			width: 44px;
+			height: 44px;
+			top: 0.5rem;
+			right: 0.5rem;
+		}
 	}
 	dialog::backdrop {
 		background: rgb(0 0 0 / 0.35);
