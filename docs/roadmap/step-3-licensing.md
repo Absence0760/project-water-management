@@ -85,7 +85,7 @@ marked):
 | --- | --- |
 | Pinned runs | [WP-1.11](./step-1-hydrologist-tool.md#wp-111-pinned-runs). WP-3.1 only adds "cited" runs that can't be trimmed or unpinned. |
 | Per-node series overlay; copies that remember source nodes; per-water-year series hashes | [WP-1.27](./step-1-hydrologist-tool.md#wp-127-run-comparison-per-node-overlay-and-leftovers) |
-| Transfer free space (N4/Q3), transfer priority (Q18), irrigation reserve (Q5), ~~Pitman fallback (Q7)~~ (removed, engine 0.10.0), Q1 rename | [WP-1.19](./step-1-hydrologist-tool.md#wp-119-operating-rules-n4q3-q18-q5-q7-q1) |
+| Transfer free space (N4/Q3), transfer priority (Q18), irrigation reserve (Q5), ~~Pitman fallback (Q7)~~ (removed, engine 0.10.0), ~~Q1 rename~~ (not needed, engine 0.9.0 fixed the formula) | [WP-1.19](./step-1-hydrologist-tool.md#wp-119-operating-rules-n4q3-q18-q5-q7-q1) |
 | Irrigation efficiency (N1), which redefines consumptive use | [WP-1.20](./step-1-hydrologist-tool.md#wp-120-n1-irrigation-application-efficiency) |
 | Power-law dam area, evaporation, seepage (N2) | [WP-1.21](./step-1-hydrologist-tool.md#wp-121-n2-dam-areavolume-evaporation-seepage) |
 | EWR shortfall attribution to farms (Q17) | [WP-1.23](./step-1-hydrologist-tool.md#wp-123-q17-ewr-shortfall-attribution-q11q13-curtailment-policy). WP-3.7 applies the chosen rule per EWR site. |
@@ -118,7 +118,7 @@ marked):
 | The hydrologist has signed off the model, with a new engine release and recalibration | WP-1.1, WP-1.25 | A pack can't rest on an unaccepted model |
 | H1 resolved or explicitly accepted | WP-1.24 | With H1 open, one 10 mm storm returns 4.9× its rain. Not defensible evidence. |
 | N1 irrigation efficiency, landed or declined | WP-1.20 | Defines consumptive use in the water account (WP-3.4) |
-| N2 evaporation and seepage, landed or declined | WP-1.21 | WP-3.5 builds on its `node.dam_area_full_m2`, `dam_area_exponent`, `dam_seepage_per_day`, `lakeEvapFactor` and the `evaporation`/`seepage` outputs. If it was declined, WP-3.5 absorbs it (M → L). |
+| N2 evaporation and seepage, landed or declined | WP-1.21 | WP-3.5 builds on its `node.dam_area_full_m2`, `dam_area_exponent`, `dam_seepage_per_day`, `lakeEvapFactor` and the `dam_evaporation`/`dam_seepage` outputs (landed, engine 0.16.0). If it was declined, WP-3.5 absorbs it (M → L). |
 | Operating-rule answers (N4/Q3, Q18, Q5, Q7, Q1) | WP-1.19 | WP-3.8 extends the same `simulate.ts` supply step |
 | Q17 attribution rule decided | WP-1.23 | WP-3.7 applies it per EWR site |
 | Pinned runs | WP-1.11 | WP-3.1 extends it |
@@ -577,7 +577,7 @@ must build WP-2.15 Phase B.
       - in: rain volume, natural flow, groundwater;
       - out: consumptive irrigation (crop use as WP-1.20 defines it:
         `e × G`, or `G(1 − r)` if N1 was declined), dam evaporation and
-        seepage (WP-1.21 outputs `evaporation` and `seepage`), dam
+        seepage (WP-1.21 outputs `dam_evaporation` and `dam_seepage`), dam
         releases (WP-3.5), outflow;
       - Δ storage;
       - EWR required vs met at each site;
@@ -618,18 +618,23 @@ must build WP-2.15 Phase B.
 ### WP-3.5 Dam storage: area–volume curves, losses and releases
 
 - **Goal.** Dam behaviour good enough for a storage licence (s21(b)).
-- **[WP-1.21](./step-1-hydrologist-tool.md#wp-121-n2-dam-areavolume-evaporation-seepage) delivers:**
-  - evaporation `E = k_lake(month) × A-pan(month)/days × A(S)`, with a
+- **[WP-1.21](./step-1-hydrologist-tool.md#wp-121-n2-dam-areavolume-evaporation-seepage) delivers** (landed, engine 0.16.0):
+  - evaporation `E = k_lake × A-pan(month)/days × A(S)`, with a
     power law `A(S)` from `node.dam_area_full_m2` and `dam_area_exponent`
-    (default 0.7), and settings `lakeEvapFactor`;
-  - seepage `node.dam_seepage_per_day × S`, taken before irrigation and
-    clamped so storage ≥ 0;
-  - output keys `evaporation` and `seepage`, and warning W6 (a dam with no
-    area data has no evaporation);
+    (default 0.7), and one settings value `lakeEvapFactor` (default 0.75);
+  - rain on the dam, `rain × A(S)`;
+  - seepage `node.dam_seepage_per_day × S`, clamped so storage ≥ 0, which
+    joins the farm's outflow the same day;
+  - output keys `dam_area`, `dam_evaporation`, `rain_on_dam` and
+    `dam_seepage`, and warning W6 (a dam with no area data gets an area
+    estimated as capacity ÷ 3 m);
   - model.md §2.7a.
 
-  The gap it leaves for licensing: no survey curve, no dead storage, no
-  releases, and seepage is always lost from the catchment.
+  The gap it leaves for licensing: no survey curve, no releases, no monthly
+  lake factors, and no choice of where seepage goes. Q5 (engine 0.16.0)
+  already made `damMinPct` the dam's minimum operating level (dead storage):
+  irrigation can't draw below it and it still evaporates, so item 2 below
+  starts from that field.
 - **This WP adds:**
   1. **Tabulated survey curves**: elevation–area–volume rows, as captured
      on the DWS dam technical data form (DW789) [R267]. Linear
@@ -655,8 +660,8 @@ must build WP-2.15 Phase B.
       from WP-1.21's power law, so WP-1.21's evaporation code is reused,
       not duplicated. A release step comes before irrigation (release, then
       G). Seepage is split into lost and returned by `seepageReturnPct`;
-    - new output keys `dam_release` and `dam_area`. WP-1.21's `evaporation`
-      and `seepage` keys are unchanged.
+    - a new output key `dam_release`. WP-1.21's `dam_area`,
+      `dam_evaporation` and `dam_seepage` keys are unchanged.
   - *Backend:*
     - `node` columns; a `dam_curve` child table;
     - `model/validate.ts`: a monotone curve, volume at the top row ≈

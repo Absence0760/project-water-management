@@ -18,7 +18,7 @@ Tick items off (or move them into an issue) as they are done.
         the release preflight refuses every release;
       - CodeQL and Scorecard fail on every push.
 
-      Make the repo public (after the scrub below) or upgrade the plan. Then
+      Make the repo public (after the history scrub above) or upgrade the plan. Then
       make `CI gate` a required check.
 - [x] **Client names (WP-1.7).** The tree and the history are scrubbed
       (2026-09, `git filter-repo --replace-text`). The repo was then
@@ -329,7 +329,7 @@ conditions come before any client numbers:
         more sensitive after refitting;
       - refits score better at flat 0.70 and the winter preset than at the
         extremes, a mild hint that the true forcing sits mid-range.
-      Still open: the hydrologist picks the monthly values (plan.md Q4).
+      Still open: the hydrologist picks the monthly values (Q4 below).
 - [ ] **The stored GR4J parameters don't fit the logger.** The same
       sensitivity run found the client catchment's current GR4J parameters
       score a negative NSE against the logger at every pan coefficient;

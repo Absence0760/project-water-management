@@ -1,7 +1,10 @@
 # Step 1: the hydrologist's tool, finished and deployed
 
-Status: planned (written 2026-09-23 against `main` @ 43f9ccb, engine 0.4.0,
-migrations `001`–`005`). Rules and template: [README.md](./README.md).
+Status: in progress (written 2026-09-23 against `main` @ 43f9ccb, engine 0.4.0,
+migrations `001`–`005`; `main` is now at engine 0.17.0 and migration `006`).
+WP-1.2–1.4, 1.18–1.23 and the H1 decision have landed, most of the engine
+work on persona recommendations still pending the hydrologist; each WP's
+status note says what is left. Rules and template: [README.md](./README.md).
 
 ## 1. Summary
 
@@ -118,7 +121,7 @@ Postgres (new next-free NNN_ migrations)
  ├─ model_run.pinned_at, pinned_by                                          (WP-1.11)
  ├─ app_user.preferences jsonb                                              (WP-1.26)
  ├─ created_by nullable on project/team/model_run; app_delete_account()     (WP-1.13)
- └─ node: irrigation efficiency, dam area–volume, seepage; Q1 rename        (WP-1.19–1.21)
+ └─ node: irrigation efficiency, dam area–volume, seepage; transfer.priority (WP-1.19–1.21, landed in 006)
 packages/engine (pure)
  ├─ calibrate/ (dds, objectives, calibrate), buildModelInput               (WP-1.17/1.18)
  ├─ quality.ts: zero-rain runs, rain below CHIRPS                           (WP-1.4)
@@ -679,7 +682,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     stale responses (a generation counter or `AbortController`) when the
     project or series changes.
   - **Tick stale plan.md Phase 7 rows:** the per-account lockout (`005`) and
-    the session watermark (`004`) are done.
+    the session watermark (`004`) are done. (Ticked.)
   - **Accessibility leftovers:** a 320 px reflow check and a token contrast
     test, if `e2e/tests/a11y.spec.ts` doesn't already cover them.
   - `/audit/all`, fix every finding; `/release-readiness`.
@@ -1147,6 +1150,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.22 N3 effective-rain carry-over
 
 - **Goal:** rain offsets demand beyond the day it falls.
+- **Status: landed (engine 0.14.0)** on persona recommendation, pending the
+  hydrologist ([audit N3](../engine-audit.md)). As built: one mode only, a
+  per-farm soil-water store of `settings.effectiveRainStoreMm` (default
+  25 mm; 0 reproduces the workbook), not the `effectiveRainMode` selector
+  or a per-node TAW column below. The crop factors are confirmed A-pan based.
 - **Changes:**
   - **engine:** `settings.effectiveRainMode: 'daily' | 'monthly' | 'soilWater'`.
     - `monthly`: monthly effective rain against monthly demand (Dastane
@@ -1175,6 +1183,13 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** farm shortfalls add up to the site's shortfall, and the
   curtailment report says what it means.
+- **Status: landed (engine 0.17.0)** on a simulated CMA-assessor
+  recommendation, pending the real assessor and the hydrologist
+  ([audit Q17, Q11, Q13](../engine-audit.md); model.md §2.7b, §2.11): EWR
+  sites are the outlet and every gauge, charged pro rata to net impact with
+  an irrigation and a storage part; the old AB stays as "reach shortfall";
+  the equitable share is labelled a fairness benchmark; "Demand left %" is
+  bounded. Follow-ons are in followups.md (*Attribution follow-ons*).
 - **Changes:**
   - **engine:**
     - `network/ewr.ts` / `simulate.ts`: attribute each site's shortfall to
@@ -1211,6 +1226,14 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > model kept as the baseline until sign-off. The issue has the equations, the
 > invariants and the phase-by-phase acceptance criteria; follow it where it is
 > more specific than this section.
+>
+> **Status:** GR4J is selectable behind `settings.runoffModel` (engine 0.5.0)
+> and the default since engine 0.11.0; the setting is `runoffModel`
+> (`'legacy' | 'gr4j'`), not the `flowGenerator` named below. **H1 decided**
+> (persona recommendation, 2026-09-24; pending the hydrologist): legacy is
+> kept unchanged as workbook comparison only, never evidence, and GR4J is the
+> model of record ([audit H1](../engine-audit.md)). Left: IHACRES (issue #4
+> phase 7) only if asked, and removing legacy after sign-off (phase 10).
 
 - **Goal:** a storm can never return more water than it brought (today a
   10 mm storm returns 4.9× its rain).
@@ -1855,10 +1878,10 @@ Questions for the hydrologist: the WP-1.1 pack.
 | --- | --- | --- | --- | --- |
 | D1 | Calibration record (issue #1) | A1 logger; G1 gauge; A1 with excluded periods | A1 (already the setting), with exclusions for unmeasured peaks if wanted | Hydrologist |
 | D2 | Audit questions H1, N1–N4, Q1, Q3, Q5, Q7, Q11–Q13, Q17, Q18 | Per engine-audit.md | Per engine-audit.md recommendations; N1 backfill e = 1 − `return_flow_pct` | Hydrologist |
-| D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term) | Operator + hydrologist |
+| D3 | How H1 lands | Replace outright; temporary `flowGenerator` setting removed at sign-off | Temporary setting, removed in WP-1.25 (keeps "no compat modes" long-term). **Taken that way:** `settings.runoffModel`, GR4J by default since engine 0.11.0, legacy for workbook comparison only (WP-1.24) | Operator + hydrologist |
 | D4 | `verify/` | Delete; rebuild against the audited model | Delete (WP-1.6) | Operator |
 | D5 | GitHub gates | Public repo; GitHub Enterprise (required reviewers on private repos) | Public, after the scrub | Operator |
-| D6 | History with client terms | `git filter-repo --replace-text`; publish a fresh squashed repo; accept (if terms are only public facts) | Decide after `git log -S`; a squashed fresh repo is the safest if farm names are in history | Operator + client |
+| D6 | History with client terms | `git filter-repo --replace-text`; publish a fresh squashed repo; accept (if terms are only public facts) | Decide after `git log -S`; a squashed fresh repo is the safest if farm names are in history. **Decided (2026-09):** `filter-repo`, then the repo recreated from the clean history (WP-1.7) | Operator + client |
 | D7 | Region | af-south-1; eu-west-1; us-east-1 | af-south-1 (POPIA, latency); budget ≈ $70 | Operator, after client Q15 |
 | D8 | Spreadsheet library | SheetJS CE CDN tarball; ExcelJS; write-excel-file + SheetJS | SheetJS CE (one library for read and write) | Operator |
 | D9 | Exports over 5 MB | Lambda streaming; S3 pre-signed + MinIO | Streaming now; S3 when Step 2 needs stored artefacts | Operator |
