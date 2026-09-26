@@ -32,6 +32,7 @@ workbook cells.
 | `attribution.ts` | – (replaces the use of Element sheet AB) | Who is charged for an EWR shortfall (engine ≥ 0.17.0, audit Q17): each EWR site's (outlet, gauges) shortfall pro rata to the upstream farms' net impact, the natural remainder, each farm's largest charge and its irrigation part. docs/model.md §2.7b. |
 | `users.test.ts` | – | Other water users (WP-1.33, docs/model.md §2.7c), hand-worked. |
 | `boreholes.ts` | – | A node's boreholes resolved for the plan (WP-1.34, docs/model.md §2.7d); `simulate.ts` pumps and depletes. |
+| `dam.ts` | – | Dam survey curves (area linear in volume), release rules and the seepage destination, resolved for the plan and read by the self-checks (WP-3.5, docs/model.md §2.7a); `simulate.ts` applies them. |
 | `landcover.ts` | – | Land-cover streamflow reductions (WP-1.35, docs/model.md §2.5a): patches per farm, the Q75 low-flow threshold, the day's reduction of the farm's runoff. |
 | `round.ts` | – | Excel `ROUND` / `ROUNDDOWN`, for tests that replay workbook cells only. |
 

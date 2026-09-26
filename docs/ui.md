@@ -534,6 +534,24 @@ does. The intro states the thresholds the API returns.
   drought), drought trigger (%), stream depletion (%) and depletion lag
   (days). The client check refuses boreholes on a gauge and the drought rule
   without a farm dam.
+- **Dam survey and releases** (engine ≥ 0.35.0, WP-3.5, [model.md §2.7a](./model.md)),
+  one-node form, farms with a dam (`DamStorageFields.svelte`, `damCurve.ts`):
+  without a curve it says the power-law area is in use; **Paste survey rows**
+  opens a box for level, area and volume rows (commas, semicolons, tabs or
+  spaces; a header line skipped) with **Use these rows** / **Cancel**, and a
+  line it can't read is named in an alert. With a curve: its rows as a table,
+  a small area–volume chart (dashed line at the capacity; the chart's
+  accessible name gives the first and last rows), the save rule's message if
+  it breaks one, a note when the top row is more than 1 % from the capacity,
+  **Edit the survey rows** and **Remove the curve**. Below: **Release rule**
+  (none / pass inflow / fixed) with its monthly amounts (m³/day, Oct–Sep,
+  *Use October's amount for every month*); under pass inflow a checkbox
+  keeps the EWR required at the node as the target. The Farm dam group gains
+  **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
+  limit), one-node form only. Viewers see the values read-only (no paste
+  controls). The dam hint about a missing area is dropped when a curve gives
+  it. Settings: **Vary it by month** under the dam evaporation factor opens a
+  monthly row of factors (started from the single one).
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);

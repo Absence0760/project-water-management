@@ -184,3 +184,53 @@ describe('land cover (WP-1.35)', () => {
 		expect(await count(owner.id)).toBe(0);
 	});
 });
+
+describe('dam storage (WP-3.5)', () => {
+	it('stores a dam’s survey curve, release rule and seepage share, runs them, and refuses a curve that falls', async () => {
+		const u = await signUp('Survey');
+		const projectId = await project(u, 'With a surveyed dam');
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { lakeEvapFactorMonthly: monthly(0.8) } })).status).toBe(200);
+		const curve = [
+			{ levelM: 210, areaM2: 0, volumeM3: 0 },
+			{ levelM: 212, areaM2: 9000, volumeM3: 8000 },
+			{ levelM: 214, areaM2: 15_000, volumeM3: 30_000 }
+		];
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id, {
+			damCapacityM3: 30_000,
+			damInitialPct: 0.8,
+			damSeepagePerDay: 0.002,
+			damCurve: curve,
+			damReleaseRule: 'fixed',
+			damReleaseM3Day: monthly(25),
+			damOutletCapacityM3Day: 300,
+			damSeepageReturnPct: 0.4
+		});
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 20_000 }], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === farm.id)).toMatchObject({ damCurve: curve, damReleaseRule: 'fixed', damReleaseM3Day: monthly(25), damOutletCapacityM3Day: 300, damSeepageReturnPct: 0.4 });
+		expect(got.find((n) => n.id === outlet.id)).toMatchObject({ damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null, damOutletCapacityM3Day: null, damSeepageReturnPct: 1 });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'surveyed' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.waterBalance.total.damSeepageLostM3).toBeGreaterThan(0);
+		expect(summary.waterBalance.total.damReleaseM3).toBeGreaterThan(0);
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['dam_release', 'dam_seepage_lost'])).toEqual(['dam_release', 'dam_seepage_lost']);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, nodes: [outlet, { ...farm, damCurve: [curve[0], { ...curve[1], areaM2: 20_000 }, curve[2]] }] }, /dam survey curve: the survey area falls/);
+		await bad({ ...model, nodes: [{ ...outlet, damCurve: curve }, farm] }, /only a farm has a dam/);
+		await bad({ ...model, nodes: [outlet, { ...farm, damReleaseRule: 'spill' }] }, /damReleaseRule/);
+		await bad({ ...model, nodes: [outlet, { ...farm, damSeepageReturnPct: 2 }] }, /damSeepageReturnPct/);
+		await expect(asOwner(`UPDATE node SET dam_release_rule = 'spill' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
+		await expect(asOwner(`UPDATE node SET dam_curve = '{"a": 1}'::jsonb WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
+	});
+});

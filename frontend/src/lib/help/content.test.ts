@@ -24,7 +24,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true,
 	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
-	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true
+	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
+	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -61,6 +62,8 @@ const RUN_KEYS = [
 	'diverted_to_dam', 'interim_storage', 'below_dam_not_diverted', 'return_flow', 'balance_residual',
 	// Dam evaporation, rain on the dam and seepage (engine 0.16.0, audit N2)
 	'dam_area', 'rain_on_dam', 'dam_evaporation', 'dam_seepage',
+	// Dam releases and seepage lost (engine 0.35.0, WP-3.5)
+	'dam_release', 'dam_seepage_lost',
 	// Other water users (engine 0.22.0, WP-1.33)
 	'senior_requirement', 'passed_for_senior',
 	// Boreholes (engine 0.23.0, WP-1.34)

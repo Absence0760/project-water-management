@@ -1241,6 +1241,37 @@ role and not before it.
 
 ## Features left half-way
 
+- [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
+      Built: survey curves, releases, monthly lake factors, seepage
+      destination (model.md §2.7a "Dam geometry, losses and releases").
+      Still open:
+      - *Capacity loss to sediment* (WP item 5, optional %/year for long
+        records): scale the capacity (and the curve's volumes) down by the
+        rate × years since a survey date. Needs a survey year per dam, so a
+        field and a migration. Trigger: a licence run over more than ~20
+        years, or the hydrologist asks.
+      - *The survey curve as a scenario op*: a scenario can add a dam with a
+        curve (`node.add`) but has no `node.set` for `damCurve` (the
+        override form has no table value spec). Durable fix: a `table`
+        ValueSpec in `scenarios/fields.ts` reusing `parseDamCurve`, and
+        `damCurve` in `NODE_SET_FIELDS.farm`. Trigger: an applicant's
+        scenario that raises a dam (WP-3.6 storage–yield will want it).
+      - *Transfer room ignores today's release*: a transfer into a dam with
+        a release rule is sized as if the dam kept what it releases, so it
+        can move less than it could (never more). Same conservative choice
+        as for today's inflow (§2.6). Fix with the release computed before
+        the transfer (needs Z at transfer time); trigger: a scheme with both.
+      - *Self-checks water-balance table* (`runs/checks.ts` BALANCE_COLUMNS)
+        shows neither the seepage lost nor the release (nor, already,
+        groundwater, other use, depletion or land cover), so its visible
+        terms don't add up to the residual on runs that use them; the CSV
+        and `summary.waterBalance` have them all. Fix: optional columns shown
+        only when a run has them. Coordinate with the groundwater WP (3.9),
+        which touches the same table.
+      - *Monthly lake-factor presets*: none offered; values for SA reservoirs
+        (the lag of deep-water evaporation behind the pan) pending the
+        hydrologist.
+
 - [ ] **The Sandspruit example fails `catchments.test.ts` on main** (seen
       2026-09-25 on origin/main at 9590fa1, before the scenario merge): engine
       0.28.0's forecast-rain warning (3ae50b9) fires on the example's last 10
@@ -1796,9 +1827,13 @@ from the WP:
 - [ ] **A resized dam's shape** (pending the hydrologist). The storage–yield
       curve scales a dam's full-supply area with its capacity (constant mean
       depth) and keeps its initial and minimum levels as fractions. A real
-      raise changes the area–capacity curve differently. Durable fix: read the
-      dam's surveyed area–capacity table once WP-3.5 adds one. Trigger:
-      WP-3.5 merges.
+      raise changes the area–capacity curve differently. Since WP-3.5 merged
+      (engine 0.35.0) a dam's survey curve is used and scaled uniformly
+      (volumes and areas × the capacity ratio, model.md §2.13), which keeps
+      its shape. Durable fix: let a curve point take its own surveyed curve
+      for the enlarged dam (a scenario's dam survey), and the hydrologist to
+      confirm uniform scaling meanwhile. Trigger: the hydrologist's review,
+      or a licence application for a dam raise.
 
 ## Housekeeping
 

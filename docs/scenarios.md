@@ -77,7 +77,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent`,
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
-  `lossReturnFraction`; boreholes `boreholeCapacityM3Day`, `boreholeRule`,
+  `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
+  `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct` (a
+  `node.add` may also carry a `damCurve`; there is no `node.set` for it
+  yet); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
   `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
@@ -86,7 +89,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 Ranges are the backend's (`backend/src/model/validate.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
-`effectiveRainStoreMm`, `lakeEvapFactor`, `apanMm`, `panCoefficient`,
+`effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
 `ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
 `runoffModel`, `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,

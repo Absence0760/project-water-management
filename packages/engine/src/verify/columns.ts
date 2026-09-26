@@ -25,7 +25,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'soil_water', letter: null, formula: 'MIN(store size, soil store[t−1] + Pe − effective rain used), in mm over the cropped area; starts empty' },
 	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used' },
 	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
-	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dam capacity × minimum operating level, 0), D)' },
+	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − release − dam capacity × minimum operating level, 0), D) (release only with a release rule, WP-3.5)' },
 	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
 	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share − runoff removed by land cover (only with land cover, WP-1.35)" },
 	{
@@ -41,17 +41,30 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'runoff_to_dam', letter: 'M', formula: 'I × % runoff to dam' },
 	{ key: 'runoff_below_dam', letter: 'N', formula: 'I − M' },
 	{ key: 'diverted_to_dam', letter: 'O', formula: 'MIN(diversion capacity, L + N)' },
-	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m' },
+	{ key: 'dam_area', letter: null, formula: 'A_full × (Q[t−1] ÷ dam capacity)^b; A_full as entered, or dam capacity ÷ 3 m. With a survey curve (WP-3.5): the area linear in volume between its rows at Q[t−1] (from 0 m³, 0 m² below the lowest row; the top row\'s area above it)' },
 	{ key: 'rain_on_dam', letter: null, formula: 'rain (before any threshold) ÷ 1000 × dam area' },
-	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J); for b > 1 also at most (1 − seepage per day) × Q[t−1] ÷ b' },
+	{ key: 'dam_evaporation', letter: null, formula: 'MIN(lake factor (the month\'s, when monthly factors are set) × A-pan ÷ days in month ÷ 1000 × dam area, Q[t−1] + rain on dam + J); for b > 1 also at most (1 − seepage per day) × Q[t−1] ÷ b (on a survey curve b = Q[t−1] × the curve\'s slope ÷ dam area)' },
 	{ key: 'dam_seepage', letter: null, formula: 'MIN(seepage per day × Q[t−1], Q[t−1] + rain on dam + J − evaporation)' },
-	{ key: 'interim_storage', letter: 'P', formula: 'Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G' },
+	{
+		key: 'dam_seepage_lost',
+		letter: null,
+		formula: 'seepage × (1 − seepage return share): lost from the catchment (to deep groundwater); only when the share is below 1 (WP-3.5)',
+		optional: true
+	},
+	{
+		key: 'dam_release',
+		letter: 'X',
+		formula:
+			'before irrigation (WP-3.5): pass inflow MIN(K + M + O, requirement − S, outlet capacity, Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J), requirement = the monthly amount or, when none, Z; fixed MIN(monthly amount, outlet capacity, that storage − dead storage); never < 0',
+		optional: true
+	},
+	{ key: 'interim_storage', letter: 'P', formula: 'Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − release − G' },
 	{ key: 'dam_storage', letter: 'Q', formula: 'MIN(P, dam capacity)' },
 	{ key: 'spill', letter: 'R', formula: 'MAX(P − dam capacity, 0)' },
 	{ key: 'below_dam_not_diverted', letter: 'S', formula: 'L + N − O' },
 	{ key: 'return_flow', letter: 'T', formula: 'loss return fraction β × (1 − e) × G: the share of the application losses that reaches the river' },
-	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage' },
-	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep; 0 up to float noise (GW and Dep only with boreholes)' },
+	{ key: 'outflow', letter: 'U', formula: 'R + S + T + seepage − seepage lost + release' },
+	{ key: 'balance_residual', letter: 'V', formula: '(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW and Dep only with boreholes)' },
 	{ key: 'deficit', letter: 'W', formula: 'D − G' },
 	{ key: 'ewr', letter: 'Y', formula: "pragmatic EWR × this farm's share" },
 	{ key: 'ewr_cumulative', letter: 'Z', formula: 'Y + Σ Z of the elements directly upstream' },
@@ -66,7 +79,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'ewr_charge_irrigation', letter: null, formula: 'charge × c ÷ (c + MAX(e − c, 0)), c = G − T the consumptive irrigation (e at the binding site); 0 when c = 0' },
 	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, D − surface G), primary MIN(capacity, D) first, drought as supplemental while Q[t−1] < trigger × dam capacity; part of G (WP-1.34)', optional: true },
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + d × GW − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + d × GW), all of it when lag = 0', optional: true },
-	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + seepage): taken from the flow leaving the farm, so U = R + S + T + seepage − Dep', optional: true },
+	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
 	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },
 	{
 		key: 'senior_requirement',

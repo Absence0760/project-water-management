@@ -191,16 +191,21 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	const baseCap = base.damCapacityM3;
 	// A resized dam keeps its initial and dead storage as fractions of capacity,
 	// and its mean depth (surface area ∝ capacity): pending the hydrologist.
+	// A survey curve (WP-3.5) is scaled the same way, volumes and areas both
+	// × the ratio, so the dam keeps its shape (the same depth at the same
+	// fraction full) and a curve and the power law resize alike (model.md §2.13).
 	const ratio = baseCap > 0 ? cap / baseCap : 0;
+	const curve = base.damCurve && ratio > 0 ? { volume: base.damCurve.volume.map((v) => v * ratio), area: base.damCurve.area.map((a) => a * ratio) } : undefined;
 	const demand = new Float64Array(p.days);
 	// The dam's own yield: its boreholes (WP-1.34) don't count towards it.
-	const { borehole: _borehole, ...rest } = base;
+	const { borehole: _borehole, damCurve: _curve, ...rest } = base;
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,
 		initialStorageM3: base.initialStorageM3 * ratio,
 		deadStorageM3: base.deadStorageM3 * ratio,
 		damAreaFullM2: base.damAreaFullM2 * ratio,
+		...(curve ? { damCurve: curve } : {}),
 		demand
 	};
 	const nodes = p.plan.nodes.slice();
@@ -279,7 +284,9 @@ export function firmYield(source: ModelInput | YieldProblem, nodeId: string, opt
 	let inflow = 0;
 	for (let t = 0; t < days; t++) inflow += zero.inflowUpstream[t]! + zero.runoff[t]! + Math.max(zero.transfer[t]!, 0);
 	let rainOnFull = 0;
-	if (plan.damRainMm && cap > 0) for (let t = 0; t < days; t++) rainOnFull += (plan.damRainMm[t]! * plan.nodes[at]!.damAreaFullM2) / 1000;
+	// The full surface: the survey curve's top row when the dam has one (WP-3.5), else the power law's.
+	const fullArea = plan.nodes[at]!.damCurve ? Math.max(...plan.nodes[at]!.damCurve!.area) : plan.nodes[at]!.damAreaFullM2;
+	if (plan.damRainMm && cap > 0) for (let t = 0; t < days; t++) rainOnFull += (plan.damRainMm[t]! * fullArea) / 1000;
 	const bound = days ? (inflow + rainOnFull + plan.nodes[at]!.initialStorageM3) / days : 0;
 
 	const point = (y: number, failsAt: number | null, r: ProbeResult): YieldPoint => ({

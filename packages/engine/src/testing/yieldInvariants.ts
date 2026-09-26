@@ -5,7 +5,8 @@ import { simulateNetwork } from '../network/simulate';
 import { firmYield, isMonotone, prepareYield, storageYieldCapacities, YIELD_DEFAULT_TOLERANCE } from '../network/yield';
 
 /**
- * The input with the dam made lossless and cut off from transfers, the
+ * The input with the dam made lossless (no area, no seepage, no survey curve)
+ * and cut off from transfers and its release rule, the
  * conditions under which a storage–yield curve must be monotone and the
  * zero-capacity yield is the smallest daily inflow: a bigger shallow dam can
  * evaporate more than it stores, and transfers out of it grow with it.
@@ -16,7 +17,9 @@ export function isolateDam(input: ModelInput, nodeId: string): ModelInput {
 	// it fills to it, and a bigger one (the same fractions) takes longer to: its
 	// yield can be lower. Start it at least at that level.
 	for (const n of x.model.nodes)
-		if (n.id === nodeId) Object.assign(n, { damAreaFullM2: 0, damSeepagePerDay: 0, damInitialPct: Math.max(n.damInitialPct, n.damMinPct) });
+		// Lossless also means no survey curve (its area would evaporate) and no
+		// release rule (WP-3.5): a release is a second draft ahead of the yield.
+		if (n.id === nodeId) Object.assign(n, { damAreaFullM2: 0, damSeepagePerDay: 0, damInitialPct: Math.max(n.damInitialPct, n.damMinPct), damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null });
 	x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nodeId && t.toNodeId !== nodeId);
 	return x;
 }

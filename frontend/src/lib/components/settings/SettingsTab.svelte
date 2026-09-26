@@ -84,8 +84,10 @@
 	} = $props();
 
 	// Mutable view of the settings (the engine's Monthly type is a readonly tuple).
-	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration' | 'pe'> & {
+	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration' | 'pe' | 'lakeEvapFactorMonthly'> & {
 		apanMm: number[];
+		/** Monthly lake factors (WP-3.5); null = lakeEvapFactor in every month. */
+		lakeEvapFactorMonthly?: number[] | null;
 		ewrPragmaticM3PerDay: number[];
 		panCoefficient: number[];
 		calibration: CalibrationParams & Record<string, unknown>;
@@ -313,6 +315,28 @@
 		<p class="hint muted">
 			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment.
 		</p>
+		{#if s.lakeEvapFactorMonthly}
+			<div class="table-wrap">
+				<table class="data compact monthly" data-testid="lake-factor-row">
+					<caption class="visually-hidden">Dam evaporation factor by month, × A-pan</caption>
+					<thead>
+						<tr>
+							<th scope="col" class="sticky">Parameter</th>
+							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<th scope="row" class="sticky">Dam evaporation factor <span class="u">× A-pan</span> <HelpTip key="settings.lakeEvapFactorMonthly" /></th>
+							{#each WATER_YEAR_MONTHS as m, i (m)}
+								<td><NumberInput label="Dam evaporation factor, {m}, × A-pan" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactorMonthly[i]} /></td>
+							{/each}
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<p class="hint muted">These replace the single dam evaporation factor below, month by month. Untick “Vary it by month” to go back to one factor.</p>
+		{/if}
 		<div class="fields">
 			<div class="field">
 				<span class="lbl"><label for="st-erf">Effective rainfall <span class="u">(%)</span></label><HelpTip key="settings.effectiveRainFraction" /></span>
@@ -328,6 +352,15 @@
 				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
 				<span class="hint" id="st-lef-h">Open-water evaporation from the farm dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
+				<label class="check">
+					<input
+						type="checkbox"
+						disabled={readonly}
+						checked={!!s.lakeEvapFactorMonthly}
+						onchange={(e) => (s.lakeEvapFactorMonthly = e.currentTarget.checked ? new Array(12).fill(s.lakeEvapFactor) : null)}
+					/>
+					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" />
+				</label>
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="st-feb">Days in February</label><HelpTip key="settings.februaryDays" /></span>

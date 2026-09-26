@@ -8,6 +8,8 @@ import {
 	BOREHOLE_RULES,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
+	DAM_CURVE_MAX_ROWS,
+	DAM_RELEASE_RULES,
 	LAND_COVER_CLASSES,
 	PE_KINDS,
 	PE_SOURCE_MAX,
@@ -108,6 +110,8 @@ const DAM_AND_IRRIGATION = [
 ] as const;
 /** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
 const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
+/** A dam's releases and where its seepage goes (WP-3.5); the survey curve is a table, set with the model, not an op. */
+const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
 
@@ -117,7 +121,7 @@ const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
  * it) or `sortOrder` (display only). A gauge only measures, so only its name.
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...BOREHOLES],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...BOREHOLES],
 	user: ['name', ...USER, ...BOREHOLES],
 	gauge: ['name']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -144,6 +148,10 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	divertCapacityM3Day: nonNeg,
 	irrigationEfficiency: range(0, 1, { loOpen: true }),
 	lossReturnFraction: frac,
+	damReleaseRule: oneOf(DAM_RELEASE_RULES),
+	damReleaseM3Day: nullable(monthlyOf(nonNeg)),
+	damOutletCapacityM3Day: nullable(nonNeg),
+	damSeepageReturnPct: frac,
 	boreholeCapacityM3Day: nullable(nonNeg),
 	boreholeRule: oneOf(BOREHOLE_RULES),
 	boreholeTriggerPct: frac,
@@ -195,6 +203,8 @@ export interface SettingsPathValues {
 	effectiveRainFraction: number;
 	effectiveRainStoreMm: number;
 	lakeEvapFactor: number;
+	/** Monthly lake factors (WP-3.5); null = the one factor in every month. */
+	lakeEvapFactorMonthly: number[] | null;
 	apanMm: number[];
 	panCoefficient: number[];
 	ewrPragmaticM3PerDay: number[];
@@ -262,6 +272,7 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	effectiveRainFraction: frac,
 	effectiveRainStoreMm: range(0, 500),
 	lakeEvapFactor: range(0, 2),
+	lakeEvapFactorMonthly: nullable(monthlyOf(range(0, 2))),
 	apanMm: monthlyOf(range(0, 10_000)),
 	panCoefficient: monthlyOf(range(0, 2)),
 	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
@@ -397,10 +408,21 @@ const NODE_FIELDS: Record<string, Check> = {
 	kind: oneOf(['farm', 'gauge', 'user']),
 	downstreamNodeId: id,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
-	...NODE_FIELD_CHECKS
+	...NODE_FIELD_CHECKS,
+	// A new farm may bring its dam's survey curve (WP-3.5); runModel checks its shape.
+	damCurve: nullable((v) =>
+		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every((r) => isObj(r) && isNum(r.levelM) && isNum(r.areaM2) && isNum(r.volumeM3))
+			? null
+			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
+	)
 };
+/** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
+export function nodeAddFieldError(field: string, value: unknown): string | null {
+	const c = NODE_FIELDS[field];
+	return c ? c(value) : `"${field}" is not a node field`;
+}
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
-const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', ...USER, ...BOREHOLES]);
+const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,
