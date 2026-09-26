@@ -455,7 +455,7 @@ keeps that record.
   areas). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
   season factors, summer months and winter thresholds, the initial base flow,
   the reset ratio, the shift-peak indices, the amplitude, `DaysMax` and the
-  recession tables) are dropped when settings are read, and migration 063
+  recession tables) are dropped when settings are read, and migration 064
   removed them from stored projects. The importers read only the threshold
   and the area from `[Flow Calibration Cfg]`.
 - **`settings.runoffModel`** is the run's record of its model, not a choice:
@@ -3116,7 +3116,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   `fitRecordStatus` also says when the record is of another runoff model (a
   fit of the legacy model in a run snapshot from before engine 1.0.0:
   "The fit is of the legacy runoff model, removed in engine 1.0.0, …";
-  `resolveFitRecord` and migration 063 drop one from a project's settings, so
+  `resolveFitRecord` and migration 064 drop one from a project's settings, so
   the project reads as not fitted), and when the window, exclusions or
   flow record have changed since the fit — and, from `forcing`, when the pan
   coefficient, A-pan evaporation, PE input or CHIRPS bias correction has
@@ -4210,8 +4210,12 @@ number is the wrong answer). Pure, in `packages/engine/src/outlook/`
 `outlookMemberInput`, `outlookMember`, `summariseOutlook` for a job that
 runs the members one by one). A derived view: its only engine change is
 `settings.demandFactorFrom` (§2.3 step 4a), which moved the version to
-0.44.0. The backend job, the screen and the farmer view are not built yet
-(design §3.5).
+0.44.0. The backend job (`outlook`, migration 064,
+[api.md § Seasonal outlooks](./api.md#seasonal-outlooks)) runs the members
+one at a time, and the Runs tab shows the result
+([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)); the season and the
+planning share are project settings (`settings.outlook`). The farmer view
+is not built yet (design §3.5).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.
@@ -4845,6 +4849,7 @@ step when a definition changes.
 
 | Term | Meaning |
 | --- | --- |
+| **Unit** | The modeller workspace's name (issue #54 item 2a) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The code, API, CSV exports, this document and the farmer view say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the A-pan, MAP and naturalised flow data per quaternary catchment. |
 | **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |

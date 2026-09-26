@@ -88,6 +88,7 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'Simulation period',
 		'Data quality',
 		'Outcome matrix',
+		'Seasonal outlook',
 		'Automatic runs',
 		'Data feeds'
 	]);

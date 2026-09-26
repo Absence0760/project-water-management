@@ -55,6 +55,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
 	// The outcome matrix (issue #53 R4): a demand sweep of this run by class of water year; its own chunk.
 	const loadOutcomePanel = () => import('$lib/components/outcomes/OutcomeMatrixPanel.svelte');
+	// The seasonal outlook (issue #53 R5): the season from this run's state at a few demand levels; its own chunk.
+	const loadOutlookPanel = () => import('$lib/components/outlook/OutlookPanel.svelte');
 	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
 	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
@@ -642,6 +644,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							{/snippet}
 						</Lazy>
 					</div>
+					<div class="panel" id="res-outlook">
+						<Lazy load={loadOutlookPanel}>
+							{#snippet children(OutlookPanel)}
+								{#key shownRunId}
+									<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canRun} />
+								{/key}
+							{/snippet}
+						</Lazy>
+					</div>
 					<div class="panel" id="res-water-account">
 						<Lazy load={loadWaterAccountPanel}>
 							{#snippet children(WaterAccountPanel)}
@@ -781,7 +792,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		{:else}
 			<div class="panel placeholder muted">
 				Results appear here after a run: flows at the outflow gauge, calibration against observed flow, EWR compliance and each
-				farm's supply and dam storage.
+				unit's supply and dam storage.
 			</div>
 		{/if}
 	</div>

@@ -261,6 +261,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   project document moves the site to the copy's gauge. Like
   `autoRun` it is no model input: runs don't record it, and a `PATCH` that
   changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
+  `settings.outlook = { season, planningShare }` (issue #53 R5,
+  `projects/outlookSettings.ts`, [ui.md § Seasonal outlook](./ui.md#seasonal-outlook))
+  is always present too, defaults `{ season: null, planningShare: null }`:
+  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April,
+  pending the client's O3) and `DEFAULT_PLANNING_SHARE` (0.8, pending O6).
+  `PATCH` takes either field: `season` null or `{ startMonth, startDay,
+  endMonth, endDay }` (the decision date and the season end as a month and
+  day; whole, each a real day of a common year, so not 29 February, and
+  not the same day; `400`), `planningShare` null or a number in (0, 1]. It
+  says how a [seasonal outlook](#seasonal-outlooks) is set up; like
+  `outcomes` it is no model input (runs don't record it, and saving only it
+  leaves `updatedAt` alone).
   `rerunQueuedFor` is when the project's
   pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
   `null`; on `GET /projects/:id` and the other routes that answer
@@ -275,7 +287,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   §2.4a) is the only value, since engine 1.0.0 removed the legacy b023
   recession model (issue #16). `legacy` is a `400`, "the legacy runoff model
   was removed in engine 1.0.0: GR4J is the only runoff model". Reading
-  settings maps a stored `legacy` to `gr4j` (migration 063 did the same to
+  settings maps a stored `legacy` to `gr4j` (migration 064 did the same to
   every stored project), and drops a stored fit record of the legacy model.
   `calibration` takes `rainThresholdMm` (0–1000 mm) and `catchmentAreaKm2`
   (0–1 000 000 km², or `null` = the sum of the farm areas); any subset may be
@@ -1969,6 +1981,75 @@ outcome series, or the problems that kept it from running.
   missing value as `null`. Not every node's series: a sweep is not a run.
 - Progress: the job reports 0–100 after each member (`job.progress`, and
   `GET /jobs`). A sweep can't be cancelled; it is at most 12 runs.
+
+## Seasonal outlooks
+
+The seasonal outlook (issue #53 R5, [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core),
+[ui.md § Seasonal outlook](./ui.md#seasonal-outlook)): an ESP ensemble from
+a saved run's state on a decision date. One background `outlook` job runs
+every demand level × every analogue water year of the record as one member
+(the engine's `outlookMemberInput` → `runModelWithoutChecks` →
+`outlookMember`), stores each member, then the engine's `summariseOutlook`
+as the result. Not a [sweep](#sweeps): a sweep member is a whole-record
+run; an outlook member is one level in one year, measured over the season.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` | viewer |
+| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` (null while pending). `404` for one that isn't this project's | viewer |
+
+- Body (strict): `name` 1–200 characters; `baseRunId` a saved run of this
+  project; `levels` **1–6** (`OUTLOOK_LEVELS_MAX`), each `{ label, ops }`
+  with a `label` of 1–100 characters, unique whatever the case, and `ops`
+  checked as a scenario's are ([§ Scenarios](#scenarios)) and **all
+  `demand.scale`** (`400`: any other op would change the history the
+  season starts from). `ops: []` is today's demand; R1's `months` form
+  makes a monthly plan (one op per group of months). `decisionDate` and
+  `seasonEnd` (ISO, both or neither, at most 366 days, the engine's
+  `resolveSeason`, `400` with its message): absent, the project's
+  `settings.outlook.season` from the base run's **newest state**: the latest
+  decision date (that month and day) whose day before the run holds, and
+  the season end the first of its month and day after it. `planningShare`
+  (0, 1]: absent, the project's setting, else null (the engine's default,
+  `shareIsDefault` in the result). `analogueYears` (1–200 distinct water
+  years): absent, every one the record holds but the season's own.
+- Checked before anything is queued: the base run as for a sweep (`404`,
+  `409` for a scenario or forecast run), and the season: the decision date
+  must fall after the run's first day and at most the day after its last
+  (`422`, the state on the day before must be in the run), or the run must
+  hold a decision date of the project's season (`422`). Whether each
+  level's ops *apply* (the node ids exist) is the job's to find out.
+- **Limits**: at most **2 outlook jobs queued or running per user**
+  (`429`); a job gets 2 attempts; a project keeps its newest **20**
+  outlooks; an outlook goes with its base run. At most **40 analogue years**
+  (`OUTLOOK_YEARS_MAX`, the record's newest; older ones are listed in
+  `excluded` as `overLimit`), so at most 240 members, each a full run (the
+  history, then the season), in the job's one transaction: that has to fit
+  the worker Lambda's 300 s. No cancel.
+- `Outlook = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  decisionDate, seasonEnd, planningShare, levels: [{ id, label, ops }],
+  analogueYears, status, engineVersion, job, createdBy, createdAt,
+  completedAt, result? }`. `levels[].id` is its place, `"0"` …; `status`
+  `pending` until the job stores the result, then `complete`; `job` as a
+  sweep's (a `pending` outlook behind a `dead` job says why in `job.error`).
+- `result`: the engine's `SeasonalOutlook` (model.md §2.15): `decisionDate`,
+  `seasonEnd`, `days`, `metric` (`reserveMonthsMet` or `daysBelowEwr`),
+  `siteNodeId` (the outlet), `startStorageM3`, `capacityM3`, `analogues`,
+  `nYears`, `enoughYears` (≥ `OUTLOOK_MIN_YEARS` = 10), `levels` (per level:
+  `problems`, `nYears`, `meanDemandM3`, `seasonEndStorageM3`, `demandMet`,
+  `userDemandMet`, `ewr` as `{ p10, p50, p90 }` or null, `yearsEwrMet`,
+  `storageByDam`, and every year's values), `planning` (`share`,
+  `shareIsDefault`, `reason` `met` / `noLevelMeets` / `notEnoughYears` /
+  `noLevels`, the level, `yearsMet`, `ranked`) and `warnings`; plus
+  `excluded` (each `{ waterYear, reason }`: the engine's `outsideRecord`,
+  `missingRain`, `theSeason`, `duplicate`, `notAYear`, or `overLimit`, or
+  `memberFailed`) and `failures` (`{ levelId, label, waterYear, message }`
+  for each member the engine refused). A level whose ops don't apply has
+  `problems` and no years; a level refused in every year likewise; a year
+  a running level was refused in is left out of every level (`memberFailed`)
+  so the levels compare the same years. One member never fails the outlook.
+- Progress: 0–100 after each member (`job.progress`).
 
 ## Data feeds
 

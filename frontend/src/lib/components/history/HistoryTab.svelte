@@ -172,9 +172,9 @@
 
 	<div class="filters" role="group" aria-label="Filter the history">
 		<div class="field">
-			<label for="{uid}-farm">Farm</label>
+			<label for="{uid}-farm">Unit</label>
 			<select id="{uid}-farm" bind:value={nodeId}>
-				<option value="">All farms</option>
+				<option value="">All units</option>
 				{#each farms as f (f.id)}<option value={f.id}>{f.name}</option>{/each}
 			</select>
 		</div>
@@ -292,7 +292,7 @@
 		{:else}
 			<ChangesList changes={preview} />
 		{/if}
-		<p class="muted small">Series values aren't part of a version: restore them from their own entries here (“Restore the earlier values”). A restored farm comes back without its farmer links.</p>
+		<p class="muted small">Series values aren't part of a version: restore them from their own entries here (“Restore the earlier values”). A restored unit comes back without its farmer links.</p>
 		<div class="field">
 			<label for="{uid}-reason">Reason for restoring <span class="muted">(optional)</span></label>
 			<input id="{uid}-reason" maxlength={REASON_MAX} bind:value={reason} placeholder="e.g. the new dam survey was wrong" />

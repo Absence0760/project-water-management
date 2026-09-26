@@ -164,7 +164,7 @@ export const defaultZeroRainSettings = (): ZeroRainSettings => ({
  * recession model (removed in engine 1.0.0, issue #16). The key keeps its
  * workbook name; the legacy model's other keys (a, b, the season factors and
  * thresholds, the recession tables) are dropped when settings are read
- * (migration 063). Workbook named range in brackets.
+ * (migration 064). Workbook named range in brackets.
  */
 export interface CalibrationParams {
 	/**

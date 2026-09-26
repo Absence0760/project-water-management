@@ -21,8 +21,8 @@ export const SWEEPS_KEPT = 20;
 /**
  * The catchment-level daily series (nodeId null) a member keeps beside its
  * summary: what R4's outcome matrix (views/outcomeMatrix.ts, ewr_shortfall;
- * views/yearClasses.ts, natural_flow) and R5's outlook read. Not every
- * node's series: a sweep is not a run.
+ * views/yearClasses.ts, natural_flow) reads (R5's outlook has its own
+ * job and tables, outlooks/). Not every node's series: a sweep is not a run.
  */
 export const SWEEP_SERIES_KEYS = ['natural_flow', 'simulated_outflow', 'ewr', 'ewr_shortfall'] as const;
 

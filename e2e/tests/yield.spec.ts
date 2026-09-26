@@ -14,7 +14,7 @@ import { openNodeForm } from '../support/network.ts';
 async function openUpperFarm(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
 	return page.getByRole('region', { name: 'Yield of Upper farm' });
 }
 
@@ -44,7 +44,7 @@ test('an editor runs a storage–yield curve for a dam, cancels a queued yield, 
 	await expect(table.getByRole('rowheader').nth(5)).toHaveText('150,000 (this dam)');
 	await expect(table.getByRole('rowheader').last()).toHaveText('300,000');
 	await expect(panel.getByRole('heading', { name: 'Storage–yield curve' })).toBeVisible();
-	await expect(panel.getByText(/firm yield, this farm's demand shape, at 11 capacities/)).toBeVisible();
+	await expect(panel.getByText(/firm yield, this unit's demand shape, at 11 capacities/)).toBeVisible();
 	await expect(panel.getByTestId('yield-status')).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="yield-panel"]' });
 

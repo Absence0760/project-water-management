@@ -86,7 +86,7 @@ export function outcomeRows(comparisons: readonly RunComparison[]): OutcomeRow[]
 			comparisons
 		),
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
-		row('farmsBelow', `Farms below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'farms', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
+		row('farmsBelow', `Units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
 		...farmRows(comparisons),
 		row('outflow', 'Mean outflow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanSimulatedOutflowM3Day, comparisons)
 	];
@@ -150,7 +150,7 @@ export function takeaways(rows: readonly OutcomeRow[], names: readonly string[],
 		if (sd !== null && sd !== undefined) {
 			const pp = Number((sd * 100).toFixed(1));
 			if (Math.abs(pp) >= MATERIAL.suppliedPp) {
-				out.push({ tone: pp > 0 ? 'better' : 'worse', text: `${name} supplies ${fmtNum(Math.abs(pp), 1)} pp ${pp > 0 ? 'more' : 'less'} of the farms' demand` });
+				out.push({ tone: pp > 0 ? 'better' : 'worse', text: `${name} supplies ${fmtNum(Math.abs(pp), 1)} pp ${pp > 0 ? 'more' : 'less'} of the units' demand` });
 			}
 		}
 		const fd = get('farmsBelow')?.whatIfs[i]?.delta;
@@ -159,8 +159,8 @@ export function takeaways(rows: readonly OutcomeRow[], names: readonly string[],
 			const target = fmtPct(SUPPLY_TARGET, 0);
 			out.push(
 				n > 0
-					? { tone: 'worse', text: `${name} leaves ${plural(n, 'more farm')} below ${target} supplied` }
-					: { tone: 'better', text: `${name} brings ${plural(-n, 'farm')} up to ${target} supplied` }
+					? { tone: 'worse', text: `${name} leaves ${plural(n, 'more unit')} below ${target} supplied` }
+					: { tone: 'better', text: `${name} brings ${plural(-n, 'unit')} up to ${target} supplied` }
 			);
 		}
 		for (const r of rows.filter((x) => x.id.startsWith('farm:'))) {

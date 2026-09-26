@@ -423,7 +423,7 @@ A **sweep** (issue #53 R2, [planning-outputs.md §3.2](./design/planning-outputs
 is one saved base run × a list of named **members**, each an op set, run
 as one background job. The main use is demand levels: `demand.scale` at
 1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
-and R5's seasonal outlook read. Built as backend and API only
+reads. Built as backend and API only
 (`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
 migration 062). The first screen that starts and reads one is R4's
 outcome matrix on the Runs tab ([ui.md § Outcome matrix](./ui.md#outcome-matrix)):
@@ -432,7 +432,7 @@ demand levels only, one `demand.scale` op per member.
 - **Not a scenario.** A member has no row in `scenario` and makes no
   `model_run`: it stores its **run summary** (the `RunSummary` a run
   stores in `model_run.summary`) and the catchment-level daily series R4's
-  outcome matrix and R5's outlook read (`natural_flow`,
+  outcome matrix reads (`natural_flow`,
   `simulated_outflow`, `ewr`, `ewr_shortfall`; `SWEEP_SERIES_KEYS`), never
   every node's series, so a sweep never counts against the 20-run cap and
   never shows in the run list. A member's `{ startDate, series, summary }`
@@ -467,11 +467,11 @@ demand levels only, one `demand.scale` op per member.
   with its base run.
 - **Base run.** An ordinary run of the model only, as for a scenario: not a
   scenario run, not a forecast run (a sweep is judged on history).
-  R5's outlook needs a sweep from a run's state on a decision date: the
-  engine builds those members (`outlookMemberInput`, [model.md
-  §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)),
-  the job that runs and stores them is not built yet
-  ([planning-outputs.md §3.5](./design/planning-outputs.md#35-r5-the-seasonal-outlook-ml)).
+- **Not the seasonal outlook.** R5's outlook runs from a run's state on a
+  decision date, one member per demand level × analogue year, measured
+  over the season only: its own `outlook` job and tables, not a sweep mode
+  ([api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
+  [data-model.md § Seasonal outlooks](./data-model.md#seasonal-outlooks-063_seasonal_outlooksql)).
 
 API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 ([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`

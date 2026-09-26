@@ -175,11 +175,11 @@
 			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
 			<p id="{uid}-help" class="muted small">
 				{words.plainText}
-				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this farm’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
 				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
 			</p>
 			{#if showShare}
-				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this farm’s farmers</label>
+				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this unit’s farmers</label>
 			{/if}
 			<div class="row">
 				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>

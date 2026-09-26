@@ -82,8 +82,8 @@ describe('what the legacy runoff model left in stored settings (engine 1.0.0, is
 		expect(SettingsPatch.safeParse({ calibration: { somethingElse: 1 } }).success).toBe(false);
 	});
 
-	it('migration 063 drops exactly the engine’s RETIRED_CALIBRATION_KEYS', () => {
-		const sql = readFileSync(new URL('../../migrations/063_remove_legacy_runoff.sql', import.meta.url), 'utf8');
+	it('migration 064 drops exactly the engine’s RETIRED_CALIBRATION_KEYS', () => {
+		const sql = readFileSync(new URL('../../migrations/064_remove_legacy_runoff.sql', import.meta.url), 'utf8');
 		const arrays = [...sql.matchAll(/ARRAY\[([^\]]+)\]::text\[\]/g)].map((m) => [...m[1]!.matchAll(/'([^']+)'/g)].map((k) => k[1]).sort());
 		expect(arrays).toHaveLength(2);
 		for (const keys of arrays) expect(keys).toEqual([...RETIRED_CALIBRATION_KEYS].sort());

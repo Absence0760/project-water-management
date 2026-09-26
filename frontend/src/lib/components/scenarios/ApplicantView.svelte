@@ -52,7 +52,7 @@
 			<p>
 				Your applications start on the baseline the assessors published on <strong>{fmtDate(publication.publishedAt, true)}</strong>{publication.publishedBy
 					? ` (${publication.publishedBy})`
-					: ''}. You see your own farms in full and every other farm only by an anonymous name.
+					: ''}. You see your own units in full and every other unit only by an anonymous name.
 			</p>
 		{:else}
 			<p>Nothing is published yet. You can start an application once the assessors publish a baseline.</p>

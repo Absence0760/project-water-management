@@ -20,7 +20,7 @@ and [data-model.md](./data-model.md)):
 - **Runoff model on record: GR4J (issue #4 Phase 6 decision gate, 2026-09-25).**
   GR4J is the daily model. **The legacy model was removed on 2026-09-26 in
   engine 1.0.0** (issue #4 Phase 10, issue #16, ahead of its 2026-11-30
-  deadline): GR4J is the only runoff model, migration 063 moved every project
+  deadline): GR4J is the only runoff model, migration 064 moved every project
   to it, and stored legacy runs stay readable, badged, never re-run and never
   evidence ([model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data),
   [audit H1](./engine-audit.md), closed). The planned trigger, the
@@ -724,8 +724,11 @@ From the client's four sketched outputs; research and recommendations in
   terciles or quintiles can be fixed. Fixed percentile years would be a new
   method.*
 - **O3. Decision and review dates.** On what date does the WUA set the
-  season's irrigation level, and when does it review? *Planned: a project
-  setting, default the start of the irrigation season.*
+  season's irrigation level, and when does it review? *The decision date is
+  built as a project setting (`settings.outlook.season`, Settings →
+  Seasonal outlook, issue #53 R5): the season as a month and day each end,
+  default 1 October – 30 April, marked pending the client until answered.
+  The review date waits on R6.*
 - **O4. Restrictions per category.** Should the share-the-pain view cut
   domestic, industrial and irrigation users by different percentages (as DWS
   gazettes restrictions), and are the town's uses domestic or irrigation?
@@ -734,6 +737,9 @@ From the client's four sketched outputs; research and recommendations in
 - **O6. Planning share.** The outlook reports the highest demand level that
   meets the EWR in a set share of past years. What share: 80 %? The app
   reports the trade-off; the WUA publishes the decision (disclaimer, D10).
+  *Built as a project setting (`settings.outlook.planningShare`): default
+  80 %, marked pending the client until answered; a project can already set
+  its own.*
 
 ### Data, legal, hosting
 

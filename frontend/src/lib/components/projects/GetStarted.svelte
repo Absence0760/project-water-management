@@ -10,9 +10,9 @@
 	<div class="intro">
 		<h2 id="start-h">Start your first catchment</h2>
 		<p>
-			You have no projects yet. A <strong>project</strong> models one catchment: farms with dams and
+			You have no projects yet. A <strong>project</strong> models one catchment: units (farms or sub-catchments) with dams and
 			irrigation drain through gauges to one outflow gauge. Run it against daily rainfall to see each
-			farm's supply and deficit, dam storage, spills and whether the environmental flow requirement
+			unit's supply and deficit, dam storage, spills and whether the environmental flow requirement
 			(EWR) is met.
 		</p>
 	</div>
@@ -28,7 +28,7 @@
 			<span class="n" aria-hidden="true">2</span>
 			<div>
 				<h3>Build the network and crops</h3>
-				<p>Add farms and gauges with areas and dam sizes, then crops, crop factors and irrigated hectares.</p>
+				<p>Add units and gauges with areas and dam sizes, then crops, crop factors and irrigated hectares.</p>
 			</div>
 		</li>
 		<li>

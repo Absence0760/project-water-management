@@ -1335,7 +1335,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Status: done for the engine (2026-09-26, engine 1.0.0, issue #16).**
   1.0.0 is the consolidated version: the legacy model is gone, and with it
-  D3's temporary switch (`settings.runoffModel` now only records GR4J), migration 063 moved every project to GR4J, the 20 000-case soak
+  D3's temporary switch (`settings.runoffModel` now only records GR4J), migration 064 moved every project to GR4J, the 20 000-case soak
   passed, and the regression suite's final deviation list is recorded
   ([engine-audit.md § Regression suite](../engine-audit.md#regression-suite-deviation-list);
   the end-to-end natural-flow comparison is retired with the record of its

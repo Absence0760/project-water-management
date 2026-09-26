@@ -20,7 +20,7 @@ export { helpFieldKeys } from './tips';
 export const CATEGORY_TITLES: Record<HelpCategory, string> = {
 	basics: 'Basics',
 	network: 'Network',
-	farm: 'Farms and dams',
+	farm: 'Units and dams',
 	crops: 'Crops and irrigation demand',
 	transfers: 'Transfers',
 	flow: 'Natural flow and calibration',

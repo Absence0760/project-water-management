@@ -36,18 +36,20 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
 				// The run's inputs at a few demand levels by class of water year (issue #53 R4): every run; a scenario or forecast run says it can't.
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
+				// The season from the run's state at a few demand levels (issue #53 R5): every run; a scenario or forecast run says it can't.
+				{ id: 'res-outlook', label: 'Seasonal outlook' },
 				// Where the water went per water year (engine ≥ 0.32.0, WP-3.4); older runs say it wasn't computed.
 				{ id: 'res-water-account', label: 'Water account' }
 			]
 		},
 		{
-			label: 'Farms & users',
+			label: 'Units & users',
 			sections: [
 				{ id: 'res-curtailment', label: 'Curtailment' },
 				// Reliability and stress classes (engine ≥ 0.32.0, WP-3.4); older runs say they weren't computed.
 				{ id: 'res-assurance', label: 'Assurance of supply' },
 				// Farm detail is only drawn when the run has farms.
-				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Farm detail' }] : [])
+				...(summary.farms?.length ? [{ id: 'res-farm', label: 'Unit detail' }] : [])
 			]
 		},
 		{

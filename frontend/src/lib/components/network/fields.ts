@@ -45,7 +45,7 @@ export interface NodeField {
 
 export const GROUPS: Record<NodeField['group'], string> = {
 	area: 'Catchment area',
-	dam: 'Farm dam',
+	dam: 'Dam',
 	routing: 'Routing',
 	irrigation: 'Irrigation',
 	share: 'Flow share',
@@ -59,7 +59,7 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: 'km²',
 		group: 'area',
 		aria: (n) => `Area of ${n}, km²`,
-		help: "The node's own runoff area, excluding nodes upstream of it. Farm areas set the area-based flow shares and add up to the catchment area."
+		help: "The node's own runoff area, excluding nodes upstream of it. Unit areas set the area-based flow shares and add up to the catchment area."
 	},
 	{
 		key: 'areaHiKm2',
@@ -84,7 +84,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'dam',
 		farmOnly: true,
 		aria: (n) => `Dam capacity of ${n}, m³`,
-		help: 'Full supply capacity of the farm dam. 0 means no dam: demand is met from the river only.'
+		help: 'Full supply capacity of the unit’s dam. 0 means no dam: demand is met from the river only.'
 	},
 	{
 		key: 'damInitialPct',
@@ -172,7 +172,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Own runoff entering the dam at ${n}, %`,
-		help: "Share of the farm's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
+		help: "Share of the unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
 	},
 	{
 		key: 'divertCapacityM3Day',
@@ -190,7 +190,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'irrigation',
 		farmOnly: true,
 		aria: (n) => `Irrigation efficiency of ${n}, %`,
-		help: 'Share of the water abstracted that reaches the crop. The farm abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+		help: 'Share of the water abstracted that reaches the crop. The unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
 	},
 	{
 		key: 'lossReturnFraction',
@@ -199,7 +199,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'irrigation',
 		farmOnly: true,
 		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
-		help: 'Share of the application losses that drains back to the river below the farm the same day (return flow). The rest leaves the catchment.'
+		help: 'Share of the application losses that drains back to the river below the unit the same day (return flow). The rest leaves the catchment.'
 	},
 	{
 		key: 'flowShareManual',
@@ -209,7 +209,7 @@ export const NODE_FIELDS: NodeField[] = [
 		farmOnly: true,
 		nullable: true,
 		aria: (n) => `Manual flow share of ${n}, %`,
-		help: "This farm's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; farm shares should add up to 100 %."
+		help: "This unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; unit shares should add up to 100 %."
 	},
 	{
 		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)

@@ -779,6 +779,22 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// 2026-09-26  total 924 → 939 KB (measured 934: 955 896 bytes, from 923 on
+//             main @ 6380d36, R6's engine half merged). Issue #53 R5's seasonal outlook screen: the
+//             Runs tab's panel (outlook/OutlookPanel.svelte with its view
+//             model: the demand levels and the monthly plan, the table of
+//             medians and 10–90 % ranges, every analogue year, the planning
+//             figure, 7.0 KB), Settings → Seasonal outlook (1.8 KB), the
+//             engine's outlook defaults and describePlanningFigure (0.5 KB, a
+//             chunk the two share) and the draft disclaimer (0.5 KB, now a
+//             chunk the report and the panel share), the lazy hooks, menu
+//             entries and outlooks API client. All lazy: the panel loads when
+//             a run is shown, the section when Settings is. The outlook runner
+//             (runSeasonalOutlook, outlookMemberInput) is in no chunk: the
+//             backend's job runs it. The Settings chunk is 42 741 bytes, 267
+//             under its 42 KB ceiling, so the next Settings group must
+//             lazy-load its blocker check too. No new dependency. Headroom
+//             ~5 KB.
 // 2026-09-26  total 924 → 935 KB (measured 931). origin/main already measured
 //             926 before this merge (work landed after the entry above without
 //             a raise); issue #17's Summary (board A1: KPI row with Dams today,
@@ -804,6 +820,11 @@
 //             Crops chunk; the largest chunk is unchanged (41.7 KB, the
 //             workspace page). No new dependency. Headroom ~4 KB; the i18n
 //             catalogue trim is still the next saving.
+// 2026-09-26  total 949 → 957 KB (measured 953). A merge: the 924 → 939
+//             entry (#53 R5's seasonal outlook) and the 935 → 949 entries
+//             (#17's Summary, Teams and Crops pages) were each measured without
+//             the other's growth; together with #54 2a's Unit labels (+0.3 KB)
+//             they measure 953. Headroom ~4 KB; the i18n catalogue trim is due.
 // 2026-09-26  total 949 → 959 KB (measured 955; the branch measured 924
 //             from 914 on main @ 3f0f056, +10). Issue #17 board A4, Compare runs: a baseline and up
 //             to two what-ifs. The CompareView chunk (already lazy, the
@@ -814,6 +835,10 @@
 //             reserveDaysByWaterYear). No page chunk or largest chunk moves;
 //             no new dependency. Headroom ~4 KB; the bundle-weight trim
 //             under way should bring this back down.
+// 2026-09-26  total 959 → 967 KB (measured 963). A merge: the 949 → 957
+//             entry above and #17's 949 → 959 Compare runs entry were each
+//             measured without the other's growth; together they measure 963.
+//             Headroom ~4 KB; the bundle-weight trim under way is due.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -824,7 +849,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 959,
+	totalCodeKb: 967,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

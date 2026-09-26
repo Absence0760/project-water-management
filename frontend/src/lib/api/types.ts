@@ -8,6 +8,7 @@ import type {
 	InputChange,
 	MemberResult,
 	OpClass,
+	OutlookExcluded,
 	PairedMember,
 	PairedSummary,
 	ProjectModel,
@@ -21,6 +22,7 @@ import type {
 	SignoffStatement,
 	RunSummary,
 	ScenarioOp,
+	SeasonalOutlook,
 	SeriesMeta,
 	StoredRunoffModelId,
 	YearClassMethod,
@@ -113,10 +115,28 @@ export interface OutcomeSettings {
 	siteNodeId?: string | null;
 }
 
+/** A season as a month and day each end (settings.outlook.season): the decision date and the season end. */
+export interface OutlookSeasonSetting {
+	startMonth: number;
+	startDay: number;
+	endMonth: number;
+	endDay: number;
+}
+
+/**
+ * settings.outlook (issue #53 R5, backend projects/outlookSettings.ts): how a
+ * seasonal outlook is set up. null = the engine's defaults, pending the
+ * client (O3, O6). Not a model input; the API always sends both fields.
+ */
+export interface OutlookSettings {
+	season: OutlookSeasonSetting | null;
+	planningShare: number | null;
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 }
@@ -1348,6 +1368,48 @@ export interface SweepRequest {
 	name: string;
 	baseRunId: string;
 	members: { name: string; ops: ScenarioOp[] }[];
+}
+
+/** A water year an outlook left out (docs/api.md § Seasonal outlooks): the engine's reasons, or the backend's. */
+export type OutlookExcludedYear = OutlookExcluded | { waterYear: number; reason: 'overLimit' | 'memberFailed' };
+
+/** An outlook's result: the engine's SeasonalOutlook, with the backend's exclusions and the members the engine refused. */
+export type OutlookResult = Omit<SeasonalOutlook, 'excluded'> & {
+	excluded: OutlookExcludedYear[];
+	failures: { levelId: string; label: string; waterYear: number; message: string }[];
+};
+
+/** A seasonal outlook (issue #53 R5, docs/api.md § Seasonal outlooks, backend outlooks/store.ts OutlookRow). */
+export interface Outlook {
+	id: string;
+	name: string;
+	baseRunId: string;
+	baseRun: { id: string; label: string; createdAt: string };
+	decisionDate: string;
+	seasonEnd: string;
+	/** null = the engine's default share (pending the client's O6). */
+	planningShare: number | null;
+	levels: { id: string; label: string; ops: ScenarioOp[] }[];
+	analogueYears: number[] | null;
+	status: 'pending' | 'complete';
+	engineVersion: string | null;
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	/** Only on GET …/outlooks/:outlookId; null while pending. */
+	result?: OutlookResult | null;
+}
+
+/** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
+export interface OutlookRequest {
+	name: string;
+	baseRunId: string;
+	levels: { label: string; ops: ScenarioOp[] }[];
+	decisionDate?: string;
+	seasonEnd?: string;
+	planningShare?: number;
+	analogueYears?: number[];
 }
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */
