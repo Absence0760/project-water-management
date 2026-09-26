@@ -1717,6 +1717,21 @@ role and not before it.
 - [x] Dependabot's `pip` entry watched the repo root, which has no Python
       manifest; since 2026-09-25 it watches `brand/` and `scripts/wbt-import/`
       (the openpyxl pin the importer CI job installs).
+- [ ] **`help.spec.ts:289` flake under heavy load** ("an old /help#term
+      link goes on to the glossary entry"): seen once at 10 workers on a
+      loaded machine after #41's fixes; the article existed but was scrolled
+      out of view. Likely a client-side scroll race after the redirect (the
+      heading font landing late and shifting layout). Durable fix: scroll
+      only once the target has rendered and fonts are ready
+      (`document.fonts.ready`), or re-scroll on the article's resize, never a
+      longer wait. Trigger: it recurs, in CI or locally.
+- [ ] **`POST /projects/:id/runs` holds a DB connection for the whole engine
+      run** (found by #41): the engine runs inside the request's
+      transaction, so a long run pins a pooled connection and its slot on the
+      one Node thread. Durable fix: load inputs, run the engine outside the
+      transaction, then write results in a second one (session B's
+      `runs/`). Trigger: connection waits in production, or a Lambda serving
+      concurrent requests.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
