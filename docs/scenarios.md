@@ -217,8 +217,9 @@ bodies), `execute.ts` (`executeScenarioRun`).
   scenario won't run until its ops apply again (edit them with `PATCH`).
 - **Status.** `draft → submitted → withdrawn | decided`, and `withdrawn →
   draft`. Only a draft's ops, owned nodes and base change; a submitted or
-  decided scenario can't be deleted. Who may submit and decide is WP-3.3's
-  (the applicant role); today any editor may.
+  decided scenario can't be deleted. On a team scenario any editor moves it;
+  on an application only its owner, and only an assessor decides it
+  ([§ Applications](#applications-wp-33)).
 - **The base is cited** (`model_run_cited`), so it can't be deleted,
   trimmed or unpinned while the scenario exists, and its pin doesn't count
   against the 10-pin ceiling. `RunMeta.citedBy` lists the publications holding it and the scenarios based on
@@ -241,13 +242,14 @@ Migration `024_scenarios.sql`
   a non-draft is frozen; status moves as above.
 - RLS: viewer read, editor write; **farmers read nothing** (a scenario's ops
   and base name every farm; the catchment report makes the same call).
-  WP-3.3 adds the applicant's own policies.
+  `036_contributor_scope.sql` rewrote them for applications
+  ([§ Applications](#applications-wp-33)): a team scenario keeps exactly these.
 - `model_run_cited` gains a clause (a scenario's base) beside 022's
   publication clause, and the pin ceiling stops counting cited runs.
 - The publication-history cap (newest 12) spares a publication whose run a
   scenario is based on, so the base keeps its "published" record. Editors
-  may base a scenario on any run of the model, published or not; WP-3.3
-  requires a published base for applicants.
+  may base a scenario on any run of the model, published or not; an
+  application's base must be a published run (current or in the history).
 - `run_series.node_id` stops being a foreign key to the live `node` table: a
   scenario run has nodes the live model doesn't (`node.add`), and the old
   cascade deleted a node's series from every earlier run when the node was
@@ -303,9 +305,9 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   `settings.set`, it is a baseline assumption.
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
-  changed** callout, in the tab and on the compare page. The proposer's
-  nodes (`ownedNodeIds`) are a checkbox list in the tab, until WP-3.3 derives
-  them from the applicant's links.
+  changed** callout, in the tab and on the compare page. On a team scenario
+  the proposer's nodes (`ownedNodeIds`) are a checkbox list in the tab; on an
+  application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
   headline, farm and daily-overlay components (issue #8); the compare page
@@ -325,3 +327,73 @@ classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
 read only; submit, withdraw, delete releasing the base; axe in light, dark
 and on a phone).
+
+## Applications (WP-3.3)
+
+An **application** is a scenario a **contributor** makes: a licence applicant
+or their consultant, the project role ranked between `farmer` and `viewer`
+(migrations `035_contributor_role.sql`, `036_contributor_scope.sql`;
+[data-model.md § Applicants](./data-model.md#applicants-035036),
+[security.md § Applicants](./security.md#applicants-the-contributor-role)).
+It is the same table, ops, check and run as any scenario, with
+`scenario.origin = 'applicant'` (stamped from the creator's role; an editor's
+scenario is `'team'`, and behaves exactly as above).
+
+- **The base is the published baseline.** A contributor can't read a run's
+  row, so the server rebuilds the published run's input past RLS
+  (`loadPublishedRunInput`, through the `SECURITY DEFINER`
+  `app_published_run_input` / `app_published_run_series`) and never returns
+  it. An unpublished run answers `404`, as if it didn't exist.
+- **What the applicant sees of it** (`GET …/scenarios/:sid/base`,
+  `backend/src/scenarios/applicant.ts`): the settings, their own farms (their
+  farm links) and every gauge in full; every other node by its kind and
+  place in the network under an anonymous name ("Farm 3", "Water user 1"),
+  its values blanked; crops, crop areas, transfers and land cover on their
+  own farms only. The engine's messages about ops (notes, problems) come back
+  with the anonymised names. This is D2's recommended default
+  ([step-3 § 11](./roadmap/step-3-licensing.md#11-open-decisions)),
+  **pending the client**.
+- **Own nodes** are the owner's farm links (`app_farm_nodes`), set at create
+  and each time the ops change while a draft. A contributor can't claim
+  others' (`403`), so a dam raise on their own farm is a proposal and the
+  same raise on a neighbour's is a baseline assumption.
+- **Workflow.** The owner submits (`POST …/submit`: only when every op
+  applies; the ops, their hash, the base and the own nodes freeze), may
+  withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
+  draft (`…/reopen`). An **assessor**, an editor who isn't the owner, decides
+  a submitted one (`…/decide { outcome, note }`, outcome `approved`,
+  `approved_with_conditions` or `refused`, the words pending the licensing
+  authority); a decision is final. `submitted_at`, `decided_at` and
+  `decided_by` are stamped by the trigger. The roadmap's "under review" is
+  not a status of its own: a submitted application is the assessors' queue.
+- **Who reads it.** Its owner and whoever they share it with
+  (`POST|DELETE …/members`, `scenario_member`: another contributor-or-above
+  member of the project, by email); the editors once it is submitted (drafts
+  stay the applicant's alone, from the assessors too); viewers once it is
+  decided. Its runs follow: an application's draft runs are hidden from the
+  editors' run lists and series as well (`model_run_select`, and
+  `run_series_select` excluding `app_hidden_scenario_runs()`).
+- **Runs.** The owner and the people it is shared with run it, and so may an
+  assessor. A contributor's run answers with the run's metadata only (its
+  summary names every farm); each application keeps its newest 5 runs
+  (`APPLICATION_RUNS_KEPT`, trimmed as its owner: the project's 20-run cap
+  counts only the runs the editor trimming can see). Deleting a draft or
+  withdrawn application deletes its runs that nothing keeps.
+- **Results for the applicant** are not built: the assessors compare a run
+  with its base (`/compare/runs` refuses a contributor, since it returns
+  `inputs`); the applicant projection of results (catchment series, their own
+  farm, anonymised downstream deltas) is a follow-up
+  ([followups.md § Applicants](./followups.md#applicants-wp-33)).
+- **The log.** `scenario.created / changed / submitted / withdrawn /
+  reopened / decided / shared / unshared / deleted` and `run.created` carry
+  `application: true` and no name until the application is decided (every
+  viewer reads the project's history).
+
+Tests: `backend/src/scenarios/applications.db.test.ts` (RLS with positive
+controls: drafts hidden from the other applicant, the editors and viewers;
+the published run's row unreadable, its catchment series readable; submit,
+freeze, decide; sharing; the per-application run cap; the contributor route
+inventory), `applicant.test.ts` (the projection and the renaming),
+`history/write-routes.db.test.ts` (each new route records its event), e2e
+`e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's
+decision, axe in both themes).

@@ -429,8 +429,10 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
-  `report_schedule.configured`, `scenario.created/changed/deleted`, and
-  restores. `api_key.*` is reserved.
+  `report_schedule.configured`, `scenario.created/changed/deleted`, the
+  application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
+  (036; an application's events carry `application: true` and no name until
+  it is decided), and restores. `api_key.*` is reserved.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -597,8 +599,9 @@ run's stored input (above), never the live model.
   of its own project's. The API answers each of these with a `409` first.
 - **RLS**: `SELECT` viewer, `INSERT` / `UPDATE` / `DELETE` editor. **Farmers
   read nothing** (no policy names them, so the viewer floor refuses them), as
-  for `model_run`: a scenario's ops and base name every farm. WP-3.3 adds the
-  applicant's own policies. `water_app` has `SELECT, INSERT, UPDATE, DELETE`.
+  for `model_run`: a scenario's ops and base name every farm. 036 replaced
+  these four with origin-aware ones (§ Applicants); a team scenario keeps
+  exactly this rule. `water_app` has `SELECT, INSERT, UPDATE, DELETE`.
 - **`run_series.node_id` since 024.** 001 made it a foreign key to `node`
   (`ON DELETE CASCADE`) with a same-project trigger. A scenario run stores
   series for nodes the live model never had (`node.add`), and the cascade
@@ -612,9 +615,12 @@ run's stored input (above), never the live model.
 - **Concurrency.** Creating, rebasing and deleting a scenario take the
   project's run lock (`lockProjectRuns`) first, as `trimRuns` does, so a trim
   never misses a citation being added in the same moment. A scenario run
-  takes the same lock, then holds its scenario `FOR KEY SHARE` until it
-  commits, so the scenario can't be deleted under it (lock first, row second
-  on every path, so the two wait for each other instead of deadlocking).
+  takes the same lock before it reads its scenario, and the delete and
+  rebase routes take it before they touch the row, so a run racing either
+  waits for it. (Until 036 the run also held the row `FOR KEY SHARE`; that
+  lock needs the `UPDATE` policy, which a shared member or an assessor
+  running an application doesn't pass.) A submit holds the row `FOR UPDATE`
+  from its check to its commit, so the ops it checked are the ones frozen.
 - Guards: `backend/src/scenarios/scenarios.db.test.ts` (with positive
   controls), the catalogue tests (RLS, grants, covering indexes,
   `search_path`) and the route inventories (auth and farmer `403`).
@@ -674,6 +680,7 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 | Role | Can |
 | --- | --- |
 | `farmer` | Read only the farms linked to them (`farm_link`), and leave. Nothing of the model, series or runs (§ Farmers, 019/020) |
+| `contributor` | An applicant (WP-3.3). What a farmer with the same links reads, plus their own applications on the published baseline and those shared with them, their runs, and the published runs' catchment series. Nothing unpublished, no other farm's inputs, no other applicant's drafts (§ Applicants, 035/036) |
 | `viewer` | Read the project, its model, series, runs and members |
 | `editor` | Everything a viewer can, plus change settings and model data, upload series, run the model, write a run's notes, delete runs |
 | `owner` | Everything an editor can, plus add/remove members, change roles, delete the project |
@@ -757,6 +764,87 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   catalogue test that every table with a node column has a farmer-aware
   `SELECT` policy or is listed as never read by farmers (none since 022 gave
   `run_series` its publication-scoped farmer policy).
+
+### Applicants (035/036)
+
+A **contributor** (roadmap WP-3.3) is a licence applicant or their
+consultant: a direct project member (`POST /projects/:id/members` with
+`role: 'contributor'`; the UI calls it "Applicant"), ranked `farmer <
+contributor < viewer < editor < owner`. `035_contributor_role.sql` adds the
+enum value alone (it can't be used in the transaction that adds it);
+`036_contributor_scope.sql` adds everything else.
+
+- **Below viewer, like a farmer.** Every existing policy and every
+  `requireRole(…, 'viewer')` refuses a contributor untouched (fail closed);
+  what they may do is only extra permissive policies. Team roles never map
+  to `contributor`, and `app_project_role` takes the max, so a team member
+  who is also a contributor is an editor (and their scenarios are team
+  scenarios). Hence D1: a consultancy mustn't host the baseline in its own
+  team while its staff act for applicants.
+- **Farm links.** A contributor keeps farm links (an irrigator applying to
+  raise their own dam): `farm_link_check` admits `farmer` or `contributor`,
+  and `/farmers` lists and relinks both (`role` on each row). Every farmer
+  policy of 020/022 is keyed on `app_farm_nodes()` (the links), not on the
+  role, so a linked contributor reads exactly what a farmer with the same
+  links reads; the policies that admit "every member" (`app_has_role(…,
+  'farmer')`: `project`, `run_publication`, `audit_event` insert) admit a
+  contributor, who ranks above a farmer. The audit of WP-2.1's helpers found
+  one role test to widen (`farm_link_check`); `app_accept_invites` links
+  farms only on a farmer invite, and `app_farm_access` lists a linked
+  contributor as the farm's farmer.
+- **`scenario.origin`** `'team' | 'applicant'`, stamped by `scenario_guard`
+  from the creator's role and never changed, plus the decision:
+  `submitted_at`, `decided_at`, `decided_by → app_user` (covering index),
+  `outcome` (`approved`, `approved_with_conditions`, `refused`; only when
+  decided) and `decision_note` (≤ 4000). A partial index
+  `(project_id, status) WHERE origin = 'applicant'` serves the Applications
+  list. `scenario_guard` (from 024's body) also: an application's base is a
+  published run of the project (on insert and rebase); only its owner moves
+  it (submit, withdraw, back to draft) or edits it; only an editor who isn't
+  its owner decides it, with an outcome and nothing else changed; the
+  decision is set once. `scenario_drop_application_runs` deletes a deleted
+  application's runs that nothing keeps (else `SET NULL` would show them to
+  every viewer).
+- **`scenario_member (scenario_id, project_id, user_id, added_by,
+  added_at)`**: the people an applicant shares an application with.
+  `(project_id, user_id)` references `project_member` `ON DELETE CASCADE`
+  (leaving the project ends the share), with covering indexes. A trigger
+  admits only an application of the same project, a contributor-or-above
+  member, never its owner. RLS: read by whoever reads the application; only
+  its owner adds; the owner removes anyone and anyone listed may leave; no
+  update.
+- **Who reads a scenario** is one function, `app_scenario_visible(project,
+  id, origin, status, owner)` (taking columns so the insert's `RETURNING`
+  passes it); `app_scenario_readable(id)` looks the row up and calls it. A
+  team scenario: viewers. An application: its owner and members (while
+  contributors or above), editors once not a draft, viewers once decided.
+  Writes: a team scenario, editors; an application, its owner, and an
+  editor for the move to `decided`.
+- **`model_run`**: `model_run_select` (from 001) now reads a scenario run
+  only through `app_scenario_readable`, so an application's draft runs are
+  hidden from the editors too. A contributor may insert runs of the
+  scenarios they read (as themselves) and delete their own applications'
+  runs that nothing keeps (`app_run_kept`, `RUN_KEPT_SQL`'s rule past RLS). A
+  published run is **not** readable as a row: its `inputs` and `summary`
+  hold every farm.
+- **`run_series`**: `run_series_select` (from 001) excludes
+  `app_hidden_scenario_runs()` (applications the caller can't read);
+  `run_series_select_contributor` reads the contributor's applications' runs
+  and the share links' catchment keys (`natural_flow`, `simulated_outflow`,
+  `observed_flow`, `ewr`, `ewr_shortfall`, `node_id IS NULL`) of a published
+  run (current or in the history) when the catchment has at least 5 farm
+  holders, counted as `app_share_series` counts them. Both helpers are
+  uncorrelated set-returning functions, so a query evaluates each once (a
+  hashed subplan), not per row. `series_blob` / `run_input_series` gain a
+  contributor insert policy for their runs' stored inputs.
+- **The published baseline for the server**:
+  `app_published_run_input(project, run)` and `app_published_run_series`
+  return a published run's snapshot and stored series to a contributor or
+  above, for `loadPublishedRunInput`; the API never returns them to a
+  contributor. `app_run_brief` gives the base banner its label and date.
+- Guards: `src/scenarios/applications.db.test.ts` (every "cannot see" with
+  its positive control, and every `/projects/:id` route answering a
+  contributor `400`/`403` except the listed ones), the catalogue tests.
 
 ### Publications (022_publication.sql)
 

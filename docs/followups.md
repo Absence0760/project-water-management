@@ -1580,6 +1580,58 @@ role and not before it.
       exist (WP-2.9); `audit_event.actor_api_key_id` is there, unused.
       Trigger: WP-2.9.
 
+## Applicants (WP-3.3)
+
+The first slice (migrations 035/036, [scenarios.md § Applications](./scenarios.md#applications-wp-33))
+built the role, its RLS, applications and their workflow, sharing, the
+Applicant view and the Applications tab. Left:
+
+- [ ] **The applicant's view of results.** An applicant runs their
+      application but sees no result: `/compare/runs` refuses a contributor
+      (it returns `inputs`, every farm), and the scenario run answers with
+      metadata only. Durable fix: a contributor projection of a scenario run
+      against its base (the roadmap's D2 default: catchment series, their own
+      nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
+      downstream: supply −4 %"), built from the run and base server-side like
+      `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
+      next WP-3.3 slice, before an applicant uses it for real.
+- [ ] **A contributor can `SELECT` their own application runs' rows**, whose
+      `inputs` snapshot holds the whole base (every farm's parameters); the
+      API never returns them (RLS can't hide a column). Durable fix: store
+      the applicant's projection with the run, or read scenario runs for
+      contributors only through a `SECURITY DEFINER` projection and drop
+      `model_run_select`'s contributor branch. Trigger: the results slice
+      above, which needs the same projection.
+- [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
+      recommended defaults: D2's anonymised baseline and the outcome words
+      (`approved`, `approved_with_conditions`, `refused`) are **pending the
+      client and the licensing authority**. Trigger: the client's answers.
+- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
+      a contributor-or-above member of the project; renaming their own farm
+      to a neighbour's name gets the duplicate-name problem (the name comes
+      back anonymised, but its existence shows). Durable fix: share by a
+      member picker the owner curates (the assessor adds consultants to an
+      application), and check names against the projected base for
+      contributors. Trigger: before applicants from competing parties share a
+      project.
+- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
+      access** (WP-3.15) link from the list and the Application panel.
+      Trigger: those WPs.
+- [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
+      share links' rule, applied conservatively; the hydrologist and the
+      client may prefer catchment flows always visible to applicants (they
+      are gauge data). Pending the hydrologist.
+- [ ] **Performance of `run_series_select`.** Every viewer read of run series
+      now evaluates `app_hidden_scenario_runs()` and the contributor policy's
+      two helpers once per query (hashed subplans; the contributor ones exit
+      after one index probe for a non-contributor). Measured ~6 ms per query
+      on a loaded test database; run `pnpm test:backend:perf` alone on a quiet
+      machine to confirm the budgets hold. Trigger: the next perf run.
+- [ ] **Invite as an applicant with farms.** A contributor's farm links are
+      set by the owner after they join (`/farmers/:userId`); a farmer invite
+      carries farms, a contributor invite doesn't. Trigger: the first client
+      catchment with an irrigator applicant.
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
