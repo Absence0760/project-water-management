@@ -137,12 +137,9 @@ export const meAlertRoutes = new Hono<AuthEnv>()
 					if (nodeId || item.mode === 'daily_digest') throw new ApiError(400, '“all” is on (immediate) or off, for the whole project');
 				} else {
 					if (!defaultMode(role, item.kind)) throw new ApiError(400, `your role doesn’t get ${item.kind} alerts`);
-					if (nodeId && item.kind !== 'dam_below') throw new ApiError(400, 'only dam alerts are per farm');
+					// A farmer chooses per farm (their own); everyone else once for every farm, as the page shows it.
+					if (nodeId && (item.kind !== 'dam_below' || role !== 'farmer')) throw new ApiError(400, 'only a farmer’s dam alerts are per farm');
 					if (role === 'farmer' && item.kind === 'dam_below' && (!nodeId || !myFarms.has(nodeId))) throw new ApiError(404, 'not found');
-					if (nodeId && role !== 'farmer') {
-						const { rows } = await db.query("SELECT 1 FROM node WHERE id = $1 AND project_id = $2 AND kind = 'farm'", [nodeId, id]);
-						if (!rows[0]) throw new ApiError(404, 'not found');
-					}
 				}
 				// Turning a choice back on draws a new nonce, so a link in an old mail can't undo it
 				// (the worker stores the new token's hash with the next mail: alerts/tokens.ts).

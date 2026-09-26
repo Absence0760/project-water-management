@@ -161,6 +161,8 @@ describe('recipients (app_alert_recipients)', () => {
 
 	it('a viewer who opts in gets dam alerts; anyone who turns a kind off drops out', async () => {
 		expect((await viewer.call('PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'immediate' }] })).status).toBe(200);
+		// The WUA chooses once for every farm (a per-farm row would be a choice the page can't show).
+		expect((await viewer.call('PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', nodeId: one.id, mode: 'off' }] })).status).toBe(400);
 		expect(await recipients(editor, 'dam_below', one.id)).toContain(viewer.id);
 		expect((await editor.call('PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'off' }] })).status).toBe(200);
 		expect(await recipients(editor, 'dam_below', one.id)).not.toContain(editor.id);
