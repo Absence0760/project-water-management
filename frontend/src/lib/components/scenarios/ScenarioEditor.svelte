@@ -325,6 +325,13 @@
 			{problems === 1 ? 'it is' : 'they are'} removed or the base changes.
 		</div>
 	{/if}
+	{#if data.check?.renamed?.length}
+		<!-- The assessors only (the applicant never learns a hidden name): what the application's names displaced. -->
+		<p class="alert alert-info" role="status" data-testid="scenario-renamed">
+			The applicant gave a name already used by a farm or crop they can't see; in this application's runs
+			{data.check.renamed.map((r) => `${r.name} is called “${r.as}”`).join(', ')}.
+		</p>
+	{/if}
 
 	<section aria-labelledby="changes-h">
 		<div class="changes-head">
