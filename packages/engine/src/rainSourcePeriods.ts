@@ -43,6 +43,7 @@ import {
 	type ZeroRainSettings
 } from './project';
 import { rainVsChirps, waterYearLabel } from './quality';
+import { provenanceLabel, type SeriesProvenance } from './seriesProvenance';
 import {
 	CHIRPS_FACTOR_MAX,
 	CHIRPS_FACTOR_MIN,
@@ -264,6 +265,8 @@ export interface RainSourcePeriodInfo {
 	gaugeInChirps: boolean;
 	/** The project has the named series (false = every day falls through). */
 	seriesPresent: boolean;
+	/** The product and version the series holds (032_series_provenance; null = not recorded, absent when the caller didn't say). */
+	seriesProvenance?: SeriesProvenance | null;
 	/** Run days in the period, and where their rain came from. */
 	runDays: number;
 	seriesDays: number;
@@ -421,6 +424,7 @@ export function applyRainSource(
 				...f,
 				gaugeInChirps: p.gaugeInChirps === true,
 				seriesPresent: !!alt,
+				...(alt?.provenance !== undefined ? { seriesProvenance: alt.provenance ? { ...alt.provenance } : null } : {}),
 				runDays: 0,
 				seriesDays: 0,
 				seriesRawMm: 0,
@@ -576,7 +580,8 @@ export function rainSourcePeriodWarnings(info: RainSourceInfo | null): string[] 
 export function rainSourceLines(info: RainSourceInfo | null | undefined): string[] {
 	return (info?.periods ?? []).map(
 		(p) =>
-			`${p.start} to ${p.end} (${p.reason}): ${rainSourceKindName(p.series)} × ${rainSourceFactorText(p.factors)}; ` +
+			`${p.start} to ${p.end} (${p.reason}): ${rainSourceKindName(p.series)}` +
+			`${p.seriesProvenance !== undefined ? ` (${provenanceLabel(p.seriesProvenance)})` : ''} × ${rainSourceFactorText(p.factors)}; ` +
 			`${rainSourceFactorOrigin(p)}; gaps from ${rainSourceFallbackText(p.fallback)}`
 	);
 }

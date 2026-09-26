@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { doubleMass, doubleMassCheck, doubleMassRunWarning, proposeChirpsFitRanges } from './doublemass';
-import { defaultProjectSettings, type ChirpsFitPeriod, type ChirpsFitRange, type DailySeries, type ModelInput, type SeriesKind, type ZeroRainSettings } from './project';
+import { defaultProjectSettings, type ChirpsFitPeriod, type RainSourcePeriod, type ChirpsFitRange, type DailySeries, type ModelInput, type SeriesKind, type ZeroRainSettings } from './project';
 import {
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
@@ -277,7 +277,7 @@ describe('replaced, missing and filled days stay out of every fit', () => {
 		for (let i = 0; i < wild.c.length; i++) if (wyOf(i) === 2003 || wyOf(i) === 2004) wild.c[i] = wild.h[i]! * 10;
 		// The real thing the missing-period test above stands in for: 2003–2004 replaced from an alternative gauge.
 		const alt = { startDate: S, values: ref.h.map((v, i) => (wyOf(i) === 2003 || wyOf(i) === 2004 ? v! * 1.5 : null)) };
-		const rainSource = [
+		const rainSource: RainSourcePeriod[] = [
 			{
 				start: '2003-10-01',
 				end: '2005-09-30',
@@ -287,7 +287,7 @@ describe('replaced, missing and filled days stay out of every fit', () => {
 				reason: 'replaced from the automatic station'
 			}
 		];
-		const factors = (s: Series, periods?: unknown) => {
+		const factors = (s: Series, periods?: RainSourcePeriod[]) => {
 			const i = input({ ...s, rain_catchment_alt_mm: alt }, ERAS);
 			const corr = prepareRun({ ...i, settings: { ...i.settings, ...(periods ? { rainSource: periods } : {}) } }).chirpsCorrection!;
 			return { all: corr.months.map((m) => m.factor), ranges: corr.fitPeriod!.segments.map((g) => g.months.map((m) => m.factor)), left: corr.replacedDaysLeftOut };

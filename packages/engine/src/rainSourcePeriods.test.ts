@@ -340,6 +340,12 @@ describe('run comparison and words', () => {
 		expect(diffInputs({ ...(snap(none) as object), settings: pre } as never, snap(none))).toEqual([]);
 		expect(cmp(none, none).rainSource).toBeNull();
 		expect(rainSourceLines(null)).toEqual([]);
+		// The series' product label (032_series_provenance) is part of the line: another station product is another forcing.
+		const labelled = toSeries(build());
+		labelled.rain_catchment_alt_mm = { ...labelled.rain_catchment_alt_mm!, provenance: { product: 'SASSCAL AWS', version: '1' } };
+		const info = runModel(input(labelled, [FIXED])).summary.rainSource!;
+		expect(info.periods[0]!.seriesProvenance).toEqual({ product: 'SASSCAL AWS', version: '1' });
+		expect(rainSourceLines(info)[0]).toContain('alternative catchment gauge (SASSCAL AWS v1) × Oct 1.25');
 		expect(rainSourceText([])).toBe('none (the catchment series throughout)');
 	});
 });
