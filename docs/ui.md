@@ -1491,11 +1491,19 @@ run's report to chosen members every week or month.
   record**, or **Custom range** (From / To date fields, starting from the days
   shown, cut to the run with a note; a backwards range or one outside the run
   says so and shows the project window). Any window other than the run's own is
-  worked out **in the browser** from the run's stored daily series (per farm
-  and other user: demand, supplied, EWR charge and its irrigation part or the
-  return flow; per EWR site: shortfall, charged and natural), fetched once per
-  run the first time another window is picked, with the engine's
-  `computeCurtailment`. Nothing is re-run and nothing is saved: the project
+  worked out **in the browser** from the run's stored daily series by the
+  engine's `prepareCurtailment` / `curtailmentOverWindow` (the recompute the
+  farmer projection's season uses, [model.md §2.11](./model.md#211-curtailment-targets-shortfalls)):
+  per node its inflow from upstream and outflow; per farm demand, supplied,
+  runoff, dam storage, EWR charge and its irrigation part (and the net
+  transfer when a transfer rule joins it to another farm); per other user
+  demand, supplied, return flow and EWR charge; per EWR site shortfall,
+  charged and natural (`curtailmentSeriesKeys` lists them). They are fetched
+  once per run the first time another window is picked, and the run is read
+  once, so switching between windows is instant. Every column is recomputed,
+  the **EWR site setting each farm's charge** included (the engine recomputes
+  each day's binding site from the stored flows); only when the transfer rules
+  form a loop is that column approximate, and the status line says so. Nothing is re-run and nothing is saved: the project
   setting, the stored run, the downloads and the printable report keep the
   project window, and the status line under the picker says so. A viewer can use
   it (it only reads the run). The choice is `?window=` in the URL (`last7`,
@@ -1506,16 +1514,16 @@ run's report to chosen members every week or month.
   window's name and dates ("Last 7 days: daily averages over 2022-01-22 –
   2022-01-28 (7 days)", also in its caption), and the other water users and
   EWR sites tables repeat the dates. The status line adds how many of the days
-  fall in the forecast period (`RunSummary.forecastRain`). Two limits: the **EWR
-  site setting each farm's charge** can't be recomputed (the engine doesn't
-  store the per-day binding site), so over another window that column is blank
-  and the status line says it is shown for the project window only; and a run
-  saved before engine 0.17.0 (no EWR charge series) disables the picker and
-  asks for a new run. `windowedCurtailment.test.ts` checks the browser's table
-  against `runModel` run with the same window as the project setting, on
-  seeded synthetic runs; `e2e/tests/report-window.spec.ts` checks the same
-  against a second run in the app, the URL, back / forward, and axe in both
-  themes and on a phone.
+  fall in the forecast period (`RunSummary.forecastRain`). A run saved before
+  engine 0.17.0 (no EWR charge series), or missing any series the recompute
+  reads, disables the picker and asks for a new run. The engine's
+  `views/curtailmentOverWindow.test.ts` checks the table, binding sites
+  included, against `runModel` run with the same window as the project
+  setting on seeded synthetic runs (and against the stored table over the
+  run's own window); `windowedCurtailment.test.ts` checks the panel's wiring
+  (the series it fetches, each preset); `e2e/tests/report-window.spec.ts`
+  checks whole rows, the binding site included, against a second run in the
+  app, the URL, back / forward, and axe in both themes and on a phone.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)). It has three

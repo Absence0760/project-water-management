@@ -597,7 +597,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
-						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} nodes={editor.model.nodes} {farmNames} />
+						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} network={editor.model} {farmNames} />
 					</section>
 					<section class="panel" id="res-assurance">
 						<Lazy load={loadSupplyAssurancePanel}>

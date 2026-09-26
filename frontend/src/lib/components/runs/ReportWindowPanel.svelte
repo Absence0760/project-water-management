@@ -2,8 +2,9 @@
 	The reporting-window picker above the curtailment table (issue #44): last
 	7 / 14 / 30 days, the project's window, the whole record or a custom range.
 	Another window is worked out in the browser from the run's stored daily
-	series (windowedCurtailment.ts): no re-run, no change to the project
-	setting, so a viewer can use it too. The choice is `?window=` in the URL
+	series by the engine (windowedCurtailment.ts), the EWR site setting each
+	farm's charge included: no re-run, no change to the project setting, so a
+	viewer can use it too. The choice is `?window=` in the URL
 	(reportWindow.ts), a history entry of its own, so back and forward step
 	through the windows looked at.
 -->
@@ -25,21 +26,22 @@
 		type WindowChoice,
 		type WindowPreset
 	} from './reportWindow';
-	import { curtailmentSeriesKeys, missingSeries, recomputeCurtailment, type NodeParams, type SeriesKey, type Stored } from './windowedCurtailment';
+	import type { NetworkNode, Transfer } from '@water-management/engine';
+	import { curtailmentSeriesKeys, missingSeries, prepareWindowed, type RunNetwork, type SeriesKey, type Stored } from './windowedCurtailment';
 
 	let {
 		projectId,
 		run,
 		refs,
-		nodes,
+		network,
 		farmNames = {}
 	}: {
 		projectId: string;
 		run: Run;
 		/** The run's stored series (GET …/runs/:runId). */
 		refs: RunSeriesRef[];
-		/** Today's nodes, for k when the run carries no model snapshot. */
-		nodes: readonly NodeParams[];
+		/** Today's nodes and transfers, when the run carries no model snapshot (an older API). */
+		network: RunNetwork;
 		farmNames?: Record<string, string>;
 	} = $props();
 
@@ -49,14 +51,17 @@
 	const target = $derived(resolution?.ok ? resolution.window : null);
 	/** The window differs from the one the run reported over: work it out from the series. */
 	const recompute = $derived(!!stored && !!target && !sameWindow(target, stored));
-	const keys = $derived(stored ? curtailmentSeriesKeys(stored) : null);
+	/** The network the run used: its model snapshot, else today's. */
+	const runNetwork = $derived<RunNetwork>(
+		run.model?.nodes ? { nodes: run.model.nodes as NetworkNode[], transfers: (run.model.transfers as Transfer[] | undefined) ?? [] } : network
+	);
+	const keys = $derived(stored ? curtailmentSeriesKeys(stored, runNetwork) : null);
 	/** Why this run can't be re-windowed (saved before the series it needs existed); null when it can. */
 	const unavailable = $derived.by(() => {
 		if (!stored || stored.farms.length === 0) return null;
 		if (!keys || missingSeries(keys, refs).length) return 'This run was saved before its tables could be worked out for another window. Run the model again to pick one.';
 		return null;
 	});
-	const snapshot = $derived((run.model?.nodes as NodeParams[] | undefined) ?? nodes);
 
 	const idOf = (k: SeriesKey) => `${k.nodeId ?? ''}|${k.key}`;
 	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte). Replace, never mutate.
@@ -67,7 +72,7 @@
 	/** The run whose series are being fetched, so flipping windows mid-fetch doesn't start a second one. */
 	let inflight = '';
 
-	// Fetch the series once per run, the first time another window is picked (a few per farm and site).
+	// Fetch the series once per run, the first time another window is picked (several per node and EWR site).
 	$effect(() => {
 		const runId = run.id;
 		void attempt;
@@ -107,12 +112,19 @@
 		return out;
 	}
 
-	const windowed = $derived.by(() => {
-		if (!recompute || !stored || !target || !keys || unavailable || loaded.runId !== run.id) return null;
+	/** The run read once (the binding-site recompute is the costly part), then any window from it. */
+	const prepared = $derived.by(() => {
+		if (!recompute || !keys || unavailable || loaded.runId !== run.id) return null;
 		const series = loaded.series;
 		if (!keys.every((k) => series.has(idOf(k)))) return null;
-		return recomputeCurtailment(stored, (nodeId, key) => series.get(idOf({ nodeId, key }))!, snapshot, target);
+		try {
+			return { ok: true as const, run: prepareWindowed(run, runNetwork, (nodeId, key) => series.get(idOf({ nodeId, key }))) };
+		} catch (e) {
+			return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+		}
 	});
+	const windowed = $derived(prepared?.ok && target ? prepared.run.over(target) : null);
+	const workError = $derived(prepared && !prepared.ok ? prepared.error : null);
 	/** The table shown: the picked window once worked out, the run's own until then. */
 	const shownPicked = $derived(!recompute || !!windowed);
 	const period = $derived(shownPicked && resolution?.ok ? presetLabel(choice.preset) : presetLabel('project'));
@@ -182,7 +194,7 @@
 				{/if}
 				{#if resolution?.ok && resolution.note}{resolution.note}{/if}
 				{#if forecastDays}{forecastDays} of these days fall in the forecast period, where the rain is forecast, not recorded.{/if}
-				{#if windowed && !windowed.bindingKnown}The EWR site setting each farm's charge is shown for the project window only.{/if}
+				{#if windowed?.bindingApproximate}The transfer rules form a loop, so the EWR site setting each farm's charge is approximate.{/if}
 			</p>
 		{/if}
 	</div>
@@ -191,6 +203,8 @@
 			Couldn't load the run's daily results: {loadError}
 			<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
 		</div>
+	{:else if workError && recompute}
+		<div class="alert alert-error" role="alert">Couldn't work out this window from the run's daily results: {workError}</div>
 	{/if}
 {/if}
 <div aria-busy={recompute && loading}>

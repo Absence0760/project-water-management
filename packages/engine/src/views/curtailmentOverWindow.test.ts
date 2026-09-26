@@ -1,0 +1,166 @@
+// curtailmentOverWindow must be runModel's own curtailment table for the
+// same window (issue #44): seeded synthetic runs are run once, their stored
+// series re-windowed, and compared with runModel run again with that window
+// as the project's report window: farms (binding EWR site included), other
+// water users and EWR sites. Over the run's own window it is the stored table.
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fromEpochDay, toEpochDay } from '../calendar';
+import type { ReportWindow } from '../network/curtailment';
+import type { ModelInput, ModelOutput } from '../project';
+import { runModel } from '../run';
+import { randomInput } from '../testing/fuzz';
+import { curtailmentOverWindow, curtailmentSeriesKeys, prepareCurtailment, ProjectionInputError, type CurtailmentRun } from './farmProjection';
+
+/** A saved run as the API stores it (a non-finite day is null), recording which series are read. */
+function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): CurtailmentRun {
+	const byKey = new Map(out.series.map((s) => [`${s.nodeId ?? ''}|${s.key}`, s.values.map((v) => (Number.isFinite(v) ? v : null))]));
+	return {
+		startDate: out.startDate,
+		endDate: out.endDate,
+		nodes: input.model.nodes,
+		transfers: input.model.transfers,
+		series: (nodeId, key) => {
+			read?.add(`${nodeId ?? ''}|${key}`);
+			return byKey.get(`${nodeId ?? ''}|${key}`);
+		}
+	};
+}
+
+const withWindow = (input: ModelInput, w: ReportWindow): ModelInput => ({ ...input, settings: { ...input.settings, reportStart: w.reportStart, reportEnd: w.reportEnd } });
+
+/** Day indices from to … to of a run, with their dates. */
+function win(run: ModelOutput, from: number, to: number): ReportWindow {
+	const d0 = toEpochDay(run.startDate);
+	return { from, to, reportStart: fromEpochDay(d0 + from), reportEnd: fromEpochDay(d0 + to) };
+}
+
+/** The windows checked: the last 7 and 30 days, the whole run, a middle stretch and a single day. */
+function windows(run: ModelOutput): ReportWindow[] {
+	const last = run.days - 1;
+	return [win(run, last - 6, last), win(run, last - 29, last), win(run, 0, last), win(run, Math.floor(run.days / 4), Math.floor((3 * run.days) / 4)), win(run, Math.floor(run.days / 2), Math.floor(run.days / 2))];
+}
+
+/** Seeded runs with farms and at least 40 days. */
+function cases(count: number, maxDays = 400) {
+	const out: { input: ModelInput; run: ModelOutput }[] = [];
+	for (let seed = 1; out.length < count && seed < 600; seed++) {
+		const input = randomInput(seed, { maxDays });
+		let run: ModelOutput;
+		try {
+			run = runModel(input);
+		} catch {
+			continue;
+		}
+		if (run.summary.curtailment?.farms.length && run.days >= 40) out.push({ input, run });
+	}
+	return out;
+}
+
+const strip = <T extends { farms: { ewrBindingSiteId?: string | null }[] }>(c: T): T => ({ ...c, farms: c.farms.map((f) => ({ ...f, ewrBindingSiteId: null })) });
+
+describe('curtailmentOverWindow', () => {
+	const runs = cases(40);
+
+	it('has seeded runs to check, with other water users, gauges, transfers and charged farms', () => {
+		expect(runs).toHaveLength(40);
+		expect(runs.some((c) => c.run.summary.curtailment!.otherUsers?.length)).toBe(true);
+		expect(runs.some((c) => (c.run.summary.curtailment!.ewrSites?.length ?? 0) > 1)).toBe(true);
+		expect(runs.some((c) => c.input.model.transfers.some((t) => t.enabled))).toBe(true);
+		expect(runs.some((c) => c.run.summary.curtailment!.farms.some((f) => f.ewrBindingSiteId))).toBe(true);
+	});
+
+	it('is the stored table exactly over the run’s own window', () => {
+		for (const { input, run } of runs) {
+			const stored = run.summary.curtailment!;
+			const d0 = toEpochDay(run.startDate);
+			const own = { from: toEpochDay(stored.reportStart) - d0, to: toEpochDay(stored.reportEnd) - d0, reportStart: stored.reportStart, reportEnd: stored.reportEnd };
+			const got = curtailmentOverWindow(asRun(input, run), own);
+			if (got.bindingApproximate) expect(strip(got.curtailment)).toEqual(strip(stored));
+			else expect(got.curtailment).toEqual(stored);
+		}
+	});
+
+	it('equals runModel with the window as the project setting, binding sites included', () => {
+		let bound = 0;
+		for (const { input, run } of runs) {
+			const prepared = prepareCurtailment(asRun(input, run));
+			for (const w of windows(run)) {
+				const again = runModel(withWindow(input, w)).summary.curtailment!;
+				const got = prepared.over(w);
+				expect(got.curtailment.reportStart).toBe(w.reportStart);
+				if (got.bindingApproximate) expect(strip(got.curtailment)).toEqual(strip(again));
+				else expect(got.curtailment).toEqual(again);
+				if (!got.bindingApproximate && got.curtailment.farms.some((f) => f.ewrBindingSiteId)) bound++;
+			}
+		}
+		// The binding site is what the browser couldn't recompute before: make sure it is exercised.
+		expect(bound).toBeGreaterThan(10);
+	});
+
+	it('finds a gauge, not only the outlet, setting a farm’s charge over some window', () => {
+		let gaugeBinds = 0;
+		for (const { input, run } of cases(80, 600)) {
+			const prepared = prepareCurtailment(asRun(input, run));
+			for (const w of windows(run)) {
+				const got = prepared.over(w);
+				if (got.bindingApproximate) continue;
+				const outlet = got.sites.find((s) => s.isOutlet)?.nodeId;
+				if (got.curtailment.farms.some((f) => f.ewrBindingSiteId && f.ewrBindingSiteId !== outlet)) {
+					gaugeBinds++;
+					expect(got.curtailment.farms).toEqual(runModel(withWindow(input, w)).summary.curtailment!.farms);
+				}
+			}
+		}
+		expect(gaugeBinds).toBeGreaterThan(0);
+	});
+
+	it('reads exactly the series curtailmentSeriesKeys lists', () => {
+		for (const { input, run } of runs) {
+			for (const otherUsers of [true, false]) {
+				const read = new Set<string>();
+				curtailmentOverWindow(asRun(input, run, read), win(run, 0, run.days - 1), { otherUsers });
+				const keys = curtailmentSeriesKeys(input.model.nodes, input.model.transfers, { otherUsers }).map((k) => `${k.nodeId ?? ''}|${k.key}`);
+				expect(new Set(keys)).toEqual(read);
+				expect(keys).toHaveLength(read.size);
+			}
+		}
+	});
+
+	it('leaves the other water users out when asked, and only then', () => {
+		const withUsers = runs.find((c) => c.run.summary.curtailment!.otherUsers?.length)!;
+		const w = win(withUsers.run, 0, withUsers.run.days - 1);
+		expect(curtailmentOverWindow(asRun(withUsers.input, withUsers.run), w, { otherUsers: false }).curtailment.otherUsers).toBeUndefined();
+		expect(curtailmentOverWindow(asRun(withUsers.input, withUsers.run), w).curtailment.otherUsers).toEqual(runModel(withWindow(withUsers.input, w)).summary.curtailment!.otherUsers);
+	});
+
+	it('refuses a window outside the run, an empty one, and a run missing a series', () => {
+		const { input, run } = runs[0]!;
+		const prepared = prepareCurtailment(asRun(input, run));
+		expect(() => prepared.over(win(run, 0, run.days))).toThrow(ProjectionInputError);
+		expect(() => prepared.over(win(run, -1, 3))).toThrow(ProjectionInputError);
+		expect(() => prepared.over(win(run, 5, 4))).toThrow(/empty/);
+		const farm = input.model.nodes.find((n) => n.kind === 'farm')!;
+		const r = asRun(input, run);
+		const gap: CurtailmentRun = { ...r, series: (nodeId, key) => (nodeId === farm.id && key === 'ewr_charge_irrigation' ? undefined : r.series(nodeId, key)) };
+		expect(() => prepareCurtailment(gap)).toThrow(/no ewr_charge_irrigation series/);
+	});
+
+	describe('under a skewed time zone', () => {
+		let tz: string | undefined;
+		beforeEach(() => {
+			tz = process.env.TZ;
+		});
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		it('averages over the same days east and west of UTC', () => {
+			const { input, run } = runs[0]!;
+			const w = windows(run)[0]!;
+			const expected = curtailmentOverWindow(asRun(input, run), w).curtailment;
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Africa/Johannesburg']) {
+				process.env.TZ = zone;
+				expect(curtailmentOverWindow(asRun(input, run), win(run, w.from, w.to)).curtailment, zone).toEqual(expected);
+			}
+		});
+	});
+});
