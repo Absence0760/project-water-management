@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PortfolioProject } from '$lib/api/types';
 import {
 	ageText,
+	alertsText,
 	curtailmentHref,
 	damText,
 	DEFAULT_SORT,
@@ -38,11 +39,19 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	lowestDamPct: { nodeName: 'Kareebos', pct: 0.183 },
 	damsKnown: true,
 	feeds: { total: 0, ok: 0, failing: 0 },
-	alertsFiring: null,
+	alertsFiring: 0,
 	restriction: { level: 'advisory', pct: 12.5 },
 	...over
 });
 const unknown = (reason: 'no-figures' | 'no-ewr' | 'no-series') => ({ status: 'unknown' as const, daysNotMet30: null, days30: null, fraction30: null, reason });
+
+describe('alerts (WP-2.13)', () => {
+	it('counts the firing alerts in words', () => {
+		expect(alertsText(row())).toBe('None');
+		expect(alertsText(row({ alertsFiring: 1 }))).toBe('1 firing');
+		expect(alertsText(row({ alertsFiring: 1200 }))).toBe('1,200 firing');
+	});
+});
 
 describe('wording: every status is words, every unknown says why', () => {
 	it('EWR', () => {

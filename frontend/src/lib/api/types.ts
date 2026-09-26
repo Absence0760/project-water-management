@@ -280,9 +280,88 @@ export interface PortfolioProject {
 	lowestDamPct: { nodeName: string; pct: number } | null;
 	damsKnown: boolean;
 	feeds: { total: number; ok: number; failing: number };
-	/** Firing alerts: always null until WP-2.13 (alerts) is built. */
-	alertsFiring: number | null;
+	/** Alerts firing now (WP-2.13); 0 when none, or when the catchment has no alert switched on. */
+	alertsFiring: number;
 	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
+}
+
+// ---- Alerts (WP-2.13, docs/api.md § Alerts) --------------------------------
+
+export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing';
+export type AlertMode = 'immediate' | 'daily_digest' | 'off';
+
+/** One choice on /account/alerts. */
+export interface AlertChoice {
+	kind: AlertKind;
+	/** A farmer's farm (their dam alerts are per farm); null for a kind-wide choice. */
+	nodeId: string | null;
+	nodeName: string | null;
+	/** What you get now. */
+	mode: AlertMode;
+	/** What your role gets by default. */
+	defaultMode: AlertMode;
+	/** You chose it (rather than the default). */
+	chosen: boolean;
+	/** The catchment has this alert switched on; off, you get nothing whatever you choose. */
+	ruleOn: boolean;
+}
+
+/** GET /me/alerts: one catchment's choices. */
+export interface ProjectAlerts {
+	id: string;
+	name: string;
+	role: 'farmer' | 'viewer' | 'editor' | 'owner';
+	/** Every alert email for the catchment is off (a digest's unsubscribe). */
+	muted: boolean;
+	choices: AlertChoice[];
+}
+
+export interface AlertChoiceChange {
+	kind: AlertKind | 'all';
+	nodeId?: string | null;
+	mode: AlertMode;
+}
+
+/** GET /projects/:id/alert-rules (editor). */
+export interface AlertRule {
+	/** null: not saved yet (a default, off). */
+	id: string | null;
+	kind: AlertKind;
+	nodeId: string | null;
+	nodeName: string | null;
+	/** dam_below: a fraction of capacity (0.3 = 30 %); the others whole days, failures or jobs; restriction_published 0. */
+	threshold: number;
+	enabled: boolean;
+	firing: boolean;
+}
+
+export interface AlertRuleChange {
+	kind: AlertKind;
+	nodeId?: string | null;
+	threshold: number;
+	enabled: boolean;
+}
+
+/** GET /projects/:id/alert-events: what the caller may see (a farmer, their farms' alerts and the notices). */
+export interface AlertEvent {
+	id: string;
+	kind: AlertKind;
+	state: 'firing' | 'cleared';
+	value: number | null;
+	threshold: number;
+	nodeId: string | null;
+	nodeName: string | null;
+	openedAt: string;
+	clearedAt: string | null;
+	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
+	detail: Record<string, unknown>;
+}
+
+/** POST /alerts/unsubscribe (the landing page's JSON form). */
+export interface Unsubscribed {
+	kind: AlertKind | 'all';
+	project: { name: string };
+	farm: string | null;
 }
 
 export interface Portfolio {

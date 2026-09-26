@@ -1,8 +1,9 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
-	// while signed in. The header's account menu links here. docs/ui.md § App
+	// while signed in, and a link to the alert emails page (WP-2.13). The header's account menu links here. docs/ui.md § App
 	// header and account menu, § Language. Its words come from $lib/i18n.
+	import { base } from '$app/paths';
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
@@ -175,6 +176,12 @@
 				</label>
 				<p class="status" role="status" aria-live="polite">{unitSaved ? t('account.unitSaved') : ''}</p>
 			</fieldset>
+		</section>
+
+		<section class="panel" aria-labelledby="alerts-h">
+			<h2 id="alerts-h">{t('account.alerts')}</h2>
+			<p class="muted intro">{t('account.alertsHint')}</p>
+			<p><a href="{base}/account/alerts">{t('account.alertsLink')}</a></p>
 		</section>
 
 		<section class="panel" aria-labelledby="password-h">

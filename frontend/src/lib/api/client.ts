@@ -19,6 +19,12 @@ import type {
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	AlertChoiceChange,
+	AlertEvent,
+	AlertRule,
+	AlertRuleChange,
+	ProjectAlerts,
+	Unsubscribed,
 	Allocation,
 	AllocationImportRequest,
 	AllocationInput,
@@ -489,6 +495,24 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			create: (id: string, body: ApiKeyCreate) => request<{ key: ApiKey; secret: string }>('POST', `${p(id)}/api-keys`, body),
 			/** Revoke a key (owner): the next request with it is refused. */
 			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
+		},
+		/** Alert emails (WP-2.13, docs/api.md § Alerts). */
+		alerts: {
+			/** Your choices, per catchment you can get alerts for. */
+			mine: () => request<{ projects: ProjectAlerts[] }>('GET', '/me/alerts').then((r) => r.projects),
+			/** Change some of your choices for one catchment; answers that catchment's choices. */
+			save: (projectId: string, items: AlertChoiceChange[]) =>
+				request<{ project: ProjectAlerts }>('PUT', `/me/alerts/${enc(projectId)}`, { items }).then((r) => r.project),
+			/** The catchment's rules, every kind and farm (editor). */
+			rules: (id: string) => request<{ rules: AlertRule[] }>('GET', `${p(id)}/alert-rules`).then((r) => r.rules),
+			/** Switch alerts on or off and set thresholds (editor); answers every rule. */
+			saveRules: (id: string, rules: AlertRuleChange[]) =>
+				request<{ rules: AlertRule[] }>('PUT', `${p(id)}/alert-rules`, { rules }).then((r) => r.rules),
+			/** Alerts firing now (or all recent ones), as the caller may see them. */
+			events: (id: string, state: 'firing' | 'all' = 'firing') =>
+				request<{ events: AlertEvent[] }>('GET', `${p(id)}/alert-events?state=${state}`).then((r) => r.events),
+			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
+			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */

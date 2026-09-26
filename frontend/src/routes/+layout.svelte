@@ -65,9 +65,9 @@
 		untrack(() => setLocale(resolveLocale(chosen, readStoredLocale())));
 	});
 	// <html lang> names the language the page's words are in: only the
-	// translated surfaces (sign-in pages, the farm view, the account page)
+	// translated surfaces (sign-in pages, the farm view, the account and alert pages)
 	// follow the chosen language; the modeller workspace and /share are English.
-	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account)(\/|$)/.test(page.url.pathname.slice(base.length)));
+	const translated = $derived(/^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts)(\/|$)/.test(page.url.pathname.slice(base.length)));
 	$effect(() => {
 		document.documentElement.lang = translated ? wordsLang() : 'en';
 	});

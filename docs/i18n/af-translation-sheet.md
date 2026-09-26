@@ -14,7 +14,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-473 strings: 380 on the site, 69 in emails, 24 in the glossary.
+515 strings: 422 on the site, 69 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -212,6 +212,9 @@ The account page: name, language and units, password.
 | `account.changing` | Changing… |  |  |
 | `account.change` | Change password |  |  |
 | `account.changed` | Password changed. Every other device has been signed out. |  |  |
+| `account.alerts` | Alert emails |  |  |
+| `account.alertsHint` | Choose which alerts you get by email, and how often. |  |  |
+| `account.alertsLink` | Choose your alert emails |  |  |
 
 ### farm
 
@@ -635,6 +638,87 @@ Farm view: “Your farms”, for a farmer with several farms.
 | `farm.list.dam` | dam {pct} | Keep: {pct} |  |
 | `farm.list.noDam` | no dam |  |  |
 | `farm.list.privacy` | Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them. |  |  |
+
+### farm.alerts
+
+Farm view: the alert card, shown while the farm’s dam is below the WUA’s alert level. What the model estimates, never a promise.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `farm.alerts.title` | Alerts |  |  |
+| `farm.alerts.dam` | Your dam is below the alert level of {threshold}: about {pct} on {date}. | Keep: {date}, {pct}, {threshold} |  |
+| `farm.alerts.damForecast` | On the rain forecast, your dam may fall below the alert level of {threshold}: about {pct} around {date}. | Keep: {date}, {pct}, {threshold} |  |
+| `farm.alerts.manage` | Choose your alert emails |  |  |
+
+### alerts
+
+The alert emails page (from the account page): which alerts a person gets by email, per catchment, and how often.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `alerts.title` | Alert emails |  |  |
+| `alerts.intro` | Choose which alerts you get by email for each catchment, and how often. Alerts come from the catchment model: estimates, not instructions. |  |  |
+| `alerts.cap` | At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00). | Keep: {cap} |  |
+| `alerts.none` | None of your catchments can send you alerts yet. |  |  |
+| `alerts.back` | Back to your account |  |  |
+| `alerts.notOn` | Not switched on for this catchment yet: you get nothing until the WUA turns it on. |  |  |
+| `alerts.muted` | All alert emails for this catchment are off. |  |  |
+| `alerts.unmute` | Turn alert emails back on |  |  |
+| `alerts.saving` | Saving… |  |  |
+| `alerts.saved` | Saved. |  |  |
+
+### alerts.mode
+
+Alert emails page: how often, one choice per alert.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `alerts.mode.immediate` | Right away |  |  |
+| `alerts.mode.daily_digest` | Once a day (06:00) |  |  |
+| `alerts.mode.off` | Off |  |  |
+
+### alerts.kind
+
+Alert emails page: the name of each kind of alert.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `alerts.kind.dam_below` | Dam running low |  |  |
+| `alerts.kind.damFarm` | Dam running low: {farm} | Keep: {farm} |  |
+| `alerts.kind.ewr_forecast_fail` | River flow at risk in the forecast |  |  |
+| `alerts.kind.data_stale` | Data feed behind |  |  |
+| `alerts.kind.restriction_published` | Restriction notices from the WUA |  |  |
+| `alerts.kind.job_dead` | Failed background jobs |  |  |
+| `alerts.kind.feed_failing` | Failing data feeds |  |  |
+
+### unsubscribe
+
+The page an alert email’s “Stop these emails” link opens. Works without signing in.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `unsubscribe.title` | Stop alert emails |  |  |
+| `unsubscribe.ask` | Stop getting these alert emails? You can turn them back on from your account at any time. |  |  |
+| `unsubscribe.confirm` | Stop these emails |  |  |
+| `unsubscribe.working` | One moment… |  |  |
+| `unsubscribe.done` | You won’t get {kind} emails for {project} any more. | Keep: {kind}, {project} |  |
+| `unsubscribe.doneAll` | You won’t get any alert emails for {project} any more. | Keep: {project} |  |
+| `unsubscribe.dead` | This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment. |  |  |
+| `unsubscribe.noToken` | This link is incomplete. Open it again from the email, or copy the whole link. |  |  |
+| `unsubscribe.manage` | Manage alerts |  |  |
+
+### unsubscribe.kind
+
+Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for {project} any more”.
+
+| Key | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `unsubscribe.kind.dam_below` | dam level |  |  |
+| `unsubscribe.kind.ewr_forecast_fail` | river flow forecast |  |  |
+| `unsubscribe.kind.data_stale` | missing data |  |  |
+| `unsubscribe.kind.restriction_published` | restriction notice |  |  |
+| `unsubscribe.kind.job_dead` | failed background job |  |  |
+| `unsubscribe.kind.feed_failing` | failing data feed |  |  |
 
 ## Emails
 

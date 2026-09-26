@@ -68,6 +68,11 @@ export function restrictionText(p: Pick<PortfolioProject, 'restriction'>): strin
 	return r.pct == null ? level : `${level} · ${fmtNum(r.pct, 2, true)} %`;
 }
 
+/** "None" or "2 firing" (WP-2.13: alert_event rows firing now). */
+export function alertsText(p: Pick<PortfolioProject, 'alertsFiring'>): string {
+	return p.alertsFiring > 0 ? `${fmtNum(p.alertsFiring)} firing` : 'None';
+}
+
 /** "No feeds", "2 feeds OK", "1 of 3 feeds failing or stale". */
 export function feedsText(p: Pick<PortfolioProject, 'feeds'>): string {
 	const f = p.feeds;

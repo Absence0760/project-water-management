@@ -50,6 +50,14 @@ describe('routeAccess', () => {
 		expect(routeAccess('/app/verify-email', '/app', true)).toBe('show');
 	});
 
+	it('opens an alert email’s unsubscribe link signed in or out, on its own screen (WP-2.13); the alerts preferences need a session', () => {
+		expect(routeAccess('/alerts/unsubscribe', '', false)).toBe('show');
+		expect(routeAccess('/alerts/unsubscribe', '', true)).toBe('show');
+		expect(isPublicPath('/app/alerts/unsubscribe', '/app')).toBe(true);
+		expect(routeAccess('/account/alerts', '', false)).toBe('login');
+		expect(routeAccess('/alerts', '', false)).toBe('login');
+	});
+
 	it('opens a share link signed in or out, on its own screen', () => {
 		expect(routeAccess('/share', '', false)).toBe('show');
 		expect(routeAccess('/share', '', true)).toBe('show');

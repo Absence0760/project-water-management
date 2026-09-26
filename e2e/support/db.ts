@@ -77,3 +77,22 @@ export async function plantInviteToken(email: string): Promise<string> {
 	});
 	return token;
 }
+
+/**
+ * An alert subscription for `email` whose one-click unsubscribe token the test
+ * knows (WP-2.13). The worker would derive the token as
+ * HMAC(ALERTS_TOKEN_SECRET, nonce); the API only ever looks it up by its
+ * SHA-256, so any 43-character token planted with its hash behaves the same.
+ */
+export async function plantAlertSubscription(email: string, projectId: string, kind: string, nodeId: string | null = null): Promise<string> {
+	const { token, hash } = newToken();
+	await withDb(async (db) => {
+		const r = await db.query(
+			`INSERT INTO alert_subscription (user_id, project_id, kind, node_id, mode, unsubscribe_nonce, unsubscribe_hash)
+			 SELECT id, $2, $3, $4, 'immediate', $5, $6 FROM app_user WHERE email = $1`,
+			[email, projectId, kind, nodeId, randomBytes(32), hash]
+		);
+		if (r.rowCount !== 1) throw new Error(`no user ${email}`);
+	});
+	return token;
+}

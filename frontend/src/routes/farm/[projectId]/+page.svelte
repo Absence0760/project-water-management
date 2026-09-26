@@ -13,6 +13,7 @@
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
 	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import LookingBack from '$lib/components/farm/LookingBack.svelte';
@@ -75,6 +76,8 @@
 			<p class="sub">{stateText('needsConnection')}</p>
 		{:else}
 			<NoticeCard {notice} />
+			<!-- The farm's own dam alert, while it is firing (WP-2.13). -->
+			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
 			<SupplyCard farm={view.farm} bind:unit />
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
 			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />

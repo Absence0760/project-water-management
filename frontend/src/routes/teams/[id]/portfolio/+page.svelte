@@ -19,6 +19,7 @@
 		farmsShortText,
 		farmsUnknownText,
 		feedsText,
+		alertsText,
 		nextSort,
 		parseSort,
 		restrictionText,
@@ -197,7 +198,7 @@
 								<th scope="col" aria-sort={ariaSort('age')}>
 									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'age'))}>Data <span aria-hidden="true">{indicator('age')}</span></button>
 								</th>
-								<!-- WP-2.13 hook: an Alerts column goes here once alertsFiring is a number (it is always null until alerts exist). -->
+								<th scope="col">Alerts</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -212,6 +213,7 @@
 									<td>{#if p.damsKnown}{damText(p)}{:else}<span class="muted">{damText(p)}</span>{/if}</td>
 									<td>{#if p.restriction}{restrictionText(p)}{:else}<span class="muted">{restrictionText(p)}</span>{/if}</td>
 									<td>{@render dataCell(p)}</td>
+									<td>{#if p.alertsFiring > 0}<span class="badge badge-warn">{alertsText(p)}</span>{:else}<span class="muted">{alertsText(p)}</span>{/if}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -230,7 +232,7 @@
 								<div><dt>Lowest dam</dt><dd>{damText(p)}</dd></div>
 								<div><dt>Restriction</dt><dd>{restrictionText(p)}</dd></div>
 								<div><dt>Data</dt><dd>{@render dataCell(p)}</dd></div>
-								<!-- WP-2.13 hook: an Alerts entry goes here once alertsFiring is a number. -->
+								<div><dt>Alerts</dt><dd>{alertsText(p)}</dd></div>
 							</dl>
 						</li>
 					{/each}
