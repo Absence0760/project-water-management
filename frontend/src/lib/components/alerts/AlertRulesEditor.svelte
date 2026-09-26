@@ -103,7 +103,7 @@
 		{#if groups.feeds.length}
 			<fieldset>
 				<legend>Data feeds behind</legend>
-				<p class="muted hint">Each feed has its own level: the days past that feed's usual delay before it alerts.</p>
+				<p class="muted hint">Each feed has its own level: the days past that feed’s usual delay before it alerts.</p>
 				{#each groups.feeds as r (key(r))}{@render rule(r, feedRuleLabel(r))}{/each}
 			</fieldset>
 		{/if}
