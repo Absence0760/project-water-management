@@ -1029,7 +1029,52 @@ const SERIES_LABELS: Record<string, string> = {
 	flow_reference_m3s: 'Reference gauge (other catchment)'
 };
 
-function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSnapshot['series'] | undefined): InputChange[] {
+/** A run's stored input values by series kind (backend: run_input_series + series_blob), when it has them. */
+export type StoredSeriesValues = Partial<Record<string, readonly (number | null)[]>>;
+
+/**
+ * The days two versions of a series share, compared value by value: how many
+ * differ, and the change in their total over the days both have a number.
+ */
+export function sharedDaysChange(
+	x: { startDate: string; values: readonly (number | null)[] },
+	y: { startDate: string; values: readonly (number | null)[] }
+): { shared: number; changed: number; first: string; last: string; totalA: number; totalB: number } | null {
+	const x0 = toEpochDay(x.startDate);
+	const y0 = toEpochDay(y.startDate);
+	const from = Math.max(x0, y0);
+	const to = Math.min(x0 + x.values.length, y0 + y.values.length) - 1;
+	if (to < from) return null;
+	let changed = 0;
+	let totalA = 0;
+	let totalB = 0;
+	for (let d = from; d <= to; d++) {
+		const va = x.values[d - x0] ?? null;
+		const vb = y.values[d - y0] ?? null;
+		if (va !== vb) changed++;
+		if (va !== null && vb !== null) {
+			totalA += va;
+			totalB += vb;
+		}
+	}
+	return { shared: to - from + 1, changed, first: fromEpochDay(from), last: fromEpochDay(to), totalA, totalB };
+}
+
+function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDaysChange>>): string {
+	const total =
+		c.totalA === c.totalB
+			? ''
+			: c.totalA !== 0
+				? `; their total ${c.totalB > c.totalA ? 'rose' : 'fell'} ${fmtValue((Math.abs(c.totalB - c.totalA) / Math.abs(c.totalA)) * 100, 1)}% (${fmtValue(c.totalA)} → ${fmtValue(c.totalB)})`
+				: `; their total went from 0 to ${fmtValue(c.totalB)}`;
+	return `${label} values changed on ${fmtValue(c.changed, 0)} of the ${fmtValue(c.shared, 0)} days both runs cover (${c.first} to ${c.last})${total}`;
+}
+
+function diffSeries(
+	sa: RunInputsSnapshot['series'] | undefined,
+	sb: RunInputsSnapshot['series'] | undefined,
+	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {}
+): InputChange[] {
 	const a = sa ?? {};
 	const b = sb ?? {};
 	const out: InputChange[] = [];
@@ -1065,11 +1110,25 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
 			else if (rb.end < ra.end) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now ends ${rb.end} (was ${ra.end})` });
 			if (rb.start < ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series extended back to ${rb.start} (was ${ra.start})` });
 			else if (rb.start > ra.start) out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} series now starts ${rb.start} (was ${ra.start})` });
-			// Same dates, different content: values corrected in place. (With
-			// different dates the hash can't tell whether shared days changed.)
+			// The days both cover: compared value by value when both runs stored
+			// their values (021_series_blob), so an edit can't hide behind a date
+			// change; else the hash can only speak for identical dates.
 			const sameRange = ra.start === rb.start && ra.end === rb.end;
-			if (sameRange && x.valuesSha256 && y.valuesSha256 && x.valuesSha256 !== y.valuesSha256) {
+			if (sameRange && x.valuesSha256 && y.valuesSha256 && x.valuesSha256 === y.valuesSha256) continue;
+			const va = values.a?.[k];
+			const vb = values.b?.[k];
+			const shared = va && vb ? sharedDaysChange({ startDate: x.startDate, values: va }, { startDate: y.startDate, values: vb }) : null;
+			if (shared) {
+				if (shared.changed) out.push({ area: 'series', kind: 'changed', subject: label, text: sharedDaysText(label, shared) });
+			} else if (sameRange && x.valuesSha256 && y.valuesSha256) {
 				out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} values changed (same dates, ${ra.start} to ${ra.end})` });
+			} else if (!sameRange && !(va && vb) && ra.end >= rb.start && rb.end >= ra.start) {
+				out.push({
+					area: 'series',
+					kind: 'changed',
+					subject: label,
+					text: `${label}: the days both runs cover were not checked for edits (a run from before runs stored their input series)`
+				});
 			}
 		}
 	}
@@ -1080,10 +1139,14 @@ function diffSeries(sa: RunInputsSnapshot['series'] | undefined, sb: RunInputsSn
  * Human-readable list of what differs between the inputs of run A and run B:
  * settings, network nodes, crops and crop areas, transfers, and the date range
  * of each driving series. Values edited within the same dates show up through
- * the series' content hash (when both runs stored one); when the dates also
- * changed, only the date change is reported.
+ * each run's stored values (`values`) on the days both cover, or, without
+ * them, through the series' content hash when the dates are the same.
  */
-export function diffInputs(a: RunInputsSnapshot | null | undefined, b: RunInputsSnapshot | null | undefined): InputChange[] {
+export function diffInputs(
+	a: RunInputsSnapshot | null | undefined,
+	b: RunInputsSnapshot | null | undefined,
+	values: { a?: StoredSeriesValues; b?: StoredSeriesValues } = {}
+): InputChange[] {
 	// Rule tables name their site by node id: show the node's name (run B's, else A's).
 	const names = new Map<string, string>();
 	for (const m of [a?.model, b?.model]) for (const n of m?.nodes ?? []) names.set(n.id, n.name);
@@ -1091,6 +1154,6 @@ export function diffInputs(a: RunInputsSnapshot | null | undefined, b: RunInputs
 	return [
 		...diffModel(a?.model, b?.model),
 		...diffSettings(a?.settings, b?.settings, siteName),
-		...diffSeries(a?.series, b?.series)
+		...diffSeries(a?.series, b?.series, values)
 	];
 }

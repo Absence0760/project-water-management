@@ -40,6 +40,28 @@ describe('POST /projects/:id/runs', () => {
 		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' })).status).toBe(201);
 	});
 
+	it('refuses flow shares over 100 % with the reason, stores no run, and runs once they fit (engine 0.27.1)', async () => {
+		const u = await signUp('Overshare');
+		const projectId = await runnable(u);
+		// Each share is within 0–1 (the model save checks that); two farms at 0.75 make 150 %.
+		const model = (await u.call('GET', `/projects/${projectId}/model`)).body as { nodes: (Omit<ReturnType<typeof node>, 'flowShareManual'> & { flowShareManual: number | null })[] };
+		const outlet = model.nodes.find((n) => n.downstreamNodeId === null)!;
+		model.nodes.push({ ...node('Lower', outlet.id), sortOrder: 2 });
+		const share = async (v: number) => {
+			for (const n of model.nodes) if (n.kind === 'farm') n.flowShareManual = v;
+			expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		};
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { flowShareMethod: 'manual' } })).status).toBe(200);
+		await share(0.75);
+		const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'over' });
+		expect(res.status).toBe(400);
+		expect(res.body.error).toMatch(/flow shares sum to 150\.00%, more than 100%.*add up to 100%/);
+		expect((await u.call('GET', `/projects/${projectId}/runs`)).body.runs).toEqual([]);
+		// Positive control: the same farms at 50 % each run.
+		await share(0.5);
+		expect((await u.call('POST', `/projects/${projectId}/runs`, { label: 'fits' })).status).toBe(201);
+	});
+
 	it('reports which runs used the legacy runoff model (audit H1), on the list and on each run', async () => {
 		const u = await signUp('Legacyflag');
 		const projectId = await runnable(u);

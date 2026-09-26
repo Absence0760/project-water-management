@@ -5,6 +5,7 @@ import {
 	compareRuns,
 	diffInputs,
 	type RunInputsSnapshot,
+	type StoredSeriesValues,
 	type RunSummary
 } from '@water-management/engine';
 import { Hono } from 'hono';
@@ -111,6 +112,34 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	return { project: { id: ref.projectId, name: projectName }, run, scenario, catchmentSeries: series };
 }
 
+/**
+ * A run's stored input values (021_series_blob) for the given series kinds, so
+ * the input diff can compare the days both runs cover rather than trust a
+ * whole-series hash that any date change breaks. Runs from before stored
+ * inputs have none; the diff says their shared days weren't checked.
+ */
+async function storedValues(db: Db, runId: string, kinds: string[]): Promise<StoredSeriesValues> {
+	if (!kinds.length) return {};
+	const { rows } = await db.query<{ kind: string; values: (number | null)[] | null }>(
+		`SELECT i.kind, b."values"
+		 FROM run_input_series i JOIN series_blob b ON b.project_id = i.project_id AND b.sha256 = i.sha256
+		 WHERE i.run_id = $1 AND i.kind = ANY($2::text[])`,
+		[runId, kinds]
+	);
+	return Object.fromEntries(rows.filter((r) => r.values).map((r) => [r.kind, r.values!]));
+}
+
+/** Series kinds both runs used whose dates or content hash differ: the only ones worth fetching. */
+function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
+	const sa = a?.series ?? {};
+	const sb = b?.series ?? {};
+	return Object.keys(sa).filter((k) => {
+		const x = sa[k];
+		const y = sb[k];
+		return x && y && !(x.startDate === y.startDate && x.length === y.length && x.valuesSha256 && x.valuesSha256 === y.valuesSha256);
+	});
+}
+
 export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 	const q = z.object({ a: RunRef, b: RunRef }).parse(c.req.query());
 	return withUser(c.get('userId'), async (db) => {
@@ -119,11 +148,12 @@ export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 		// Catchment series both runs stored with the same unit — the ones that can be overlaid.
 		const inB = new Map(b.catchmentSeries.map((s) => [s.key, s]));
 		const catchmentSeries = a.catchmentSeries.filter((s) => inB.get(s.key)?.unit === s.unit);
+		const kinds = differingKinds(a.run.inputs, b.run.inputs);
 		return c.json({
 			a: { project: a.project, run: a.run, scenario: a.scenario },
 			b: { project: b.project, run: b.run, scenario: b.scenario },
 			comparison: compareRuns(a.run, b.run),
-			changes: diffInputs(a.run.inputs, b.run.inputs),
+			changes: diffInputs(a.run.inputs, b.run.inputs, { a: await storedValues(db, a.run.id, kinds), b: await storedValues(db, b.run.id, kinds) }),
 			catchmentSeries
 		});
 	});

@@ -116,11 +116,11 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 
 	await page.goto('/');
 	const emptyRow = row(page, 'Freshness — empty');
-	await expect(emptyRow).toContainText('no data yet');
+	await expect(emptyRow).toContainText('no rain yet');
 	await expect(emptyRow).toContainText('not run yet');
 	const staleRow = row(page, 'Freshness — stale');
-	const status = staleRow.getByRole('cell').filter({ hasText: /^data / });
-	await expect(status.getByTitle('Input data runs to 2020-10-30')).toHaveText(/^data \d+ years old$/);
+	const status = staleRow.getByRole('cell').filter({ hasText: /^rain / });
+	await expect(status.getByTitle('Recorded rain runs to 2020-10-30')).toHaveText(/^rain \d+ years old$/);
 	await expect(status).toContainText(/last run \d{4}-\d{2}-\d{2}/);
 
 	// "Add data" opens the workspace with the upload dialog requested.
@@ -132,7 +132,7 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await addMember(page.request, stale.id, viewer.user.email, 'viewer');
 	await viewer.page.goto('/');
 	const vRow = row(viewer.page, 'Freshness — stale');
-	await expect(vRow).toContainText(/data \d+ years old/);
+	await expect(vRow).toContainText(/rain \d+ years old/);
 	await expect(vRow.getByRole('link', { name: /^Add data/ })).toHaveCount(0);
 });
 
@@ -151,13 +151,13 @@ test.describe('data age under a skewed time zone', () => {
 
 		await page.goto('/');
 		// The row carries the badge twice (wide and narrow layouts); one is shown.
-		const badge = row(page, 'Skewed clock').getByTitle('Input data runs to 2022-01-28').filter({ visible: true });
-		await expect(badge).toHaveText('data 10 days old');
+		const badge = row(page, 'Skewed clock').getByTitle('Recorded rain runs to 2022-01-28').filter({ visible: true });
+		await expect(badge).toHaveText('rain 10 days old');
 
 		await page.goto(`/projects/${p.id}`);
 		// Stale (> 7 days), so a hidden "(older than 7 days)" follows.
-		await expect(page.locator('summary').filter({ hasText: 'Data up to' })).toHaveText(
-			'Data up to 28 Jan 2022 · 10 days ago (older than 7 days)'
+		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(
+			'Rain up to 28 Jan 2022 · 10 days ago (older than 7 days)'
 		);
 	});
 });

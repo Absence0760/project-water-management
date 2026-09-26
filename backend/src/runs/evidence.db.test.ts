@@ -4,7 +4,7 @@
 // control) and the grants (the history is append-only for water_app, and a
 // nominated run can't be deleted or trimmed).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { NOMINATIONS_PER_PROJECT_MAX } from './evidence.js';
 import { trimRuns } from './execute.js';
@@ -101,6 +101,15 @@ describe('POST /projects/:id/evidence', () => {
 		expect(legacy.status).toBe(409);
 		expect(legacy.body.error).toMatch(/legacy runoff model/);
 		expect((await nominate(owner, crypto.randomUUID())).status).toBe(404);
+		// A run from before engine 0.27.1 that ran with flow shares over 100 % (water from nowhere).
+		const overRun = await newRun(owner, projectId, 'Over-allocated', { runoffModel: 'gr4j' });
+		const { inputs } = (await asOwner('SELECT inputs FROM model_run WHERE id = $1', [overRun]))[0] as { inputs: { settings: Record<string, unknown>; model: { nodes: { kind: string; flowShareManual: number | null }[] } } };
+		inputs.settings.flowShareMethod = 'manual';
+		for (const n of inputs.model.nodes) if (n.kind === 'farm') n.flowShareManual = 2;
+		await asOwner('UPDATE model_run SET inputs = $2 WHERE id = $1', [overRun, inputs]);
+		const over = await nominate(owner, overRun);
+		expect(over.status).toBe(409);
+		expect(over.body.error).toMatch(/^this run cannot be nominated as evidence: its farm flow shares sum to \d+\.00%, more than 100%/);
 		// Another project's run, by an editor of both, is not found through this one.
 		const other = await runnableProject(editor, 'Elsewhere');
 		const otherRun = await newRun(editor, other, 'Theirs');

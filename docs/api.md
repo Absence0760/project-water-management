@@ -113,8 +113,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
-- `dataUntil` — the last day covered by any of the project's time series
-  (`YYYY-MM-DD`: the latest `startDate + length − 1`), or `null` with no data.
+- `dataUntil` — the last day of the project's **recorded rain**
+  (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
+  `startDate + length − 1`), or `null` with none. A forecast or a flow series
+  doesn't count: a forecast runs into the future and flow only scores a run.
   `lastRunAt` — ISO timestamp of the newest run, or `null`. Both come from the
   same query as the list (no per-project calls), for the list's freshness badge.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
@@ -541,12 +543,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, `[]` when none | viewer |
-| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), the run that is already current, or a project at its limit of 50 nominations | editor |
+| POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, or a project at its limit of 50 nominations | editor |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
   with the engine's reason, and nothing is stored: no rainfall series, a
-  simulation end before its start, or (engine ≥ 0.11.1) a GR4J run with no
-  potential evaporation (A-pan × pan coefficient 0 in every month).
+  simulation end before its start, (engine ≥ 0.11.1) a GR4J run with no
+  potential evaporation (A-pan × pan coefficient 0 in every month), or
+  (engine ≥ 0.27.1) farm flow shares that add up to more than 100 %.
 - A project keeps its newest **20** runs (env `RUNS_KEPT_PER_PROJECT`,
   default 20); each new run deletes the oldest beyond that, with their
   outputs. Pinned runs (at most 10 per project), runs the evidence
@@ -1058,7 +1061,7 @@ matched.
   a: { project: { id, name }, run: RunMeta & { summary: RunSummary, inputs: RunInputsSnapshot }, scenario: CompareScenario | null },
   b: { … same shape … },
   comparison: RunComparison,    // compareRuns(a.run, b.run) — every delta is b − a
-  changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs)
+  changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs, both runs' stored values of each differing series)
   catchmentSeries: { key, label, unit }[]  // catchment series present in both runs, same unit
 }
 ```

@@ -1,7 +1,7 @@
 // Flow fragmentation — port of b023 [Farm spec] "Selected fragmentation (%)":
 // the share of catchment natural flow (and of the pragmatic EWR) each farm's
 // own land generates.
-import type { FlowShareMethod, NetworkNode } from '../project';
+import { defaultProjectSettings, type FlowShareMethod, type ModelInput, type NetworkNode } from '../project';
 import { cmpStr } from '../order';
 
 /** b023 `rFarmSpec_FragmentationTolerance`: shares must sum to 1 within this. */
@@ -65,11 +65,37 @@ export function flowShares(
 
 	let sum = 0;
 	for (const { i } of farms) sum += share[i]!;
-	if (farms.length > 0 && Math.abs(sum - 1) >= SHARE_TOLERANCE) {
+	// Over 100 % is refused by the run (overAllocationError), so only a shortfall is a warning.
+	if (farms.length > 0 && 1 - sum >= SHARE_TOLERANCE) {
 		warnings.push(
 			`farm flow shares sum to ${(sum * 100).toFixed(2)}%, not 100% (tolerance ±${SHARE_TOLERANCE * 100}%): ` +
 				'natural flow and EWR are not fully allocated to farms'
 		);
 	}
 	return { share, sum, warnings };
+}
+
+/**
+ * Why a run can't go ahead with these shares, or null. Shares summing to more
+ * than 100 % make the farms generate more runoff than the catchment's natural
+ * flow: water from nowhere, which lifts the outflow and hides EWR failures
+ * while every self-check still closes (each checks the balance it is given).
+ */
+export function overAllocationError(sum: number): string | null {
+	if (sum - 1 < SHARE_TOLERANCE) return null;
+	return (
+		`farm flow shares sum to ${(sum * 100).toFixed(2)}%, more than 100%: the farms would generate more water than the catchment's natural flow. ` +
+		'Correct the manual flow shares (Network) or the high/low MAP split (Settings) so they add up to 100%'
+	);
+}
+
+/**
+ * The shares a stored or raw input applies, with the settings' defaults filled
+ * in the way the run fills them: for checking a run's snapshot after the fact.
+ */
+export function inputFlowShares(input: { model: Pick<ModelInput['model'], 'nodes'>; settings: object }): FlowShares {
+	const d = defaultProjectSettings();
+	const raw = input.settings as Record<string, unknown>;
+	const method = ['area', 'hiLo', 'manual'].includes(String(raw.flowShareMethod)) ? (raw.flowShareMethod as FlowShareMethod) : d.flowShareMethod;
+	return flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((raw.hiLoSplit as object | undefined) ?? {}) });
 }

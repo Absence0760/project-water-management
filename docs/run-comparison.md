@@ -225,15 +225,22 @@ changed", with the red "Baseline assumptions changed" callout when any op is
 Each run stores a snapshot of its inputs in `model_run.inputs`: the settings
 (merged over the defaults), the whole model document, and each driving series'
 **start date, length and a SHA-256 hash of its values** (`valuesSha256`).
-The diff reads only the snapshot, not the values (which runs since migration
-021 keep separately, [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)). So "What changed" reports a series
-that was added, removed, extended or trimmed, and — from the hash — values
-edited **inside the same dates** (for example a corrected logger reading:
-*Observed flow values changed (same dates, … to …)*). Two limits: when the
-dates changed too, only the date change is listed (one hash can't say whether
-the shared days changed), and runs stored before the hash existed have none,
-so an in-place edit between them isn't visible. If the results changed and
-the list shows nothing, one of those is the likely reason.
+Since migration 021 each run also stores the series' **values**
+(`run_input_series` + `series_blob`), and the compare route hands both runs'
+values to `diffInputs` for every series whose dates or hash differ. So "What
+changed" reports a series that was added, removed, extended or trimmed, and
+then compares **the days both runs cover, value by value**
+(`sharedDaysChange`): *Rainfall (catchment) values changed on 53 of the 366
+days both runs cover (… to …); their total fell 15% (1,060 → 901)*. An edit
+can't hide behind a date change: rain cut by 15 % with one day added used to
+read only "series extended". A gap opened or filled counts as a changed day
+and stays out of the totals (the total is left out when it didn't move).
+Runs from before stored values fall back to the hash: identical dates with a
+different hash read *values changed (same dates, … to …)*, and different
+dates add *the days both runs cover were not checked for edits*, so the limit
+is said rather than implied. Runs stored before the hash existed show
+nothing for an in-place edit. If the results changed and the list shows
+nothing, that is the likely reason.
 A model from a run saved before engine 0.16.0 is read as migration 006 stored
 it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
 1 − r with every loss returning), so a project that only went through the

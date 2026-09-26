@@ -3,13 +3,13 @@ import { expect, test } from '../support/fixtures.ts';
 
 // Popups close on Escape, except when closing would throw away unsaved input.
 
-test('the "Data up to" dropdown closes on Escape and on an outside click', async ({ page, owner }) => {
+test('the "Rain up to" dropdown closes on Escape and on an outside click', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Escape freshness');
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
 	await page.goto(`/projects/${project.id}`);
 
-	const summary = page.locator('summary', { hasText: 'Data up to' });
+	const summary = page.locator('summary', { hasText: 'Rain up to' });
 	const panel = page.getByRole('columnheader', { name: 'Series' }).first();
 
 	await summary.click();
