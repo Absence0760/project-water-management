@@ -108,13 +108,14 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 (`routes/projects/[id]`) is split further, because it carries most of the app:
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
-Runs & results) is a dynamic `import()` of its component, as are the two
+Runs & results, Scenarios, History) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and the Runs & results compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). uPlot and the
+water users). The compare page loads its daily overlay and, only when a side
+is a scenario run, its Scenario overrides section the same way. uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 

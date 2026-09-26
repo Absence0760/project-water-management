@@ -8,10 +8,11 @@ in [run comparison](./run-comparison.md). Build plan:
 [roadmap WP-3.2](./roadmap/step-3-licensing.md#wp-32-scenarios-within-a-project),
 issue #18.
 
-Status: the **engine part** (`packages/engine/src/scenario/`), the **backend
-and data model** (`backend/src/scenarios/`, migration 024) and the frontend's
-API client are built. The UI (the Scenarios tab, the override-mode editor and
-the compare page's Scenario overrides section) is not.
+Status: built end to end: the **engine part** (`packages/engine/src/scenario/`),
+the **backend and data model** (`backend/src/scenarios/`, migration 024), the
+frontend's API client, and the **UI** (the Scenarios tab, its override
+editor and scenario-vs-base comparison, and the compare page's Scenario
+overrides section; § UI below).
 
 ## Engine: `applyScenario`
 
@@ -275,4 +276,45 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status) and `schema.test.ts`.
 
-## UI (not built yet)
+## UI
+
+The workspace's **Scenarios** tab (`?tab=scenarios&scenario=<id>`,
+`frontend/src/lib/components/scenarios/`); what it shows, control by
+control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
+
+- **The editor records ops, never a model document.** "Add a change" is one
+  form over the whole `ScenarioOp` union: it builds the op (`ops.ts`
+  `buildOp`), checks it with the engine's `validateScenarioOps` (so the form
+  refuses exactly what the backend would), and `PATCH`es the whole list; the
+  answer's check (`applied`, `problems`, `classified`) drives the list. Undo
+  re-sends the list as it was before the last edit.
+- **What the editor computes itself**, from the base run's model and settings
+  snapshot (`GET …/runs/:runId`) with no series: the input each op meets
+  (`stepInputs`, `applyScenario` one op at a time), for the targets the form
+  offers and the value each op replaces in its description. It never decides
+  whether an op applies or how it is classed: those are the server's check,
+  on the run's stored series (a `series.scale` can only be checked there).
+- **Classification in the UI**: each op shows **Proposal** or **Baseline
+  assumption**; any baseline op shows the red **Baseline assumptions
+  changed** callout, in the tab and on the compare page. The proposer's
+  nodes (`ownedNodeIds`) are a checkbox list in the tab, until WP-3.3 derives
+  them from the applicant's links.
+- **Comparison**: the tab compares the latest scenario run with the base run
+  that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
+  headline, farm and daily-overlay components (issue #8); the compare page
+  lists each scenario side's recorded ops in its Scenario overrides section.
+- **Where the build differs from the roadmap**: the roadmap's "override mode"
+  of the Network, Crops and Transfers editors (recording their edits as ops)
+  is not built; the op form covers every op instead, one change at a time.
+  Tracked in [followups.md § Scenarios](./followups.md).
+
+Tests: `scenarios/fields.test.ts` (every node field, transfer field and
+settings path the engine allows has a spec; values round-trip through the
+form's text and still pass the engine's checks), `scenarios/ops.test.ts`
+(`stepInputs`, `describeOp`, problems lined up with their ops, `buildOp` for
+every op kind, each built op applying to a base), and
+`e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
+classed, undone, run and compared, with the compare page's overrides; a
+rebase reporting a change that no longer applies and the `422`; a viewer
+read only; submit, withdraw, delete releasing the base; axe in light, dark
+and on a phone).

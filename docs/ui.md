@@ -52,6 +52,7 @@ Tabs follow the modelling workflow:
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
+| Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
 | History | `history` | `changes` | `lib/components/history/` |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
@@ -61,7 +62,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Overview, Data, Runs & results (and Scenarios once the page has it); Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip |
+| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip |
 | farmer, none | Overview only (a farmer is redirected to `/farm/:id` anyway) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -1503,6 +1504,78 @@ run's report to chosen members every week or month.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 - **Report**, beside the Download menu in the run header, opens the shown
   run's printable report (§ Report below).
+
+## Scenarios (`?tab=scenarios`)
+
+Issue #18 stage D, WP-3.2 ([scenarios.md](./scenarios.md)):
+`lib/components/scenarios/`, a lazy tab after Runs & results. A scenario is a
+named list of changes (ops) on a base run, run and compared without copying
+the project. Viewers read every scenario and its comparison; farmers never
+see the tab (the workspace sends them to the farm page, and the API refuses
+them scenarios).
+
+- **The list** (left on wide screens, above the scenario under 900px): each
+  scenario's name, status, number of changes, base run and last run. Empty:
+  "No scenarios yet. A scenario changes the published baseline without
+  copying it." **New scenario** (editors): a name and a base run, the
+  published run by default, else the latest; scenario runs aren't offered (a
+  scenario run can't be a base). With no runs it says to run the model
+  first. The chosen scenario is `&scenario=<id>` in the URL.
+- **The banner**: "Based on run *X* (run date, published)", and that the base
+  is kept while the scenario exists.
+- **Changes** (`OpList.svelte`): the ops in order, each in words against the
+  input it meets, so a second change to one value shows the first one's
+  value as "was" (`ops.ts` `describeOp`, `stepInputs` over the base run's
+  model and settings snapshot from `GET …/runs/:runId`). Each carries its
+  class, **Proposal** or **Baseline assumption**, from the server's check,
+  and when it doesn't apply to the base, "Doesn't apply: …" with the
+  engine's reason (ids named). Any baseline op puts the red **Baseline
+  assumptions changed** callout above the list. When any op doesn't apply,
+  a warning says so and **Run scenario** is disabled (the server refuses the
+  run with `422` too).
+- **Add a change** (`OpForm.svelte`, editors, drafts only): one form for every
+  op of the engine's `ScenarioOp` union: change a node's value, add a node
+  (a leaf farm or other water user), remove a node, set a farm's crop area,
+  add a crop (optionally starting from another crop's factors), add, change
+  or remove a transfer, add or remove land cover, change a setting, scale
+  rainfall by a % change over a date range. Targets come from the model as
+  the listed ops leave it, so a node the scenario adds can be changed next.
+  A field starts at its current value with "Now: …" under it; percentages
+  are typed as %, areas in ha. The op is built and checked with the engine's
+  own validator (`ops.ts` `buildOp`, `validateScenarioOps`), so a bad value is
+  refused in the form in the units typed ("Must be at most 100 %"); whether
+  it applies to the base is the server's check, shown once it is saved.
+  Every edit is a `PATCH` of the whole op list, answered with the check.
+  **Undo** steps back through this visit's edits; each op also has a ✕.
+- **The proposer's nodes**: a checkbox per node of the base. Changes to them
+  (and to nodes the scenario adds) are proposals; the rest are baseline
+  assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+- **Actions** (editors): **Run scenario** (labelled with the scenario's name;
+  the run joins the runs list and counts toward the 20-run cap), the status
+  moves (**Submit** behind a confirm, **Withdraw**, **Mark decided**, **Back
+  to draft**; only a draft's changes, nodes and base change), **Delete
+  scenario** (draft or withdrawn; its runs stay as ordinary runs), and
+  **Rename** (name and description).
+- **Rebase onto another run** (drafts): pick a newer run of the model,
+  **Check** (a dry run listing any change that no longer applies, for
+  example a node removed since), then **Rebase onto this run**. A change on
+  a node the new base lacks is still named, from the bases loaded in this
+  visit; otherwise it reads "a node the base run doesn't have".
+- **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
+  the scenario against the base run *that run* was made on (so an older run
+  of a rebased scenario is still compared with its own base), through
+  `GET /compare/runs`: headline results, the farms table and the per-node
+  daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
+  #8), with **Open the full comparison**. A note says when the changes were
+  edited since that run.
+- **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
+  based on is tagged **Scenario base** and has no ✕ (it is cited: kept, no
+  delete or unpin, `RunMeta.citedBy`). The runs list reloads after a
+  scenario is created, rebased or deleted, so the tag follows.
+- **Compare page.** When either side is a scenario run, a **Scenario
+  overrides** section above "What changed" lists that run's ops as it
+  recorded them, with their classes and the callout (`ScenarioOverrides.svelte`,
+  its own chunk).
 
 ## History (`?tab=history`)
 

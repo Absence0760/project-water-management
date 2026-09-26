@@ -257,9 +257,13 @@ that run applied them and how each op was classed (`proposal` or `baseline`,
 They come from the run's own snapshot (`inputs.scenario`), not from the
 scenario as it is now, so a scenario edited, rebased or deleted since still
 shows the ops that produced the run. The compare page's **Scenario overrides**
-section (the Scenarios tab work, stage D of issue #18) lists them above "What
-changed", with the red "Baseline assumptions changed" callout when any op is
-`baseline`.
+section (`scenarios/ScenarioOverrides.svelte`, its own chunk, shown only when
+a side is a scenario run) lists them above "What changed", each in words and
+with its class, and the red "Baseline assumptions changed" callout when any
+op is `baseline`. When the other side is the scenario's own base, each op is
+described against it (the value it replaced). The Scenarios tab's own
+comparison ([ui.md § Scenarios](./ui.md#scenarios-tabscenarios)) reuses the
+headline, farm and daily-overlay components.
 
 ## What the input diff can and can't see
 
