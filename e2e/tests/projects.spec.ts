@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { addMember, createProject, createRun, putModel, putSeries, register, sampleModel, updateSettings } from '../support/api.ts';
+import { addMember, createProject, createRun, nominateRun, putModel, putSeries, register, sampleModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const row = (page: Page, name: string) =>
@@ -100,6 +100,36 @@ test('cancelling the delete confirmation keeps the project', async ({ page, owne
 	await row(page, 'Keep me').getByRole('button', { name: 'Delete Keep me' }).click();
 	await page.reload();
 	await expect(row(page, 'Keep me')).toBeVisible();
+});
+
+// Issue #43: a project with a nominated evidence run keeps it. The refusal is
+// explained in a dialog that names the run and links to it, not a raw error.
+test('deleting a project with a nominated evidence run is refused, and the dialog explains why', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Licence evidence');
+	const runId = await createRun(page.request, project.id, 'Calibrated GR4J');
+	await nominateRun(page.request, project.id, runId, 'Calibrated against the logger record.');
+	await page.goto('/');
+
+	page.once('dialog', (d) => void d.accept());
+	await row(page, 'Licence evidence').getByRole('button', { name: 'Delete Licence evidence' }).click();
+	const dialog = page.getByRole('dialog', { name: "This project can't be deleted" });
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByTestId('evidence-kept')).toHaveText(
+		'“Calibrated GR4J” is the nominated evidence run of “Licence evidence”. A project that has nominated evidence keeps it, with its nomination history, for good, so the evidence can still be read and reproduced.'
+	);
+	await expect(page.getByRole('alert')).toHaveCount(0);
+	await expect(dialog.getByRole('link', { name: 'Open the evidence run' })).toHaveAttribute('href', `/projects/${project.id}?tab=runs&run=${runId}`);
+
+	// Copy project hands over to the copy dialog, for a fresh start without the evidence.
+	await dialog.getByRole('button', { name: 'Copy project' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(page.getByRole('dialog', { name: 'Copy project' }).getByLabel('Name of the copy')).toHaveValue('Licence evidence (copy)');
+	await page.keyboard.press('Escape');
+
+	// Still there after a reload.
+	await page.reload();
+	await expect(row(page, 'Licence evidence')).toBeVisible();
 });
 
 test('the list shows the role the user has on each project', async ({ page, owner, playwright }) => {
