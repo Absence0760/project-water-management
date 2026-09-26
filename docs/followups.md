@@ -2133,6 +2133,18 @@ Applicant view and the Applications tab. Left:
       carries farms, a contributor invite doesn't. Trigger: the first client
       catchment with an irrigator applicant.
 
+- [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
+      2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +
+      `portfolio.spec.ts` at `--repeat-each=40`, 12 workers, while testing
+      the stylesheet wait): in the same repeat the curtailment test's table
+      stayed on "Working out last 7 days…" past its 5 s check, and the
+      farmer-redirect test stopped at `/farm`. Both wait on API responses,
+      and the traces showed no stylesheet wait, so it reads as a backend
+      stall under load (compare #41's hashing and model-save causes).
+      Durable fix: trace the slow requests in a loaded run (the API's
+      per-request timing log, as #41 did) and fix whichever handler stalls;
+      never a longer wait. Trigger: it recurs, in CI or a local loaded run.
+
 ## Housekeeping
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
