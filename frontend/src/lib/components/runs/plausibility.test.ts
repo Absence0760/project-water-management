@@ -8,7 +8,8 @@ const meta = (id: string, runoffModel?: string): RunMeta =>
 
 const curves = (runoffModel: 'gr4j' | 'legacy', months = [11, 12, 1, 2, 3, 4], k = 1): LowFlowCurves => ({
 	season: { months, source: 'flow_observed_m3s' },
-	runoffModel,
+	// A stored legacy run's curves say 'legacy' (engine < 1.0.0); the engine's type names only today's model.
+	runoffModel: runoffModel as LowFlowCurves['runoffModel'],
 	points: [50, 90],
 	curves: [
 		{ source: 'flow_observed_m3s', pairedWith: null, days: 300, flowsM3s: [2, 1] },

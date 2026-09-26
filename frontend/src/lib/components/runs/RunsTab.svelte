@@ -491,7 +491,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
 										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
 										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
-										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
+										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
 							</button>
@@ -541,7 +541,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{#if detail.run.legacy}
 							<span
 								class="badge badge-warn"
-								title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence."
+								title="Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run."
 								>Workbook comparison</span
 							>
 						{/if}

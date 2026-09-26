@@ -1,7 +1,7 @@
 import { applyScenario, classifyOp, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { buildOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
+import { buildOp, checkOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, statusByOp, stepInputs, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -125,6 +125,12 @@ describe('describeOp', () => {
 		expect(describeOp(raise, null, namesOf([b.model]))).toBe('Upper farm: Dam capacity → 180,000 m³');
 		expect(describeOp({ op: 'transfer.remove', transferId: 'x' }, null)).toBe('Remove a transfer');
 	});
+
+	it('shows a stored change to a legacy runoff setting (removed in engine 1.0.0) by its path, and checks it as retired', () => {
+		const old = { op: 'settings.set', path: 'calibration.a', value: 0.2 } as unknown as ScenarioOp;
+		expect(d(old)).toBe('calibration.a: → 0.2');
+		expect(checkOp(old)).toEqual({ ok: false, error: expect.stringMatching(/legacy runoff model, removed in engine 1\.0\.0: delete this change/) });
+	});
 });
 
 describe('statusByOp', () => {
@@ -244,7 +250,7 @@ describe('buildOp', () => {
 			draft({ kind: 'landCover.add', nodeId: UP, coverClass: 'invasive', coverAreaKm2: '0.4', densityPct: '30' }),
 			draft({ kind: 'landCover.remove', patchId: P }),
 			draft({ kind: 'settings.set', field: 'flowShareMethod', value: 'hiLo' }),
-			draft({ kind: 'settings.set', field: 'calibration.summerMonths', months: [12, 1, 2] }),
+			draft({ kind: 'settings.set', field: 'calibration.rainThresholdMm', value: '3' }),
 			draft({ kind: 'settings.set', field: 'pe', pe: { kind: 'monthly', mm: '100', source: ' Station ET₀ ' } }),
 			draft({ kind: 'series.scale', seriesKind: 'rain_catchment_mm', changePct: '-10', from: '2022-01-01', to: '' })
 		].map((x) => buildOp(x, m, id));

@@ -36,7 +36,6 @@ const LIGHT = [
 const HEAVY = [
 	'run.ts',
 	'prepare.ts',
-	'flow.ts',
 	'rain.ts',
 	'quality.ts',
 	'calibrate/calibrate.ts',
@@ -46,7 +45,6 @@ const HEAVY = [
 	'network/dam.ts',
 	'reference/wr2012.ts',
 	'runoff/gr4j.ts',
-	'runoff/legacy.ts',
 	'runoff/simulate.ts'
 ];
 

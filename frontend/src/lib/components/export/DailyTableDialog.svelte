@@ -105,7 +105,7 @@
 	{:else if !shown}
 		<div class="state" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading…</div>
 	{:else}
-		{#if shown.comment}<div class="alert alert-warning" role="note">This run used the legacy runoff model: a workbook comparison only, not evidence.</div>{/if}
+		{#if shown.comment}<div class="alert alert-warning" role="note">This run used the legacy runoff model (removed in engine 1.0.0): a workbook comparison only, not evidence.</div>{/if}
 		<div class="controls">
 			<label for="{uid}-q" class="visually-hidden">Find a date</label>
 			<input id="{uid}-q" type="search" autocomplete="off" placeholder="Date prefix: 2015, 2015-03 or 2015-03-14" bind:value={query} />
