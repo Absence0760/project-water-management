@@ -258,15 +258,17 @@ analogue years." Choices, each marked in model.md:
   the cautious reading of finding 4; a midpoint option exists
   **(judgement, pending the hydrologist)**; the total is shared over the
   dams pro rata to capacity (every dam at the same fill);
-- **starting from a storage** needed an engine setting,
-  `damStorageReset` (the engine can't start from a saved state): the dams
-  start the review date at the set volume, the rest of the state is the
-  history's, and the step is counted in every balance; runs without it are
-  unchanged to the bit.
+- **starting from a storage**: since engine 0.47.0 the base run's state at
+  the review date is captured once (a model-state snapshot, model.md
+  §2.16) and each band sets its storage in the snapshot's dams
+  (`withDamStorage`); the older path, `damStorageReset` (engine 0.46.0),
+  re-runs the history per member and sets the dams on the review date.
+  Either way the rest of the state is the history's; runs without them
+  are unchanged to the bit.
 
-Cost: bands × years × levels full runs (3 × 12 × 4 in about 1.3 s on the
-test catchment); sharing the history across bands needs the engine to
-start from a stored state, the durable fix if a record makes it slow.
+Cost: one run of the history, then bands × years × levels runs of the
+season alone (3 × 12 × 4 in 53 ms on the test catchment, against 1.1 s
+re-running the history per member, engine 0.47.0).
 WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:
