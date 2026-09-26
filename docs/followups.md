@@ -1165,7 +1165,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
 No Afrikaans wording ships yet: none is reviewed.
 
-- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (423
+- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (432
       strings: site, emails, farmer glossary) goes to the client's named
       translator (roadmap Step 2, prerequisite 6). When it comes back: copy
       each line into `frontend/src/lib/i18n/messages/af.ts`,
@@ -1184,6 +1184,14 @@ No Afrikaans wording ships yet: none is reviewed.
       API error messages shown as-is on the sign-in and account pages (only
       the login's `401` is worded client-side). Trigger: the translation
       turnaround above, so the new keys join the same sheet.
+- [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
+      the total (the English catalogue is ~7 KB; each key also appears at its
+      call site). After merging main on 2026-09-26 `pnpm check:bundle`
+      measured 925 KB against the 921 KB ceiling (largest chunk 43 KB, at its
+      ceiling). WP-2.5's brief was not to move the ceiling: the operator
+      either raises `BUDGET.totalCodeKb` with a change-log entry or asks for
+      a trim (shorter keys, or splitting the catalogue per surface so the
+      workspace never loads it). Trigger: before this branch merges to main.
 - [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
       `check:i18n` listing of stale entries): today `content.af.test.ts`
       fails on a stale `sourceHash` and the sheet names the new hash.

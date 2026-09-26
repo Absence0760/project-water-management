@@ -789,7 +789,7 @@ audit log of model changes yet" from Known gaps).
 > Where the build departs from the plan below, and why:
 > - **`af.ts` is `Partial`**, not a full `Record`: no Afrikaans is reviewed
 >   yet and nothing is invented, so a missing key shows in English and must be
->   on `docs/i18n/af-translation-sheet.md` (423 strings; the catalogue tests
+>   on `docs/i18n/af-translation-sheet.md` (432 strings; the catalogue tests
 >   fail otherwise). An unknown key still fails `pnpm check`.
 > - **`<html lang>` follows the words**, not the choice: it stays `en` until
 >   the Afrikaans catalogue is complete, and dates follow it too; numbers
