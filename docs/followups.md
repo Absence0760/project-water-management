@@ -2015,7 +2015,7 @@ The Step 2 release-hardening pass (2026-09-26,
 [step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
 documented what is true today in
 [security.md § Personal information](./security.md#personal-information-popia)
-and fixed what it could in code (045_account_deletion). These need the
+and fixed what it could in code (048_account_deletion). These need the
 client, its information officer or legal, and none is a code change on its
 own. Loop in the CISO or security analyst before acting on any of them.
 
@@ -2067,7 +2067,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       without re-applying erasures; confirm and put it in the notice. Who:
       operator + information officer. Trigger: with the privacy notice.
 - [ ] **D12 confirmation.** The audit log is pseudonymised on account
-      deletion ("Deleted user", 045) as the roadmap recommends; the
+      deletion ("Deleted user", 048) as the roadmap recommends; the
       information officer confirms it (or asks for full deletion of the
       events, which would weaken the regulator's trail). Trigger: with the
       privacy notice.
@@ -2075,6 +2075,26 @@ own. Loop in the CISO or security analyst before acting on any of them.
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data
       subject (s22), and in what time. Who: client. Trigger: before go-live.
+- [ ] **The ingest hold's outlier limit still counts a key's earlier
+      pushes.** Each push is judged against the series without its own days
+      (`series/hold.ts` `limitWithout`), but days the same key pushed before
+      count, so a key that poisons slowly can lift the 99th percentile it is
+      later judged by. Durable fix: record which days each key wrote
+      (a `key_days datemultirange` on `time_series`, like `feed_days` for
+      feeds, 031) and leave them out of the limit, or take the limit from
+      the published run's inputs. Trigger: the first production gateway
+      key, or a hold that should have fired and didn't.
+- [ ] **Deleting an assessor's account is refused (session B, WP-3.3).**
+      `scenario_guard` (045_contributor_scope.sql, the branch that raises
+      "a decision is recorded when the scenario is decided, and never
+      changes") also refuses the foreign key's `ON DELETE SET NULL` on
+      `scenario.decided_by`, so an account that decided an application can't
+      be deleted: the same bug 048 fixed in `note_guard`. Fix (session B's
+      to make, from 045's definition): let an update through untouched when
+      its only change is `decided_by` becoming NULL (water_app can't write
+      `decided_by` outside a decision, which the guard stamps), then add the
+      case to `auth/account-deletion.db.test.ts`. Trigger: before the first
+      application is decided on production.
 - [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
       pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
       with the verdicts recorded in step-2 §9, and the 60-farm load

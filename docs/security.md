@@ -297,9 +297,20 @@ and nothing else.
   so neither an already-queued re-run nor a later clean push can carry the
   bad days into an automatic run, or an automatic publication. The hold
   ends when a person runs the model. A person's own merge is never held; a
-  data feed's values are checked by its parser. Limits: a plausible wrong
-  value (inside the series' range) isn't caught, and the outlier rule needs
-  100 non-zero days in the series. Recovery is the runbook in
+  data feed's values are checked by its parser. The outlier limit is the
+  engine's (5× the 99th percentile of the series' non-zero days for rain,
+  10× for flow), taken from the series **without** the push (its days before
+  the merge, less the days the push overwrites), so one push can't lift the
+  limit over itself. **Limits** (a partial mitigation):
+  - a plausible wrong value, inside the series' usual range, isn't caught;
+  - the outlier rule needs 100 non-zero days in the series, so a new or
+    short series is checked for negatives only;
+  - days an earlier push of the same key wrote still count towards the
+    limit (a series keeps no per-day author), so a key that poisons slowly,
+    push by push, can shift the 99th percentile it is later judged by
+    (followups.md § POPIA and the Step 2 release tracks excluding them).
+
+  Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
   days from the key's events, re-push; a key's merge keeps no series
   revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
@@ -783,7 +794,8 @@ In short:
     already target.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
-  `insertAdjacentHTML` / `document.write` / `createContextualFragment`.
+  `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
+  `bind:innerHTML` / `bind:outerHTML` on a contenteditable element.
   `frontend/src/lib/rawHtml.test.ts` fails on any of them anywhere under
   `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
   person types are text). Help text has its own parser (`lib/help`), not
@@ -906,10 +918,10 @@ file), so a new column can't ship without a decision.
 | Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
-| Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (045) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
+| Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
-| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 045) | Deleted |
+| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
