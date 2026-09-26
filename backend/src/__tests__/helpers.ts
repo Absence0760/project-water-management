@@ -103,3 +103,31 @@ export async function asOwner(sql: string, params: unknown[] = []) {
 		await client.end();
 	}
 }
+
+/**
+ * Turn a run just made through the API into one saved on the legacy runoff
+ * model before engine 1.0.0 removed it (issue #16), which the API can no
+ * longer make: its settings say 'legacy', its summary has no runoff balance
+ * and it stores the [Flow data] trace columns (engine LEGACY_RUNOFF_COLUMNS)
+ * instead of GR4J's stores. Test state only, like the rest of asOwner.
+ */
+export async function makeStoredLegacyRun(runId: string) {
+	await asOwner(
+		`UPDATE model_run SET engine_version = '0.45.0', summary = summary - 'runoff',
+			inputs = jsonb_set(inputs, '{settings,runoffModel}', '"legacy"') WHERE id = $1`,
+		[runId]
+	);
+	await asOwner(
+		`DELETE FROM run_series WHERE run_id = $1 AND node_id IS NULL AND key IN ('pet', 'aet', 'exchange', 'production_store', 'routing_store', 'uh_store')`,
+		[runId]
+	);
+	await asOwner(
+		`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values")
+		 SELECT s.run_id, s.project_id, NULL, k.key, jsonb_build_object('label', k.label, 'unit', k.unit), s."values"
+		 FROM run_series s,
+			(VALUES ('is_summer', 'Summer (1) or winter (0)', ''), ('rain_flow', 'Rain-driven flow', 'm³/day'), ('base_flow', 'Underlying base flow', 'm³/day'),
+				('response_flow', 'Response flow', 'm³/day'), ('resultant_flow', 'Resultant flow', 'm³/day')) AS k(key, label, unit)
+		 WHERE s.run_id = $1 AND s.node_id IS NULL AND s.key = 'natural_flow'`,
+		[runId]
+	);
+}

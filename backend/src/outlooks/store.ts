@@ -194,7 +194,7 @@ function startStorage(input: ModelInput, baseRun: OutlookBaseRun, decisionDate: 
  * `overLimit`), then for every level whose ops apply, every analogue year as
  * one member, each stored as it finishes. The history runs once: the base
  * run also captures the model's state on the decision date
- * (outlookBaseAndSnapshot, engine ≥ 0.47.0, docs/model.md §2.16), and each
+ * (outlookBaseAndSnapshot, engine ≥ 1.1.0, docs/model.md §2.16), and each
  * member runs only the season from it (runOutlookMember). A base run that
  * ends before the decision date has no snapshot; the level probe below then
  * fails the job with the engine's words, as before. A member the engine refuses is stored as

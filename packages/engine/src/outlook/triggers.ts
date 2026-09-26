@@ -7,7 +7,7 @@
 // date to the season end with the farm dams set to a representative storage
 // in the band on the review date, every other part of the state the base
 // run's history: the base run's snapshot at the review date with the band's
-// storage in its dams (withDamStorage, ../warmstart, engine 0.47.0), or with
+// storage in its dams (withDamStorage, ../warmstart, engine 1.1.0), or with
 // warmStart false settings.damStorageReset (engine 0.46.0, through
 // outlookMemberInput's `start`) in a full re-run of the history. Each band's row is the outlook's planning figure: the
 // highest demand level that met the river's requirement in at least the
@@ -367,7 +367,7 @@ export interface ReviewTriggerOptions {
 	metric?: 'auto' | OutcomeMetric;
 	siteNodeId?: string | null;
 	planningShare?: number;
-	/** Run each member from the base run's snapshot at the review date with the band's storage (default true, engine ≥ 0.47.0); false: re-run the history per member with a storage reset. */
+	/** Run each member from the base run's snapshot at the review date with the band's storage (default true, engine ≥ 1.1.0); false: re-run the history per member with a storage reset. */
 	warmStart?: boolean;
 	/** The snapshot at the review date (captureModelState(input, reviewDate)); captured here when absent. */
 	snapshot?: ModelStateSnapshot;

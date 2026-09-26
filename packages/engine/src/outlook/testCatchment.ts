@@ -43,7 +43,7 @@ export interface TestCatchmentOptions {
 	/** A daily A-pan series as well as the monthly means. */
 	dailyApan?: boolean;
 	/**
-	 * Record-wide statistics in play (engine ≥ 0.47.0, the snapshot's pinned
+	 * Record-wide statistics in play (engine ≥ 1.1.0, the snapshot's pinned
 	 * ones): invasive trees on Farm A (the land-cover low-flow threshold) and
 	 * a Reserve rule table at the outlet read against the run's own natural
 	 * duration curves. Invented values.

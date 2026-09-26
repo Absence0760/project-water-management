@@ -178,13 +178,16 @@ describe('fit record', () => {
 		expect(resolveFitRecord({ fitRecord: { model: 'nope' } } as never)).toBeNull();
 	});
 
-	it('checks legacy parameters in settings.calibration', () => {
-		const rec = fitRecordFromReport(report({ model: 'legacy', free: ['a', 'b'], params: { a: 0.2, b: 1.4, summerFactor: 0.1, winterFactor: 1 } }), ctx);
-		const s = defaultProjectSettings();
-		s.calibration = { ...s.calibration, a: 0.2, b: 1.4 };
-		expect(editedParams(s, rec)).toEqual([]);
-		s.calibration.b = 1.5;
-		expect(editedParams(s, rec)).toEqual(['b']);
+	it('drops a stored fit of the removed legacy model: nothing is fitted (engine 1.0.0)', () => {
+		const legacy = { ...fitRecordFromReport(report(), ctx), model: 'legacy', free: ['a', 'b'], params: { a: 0.2, b: 1.4 } } as never;
+		expect(resolveFitRecord({ ...gr4jSettings(), fitRecord: legacy } as never)).toBeNull();
+		expect(calibrationFitStatus({ ...gr4jSettings(), fitRecord: legacy }, 'flow_logger_m3s')).toBe('notFitted');
+		expect(fitRecordStatus(gr4jSettings(), legacy).otherModel).toBe(true);
+		expect(fitRecordCaveats(fitRecordStatus(gr4jSettings(), legacy))[0]).toMatch(/legacy runoff model, removed in engine 1\.0\.0/);
+		// Positive control: the GR4J fit is kept, and is this model's.
+		const rec = fitRecordFromReport(report(), ctx);
+		expect(resolveFitRecord({ ...gr4jSettings(), fitRecord: rec } as never)).not.toBeNull();
+		expect(fitRecordStatus(gr4jSettings(), rec).otherModel).toBe(false);
 	});
 
 	it('calls the scores in-sample only when the parameters were fitted on the days scored (issue #45)', () => {
@@ -198,9 +201,9 @@ describe('fit record', () => {
 		const onPan = fitRecordFromReport(report(), { ...ctx, apanDaily: { startDate: '2012-10-01', length: 730, valuesSha256: 'a'.repeat(64) } });
 		expect(calibrationFitStatus({ ...s, fitRecord: onPan }, 'flow_logger_m3s')).toBe('fitted');
 		expect(fitRecordStatus({ ...s, fitRecord: onPan }, onPan, { apanDaily: null }).apanDailyChanged).toBe(true);
-		// Nothing fitted: no record, or a record for the other runoff model.
+		// Nothing fitted: no record, or a record for another runoff model (a stored legacy fit).
 		expect(calibrationFitStatus(s, 'flow_logger_m3s')).toBe('notFitted');
-		expect(calibrationFitStatus({ ...s, runoffModel: 'legacy', fitRecord: rec }, 'flow_logger_m3s')).toBe('notFitted');
+		expect(calibrationFitStatus({ ...s, fitRecord: { ...rec, model: 'legacy' } as never }, 'flow_logger_m3s')).toBe('notFitted');
 		// Edited by hand since the fit.
 		expect(calibrationFitStatus({ ...s, gr4j: { ...s.gr4j, x1: 1 }, fitRecord: rec }, 'flow_logger_m3s')).toBe('edited');
 		// Fitted, but on other days: another window, other exclusions or the other record.
@@ -219,7 +222,6 @@ describe('fit record', () => {
 		const changed = fitRecordStatus(
 			{
 				...s,
-				runoffModel: 'legacy',
 				gr4j: { ...s.gr4j, x1: 1 },
 				calibrationEnd: '2014-01-01',
 				calibrationExclusions: [],
@@ -229,10 +231,10 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: true, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
-		expect(caveats).toHaveLength(6);
-		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
+		expect(caveats).toHaveLength(5);
+		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
 	});
 
@@ -428,10 +430,10 @@ describe('fit record', () => {
 		const before = fitRecordFromReport(report(), ctx);
 		expect(before.forcing).not.toHaveProperty('apanDaily');
 		expect(fitRecordStatus(s, before, { apanDaily: pan1 }).apanDailyChanged).toBe(false);
-		// The series doesn't reach GR4J under a monthly PE, nor a legacy fit.
+		// The series doesn't reach GR4J under a monthly PE, nor a stored legacy fit.
 		const monthly = { kind: 'monthly' as const, mm: apanMm, source: 'station ET0' };
 		expect(fitRecordStatus({ ...s, pe: monthly }, rec, { apanDaily: null }).apanDailyChanged).toBe(false);
-		const legacy = fitRecordFromReport(report({ model: 'legacy' }), { ...ctx, apanDaily: pan1 });
-		expect(fitRecordStatus({ ...s, runoffModel: 'legacy' }, legacy, { apanDaily: null }).apanDailyChanged).toBe(false);
+		const legacy = { ...fitRecordFromReport(report(), { ...ctx, apanDaily: pan1 }), model: 'legacy' } as never;
+		expect(fitRecordStatus(s, legacy, { apanDaily: null }).apanDailyChanged).toBe(false);
 	});
 });

@@ -555,7 +555,8 @@ settled something this spec left open:*
   translated" when it falls back to the other (§7). (First built as one
   `notice` picked by `?lang` with a `noticeLang`; changed in WP-2.5 so a
   language switch and the saved copy need no second request.)*
-- *A legacy-runoff-model run can't be published (audit H1).*
+- *A legacy-runoff-model run can't be published (audit H1). Since engine
+  1.0.0 removed that model, only a stored run from before it can be one.*
 - *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop
   level); "all when your dam was down to its stop level" reads for dam farms
   only, as §3 Q1 says.*

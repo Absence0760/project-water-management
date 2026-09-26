@@ -285,7 +285,7 @@ function carriedMonth(d0: number, days: number, before: number): MonthBlock | nu
 }
 
 /**
- * The sums a resumed run carries into assessSite (engine ≥ 0.47.0): the
+ * The sums a resumed run carries into assessSite (engine ≥ 1.1.0): the
  * natural and impacted flow of the month holding day `at` (an index into
  * the series), from its first day to the day before `at`, summed as
  * assessSite sums a month. null when `at` is a month's first day, or the
@@ -322,11 +322,11 @@ export function assessSite(
 	/**
 	 * The natural curves to use per water-year month (Oct … Sep) in 'run'
 	 * mode, pinned from the run a model-state snapshot came from (engine ≥
-	 * 0.47.0, ../warmstart); a month's null, or none given, is this run's own.
+	 * 1.1.0, ../warmstart); a month's null, or none given, is this run's own.
 	 */
 	pinnedNatural?: readonly (readonly number[] | null)[],
 	/**
-	 * A run resumed part-way through a calendar month (engine ≥ 0.47.0): that
+	 * A run resumed part-way through a calendar month (engine ≥ 1.1.0): that
 	 * month's first `days` days before the run, as the natural and impacted
 	 * sums (m³) so far, so the month is still assessed whole.
 	 */

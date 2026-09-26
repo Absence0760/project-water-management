@@ -44,7 +44,7 @@ function input(a: Partial<NetworkNode>, need: number, days: number): ModelInput 
 	const apanMm = new Array(12).fill(0);
 	apanMm[3] = need;
 	return {
-		settings: { runoffModel: 'legacy', apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
 		model: {
 			nodes: [node('G', 'gauge', null), node('A', 'farm', 'G', a)],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: flat(1) }],
@@ -183,8 +183,19 @@ describe('boreholes (WP-1.34)', () => {
 	});
 
 	it('a drought rule can legitimately raise the supply fraction when demand grows (seed 4623; was 1450 before the fuzz generator drew rule tables), so the doubled-crop-area law is checked without it', () => {
-		const input = randomInput(4623, { runoffModel: 'gr4j' });
+		const input = randomInput(4623);
 		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n24's supply fraction/);
+		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
+	});
+
+	it('an annual borehole cap can legitimately raise a downstream farm’s time reliability when demand grows (seed 2909), so the law is checked without caps', () => {
+		// More demand uses n2's capped borehole up earlier, so its lagged stream depletion falls earlier and misses the
+		// days n1's dam (minimum level 100 %) needs the river to refill.
+		const input = randomInput(2909);
+		expect(input.model.boreholes!.some((b) => b.nodeId === 'n2' && b.annualCapM3 !== null && b.depletionFactor > 0)).toBe(true);
+		const rules = droughtBoreholesAsSupplemental(input);
+		for (const b of rules.model.boreholes ?? []) b.annualCapM3 = input.model.boreholes!.find((x) => x.id === b.id)!.annualCapM3;
+		expect(checkDoubledCropAreas(rules)).toMatch(/doubling crop areas raised n1's timeReliability/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});
 });

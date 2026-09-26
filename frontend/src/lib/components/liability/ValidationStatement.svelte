@@ -41,7 +41,7 @@
 	</dl>
 
 	{#if v.legacy}
-		<p class="alert alert-warning">Legacy runoff model (b023 workbook): it does not conserve water at the event scale (audit H1). Not evidence.</p>
+		<p class="alert alert-warning">Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1). Not evidence.</p>
 	{/if}
 
 	<h3 id="{uid}-cal">Calibration</h3>

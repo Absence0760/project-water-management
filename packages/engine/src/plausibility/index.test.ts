@@ -44,7 +44,7 @@ function input(observed: (sim: number[]) => (number | null)[] | null, series: Pa
 		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
 	];
 	const base: ModelInput = {
-		settings: { ewrPragmaticM3PerDay: flat(1500), apanMm: flat(150), runoffModel: 'legacy' },
+		settings: { ewrPragmaticM3PerDay: flat(1500), apanMm: flat(150) },
 		model: { nodes, crops: [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }], cropAreas: [{ nodeId: 'A', cropId: 'c', areaM2: 2000 }], transfers: [] },
 		series: { rain_catchment_mm: { startDate, values: new Array(days).fill(1) }, ...series }
 	};

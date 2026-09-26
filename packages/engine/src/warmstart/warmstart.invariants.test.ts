@@ -1,4 +1,4 @@
-// Capture and resume on random networks (engine 0.47.0, docs/model.md
+// Capture and resume on random networks (engine 1.1.0, docs/model.md
 // §2.16): every part of the model the generator draws (transfers, dam
 // curves and releases, boreholes with annual caps and depletion lags, supply
 // rules and the river pump, other water users, land cover, Reserve rule
@@ -23,8 +23,8 @@ const FIRST = Number(process.env.WARM_SEED ?? 1);
 type Variant = 'plain' | 'demandFactorFrom' | 'damStorageReset';
 
 /** A seed's network with a demand factor from a random day (or every day), or a storage reset on a random day. */
-function variantInput(seed: number, runoffModel: 'legacy' | 'gr4j', variant: Variant): { input: ModelInput; full: ModelOutput } | null {
-	const input = randomInput(seed, { runoffModel, maxDays: 800 });
+function variantInput(seed: number, variant: Variant): { input: ModelInput; full: ModelOutput } | null {
+	const input = randomInput(seed, { maxDays: 800 });
 	const rng = new Rng(seed * 31 + variant.length);
 	let full: ModelOutput;
 	try {
@@ -59,13 +59,12 @@ function splitDays(full: ModelOutput, rng: Rng): number[] {
 }
 
 describe('capture and resume on random networks', () => {
-	for (const runoffModel of ['legacy', 'gr4j'] as const) {
 		for (const variant of ['plain', 'demandFactorFrom', 'damStorageReset'] as const) {
-			it(`${runoffModel}, ${variant}: a resumed run is the uninterrupted run's tail to the bit (${CASES} networks)`, () => {
+			it(`${variant}: a resumed run is the uninterrupted run's tail to the bit (${CASES} networks)`, () => {
 				const failures: string[] = [];
 				let checked = 0;
 				for (let seed = FIRST; seed < FIRST + CASES; seed++) {
-					const v = variantInput(seed, runoffModel, variant);
+					const v = variantInput(seed, variant);
 					if (!v) continue;
 					for (const k of splitDays(v.full, new Rng(seed))) {
 						checked++;
@@ -77,12 +76,11 @@ describe('capture and resume on random networks', () => {
 				expect(failures).toEqual([]);
 			});
 		}
-	}
 
 	it(`withDamStorage on a snapshot is a storage reset on its day, every series but the reset's step (${CASES} networks)`, () => {
 		let tested = 0;
 		for (let seed = FIRST; seed < FIRST + CASES; seed++) {
-			const v = variantInput(seed, 'gr4j', 'plain');
+			const v = variantInput(seed, 'plain');
 			if (!v) continue;
 			const dams = v.input.model.nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
 			if (!dams.length) continue;

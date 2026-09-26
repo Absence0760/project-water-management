@@ -134,9 +134,9 @@ planned.
 
 | ID | Change | Why | Effort | Priority |
 | --- | --- | --- | --- | --- |
-| CR-13 | **Recession diagnostics.** Pick out recession segments from the observed record automatically: catchment rain below a threshold on the day and the day before, Q falling, at least 5–7 days long, with gaps breaking a segment, and flagged extrapolated or suspect days left out. Plot −dQ/dt against Q with the imported table overlaid, so the user can see how far the hand-built curve is from the data. | Tallaksen 1995; Stoelzle et al. 2013; Dralle et al. 2017. TOSSH (Gnann et al. 2021) documents every default and is the specification to port from. | ~1 wk | P1 |
-| CR-14 | **Mass-conserving legacy store** (needs the hydrologist, H1). Turn the table into S(Q) through g(Q) = −ln k(Q) and add each rain pulse as volume. Drop the base-flow reset and the size-dependent start index. Add a water-balance invariant: one pulse returns its own volume within 0.1 % at 1, 10 and 100 mm. Bump `ENGINE_VERSION` and add an audit entry. | Kirchner 2009; Lamb & Beven 1997; Fenicia et al. 2006. This removes H1, and the legacy model becomes a one-store relative of GR4J. Not built. Interim decision (2026-09-24, audit H1, pending the hydrologist): legacy stays unchanged as a workbook comparison only, and GR4J is the model of record. | 3–5 d | P1, after sign-off |
-| CR-15 | **Fitted recession table with uncertainty.** Fit −dQ/dt = aQ^b to each segment. Bin k by log Q and take the 10th/50th/90th percentiles. Bootstrap by segment. Derive a table from the median and report the bands. Tag segments by season and by whether they come before or after the dams spill, and add back estimated abstraction before fitting. Don't replace the imported table when there are fewer than about 8 segments. | Jachens et al. 2020; McMahon et al. 2026; Wang & Cai 2009; Thomas et al. 2013. | 1–2 wk | P2 |
+| CR-13 | **Recession diagnostics.** Pick out recession segments from the observed record automatically: catchment rain below a threshold on the day and the day before, Q falling, at least 5–7 days long, with gaps breaking a segment, and flagged extrapolated or suspect days left out. Plot −dQ/dt against Q with the imported table overlaid, so the user can see how far the hand-built curve is from the data. (Since engine 1.0.0 there is no imported table to overlay: it went with the legacy model, issue #16. The segments stay useful as a check on GR4J's simulated recessions.) | Tallaksen 1995; Stoelzle et al. 2013; Dralle et al. 2017. TOSSH (Gnann et al. 2021) documents every default and is the specification to port from. | ~1 wk | P1 |
+| CR-14 | **Mass-conserving legacy store** (needs the hydrologist, H1). Turn the table into S(Q) through g(Q) = −ln k(Q) and add each rain pulse as volume. Drop the base-flow reset and the size-dependent start index. Add a water-balance invariant: one pulse returns its own volume within 0.1 % at 1, 10 and 100 mm. Bump `ENGINE_VERSION` and add an audit entry. | Kirchner 2009; Lamb & Beven 1997; Fenicia et al. 2006. This removes H1, and the legacy model becomes a one-store relative of GR4J. Not built. **Dropped (2026-09-26):** engine 1.0.0 removed the legacy model instead (issue #16, audit H1 closed); GR4J is the only runoff model. | – | – |
+| CR-15 | **Fitted recession table with uncertainty.** Fit −dQ/dt = aQ^b to each segment. Bin k by log Q and take the 10th/50th/90th percentiles. Bootstrap by segment. Derive a table from the median and report the bands. Tag segments by season and by whether they come before or after the dams spill, and add back estimated abstraction before fitting. Don't replace the imported table when there are fewer than about 8 segments. (The table it would replace went with the legacy model in engine 1.0.0; the segment fit and its bands remain as a diagnostic.) | Jachens et al. 2020; McMahon et al. 2026; Wang & Cai 2009; Thomas et al. 2013. | 1–2 wk | P2 |
 | CR-16 | **Recession validation signatures.** Report the skill on withheld segments, BFI by both the Eckhardt and the Hughes et al. (2003) filters (South African reviewers expect the second), and the slope and bias of the low-flow FDC. **Part built (engine 0.25.0, [model.md §2.10d](./model.md)):** dry-season low-flow duration curves of the gauge, logger and each model, with a warning when the simulated Q90 is more than a factor of 2 from the observed. | Eckhardt 2005; Hughes, Hannart & Watkins 2003; Yilmaz et al. 2008. | ~1 wk | P2 |
 | CR-17 | **Recommend GR4J** for the client catchment until CR-13/14 pass. | GR4J already conserves water. Done: GR4J is the default since engine 0.11.0. | docs | P3 |
 
@@ -171,8 +171,8 @@ planned.
 first. Then:
 - the data layer: CR-18 → CR-19 → CR-20 → CR-22;
 - the ensemble and reporting: CR-1 → CR-5 → CR-21 → CR-28 → CR-29;
-- the recession work: CR-13, then CR-14 once the hydrologist has seen the
-  diagnostics.
+- the recession work: CR-13 (CR-14 was dropped when engine 1.0.0 removed
+  the legacy model).
 
 CR-30 and CR-31 are the larger licensing features in roadmap step 3.
 
@@ -180,8 +180,9 @@ CR-30 and CR-31 are the larger licensing features in roadmap step 3.
 
 1. **Recession (CR-14).** Should the legacy model become a mass-conserving
    store, or should the app recommend GR4J and keep legacy only to reproduce
-   the workbook? The app now does the second, pending this answer (audit H1,
-   2026-09-24).
+   the workbook? **Settled without it (2026-09-26):** the app kept legacy for
+   comparison from 2026-09-24, then engine 1.0.0 removed it (issue #16); the
+   operator assumed the hydrologist's agreement.
 2. **EWR form (CR-30).** Is the 12-value pragmatic EWR acceptable for the
    client's purpose? Or does the CMA expect the assurance-table form from the
    gazetted Reserve study for this reach? The app can now take that table and

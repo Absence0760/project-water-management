@@ -48,6 +48,8 @@ import {
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
 	defaultProjectSettings,
+	LEGACY_UPGRADED_WARNING,
+	RETIRED_CALIBRATION_KEYS,
 	panCoefficientOutOfRange,
 	resolvePe,
 	PE_SOURCE_MAX,
@@ -67,7 +69,7 @@ export type RainSourceFactorsOf = ReturnType<typeof rainSourceFactors>[number];
 /**
  * The rain handling's fits from the whole stored record: the CHIRPS bias
  * factors (before a run counts its fallback days) and each rain-source
- * period's factors. A model-state snapshot pins them (engine ≥ 0.47.0,
+ * period's factors. A model-state snapshot pins them (engine ≥ 1.1.0,
  * ./warmstart), so a run resumed from it uses the capture run's fits.
  */
 export interface PreparedFits {
@@ -326,11 +328,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
 
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
-		warnings.push(
-			settings.runoffModel === 'legacy'
-				? 'no rainfall series: natural flow is only the receding initial base flow, and demand is not reduced by rain'
-				: 'no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain'
-		);
+		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
 	}
 
 	return {
@@ -378,7 +376,10 @@ export function monthly(v: unknown, name: string, warnings: string[]): Monthly {
 function mergeSettings(raw: ModelInput['settings'], warnings: string[]): ProjectSettings {
 	const d = defaultProjectSettings();
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
-	s.calibration = { ...d.calibration, ...((raw?.calibration as object | undefined) ?? {}) };
+	// Only the keys that outlived the legacy runoff model (engine 1.0.0): a stored project may still carry its others.
+	const cal = { ...((raw?.calibration as Record<string, unknown> | undefined) ?? {}) };
+	for (const k of RETIRED_CALIBRATION_KEYS) delete cal[k];
+	s.calibration = { ...d.calibration, ...cal };
 	s.hiLoSplit = { ...d.hiLoSplit, ...((raw?.hiLoSplit as object | undefined) ?? {}) };
 	s.gr4j = { ...d.gr4j, ...((raw?.gr4j as object | undefined) ?? {}) };
 	s.panCoefficient = monthly(s.panCoefficient, 'pan coefficient', warnings);
@@ -455,7 +456,10 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		s.calibrationStart = null;
 		s.calibrationEnd = null;
 	}
-	if (!(RUNOFF_MODELS as readonly string[]).includes(s.runoffModel)) {
+	if ((s.runoffModel as string) === 'legacy') {
+		warnings.push(LEGACY_UPGRADED_WARNING);
+		s.runoffModel = d.runoffModel;
+	} else if (!(RUNOFF_MODELS as readonly string[]).includes(s.runoffModel)) {
 		warnings.push(`unknown runoff model "${String(s.runoffModel)}"; using ${d.runoffModel}`);
 		s.runoffModel = d.runoffModel;
 	}
@@ -463,7 +467,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';
 	// The Kp plausibility check only means something when GR4J's PE is Kp × A-pan.
-	if (s.runoffModel === 'gr4j' && s.pe.kind === 'pan') {
+	if (s.pe.kind === 'pan') {
 		const months = panCoefficientOutOfRange(s.panCoefficient);
 		if (months.length) {
 			const names = months.map((i) => WATER_YEAR_MONTH_NAMES[i]).join(', ');

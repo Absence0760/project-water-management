@@ -14,7 +14,7 @@ const START = '2020-01-01';
 
 /** A random network with rain replaced by `rain` from START (and a forecast when given). */
 function withRain(rain: (number | null)[], forecast?: { startDate: string; values: (number | null)[] }, seed = 11): ModelInput {
-	const x = randomInput(seed, { runoffModel: 'gr4j', maxDays: 400 });
+	const x = randomInput(seed, { maxDays: 400 });
 	x.series = { ...x.series, rain_catchment_mm: { startDate: START, values: rain } };
 	delete x.series.rain_chirps_mm;
 	delete x.series.rain_forecast_mm;

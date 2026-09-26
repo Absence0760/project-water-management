@@ -33,6 +33,13 @@ describe('effectiveSettings', () => {
 		expect(s.gr4j.x4).toBe(1.7);
 		expect(s.panCoefficient).toHaveLength(12);
 	});
+
+	it('reads a stored run that names no runoff model as legacy (engine < 1.0.0), never as today’s GR4J default', () => {
+		expect(effectiveSettings({ runoffModel: 'gr4j' }).runoffModel).toBe('gr4j');
+		expect(effectiveSettings({ runoffModel: 'legacy' }).runoffModel).toBe('legacy');
+		expect(effectiveSettings({}).runoffModel).toBe('legacy');
+		expect(effectiveSettings(undefined).runoffModel).toBe('legacy');
+	});
 });
 
 describe('settingsRows', () => {
@@ -44,7 +51,7 @@ describe('settingsRows', () => {
 		expect(gr4j['GR4J parameters']).toMatch(/^X1 350 mm/);
 		expect(gr4j['Calibration window']).toBe('whole record');
 		const legacy = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'legacy', calibrationStart: '2003-10-01' }), run));
-		expect(legacy['Runoff model']).toMatch(/^Legacy/);
+		expect(legacy['Runoff model']).toBe('Legacy (b023 workbook, removed in engine 1.0.0): workbook comparison only');
 		expect(legacy['GR4J parameters']).toBeUndefined();
 		expect(legacy['Calibration window']).toBe('from 2003-10-01');
 	});

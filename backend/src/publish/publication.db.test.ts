@@ -2,7 +2,7 @@
 // built from it (WP-2.6 API). Every "cannot see" check has a positive
 // control: the same farmer sees their own farm, a viewer sees every farm.
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { trimRuns } from '../runs/execute.js';
 
@@ -170,10 +170,11 @@ describe('publishing', () => {
 		expect((await owner.call('DELETE', `/projects/${other}`)).status).toBe(204);
 	});
 
-	it('refuses a legacy-runoff-model run', async () => {
+	it('refuses a stored legacy-runoff-model run', async () => {
 		const legacy = await makeProject(owner, 'Legacy');
-		expect((await owner.call('PATCH', `/projects/${legacy}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		// Saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
 		const r = await run(owner, legacy);
+		await makeStoredLegacyRun(r);
 		const res = await publish(owner, r, {}, legacy);
 		expect(res.status).toBe(409);
 		expect(res.body.error).toMatch(/legacy runoff model/);

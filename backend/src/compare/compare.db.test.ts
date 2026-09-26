@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -83,12 +83,13 @@ describe('GET /compare/runs', () => {
 		expect(res.body.b.run.legacy).toBe(false);
 	});
 
-	it('flags a legacy-runoff-model run on its own side, independently of the other (audit H1)', async () => {
+	it('flags a stored legacy-runoff-model run on its own side, independently of the other (audit H1)', async () => {
 		const u = await signUp('Hydrolegacy');
 		const { projectId } = await runnableProject(u);
 		const gr4jRun = await run(u, projectId, 'GR4J');
-		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		// A run saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
 		const legacyRun = await run(u, projectId, 'Legacy');
+		await makeStoredLegacyRun(legacyRun);
 
 		const res = await compare(u, `${projectId}:${gr4jRun}`, `${projectId}:${legacyRun}`);
 		expect(res.status).toBe(200);

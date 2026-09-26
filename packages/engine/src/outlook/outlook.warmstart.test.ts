@@ -1,5 +1,5 @@
 // The seasonal outlook and the review triggers from a snapshot of the base
-// run (engine 0.47.0, docs/model.md §2.15, §2.15a, §2.16): the history runs
+// run (engine 1.1.0, docs/model.md §2.15, §2.15a, §2.16): the history runs
 // once, and each member runs only the season. Against the older path, where
 // every member re-runs the history, on the invented catchment.
 import { describe, expect, it } from 'vitest';

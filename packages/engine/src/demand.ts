@@ -177,7 +177,7 @@ export interface FarmDailyDemand {
 	used: Float64Array;
 	/** Soil-water store at the end of the day (mm over the cropped area). */
 	storeMm: Float64Array;
-	/** The store W (m³) at the start of day `warm.captureAt`, when asked (engine ≥ 0.47.0, ./warmstart). */
+	/** The store W (m³) at the start of day `warm.captureAt`, when asked (engine ≥ 1.1.0, ./warmstart). */
 	storeAtM3?: number;
 }
 
@@ -200,7 +200,7 @@ export interface FarmDailyDemand {
  * equal to the old MAX(0, gross − Pe) (netDailyDemandM3). W starts empty.
  * `effectiveRainFraction` is one number, or one per day (the day's month's
  * value of settings.effectiveRainFractionMonthly, engine ≥ 0.43.0).
- * `warm` (engine ≥ 0.47.0, ./warmstart): start from a store of `initialM3`
+ * `warm` (engine ≥ 1.1.0, ./warmstart): start from a store of `initialM3`
  * instead of empty, and report the store at the start of day `captureAt`.
  */
 export function farmDailyDemand(

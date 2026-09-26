@@ -528,7 +528,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Settings & calibration → Calibration record**, choose the calibration flow series (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
 							'Add [[calibration-exclusions]] for periods you can’t trust, each with its reason.',
-							'Pick the [[runoff-model]] under **Flow calibration**. GR4J is the default; legacy is the workbook’s model, kept for comparison with the workbook only.'
+							'The [[runoff-model]] is GR4J: its parameters are under **Flow calibration**. (The workbook’s legacy model was removed in engine 1.0.0.)'
 						]
 					}
 				]
@@ -554,7 +554,7 @@ export const GUIDES: Guide[] = [
 				]
 			}
 		],
-		terms: ['calibration', 'gr4j', 'peak-coefficient', 'recession-curve'],
+		terms: ['calibration', 'gr4j', 'runoff-model', 'base-flow'],
 		related: ['fit-automatically', 'how-calibration-works', 'how-gr4j-works']
 	},
 	{
@@ -692,7 +692,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on ([[evidence-run]]). A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model (badged **Workbook comparison**) can’t be nominated.'
+						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on ([[evidence-run]]). A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model, made before engine 1.0.0 removed it (badged **Workbook comparison**), can’t be nominated.'
 					},
 					{
 						type: 'note',
@@ -762,7 +762,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
-							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no units.',
+							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no units.',
 							'**Shares.** Natural flow and the EWR are split between the units by fixed [[flow-share|flow shares]].',
 							'**Demand.** Crops, A-pan and effective rain give each unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the unit takes from its dam and the river.',
 							'**Unit balance.** Upstream first, each unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one unit]].',
@@ -906,7 +906,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Rain is the same gap-filled rain as for legacy, with no rain threshold. Potential evaporation is the monthly [[pan-coefficient]] × A-pan, spread over the days of the month. A warm-up (a year by default) runs over the start of the record first, so the stores begin at a realistic level; warm-up days are never shown or scored.'
+						text: 'Rain is the gap-filled catchment rain, with no rain threshold. Potential evaporation is the monthly [[pan-coefficient]] × A-pan, spread over the days of the month. A warm-up (a year by default) runs over the start of the record first, so the stores begin at a realistic level; warm-up days are never shown or scored.'
 					},
 					{
 						type: 'formula',

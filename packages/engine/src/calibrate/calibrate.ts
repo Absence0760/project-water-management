@@ -1,5 +1,5 @@
-// Automatic calibration of a runoff model (issue #4 §3): GR4J, or the legacy
-// b023 model so the two can be compared on equal terms (issue #4 phase 6).
+// Automatic calibration of the runoff model (issue #4 §3): GR4J, the only one
+// since engine 1.0.0 removed the legacy b023 model (issue #16).
 //
 // What is scored is the *whole run*: runoff model → natural flow → the network (farms,
 // dams, abstraction, transfers) → the series that matches the observed
@@ -20,13 +20,12 @@
 //   used the gauge, or the reverse), over that record's own days. It tests
 //   the fit against a second instrument, not just a second period.
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
-import { computeNaturalFlow } from '../flow';
 import { simulateNetwork } from '../network/simulate';
 import type { CalibrationFlowKind, ModelInput } from '../project';
 import { buildNetworkPlan, pickObservedKind } from '../run';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
-import { GR4J_PARAMS, LEGACY_PARAMS, type Gr4jParams } from '../runoff/params';
+import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
@@ -56,7 +55,7 @@ export interface CalibrateOptions {
 	/**
 	 * The box the search is free to explore, per parameter (issue #4 phase 6
 	 * §"make the logger fit identifiable"): 'wide' (default) is each
-	 * parameter's min/max (GR4J_PARAMS / LEGACY_PARAMS); 'typical' is Perrin et
+	 * parameter's min/max (GR4J_PARAMS); 'typical' is Perrin et
 	 * al.'s (2003) 80 % range (`typical`), tighter but not always enough to
 	 * pin down a short, drought-dominated record either. The starting point is
 	 * clamped into whichever box is used.
@@ -77,7 +76,7 @@ export interface CalibrateOptions {
 	/**
 	 * Parameters to fit; the rest keep their current value. Default: every
 	 * parameter not fixed by default (GR4J X1, X3, X4, with X2 as set, normally
-	 * 0; legacy a, b and the season factors).
+	 * 0).
 	 */
 	free?: string[];
 	/**
@@ -175,7 +174,7 @@ export interface CalibrationReport {
 	starts: number;
 	startResults: StartResult[];
 	free: string[];
-	/** Best parameters over the whole window: what "Apply" would put in the form (settings.gr4j, or settings.calibration for legacy). */
+	/** Best parameters over the whole window: what "Apply" would put in the form (settings.gr4j). */
 	params: ParamSet;
 	/** The parameters the project had, for comparison. */
 	startParams: ParamSet;
@@ -265,12 +264,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
-	if (modelId === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	const startParams: ParamSet =
-		modelId === 'gr4j'
-			? { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) }
-			: Object.fromEntries(LEGACY_PARAMS.map((s) => [s.key, settings.calibration[s.key] as number]));
+	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
 	const natural = new Float64Array(days);
 	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start);
 
@@ -294,28 +290,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is ~20 ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
-	let runoff: (p: ParamSet, n: number) => void;
-	if (modelId === 'gr4j') {
-		const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
-		const forcing = runoffForcing(settings, { startDate, days, aligned });
-		// The warm-up cycles the *full* forcing, as runModel's does, so a
-		// scored day sees exactly the state a normal run would give it.
-		runoff = (p, n) => {
-			const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n });
-			for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
-		};
-	} else {
-		const base = {
-			startDate,
-			rainCatchmentMm: aligned('rain_catchment_mm'),
-			rainChirpsMm: aligned('rain_chirps_mm'),
-			rainForecastMm: aligned('rain_forecast_mm')
-		};
-		runoff = (p, n) => {
-			const nf = computeNaturalFlow({ ...settings.calibration, ...p, catchmentAreaKm2: area }, { ...base, days: n }).naturalFlowM3Day;
-			for (let t = 0; t < n; t++) natural[t] = Number.isFinite(nf[t]!) ? nf[t]! : 0;
-		};
-	}
+	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
+	const forcing = runoffForcing(settings, { startDate, days, aligned });
+	// The warm-up cycles the *full* forcing, as runModel's does, so a
+	// scored day sees exactly the state a normal run would give it.
+	const runoff = (p: ParamSet, n: number) => {
+		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n });
+		for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
+	};
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
 	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
 	// threshold is the flow exceeded 75 % of the days), so a run with land

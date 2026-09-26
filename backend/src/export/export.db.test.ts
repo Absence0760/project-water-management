@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { LEGACY_RUN_CSV_COMMENT } from './csv.js';
 import { flowDurationTable } from './fdc.js';
 import { localDate } from '../projects/timeZone.js';
@@ -265,7 +265,7 @@ describe('legacy run CSV comment (audit H1)', () => {
 	beforeAll(async () => {
 		const { body } = await owner.call('POST', '/projects', { name: 'Legacy export' });
 		legacyProjectId = body.project.id;
-		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 		const legacyOutlet = node('Outlet', null);
 		const legacyFarm = node('Farm', legacyOutlet.id);
 		expect((await owner.call('PUT', `/projects/${legacyProjectId}/model`, { nodes: [legacyOutlet, legacyFarm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
@@ -275,6 +275,8 @@ describe('legacy run CSV comment (audit H1)', () => {
 		const run = await owner.call('POST', `/projects/${legacyProjectId}/runs`, { label: 'Legacy' });
 		expect(run.status).toBe(201);
 		legacyRunId = run.body.run.id;
+		// Saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
+		await makeStoredLegacyRun(legacyRunId);
 	});
 
 	it('starts daily.csv and summary.csv with the legacy comment, header still row 1 after it', async () => {

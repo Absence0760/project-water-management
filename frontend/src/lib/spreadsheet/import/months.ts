@@ -5,11 +5,9 @@
 // is a workbook bug, not what the author wrote: the importer keeps the listed
 // months only and names what the workbook would have added.
 //
-// The Python importer has two copies that differ at one edge, both ported:
-// extract_project.py's month_list() (transfer months) finds the numbers in the
-// cell text as written, while calibration.py's summer_months() first removes
-// the spaces, so "1 2" is January and February for a transfer but December
-// for the summer months.
+// Ported from extract_project.py's month_list() (transfer months), which
+// finds the numbers in the cell text as written. (The legacy runoff model's
+// summer months, read with the spaces removed, went with it in engine 1.0.0.)
 import { type Cell, pyStr } from './cells';
 
 function cellText(v: Cell): string {
@@ -43,20 +41,4 @@ export function substringExtraMonths(v: Cell): number[] {
 	if (v === null) return [];
 	const named = new Set(monthList(v));
 	return [...substringMatched(cellText(v).replace(/ /g, ''))].filter((m) => !named.has(m)).sort((a, b) => a - b);
-}
-
-/** calibration.py _month_text(): the cell as text, spaces removed. */
-function summerText(v: Cell): string {
-	return v === null ? '' : cellText(v).replace(/ /g, '');
-}
-
-/** calibration.py summer_months(): the months the summer-months cell names. */
-export function summerMonths(v: Cell): number[] {
-	return listed(summerText(v));
-}
-
-/** calibration.py substring_extra_months(): months the workbook's FIND makes summer although the list doesn't name them. */
-export function summerExtraMonths(v: Cell): number[] {
-	const named = new Set(summerMonths(v));
-	return [...substringMatched(summerText(v))].filter((m) => !named.has(m)).sort((a, b) => a - b);
 }

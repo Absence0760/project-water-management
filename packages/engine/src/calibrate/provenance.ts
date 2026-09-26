@@ -13,7 +13,7 @@
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
 import { resolvePe, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
-import { GR4J_PARAMS, LEGACY_PARAMS } from '../runoff/params';
+import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
@@ -325,14 +325,12 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 
 /** Keys of a runoff model's calibratable parameters. */
 const PARAM_KEYS: Record<RunoffModelId, readonly string[]> = {
-	gr4j: GR4J_PARAMS.map((p) => p.key),
-	legacy: LEGACY_PARAMS.map((p) => p.key)
+	gr4j: GR4J_PARAMS.map((p) => p.key)
 };
 
 /** The settings' current value of a model's parameter. */
-function currentParam(settings: Partial<ProjectSettings>, model: RunoffModelId, key: string): unknown {
-	const group = model === 'gr4j' ? settings.gr4j : settings.calibration;
-	return (group as Record<string, unknown> | undefined)?.[key];
+function currentParam(settings: Partial<ProjectSettings>, _model: RunoffModelId, key: string): unknown {
+	return (settings.gr4j as Record<string, unknown> | undefined)?.[key];
 }
 
 const close = (a: unknown, b: unknown) =>
@@ -359,7 +357,10 @@ export function resolveFitRecord(settings: Partial<ProjectSettings> & Record<str
 export interface FitRecordStatus {
 	/** Parameters changed by hand since the fit. */
 	editedParams: string[];
-	/** The settings select another runoff model: the fit doesn't describe the run's parameters. */
+	/**
+	 * The fit is of another runoff model than the one the run uses (GR4J): a
+	 * stored fit of the legacy model, removed in engine 1.0.0 (issue #16).
+	 */
 	otherModel: boolean;
 	/** The calibration window, exclusions or flow record differ from the fit's. */
 	windowChanged: boolean;
@@ -388,7 +389,7 @@ export interface FitRecordStatus {
 	 * The daily A-pan series (engine ≥ 0.40.0, issue #45) was added, removed
 	 * or changed since a GR4J fit that ran on pan coefficient × A-pan, and
 	 * GR4J still does: the PE on the days it covers changed. False when the
-	 * record or the caller doesn't know the series, for a legacy fit, and
+	 * record or the caller doesn't know the series, and
 	 * under a monthly PE (the series doesn't reach GR4J). Also sets
 	 * `forcingChanged`.
 	 */
@@ -484,7 +485,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		!sameApanDaily(apanThen, now.apanDaily);
 	return {
 		editedParams: editedParams(settings, record),
-		otherModel: (settings.runoffModel ?? 'legacy') !== record.model,
+		otherModel: (record.model as string) !== 'gr4j',
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
@@ -508,7 +509,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
  */
 export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind): CalibrationFitStatus {
 	const record = resolveFitRecord(settings as Partial<ProjectSettings> & Record<string, unknown>);
-	if (!record || record.model !== (settings.runoffModel ?? 'legacy')) return 'notFitted';
+	if (!record || (record.model as string) !== 'gr4j') return 'notFitted';
 	const status = fitRecordStatus(settings, record);
 	if (status.editedParams.length) return 'edited';
 	if (status.windowChanged || status.exclusionsChanged || record.flowKind !== flowKind) return 'otherPeriod';
@@ -518,7 +519,7 @@ export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKin
 /** Plain-language caveats for a fit record in these settings; empty when it describes them exactly. */
 export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: string) => string = (k) => k): string[] {
 	const out: string[] = [];
-	if (status.otherModel) out.push('The fit is for the other runoff model, so it does not describe these parameters.');
+	if (status.otherModel) out.push('The fit is of the legacy runoff model, removed in engine 1.0.0, so it does not describe the GR4J parameters.');
 	if (status.editedParams.length) {
 		out.push(`Parameters edited since the fit: ${status.editedParams.map(paramLabel).join(', ')}. The fit and its validation no longer describe them.`);
 	}

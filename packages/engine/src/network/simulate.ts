@@ -50,7 +50,7 @@ export interface PlanNode {
 	storageResetM3?: number;
 	/**
 	 * The rest of the node's state on the day before the first simulated day,
-	 * for a run resumed from a model-state snapshot (engine ≥ 0.47.0,
+	 * for a run resumed from a model-state snapshot (engine ≥ 1.1.0,
 	 * ../warmstart): the stream-depletion lag store, whether the river pump
 	 * was on yesterday (the trigger rule) and each pumping unit's volume so far
 	 * this water year. Absent = a fresh start (0, off, 0).
@@ -178,12 +178,12 @@ export interface NetworkPlan {
 	storageResetDay?: number;
 	/**
 	 * The land-cover low-flow threshold to use (m³/day), pinned from the run a
-	 * snapshot was captured from (engine ≥ 0.47.0, ../warmstart); absent = the
+	 * snapshot was captured from (engine ≥ 1.1.0, ../warmstart); absent = the
 	 * natural flow's own Q75 over this run.
 	 */
 	lowFlowThresholdM3Day?: number;
 	/**
-	 * A run resumed part-way through a record (engine ≥ 0.47.0): the calendar
+	 * A run resumed part-way through a record (engine ≥ 1.1.0): the calendar
 	 * month of the day before its first day, so day 0 starts a water year (and
 	 * clears the boreholes' annual volumes) only when it is 1 October.
 	 */
@@ -296,7 +296,7 @@ export interface FarmWorkings {
 	passedForSenior: Float64Array;
 }
 
-/** The network's day-to-day state at the start of a day, per node (simulateNetwork's `captureAt`, engine ≥ 0.47.0). */
+/** The network's day-to-day state at the start of a day, per node (simulateNetwork's `captureAt`, engine ≥ 1.1.0). */
 export interface NetworkState {
 	/** Dam storage the day before (before any storage reset that day). */
 	storageM3: Float64Array;
@@ -447,7 +447,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		return u;
 	});
-	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 0.47.0).
+	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 1.1.0).
 	const startsYear = (t: number) => (t === 0 && plan.continued ? month[0] === 10 && plan.continued.monthBefore !== 10 : startsWaterYear(month, t));
 	let captured: NetworkState | undefined;
 	const capture = (t: number): NetworkState => ({

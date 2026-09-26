@@ -3,7 +3,7 @@
 // removed or forged, at the route and at RLS.
 import { signoffStatement, signoffStatementText } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { sha256 } from './routes.js';
 
@@ -43,10 +43,11 @@ beforeAll(async () => {
 	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'baseline' });
 	expect(run.status).toBe(201);
 	runId = run.body.run.id;
-	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+	// A run saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
 	const legacy = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'legacy' });
 	expect(legacy.status).toBe(201);
 	legacyRunId = legacy.body.run.id;
+	await makeStoredLegacyRun(legacyRunId);
 	for (const [u, role] of [
 		[editor, 'editor'],
 		[viewer, 'viewer']

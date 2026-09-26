@@ -53,7 +53,7 @@ export interface AttributionInput {
 	supplied: readonly ArrayLike<number>[];
 	/** Per node, daily: Q dam storage at the end of the day (only sizes float noise; omitted = no dams). */
 	storage?: readonly ArrayLike<number>[];
-	/** Per node: Q the day before day 0, for a run resumed part-way through a record (engine ≥ 0.47.0); omitted = 0. */
+	/** Per node: Q the day before day 0, for a run resumed part-way through a record (engine ≥ 1.1.0); omitted = 0. */
 	storageBefore?: ArrayLike<number>;
 	/** Per node: consumptive share of what is supplied, k = 1 − β(1 − e), so c = G·k = G − T (audit N1). */
 	consumptivePerSupplied: ArrayLike<number>;

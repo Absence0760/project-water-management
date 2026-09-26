@@ -284,7 +284,7 @@ export async function publishRun(db: Db, projectId: string, body: z.infer<typeof
 	const loaded = await loadProjectionRun(db, projectId, body.runId);
 	if (!loaded) throw new ApiError(400, 'no such run in this project');
 	// Audit H1: a legacy-runoff run is a workbook comparison, not evidence.
-	if (loaded.runoffModel === 'legacy') throw new ApiError(409, 'this run used the legacy runoff model, a workbook comparison only; run a conceptual model to publish');
+	if (loaded.runoffModel === 'legacy') throw new ApiError(409, 'this run used the legacy runoff model (removed in engine 1.0.0), a workbook comparison only; run the model again to publish');
 	let analysis;
 	let views;
 	try {

@@ -551,7 +551,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'runoff-model',
 		term: 'Runoff model',
-		short: 'Which model turns rain into natural flow. GR4J is the default; legacy is the b023 model, kept for workbook comparison only, not evidence.',
+		short: 'The model that turns rain into natural flow: GR4J, the only one since engine 1.0.0 removed the legacy b023 model.',
 		category: 'flow',
 		fields: ['settings.runoffModel']
 	},
@@ -641,41 +641,12 @@ export const TIPS: HelpTipText[] = [
 		fields: ['calibration.catchmentAreaKm2']
 	},
 	{
-		id: 'peak-coefficient',
-		term: 'Peak coefficient a and exponent b',
-		short: 'Rain-driven flow = a · rain^b × catchment area × season factor. Larger a or b gives bigger flood peaks.',
-		category: 'flow',
-		fields: ['calibration.a', 'calibration.b']
-	},
-	{
 		id: 'rain-threshold',
 		term: 'Rain threshold',
-		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand, and in the legacy model produces no flow. b023 default 2 mm.',
+		short: 'Daily rain at or below this (mm) doesn’t reduce irrigation demand. GR4J uses all the rain. b023 default 2 mm.',
 		units: 'mm',
 		category: 'flow',
 		fields: ['calibration.rainThresholdMm', 'run.rain_used']
-	},
-	{
-		id: 'season-factors',
-		term: 'Summer and winter factors',
-		short: 'Multipliers on rain-driven flow by season. Dry summer soils absorb more, so the summer factor is usually much lower.',
-		category: 'flow',
-		fields: ['calibration.summerFactor', 'calibration.winterFactor', 'run.is_summer']
-	},
-	{
-		id: 'summer-months',
-		term: 'Summer months',
-		short: 'Months that always use the summer response (legacy model), ticked Oct … Sep. Set them for the catchment’s dry season.',
-		category: 'flow',
-		fields: ['calibration.summerMonths']
-	},
-	{
-		id: 'winter-thresholds',
-		term: 'Winter switch thresholds',
-		short: 'Outside summer months, rain today ≥ one threshold or yesterday ≥ the other (mm) switches the catchment to winter response.',
-		units: 'mm',
-		category: 'flow',
-		fields: ['calibration.winterTodayRainMm', 'calibration.winterNextDayRainMm']
 	},
 	{
 		id: 'base-flow',
@@ -683,26 +654,14 @@ export const TIPS: HelpTipText[] = [
 		short: 'The slow, groundwater-fed part of river flow that recedes gradually between storms, in m³/day.',
 		units: 'm³/day',
 		category: 'flow',
-		fields: ['calibration.baseFlowInitial', 'calibration.baseResetRatio', 'run.base_flow']
+		fields: ['run.base_flow']
 	},
 	{
-		id: 'recession-curve',
-		term: 'Recession curve',
-		short: 'How flow decays day by day without rain: a table from flow level to a daily recession factor.',
+		id: 'legacy-runoff-model',
+		term: 'Legacy runoff model',
+		short: 'The b023 workbook’s rain → peak → recession routine, removed in engine 1.0.0. Runs made with it still open, labelled, but can’t be re-run.',
 		category: 'flow',
-		fields: [
-			'calibration.recessionFactors',
-			'calibration.recessionCurveM3Day',
-			'calibration.recessionDaysMax',
-			'run.response_flow'
-		]
-	},
-	{
-		id: 'pulse-index',
-		term: 'Pulse start index and amplitude',
-		short: 'Where on the recession curve a new rain pulse starts. Big pulses start near the low index and recede fast.',
-		category: 'flow',
-		fields: ['calibration.shiftPeakIndexLo', 'calibration.shiftPeakIndexHi', 'calibration.amplitudeM3Day', 'run.rain_flow']
+		fields: ['run.is_summer', 'run.rain_flow', 'run.response_flow']
 	},
 
 	// ---- EWR ----------------------------------------------------------------

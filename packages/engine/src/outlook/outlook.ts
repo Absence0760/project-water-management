@@ -229,7 +229,7 @@ export function outlookMemberInput(
 /**
  * One member's season alone, for a run from a snapshot of the base input at
  * the decision date (runModelFrom(captureModelState(input, decisionDate),
- * …), engine ≥ 0.47.0): outlookMemberInput's member without the history. Its
+ * …), engine ≥ 1.1.0): outlookMemberInput's member without the history. Its
  * only series are the season's: the analogue's rain as the forecast rain and
  * its daily A-pan when the project has one, both from the decision date; the
  * window is the season; the settings, the ops (demand factors from the
@@ -509,7 +509,7 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
 	planningShare?: number;
 	/**
 	 * Run each member from a snapshot of the base input at the decision date
-	 * (default true, engine ≥ 0.47.0): the history runs once. false: every
+	 * (default true, engine ≥ 1.1.0): the history runs once. false: every
 	 * member re-runs the history (outlookMemberInput), the older path.
 	 */
 	warmStart?: boolean;
@@ -544,7 +544,7 @@ export function outlookBaseAndSnapshot(input: ModelInput, date: string, given: {
 
 /**
  * One member's measures, run from a snapshot of the base input at the
- * season's first day (engine ≥ 0.47.0): outlookSeasonInput, runModelFrom
+ * season's first day (engine ≥ 1.1.0): outlookSeasonInput, runModelFrom
  * and outlookMember in one. `problems` when the ops don't apply (then no
  * member). What the backend job runs per member once it holds a snapshot.
  */

@@ -1,4 +1,4 @@
-// Model-state snapshots (engine ≥ 0.47.0, issue #53, docs/model.md §2.16):
+// Model-state snapshots (engine ≥ 1.1.0, issue #53, docs/model.md §2.16):
 // the complete state of a run at the start of a day, as plain versioned
 // data, so another run can start there instead of re-running the history.
 // ../run.ts captures one (runModelCapturing, captureModelState) and resumes
@@ -7,8 +7,7 @@
 //
 // What a snapshot holds, per part of the model:
 //   - the runoff model's stores: GR4J's production and routing stores and
-//     both unit-hydrograph queues, or the legacy recession model's flows and
-//     indices and its season flag (no warm-up on resume: the state is it);
+//     both unit-hydrograph queues (no warm-up on resume: the state is it);
 //   - per node: the dam storage the day before (before any storage reset on
 //     the day), the soil-water store (m³ over the cropped area), the
 //     stream-depletion lag store, whether the river pump was on and each
@@ -66,7 +65,7 @@ export interface PinnedStatistics {
 
 /** The decoded state (plain numbers). */
 export interface ModelState {
-	runoff: { model: 'gr4j' | 'legacy'; state: number[] };
+	runoff: { model: 'gr4j'; state: number[] };
 	nodes: ModelNodeState[];
 	pinned: PinnedStatistics;
 	/**

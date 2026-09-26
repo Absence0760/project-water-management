@@ -90,7 +90,7 @@ describe('sums over lists run in id order', () => {
 		const apan = new Array(12).fill(0);
 		apan[3] = 100;
 		return {
-			settings: { runoffModel: 'legacy', apanMm: apan as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: new Array(12).fill(0) as never },
+			settings: { apanMm: apan as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: new Array(12).fill(0) as never },
 			model: {
 				nodes,
 				crops: crops.map((f, k) => ({ id: `c${k}`, name: `c${k}`, cropFactor: new Array(12).fill(f) })),
@@ -190,7 +190,7 @@ describe('canonicalOrder', () => {
 		const apan = new Array(12).fill(0);
 		apan[3] = 31;
 		const input = (nodes: NetworkNode[]): ModelInput => ({
-			settings: { runoffModel: 'legacy', apanMm: apan as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: new Array(12).fill(10) as never },
+			settings: { apanMm: apan as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: new Array(12).fill(10) as never },
 			model: {
 				nodes,
 				crops: [{ id: 'c', name: 'c', cropFactor: new Array(12).fill(1) }],

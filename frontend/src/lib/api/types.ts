@@ -24,6 +24,7 @@ import type {
 	ScenarioOp,
 	SeasonalOutlook,
 	SeriesMeta,
+	StoredRunoffModelId,
 	YearClassMethod,
 	YieldPoint
 } from '@water-management/engine';
@@ -486,7 +487,10 @@ export interface RunMeta {
 	endDate: string;
 	createdAt: string;
 	createdBy: string | null;
-	/** settings.runoffModel === 'legacy' (audit H1): workbook comparison only, not evidence. */
+	/**
+	 * The run used the legacy runoff model (its settings don't say 'gr4j'; audit H1): workbook comparison only,
+	 * not evidence. Only a run made before engine 1.0.0 removed that model (issue #16); never a new run.
+	 */
 	legacy: boolean;
 	/**
 	 * The modeller's written explanation of the run ('' = none), e.g. why a
@@ -497,8 +501,8 @@ export interface RunMeta {
 	/** When and by whom (display name) the notes last changed; null = never written. */
 	notesUpdatedAt?: string | null;
 	notesUpdatedBy?: string | null;
-	/** settings.runoffModel the run used ('gr4j', 'legacy', …; absent → legacy). Absent from an older API. */
-	runoffModel?: string;
+	/** settings.runoffModel the run used: 'gr4j', or 'legacy' for a run before engine 1.0.0 (absent → legacy). Absent from an older API. */
+	runoffModel?: StoredRunoffModelId;
 	/**
 	 * The run's place in the evidence history (010_run_nomination): 'current'
 	 * is the project's nominated evidence run, 'past' was nominated and since
@@ -586,7 +590,7 @@ export interface Nomination {
 	runLabel: string;
 	runCreatedAt: string;
 	/** Copied from the run when it was nominated. */
-	runoffModel: string;
+	runoffModel: StoredRunoffModelId;
 	engineVersion: string;
 	reason: string;
 	nominatedAt: string;
@@ -707,8 +711,8 @@ export interface RunCatchmentDay {
 	nodeId: null;
 	name: string;
 	kind: 'catchment';
-	/** 'legacy' for a run without a runoff balance (no stores to trace). */
-	runoffModel: string;
+	/** 'legacy' for a run of the legacy runoff model (engine < 1.0.0), which has no stores to trace. */
+	runoffModel: StoredRunoffModelId;
 	/** Area the mm are spread over; null for a legacy run. */
 	areaKm2: number | null;
 	/** The runoff model's parameters as the run used them (GR4J: x1 … x4, warmupDays); null for a legacy run. */

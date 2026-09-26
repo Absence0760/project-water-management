@@ -3,9 +3,12 @@ import { CALIBRATION_PARAMS, type ApanDailyFingerprint, type RunoffModelId } fro
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum } from '$lib/format/number';
 
-/** "Production store capacity X1" for GR4J's x1; the key itself when unknown. */
-export function paramLabel(model: RunoffModelId, key: string): string {
-	return CALIBRATION_PARAMS[model]?.find((p) => p.key === key)?.label ?? key;
+/**
+ * "Production store capacity X1" for GR4J's x1; the key itself when unknown,
+ * as a stored fit of the legacy model's parameters (removed in engine 1.0.0) is.
+ */
+export function paramLabel(model: string, key: string): string {
+	return CALIBRATION_PARAMS[model as RunoffModelId]?.find((p) => p.key === key)?.label ?? key;
 }
 
 /** A fit record's recorded monthly forcing: "0.70 every month" when uniform, else "Oct 0.65, Nov 0.70, …". */
@@ -24,9 +27,13 @@ export function chirpsFactorsText(factors: readonly (number | null)[]): string {
 	return wy.map((v, i) => `${WATER_YEAR_MONTHS[i]} ${v === null ? '–' : fmtNum(v, 2)}`).join(', ');
 }
 
-/** "GR4J" or "Legacy (workbook comparison)" (audit H1): the fit record's model, in the heading of FitProvenance. */
-export function fitModelLabel(model: RunoffModelId): string {
-	return model === 'gr4j' ? 'GR4J' : 'Legacy (workbook comparison)';
+/**
+ * "GR4J", or for a fit stored before engine 1.0.0 removed the legacy model
+ * (issue #16) "Legacy (removed in engine 1.0.0)": the fit record's model, in
+ * the heading of FitProvenance.
+ */
+export function fitModelLabel(model: string): string {
+	return model === 'gr4j' ? 'GR4J' : 'Legacy (removed in engine 1.0.0)';
 }
 
 /** A fit record's daily A-pan series (issue #45) in words: 'none', or its first day, length and a short hash. */

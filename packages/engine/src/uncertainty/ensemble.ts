@@ -212,7 +212,7 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	const notes: string[] = [];
 	const model = req.model ?? settings.runoffModel;
 	if (!RUNOFF_MODELS.includes(model)) throw new Error(`unknown runoff model "${String(model)}"`);
-	if (model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
+	if (!hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
 	const members = req.members ?? ENSEMBLE_DEFAULTS.members;
 	if (!isInt(members, ENSEMBLE_MEMBERS_MIN, ENSEMBLE_MEMBERS_MAX)) {
 		throw new Error(`members must be a whole number from ${ENSEMBLE_MEMBERS_MIN} to ${ENSEMBLE_MEMBERS_MAX}`);
@@ -231,15 +231,11 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	if (unknown.length) throw new Error(`not a ${model} parameter: ${unknown.join(', ')}`);
 	const orderedFree = specs.filter((s) => free.includes(s.key)).map((s) => s.key);
 
-	let panOffset = req.panOffset ?? (model === 'gr4j' ? ENSEMBLE_DEFAULTS.panOffset : 0);
+	let panOffset = req.panOffset ?? ENSEMBLE_DEFAULTS.panOffset;
 	if (!isNum(panOffset, 0, PAN_OFFSET_MAX)) throw new Error(`pan offset must be from 0 to ${PAN_OFFSET_MAX}`);
-	if (model === 'legacy' && panOffset > 0) {
-		notes.push('The pan coefficient is not varied: the legacy model does not use potential evaporation.');
-		panOffset = 0;
-	}
 	// Under a monthly PE (settings.pe, engine ≥ 0.31.0) GR4J never reads the pan coefficient, so shifting it would be a
-	// dimension that changes nothing: drop it and say so, as for the legacy model.
-	if (model === 'gr4j' && settings.pe.kind === 'monthly' && panOffset > 0) {
+	// dimension that changes nothing: drop it and say so.
+	if (settings.pe.kind === 'monthly' && panOffset > 0) {
 		notes.push(
 			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Settings), which does not use it. The ensemble does not vary potential evaporation.'
 		);

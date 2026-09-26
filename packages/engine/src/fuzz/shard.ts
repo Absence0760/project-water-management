@@ -1,10 +1,10 @@
 // The engine's random-network soak (checkAll on FUZZ_CASES seeds from
-// FUZZ_SEED, for the legacy and GR4J runoff models), split across shard files
+// FUZZ_SEED, GR4J runoff), split across shard files
 // so vitest runs them on separate cores. One file runs in one worker, so the
 // soak as two 400-case tests in one file set the whole engine suite's wall
-// time (~130 s); four shards per model bring it under the next-slowest file.
+// time (~130 s); four shards bring it under the next-slowest file.
 //
-// Each shard file is one call, fuzzShard(model, i, SHARDS): it takes every
+// Each shard file is one call, fuzzShard(i, SHARDS): it takes every
 // seed in its contiguous slice of the range, so the shards together cover
 // exactly the seeds the single test did. FUZZ_CASES / FUZZ_SEED /
 // FUZZ_MAX_FAILURES work as before (a soak: FUZZ_CASES=20000 pnpm test).
@@ -28,14 +28,13 @@ export function shardRange(i: number, n: number, cases = CASES, seed0 = SEED0): 
 	return [seed0 + (i - 1) * per, Math.min(seed0 + cases, seed0 + i * per)];
 }
 
-export function fuzzShard(runoffModel: 'legacy' | 'gr4j', i: number, n = SHARDS): void {
+export function fuzzShard(i: number, n = SHARDS): void {
 	const [from, to] = shardRange(i, n);
 	describe('engine invariants on random networks', () => {
-		it(`seeds ${from}–${to - 1} of ${CASES} from ${SEED0}${runoffModel === 'gr4j' ? ', GR4J runoff' : ''} (shard ${i} of ${n})`, () => {
+		it(`seeds ${from}–${to - 1} of ${CASES} from ${SEED0}, GR4J runoff (shard ${i} of ${n})`, () => {
 			const failures: string[] = [];
 			for (let seed = from; seed < to && failures.length < MAX_FAILURES; seed++) {
-				// The legacy soak keeps the generator's own runoff model choice, as the single test did.
-				const input = runoffModel === 'gr4j' ? randomInput(seed, { runoffModel }) : randomInput(seed);
+				const input = randomInput(seed);
 				const bad = checkAll(input, seed);
 				if (!bad) continue;
 				const rule = ruleOf(bad);

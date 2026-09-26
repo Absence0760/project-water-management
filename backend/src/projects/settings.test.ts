@@ -1,4 +1,5 @@
-import { defaultProjectSettings, PE_SOURCE_MAX, resolveChirpsFitPeriod, resolveRainSource } from '@water-management/engine';
+import { readFileSync } from 'node:fs';
+import { defaultProjectSettings, PE_SOURCE_MAX, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -47,15 +48,45 @@ describe('mergeSettings', () => {
 describe('SettingsPatch.runoffModel', () => {
 	const ok = (runoffModel: unknown) => SettingsPatch.safeParse({ runoffModel }).success;
 
-	it('accepts the models the engine has, and nothing else', () => {
+	it('accepts the models the engine has (GR4J), and nothing else, naming why legacy is refused', () => {
 		expect(ok(defaultProjectSettings().runoffModel)).toBe(true);
-		expect(ok('legacy')).toBe(true);
 		expect(ok('gr4j')).toBe(true);
-		for (const bad of ['pitman', '', null, 1]) expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		for (const bad of ['legacy', 'pitman', '', null, 1]) expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		const legacy = SettingsPatch.safeParse({ runoffModel: 'legacy' });
+		expect(legacy.success ? '' : legacy.error.issues[0]!.message).toMatch(/legacy runoff model was removed in engine 1\.0\.0/);
 	});
 
 	it('defaults to GR4J when none is stored', () => {
 		expect(mergeSettings({}).runoffModel).toBe('gr4j');
+	});
+});
+
+describe('what the legacy runoff model left in stored settings (engine 1.0.0, issue #16)', () => {
+	const legacyCalibration = { a: 0.2, b: 1.4, summerMonths: [1, 2], recessionFactors: [0.9], rainThresholdMm: 3, catchmentAreaKm2: 12 };
+
+	it('mergeSettings reads a project still stored as legacy as GR4J, without the legacy keys or a legacy fit', () => {
+		const s = mergeSettings({ runoffModel: 'legacy', calibration: legacyCalibration, fitRecord: { model: 'legacy', free: ['a'], params: { a: 0.2 } } }) as unknown as Record<string, unknown>;
+		expect(s.runoffModel).toBe('gr4j');
+		expect(s.calibration).toEqual({ rainThresholdMm: 3, catchmentAreaKm2: 12 });
+		expect(s.fitRecord).toBeNull();
+		// Positive control: a GR4J fit is kept.
+		const fit = { model: 'gr4j', free: ['x1'], params: { x1: 400 } };
+		expect((mergeSettings({ fitRecord: fit }) as unknown as Record<string, unknown>).fitRecord).toEqual(fit);
+	});
+
+	it('SettingsPatch drops the legacy calibration keys (an older export) and checks the two that are left', () => {
+		const r = SettingsPatch.safeParse({ calibration: legacyCalibration });
+		expect(r.success && r.data.calibration).toEqual({ rainThresholdMm: 3, catchmentAreaKm2: 12 });
+		expect(SettingsPatch.safeParse({ calibration: { rainThresholdMm: -1 } }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ calibration: { catchmentAreaKm2: null } }).success).toBe(true);
+		expect(SettingsPatch.safeParse({ calibration: { somethingElse: 1 } }).success).toBe(false);
+	});
+
+	it('migration 064 drops exactly the engine’s RETIRED_CALIBRATION_KEYS', () => {
+		const sql = readFileSync(new URL('../../migrations/064_remove_legacy_runoff.sql', import.meta.url), 'utf8');
+		const arrays = [...sql.matchAll(/ARRAY\[([^\]]+)\]::text\[\]/g)].map((m) => [...m[1]!.matchAll(/'([^']+)'/g)].map((k) => k[1]).sort());
+		expect(arrays).toHaveLength(2);
+		for (const keys of arrays) expect(keys).toEqual([...RETIRED_CALIBRATION_KEYS].sort());
 	});
 });
 

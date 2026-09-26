@@ -389,8 +389,7 @@ describe('runModel with the CHIRPS correction', () => {
 	});
 
 	it('outputs CHIRPS as uploaded and, beside it, CHIRPS × the monthly factor on every day', () => {
-		// Legacy, so rain used shows the rain threshold that final rainfall is before.
-		const input = runInput({ runoffModel: 'legacy' });
+		const input = runInput();
 		const h = input.series.rain_chirps_mm!.values;
 		h[5] = null; // a missing CHIRPS day is a gap in both columns
 		const out = runModel(input);
@@ -411,7 +410,7 @@ describe('runModel with the CHIRPS correction', () => {
 		}
 		// Rain used only takes the corrected value on the fallback days.
 		const rain = get(out, null, 'rain_used');
-		for (const i of fallbackDays) if (h[i]! > 2) expect(rain[i]).toBeCloseTo(corrected[i]!, 12);
+		for (const i of fallbackDays) if (h[i] !== null) expect(rain[i]).toBeCloseTo(corrected[i]!, 12);
 		// Final rainfall: catchment where present, corrected CHIRPS where not, gaps where neither; no threshold.
 		const final = get(out, null, 'rain_final');
 		expect(keys.indexOf('rain_final')).toBe(keys.indexOf('rain_chirps') - 1);
@@ -421,7 +420,8 @@ describe('runModel with the CHIRPS correction', () => {
 			else if (h[i] === null) expect(final[i]).toBeNaN();
 			else expect(final[i]).toBeCloseTo(corrected[i]!, 12);
 		}
-		expect(final.some((v, i) => v > 0 && v <= 2 && rain[i] === 0)).toBe(true);
+		// GR4J uses the rain as it is (no threshold, missing days 0): rain used is final rainfall.
+		for (let i = 0; i < DAYS; i++) expect(rain[i]).toBe(Number.isNaN(final[i]!) ? 0 : final[i]);
 		expect(corrected.some((v, i) => h[i] !== null && h[i]! > 0 && v !== raw[i])).toBe(true);
 		// The day's monthly factor sits in the next column: 12 values, one per calendar month.
 		expect(keys.indexOf('chirps_factor')).toBe(keys.indexOf('rain_chirps_corrected') + 1);

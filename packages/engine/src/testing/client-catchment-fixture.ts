@@ -51,7 +51,7 @@ export interface ClientCatchmentFixture {
 	dataDir: string;
 	project: ImportedProject;
 	expected: Expected;
-	/** The replay `ModelInput`: legacy runoff, off the workbook's own quirks (see comments below). */
+	/** The replay `ModelInput`, off the workbook's own quirks (see comments below); the suite feeds it `natural`. */
 	modelInput: ModelInput;
 	/** The workbook's own natural flow, for tests that isolate the network port from the rain model. */
 	natural: number[];
@@ -101,10 +101,13 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 	// dam a surface of 0 m² and no seepage, which is bit for bit the
 	// workbook's dam; the "N2:" test below runs the estimated areas.
 	const modelInput: ModelInput = {
-		// The workbook's natural flow is the legacy recession model's; GR4J is the default.
+		// Natural flow is the workbook's own (`natural`, below): its recession
+		// model was removed in engine 1.0.0 (issue #16), and runModelWith takes
+		// the column in its place. A project.json from an older extract may
+		// still name the legacy model; the replay says GR4J, so it doesn't warn.
 		settings: {
 			...project.settings,
-			runoffModel: 'legacy',
+			runoffModel: 'gr4j',
 			effectiveRainStoreMm: 0,
 			zeroRainRuns: { mode: 'asRecorded', keepDry: [], missing: [], accumulationMode: 'asRecorded', keepReadings: [], addAccumulations: [] }
 		},

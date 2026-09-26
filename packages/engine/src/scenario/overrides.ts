@@ -427,7 +427,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		case 'settings.set': {
 			const e = settingsValueError(op.path, op.value);
 			if (e) fail(`${op.path} ${e}`);
-			const value = op.path === 'calibration.summerMonths' ? monthSet(op.value as number[]) : cloneData(op.value);
+			const value = cloneData(op.value);
 			const [head, leaf] = op.path.split('.') as [string, string | undefined];
 			const s = d.settings as Record<string, unknown>;
 			if (leaf === undefined) s[head] = value;

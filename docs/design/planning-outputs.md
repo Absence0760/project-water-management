@@ -176,7 +176,7 @@ season-end storage, % of demand met and the EWR/Reserve share as median
 and 10th–90th percentiles with every year's values, and the planning
 figure as data (`describePlanningFigure`). Only `demand.scale` ops make a
 level (anything else would change the history the season starts from).
-- **The backend** (migration 063, [api.md § Seasonal outlooks](../api.md#seasonal-outlooks)):
+- **The backend** (migration 064, [api.md § Seasonal outlooks](../api.md#seasonal-outlooks)):
   job kind `outlook`, its own tables `seasonal_outlook` /
   `seasonal_outlook_member` rather than a sweep mode (a member is one level
   in one year measured over the season, and there are years × levels of
@@ -185,7 +185,7 @@ level (anything else would change the history the season starts from).
   member runs), 2 pending per user, the newest 20 per project. A member
   the engine refuses is stored as failed and the outlook carries on. The
   job runs the history once and each member over the season only, from a
-  snapshot of the decision date (engine 0.47.0, model.md §2.16,
+  snapshot of the decision date (engine 1.1.0, model.md §2.16,
   `runOutlookMember`).
 - **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
   season as a month and day each end (default 1 October – 30 April,
@@ -261,7 +261,7 @@ analogue years." Choices, each marked in model.md:
   the cautious reading of finding 4; a midpoint option exists
   **(judgement, pending the hydrologist)**; the total is shared over the
   dams pro rata to capacity (every dam at the same fill);
-- **starting from a storage**: since engine 0.47.0 the base run's state at
+- **starting from a storage**: since engine 1.1.0 the base run's state at
   the review date is captured once (a model-state snapshot, model.md
   §2.16) and each band sets its storage in the snapshot's dams
   (`withDamStorage`); the older path, `damStorageReset` (engine 0.46.0),
@@ -271,7 +271,7 @@ analogue years." Choices, each marked in model.md:
 
 Cost: one run of the history, then bands × years × levels runs of the
 season alone (3 × 12 × 4 in 53 ms on the test catchment, against 1.1 s
-re-running the history per member, engine 0.47.0).
+re-running the history per member, engine 1.1.0).
 WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a). Still to build:

@@ -1,7 +1,7 @@
 // GET /projects/:id/runs/:runId/day: one node's columns on one day, for the
 // day trace in the results (docs/ui.md § Self-checks).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -193,10 +193,11 @@ describe('GET /projects/:id/runs/:runId/day without a nodeId (catchment)', () =>
 		const a = await owner.call('POST', `/projects/${catchmentProject}/runs`, { label: 'GR4J' });
 		expect(a.status).toBe(201);
 		gr4jRun = a.body.run.id;
-		expect((await owner.call('PATCH', `/projects/${catchmentProject}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		// Saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
 		const b = await owner.call('POST', `/projects/${catchmentProject}/runs`, { label: 'Legacy' });
 		expect(b.status).toBe(201);
 		legacyRun = b.body.run.id;
+		await makeStoredLegacyRun(legacyRun);
 		expect((await owner.call('POST', `/projects/${catchmentProject}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
 	});
 

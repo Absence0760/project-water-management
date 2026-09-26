@@ -160,49 +160,51 @@ export const defaultZeroRainSettings = (): ZeroRainSettings => ({
 });
 
 /**
- * Rain → natural-flow calibration (b023 [Flow Calibration Cfg]); consumed by
- * computeNaturalFlow() in flow.ts. Workbook named range in brackets.
+ * Catchment settings from b023 [Flow Calibration Cfg] that outlived its
+ * recession model (removed in engine 1.0.0, issue #16). The key keeps its
+ * workbook name; the legacy model's other keys (a, b, the season factors and
+ * thresholds, the recession tables) are dropped when settings are read
+ * (migration 064). Workbook named range in brackets.
  */
 export interface CalibrationParams {
-	/** Peak flow coefficient in a·Rain^b [rCalibration_PeakCoef_a]. */
-	a: number;
-	/** Peak flow exponent in a·Rain^b [rCalibration_PeakExp_b]. */
-	b: number;
-	/** Rain at or below this (mm) produces no rain-driven flow [rCalibration_RainThreshold]. */
+	/**
+	 * Rain at or below this (mm) counts as no rain for irrigation demand's
+	 * effective rain [rCalibration_RainThreshold].
+	 */
 	rainThresholdMm: number;
-	/** Rain-to-flow multiplier in summer [rCalibration_FactorSummer]. */
-	summerFactor: number;
-	/** Rain-to-flow multiplier in winter [rCalibration_FactorWinter]. */
-	winterFactor: number;
-	/** Calendar months (1–12) always treated as summer [rCalibration_SummerMths]. */
-	summerMonths: number[];
-	/** Base flow (m³/day) in the row before the first simulated day ([Flow data] S20). */
-	baseFlowInitial: number;
 	/**
 	 * Catchment area (km²) that rain falls on [rFarmSpec_AreaTotal]. null (the
 	 * default) = the sum of the farm nodes' areas, which is what the workbook's
 	 * total is; set it only to override.
 	 */
 	catchmentAreaKm2: number | null;
-	/** Rain flow / receded base flow above this resets the base flow [rCalibration_MinFlowRatioToResetBase]. */
-	baseResetRatio: number;
-	/** Outside summer months: rain today ≥ this (mm) switches to winter the same day [rCalibration_WinterTodayThresh]. */
-	winterTodayRainMm: number;
-	/** Outside summer months: rain yesterday ≥ this (mm) switches to winter today [rCalibration_WinterNextDayThresh]. */
-	winterNextDayRainMm: number;
-	/** Recession index a rain event of amplitudeM3Day starts at [rCalibration_ShiftPeakIndexLo]. */
-	shiftPeakIndexLo: number;
-	/** Recession index a vanishingly small rain event starts at [rCalibration_ShiftPeakIndexHi]. */
-	shiftPeakIndexHi: number;
-	/** Rain → flow amplitude (m³/day) that maps to shiftPeakIndexLo [rCalibration_Amplitude]. */
-	amplitudeM3Day: number;
-	/** Highest recession index used (days) [rCalibration_DaysMax]. */
-	recessionDaysMax: number;
-	/** Daily recession factor per 1-based index [rCalibration_RecessionFactors]. */
-	recessionFactors: number[];
-	/** Smoothed recession flow (m³/day) per index, descending [rCalibration_Curve]. */
-	recessionCurveM3Day: number[];
 }
+
+/**
+ * The warning a run carries when its settings still named the legacy runoff
+ * model, which engine 1.0.0 removed (issue #16): it ran GR4J instead.
+ */
+export const LEGACY_UPGRADED_WARNING =
+	'LEGACY_UPGRADED: this project was set to the legacy runoff model (b023 workbook), removed in engine 1.0.0; it ran GR4J. Check the GR4J parameters (Settings → Flow calibration) or refit them.';
+
+/** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
+export const RETIRED_CALIBRATION_KEYS = [
+	'a',
+	'b',
+	'summerFactor',
+	'winterFactor',
+	'summerMonths',
+	'baseFlowInitial',
+	'baseResetRatio',
+	'winterTodayRainMm',
+	'winterNextDayRainMm',
+	'shiftPeakIndexLo',
+	'shiftPeakIndexHi',
+	'amplitudeM3Day',
+	'recessionDaysMax',
+	'recessionFactors',
+	'recessionCurveM3Day'
+] as const;
 
 /** GR4J parameters (./runoff/gr4j.ts) plus the warm-up before day 1. */
 export interface Gr4jSettings extends Gr4jParams {
@@ -266,17 +268,19 @@ export interface ProjectSettings {
 	/** Pitman high/low MAP split used by the `hiLo` flow-share method. */
 	hiLoSplit: { hi: number; lo: number };
 	/**
-	 * Rain → natural-flow model (./runoff). 'gr4j' (the default since engine
-	 * 0.11.0) or 'legacy', the b023 recession model (./flow.ts), kept
-	 * selectable to compare with the workbook (issue #4).
+	 * Rain → natural-flow model (./runoff): 'gr4j', the only one since engine
+	 * 1.0.0 removed the legacy b023 recession model (issue #16). Not a choice
+	 * any more but the run's record of its model: a stored run whose settings
+	 * don't say 'gr4j' ran the legacy model (StoredRunoffModelId). Reading
+	 * settings maps a stored 'legacy' to 'gr4j', with a warning.
 	 */
 	runoffModel: RunoffModelId;
 	/** Parameters of the GR4J runoff model (used when runoffModel = 'gr4j'). */
 	gr4j: Gr4jSettings;
 	/**
 	 * Pan coefficient per water-year month (Oct–Sep): potential evaporation =
-	 * coefficient × A-pan. Drives the conceptual runoff models (GR4J), not the
-	 * legacy one or irrigation demand. Default 0.7 every month. Stays editable
+	 * coefficient × A-pan. Drives the runoff model (GR4J), not irrigation
+	 * demand. Default 0.7 every month. Stays editable
 	 * per month; `PAN_COEFFICIENT_PRESETS` are starting points a form can fill
 	 * the row with, not stored settings. A month outside
 	 * `PAN_COEFFICIENT_TYPICAL_MIN`–`PAN_COEFFICIENT_TYPICAL_MAX` is a run
@@ -450,45 +454,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		chirpsFitPeriod: 'all',
 		rainSource: [],
 		zeroRainRuns: defaultZeroRainSettings(),
-		calibration: {
-			a: 0.09,
-			b: 1.2,
-			rainThresholdMm: 2,
-			summerFactor: 0.1,
-			winterFactor: 1,
-			summerMonths: [1, 2, 3, 4, 5, 11, 12],
-			baseFlowInitial: 300,
-			catchmentAreaKm2: null,
-			baseResetRatio: 1.5,
-			winterTodayRainMm: 35,
-			winterNextDayRainMm: 9,
-			shiftPeakIndexLo: 0.9,
-			shiftPeakIndexHi: 3.5,
-			amplitudeM3Day: 2343944,
-			recessionDaysMax: 79,
-			// prettier-ignore
-			recessionFactors: [
-				0.255, 0.396, 0.511, 0.718, 0.829, 0.876, 0.902, 0.9283, 0.9396, 0.9492,
-				0.9577, 0.9583, 0.9613, 0.9634, 0.965, 0.9664, 0.9675, 0.9685, 0.9694, 0.9701,
-				0.9708, 0.9715, 0.9721, 0.9726, 0.9731, 0.9736, 0.974, 0.9745, 0.9749, 0.9753,
-				0.9756, 0.976, 0.9763, 0.9766, 0.9769, 0.9772, 0.9775, 0.9778, 0.978, 0.9783,
-				0.9785, 0.9787, 0.979, 0.9792, 0.9794, 0.9796, 0.9798, 0.98, 0.9802, 0.9804,
-				0.9806, 0.9808, 0.9809, 0.9811, 0.9813, 0.9814, 0.9816, 0.9818, 0.9819, 0.9821,
-				0.9822, 0.9824, 0.9825, 0.9826, 0.9828, 0.9829, 0.983, 0.9832, 0.9833, 0.9834,
-				0.9836, 0.9837, 0.9838, 0.9839, 0.984, 0.9841, 0.9843, 0.9844, 0.9845, 0.9845
-			],
-			// prettier-ignore
-			recessionCurveM3Day: [
-				10000000, 2553249, 1011087, 516665, 370965, 307530, 269396, 242995, 225572, 211947,
-				201180, 192670, 184636, 177491, 170995, 165010, 159466, 154283, 149423, 144851,
-				140520, 136417, 132529, 128831, 125301, 121930, 118711, 115625, 112677, 109849,
-				107136, 104522, 102013, 99595, 97264, 95017, 92851, 90762, 88747, 86795,
-				84912, 83086, 81316, 79608, 77952, 76346, 74789, 73278, 71812, 70390,
-				69010, 67671, 66372, 65104, 63874, 62680, 61514, 60382, 59283, 58210,
-				57168, 56150, 55162, 54197, 53254, 52338, 51443, 50568, 49718, 48888,
-				48076, 47288, 46517, 45763, 45026, 44306, 43602, 42917, 42247, 0
-			]
-		},
+		calibration: { rainThresholdMm: 2, catchmentAreaKm2: null },
 		ewrPragmaticM3PerDay: zeros,
 		ewrRules: [],
 		simulationStart: null,
@@ -1571,13 +1537,13 @@ export interface CurtailmentSummary {
 }
 
 /**
- * The runoff model's water balance over the run (engine ≥ 0.5.0; conceptual
- * models only, absent for the legacy model), in mm over the catchment:
+ * The runoff model's water balance over the run (engine ≥ 0.5.0; absent on a
+ * stored legacy run, engine < 1.0.0), in mm over the catchment:
  *   rain − aet − flow + exchange = storageEnd − storageStart.
  * The stores start the run at the level the warm-up left them.
  */
 export interface RunoffBalance {
-	model: Exclude<RunoffModelId, 'legacy'>;
+	model: RunoffModelId;
 	/** The parameters the run used (after validation). */
 	params: Record<string, number>;
 	warmupDays: number;
@@ -1816,7 +1782,7 @@ export interface WaterBalanceRow {
 	naturalFlowMm: number | null;
 	/** naturalFlowMm / rainMm; null without rain or an area. */
 	runoffCoefficient: number | null;
-	/** Runoff model store balance (GR4J only; null for legacy runs). */
+	/** Runoff model store balance (null on a stored legacy run, engine < 1.0.0). */
 	runoff: {
 		aetMm: number;
 		exchangeMm: number;

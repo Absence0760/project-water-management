@@ -96,7 +96,7 @@ export function compareEvidenceNote(side: 'A' | 'B', e: RunEvidence | null | und
  * nominated. The server refuses both cases too (409).
  */
 export function nominateBlocker(run: Pick<RunMeta, 'id' | 'legacy'>, history: readonly Nomination[]): string | null {
-	if (run.legacy) return 'A run of the legacy runoff model is workbook comparison only, so it can’t be nominated as evidence.';
+	if (run.legacy) return 'A run of the legacy runoff model (removed in engine 1.0.0) is workbook comparison only, so it can’t be nominated as evidence.';
 	if (currentNomination(history)?.runId === run.id) return 'This run is the nominated evidence run.';
 	return null;
 }

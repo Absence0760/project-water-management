@@ -37,8 +37,6 @@ export type ImportNoteCode =
 	| 'farm-demand-gross-mismatch'
 	/** A transfer names an element that isn't in [Network]; skipped. */
 	| 'transfer-unknown-element'
-	/** The calibration summer months relied on the workbook's substring match (audit M1). */
-	| 'summer-months-substring'
 	/** Runs of zero catchment rain that look like missing data (issue #2). */
 	| 'zero-rain-runs'
 	/** gaugeAsReference: the gauge column was imported as a reference gauge. */
@@ -91,8 +89,6 @@ export type UnmappedCode =
 	| 'transfer-zero-rate'
 	/** A transfer month list the workbook's substring match reads differently (audit M1; also a note). */
 	| 'transfer-months-substring'
-	/** The calibration summer months the workbook's substring match reads differently (audit M1; also a note). */
-	| 'summer-months-substring'
 	/** Specific (manual) flow shares are selected but a farm's share is blank; imported as 0. */
 	| 'flow-share-missing'
 	/** A [Network] element type other than Farm or Gauge; imported as a farm. */

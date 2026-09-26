@@ -184,7 +184,11 @@ export const GR4J_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'natural_flow', letter: 'Q', formula: '(Qr + Qd) × catchment area (km²) × 1000; Qd = MAX(0, Q1 + F)' }
 ];
 
-/** The legacy [Flow data] port (runoff/legacy.ts, flow.ts), with its workbook column letters. No stores to balance. */
+/**
+ * The legacy [Flow data] port's columns, with their workbook letters: for
+ * reading runs saved before engine 1.0.0 removed that model (issue #16). No
+ * run stores them now. No stores to balance.
+ */
 export const LEGACY_RUNOFF_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'rain_used', letter: 'R', formula: 'catchment rain, else CHIRPS, else forecast rain; 0 at or below the rain threshold' },
 	{ key: 'is_summer', letter: 'N', formula: '1 in a summer month; in winter stays 0 until a summer month, and turns 0 on enough rain today or yesterday' },

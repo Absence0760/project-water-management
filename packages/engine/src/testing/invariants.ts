@@ -205,7 +205,14 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
  * seed 4623, GR4J: n24 0.963 → 0.978; seed 1450 before the generator drew EWR rule tables). The property is a law of the rest of
  * the network, so it is checked with the trigger taken out. The trigger
  * supply rule (WP-3.8) switches to the river the same way, so it runs as
- * river first here.
+ * river first here. A borehole's annual cap (WP-3.9) is taken off too: more
+ * demand uses the cap up earlier in the water year, which moves the pumping,
+ * and the stream depletion it causes, earlier in time, so a farm downstream
+ * can get more of the river on the days it needs it (fuzz seed 2909, found by
+ * the 20 000-case soak: the lagged depletion of n2's capped borehole fell on
+ * the days n1's full-level dam needed topping up, and n1's time reliability
+ * rose 1/70 → 3/70). The caps themselves are checked by the groundwater
+ * self-check (checkGroundwater).
  */
 export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	const x = cloneInput(input);
@@ -213,6 +220,7 @@ export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	// Individual boreholes (WP-3.9): emergency mode triggers on the dam the same way.
 	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency') b.mode = 'supplemental';
 	for (const n of x.model.nodes) if (n.supplyRule === 'trigger') n.supplyRule = 'riverFirst';
+	for (const b of x.model.boreholes ?? []) b.annualCapM3 = null;
 	return x;
 }
 

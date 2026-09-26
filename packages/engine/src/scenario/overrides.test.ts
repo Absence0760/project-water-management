@@ -47,7 +47,6 @@ function base(): ModelInput {
 	const rain = Array.from({ length: days }, (_, t) => (t % 17 === 0 ? 40 : t % 5 === 0 ? 6 : 0));
 	return {
 		settings: {
-			runoffModel: 'legacy',
 			apanMm: [150, 180, 210, 220, 190, 160, 110, 80, 60, 60, 80, 110],
 			ewrPragmaticM3PerDay: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 			ewrRules: [blankEwrRuleTable('G'), blankEwrRuleTable('A')]
@@ -297,17 +296,21 @@ describe('applyScenario: each op', () => {
 	it('settings.set writes a whitelisted path, nested ones over what is there', () => {
 		const r = applyScenario(base(), [
 			{ op: 'settings.set', path: 'lakeEvapFactor', value: 0.7 },
-			{ op: 'settings.set', path: 'calibration.a', value: 0.2 },
-			{ op: 'settings.set', path: 'calibration.summerMonths', value: [12, 1, 1, 2] }
+			{ op: 'settings.set', path: 'calibration.rainThresholdMm', value: 3 },
+			{ op: 'settings.set', path: 'calibration.catchmentAreaKm2', value: 12.5 }
 		]);
 		expect(r.problems).toEqual([]);
 		expect(r.input.settings.lakeEvapFactor).toBe(0.7);
-		expect(r.input.settings.calibration).toEqual({ a: 0.2, summerMonths: [1, 2, 12] });
+		expect(r.input.settings.calibration).toEqual({ rainThresholdMm: 3, catchmentAreaKm2: 12.5 });
 	});
 
 	it('settings.set refuses an unknown path, a bad value and a window that ends before it starts', () => {
 		expect(one({ op: 'settings.set', path: 'fitRecord', value: null } as unknown as ScenarioOp).problems[0]).toMatch(/not a setting a scenario can change/);
-		expect(one({ op: 'settings.set', path: 'runoffModel', value: 'pitman' } as unknown as ScenarioOp).problems[0]).toMatch(/must be one of/);
+		// The legacy runoff model's paths (engine 1.0.0): a stored op on one names why it is refused.
+		for (const [path, value] of [['runoffModel', 'legacy'], ['calibration.a', 0.2], ['calibration.summerMonths', [1]]] as const) {
+			expect(one({ op: 'settings.set', path, value } as unknown as ScenarioOp).problems[0], path).toMatch(/legacy runoff model, removed in engine 1\.0\.0: delete this change/);
+			expect(validateScenarioOps([{ op: 'settings.set', path, value }]).errors[0], path).toMatch(/legacy runoff model, removed in engine 1\.0\.0/);
+		}
 		const r = applyScenario(base(), [
 			{ op: 'settings.set', path: 'reportStart', value: '2021-06-01' },
 			{ op: 'settings.set', path: 'reportEnd', value: '2021-01-01' }
@@ -466,7 +469,7 @@ describe('applyScenario: the whole list', () => {
 			{ op: 'node.remove', nodeId: 'A' },
 			{ op: 'cropArea.set', nodeId: 'C', cropId: 'c1', areaM2: 9 },
 			{ op: 'landCover.remove', patchId: 'lc1' },
-			{ op: 'settings.set', path: 'calibration.a', value: 0.3 },
+			{ op: 'settings.set', path: 'calibration.rainThresholdMm', value: 4 },
 			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.5 }
 		];
 		const snapshot = JSON.stringify(b);

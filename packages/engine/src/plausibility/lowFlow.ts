@@ -18,7 +18,7 @@
 // & Freer 2012). A factor of 2 either way is outside that band, so a
 // difference that big is the model's, not the gauge's.
 import type { CalibrationFlowKind } from '../project';
-import type { RunoffModelId } from '../runoff/types';
+import type { RunoffModelId, StoredRunoffModelId } from '../runoff/types';
 import { isFlow, type DrySeason } from './season';
 import { flowText } from './format';
 
@@ -58,8 +58,8 @@ export interface LowFlowComparison {
 
 export interface LowFlowCurves {
 	season: DrySeason;
-	/** The run's runoff model, so curves from runs of different models can be told apart when overlaid. */
-	runoffModel: RunoffModelId;
+	/** The run's runoff model, so curves from runs of different models (a stored legacy run, engine < 1.0.0) can be told apart when overlaid. */
+	runoffModel: StoredRunoffModelId;
 	points: number[];
 	/** In order: gauge, logger, simulated outflow, natural flow, then simulated on the gauge's and the logger's days. Curves with too few days are left out. */
 	curves: LowFlowCurve[];

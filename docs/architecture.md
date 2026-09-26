@@ -242,7 +242,7 @@ They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
 (`prepareRun`: settings, run window and aligned inputs, for the Data tab's
 series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
 `calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
-GR4J and legacy parameter tables), `runoff/pet.ts`
+GR4J parameter table; the legacy one went with that model in engine 1.0.0), `runoff/pet.ts`
 (`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012
 settings, defaults and checks; `wr2012Resolve.ts` is the run's merge),
 `uncertainty/options.ts` (ensemble options, labels and their diff),

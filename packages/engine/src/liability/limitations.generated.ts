@@ -4,13 +4,6 @@ import type { Limitation } from './limitations';
 
 export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
-		"id": "H1",
-		"source": "finding",
-		"severity": "High (structural)",
-		"title": "The rain model does not conserve water at the event scale",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist): legacy kept unchanged as workbook comparison only; GR4J is the model of record"
-	},
-	{
 		"id": "N1",
 		"source": "finding",
 		"severity": "Medium",

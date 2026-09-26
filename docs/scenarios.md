@@ -143,12 +143,10 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
 `ewrPragmaticM3PerDay`, `flowShareMethod`, `hiLoSplit.hi`, `hiLoSplit.lo`,
-`runoffModel`, `gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
+`gr4j.x1`–`gr4j.x4`, `gr4j.warmupDays`,
 `chirpsBiasCorrection`, `zeroRainRuns.mode`, `zeroRainRuns.accumulationMode`,
-`calibration.a`, `calibration.b`, `calibration.rainThresholdMm`,
-`calibration.summerFactor`, `calibration.winterFactor`,
-`calibration.baseFlowInitial`, `calibration.catchmentAreaKm2`,
-`calibration.summerMonths`, `simulationStart`, `simulationEnd`,
+`calibration.rainThresholdMm`, `calibration.catchmentAreaKm2`,
+`simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
 `calibrationFlowKind`, `pe`. Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
@@ -157,6 +155,17 @@ of potential evaporation: `{ kind: 'pan' }` with no other key, or
 a source that is not blank when trimmed, at most 600 characters. Like every
 `settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
+
+**Retired paths (engine 1.0.0, issue #16).** `runoffModel`,
+`calibration.a`, `calibration.b`, `calibration.summerFactor`,
+`calibration.winterFactor`, `calibration.baseFlowInitial` and
+`calibration.summerMonths` belonged to the legacy runoff model, which engine
+1.0.0 removed (`RETIRED_SETTINGS_PATHS` in `scenario/ops.ts`). An op on one
+is refused with "… belonged to the legacy runoff model, removed in engine
+1.0.0: delete this change": a new one when the ops are saved, a stored one
+as a problem when the scenario is checked or run. Migration 063 leaves
+stored ops alone (they are hashed), so the scenario shows the op by its path
+and the editor deletes it.
 
 **Demand scaling (`demand.scale`, engine ≥ 0.41.0, [planning-outputs.md
 R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).**
@@ -173,8 +182,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
-  every month *list* in the engine (`transfer.months`,
-  `calibration.summerMonths`); the 12-value *rows* (`demandFactor`,
+  every month *list* in the engine (`transfer.months`); the 12-value *rows* (`demandFactor`,
   `userDemandM3Day`) run Oct–Sep. Left out, every month.
 - **Categories:** `farm` (default) and `user`. One op scales one category;
   both is two ops. A gauge has no demand.

@@ -85,7 +85,7 @@ export function simulateRunoff<P, S>(
 		fill?: number;
 		trace?: boolean;
 		days?: number;
-		/** Start from this saved state (model.saveState's numbers) instead of `fill` and the warm-up (engine ≥ 0.47.0). */
+		/** Start from this saved state (model.saveState's numbers) instead of `fill` and the warm-up (engine ≥ 1.1.0). */
 		initial?: readonly number[];
 		/** Return the state at the start of this day (0 … days) as `captured`. */
 		captureAt?: number;

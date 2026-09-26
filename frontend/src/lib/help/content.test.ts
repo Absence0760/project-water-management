@@ -239,7 +239,8 @@ describe('the help text split', () => {
 describe('helpFor', () => {
 	it('finds entries by field key and by id', () => {
 		expect(helpFor('node.damCapacityM3')?.id).toBe('dam-capacity');
-		expect(helpFor('calibration.a')?.id).toBe('peak-coefficient');
+		expect(helpFor('run.is_summer')?.id).toBe('legacy-runoff-model');
+		expect(helpFor('calibration.a')).toBeUndefined();
 		expect(helpFor('ewr')?.term).toMatch(/Environmental Water Requirement/);
 		expect(helpFor('nope')).toBeUndefined();
 	});

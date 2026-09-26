@@ -13,19 +13,18 @@ const FIRST = Number(env.FUZZ_SEED ?? 1);
 const MAX_FAILURES = Number(env.FUZZ_MAX_FAILURES ?? 5);
 
 describe('forecast mode on random networks', () => {
-	it(`prefix stability on ${CASES} random networks with a forecast tail (legacy and GR4J)`, () => {
+	it(`prefix stability on ${CASES} random networks with a forecast tail`, () => {
 		const failures: string[] = [];
 		for (let seed = FIRST; seed < FIRST + CASES && failures.length < MAX_FAILURES; seed++) {
-			const runoffModel = seed % 2 ? 'gr4j' : 'legacy';
-			const bad = checkForecastPrefix(withForecastTail(randomInput(seed, { runoffModel }), seed));
-			if (bad) failures.push(`seed ${seed} (${runoffModel}): ${bad}`);
+			const bad = checkForecastPrefix(withForecastTail(randomInput(seed), seed));
+			if (bad) failures.push(`seed ${seed}: ${bad}`);
 		}
 		expect(failures).toEqual([]);
 	}, Math.max(120_000, CASES * 300));
 
 	it('an input the model refuses is refused the same way (soak seeds 3887, 15857: a simulation start after the data)', () => {
 		for (const seed of [3887, 15857]) {
-			const x = withForecastTail(randomInput(seed, { runoffModel: 'gr4j' }), seed);
+			const x = withForecastTail(randomInput(seed), seed);
 			expect(() => runForecastChecked(x), `seed ${seed}`).toThrow(/simulation end .* is before start/);
 			expect(checkForecastPrefix(x), `seed ${seed}`).toBeNull();
 		}

@@ -1,4 +1,4 @@
-// Capture and resume (engine ≥ 0.47.0, ../warmstart, docs/model.md §2.16)
+// Capture and resume (engine ≥ 1.1.0, ../warmstart, docs/model.md §2.16)
 // as checks on any input: capturing leaves the run as it was, and a run
 // resumed from the snapshot is the same days of the uninterrupted run, every
 // series to the bit, in the same order.

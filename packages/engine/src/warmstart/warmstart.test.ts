@@ -1,4 +1,4 @@
-// Model-state snapshots (engine 0.47.0, issue #53, docs/model.md §2.16):
+// Model-state snapshots (engine 1.1.0, issue #53, docs/model.md §2.16):
 // capture the state at the start of a day, resume from it, and refuse a
 // snapshot that isn't this input's. On the invented outlook catchment
 // (../outlook/testCatchment.ts) and hand-made variants of it; random
@@ -32,11 +32,6 @@ const variants: [string, ModelInput][] = [
 	['GR4J without a soil-water store', (() => {
 		const x = testCatchment();
 		x.settings.effectiveRainStoreMm = 0;
-		return x;
-	})()],
-	['the legacy runoff model', (() => {
-		const x = testCatchment({ dailyApan: true });
-		x.settings.runoffModel = 'legacy';
 		return x;
 	})()],
 	['land cover and a Reserve rule table', testCatchment({ dailyApan: true, recordWide: true })]
