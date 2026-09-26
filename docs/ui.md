@@ -569,28 +569,39 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
 `noteHref`, opens the map with its node picked).
 
 - **Map** (issue #17, option A's simplicity with nothing lost; the A2
-  board): the schematic beside a side column (one column below 900 px, the
-  schematic first). Above them, **Open as a grid** (a named group):
-  *Crop factors*, *Planted areas* and *Transfers* open in the
-  [grid modal](#grid-modal), and *Node table* switches to the Table layout;
-  editors also get **+ Add node**, which opens the new node on its form.
-  The side column holds:
-  - the **picked node's card** (`network/NodeCard.svelte`): kind ("Selected
-    · farm", "outflow gauge", "other water user") and name, its notes
-    (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
-    which opens the One node layout on it. A farm adds two tiles, *Supplied*
-    in the latest run (the newest run's summary, fetched through the Runs
-    tab's `detailCache` whenever this layout is showing; the tile tints for
-    the short and low bands, and "no demand" / "not in this run" are
-    written) and its *Flow share* in use. Then drains into, catchment area
-    (a user: what it takes, `describeUser`), a farm's dam capacity and its
-    irrigated area, a link ("20.00 ha, 1 crop") to the farm drawer. With
-    nothing picked: "Select a node on the map or in the list to see it
-    here."
-  - **All nodes**: a button per node, in the model's order, with a dot for
-    its kind (in its supply band's colour while *Colour farms by* is on), its
-    name and "→ downstream" (or "outlet"). Pressing one picks it (and marks
-    it on the schematic); picking on the schematic marks it here.
+  board), a page of its own:
+  - **Header:** "Network" and one line on what it is ("2 farms · 2 dams · 1
+    gauge · draining to Outflow gauge · 32.0 km²"); on the right the
+    **Layout** switch, a **Grids** menu (a disclosure named "Open as a grid":
+    *Crop factors*, *Planted areas* and *Transfers* open in the
+    [grid modal](#grid-modal), *Node table* switches to the Table layout;
+    Escape or a click outside closes it) and, for editors, **+ Add node**
+    (which opens the new node on its form).
+  - **Catchment map** card: *Colour farms by* in its header and the
+    schematic filling the card (`NetworkSchematic`'s `fill`: a small drawing
+    scales up to the card's width, at most 1.35× and no taller than the
+    460 px box; a big one keeps its size and scrolls, as elsewhere), then the
+    legend. Colouring by supply is **on by default** once the project has a
+    run.
+  - Beside it (one column below 900 px, the map first), two cards:
+    - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
+      farm", "outflow gauge", "other water user") and name, its notes
+      (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
+      which opens the One node layout on it. A farm has two tiles:
+      *Supplied* in the latest run (the newest run's summary, fetched through
+      the Runs tab's `detailCache` whenever this layout shows; the tile
+      tints for the short and low bands, and "no demand" / "not in this run"
+      are written) and **Dam now**, its storage at the end of that run as a %
+      of capacity (its `dam_storage` series, through `cachedSeries`, reduced
+      by `overview/damLevels.ts`; "No dam" without one). Then drains into,
+      catchment area (a user: what it takes, `describeUser`), and for a farm
+      its flow share in use, dam capacity and irrigated area, a link ("20.00
+      ha, 1 crop") to the farm drawer. With nothing picked: "Select a node on
+      the map or in the list to see it here."
+    - **All nodes**: a button per node, in the model's order, with a dot for
+      its kind (in its supply band's colour while colouring is on), its name
+      and "→ downstream" (or "outlet"). Pressing one picks it (and marks it
+      on the schematic); picking on the schematic marks it here.
 
   The Table's and One node's fields aren't on the map: every one is a click
   away (Edit, Node table, the grids), so nothing was removed.
@@ -607,8 +618,9 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
 - **Colour farms by** (above the schematic, offered once the project has a
-  run and a farm): **Nothing** (the default, the plain drawing) or **Supply,
-  latest run**. The choice is component state, not kept in the URL. On, it
+  run and a farm): **Supply, latest run** (the default once there is a run,
+  since issue #17) or **Nothing** (the plain drawing). The choice is
+  component state, not kept in the URL. On, it
   fetches the newest run's summary (`api.runs.get`, sharing the Runs tab's
   `detailCache`; a quiet status line covers loading, and a failure offers
   Retry without touching editing) and fills each farm by `fractionSupplied`
@@ -618,8 +630,10 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   value falls in the higher band. A farm with no irrigation demand in the
   run (the engine reports it as 100 %) is "no demand", dashed and unfilled;
   a farm in the model but not in the run (added since, or a gauge then) is
-  "not in this run", hatched with a dashed outline. The share is also on the
-  node's label line, its tooltip and the drainage-tree text, so nothing is
+  "not in this run", hatched with a dashed outline. The share is the node's
+  second label line on its own while colouring is on (the area and dam
+  volume move to its tooltip, so a long line can't run into the next
+  column's label), and also on its tooltip and the drainage-tree text, so nothing is
   colour-only. A second legend row lists the bands present and names the
   run ("… in run “label”, ran 2 days ago", by the viewer's calendar); with
   unsaved model edits it adds that the colours show the run, not the edits.

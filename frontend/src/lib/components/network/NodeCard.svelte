@@ -14,6 +14,7 @@
 		nodes,
 		share,
 		supply,
+		damNowPct = null,
 		planting,
 		runName,
 		readonly,
@@ -28,6 +29,8 @@
 		share: number | null;
 		/** The farm's supply in the latest run; null when there is no run (or not loaded). */
 		supply: FarmSupply | null;
+		/** The farm's dam at the end of the latest run, % of capacity (null: no dam, no run, or loading). */
+		damNowPct?: number | null;
 		planting: FarmPlanting | null;
 		/** The latest run's label, for the supply tile. */
 		runName: string | null;
@@ -68,8 +71,8 @@
 				{#if supply && supply.fraction == null}<span class="t-s">{supply.text}</span>{/if}
 			</div>
 			<div class="tile">
-				<span class="t-l">Flow share</span>
-				<span class="t-v">{share === null ? '–' : fmtPct(share, 1)}</span>
+				<span class="t-l">Dam now</span>
+				<span class="t-v">{node.damCapacityM3 >= 1 ? (damNowPct === null ? '–' : `${fmtNum(damNowPct, 0)}%`) : 'No dam'}</span>
 			</div>
 		</div>
 	{/if}
@@ -82,6 +85,7 @@
 			<div><dt>Catchment area</dt><dd class="num">{fmtNum(node.areaKm2 || 0, 2)} km²</dd></div>
 		{/if}
 		{#if node.kind === 'farm'}
+			<div><dt>Flow share</dt><dd class="num">{share === null ? '–' : fmtPct(share, 1)}</dd></div>
 			<div><dt>Dam</dt><dd class="num">{node.damCapacityM3 > 0 ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
 			<div>
 				<dt>Irrigated</dt>

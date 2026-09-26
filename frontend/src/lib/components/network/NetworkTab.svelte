@@ -5,7 +5,8 @@
 	import { page } from '$app/state';
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
-	import { detailCache } from '$lib/components/runs/cache';
+	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
+	import { damLevel } from '$lib/components/overview/damLevels';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode, type SchematicSupply } from './supplyColour';
@@ -57,7 +58,8 @@
 	const METHOD_LABEL = { area: 'by area', hiLo: 'high/low MAP split', manual: 'manual shares' } as const;
 
 	// --- colour farms by the latest run's supply (view option, component state) ---
-	let colourBy = $state<'none' | 'supply'>('none');
+	// On by default once there is a run (the map answers "who is short?" first, issue #17).
+	let colourBy = $state<'none' | 'supply'>(untrack(() => (runs?.length ? 'supply' : 'none')));
 	const latestRun = $derived(runs?.[0] ?? null);
 	let supplyRun = $state<{ id: string; summary: RunSummary } | null>(null);
 	let supplyLoading = $state(false);
@@ -254,30 +256,72 @@
 		['transfers', 'Transfers']
 	];
 	const dotBand = (id: string) => (colourBy === 'supply' ? (latestSupply?.get(id)?.band ?? null) : null);
+	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
+	let gridsOpen = $state(false);
+	let gridsEl: HTMLDetailsElement | undefined = $state();
+	function gridsKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || !gridsEl?.open) return;
+		e.preventDefault();
+		gridsOpen = false;
+		gridsEl.querySelector('summary')?.focus();
+	}
+	$effect(() => {
+		if (!gridsOpen) return;
+		const onDoc = (e: PointerEvent) => {
+			if (gridsEl && !gridsEl.contains(e.target as Node)) gridsOpen = false;
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
+	const dams = $derived(farms.filter((n) => n.damCapacityM3 >= 1).length);
+	const outletName = $derived(nodes.find((n) => n.downstreamNodeId === null)?.name || null);
+	/** The Map header's one line: what the network is. */
+	const summaryLine = $derived(
+		[
+			`${farms.length} farm${farms.length === 1 ? '' : 's'}`,
+			`${dams} dam${dams === 1 ? '' : 's'}`,
+			`${gauges.length} gauge${gauges.length === 1 ? '' : 's'}`,
+			...(users.length ? [`${users.length} other user${users.length === 1 ? '' : 's'}`] : []),
+			...(outletName ? [`draining to ${outletName}`] : []),
+			`${fmtNum(nodes.reduce((sum, n) => sum + (n.areaKm2 || 0), 0), 1)} km²`
+		].join(' · ')
+	);
+
+	// The picked farm's dam at the end of the latest run (the Dam now tile):
+	// its dam_storage series through the Runs cache (overview/damLevels.ts).
+	let damNow = $state<{ nodeId: string; pct: number } | null>(null);
+	$effect(() => {
+		const id = view === 'map' && picked?.kind === 'farm' && picked.damCapacityM3 >= 1 ? picked.id : null;
+		const run = latestRun?.id ?? null;
+		const cap = picked?.damCapacityM3 ?? 0;
+		const refs = run ? (detailCache.get(run)?.series ?? []) : [];
+		void supplyRun;
+		if (!id || !run || !refs.some((r) => r.key === 'dam_storage' && r.nodeId === id)) {
+			damNow = null;
+			return;
+		}
+		cachedSeries(run, 'dam_storage', id, () => api.runs.series(projectId, run, 'dam_storage', id))
+			.then((s) => {
+				const l = damLevel({ nodeId: id, name: '', capacityM3: cap, minPct: 0 }, s);
+				if (picked?.id === id) damNow = l ? { nodeId: id, pct: l.endPct } : null;
+			})
+			.catch(() => {
+				if (picked?.id === id) damNow = null;
+			});
+	});
 	const totalArea = $derived(nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 	const farmArea = $derived(farms.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 </script>
 
-<section class="panel" aria-labelledby="sch-h">
-	<div class="panel-head">
-		<h2 id="sch-h">Schematic</h2>
-		{#if nodes.length}
-			<div class="seg" role="group" aria-label="Layout">
-				<button type="button" class="btn btn-sm" aria-pressed={view === 'map'} onclick={() => setView('map')}>Map</button>
-				<button type="button" class="btn btn-sm" aria-pressed={view === 'table'} onclick={() => setView('table')}>Table</button>
-				<button type="button" class="btn btn-sm" aria-pressed={view === 'detail'} onclick={() => setView('detail')}>One node</button>
-			</div>
-		{/if}
-		<span class="muted small">
-			{#if nodes.length}
-				{farms.length} farm{farms.length === 1 ? '' : 's'} · {gauges.length} gauge{gauges.length === 1 ? '' : 's'} ·
-				{#if users.length}{users.length} other user{users.length === 1 ? '' : 's'} ·{/if}
-				{fmtNum(farmArea, 1)} km² of farm area
-			{:else}
-				Water flows down the page to the outflow gauge
-			{/if}
-		</span>
+{#snippet layoutSwitch()}
+	<div class="seg" role="group" aria-label="Layout">
+		<button type="button" class="btn btn-sm" aria-pressed={view === 'map'} onclick={() => setView('map')}>Map</button>
+		<button type="button" class="btn btn-sm" aria-pressed={view === 'table'} onclick={() => setView('table')}>Table</button>
+		<button type="button" class="btn btn-sm" aria-pressed={view === 'detail'} onclick={() => setView('detail')}>One node</button>
 	</div>
+{/snippet}
+
+{#snippet colourByControl()}
 	{#if latestRun && farms.length}
 		<div class="colour-by">
 			<label for="sch-colour">Colour farms by</label>
@@ -297,21 +341,9 @@
 			{/if}
 		</div>
 	{/if}
-	{#if view === 'map' && nodes.length}
-		<div class="map-tools">
-			<div class="grid-links" role="group" aria-labelledby="grid-links-l">
-				<span class="muted small" id="grid-links-l">Open as a grid</span>
-				{#each GRID_LINKS as [id, label] (id)}<a class="btn btn-sm" href={withParam(page.url, 'grid', id)}>{label}</a>{/each}
-				<button type="button" class="btn btn-sm" onclick={() => setView('table')}>Node table</button>
-			</div>
-			{#if !readonly}
-				<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" onclick={add}>+ Add node</button>
-			{/if}
-		</div>
-	{/if}
-	<div class:map-layout={view === 'map' && nodes.length > 0}>
-	<div class="map-main">
+{/snippet}
+
+{#snippet drawing(fill: boolean)}
 	<NetworkSchematic
 		{nodes}
 		transfers={editor.model.transfers}
@@ -320,17 +352,48 @@
 		editable={!readonly}
 		onreparent={reparent}
 		{supply}
+		{fill}
 	/>
+{/snippet}
+
+{#if view === 'map' && nodes.length}
+	<!-- Map layout (issue #17, option A · A2): a page of its own. The header
+	     names it and holds its actions; the map card fills the width beside the
+	     picked node and the node list. -->
+	<div class="net-head">
+		<div class="net-title">
+			<h2 id="net-map-h">Network</h2>
+			<p class="muted" data-testid="network-summary">{summaryLine}</p>
+		</div>
+		<div class="net-actions">
+			{@render layoutSwitch()}
+			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
+				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
+				<div class="grids-pop" role="group" aria-label="Open as a grid">
+					{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={() => (gridsOpen = false)}>{label}</a>{/each}
+					<button type="button" onclick={() => setView('table')}>Node table</button>
+				</div>
+			</details>
+			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add node</button>{/if}
+		</div>
 	</div>
-	{#if view === 'map' && nodes.length}
+	<div class="map-layout">
+		<section class="panel map-card" aria-labelledby="sch-h">
+			<div class="panel-head">
+				<h3 id="sch-h">Catchment map</h3>
+				{@render colourByControl()}
+			</div>
+			{@render drawing(true)}
+		</section>
 		<aside class="map-side" aria-label="Nodes">
-			<div class="side-box">
+			<section class="panel side-box" aria-label="Selected node">
 				{#if picked}
 					<NodeCard
 						node={picked}
 						{nodes}
 						share={shareOf(nodes.indexOf(picked))}
 						supply={picked.kind === 'farm' ? (latestSupply?.get(picked.id) ?? null) : null}
+						damNowPct={picked.kind === 'farm' && damNow?.nodeId === picked.id ? damNow.pct : null}
 						planting={picked.kind === 'farm' ? farmPlanting(editor.model, picked.id) : null}
 						runName={latestName}
 						{projectId}
@@ -342,8 +405,8 @@
 				{:else}
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
 				{/if}
-			</div>
-			<div class="side-box">
+			</section>
+			<section class="panel side-box" aria-labelledby="all-nodes-h">
 				<h3 class="list-h" id="all-nodes-h">All nodes</h3>
 				<ul class="node-list" aria-labelledby="all-nodes-h">
 					{#each nodes as n (n.id)}
@@ -357,11 +420,27 @@
 						</li>
 					{/each}
 				</ul>
-			</div>
+			</section>
 		</aside>
-	{/if}
 	</div>
-	{#if view !== 'map' && pickedFarm && pickedPlanting}
+{:else}
+<section class="panel" aria-labelledby="sch-h">
+	<div class="panel-head">
+		<h2 id="sch-h">Schematic</h2>
+		{#if nodes.length}{@render layoutSwitch()}{/if}
+		<span class="muted small">
+			{#if nodes.length}
+				{farms.length} farm{farms.length === 1 ? '' : 's'} · {gauges.length} gauge{gauges.length === 1 ? '' : 's'} ·
+				{#if users.length}{users.length} other user{users.length === 1 ? '' : 's'} ·{/if}
+				{fmtNum(farmArea, 1)} km² of farm area
+			{:else}
+				Water flows down the page to the outflow gauge
+			{/if}
+		</span>
+	</div>
+	{@render colourByControl()}
+	{@render drawing(false)}
+	{#if pickedFarm && pickedPlanting}
 		<p class="picked small" data-testid="picked-farm">
 			<strong>{pickedFarm.name || '(unnamed)'}</strong>:
 			{#if pickedPlanting.planted}
@@ -373,6 +452,7 @@
 		</p>
 	{/if}
 </section>
+{/if}
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
 
@@ -905,41 +985,97 @@
 		margin: 0.5rem 0 0;
 		color: var(--text-2);
 	}
-	/* Map layout (issue #17, A2): the schematic beside the picked node and the node list. */
-	.map-tools {
+	/* Map layout (issue #17, A2): a header, then the map card beside the picked node and the node list. */
+	.net-head {
 		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
 		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.4rem;
-		margin: 0 0 0.6rem;
+		gap: 0.75rem 1.5rem;
+		margin: 0 0 1rem;
 	}
-	.grid-links {
+	.net-title h2 {
+		margin: 0;
+		font-size: 1.6rem;
+	}
+	.net-title p {
+		margin: 0.2rem 0 0;
+		font-size: 0.9rem;
+	}
+	.net-actions {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
-	.map-tools .spacer {
-		flex: 1;
+	.grids-menu {
+		position: relative;
+	}
+	.grids-menu summary {
+		list-style: none;
+		cursor: pointer;
+	}
+	.grids-menu summary::-webkit-details-marker {
+		display: none;
+	}
+	.grids-pop {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 4px);
+		z-index: 20;
+		display: grid;
+		min-width: 12rem;
+		padding: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	.grids-pop :is(a, button) {
+		display: block;
+		width: 100%;
+		min-height: 36px;
+		padding: 0.45rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-size: 0.9rem;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.grids-pop :is(a, button):hover {
+		background: var(--surface-2);
 	}
 	.map-layout {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 21rem;
+		grid-template-columns: minmax(0, 1fr) 22rem;
 		gap: 1rem;
 		align-items: start;
 	}
-	.map-main {
+	.map-card {
+		margin: 0;
 		min-width: 0;
+	}
+	.map-card .panel-head {
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+	}
+	.map-card h3 {
+		margin: 0;
+		font-size: 1.05rem;
+	}
+	.map-card .colour-by {
+		margin: 0;
 	}
 	.map-side {
 		display: grid;
 		gap: 0.75rem;
 	}
 	.side-box {
-		padding: 0.85rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
+		margin: 0;
 	}
 	.pick-hint {
 		margin: 0;
