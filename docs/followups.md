@@ -2280,17 +2280,16 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `ingest/ingest.db.test.ts` (a key pushing in batches can't raise its
       own limit; another key's and a person's days still count),
       `series/hold.test.ts`.
-- [ ] **The ingest hold has no reference for a series one key fills.** When
-      the days left without the key's own are fewer than the outlier rule's
-      100 (a logger series nothing else writes), `limitWithout` falls back
-      to the series without the push only, which the key's earlier pushes
-      shape, so slow poisoning of such a series still lifts its limit
-      (053 closed it for series with other sources). Durable fix: take the
-      limit for those days from what a person last accepted, the inputs of
-      the project's latest manual run (`run_input_series`), which a key
-      can't write. Trigger: the first production gateway key that is the
-      only writer of its series, or a hold that should have fired and
-      didn't.
+- [x] **The ingest hold has no reference for a series one key fills.**
+      Fixed in 055_accepted_series.sql: `run_input_series.series_id` records
+      which series each input of a run was read from, and when the series
+      without the key's days is too short to judge by, the limit comes from
+      the latest manual run's input of that series (what a person accepted;
+      `limitFrom: 'accepted'`). Until a manual run has read the series the
+      limit is deliberately the key-shaped one (`limitFrom: 'own'`, said in
+      the held event, the response and the History line): security.md §
+      API keys gives the reasoning. Tests: `ingest/ingest.db.test.ts`,
+      `series/hold.test.ts`.
 - [x] **Deleting an assessor's account is refused (session B, WP-3.3).**
       Fixed in 052_scenario_decider_deletion.sql: `scenario_guard` (from
       045's definition) lets an update through untouched when its only

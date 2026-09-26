@@ -310,10 +310,24 @@ and nothing else.
   - the outlier rule needs 100 non-zero days in the series, so a new or
     short series is checked for negatives only;
   - when the days left without the key's own are too few for the rule (a
-    series the key alone fills, like a logger's), the limit falls back to
-    the series without the push only, which that key's earlier pushes still
-    shape (followups.md § POPIA and the Step 2 release tracks a reference
-    for that case).
+    series the key alone fills, like a logger's), the limit comes from what
+    a person last **accepted**: the values the project's latest manual run
+    read from that series (`run_input_series.series_id`, read by the key
+    through `app_api_key_accepted_series`, 055), which a key can't write,
+    since it can't make a run. Running the model is already what ends a
+    hold, so it is the same act of review. Those values fill the key's
+    days; days a person or a feed wrote since count as they are now. A
+    poisoned day a person ran the model over becomes part of the
+    reference: the reference is as good as that review;
+  - **until a manual run has read the series** (or read fewer than 100
+    non-zero days of it), there is no accepted reference, and the limit is
+    deliberately the series without the push only, which that key's
+    earlier pushes shape (`limitFrom: 'own'` in the held event and the
+    response; the History line says the range was the key's own). The
+    alternative, no outlier limit until a person runs the model, would let
+    even one absurd value through; this still catches that, and a key
+    poisoning slowly can lift it only until the first manual run. A run
+    saved before 055 records no series, so it is no reference either.
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
@@ -321,8 +335,9 @@ and nothing else.
   revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
   handler waiting, a person's run ending it, a person's merge not held; a
   key pushing in batches held by the limit without its own days, another
-  key's and a person's days counting, the guard's directions),
-  `series/hold.test.ts`.
+  key's and a person's days counting, the guard's directions; a key that
+  alone fills a series held by the accepted values, a genuine value passing,
+  the `own` bootstrap before a manual run), `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route

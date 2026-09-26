@@ -649,3 +649,71 @@ describe('the hold judges a key without its own earlier days (053)', () => {
 		expect(await withUser(viewer.id, async (db) => (await db.query('SELECT 1 FROM series_key_days WHERE project_id = $1', [pid])).rows)).toEqual([]);
 	});
 });
+
+// A series only the key writes (a logger's): without the key's own days
+// nothing is left to judge by, so the hold takes the limit from what a
+// person last accepted, the values the latest manual run read from the
+// series (055_accepted_series; series/hold.ts). Until a manual run has read
+// it, the limit is the series the key shaped (`own`), and says so.
+describe('a key that alone fills a series is judged by what a person last accepted (055)', () => {
+	let pid: string;
+	let key: { id: string; secret: string };
+	const day = (n: number) => new Date(Date.UTC(2022, 0, 1 + n)).toISOString().slice(0, 10);
+	// 600 days of 10 mm every 5th day (a limit of 50 mm), and the 20 days of 45 mm that would lift it to 225 mm.
+	const history = Array.from({ length: 600 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+	async function slowPoison(name: string) {
+		for (let i = 0; i < 5; i++) {
+			const res = await merge(key.secret, rain(day(4 * i), [45, 45, 45, 45], name));
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			expect(res.body.rerunHeld, `batch ${i}`).toBeNull();
+		}
+	}
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Logger only' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const farm = node('Upper', outlet.id);
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+		key = await newKey(pid, { name: 'Logger gateway' });
+		// Every day of both series is the key's: '' is the one the model reads (the first rain series by name), 'spare' no run reads.
+		for (const name of ['', 'spare']) {
+			const res = await merge(key.secret, rain('2020-01-01', history, name));
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+		}
+	});
+
+	it('records which series a manual run read', async () => {
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'checked' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const [read] = await asOwner(
+			`SELECT t.name FROM run_input_series i JOIN time_series t ON t.id = i.series_id WHERE i.run_id = $1 AND i.kind = 'rain_catchment_mm'`,
+			[run.body.run.id]
+		);
+		expect(read).toEqual({ name: '' });
+		// A key reads that reference only for a series it may write (positive control: its own).
+		const [series] = await asOwner(`SELECT id FROM time_series WHERE project_id = $1 AND kind = 'rain_catchment_mm' AND name = ''`, [pid]);
+		const own = await withApiKey(key.id, async (db) => (await db.query('SELECT cardinality("values") AS n FROM app_api_key_accepted_series($1)', [series.id])).rows);
+		expect(own).toEqual([{ n: 600 }]);
+		const other = await newKey(otherProjectId, { name: 'Elsewhere' });
+		expect(await withApiKey(other.id, async (db) => (await db.query('SELECT 1 FROM app_api_key_accepted_series($1)', [series.id])).rows)).toEqual([]);
+	});
+
+	it('holds a key slowly poisoning the series it alone writes, by the accepted values', async () => {
+		await slowPoison('');
+		const res = await merge(key.secret, rain('2022-02-01', [200]));
+		expect(res.body.rerunHeld).toMatchObject({ outlier: 1, limitFrom: 'accepted', examples: [{ date: '2022-02-01', value: 200 }] });
+		// Positive control: a genuine day inside what the person accepted goes through.
+		expect((await merge(key.secret, rain('2022-02-02', [40]))).body.rerunHeld).toBeNull();
+	});
+
+	it('before any manual run has read a series, judges it by the series the key shaped, and says so', async () => {
+		await slowPoison('spare');
+		// Lifted to 225 mm by the key's own batches: 200 passes, the documented weakness of this bootstrap.
+		expect((await merge(key.secret, rain('2022-02-01', [200], 'spare'))).body.rerunHeld).toBeNull();
+		const res = await merge(key.secret, rain('2022-02-02', [5000], 'spare'));
+		expect(res.body.rerunHeld).toMatchObject({ outlier: 1, limitFrom: 'own' });
+	});
+});

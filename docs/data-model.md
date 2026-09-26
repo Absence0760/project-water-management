@@ -573,6 +573,18 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   the end of the statement, so deleting a whole project still cascades, but
   no statement can leave a run pointing at a missing blob). Index
   `(project_id, sha256)` covers both foreign keys and the lookups below.
+  `series_id` (055_accepted_series): the series the kind was read from (the
+  first of the kind by name, `loadModelInput`), set by `storeRun` for a run
+  of the live model (`RunPlan.seriesIds`); NULL for a scenario run, a run
+  before 055 (no backfill: which series it read can't be known for
+  certain), or once the series is deleted (`(project_id, series_id)` →
+  `time_series (project_id, id)` `ON DELETE SET NULL (series_id)`, covered by
+  `(project_id, series_id)`). The `run_input_series_series_kind` trigger
+  refuses a series of another kind. The ingest hold reads the latest manual
+  run's input of a series as a person's accepted values, through
+  `app_api_key_accepted_series(p_series)` (`SECURITY DEFINER`: a key reads no
+  run; only for a series of the key's project it may write; the latest
+  `trigger = 'manual'`, non-scenario run whose input names the series).
 - **Writes.** `storeRun` stores the inputs last, after the outputs, under
   the project's run lock (`lockProjectRuns`, the advisory lock `trimRuns`
   already took): it asks which of the run's hashes the project already holds,
@@ -1321,7 +1333,9 @@ merges daily readings without a session (WP-2.9;
   project's rows. `series_key_days_guard` holds each to its direction (a key
   only adds days, a person only releases them, no row moves), so neither can
   move a day into or out of a key's record the other way. `water_app` may
-  update `days` only (the catalogue test's column-only list).
+  update `days` only (the catalogue test's column-only list). For a series
+  the key alone fills, the hold's reference is the latest manual run's
+  input of it (`run_input_series.series_id`, 055, § Stored run inputs).
 - `app_api_key_lookup(p_prefix)` (`SECURITY DEFINER`): the row for a prefix
   (id, project id and name, hash, name, scopes, allowed series, live) for
   the backend's constant-time hash comparison.
