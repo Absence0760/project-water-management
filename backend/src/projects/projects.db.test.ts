@@ -120,7 +120,7 @@ describe('projects', () => {
 		const { projectId } = await projectWithModel(u);
 		const days = 60;
 		const put = (kind: string, values: number[]) =>
-			u.call('PUT', `/projects/${projectId}/series`, { kind, name: 'x', unit: 'm3/s', startDate: '2020-10-01', values });
+			u.call('PUT', `/projects/${projectId}/series`, { kind, name: 'x', unit: kind.startsWith('rain_') ? 'mm' : 'm3/s', startDate: '2020-10-01', values });
 		expect((await put('rain_catchment_mm', new Array(days).fill(0))).status).toBe(200);
 		expect((await put('flow_reference_m3s', new Array(days).fill(5))).status).toBe(200);
 		expect((await put('flow_neighbour_m3s', new Array(days).fill(5))).status).toBe(400);

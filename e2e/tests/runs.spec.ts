@@ -353,3 +353,28 @@ test('flow shares over 100 % stop the Run button and say why, until they fit', a
 	await expect(button).toBeEnabled();
 	await expect(page.getByTestId('shares-over')).toHaveCount(0);
 });
+
+test('with a gauge covering part of the run, the flow-duration curves rank the observed days, and the whole run is a click away', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'FDC on observed days');
+	// The gauge reads only the second half of the 120-day run.
+	const flow = syntheticFlow(120).map((v, i) => (i < 60 ? null : v));
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: flow });
+	await createRun(page.request, project.id, 'Half gauged');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const fdc = page.locator('#res-fdc');
+	const days = fdc.getByRole('group', { name: 'Days the curves rank' });
+	await expect(days.getByRole('button', { name: 'Observed days' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(fdc).toContainText('Every curve ranks the 60 days with an observed reading, so they compare like with like.');
+	await days.getByRole('button', { name: 'Whole run' }).click();
+	await expect(fdc).toContainText('Natural and simulated flow rank all 120 days of the run; observed flow only its 60 days with a reading.');
+});
+
+test('with a gauge covering the whole run there is no choice of days to make (positive control)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'FDC fully gauged');
+	await createRun(page.request, project.id, 'Fully gauged');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.locator('#res-fdc').getByRole('img', { name: /Flow-duration curve/ })).toBeVisible();
+	await expect(page.locator('#res-fdc').getByRole('group', { name: 'Days the curves rank' })).toHaveCount(0);
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exceedanceGrid, flowAtExceedance, flowDurationCurves, percentileFlows, sortedDescending } from './fdc';
+import { exceedanceGrid, finiteCount, flowAtExceedance, flowDurationCurves, onDaysOf, percentileFlows, sortedDescending } from './fdc';
 
 describe('sortedDescending', () => {
 	it('drops gaps and sorts high → low', () => {
@@ -56,5 +56,23 @@ describe('percentileFlows', () => {
 	it('reports Q10/Q50/Q90/Q95', () => {
 		const q = percentileFlows(Array.from({ length: 99 }, (_, i) => i + 1));
 		expect(q).toEqual({ q10: 90, q50: 50, q90: 10, q95: 5, n: 99 });
+	});
+});
+
+describe('onDaysOf', () => {
+	it('keeps a series only on the days the mask has a reading, so both curves rank the same days', () => {
+		const sim = [10, 20, 30, 40, 50, 60];
+		const obs = [NaN, null, 3, 4, null, 6];
+		expect(onDaysOf(sim, obs)).toEqual([null, null, 30, 40, null, 60]);
+		expect(finiteCount(onDaysOf(sim, obs))).toBe(finiteCount(obs));
+		// The hydrologist's case: a gauge over the dry half only moves the median a long way.
+		const wet = Array.from({ length: 100 }, (_, i) => (i < 50 ? 10 : 1));
+		const gauge = wet.map((_, i) => (i < 50 ? null : 1));
+		expect(percentileFlows(wet).q50).toBeCloseTo(5.5);
+		expect(percentileFlows(onDaysOf(wet, gauge)).q50).toBe(1);
+	});
+
+	it('treats days past the end of the mask as gaps', () => {
+		expect(onDaysOf([1, 2, 3], [1])).toEqual([1, null, null]);
 	});
 });

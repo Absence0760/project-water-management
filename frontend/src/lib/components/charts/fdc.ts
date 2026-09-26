@@ -67,3 +67,29 @@ export function percentileFlows(values: ArrayLike<number | null>) {
 		n: s.length
 	};
 }
+
+/**
+ * `values` kept only on the days `mask` has a finite value (null elsewhere):
+ * so simulated and natural flow can be ranked over exactly the days the gauge
+ * read, not the whole run. A curve built from different days than the
+ * observed one isn't comparable with it (a gauge covering half the record put
+ * simulated Q50 a factor of 3 away from its value on the observed days).
+ */
+export function onDaysOf(values: ArrayLike<number | null>, mask: ArrayLike<number | null>): (number | null)[] {
+	const out: (number | null)[] = new Array(values.length);
+	for (let i = 0; i < values.length; i++) {
+		const m = i < mask.length ? mask[i] : null;
+		out[i] = m != null && Number.isFinite(m) ? (values[i] ?? null) : null;
+	}
+	return out;
+}
+
+/** How many finite values a series has. */
+export function finiteCount(values: ArrayLike<number | null>): number {
+	let n = 0;
+	for (let i = 0; i < values.length; i++) {
+		const v = values[i];
+		if (v != null && Number.isFinite(v)) n++;
+	}
+	return n;
+}

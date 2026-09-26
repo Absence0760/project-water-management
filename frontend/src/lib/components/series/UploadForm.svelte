@@ -5,7 +5,7 @@
 	// …/series/merge), which adds new days and corrects overlapping ones but
 	// never erases a stored value the file leaves blank.
 	import { untrack } from 'svelte';
-	import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { fromEpochDay, toEpochDay, unitOptions, type SeriesMeta } from '@water-management/engine';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -64,12 +64,10 @@
 			? mergePreview(targetValues, { startDate: parsed.startDate, values: parsed.values })
 			: null
 	);
-	const normUnit = (u: string) => u.trim().toLowerCase().replace(/3/g, '³').replace(/\s+/g, '');
-	const unitMismatch = $derived(target && unit.trim() && normUnit(target.unit) !== normUnit(unit) ? target.unit : null);
-	// Updating a stored series: use its unit unless the user typed one.
-	$effect(() => {
-		if (target && !unitTouched) unit = target.unit;
-	});
+	// Series are stored in their kind's canonical unit (m³/s, mm); the server converts
+	// an upload in any of these (engine units.ts), so a file in l/s is read as l/s.
+	const units = $derived(unitOptions(kind));
+	const converted = $derived(unit && units[0] && unit !== units[0] ? units[0] : null);
 
 	// Stored values of the target series, for the merge preview.
 	$effect(() => {
@@ -97,7 +95,8 @@
 
 	function onKind(k: string) {
 		kind = k;
-		if (!unitTouched) unit = defaultUnit(k);
+		// Keep a chosen unit while it still fits the kind (l/s for another flow); else the kind's own.
+		if (!unitTouched || !unitOptions(k).includes(unit)) unit = defaultUnit(k);
 		const same = list.filter((s) => s.kind === k);
 		if (same.length === 1) name = same[0]!.name;
 		else if (!same.some((s) => s.name === name.trim())) name = '';
@@ -218,7 +217,9 @@
 		</div>
 		<div class="field unit">
 			<label for={id('unit')}>Unit</label>
-			<input id={id('unit')} required maxlength="20" bind:value={unit} oninput={() => (unitTouched = true)} />
+			<select id={id('unit')} required bind:value={unit} onchange={() => (unitTouched = true)}>
+				{#each units as u (u)}<option value={u}>{u}</option>{/each}
+			</select>
 		</div>
 	</div>
 	{#if target}
@@ -230,8 +231,8 @@
 	{:else}
 		<p class="hint muted">Creates a new series. Pick an existing name to append to it instead.</p>
 	{/if}
-	{#if unitMismatch}
-		<p class="warn-text">The stored series is in {unitMismatch}; this upload says {unit}. Values are not converted.</p>
+	{#if converted}
+		<p class="hint muted" data-testid="unit-converted">Values in {unit} are converted to {converted} when saved.</p>
 	{/if}
 	{#if parseError}
 		<div class="alert alert-error" role="alert">{fileName}: {parseError}</div>

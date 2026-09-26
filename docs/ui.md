@@ -88,6 +88,10 @@ shorter than the cap looks as before.
   days are added and overlapping days corrected. Days the file leaves blank
   keep their stored value. The preview counts new, changed and unchanged
   days before anything is sent. **Replace** overwrites the whole series.
+  **Unit** is a list of the units the kind accepts (`unitOptions`: m³/s, l/s,
+  m³/day, m³/h, ML/day for flow; mm, cm, in for rain), the kind's own first;
+  any other says "Values in l/s are converted to m³/s when saved", and the
+  server stores the converted values (api.md § Units).
 - After an upload a banner offers **Re-run model**. Every tab notes new data
   since the last run: a rainfall series that reaches past the
   latest run's end, or was updated after it (`newDataSinceRun`).
@@ -1214,7 +1218,11 @@ run's report to chosen members every week or month.
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. The
-  flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
+  flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
+  record misses some of the run's days, every curve and the Q table rank only
+  the days with a reading by default, `onDaysOf`, so they compare like with
+  like, and **Observed days / Whole run** switches; the caption says which
+  days each curve ranks),
   EWR against outflow, **Reserve compliance by month** when the run has a rule
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
@@ -1261,7 +1269,8 @@ run's report to chosen members every week or month.
   note when it used another dry season); *Simulated outflow over* switches this
   run's curve to one record's days; a verdict on the Q90 comparison and a
   Q70 / Q90 / Q95 table. Farm detail (dam
-  storage as % of capacity, supply against demand), and an explorer for any
+  storage as % of the capacity the run had, from its model snapshot, not
+  today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
