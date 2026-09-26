@@ -205,6 +205,34 @@ variable "fetcher_reserved_concurrency" {
   default     = 2
 }
 
+# --- Server-side reports (reports.tf) --------------------------------------------
+
+variable "renderer_image_tag" {
+  description = "Tag of the renderer image in its ECR repository (a release version, e.g. 0.4.0) that the renderer Lambda is created from. Empty (the default) creates the bucket, queues and repository but not the function, because Lambda can't be created before its image exists: push one with deploy-backend.yml first (docs/deployment.md § Reports). Later releases move the function's image themselves; this is only its first."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.renderer_image_tag))
+    error_message = "renderer_image_tag must be empty or a release version like 0.4.0."
+  }
+}
+
+variable "renderer_memory_mb" {
+  description = "Renderer Lambda memory. Headless Chromium printing the report needs ~1 GB; 2048 MB also buys the CPU that keeps a render to seconds."
+  type        = number
+  default     = 2048
+  validation {
+    condition     = var.renderer_memory_mb >= 1536 && var.renderer_memory_mb <= 10240
+    error_message = "At least 1536 MB (Chromium), at most Lambda's 10240."
+  }
+}
+
+variable "renderer_reserved_concurrency" {
+  description = "Max concurrent renderer Lambda executions: bounds spend and how many Chromiums load the site at once. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  type        = number
+  default     = 2
+}
+
 variable "jobs_backlog_alarm_seconds" {
   description = "Alarm when the oldest due job has waited this long. The schedule ticks every 5 minutes, so anything under ~10 minutes would fire on a normal wait."
   type        = number

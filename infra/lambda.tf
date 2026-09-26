@@ -134,6 +134,10 @@ resource "aws_lambda_function" "backend" {
       # to the jobs queue; the EventBridge tick catches any that are lost.
       JOB_TRANSPORT  = "sqs"
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
+
+      # Server-side reports (reports.tf): the API pre-signs PDF downloads.
+      STORAGE        = "s3"
+      REPORTS_BUCKET = aws_s3_bucket.reports.bucket
     }
   }
 

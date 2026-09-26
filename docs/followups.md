@@ -1295,6 +1295,42 @@ role and not before it.
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
 
+## Server-side reports (WP-2.15 Phase B, issue #26)
+
+- [ ] **The renderer image has never been built or run on Lambda.** CI and
+      the gates cover the render path with the local Chromium (the worker's
+      inline renderer, MinIO, Mailpit, e2e) and the renderer Lambda's
+      message handling with stubs; `backend/renderer.Dockerfile` (Playwright
+      image + `aws-lambda-ric`) is first built by the first
+      `backend@` release. Before relying on it: build it once locally
+      (`docker build -f backend/renderer.Dockerfile backend` after
+      `infra/scripts/package-lambdas.sh`) and invoke it with the Lambda
+      runtime interface emulator against a local stack; then after the first
+      deploy, render one report in production and check its alarms.
+- [x] **The DB test files ran in parallel**, although
+      `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
+      `db` project and several tests say "a tick here sees only this file's
+      jobs": Vitest 2 ignores that option inside a workspace project
+      (checked 2026-09-25 with two sleeping test files). One file's tick then
+      claimed another's jobs, and with the report tests' queued renders in
+      the mix the job and feed tests failed intermittently. Fixed at the
+      root on main (b92608e): the `db` project pins one fork
+      (`poolOptions.forks.singleFork`), which does serialise the files. The
+      report branch's duplicate `--no-file-parallelism` flag was dropped at
+      merge. Making every tick-based test hermetic would let the files run in
+      parallel again.
+- [ ] **MinIO's upstream image is gone** (the `minio/minio` Docker Hub
+      repository answers "pull access denied"; MinIO stopped publishing
+      community images in 2025). docker-compose pins the community fork's
+      build (`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, github.com/pgsty/minio,
+      ~800k pulls). Re-check it on each bump; the alternative is any other
+      S3-compatible local server, since the app only uses the S3 API.
+- [ ] **playwright-core is pinned in two places**: `backend/package.json`
+      (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
+      plus the image tag in `backend/renderer.Dockerfile`. They must move
+      together (the Chromium build is tied to the version); Dependabot bumps
+      them separately.
+
 ## Housekeeping
 
 - During early development, work is pushed straight to `main`, without PRs, at

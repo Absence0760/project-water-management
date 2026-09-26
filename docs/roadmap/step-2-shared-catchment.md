@@ -1742,7 +1742,20 @@ for alert counts.
 > disclaimer (D10); the notes are the run's notes (WP-2.7 later). The Overview
 > published-card entry point waits for WP-2.3. The farmer access test (a
 > farmer gets 403) waits for WP-2.1's farmer role; today a non-member gets the
-> workspace's not-found message. Phase B is not started (D9).
+> workspace's not-found message. **Phase B built** (issue #26;
+> `backend/src/reports/`, `022_reports.sql`, `infra/reports.tf`;
+> [architecture.md § Server-side reports](../architecture.md#server-side-reports)):
+> on-demand PDFs ("Generate PDF" / "Email me the PDF"), emailed links and
+> weekly or monthly schedules, rendered from the same route in headless
+> Chromium; a render of the largest example catchment takes ~3 s locally.
+> Departures from the plan below: the worker can't host Chromium or reach the
+> site, so production renders in a container-image renderer Lambda outside
+> the VPC, fed by its own queues like the data feeds' fetcher (the worker
+> keeps the database side); emails link to a sign-in-gated app page, not the
+> pre-signed URL (which lasts an hour); `POST /reports` also takes `email`,
+> and viewers may ask for a PDF (the job table's insert policy is widened for
+> `report_render` only); farmers get `403` on all of it (WP-2.1 landed
+> first). Not deployed: plan only.
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
 consultant copy-pasting from Excel.

@@ -23,6 +23,7 @@ storage.
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -850,6 +851,62 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   or `the source’s data could not be read: the grid has no data at …`.
 - Strangers get `404`; a viewer's writes and an editor's attach / change /
   remove get `403`.
+
+## Reports
+
+Server-side PDFs of the printable report ([ui.md § Report](./ui.md#report);
+WP-2.15 Phase B, [architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+A `report_render` job prints the report route in headless Chromium, as the
+member who asked (or, for a schedule, the editor who saved it), under RLS.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/reports` | `{ runId?, email? }` | `202 { jobId }`: a render of `runId` (the latest run without one) is queued. `email`: `true` emails the link to you; a list of user ids emails it to those members (editors and owners only; `403` for a viewer naming anyone else). `404` a `runId` not in the project; `409` the project has no runs; `429` over 10 on-demand PDFs an hour per user and project | viewer |
+| GET | `/projects/:id/reports/:jobId` | – | `{ report: ReportView, url? }`. `url` is a pre-signed download link (an hour) once `status` is `done`. `404` unknown job, or not a report's | viewer |
+| GET | `/projects/:id/report-schedules` | – | `{ schedules: ScheduleView[] }` | viewer |
+| POST | `/projects/:id/report-schedules` | `ScheduleInput` | `201 { schedule: ScheduleView }`. `409` past 10 schedules per project | editor |
+| PATCH | `/projects/:id/report-schedules/:scheduleId` | any of `ScheduleInput`'s fields | `200 { schedule }`. Saving makes you its acting user; changing its timing (or pausing / resuming it) starts it afresh from now | editor |
+| DELETE | `/projects/:id/report-schedules/:scheduleId` | – | `204`. PDFs already sent stay until they expire | editor |
+
+- `ReportView = { jobId, status, runId, scheduled, pages, createdAt, finishedAt, error, emailed }`.
+  `status` ∈ `queued` → `rendering` → `done`; `retrying` (the render failed
+  and will be tried again; up to 3 attempts); `failed` (out of attempts, a
+  failure no retry can fix, or, in production, no answer from the renderer
+  within an hour). `error` is the server's own text, never raw database or
+  browser output: e.g. `the render took longer than 90 s`, `the report page
+  did not load: …` (the page's own message), `the run was deleted before its
+  report was made`, `the PDF could not be stored`; after a good render, `the
+  email to 1 of 2 recipients could not be sent`. `emailed` is how many people
+  it was sent to (asked for; each must still be a member when it's sent).
+- Recipients (on demand and scheduled) must be **direct members of the
+  project with viewer or above**, the Sharing panel's list: never a farmer,
+  never an arbitrary address (`400 every recipient must be a member of the
+  project who can read its report (a viewer or above)`). The email carries a
+  link to `/projects/:id/reports/:jobId` in the app, not the PDF: the reader
+  signs in, and the page asks this API for a fresh download link.
+- `ScheduleInput = { frequency, weekday?, monthDay?, hour, timezone, enabled?, recipients }`,
+  strict: `frequency` `weekly` (needs `weekday` 1 = Monday … 7 = Sunday) or
+  `monthly` (needs `monthDay` 1–28); `hour` 0–23 in `timezone` (an IANA zone,
+  e.g. `Africa/Johannesburg`, checked with `Intl`); `enabled` default true;
+  `recipients` 1–20 user ids.
+- `ScheduleView = { id, frequency, weekday, monthDay, hour, timezone, enabled, recipients: { userId, displayName, email }[], actingUser, nextAt, lastSentFor, lastError, updatedAt }`.
+  `nextAt` is the next time it will send (never before it was saved; `null`
+  when paused). `lastError` says why the last due time sent nothing: `the
+  project had no runs to report on`, or `the editor who saved this schedule
+  can no longer edit the project: an editor must save it again`.
+- A schedule's report is of the project's **latest run** at the time it
+  fires, emailed to its recipients. The worker's tick checks schedules every
+  pass (every 5 minutes in production) and queues each due time once.
+- PDFs are kept for 7 days (the bucket's lifecycle; locally the tick deletes
+  them with their rows a day later). Farmers get `403` on every route here.
+- `GET /jobs` lists the `report_render` jobs too.
+- **The render session** (`POST /auth/render-session`) is for the renderer,
+  not people: it exchanges a single-use, 5-minute render token (issued by the
+  worker as the requester) for a 10-minute session that may only `GET`
+  `/auth/me`, `/projects/:id`, `/projects/:id/series` and
+  `/projects/:id/runs/:runId[/…]` of the one project and run; everything else
+  answers `403 this session can only read one report`
+  ([security.md § Render tokens](./security.md#render-tokens)).
 
 ## Compare runs
 

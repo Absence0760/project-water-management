@@ -70,6 +70,11 @@ test('a non-local host in a dev default fails, and the value is not echoed', () 
 test('placeholders must stay placeholders', () => {
 	assert.match(checkEnvFile('backend/.env.development', 'AUTH_JWT_SECRET=4f9c0e...real').map((f) => f.rule).join(), /dev-only-/);
 	assert.match(checkEnvFile('backend/.env.development', 'CLOUDFRONT_SHARED_SECRET=abc').map((f) => f.rule).join(), /empty/);
+	// Object storage: MinIO's local default login passes (positive control); anything else fails.
+	assert.deepEqual(checkEnvFile('backend/.env.development', 'STORAGE=local\nS3_ACCESS_KEY_ID=minioadmin\nS3_SECRET_ACCESS_KEY=minioadmin\n'), []);
+	assert.match(checkEnvFile('backend/.env.development', 'S3_ACCESS_KEY_ID=someone-elses-key').map((f) => f.rule).join(), /minioadmin/);
+	assert.match(checkEnvFile('backend/.env.development', 'S3_SECRET_ACCESS_KEY=not-the-default').map((f) => f.rule).join(), /minioadmin/);
+	assert.match(checkEnvFile('backend/.env.development', 'STORAGE=s3').map((f) => f.rule).join(), /local/);
 });
 
 test('frontend env files hold PUBLIC_* keys only', () => {

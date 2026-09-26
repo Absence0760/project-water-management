@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Build and zip the four backend Lambdas. Used by .github/workflows/deploy-backend.yml;
+# Build and zip the four backend Lambdas, and bundle the fifth (the report
+# renderer, a container image). Used by .github/workflows/deploy-backend.yml;
 # runnable locally from anywhere in the repo (needs `pnpm install` first).
 #
 #   infra/scripts/package-lambdas.sh            # → backend/dist/{lambda,migrate,worker,fetcher}.zip
+#                                               #   + backend/dist/renderer/lambda-renderer.mjs
 #
 # Package layouts (they must match the handlers in infra/lambda.tf):
 #
@@ -19,12 +21,25 @@
 #     lambda-worker.mjs               esbuild bundle of backend/src/lambda-worker.ts
 #     rds-global-bundle.pem
 #
+#   renderer/lambda-renderer.mjs      esbuild bundle of backend/src/lambda-renderer.ts, for the
+#                                     image backend/renderer.Dockerfile builds (infra/reports.tf;
+#                                     handler lambda-renderer.handler)
+#
 #   fetcher.zip                       handler lambda-fetcher.handler (infra/feeds.tf)
 #     lambda-fetcher.mjs              esbuild bundle of backend/src/lambda-fetcher.ts
 #                                     (no database, so no CA bundle)
 #
+# playwright-core stays OUT of the API, worker and fetcher bundles (--external): only the
+# report renderer drives Chromium, and it ships as a container image with
+# playwright-core installed beside its bundle (backend/renderer.Dockerfile,
+# built by deploy-backend.yml). The API reaches the render code only through
+# the test-only memory job transport, and the production worker hands renders
+# to that Lambda (REPORT_RENDERER=sqs); the check at the end refuses a bundle
+# that pulled it in anyway.
+#
 # The API, worker and fetcher bundles include @aws-sdk/client-sqs (job wake-ups, feed queues) the
-# same way. The API bundle includes @aws-sdk/client-sesv2 (email), so production sends mail
+# same way; the API and worker also @aws-sdk/client-s3 + the presigner (report
+# download links). The API bundle includes @aws-sdk/client-sesv2 (email), so production sends mail
 # with the lockfile's pinned SDK, not whatever the nodejs24.x runtime ships. The
 # migrate Lambda keeps @aws-sdk/* external: it imports Secrets Manager from the
 # runtime on purpose (see backend/src/lambda-migrate.ts), and it isn't a
@@ -49,11 +64,11 @@ esbuild() {
     --banner:js="$banner" --log-level=warning
 }
 
-rm -f "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip" "$out/fetcher.zip"
+rm -rf "$out/lambda.zip" "$out/migrate.zip" "$out/worker.zip" "$out/fetcher.zip" "$out/renderer"
 mkdir -p "$out" "$stage/api" "$stage/migrate/dist" "$stage/migrate/migrations" "$stage/worker" "$stage/fetcher"
 
 # --- API ---------------------------------------------------------------------
-esbuild "$backend/src/lambda.ts" --outfile="$stage/api/lambda.mjs"
+esbuild "$backend/src/lambda.ts" --external:playwright-core --outfile="$stage/api/lambda.mjs"
 cp "$ca" "$stage/api/rds-global-bundle.pem"
 (cd "$stage/api" && zip -q -9 -X -r "$out/lambda.zip" .)
 
@@ -64,18 +79,29 @@ cp "$ca" "$stage/migrate/rds-global-bundle.pem"
 (cd "$stage/migrate" && zip -q -9 -X -r "$out/migrate.zip" .)
 
 # --- Worker --------------------------------------------------------------------
-esbuild "$backend/src/lambda-worker.ts" --outfile="$stage/worker/lambda-worker.mjs"
+esbuild "$backend/src/lambda-worker.ts" --external:playwright-core --outfile="$stage/worker/lambda-worker.mjs"
 cp "$ca" "$stage/worker/rds-global-bundle.pem"
 (cd "$stage/worker" && zip -q -9 -X -r "$out/worker.zip" .)
 
+# --- Renderer (bundle only) -------------------------------------------------------
+# A container image, not a zip: backend/renderer.Dockerfile copies this bundle
+# into Playwright's image beside playwright-core (external here).
+mkdir -p "$out/renderer"
+esbuild "$backend/src/lambda-renderer.ts" --external:playwright-core --outfile="$out/renderer/lambda-renderer.mjs"
+
 # --- Fetcher -------------------------------------------------------------------
-esbuild "$backend/src/lambda-fetcher.ts" --outfile="$stage/fetcher/lambda-fetcher.mjs"
+esbuild "$backend/src/lambda-fetcher.ts" --external:playwright-core --outfile="$stage/fetcher/lambda-fetcher.mjs"
 (cd "$stage/fetcher" && zip -q -9 -X -r "$out/fetcher.zip" .)
 
 # Neither Lambda bundle may carry dotenv: it would read env files from the
 # package in production (docs/STACK.md § Two backend entry points).
-for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs" "$stage/fetcher/lambda-fetcher.mjs"; do
+for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs" "$stage/fetcher/lambda-fetcher.mjs" "$out/renderer/lambda-renderer.mjs"; do
   if grep -q 'dotenv' "$f"; then echo "error: $(basename "$f") bundles dotenv" >&2; exit 1; fi
+done
+
+# Nor may they carry Chromium's driver (see above).
+for f in "$stage/api/lambda.mjs" "$stage/worker/lambda-worker.mjs" "$stage/fetcher/lambda-fetcher.mjs"; do
+  if grep -q 'chromium-bidi' "$f"; then echo "error: $(basename "$f") bundles playwright-core" >&2; exit 1; fi
 done
 
 for z in lambda migrate worker fetcher; do

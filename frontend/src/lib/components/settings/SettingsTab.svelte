@@ -50,6 +50,8 @@
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
 	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
+	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 
 	let {
 		project,
@@ -821,6 +823,12 @@
 <Lazy load={loadFeeds}>
 	{#snippet children(DataFeedsPanel)}
 		<DataFeedsPanel projectId={project.id} />
+	{/snippet}
+</Lazy>
+
+<Lazy load={loadReportSchedules}>
+	{#snippet children(ReportSchedulesPanel)}
+		<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
 	{/snippet}
 </Lazy>
 

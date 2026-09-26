@@ -23,7 +23,11 @@ sides share.
   through SQS (`@aws-sdk/client-sqs`) and a 5-minute schedule. Data feeds
   (`src/feeds/`: CHIRPS, CHIRPS-GEFS, DWS) run on that queue, reading
   synthetic fixtures (`fixtures/feeds/`, `FEED_SOURCE=fixtures`, the
-  default) everywhere but the production fetcher Lambda.
+  default) everywhere but the production fetcher Lambda. Server-side report
+  PDFs (`src/reports/`) print the report route in headless Chromium
+  (`playwright-core`, the browser e2e installs) and store the PDF through
+  `@aws-sdk/client-s3` (MinIO locally, `STORAGE=local`; a private S3 bucket in
+  production, where a container-image renderer Lambda does the printing).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has three projects: `unit` (no DB),
   `db` (needs Postgres) and `perf` (same wall-clock-budget caveat as the
@@ -46,6 +50,9 @@ sides share.
   ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
   http://localhost:8026, `pnpm dev:mail:up`).
+- **MinIO**: docker-compose, S3-compatible storage for report PDFs (API
+  **9002**, console http://localhost:9003, `pnpm dev:s3:up`; the community
+  fork's image, since upstream stopped publishing one).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
   bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
@@ -57,7 +64,9 @@ sides share.
   (API, plus a migrate Lambda, `backend/src/lambda-migrate.ts`, and the job
   worker, `backend/src/lambda-worker.ts`, with its SQS queue + DLQ and
   EventBridge tick, and the data feeds' fetcher, `backend/src/lambda-fetcher.ts`,
-  outside the VPC with its two queues) + RDS Postgres 17
+  outside the VPC with its two queues, and the report renderer,
+  `backend/src/lambda-renderer.ts`, a container image in ECR, outside the VPC,
+  with its two queues and a private reports bucket) + RDS Postgres 17
   in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
   ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
@@ -67,7 +76,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, start Mailpit (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (needs dev:db:up; the backend applies pending migrations first)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only)
 pnpm dev:run:frontend       # one side only
@@ -84,6 +93,8 @@ pnpm dev:db:reset           # drop the volume, recreate, migrate (destroys local
 pnpm dev:db:psql            # psql as the schema owner
 pnpm dev:mail:up            # Mailpit: local inbox for all app email (UI :8026)
 pnpm dev:mail:down | dev:mail:status | dev:mail:logs | dev:mail:open
+pnpm dev:s3:up              # MinIO: report PDFs (API :9002, console :9003, minioadmin / minioadmin)
+pnpm dev:s3:down | dev:s3:status | dev:s3:logs
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
@@ -93,7 +104,7 @@ pnpm test:engine | test:frontend | test:backend   # test:backend includes the ro
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e)
+pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com), password demo-password
 pnpm seed:demo              # seed:examples + the client workbook from ../project-water-management-source/Original/ (WBT_SOURCE_DIR) (needs Python + openpyxl)
@@ -180,9 +191,10 @@ Prefer reading these over guessing. Update them when behaviour changes.
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it
   out. The same pair for the job worker: `jobs/worker.ts` (local, dotenv) and
-  `lambda-worker.ts` (AWS, never dotenv), and `lambda-fetcher.ts` is AWS
-  only; `infra/scripts/package-lambdas.sh` refuses a Lambda bundle that
-  contains dotenv.
+  `lambda-worker.ts` (AWS, never dotenv), and `lambda-fetcher.ts` and
+  `lambda-renderer.ts` are AWS only; `infra/scripts/package-lambdas.sh`
+  refuses a Lambda bundle that contains dotenv, and keeps `playwright-core`
+  out of every bundle but the renderer's.
 - **Static SPA frontend only.** No SSR adapters. Routes render client-side from
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).

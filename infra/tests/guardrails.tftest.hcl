@@ -3,7 +3,8 @@
 # see: runtime/sizing of the Lambdas, the DB's durability + privacy settings,
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
-# background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
+# the report bucket / renderer image and Lambda / render queues, the alarms, the deploy role's trust pin, and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -284,6 +285,78 @@ override_resource {
   values = {
     id  = "water-management-fetcher-lambda"
     arn = "arn:aws:iam::000000000000:role/water-management-fetcher-lambda"
+  }
+}
+
+# Server-side reports (reports.tf, WP-2.15 Phase B)
+override_resource {
+  target          = aws_sqs_queue.render_requests
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-requests"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-requests"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_requests_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-requests-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-requests-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_results
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-results"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-results"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.render_results_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:af-south-1:000000000000:water-management-render-results-dlq"
+    url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-render-results-dlq"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reports
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reports-000000000000"
+    bucket = "water-management-reports-000000000000"
+  }
+}
+
+override_resource {
+  target          = aws_ecr_repository.renderer
+  override_during = plan
+  values = {
+    arn            = "arn:aws:ecr:af-south-1:000000000000:repository/water-management-renderer"
+    repository_url = "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer"
+  }
+}
+
+override_resource {
+  target          = aws_iam_role.renderer_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-renderer-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-renderer-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce_ses
+  override_during = plan
+  values = {
+    id = "sg-00000000000vpceses"
   }
 }
 
@@ -805,10 +878,10 @@ run "background_jobs" {
   }
   assert {
     condition = alltrue([for s in data.aws_iam_policy_document.sqs_endpoint.statement :
-      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn], one(s.resources)) &&
+      length(s.resources) == 1 && contains([aws_sqs_queue.jobs.arn, aws_sqs_queue.fetch_requests.arn, aws_sqs_queue.ingest_results.arn, aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn], one(s.resources)) &&
       alltrue([for a in s.actions : !strcontains(a, "*")])
     ])
-    error_message = "The SQS endpoint policy must name only the jobs and data-feed queues, one per statement, with no wildcard actions."
+    error_message = "The SQS endpoint policy must name only the jobs, data-feed and render queues, one per statement, with no wildcard actions."
   }
   assert {
     condition = toset(flatten([for s in data.aws_iam_policy_document.sqs_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
@@ -1050,8 +1123,206 @@ run "deploy_policy_has_no_wildcards" {
   }
   assert {
     condition = alltrue(flatten([for s in data.aws_iam_policy_document.github_deploy.statement : [
-      for r in s.resources : r != "*"
+      for r in s.resources : r != "*" if s.sid != "EcrLogin"
     ]]))
     error_message = "Deploy policy resources must be specific ARNs."
   }
+  # The one exception: ECR's docker login has no resource-level permissions
+  # (AWS), so that statement is "*", with that one action and nothing else.
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.github_deploy.statement :
+      s.sid != "EcrLogin" || (toset(s.actions) == toset(["ecr:GetAuthorizationToken"]) && toset(s.resources) == toset(["*"]))
+    ])
+    error_message = "EcrLogin may hold ecr:GetAuthorizationToken only."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.github_deploy.statement :
+      s.sid != "RendererImagePush" || toset(s.resources) == toset([aws_ecr_repository.renderer.arn])
+    ])
+    error_message = "The deploy role pushes to the renderer's repository only."
+  }
 }
+
+# ---------------------------------------------------------------------------
+# Server-side reports (reports.tf, WP-2.15 Phase B)
+# ---------------------------------------------------------------------------
+
+run "reports" {
+  command = plan
+
+  # --- The bucket: private, encrypted, TLS only, 7 days -------------------------------
+  assert {
+    condition = (
+      aws_s3_bucket_public_access_block.reports.block_public_acls &&
+      aws_s3_bucket_public_access_block.reports.block_public_policy &&
+      aws_s3_bucket_public_access_block.reports.ignore_public_acls &&
+      aws_s3_bucket_public_access_block.reports.restrict_public_buckets
+    )
+    error_message = "The reports bucket must block every kind of public access."
+  }
+  assert {
+    condition     = one([for r in aws_s3_bucket_server_side_encryption_configuration.reports.rule : one(r.apply_server_side_encryption_by_default).sse_algorithm]) == "AES256"
+    error_message = "Report PDFs must be encrypted at rest (SSE-S3)."
+  }
+  assert {
+    condition     = one([for r in aws_s3_bucket_ownership_controls.reports.rule : r.object_ownership]) == "BucketOwnerEnforced"
+    error_message = "ACLs off: the bucket owner owns every object."
+  }
+  assert {
+    condition = alltrue([for r in aws_s3_bucket_lifecycle_configuration.reports.rule :
+      r.status == "Enabled" && one(r.expiration).days == 7 && one(r.filter).prefix == "reports/"
+    ])
+    error_message = "Every report PDF must expire after 7 days."
+  }
+  assert {
+    condition     = contains([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport")
+    error_message = "The reports bucket must refuse plain-HTTP access."
+  }
+
+  # --- The render queues ---------------------------------------------------------------
+  assert {
+    condition     = alltrue([for q in [aws_sqs_queue.render_requests, aws_sqs_queue.render_requests_dlq, aws_sqs_queue.render_results, aws_sqs_queue.render_results_dlq] : q.sqs_managed_sse_enabled])
+    error_message = "Every render queue must be encrypted: requests carry a render token."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sqs_queue.render_requests.redrive_policy).deadLetterTargetArn == aws_sqs_queue.render_requests_dlq.arn &&
+      jsondecode(aws_sqs_queue.render_results.redrive_policy).deadLetterTargetArn == aws_sqs_queue.render_results_dlq.arn &&
+      jsondecode(aws_sqs_queue.render_requests.redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.render_results.redrive_policy).maxReceiveCount == 5 &&
+      aws_sqs_queue.render_requests.visibility_timeout_seconds >= 6 * 120 &&
+      aws_sqs_queue.render_results.visibility_timeout_seconds >= 6 * aws_lambda_function.worker.timeout
+    )
+    error_message = "Each render queue dead-letters after 5 receives, with visibility past its consumer's timeout."
+  }
+
+  # --- Nothing renders until the first image exists ------------------------------------------
+  assert {
+    condition     = length(aws_lambda_function.renderer) == 0 && length(aws_lambda_event_source_mapping.renderer_requests) == 0
+    error_message = "Without renderer_image_tag the renderer function isn't created (Lambda can't be created before its image exists)."
+  }
+  assert {
+    condition = (
+      aws_ecr_repository.renderer.image_tag_mutability == "IMMUTABLE" &&
+      one(aws_ecr_repository.renderer.image_scanning_configuration).scan_on_push
+    )
+    error_message = "The renderer repository: immutable release tags, scanned on push."
+  }
+
+  # --- Least privilege -----------------------------------------------------------------------
+  assert {
+    condition = (
+      toset(flatten([for s in data.aws_iam_policy_document.renderer_lambda.statement : s.resources])) == toset([
+        aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn, "${aws_s3_bucket.reports.arn}/reports/*",
+      ]) &&
+      alltrue([for s in data.aws_iam_policy_document.renderer_lambda.statement : s.sid != "PutReportPdfs" || toset(s.actions) == toset(["s3:PutObject"])]) &&
+      alltrue([for s in data.aws_iam_policy_document.renderer_lambda.statement : alltrue([for a in s.actions : !strcontains(a, "*")])])
+    )
+    error_message = "The renderer may receive render-requests, send render-results and put PDFs: never read, list or delete them, nor anything else."
+  }
+  assert {
+    condition     = aws_iam_role_policy_attachment.renderer_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+    error_message = "The renderer gets basic logging only (no VPC, no other managed policy)."
+  }
+  assert {
+    condition = (
+      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.actions])) == toset(["s3:GetObject"]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.resources])) == toset(["${aws_s3_bucket.reports.arn}/reports/*"])
+    )
+    error_message = "The API may only read PDFs (it pre-signs downloads)."
+  }
+  assert {
+    condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_reports.statement : s.resources])) == toset([aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn])
+    error_message = "The worker's report policy reaches the two render queues only (no bucket access)."
+  }
+  assert {
+    condition     = aws_iam_role_policy.worker_ses.role == aws_iam_role.worker_lambda.id && aws_iam_role_policy.worker_ses.name == "ses-send-no-reply"
+    error_message = "The worker sends report emails under the same no-reply-only SES policy as the API (lambda_ses, pinned in run email_ses)."
+  }
+  assert {
+    condition     = contains(flatten([for s in data.aws_iam_policy_document.github_deploy.statement : s.resources if s.sid == "LambdaUpdate"]), "arn:aws:lambda:af-south-1:000000000000:function:water-management-renderer")
+    error_message = "The deploy role must be able to move the renderer to a release's image."
+  }
+
+  # --- Wiring --------------------------------------------------------------------------------
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["REPORT_RENDERER"] == "sqs" &&
+      aws_lambda_function.worker.environment[0].variables["RENDER_REQUESTS_QUEUE_URL"] == aws_sqs_queue.render_requests.url &&
+      aws_lambda_function.worker.environment[0].variables["MAIL_TRANSPORT"] == "ses" &&
+      aws_lambda_function.backend.environment[0].variables["STORAGE"] == "s3" &&
+      aws_lambda_function.backend.environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket
+    )
+    error_message = "The worker hands renders to the renderer and mails through SES; the API signs downloads from the reports bucket."
+  }
+  assert {
+    condition     = aws_lambda_event_source_mapping.worker_render_results.event_source_arn == aws_sqs_queue.render_results.arn && aws_lambda_event_source_mapping.worker_render_results.function_name == aws_lambda_function.worker.arn
+    error_message = "render-results triggers the worker."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.render_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_requests_dlq.name &&
+      aws_cloudwatch_metric_alarm.render_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_results_dlq.name &&
+      aws_cloudwatch_metric_alarm.render_requests_dlq_depth.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.render_results_dlq_depth.threshold == 0
+    )
+    error_message = "Each render DLQ must alarm on depth > 0."
+  }
+}
+
+run "reports_renderer_created_from_its_image" {
+  command = plan
+
+  variables {
+    renderer_image_tag = "0.4.0"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.renderer[0].package_type == "Image" &&
+      aws_lambda_function.renderer[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer:0.4.0" &&
+      aws_lambda_function.renderer[0].memory_size == 2048 &&
+      aws_lambda_function.renderer[0].timeout == 120 &&
+      aws_lambda_function.renderer[0].reserved_concurrent_executions == 2
+    )
+    error_message = "Renderer Lambda: the release image, 2048 MB, 120 s, reserved concurrency 2."
+  }
+  assert {
+    condition     = length(aws_lambda_function.renderer[0].vpc_config) == 0
+    error_message = "The renderer runs outside the VPC: it reaches the site through CloudFront, and never the database."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.renderer[0].environment[0].variables["RENDER_SITE_URL"] == local.site_origin &&
+      aws_lambda_function.renderer[0].environment[0].variables["RENDER_API_URL"] == "${local.site_origin}/api" &&
+      aws_lambda_function.renderer[0].environment[0].variables["STORAGE"] == "s3" &&
+      tonumber(aws_lambda_function.renderer[0].environment[0].variables["REPORT_RENDER_TIMEOUT_MS"]) < 120000 &&
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "DATABASE_URL") &&
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET")
+    )
+    error_message = "The renderer opens the public site, stores to S3, stops before Lambda's timeout, and holds no database URL or secret."
+  }
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.renderer_requests[0].event_source_arn == aws_sqs_queue.render_requests.arn &&
+      aws_lambda_event_source_mapping.renderer_requests[0].batch_size == 1 &&
+      contains(aws_lambda_event_source_mapping.renderer_requests[0].function_response_types, "ReportBatchItemFailures")
+    )
+    error_message = "render-requests triggers the renderer, one at a time, retrying only failed answers."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.renderer_errors) == 1 && length(aws_cloudwatch_metric_alarm.renderer_duration) == 1
+    error_message = "Renderer errors and slow renders must alarm."
+  }
+}
+
+run "rejects_bad_renderer_image_tag" {
+  command = plan
+
+  variables {
+    renderer_image_tag = "latest"
+  }
+
+  expect_failures = [var.renderer_image_tag]
+}
+

@@ -241,6 +241,12 @@ jobs:
           PGPASSWORD: water
         run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
 
+      # Server-side PDF reports (server-report.spec.ts): the worker stores the
+      # PDF in MinIO and mails through Mailpit, both from docker-compose.yml
+      # on the same ports as local dev. That spec never skips in CI.
+      - name: Start MinIO and Mailpit
+        run: docker compose up -d --wait minio mailpit
+
       # Global setup creates + migrates water_e2e; Playwright starts the
       # backend (:3101) and serves the prebuilt site (:7801). The config refuses
       # a site built for another API URL.

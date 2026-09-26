@@ -104,3 +104,39 @@ export function inviteMail(
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
 	});
 }
+
+/** Absolute link to a page of the site (no token). */
+export function sitePage(path: string): string {
+	return `${(process.env.SITE_URL || 'http://localhost:7777').replace(/\/+$/, '')}${path}`;
+}
+
+export type ReportMailFacts = {
+	projectName: string;
+	/** The run's label, or its date when it has none. */
+	runName: string;
+	pages: number;
+	/** Who asked, or who set up the schedule. */
+	requestedBy: string;
+	scheduled: boolean;
+};
+
+/**
+ * A report PDF is ready (WP-2.15 Phase B). The link opens the app's download
+ * page, which needs the reader signed in and still a member of the project
+ * before it hands out a short-lived download link: the email itself grants
+ * nothing, and a forwarded one opens nothing for a non-member.
+ */
+export function reportReadyMail(to: string, url: string, f: ReportMailFacts): Mail {
+	const pages = `${f.pages} ${f.pages === 1 ? 'page' : 'pages'}`;
+	return render(to, `Catchment report: ${f.projectName} — ${PRODUCT}`, {
+		heading: `The report for ${f.projectName} is ready`,
+		paragraphs: [
+			f.scheduled
+				? `This is the scheduled report of the latest run, ${f.runName} (${pages}), set up by ${f.requestedBy}.`
+				: `${f.requestedBy} made a PDF of the report for the run ${f.runName} (${pages}).`,
+			'Sign in to download it. You need to be a member of the project.'
+		],
+		action: { label: 'Download the report', url },
+		footer: ['The PDF is kept for 7 days.', "If you weren't expecting this, a member of the project sent it to you; you can ignore it."]
+	});
+}

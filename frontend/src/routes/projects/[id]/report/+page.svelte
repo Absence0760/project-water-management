@@ -4,7 +4,8 @@
 	// It reuses the Runs tab's components in their print modes, on the same
 	// API routes, and prints to A4 through the browser (Download PDF →
 	// window.print()). data-report-ready says every section has loaded and
-	// every chart has drawn: e2e waits on it, and so would a server-side render.
+	// every chart has drawn: e2e waits on it, and so does the server-side render
+	// (backend/src/reports/render.ts), which prints this same page.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -13,6 +14,7 @@
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
@@ -30,6 +32,9 @@
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
+
+	// The server-side PDF (Generate / Email me): its own chunk, loaded with the bar.
+	const loadServerPdf = () => import('$lib/components/report/ServerPdf.svelte');
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -155,6 +160,11 @@
 		<div class="bar no-print">
 			<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
+			{#if run}
+				<Lazy load={loadServerPdf}>
+					{#snippet children(ServerPdf)}<ServerPdf {projectId} runId={run!.id} />{/snippet}
+				</Lazy>
+			{/if}
 			<p class="muted small" role="status">
 				{#if ready}
 					Opens your browser’s print dialog: choose <strong>Save as PDF</strong> as the destination. The report prints on A4, in the light

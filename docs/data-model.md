@@ -662,7 +662,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
 | `locked_until`, `lease_token` | A running job's lease and its fencing token (set together, only while `running`) |
 | `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
-| `acting_user_id` | The editor who queued it (stamped by the insert trigger). The job runs as this user under RLS |
+| `acting_user_id` | The member who queued it (stamped by the insert trigger): an editor, or any viewer for `report_render` (`022_reports.sql`). The job runs as this user under RLS |
 | `created_at`, `started_at`, `finished_at` | `finished_at` is set exactly when `done` or `dead` |
 
 - **Enqueue** is a plain INSERT as the signed-in editor. The `job_enqueue`
@@ -734,6 +734,68 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 - `feeds/feeds.db.test.ts` checks the RLS with positive controls, the forged
   health, the schedule, the acting user losing the role, and the ingest
   hand-off.
+
+### Reports (022_reports.sql)
+
+Server-side PDFs of the report ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+A farmer (`019_farmer_role.sql`) ranks below viewer, so every rule below
+refuses one.
+
+| Table | Holds |
+| --- | --- |
+| `render_token` | The headless renderer's way in: `purpose` (`report`), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
+| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
+| `report_schedule` | `frequency` (`weekly` with `weekday` 1–7, or `monthly` with `month_day` 1–28), `hour` 0–23 in `timezone` (IANA), `enabled`, `acting_user_id` (the editor who last saved it; `SET NULL` when that account goes, then skipped), `created_by`, `created_at`, `updated_at`, `anchor_at` (fires only for times after this; reset when the timing or `enabled` changes), `last_fired_for` (the scheduled time last queued), `last_error` (fixed text: why a due time queued nothing) |
+| `report_schedule_recipient` | `(schedule_id, user_id)`: who a schedule's PDF goes to |
+
+- **RLS**:
+  - `render_token`: INSERT as yourself for a project you can view; SELECT
+    your own. **Append-only** for `water_app` (the catalogue test lists it):
+    consumed only by `app_consume_render_token`.
+  - `report`: SELECT for viewers; INSERT for viewers as themselves (the
+    `report_enqueue` trigger stamps the requester and a fresh `queued`
+    state, and checks the run, job and schedule belong to the project, the
+    job being the requester's own `report_render`); UPDATE of the outcome
+    columns only (`status`, `pages`, `bytes`, `error`, `finished_at`, a
+    column grant) and only by the requester, which is who the job runs as;
+    DELETE by the requester.
+  - `report_schedule`: SELECT for viewers; INSERT / UPDATE / DELETE for
+    editors, with the acting user equal to the signed-in user. The
+    `report_schedule_stamp` trigger (on `water_app`'s writes) stamps the
+    acting user and never lets a direct write set `last_fired_for` or
+    `last_error`.
+  - `report_schedule_recipient`: SELECT through a visible schedule; writes
+    for editors of its project. The `report_schedule_recipient_check`
+    trigger refuses anyone who isn't a direct member of the project with
+    viewer or above.
+  - `job`: the insert policy (latest definition here) lets a viewer queue a
+    job of kind `report_render` only; every other kind still needs an editor.
+- **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
+  - `app_consume_render_token(hash)`: deletes the token (single use) and
+    returns its user, project and run, or nothing when unknown, used or
+    expired; drops tokens expired over a day ago. Pre-auth, like
+    `app_consume_email_token`.
+  - `app_report_schedules_to_check()`: the enabled schedules with an acting
+    user and their timing, for the tick (routing and timing only).
+  - `app_claim_report_schedule(id, time)`: true for the first caller only,
+    for a time that has come, is after `anchor_at`, and is later than the
+    last one claimed.
+  - `app_report_schedule_failed(id, reason)`: records a fixed reason.
+  - `app_report_render_target(report)`: the project and requester of a
+    report still waiting for a render, for the production worker's
+    `render-results` messages.
+  - `app_purge_reports(age)`: deletes reports older than `age` (≥ 1 day; the
+    tick passes 8), returning their ids so a local run can delete the PDFs.
+- Indexes cover every foreign key (`render_token` user / project / run,
+  `report` project / run / schedule / requester, `job_id` by its unique
+  constraint, `report_schedule` project / acting user / creator, the
+  recipient's user), plus `render_token.expires_at` and `report.created_at`
+  for the purges.
+- `reports/reports.db.test.ts` checks the token (single use, expiry, scope
+  on other projects' and runs' routes, a requester who lost access), the
+  report and schedule RLS with positive controls, farmers, the recipients
+  rule and the tick; `reports/render.db.test.ts` renders a real PDF into
+  MinIO.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role

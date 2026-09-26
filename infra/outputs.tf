@@ -42,6 +42,21 @@ output "fetcher_function_name" {
   value       = aws_lambda_function.fetcher.function_name
 }
 
+output "renderer_function_name" {
+  description = "Renderer Lambda function name (server-side reports, reports.tf). deploy-backend.yml moves it to each release's image once it exists (it is created only when renderer_image_tag is set)."
+  value       = local.renderer_function_name
+}
+
+output "renderer_ecr_repository" {
+  description = "Name of the renderer image's ECR repository. deploy-backend.yml pushes each release's image to it (the registry URL comes from the account at deploy time)."
+  value       = aws_ecr_repository.renderer.name
+}
+
+output "reports_bucket" {
+  description = "Private S3 bucket of report PDFs (7-day lifecycle)."
+  value       = aws_s3_bucket.reports.bucket
+}
+
 output "public_site_url" {
   description = "Public URL of the site."
   value       = local.site_origin

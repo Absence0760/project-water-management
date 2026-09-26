@@ -1,5 +1,6 @@
-// One tick of the queue: purge old jobs, queue the data feeds that are due
-// (feeds/schedule.ts), then claim and run due jobs one at a
+// One tick of the queue: purge old jobs and reports, queue the data feeds
+// (feeds/schedule.ts) and report schedules (reports/schedule.ts) that are
+// due, then claim and run due jobs one at a
 // time until none are due or the time budget is spent. Every transport ends
 // here: the local worker loop (worker.ts), `pnpm dev:jobs:tick`, the memory
 // transport (tests), and the production worker Lambda (lambda-worker.ts).
@@ -7,6 +8,7 @@ import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
+import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JobError, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
@@ -69,6 +71,8 @@ export interface TickOptions {
 	feeds?: boolean;
 	/** Queue every enabled feed, due or not (`pnpm dev:feeds:run`). */
 	allFeeds?: boolean;
+	/** Queue due report schedules and purge old reports first (default true; queue-only tests turn it off). */
+	reports?: boolean;
 }
 
 export interface TickResult {
@@ -82,6 +86,8 @@ export interface TickResult {
 	stats: QueueStats;
 	/** Data feeds queued by this tick (absent when feeds were off). */
 	feeds?: ScheduleResult;
+	/** Scheduled reports queued by this tick (absent when reports were off). */
+	reports?: ReportScheduleResult & { purged: number };
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -98,6 +104,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const result: TickResult = { purged: 0, claimed: 0, done: 0, failed: 0, dead: 0, lost: 0, stats: { due: 0, running: 0, oldestDueSeconds: 0 } };
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
+	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
 	// One at a time, so a job's lease starts when it does, not when a batch was claimed.
 	while (result.claimed < maxJobs && Date.now() - started < budgetMs) {
 		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds));

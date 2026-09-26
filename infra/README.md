@@ -24,6 +24,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                                             └─► jobs-dlq (after 5 receives; alarms)
    worker ──SendMessage (endpoint)──► SQS fetch-requests ──► fetcher Lambda (NO VPC, no DB; feeds.tf)
    worker ◄── SQS ingest-results ◄──SendMessage (public)──────┘   └──HTTPS──► data.chc.ucsb.edu, www.dws.gov.za
+   worker ──SendMessage (endpoint)──► SQS render-requests ──► renderer Lambda (container image, Chromium;
+   worker ◄── SQS render-results ◄──SendMessage (public)──────┘   NO VPC, no DB; reports.tf)
+                                                                  ├──HTTPS──► the site via CloudFront (render session)
+                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── API pre-signs GETs
                      (each queue: a DLQ after 5 receives; alarms)
 ```
 
@@ -51,7 +55,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   nothing else) and **SQS** (the API sends job wake-ups, the worker uses the
   `jobs` queue and the data feeds' `fetch-requests` / `ingest-results`; its
   endpoint policy names only those two roles and those three queues, the API
-  on `jobs` alone; `jobs.tf`). If a future feature needs egress, add the
+  on `jobs` alone; `jobs.tf`; the render queues joined them, reports.tf).
+  The worker also sends report emails through the SES endpoint. If a future
+  feature needs egress, add the
   matching VPC endpoint for an AWS service. Genuinely external hosts are
   reached by a Lambda **outside** the VPC with no database access, as the
   data feeds' fetcher does (`feeds.tf`), rather than a NAT (~$33/month).
@@ -77,6 +83,15 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   MB, 120 s, reserved concurrency `fetcher_reserved_concurrency` (2), its role
   limited to receiving `fetch-requests` and sending `ingest-results`
   ([docs/deployment.md § Data feeds](../docs/deployment.md#data-feeds)).
+  `water-management-renderer` (`backend/src/lambda-renderer.ts`,
+  `reports.tf`) prints report PDFs: a **container image**
+  (`backend/renderer.Dockerfile`, Playwright's Chromium) in its own ECR
+  repository, no VPC, no database or secret, 2048 MB, 120 s, reserved
+  concurrency `renderer_reserved_concurrency` (2), its role limited to
+  receiving `render-requests`, sending `render-results` and putting objects
+  under `reports/` in the reports bucket. It is created only once its first
+  image is pushed (`renderer_image_tag`;
+  [docs/deployment.md § Reports](../docs/deployment.md#reports)).
 - **TLS to RDS** is `sslmode=verify-full` (chain + hostname). Both zips carry
   `infra/certs/rds-global-bundle.pem` (the public AWS RDS CA bundle from
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
@@ -95,6 +110,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
+| `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
@@ -102,11 +118,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, backend `self_check_failed` log metric filter + alarm |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
-| `scripts/package-lambdas.sh` | Builds + zips the three Lambdas (and refuses a Lambda bundle that carries dotenv) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
+| `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image (and refuses a bundle that carries dotenv, or an API/worker/fetcher bundle that carries playwright-core) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (15 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (19 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -235,15 +251,17 @@ Idle to light use, on-demand, us-east-1:
 | SES API interface endpoint, 1 AZ | 7.30 |
 | SQS interface endpoint, 1 AZ (job wake-ups, `jobs.tf`) | 7.30 |
 | SQS + EventBridge (the 5-minute tick: ~8,600 invocations) | ~0 |
-| SQS polling by the three event sources (`jobs`, `fetch-requests`, `ingest-results`: ~0.65 M receives a month each, ~0.9 M past the free tier) | ~0.40 |
+| SQS polling by the five event sources (`jobs`, `fetch-requests`, `ingest-results`, `render-requests`, `render-results`: ~0.65 M receives a month each, ~2.25 M past the free tier) | ~0.90 |
+| ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
+| S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (RDS master secret) | 0.40 |
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 20 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric, the two feed DLQs and fetcher errors), logs, RDS log export | ~2.40 |
-| CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $49** (the data feeds added ≈ $0.70) |
+| CloudWatch: 24 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration), logs, RDS log export | ~2.80 |
+| CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
+| **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
 which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
@@ -322,7 +340,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, `PUBLIC_SITE_URL` and
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, **`RENDERER_FUNCTION_NAME`**, **`RENDERER_ECR_REPOSITORY`**, `REPORTS_BUCKET` (unused by the workflows), `PUBLIC_SITE_URL` and
    `CLOUDFRONT_DOMAIN_NAME` (unused by the workflows) as variables, and
    `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` (debugging only) as
    secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
@@ -343,6 +361,14 @@ Claude does not run any of these, and none of them print a secret. Replace
     Approve each in the `production` environment. The backend deploy ends
     with a `/api/health` check through CloudFront; check the site by hand
     too: `curl -s https://water-management.jaredhoward.com/api/health`.
+10a. **The report renderer** (after the first backend deploy). That deploy
+    pushed the renderer image to ECR, tagged with the release version, and
+    left a notice that the function doesn't exist yet. Set
+    `renderer_image_tag = "0.1.0"` (that version) in `prod.tfvars`, then plan
+    and apply (step 8). Every later backend release moves the function to
+    its own image; the tag in `prod.tfvars` only ever creates it. Until then
+    report requests wait in `render-requests` (4 days) and show as
+    "rendering".
 
 ### Rotating secrets
 
