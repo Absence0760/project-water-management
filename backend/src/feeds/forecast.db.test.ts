@@ -9,7 +9,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { utcToday } from './fetch.js';
+import { fetchWindow, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { ingestResult } from './ingest.js';
 import { feedForJob } from './store.js';
@@ -38,7 +38,7 @@ async function forecastFeed(name: string) {
 	const ingest = (raw: unknown) =>
 		withUser(owner.id, async (db) => {
 			const feed = (await feedForJob(db, pid, feedId))!;
-			return ingestResult(db, feed, raw);
+			return ingestResult(db, feed, raw, fetchWindow('chirps_gefs', feed.config, feed.lastDataDate, utcToday()));
 		});
 	return { owner, pid, feedId, ingest };
 }
@@ -92,7 +92,8 @@ describe('forecast issues in the series', () => {
 		const newerHasIngested = new Promise<void>((r) => (newerIngested = r));
 		const newerMayCommit = new Promise<void>((r) => (commitNewer = r));
 		const newer = withUser(owner.id, async (db) => {
-			const out = await ingestResult(db, (await feedForJob(db, pid, feedId))!, issue(0, 5));
+			const feed = (await feedForJob(db, pid, feedId))!;
+			const out = await ingestResult(db, feed, issue(0, 5), fetchWindow('chirps_gefs', feed.config, null, utcToday()));
 			newerIngested();
 			await newerMayCommit;
 			return out;

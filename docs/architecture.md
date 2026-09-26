@@ -349,6 +349,11 @@ merges into:
   dates outside that window, or after today, are dropped (`outside`).
   A feed's `startDate` is a floor for every fetch, not just the first: the re-read
   never reaches before it, where the series may hold the owner's own data.
+  Each successful answer records the last day it asked for (`last_meta.through`):
+  when the next window would end without reaching a day after it (a backfill
+  starting before the station's record, or a gap longer than one window), the
+  window starts from there instead, less the re-read, so it moves past days
+  with no data rather than asking for the same empty window forever (#29).
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed owns the days it
@@ -402,7 +407,15 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   of that feed (`app_feed_fetch_job`), queues a `feed_ingest` job as that
   job's user, and the job validates the result (`FetchResult`) before
   merging. A result for a feed saved with new settings since the fetch is
-  dropped.
+  dropped. The queue can redeliver and reorder, so before sending, the
+  `feed_fetch` job records itself and its window on the feed
+  (`app_begin_feed_fetch`, `028_feed_fetch.sql`), and the `feed_ingest` job
+  claims and clears that record (`app_take_feed_fetch`): only the newest
+  fetch's answer applies, once, and an older fetch's late answer or a
+  redelivery is dropped with the series and health untouched (#31). Every
+  answer (inline too) is checked against the window it asked for, which comes
+  from our side, never from the answer: a day outside it (the forecast aside,
+  keyed by its issue) refuses the answer whole as a failed fetch.
 
 Not built yet: marking a fed series on the Data tab ("from CHIRPS feed"), the
 audit event per merge (WP-2.4), the debounced re-run after new data (WP-2.11),

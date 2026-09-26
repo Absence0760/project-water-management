@@ -3,9 +3,15 @@
 // message into one of these jobs, as the feed's acting user). The result is
 // untrusted input: feeds/ingest.ts validates it before anything merges, and
 // records an invalid one as a failed fetch.
+//
+// The queue can redeliver and reorder, so only the answer to the feed's
+// newest fetch is applied, once: takeFeedFetch claims the window that fetch
+// recorded (feed-fetch.ts) and clears it. An answer to an older fetch, or one
+// already applied, finds nothing and is dropped without touching the series
+// or the feed's health (issue #31).
 import { z } from 'zod';
 import { ingestResult } from '../../feeds/ingest.js';
-import { feedForJob } from '../../feeds/store.js';
+import { feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 
 export const FeedIngestPayload = z
@@ -25,6 +31,8 @@ export const feedIngestHandler = defineHandler({
 		// Removed, switched off, or saved with new settings since the fetch was
 		// asked for: the days belong to a place or series the feed no longer means.
 		if (!feed || !feed.enabled || feed.version !== payload.feedVersion) return;
-		await ingestResult(db, feed, payload.result);
+		const window = await takeFeedFetch(db, feed.id, payload.fetchJobId);
+		if (!window) return;
+		await ingestResult(db, feed, payload.result, window);
 	}
 });

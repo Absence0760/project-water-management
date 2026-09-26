@@ -480,9 +480,12 @@ In short:
     byte budget, no U+0000, so nothing it accepts can fail the database after
     the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
-    as the feed's acting user. A compromised fetcher could at worst send wrong
-    numbers for feeds that asked it, into the series those feeds already
-    target.
+    as the feed's acting user. It applies only the answer to the feed's newest
+    fetch, once, and refuses one with a day outside the window that fetch
+    recorded on the feed (`028_feed_fetch`; the window comes from the worker,
+    never the answer). A compromised fetcher could at worst send wrong
+    numbers for the days feeds asked it for, into the series those feeds
+    already target.
 - Svelte escapes output by default. Don't use `{@html}` with user-supplied names
   (farms, crops, projects).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are

@@ -849,7 +849,7 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Data feeds (018_feeds.sql)
+### Data feeds (018_feeds.sql, 028_feed_fetch.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
@@ -862,14 +862,16 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29) |
+| `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (028, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
   acting user equal to the signed-in user. The `data_feed_stamp` trigger runs
   on `water_app`'s writes only: it stamps the acting user, keeps the id,
   project and creator, and never lets a direct write set health (an owner
-  can't forge "last success"). Changing the source, config or target clears
-  the health; switching a feed back on makes it due at once.
+  can't forge "last success"), nor the fetch columns. Changing the source,
+  config or target clears the health and the fetch columns; switching a feed
+  back on makes it due at once.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
   - `app_claim_due_feeds(limit, all)`: the scheduler, no user context. Claims
     enabled feeds with an acting user that are due (not scheduled within a
@@ -886,12 +888,22 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.
+  - `app_begin_feed_fetch(feed, job, start, end)` (028): a `feed_fetch` job
+    about to send its request records itself and its window. The caller must
+    be an editor running that job (a `running` `feed_fetch` of this feed, as
+    the caller).
+  - `app_take_feed_fetch(feed, job)` (028): the `feed_ingest` job claims the
+    window of the fetch it answers and clears the columns in one statement
+    (`FOR UPDATE`, so a second ingest of the same answer waits, then gets
+    nothing). No row: not the feed's newest fetch, or already applied, so the
+    answer is dropped.
 - Grants: `SELECT, INSERT, UPDATE, DELETE` to `water_app`. Indexes: the
   unique constraint covers `project_id`; `acting_user_id`, `created_by`; and
   `last_scheduled_at` (partial, enabled with an acting user) for the claim.
 - `feeds/feeds.db.test.ts` checks the RLS with positive controls, the forged
   health, the schedule, the acting user losing the role, and the ingest
-  hand-off.
+  hand-off (the window check, late and redelivered answers, the fetch
+  columns' guards).
 
 ### Reports (023_reports.sql)
 
