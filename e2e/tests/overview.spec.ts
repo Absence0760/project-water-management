@@ -3,6 +3,7 @@
 import type { Page } from '@playwright/test';
 import { createProject, createRun, PASSWORD, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const stat = (page: Page, term: string) =>
@@ -106,6 +107,30 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	// ?tab=summary is the same page.
 	await page.goto(`/projects/${project.id}?tab=summary`);
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
+});
+
+test('dam levels: every dam in the latest run, emptiest first, with its end-of-run and lowest level', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary dams');
+	const run = await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}`);
+
+	const dams = page.getByRole('region', { name: 'Dam levels' });
+	const rows = dams.getByRole('row').filter({ has: page.getByRole('rowheader') });
+	// The two farm dams; the outflow gauge has none.
+	await expect(rows).toHaveCount(2);
+	await expect(rows.getByRole('rowheader')).toContainText([/Upper farm|Lower farm/, /Upper farm|Lower farm/]);
+	await expect(rows.first().getByRole('rowheader')).toContainText(/\d{2},000 m³/);
+	const ends = await rows.evaluateAll((trs) => trs.map((tr) => parseFloat(tr.querySelectorAll('td')[0]!.textContent!)));
+	expect(ends.every((v) => v >= 0 && v <= 100)).toBe(true);
+	expect([...ends].sort((a, b) => a - b)).toEqual(ends);
+	await expect(rows.first().locator('td').nth(1)).toContainText(/\d+% · \d{1,2} [A-Z][a-z]{2} \d{4}/);
+	await expect(dams.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
+	// Below the flow chart, above the setup checklist.
+	const top = async (name: string | RegExp) => (await page.getByRole('region', { name }).boundingBox())!.y;
+	expect(await top('Dam levels')).toBeGreaterThan(await top('Flow vs reserve'));
+	expect(await top('Dam levels')).toBeLessThan(await top(/^Set(up| up this catchment)/));
+	await expectNoViolations(page);
 });
 
 test('each headline fact opens the tab behind it, from anywhere on its tile', async ({ page, owner }) => {

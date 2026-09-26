@@ -668,6 +668,15 @@
 //             rounding up). Largest chunk unchanged. No headroom left.
 // 2026-09-26  total stays 963 KB (measured 959): the daily A-pan fit
 //             fingerprint (+1 KB) merged over the entry above. Headroom ~4 KB.
+// 2026-09-26  total 957 → 963 KB. main measured 955 (merges since the 957
+//             entry); the Summary's Dam levels panel (issue #17 follow-on,
+//             its own lazy chunk: the panel and the damLevels reduction)
+//             adds 3: 958. Headroom ~5 KB. The way down is still
+//             English-as-key i18n (~5–7 KB, docs/followups.md).
+// 2026-09-26  total 963 → 967 KB (measured 962). main's own 957 → 963 entry
+//             and this branch's #45 display/export and A-pan fingerprint
+//             entries each assumed the other's growth absent; merged they
+//             measure 962. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -678,7 +687,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 963,
+	totalCodeKb: 967,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

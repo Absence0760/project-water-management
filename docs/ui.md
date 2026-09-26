@@ -194,7 +194,7 @@ put the results first. Top to bottom:
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads: there is nothing to summarise yet.
 2. The latest run's results, the "Needs attention" list, the **Flow vs
-   reserve** chart (below), the active alerts ([§ Alerts](#alerts)) and the
+   reserve** chart and **Dam levels** (below), the active alerts ([§ Alerts](#alerts)) and the
    published baseline.
 3. **Once there is a run**, the setup checklist comes here, below the results
    (usually as the one-line "Setup complete").
@@ -209,6 +209,22 @@ put the results first. Top to bottom:
   pulls in uPlot, so the page's first paint doesn't wait for it. Its series
   come through the Runs tab's `cachedSeries`, and it fetches only the series
   the run stored ("This run stored no outflow or EWR series." otherwise).
+- **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
+  under Flow vs reserve once the latest run's record is in: every dam in the
+  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series), emptiest
+  first. Each row has the dam's capacity, its storage at the end of the run as
+  a bar and a % of capacity (a tick marks its minimum operating level, and
+  "below 30%" or "at its minimum level" is written beside the %, so colour is
+  never the only cue), the lowest it reached in the run's last 365 days with
+  the first day of that low, and the days in that year at or below the
+  minimum. Capacity and minimum come from the run's own model
+  (`run.model`, the live model for an older run), so a later edit doesn't skew
+  them. The run summary has no dam figures, so each dam's daily series is
+  fetched through the Runs tab's `cachedSeries`, four at a time, with
+  "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
+  **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
+  dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
+  and is open work ([followups.md](./followups.md)).
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -228,7 +244,8 @@ put the results first. Top to bottom:
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
   why not, as on the Runs tab; "–" without observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
-  is only in a run's daily series, not its summary, so it has no card. Each
+  is only in a run's daily series, not its summary, so it has no card; the
+  **Dam levels** panel below reads those series. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the

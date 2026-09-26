@@ -25,6 +25,8 @@
 
 	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
 	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
+	// Dam levels fetch a daily series per dam: their own chunk too.
+	const loadDamLevels = () => import('./DamLevels.svelte');
 
 	let {
 		project,
@@ -236,6 +238,11 @@
 	<Lazy load={loadFlowVsReserve}>
 		{#snippet children(FlowVsReserve)}
 			<FlowVsReserve projectId={project.id} runId={latestRun!.id} refs={latestRefs} forecastFrom={latestRun!.summary.forecast?.from ?? null} />
+		{/snippet}
+	</Lazy>
+	<Lazy load={loadDamLevels}>
+		{#snippet children(DamLevels)}
+			<DamLevels projectId={project.id} run={latestRun!} refs={latestRefs} liveNodes={editor.model.nodes} />
 		{/snippet}
 	</Lazy>
 {/if}
