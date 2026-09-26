@@ -52,6 +52,13 @@ describe('fetchWindow', () => {
 		expect(fetchWindow('dws', { station: 'X0H000', startDate: '2020-03-01' }, '2026-06-01', '2026-09-25')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
 	});
 
+	it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'America/St_Johns'])('counts calendar days the same in any machine zone, across a leap day (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		expect(fetchWindow('chirps', grid, '2024-02-27', '2024-03-02')).toEqual({ start: '2024-01-08', end: '2024-03-01' });
+		expect(fetchWindow('chirps_gefs', grid, null, '2024-02-20')).toEqual({ start: '2024-02-20', end: '2024-03-06' });
+		expect(fetchWindow('dws', { station: 'X0H000' }, '2024-02-29', '2024-03-10')).toEqual({ start: '2023-03-01', end: '2024-03-10' });
+	});
+
 	it('GEFS: the 16 days from today', () => {
 		expect(fetchWindow('chirps_gefs', grid, '2026-10-05', '2026-09-25')).toEqual({ start: '2026-09-25', end: '2026-10-10' });
 	});
