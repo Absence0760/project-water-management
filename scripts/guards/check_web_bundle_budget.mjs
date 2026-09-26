@@ -278,6 +278,21 @@
 //             loader. No dependency. Measures 646 KB merged with the entries above;
 //             headroom ~6 KB.
 //
+// 2026-09-25  total 652 → 688 KB; other ceilings unchanged. The phone-first
+//             farmer view (WP-2.6, issue #25, docs/design/farmer-view.md):
+//             /farm, /farm/[projectId] and its "Why?" and dam pages, the
+//             farmer glossary page. Measured on the base eaafecd → this
+//             change: 647 → 682 KB. The farm routes are their own chunks,
+//             loaded by nobody but a farmer (or WUA staff previewing): ~24 KB
+//             reachable only from them (the main farm page 6 KB, "Why?" 4.5,
+//             dam 3.6, the shared wording/format/chart modules 5.8, the
+//             cards' shared chunk 1.8, the rest small), the farm frame
+//             (FarmShell, Menu, saved copy) ~4 KB, their CSS ~3 KB, and the
+//             farmer help entries ~2 KB in the help chunk. A farmer's cold
+//             load of their farm is ~73 KB of JS, lighter than the project
+//             list; no workspace page gets heavier (the largest chunk is
+//             still 39 KB). Charts are inline SVG, not uPlot. No new
+//             dependency. Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -288,7 +303,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 652,
+	totalCodeKb: 688,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,
