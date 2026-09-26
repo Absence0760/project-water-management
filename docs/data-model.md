@@ -1290,6 +1290,26 @@ merges daily readings without a session (WP-2.9;
   no delete), and `audit_event_api_key_insert` (`actor_user_id IS NULL`,
   `actor_api_key_id` the transaction's key, the key's project). Every other
   table's policies need a user, so a key sees nothing else.
+- `series_key_days (project_id, series_id, api_key_id, days datemultirange
+  NOT NULL, non-empty)` (053_series_key_days.sql): the days of a series each
+  key wrote and nobody has written since, which the ingest hold leaves out
+  of the outlier limit it judges that key's pushes by
+  ([security.md § API keys](./security.md#api-keys)). PK `(project_id,
+  series_id, api_key_id)`; composite foreign keys to `time_series
+  (project_id, id)` and `api_key (project_id, id)` (both `CASCADE`, each with
+  a new `UNIQUE (project_id, id)`), the key's covered by `(project_id,
+  api_key_id)`. A side table, not a column like `feed_days`: one feed per
+  series, but any number of keys. `series/merge.ts` `mergeSeries` keeps it in
+  the same transaction as the series row: a key's merge adds the days whose
+  value it changed; anyone else's merge releases the days it writes (even
+  with the same value) from every key, and `replaceSeries` (a replace, a
+  restore, a feed's confirmed replacement) releases them all. RLS: a key
+  reads, inserts and grows its own rows on series it may write (the
+  `time_series` key conditions); an editor reads, shrinks and deletes the
+  project's rows. `series_key_days_guard` holds each to its direction (a key
+  only adds days, a person only releases them, no row moves), so neither can
+  move a day into or out of a key's record the other way. `water_app` may
+  update `days` only (the catalogue test's column-only list).
 - `app_api_key_lookup(p_prefix)` (`SECURITY DEFINER`): the row for a prefix
   (id, project id and name, hash, name, scopes, allowed series, live) for
   the backend's constant-time hash comparison.

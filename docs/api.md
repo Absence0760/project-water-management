@@ -1574,8 +1574,10 @@ CORS (gateways aren't browsers), JSON bodies only.
 - `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
   when days this push carried look wrong by the engine's data-quality rules
   (a negative rain or flow; a value above the outlier limit of the series
-  it lands in, taken without this push's days, once that series has 100
-  or more non-zero days), else
+  it lands in, taken without this push's days and without the days this
+  key wrote before that nobody has written since, once that leaves 100 or
+  more non-zero days, else without this push's days alone; no outlier
+  limit while that is under 100), else
   `null`. The days are merged all the same, `series.held` is recorded as
   the key (with the counts, up to 5 examples and the `source` label), no
   re-run is queued (`rerunQueuedFor: null`), and every automatic re-run

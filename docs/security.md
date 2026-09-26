@@ -300,21 +300,28 @@ and nothing else.
   data feed's values are checked by its parser. The outlier limit is the
   engine's (5× the 99th percentile of the series' non-zero days for rain,
   10× for flow), taken from the series **without** the push (its days before
-  the merge, less the days the push overwrites), so one push can't lift the
-  limit over itself. **Limits** (a partial mitigation):
+  the merge, less the days the push overwrites) and without every day that
+  key wrote before and nobody has written since (`series_key_days`, 053),
+  so a key can't lift the limit over itself, in one push or slowly, batch by
+  batch under it. A person's write over a key's days (or a feed's) makes
+  them count again: they are that person's values now. **Limits** (a
+  partial mitigation):
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a new or
     short series is checked for negatives only;
-  - days an earlier push of the same key wrote still count towards the
-    limit (a series keeps no per-day author), so a key that poisons slowly,
-    push by push, can shift the 99th percentile it is later judged by
-    (followups.md § POPIA and the Step 2 release tracks excluding them).
+  - when the days left without the key's own are too few for the rule (a
+    series the key alone fills, like a logger's), the limit falls back to
+    the series without the push only, which that key's earlier pushes still
+    shape (followups.md § POPIA and the Step 2 release tracks a reference
+    for that case).
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
   days from the key's events, re-push; a key's merge keeps no series
   revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
-  handler waiting, a person's run ending it, a person's merge not held),
+  handler waiting, a person's run ending it, a person's merge not held; a
+  key pushing in batches held by the limit without its own days, another
+  key's and a person's days counting, the guard's directions),
   `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
