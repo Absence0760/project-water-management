@@ -237,6 +237,15 @@ off every first load. `src/lib/cssHash.test.ts` computes every component's
 class the way the build does and fails if one equals a class the app writes
 itself (`small`, `steps`…), or two components share one.
 
+Output file names are short (`shortFileNames` in `frontend/vite.config.ts`):
+7-character hashes instead of Rollup's 8 (the least it accepts below 4 096
+chunks), and CSS files named by their hash alone, like SvelteKit's JS chunks
+(`DaDhZLr.css`, not `LoadState.DaDhZLrP.css`). The names are repeated in
+import statements, preload lists and the route manifest, where random
+characters compress badly: −2.7 KB gzip. Everything under `_app/immutable/`
+is still content-hashed, so the deploy's year-long caching is unchanged;
+`src/lib/shortFileNames.test.ts` pins the patterns.
+
 The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
 page build, so the engine ships once (issue #9). Vite builds a
 `new Worker(new URL(…))` as a bundle of its own, which carried its own copy of

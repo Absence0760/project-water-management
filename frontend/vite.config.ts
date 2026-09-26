@@ -104,6 +104,32 @@ export function preloadDedupe(): { plugin: Plugin; resolveDependencies: (file: s
 const preload = preloadDedupe();
 
 /**
+ * Shorter output file names (issue #9). Every chunk's name is in the import
+ * statements of the chunks that use it, and every CSS file's in the preload
+ * lists and SvelteKit's route manifest: random characters that compress
+ * badly. SvelteKit names chunks `[hash]` (Rollup's default, 8 characters);
+ * here 7, the least Rollup accepts below 4 096 chunks, and CSS files drop the
+ * component name (`LoadState.DaDhZLrP.css` → `DaDhZLr.css`), the way
+ * SvelteKit already names JS chunks. 42 bits of hash still change whenever
+ * the content does, so cache busting is unaffected. Output only: the SSR pass
+ * has no hashes, and the spreadsheet workers are builds of their own.
+ */
+export function shortFileNames(): Plugin {
+	const pattern = (n: unknown) => (typeof n === 'string' ? n.replace(/\[hash\]/g, '[hash:7]') : n);
+	return {
+		name: 'water:short-file-names',
+		outputOptions(output) {
+			return {
+				...output,
+				chunkFileNames: pattern(output.chunkFileNames) as typeof output.chunkFileNames,
+				entryFileNames: pattern(output.entryFileNames) as typeof output.entryFileNames,
+				assetFileNames: pattern(typeof output.assetFileNames === 'string' ? output.assetFileNames.replace('[name].', '') : output.assetFileNames) as typeof output.assetFileNames
+			};
+		}
+	};
+}
+
+/**
  * The engine is pure (no I/O, and no module does anything when it loads:
  * src/lib/engineSideEffects.test.ts guards that), so an engine module whose
  * exports a chunk doesn't use is no dependency of that chunk. Without this,
@@ -128,7 +154,7 @@ export function svelteRuntimeChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
-	plugins: [autocalWorkerChunk(), preload.plugin, sveltekit()],
+	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rollup
 	// builds that don't read build.rollupOptions, so they need the same
 	// treeshake rule: without it the import worker kept engine code it never
