@@ -34,8 +34,25 @@ export { calibrationStats, waterYearOf, type CalibrationWindow } from './network
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';
 export { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, demandPctNote, EQUITABLE_SHARE_FOOTNOTE, M3_PER_DAY_PER_LS, type CurtailmentInput, type ReportWindow } from './network/curtailment';
+export {
+	DEFAULT_ANNUAL_THRESHOLD,
+	STRESS_LABEL,
+	STRESS_THRESHOLDS,
+	stressClassOf,
+	supplyAssurance,
+	type ReliabilityMonth,
+	type StressClass,
+	type StressGrid,
+	type StressSummary,
+	type SupplyAssurance,
+	type SupplyReliability,
+	type WaterAccount,
+	type WaterAccountEwr,
+	type WaterAccountRow
+} from './network/reliability';
 export * from './views/farmView';
 export * from './views/farmProjection';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';
+export * from './allocations/compare';

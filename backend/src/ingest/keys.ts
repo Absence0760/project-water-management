@@ -1,4 +1,4 @@
-// Per-project API keys (roadmap WP-2.9, 038_api_keys.sql, docs/api.md §
+// Per-project API keys (roadmap WP-2.9, 039_api_keys.sql, docs/api.md §
 // Ingest): the key format, hashing, the constant-time comparison, the owner's
 // request bodies and the row shapes. Pure, so it is unit-tested (keys.test.ts).
 //
@@ -11,7 +11,7 @@ import { SERIES_KINDS } from '@water-management/engine';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
-/** Longest key name, in characters (038_api_keys.sql CHECK). */
+/** Longest key name, in characters (039_api_keys.sql CHECK). */
 export const API_KEY_NAME_MAX = 100;
 /** Longest a key may be set to live, in days (the CHECK allows 3650); absent = until revoked. */
 export const API_KEY_DAYS_MAX = 3650;

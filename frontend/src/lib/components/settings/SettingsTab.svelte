@@ -837,9 +837,23 @@
 				</div>
 			</div>
 			<span class="hint">
-				Period the curtailment targets on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
+				Period the curtailment targets and the assurance of supply on Runs & results average over, e.g. the last dry season. Leave blank for the whole run.
 			</span>
 			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
+			<div class="field">
+				<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
+				<NumberInput
+					id="st-aat"
+					min={1}
+					max={100}
+					scale={100}
+					disabled={readonly}
+					value={s.assuranceAnnualThreshold ?? 0.9}
+					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
+					aria-describedby="st-aat-h"
+				/>
+				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a farm's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+			</div>
 		</fieldset>
 	</section>
 

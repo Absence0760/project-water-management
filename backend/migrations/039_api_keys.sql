@@ -1,4 +1,4 @@
--- 038_api_keys — per-project API keys and the ingest endpoint (roadmap
+-- 039_api_keys — per-project API keys and the ingest endpoint (roadmap
 -- WP-2.9; docs/data-model.md § API keys, docs/security.md § API keys,
 -- docs/api.md § Ingest).
 --
@@ -62,7 +62,7 @@ CREATE TABLE api_key (
 	CHECK (revoked_by IS NULL OR revoked_at IS NOT NULL)
 );
 COMMENT ON TABLE api_key IS
-	'Per-project API keys for the ingest endpoint (038, WP-2.9). Owner only; a key request reads its row only through app_api_key_lookup. Key stored as SHA-256.';
+	'Per-project API keys for the ingest endpoint (039, WP-2.9). Owner only; a key request reads its row only through app_api_key_lookup. Key stored as SHA-256.';
 
 -- The owner's list (newest first); also covers the project_id foreign key.
 CREATE INDEX api_key_project_idx ON api_key (project_id, created_at DESC);

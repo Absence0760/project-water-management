@@ -57,7 +57,7 @@ erDiagram
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
+| `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep) and a display `sort_order` (003) | `[Crop demand]` crop table |
@@ -436,8 +436,8 @@ the result change?", and put back any earlier version.
 - **`audit_event`**: append-only access, data and publication events, with
   `actor_user_id` (must be the caller), `actor_label` (the display name then,
   or `API key “<name>”`), `kind`, `subject jsonb`, `change_set`, and
-  `actor_api_key_id` (→ `api_key` SET NULL, 038: the key that acted, with
-  `actor_user_id` NULL; see [§ API keys](#api-keys-038_api_keyssql)). Kinds recorded: `member.added/removed/role`
+  `actor_api_key_id` (→ `api_key` SET NULL, 039: the key that acted, with
+  `actor_user_id` NULL; see [§ API keys](#api-keys-039_api_keyssql)). Kinds recorded: `member.added/removed/role`
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
@@ -453,11 +453,13 @@ the result change?", and put back any earlier version.
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
-  registration, statement version and hash), `api_key.created/revoked`
-  (038: key id, name, prefix, scopes, allowed series, lifetime; never the
-  key or its hash), and restores. A key's ingest records
-  `series.created/merged` as the key, with its optional `source` label in
-  the subject, and no series revision (like a data feed).
+  registration, statement version and hash),
+  `allocation.created/changed/deleted/imported/import_deleted` (038:
+  registration numbers, file name and hash, counts; never a holder's name),
+  `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
+  series, lifetime; never the key or its hash), and restores. A key's ingest
+  records `series.created/merged` as the key, with its optional `source`
+  label in the subject, and no series revision (like a data feed).
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -489,7 +491,8 @@ the result change?", and put back any earlier version.
   reason. A new write route fails the inventory until it's listed. Exempt
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
-  ensembles, `POST /reports`.
+  ensembles, `POST /reports`, the allocation import preview (writes
+  nothing).
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -695,6 +698,49 @@ appropriate, and that they read its known limitations
   on signing (Step 4), sign-off in the data export (the POPIA export,
   WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
+
+### Allocations (038_allocations.sql)
+
+Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
+water-use volumes per farm or water user.
+
+- **`allocation_source`**: an imported file. `id`, `project_id` (→ `project`,
+  cascade), `kind` (`warms_extract` | `csv`), `file_name` (1–255), `sha256`
+  (hex of the file's UTF-8 text), `reference` (≤ 500), `imported_by` (→
+  `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
+  file is imported once per project (the index also covers the project key).
+  Deleting a source deletes its allocations (undo an import).
+- **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
+  composite key `(source_id, project_id)` → `allocation_source (id,
+  project_id)`, cascade, so a source is always the same project's), `node_id`
+  (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
+  `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
+  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
+  `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
+  `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
+  `reference` (≤ 500), `created_at`, `updated_at`. No names. Indexes cover
+  every key.
+- **`allocation_holder`**: `allocation_id` (primary key; composite key
+  `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
+  `user_display` (1–200). The registered user's name, in its own table so RLS
+  can hide it (decision D3 (b), pending legal advice).
+- **Triggers.** `allocation_same_project` (the node is the project's);
+  `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
+  and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
+  a gauge leaves its allocations unmatched, as a deleted node does).
+- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
+  editor; `allocation_select_farmer` lets a farmer read the allocations on
+  their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
+  policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
+  on their own farm; **viewers read no names**; writes editor. `water_app` has
+  `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **No personal identifiers.** No ID-number, phone or email column exists;
+  the importer refuses files that carry them ([security.md](./security.md)).
+- Guards: `backend/src/allocations/allocations.db.test.ts` (positive
+  controls: an editor reads names, the owner reads the rows a stranger can't,
+  a farmer reads their own farm's), the catalogue tests and the route
+  inventories.
 
 ### Import reports (017_project_import.sql)
 
@@ -975,7 +1021,7 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
   in the audit log; adding and editing don't (the row carries its author,
   `created_at` and `edited_at`).
 
-### API keys (038_api_keys.sql)
+### API keys (039_api_keys.sql)
 
 Per-project keys for the ingest endpoint: a logger gateway or a script
 merges daily readings without a session (WP-2.9;
@@ -1111,7 +1157,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Share links (025): `share_link` read, created and revoked by owners only,
   never deleted; the public reads only through `app_share_view` /
   `app_share_series` (see § Share links above).
-- API keys (038): `api_key` read, created and revoked by owners only, never
+- API keys (039): `api_key` read, created and revoked by owners only, never
   deleted. A key request (no user) writes its own project's allowed series
   and adds audit events naming itself, nothing else (see § API keys above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins

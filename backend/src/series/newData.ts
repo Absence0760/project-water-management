@@ -12,7 +12,7 @@
 //
 // Note for WP-2.11: an ingest request runs under an API key (withApiKey), with
 // no user, so an enqueue from here can't take app_current_user_id() as the
-// job's acting user, and the job table has no key policy yet (038_api_keys.sql).
+// job's acting user, and the job table has no key policy yet (039_api_keys.sql).
 import type { Db } from '../db/tx.js';
 
 export interface SeriesDaysChanged {

@@ -198,7 +198,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
   `naturalSource` is `table`, else `null`), `scale` (above 0, at most 1 000)
-  `}`. The engine's own checks run too (`ewrRuleTableIssues`), and two tables
+  `}`, and from engine 0.33.0 (model.md §2.9d) two optional fields:
+  `lowFlow` (the low-flow grid of a `total` table, same shape as `ewr`, or
+  `null`; refused on a `lowFlow` table) and `highFlows` (at most 12 `{ label`
+  1–100 chars, `months` (calendar 1–12, each once), `peakM3s` (above 0),
+  `durationDays` (whole, 1–90), `perYear` (whole, 1–12) `}`, strict; events ×
+  days must fit in a year). A table stored without them stays valid. The
+  engine's own checks run too (`ewrRuleTableIssues`), and two tables
   for one site are a `400`. The list is replaced whole by a `PATCH`.
   A settings `PATCH` merges nested groups (`gr4j`, `dataQuality`, `zeroRainRuns`, `wr2012`,
   `calibration`, `hiLoSplit`) one level deep over what is stored, so sending
@@ -845,7 +851,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `{ month, years, met, rate, deficitM3, meanRequired, meanActual,
   naturalCurve, fdc: [{ point, required, impacted, met }] }`); `overall {
   months, met, rate, deficitM3, longestNotMetRun, meanShortfallPct }`; `fdc {
-  cells, met, rate }` and `minYears`. Each site also has the daily series
+  cells, met, rate }` and `minYears`. From engine 0.33.0, only when the table
+  has them (model.md §2.9d): with a low-flow grid, each month adds
+  `requiredLowFlow`, `lowFlowMet`, `requiredHighFlow`, each month of the year
+  `lowFlowRate`, and the site `lowFlow { months, met, rate, deficitM3,
+  longestNotMetRun }`; with high-flow components, `highFlows` (each the
+  component plus `peakAppliedM3s`, `years: [{ waterYear, natural, actual,
+  required, met }]` over the complete water years, and `overall { years,
+  required, met, rate }`). Each site also has the daily series
   `ewr_rule` (m³/day; NaN outside complete months). Rules:
   [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6).
 - `summary.dataQuality` (engine ≥ 0.3.1) holds the input checks:
@@ -879,6 +892,26 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `consumptiveUseM3`, `transfersM3`, `spillM3`, `outflowM3`,
   `closingStorageM3`, `residualM3` (opening + runoff + transfers − consumptive
   use − outflow − closing; float noise).
+- `summary.supplyAssurance` (engine ≥ 0.32.0, WP-3.4, [model.md §2.11a–b](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34);
+  absent on older runs and on `runModelWithoutChecks` ensemble members) is
+  `{ reportStart, reportEnd, days, annualThreshold, reliability, stress, waterAccount }`:
+  - `reliability[]`, farms then other water users over the reporting window:
+    `{ nodeId, name, kind: 'farm'|'user', demandM3, suppliedM3, demandDays, metDays,
+    timeReliability, volumetricReliability, waterYears, waterYearsMet, annualReliability,
+    failureRuns, meanFailureDays, longestFailureDays, meanFailureDeficitM3,
+    maxFailureDeficitM3, months[12] }` (ratios 0–1 or `null` without demand;
+    `months` in water-year order, each `{ demandDays, metDays, demandM3, suppliedM3,
+    timeReliability, volumetricReliability }`);
+  - `stress`: `{ waterYears, days[][], thresholds, system, nodes[] }`, each grid
+    `{ nodeId (null = system), name, kind, ratio[][], stressClass[][] }` over the
+    whole run, class one of `low`, `moderate`, `high`, `severe`, `critical` or
+    `null` (no demand);
+  - `waterAccount`: `{ areaKm2, years[], total }`, each row `{ waterYear, days,
+    rainM3, catchmentLossM3, naturalFlowM3, rainOnDamsM3, groundwaterM3, transfersM3,
+    inM3, landCoverM3, unallocatedM3, consumptiveIrrigationM3, otherUseM3,
+    damEvaporationM3, streamDepletionM3, outflowM3, outM3, damSeepageM3,
+    irrigationSuppliedM3, openingStorageM3, closingStorageM3, storageChangeM3,
+    residualM3, scaleM3, ewr: { nodeId, name, requiredM3, metM3, daysNotMet }[] }`.
 - `summary.chirpsCorrection` (engine ≥ 0.7.0) is the CHIRPS fallback bias
   correction, `null` when the project has no CHIRPS series: `{ mode, minDays,
   minMm, clampMin, clampMax, pooled: { days, catchmentMm, chirpsMm, ownFactor,
@@ -1015,6 +1048,53 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
   Each sign-off is in the project's history (`signoff.created`).
 
+## Allocations
+
+Registered and licensed water-use volumes per farm or water user, and a run's
+modelled use against them (roadmap WP-3.10, migration 038,
+[allocations.md](./allocations.md)). The app compares; it never decides
+whether a use is lawful.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
+| POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
+| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; `holder: ''` removes the name | editor |
+| DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
+| POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
+| POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
+| DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1, default 0.1) | `{ run: { id, label, startDate, endDate }, comparison: AllocationComparison }` (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
+
+- `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
+  propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
+  storageM3, validFrom, validTo, reference, createdAt, updatedAt }`. `holder`
+  is `null` for a viewer (RLS hides `allocation_holder`), and when there is
+  none. `sourceId` is `null` for a row typed into the app.
+- `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
+  holder?, authorisation: 'registration' | 'licence' | 'general_authorisation'
+  | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
+  | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
+  'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
+  reference? }` (dates `YYYY-MM-DD`).
+- `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
+  importedBy, rows }`.
+- `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
+  `nodeId`, `matchedBy` (`registration` | `property` | `name` | `manual` |
+  `null`) and `alreadyInProject` (the registration number is already there).
+- `AllocationComparison = { tolerance, startDate, endDate, nodes: [{ nodeId,
+  name, kind, surface, groundwater, storage: { registeredM3,
+  modelledCapacityM3 } }], unmatchedAllocationIds, notInRunAllocationIds }`;
+  `surface` / `groundwater` = `{ waterSource, allocationIds, years: [{
+  waterYear, days, yearDays, partial, modelledM3, registeredM3, ratio, status
+  }], yearsOver, wholeYears, meanModelledM3PerYear, meanRegisteredM3PerYear }`,
+  `status` ∈ `over` | `within` | `under` | `unregistered` | `none`.
+- **Farmers** get `403` on every route, like every viewer route; RLS already
+  limits them to their own farms' allocations for the farm view to come.
+- History: `allocation.created/changed/deleted/imported/import_deleted`; the
+  preview is exempt (it writes nothing).
+
 ## Publication
 
 The run the project's stakeholders see, with the WUA's restriction notice
@@ -1129,9 +1209,9 @@ reads and writes only `farm` notes on their linked farms, and never sees a
 ## Ingest
 
 Per-project API keys, and the endpoint a logger gateway or a script pushes
-daily readings to without a session (roadmap WP-2.9; `038_api_keys.sql`,
+daily readings to without a session (roadmap WP-2.9; `039_api_keys.sql`,
 [security.md § API keys](./security.md#api-keys),
-[data-model.md § API keys](./data-model.md#api-keys-038_api_keyssql)). A key
+[data-model.md § API keys](./data-model.md#api-keys-039_api_keyssql)). A key
 belongs to one project and can merge days into that project's series
 (optionally only some of them), and nothing else.
 
@@ -1500,7 +1580,7 @@ ahead of the usual header row.
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain) |
 | `/projects/:id/runs/:runId/export/farms.csv` | `key`, `from?`, `to?` | `date` + one column per farm of the run, in the run's farm order (upstream first, the order of `RunSummary.farms`), for one farm series `key` (any key of `FARM_COLUMNS`, the optional ones included, e.g. `landcover_reduction`; `400` otherwise). `key=runoff` is the workbook's `[Fragmented flow]` sheet (column I), `key=ewr` its `[Fragmented EWR]` sheet (column Y). Each header is the farm's current name, then the letter and unit (`Farm A [I] (m³/day)`); a farm deleted from the model since the run keeps its column under the name the run knew (a run keeps all its series, migration 024), and a farm without that series (a dam column on a farm with no dam) is left out. `404` when no farm has the series |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages), catchment figures, the water balance per water year and for the whole run, the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run, then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; each part says `Not checked: …` when the run lacks what it needs), calibration, the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

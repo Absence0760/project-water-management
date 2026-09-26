@@ -9,7 +9,7 @@ import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput } from './testing/fuzz';
-import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkTransferLimits, checkWorkings } from './testing/invariants';
+import { checkAll, checkDoubledCropAreas, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 
 describe('engine invariants on random networks', () => {
 	// The random soak itself (checkAll on FUZZ_CASES seeds, legacy and GR4J) is
@@ -130,6 +130,16 @@ describe('engine invariants on random networks', () => {
 			const input = randomInput(seed, { runoffModel: 'gr4j' });
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}, GR4J`).toBeNull();
 		}
+	});
+
+	it('engine 0.32.0: the water account closes in a dry year of a long run (seed 1486)', () => {
+		// Summed from prefix sums over the run, a 5 m³ year carried the whole
+		// run's rounding: a residual of 3e-9 m³ (network/reliability.ts dailyTotals).
+		const input = randomInput(1486);
+		const out = runModel(input);
+		expect(checkWaterAccount(out)).toBeNull();
+		expect(checkReliability(out)).toBeNull();
+		expect(checkAll(input, 1486)).toBeNull();
 	});
 });
 

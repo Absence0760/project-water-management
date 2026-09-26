@@ -194,12 +194,17 @@ export type AuditKind =
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	| 'allocation.created'
+	| 'allocation.changed'
+	| 'allocation.deleted'
+	| 'allocation.imported'
+	| 'allocation.import_deleted'
 	| 'restore';
 
 /**
  * Record one audit event as the transaction's actor, with a snapshot of their
  * name: the signed-in user (withUser) and their display name, or the API key
- * (withApiKey, 038_api_keys.sql) and `API key “<name>”`. `subject` holds ids,
+ * (withApiKey, 039_api_keys.sql) and `API key “<name>”`. `subject` holds ids,
  * names, counts and dates, never a secret, a token or series values.
  */
 export async function recordAudit(db: Db, projectId: string, kind: AuditKind, subject: Record<string, unknown> = {}): Promise<void> {

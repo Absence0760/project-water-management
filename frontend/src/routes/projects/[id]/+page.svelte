@@ -12,6 +12,7 @@
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
+		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
@@ -50,6 +51,7 @@
 		{ id: 'settings', label: 'Settings & calibration' },
 		{ id: 'runs', label: 'Runs & results' },
 		{ id: 'scenarios', label: 'Scenarios' },
+		{ id: 'allocations', label: 'Allocations' },
 		{ id: 'history', label: 'History' }
 	] as const;
 	type TabId = (typeof TABS)[number]['id'];
@@ -490,6 +492,10 @@
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
 						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={(l) => (runs = l)} />{/snippet}
+					</Lazy>
+				{:else if tab === 'allocations'}
+					<Lazy load={LOAD.allocations}>
+						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} />{/snippet}
 					</Lazy>
 				{:else if tab === 'history'}
 					<Lazy load={LOAD.history}>

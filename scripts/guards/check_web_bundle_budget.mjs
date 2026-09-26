@@ -479,7 +479,6 @@
 //             three closing sections. No new dependency; the largest page
 //             chunk stays under 41 KB. The engine split (#9) is still the
 //             way to win the total back.
-
 // 2026-09-26  total 837 → 844 KB; other ceilings unchanged. Notes and
 //             comments (WP-2.7): the notes drawer and its count badges on
 //             network rows, the run Record group and the settings groups,
@@ -490,6 +489,17 @@
 //             sits in shared chunks. No new dependency; the largest page
 //             chunk stays 40 KB. Headroom ~6 KB. #9's engine split (~20 KB,
 //             docs/followups.md) is the way back down.
+// 2026-09-26  total 844 → 874 KB (measured 872 merged with the notes
+//             above; 866 before them), calibration worker 57 → 61 KB
+//             (measured 59); other ceilings unchanged. One batch
+//             merge: WP-3.10's Allocations tab (import, compare, table),
+//             WP-3.4's Assurance of supply and Water account panels plus the
+//             engine's reliability module (network/reliability.ts, part of
+//             every run summary, so it lands in the calibration worker too),
+//             and WP-3.7's low-flow / high-flow Reserve code in the engine
+//             (reserve/) with its settings editors and heat map. No new
+//             dependency; the largest page chunk stays at 41 KB. The engine
+//             split (#9) is the way back for both the total and the worker.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -500,9 +510,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 844,
+	totalCodeKb: 874,
 	largestChunkKb: 41,
-	largestWorkerKb: 57,
+	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });

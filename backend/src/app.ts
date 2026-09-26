@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
+import { allocationRoutes } from './allocations/routes.js';
 import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
@@ -111,6 +112,7 @@ export function createApp() {
 	projects.route('/', publicationRoutes);
 	projects.route('/', historyRoutes);
 	projects.route('/', shareLinkRoutes);
+	projects.route('/', allocationRoutes);
 	projects.route('/', noteRoutes);
 	projects.route('/', apiKeyRoutes);
 	app.route('/projects', projects);

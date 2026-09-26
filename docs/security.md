@@ -236,7 +236,7 @@ result without signing in, until it expires or its owner revokes it.
 
 ## API keys
 
-Per-project keys for the ingest endpoint (WP-2.9; `038_api_keys.sql`,
+Per-project keys for the ingest endpoint (WP-2.9; `039_api_keys.sql`,
 [api.md § Ingest](./api.md#ingest)). A new trust boundary: a request with no
 session, whose credential is a long-lived secret held by a machine (a
 logger gateway, a script). The key can merge days into one project's series
@@ -723,6 +723,29 @@ the whole report is **untrusted text stored server-side**:
   run or parsed.
 - Not in `export.json`, so an export can't carry one project's report into
   another's import.
+
+### Allocations: POPIA minimisation (038_allocations.sql)
+
+A WARMS extract can carry the registered user's identity number, phone
+number and address. The app has no use for them, so they never reach the
+database:
+
+- The importer (`backend/src/allocations/parse.ts`) **refuses the whole
+  file** when a heading looks like an ID number, identity, passport, phone,
+  cell, telephone, fax or email column, before anything is stored, and says
+  which columns to delete. A 13-digit number in the holder, reference,
+  property or farm column is a row problem, so a mislabelled ID column can't
+  slip in as a name.
+- The registered user's **name** is the only personal field kept, in
+  `allocation_holder`, readable by editors and owners and by the linked farmer
+  for their own farm; **viewers never read it** (RLS, decision D3 (b) pending
+  legal advice). The history records registration numbers, file names and
+  counts, never names. The export's `holder` column is only in an editor's
+  file.
+- Cells are stored as they came; the CSV export neutralises formula-looking
+  cells (`'` prefix), as every export does.
+- Still open with the rest of POPIA (Known gaps below): allocations and names
+  in a data-subject export and deletion.
 
 ## Public repo hygiene
 

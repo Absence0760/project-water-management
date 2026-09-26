@@ -202,6 +202,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
+- `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/testing.md`: which test command when, and how long each takes
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks

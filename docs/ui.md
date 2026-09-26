@@ -1004,8 +1004,11 @@ which checks every catchment tab).
   to the WR2012 group.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
-  months get the full width) a bar chart and the annual volume, and the
-  curtailment reporting window.
+  months get the full width) a bar chart and the annual volume, the
+  curtailment reporting window (also the assurance of supply's window), and
+  the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
+  default 90 %: a water year counts as met at that supply ratio; engine ≥
+  0.32.0).
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -1034,6 +1037,19 @@ which checks every catchment tab).
   natural flow) show under the table without blocking Save; a missing source,
   a bad point list or a blank cell, and two tables for one site, block Save
   and the save bar links here. **Remove the rule table at …** deletes one.
+  From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
+  **Also enter the low flows (maintenance and drought)**, which adds a blank
+  **Low flows (maintenance to drought)** grid (blank cells block Save; switching
+  the table to *Low flows only* drops it) and a **Fill the low flows** button;
+  **Load a CSV file** reads a file into the paste box, and two links download
+  synthetic example layouts (a total-flow and a low-flow table, DRM style).
+  Under each table, **High flows: freshets and floods**
+  (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
+  months it may start in typed as "Nov-Jan" or "Nov Dec Jan", peak m³/s, days
+  at peak, events per year) with **Add a high flow** and Remove, a **Paste high
+  flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
+  example CSV. The two status lines are named *Paste result* and *High-flow
+  paste result*.
 - **Simulation period**.
 - **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
   in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
@@ -1411,8 +1427,7 @@ run's report to chosen members every week or month.
   charged to farms and the natural part over the reporting window (all three
   tables follow the [reporting window picker](#report-window)); with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
-  at the Reserve determination's EWR sites to protect upstream reaches.* The
-  hydrograph (observed flow as a line
+  at the Reserve determination's EWR sites to protect upstream reaches.* The hydrograph (observed flow as a line
   under simulated outflow, broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
@@ -1548,7 +1563,18 @@ run's report to chosen members every week or month.
   FDC points met), and, collapsed, **Month by month**: every complete month's
   natural flow, its condition (% exceedance, or wetter / drier than the table),
   the requirement, the simulated flow, the share of the requirement and met or
-  not met (rows not met shaded). The daily requirement is the series
+  not met (rows not met shaded). From engine 0.33.0 ([model.md §2.9d](./model.md)),
+  a **heat map** of the chosen site: water-year rows × Oct … Sep, each month
+  blank when met, light blue with ◐ when only the high flows were short (the
+  low flows met; only with a low-flow grid), dark blue with ● when the low
+  flows (or, without a low-flow grid, the month) were short, the number the
+  simulated flow as % of the requirement, each cell's full reading in its
+  title and for screen readers, and a key; with a low-flow grid, a **Low flows
+  met** figure, a column in the by-month table and two in Month by month; and
+  with high-flow components, a **High flows** table (each component, its
+  months, peak, days, per year and "Met in 3 of the 4 water years whose
+  natural flow had it") and, collapsed, **High flows year by year** (natural,
+  simulated and required events). The daily requirement is the series
   `ewr_rule` in the explorer and the daily CSV. Then the monthly EWR compliance grid (per farm, from engine
   0.17.0, the days it was charged and the volume charged, "(EWR charge)" in the
   site picker), the **EWR test
@@ -1588,6 +1614,28 @@ run's report to chosen members every week or month.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
+- **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
+  curtailment table; `reliability/AssurancePanel.svelte`, helpers in
+  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  [model.md §2.11a](./model.md)): per farm and other water user over the
+  reporting window, the % of demand days fully met, the % of demand
+  supplied, water years met against the annual threshold (Settings), the
+  failures and their mean and longest length, and the mean and largest
+  deficit per failure. Below it the **stress classes by month**: a heat map
+  in the EWR grid's pattern (water-year rows × Oct … Sep, arrow keys move
+  between cells), for all farms and users together or one of them (a *Show*
+  picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
+  colour is never the only cue, with a legend of the ranges and a count of
+  months per class.
+- **Water account** (`#res-water-account`, last under *River & Reserve*;
+  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  two bars for the chosen period (*Period*: the whole run or a water year),
+  what came in and where it went or was stored, each with a labelled key;
+  then a table of every term per water year and the whole run (terms a
+  network doesn't have are left out), the change in dam storage and the
+  residual (to two significant figures, float noise), and the EWR required
+  vs met at each site. Runs before engine 0.32.0 show *Not computed by
+  engine x.y* in both panels.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
@@ -1671,6 +1719,45 @@ them scenarios).
   overrides** section above "What changed" lists that run's ops as it
   recorded them, with their classes and the callout (`ScenarioOverrides.svelte`,
   its own chunk).
+
+## Allocations (`?tab=allocations`)
+
+WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
+[allocations.md](./allocations.md)). A core tab: owners, editors and viewers
+see it; farmers never reach the workspace.
+
+- **Modelled use vs registered volume** (`AllocationCompare.svelte`), on top:
+  a run picker (the published run by default, else the latest), a sentence
+  saying modelled use is *modelled, not metered* and a difference is
+  something to look into, not a finding; a warning listing the farms and
+  sources whose modelled use was above the registered volume, with how many
+  whole water years; notes for allocations not matched to a farm, or matched
+  to a farm the run doesn't have. The table has one row per farm, source and
+  water year: registered m³, modelled use m³ ("modelled, not metered" under
+  the heading), modelled ÷ registered, and a status badge (*Above
+  registered*, *Within band*, *Below registered*, *No registered volume*, *No
+  use, none registered*; the full sentence in its title). A part year is
+  marked "part (N d)". A source with neither use nor a volume is left out.
+  On a phone each row is a card of label–value lines.
+- **Registered volumes**: the list (farm, registration, the registered user
+  for editors only, authorisation, purpose, source, volume, storage, validity,
+  and where it came from: the file name and the first 12 hex digits of its
+  SHA-256, or "Entered by hand"). Unmatched rows are highlighted. **Download
+  CSV** (the export, names for editors only). Editors: **Add a volume**, and
+  **Change** / **Delete** per row (the form's farm picker is how a row is
+  matched by hand). Viewers see "Names of registered users are shown to
+  editors only." Below the list, **Imported files**: each with its full hash,
+  reference, row count, who and when, and **Remove this import**.
+- **Import registered volumes** (`AllocationImport.svelte`, editors): what
+  the file is (WARMS extract or CSV template), a reference, the file, and a
+  **Download the CSV template** link. The preview says how many rows matched,
+  didn't, or have problems; the table lists rows with problems first (the
+  problem in red), then unmatched rows, each with a farm picker ("by farm
+  name", "chosen by you"). **Import N rows** stores the valid ones; the
+  message says how many were imported, left out and still unmatched. Errors
+  (a refused file, a file already imported) show in an alert.
+- e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
+  viewer without names, phone cards, axe).
 
 ## History (`?tab=history`)
 

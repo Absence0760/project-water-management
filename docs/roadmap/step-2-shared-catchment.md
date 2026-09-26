@@ -1204,7 +1204,7 @@ section), deployment.md (queues, the worker, alarms), run-locally.md
 
 ### WP-2.9 Per-project API keys and the ingest endpoint
 
-> **Status: built** (`038_api_keys.sql`, `backend/src/ingest/`,
+> **Status: built** (`039_api_keys.sql`, `backend/src/ingest/`,
 > `series/merge.ts` `mergeInto`, Settings → API keys,
 > `scripts/ingest/push-fixture.mjs` / `pnpm dev:ingest:push`;
 > [api.md § Ingest](../api.md#ingest), [security.md § API keys](../security.md#api-keys)).

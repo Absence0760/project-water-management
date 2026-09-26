@@ -25,7 +25,7 @@ export async function withUser<T>(userId: string, fn: (db: Db) => Promise<T>): P
 }
 
 /**
- * Run `fn` in a transaction acting as the API key `keyId` (038_api_keys.sql,
+ * Run `fn` in a transaction acting as the API key `keyId` (039_api_keys.sql,
  * the ingest endpoint): sets `app.current_api_key_id`, transaction-local like
  * withUser's setting, and **no** user id. The key's RLS policies then let it
  * read and write its own project's (allowed) series and add audit events

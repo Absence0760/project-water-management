@@ -2,7 +2,7 @@
 // Ingest, docs/security.md § API keys).
 //
 // Owners list, create and revoke keys under /projects/:id/api-keys (RLS in
-// 038_api_keys.sql enforces the same). The ingest routes under /ingest/v1 have
+// 039_api_keys.sql enforces the same). The ingest routes under /ingest/v1 have
 // no session: the key is the credential (ingest/auth.ts), and the work runs in
 // withApiKey, where RLS lets the key write its own project's (allowed) series
 // and nothing else.

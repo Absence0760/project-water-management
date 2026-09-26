@@ -649,6 +649,28 @@ the reports):
       - [x] **Uncertainty on compliance.** Phase 9's bands include the
             monthly Reserve compliance rate per site beside days not met
             (engine 0.26.0).
+      - [x] **Low flows and high flows (WP-3.7, engine 0.33.0).** The DRM
+            low-flow table beside a total table and freshet / flood
+            components per site, entered by paste or CSV, with a heat map
+            per site ([model.md §2.9d](./model.md)). Method choices pending
+            the hydrologist (plan.md question 17).
+      - [ ] **Low flows on base flow.** Engine 0.33.0 judges the low-flow
+            requirement on the month's total volume, so a flood month can
+            pass its low flows while its base flow was short. The durable
+            fix is a base-flow measure of the month (a recursive baseflow
+            filter, or the mean of the month's lowest daily flows) compared
+            with the low-flow requirement, behind a new engine version.
+            Trigger: the hydrologist's answer on which measure a Reserve
+            monitoring report uses.
+      - [ ] **Site source and confidence labels (WP-3.7 UI).** Each rule
+            table has a free-text source; the WP asks for a typed source
+            (`gazetted` | `desktop` | `other`) with a confidence line
+            ("Desktop estimate, low confidence" / "Gazetted Reserve, GN …")
+            and, in scenarios and evidence packs, a changed table shown in
+            red as a baseline assumption. Durable fix: an optional
+            `sourceKind` on `EwrRuleTable` (engine, schema, editor,
+            the panel and packs). Trigger: WP-3.5 packs quoting the
+            Reserve, or the assessor persona asking.
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -1228,6 +1250,33 @@ role and not before it.
       forecast-rain change.
 
 
+- **Assurance of supply, stress classes and the water account** (roadmap
+  WP-3.4, engine 0.32.0, 2026-09-26; [model.md §2.11a–b](./model.md)).
+  Built: `network/reliability.ts` → `RunSummary.supplyAssurance`, the Runs
+  tab's two panels, the three summary-CSV blocks,
+  `settings.assuranceAnnualThreshold`, `checkReliability` and
+  `checkWaterAccount` in the soak. Left open:
+  - [ ] **The hydrologist signs off the definitions** (pending, decided from
+        the persona review): demand days, not all days, for the time-based
+        measure; part water years counting for the annual one; the v004
+        stress thresholds as they stand; seepage as a memo rather than an out
+        term. Trigger: the hydrologist's first review of a licensing run.
+  - [ ] **Dam releases in the water account** once WP-3.5 lands: a release
+        that leaves the network is an out term; one that stays is already in
+        the outflow. Owner: WP-3.5.
+  - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
+        WP-3.7's Desktop tables: the account uses the pragmatic EWR at each
+        site today. Owner: WP-3.7.
+  - [ ] **Where else the metrics show**: the printable report
+        (`report/`), the farm view (a farmer's own reliability and stress
+        months) and the scenario compare view (Δ reliability per farm).
+        Trigger: WP-3.10's evidence pack, which needs them in the report.
+  - [ ] **Bundle budget**: the build is 829 KB against the 821 KB ceiling
+        (both panels are lazy; the growth is the engine module in every
+        runModel chunk, the help entries and the Settings field). The
+        coordinator raises the ceiling at merge or trims elsewhere.
+
+
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
   scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
@@ -1644,7 +1693,7 @@ role and not before it.
       on the field itself, or the History tab's parameter filter is the
       most-used one.
 - [x] **`api_key.*` audit kinds are recorded** now that per-project API
-      keys exist (WP-2.9, `038_api_keys.sql`): `api_key.created/revoked`,
+      keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
       and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
 - [ ] **Auto re-run after an ingest or a feed merge** (WP-2.11). `mergeInto`
       calls the no-op `series/newData.ts` `onSeriesDaysChanged` on every
@@ -1654,6 +1703,41 @@ role and not before it.
       transaction has no user, so the enqueue needs an acting user (e.g. the
       key's creator) or a `SECURITY DEFINER` enqueue, plus a job policy for
       keys. Trigger: WP-2.11.
+
+## Allocations (WP-3.10)
+
+The first slice (2026-09-26: migration 038, engine `compareAllocations`,
+`backend/src/allocations/`, the Allocations tab; [allocations.md](./allocations.md))
+stores registered volumes and compares them with a run's modelled use. Left,
+from the WP:
+
+- [ ] **Engine `allocationMode`** (`cap` | `fullAllocation`, default `none`)
+      with `RunSummary.allocations` and a `checkAllocations` invariant in
+      `runModel`; bumps `ENGINE_VERSION`. `cap`: cumulative supply per water
+      year ≤ the allocation; `fullAllocation`: demand replaced by the
+      allocation over its monthly pattern. Durable fix for "what if every
+      lawful user took their entitlement" (WP-3.11's background run).
+      Trigger: WP-3.11 (cumulative impact) or an assessor asking.
+- [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
+      (default 0.1, pending the hydrologist). Trigger: the first client asking
+      for another band.
+- [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
+      import and a column-mapping step for unknown headings. Until then an
+      unknown heading is listed as "not read". Trigger: the client sends an
+      extract (plan.md questions).
+- [ ] **Licence conditions**: `months`, `maxRateM3s`, a `conditions jsonb`
+      (the WP's `Allocation` shape), shown and later enforced by `cap`.
+- [ ] **Farm view**: a farmer's own registered volume beside their modelled
+      use (RLS already allows it: `allocation_select_farmer`,
+      `allocation_holder_select`); share views per D3 (c) (volumes public,
+      names hidden). Trigger: D3 settled with the client's legal adviser.
+- [ ] **Dam filling vs registered storage** (s21b): the comparison counts
+      supply from the farm's own dam as abstraction and compares storage with
+      the dam capacity only. Pending the hydrologist.
+- [ ] **POPIA**: allocations and holder names in the data-subject export and
+      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **Evidence pack and chart**: the over/under-use chart and the
+      comparison in the licence evidence pack (WP-3.14).
 
 ## Housekeeping
 

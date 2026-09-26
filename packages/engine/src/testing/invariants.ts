@@ -5,6 +5,7 @@
 import type { ModelInput, ModelOutput } from '../project';
 import { runModel } from '../run';
 import { checkInvariants } from '../verify/checks';
+import { stressClassOf } from '../network/reliability';
 import { cloneInput, scrambleOrder } from './fuzz';
 
 export { checkBalance, checkEwrAttribution, checkInvariants, checkReportTotals, checkRunoffBalance, checkTransferLimits, checkWorkings } from '../verify/checks';
@@ -76,6 +77,11 @@ function canonical(out: ModelOutput) {
 			users: s.users && byNode(s.users),
 			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms), otherUsers: s.curtailment.otherUsers && byNode(s.curtailment.otherUsers) },
 			ewrCompliance: s.ewrCompliance && { ...s.ewrCompliance, farms: byNode(s.ewrCompliance.farms) },
+			supplyAssurance: s.supplyAssurance && {
+				...s.supplyAssurance,
+				reliability: byNode(s.supplyAssurance.reliability),
+				stress: { ...s.supplyAssurance.stress, nodes: byNode(s.supplyAssurance.stress.nodes) }
+			},
 			dataQuality: s.dataQuality && { ...s.dataQuality, areaMismatches: s.dataQuality.areaMismatches && byNode(s.dataQuality.areaMismatches) },
 			// Warnings name elements in input order; compare them as a multiset of
 			// sentences with the name lists sorted.
@@ -171,6 +177,17 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 		if (f2.fractionSupplied > f1.fractionSupplied + slack)
 			return `doubling crop areas raised ${f2.nodeId}'s supply fraction ${f1.fractionSupplied} → ${f2.fractionSupplied}`;
 	}
+	// Nor any reliability metric (WP-3.4): time-based, volumetric, annual.
+	const rel = new Map((o1.summary.supplyAssurance?.reliability ?? []).map((r) => [r.nodeId, r]));
+	for (const r2 of o2.summary.supplyAssurance?.reliability ?? []) {
+		const r1 = rel.get(r2.nodeId);
+		if (!r1 || r1.kind !== 'farm') continue;
+		for (const k of ['timeReliability', 'volumetricReliability', 'annualReliability'] as const) {
+			const a = r1[k];
+			const b = r2[k];
+			if (a !== null && b !== null && b > a + slack) return `doubling crop areas raised ${r2.nodeId}'s ${k} ${a} → ${b}`;
+		}
+	}
 	const tot = (o: ModelOutput) => o.summary.farms.reduce((s, f) => [s[0]! + f.avgDemandM3Day, s[1]! + f.avgSuppliedM3Day], [0, 0]);
 	const [d1, s1] = tot(o1);
 	const [d2, s2] = tot(o2);
@@ -221,8 +238,87 @@ export function checkAll(input: ModelInput, seed = 1): string | null {
 	} catch (e) {
 		return `threw: ${(e as Error).message}`;
 	}
-	const bad = checkInvariants(input, out);
+	const bad = checkInvariants(input, out) ?? checkReliability(out) ?? checkWaterAccount(out);
 	if (bad) return bad;
 	if (!sameOutput(runModel(input), out)) return 'not deterministic';
 	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(droughtBoreholesAsSupplemental(input));
+}
+
+/**
+ * Assurance of supply (WP-3.4, ../network/reliability.ts) agrees with the rest
+ * of the summary: every metric is a fraction in [0, 1]; a farm's volumetric
+ * reliability is the curtailment table's supplied ÷ demand over the same
+ * window; time-based reliability is 1 exactly when no demand day fell short;
+ * the months add up to the whole; and each stress class matches its ratio.
+ */
+export function checkReliability(out: ModelOutput): string | null {
+	const a = out.summary.supplyAssurance;
+	if (!a) return 'supplyAssurance missing';
+	const cur = new Map((out.summary.curtailment?.farms ?? []).map((f) => [f.nodeId, f]));
+	const get = new Map(out.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));
+	const d0 = Math.round(Date.parse(`${out.startDate}T00:00:00Z`) / 86_400_000);
+	const from = Math.round(Date.parse(`${a.reportStart}T00:00:00Z`) / 86_400_000) - d0;
+	const to = from + a.days - 1;
+	const inUnit = (v: number | null) => v === null || (v >= 0 && v <= 1 + 1e-12);
+	for (const r of a.reliability) {
+		for (const k of ['timeReliability', 'volumetricReliability', 'annualReliability'] as const)
+			if (!inUnit(r[k])) return `reliability ${r.nodeId} ${k} = ${r[k]} outside [0, 1]`;
+		const c = cur.get(r.nodeId);
+		if (r.kind === 'farm') {
+			if (!c) return `reliability ${r.nodeId} has no curtailment row`;
+			const v = c.demandM3Day > 0 ? c.suppliedM3Day / c.demandM3Day : null;
+			if ((v === null) !== (r.volumetricReliability === null) || (v !== null && Math.abs(v - r.volumetricReliability!) > 1e-9))
+				return `reliability ${r.nodeId}: volumetric ${r.volumetricReliability} ≠ curtailment ΣI/ΣH ${v}`;
+		}
+		const D = get.get(`${r.nodeId}|demand`);
+		const G = get.get(`${r.nodeId}|supplied`);
+		if (!D || !G) return `reliability ${r.nodeId}: no demand/supplied series`;
+		let short = false;
+		for (let t = from; t <= to; t++) if (D[t]! > 0 && D[t]! - G[t]! > 1e-9 * D[t]!) short = true;
+		if ((r.timeReliability === 1) === short && r.timeReliability !== null)
+			return `reliability ${r.nodeId}: time reliability ${r.timeReliability} but ${short ? 'a' : 'no'} demand day fell short`;
+		if (r.metDays > r.demandDays) return `reliability ${r.nodeId}: met days ${r.metDays} > demand days ${r.demandDays}`;
+		const md = r.months.reduce((s, m) => s + m.demandDays, 0);
+		const mm = r.months.reduce((s, m) => s + m.metDays, 0);
+		if (md !== r.demandDays || mm !== r.metDays) return `reliability ${r.nodeId}: months sum to ${mm}/${md} days, not ${r.metDays}/${r.demandDays}`;
+		if ((r.failureRuns === 0) !== (r.metDays === r.demandDays)) return `reliability ${r.nodeId}: ${r.failureRuns} failure runs with ${r.demandDays - r.metDays} failed days`;
+		if (r.waterYearsMet > r.waterYears) return `reliability ${r.nodeId}: ${r.waterYearsMet} of ${r.waterYears} water years met`;
+	}
+	for (const g of [a.stress.system, ...a.stress.nodes]) {
+		for (let i = 0; i < g.ratio.length; i++)
+			for (let j = 0; j < 12; j++) {
+				const x = g.ratio[i]![j]!;
+				if (!inUnit(x)) return `stress ${g.name} ratio ${x} outside [0, 1]`;
+				if (stressClassOf(x) !== g.stressClass[i]![j]) return `stress ${g.name}: class ${g.stressClass[i]![j]} for ratio ${x}`;
+			}
+	}
+	return null;
+}
+
+/**
+ * The water account (WP-3.4) closes: in − out − Δ storage is float noise
+ * (≤ 1e-10 of Σ|terms|) in every water year and over the run, the years add
+ * up to the run, and at each EWR site 0 ≤ met ≤ required.
+ */
+export function checkWaterAccount(out: ModelOutput): string | null {
+	const w = out.summary.supplyAssurance?.waterAccount;
+	if (!w) return 'waterAccount missing';
+	for (const r of [...w.years, w.total]) {
+		const at = r.waterYear ?? 'run';
+		if (!(Math.abs(r.residualM3) <= 1e-10 * Math.max(r.scaleM3, 1))) return `water account ${at}: residual ${r.residualM3} m³ of ${r.scaleM3}`;
+		for (const e of r.ewr) {
+			const tol = 1e-9 * Math.max(e.requiredM3, 1);
+			if (e.metM3 < -tol || e.metM3 > e.requiredM3 + tol) return `water account ${at}: EWR ${e.name} met ${e.metM3} of ${e.requiredM3}`;
+		}
+	}
+	const days = w.years.reduce((s, r) => s + r.days, 0);
+	if (days !== w.total.days) return `water account: years cover ${days} days, run ${w.total.days}`;
+	const sum = (k: 'naturalFlowM3' | 'outflowM3' | 'consumptiveIrrigationM3') => w.years.reduce((s, r) => s + r[k], 0);
+	for (const k of ['naturalFlowM3', 'outflowM3', 'consumptiveIrrigationM3'] as const) {
+		if (Math.abs(sum(k) - w.total[k]) > 1e-9 * Math.max(w.total.scaleM3, 1)) return `water account: years' ${k} ${sum(k)} ≠ run ${w.total[k]}`;
+	}
+	for (let i = 1; i < w.years.length; i++) {
+		if (w.years[i]!.openingStorageM3 !== w.years[i - 1]!.closingStorageM3) return `water account ${w.years[i]!.waterYear}: opening storage ≠ last year's closing`;
+	}
+	return null;
 }

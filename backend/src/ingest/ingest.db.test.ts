@@ -1,4 +1,4 @@
-// Per-project API keys and the ingest endpoint (WP-2.9, 038_api_keys.sql).
+// Per-project API keys and the ingest endpoint (WP-2.9, 039_api_keys.sql).
 // Every "cannot" has a positive control: the owner can, a live key writes its
 // own project's series, an allowed series merges.
 import { createHash } from 'node:crypto';

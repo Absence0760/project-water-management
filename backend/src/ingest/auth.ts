@@ -1,4 +1,4 @@
-// Authenticating an ingest request by its API key (WP-2.9, 038_api_keys.sql;
+// Authenticating an ingest request by its API key (WP-2.9, 039_api_keys.sql;
 // docs/security.md § API keys).
 //
 //   1. The Authorization header must carry `Bearer wm_<prefix>_<secret>` in
