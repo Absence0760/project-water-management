@@ -81,7 +81,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// Sign-offs (WP-3.13, 035_signoff): auth-gated like every project route.
+	// Sign-offs (WP-3.13, 036_signoff): auth-gated like every project route.
 	it('inventories the sign-off routes as auth-gated', () => {
 		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {
 			expect(routes).toContain(r);

@@ -1,5 +1,5 @@
 // /projects/:id/runs/:runId/signoffs — professional sign-off on a run
-// (roadmap WP-3.13, 035_signoff.sql; docs/api.md § Sign-offs). Viewers read
+// (roadmap WP-3.13, 036_signoff.sql; docs/api.md § Sign-offs). Viewers read
 // the statement and the sign-offs; editors and owners sign, as themselves.
 // A sign-off is immutable: there is no route to change or remove one, and RLS
 // gives water_app no UPDATE or DELETE on the table either.

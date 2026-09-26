@@ -762,7 +762,7 @@ export interface ShareSeries {
 	recent: { startDate: string; values: (number | null)[] };
 }
 
-/** A professional sign-off on a run (035_signoff, docs/api.md § Sign-offs). Immutable. */
+/** A professional sign-off on a run (036_signoff, docs/api.md § Sign-offs). Immutable. */
 export interface Signoff {
 	id: string;
 	runId: string;
