@@ -14,11 +14,16 @@
 	let {
 		summary,
 		days,
-		nodeOrder = new Map()
+		nodeOrder = new Map(),
+		startDate,
+		endDate
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
 		days: number;
+		/** The run's first and last day: the period the farm figures cover (issue #44). */
+		startDate?: string;
+		endDate?: string;
 		/** nodeId → network position, for the default farm order. */
 		nodeOrder?: ReadonlyMap<string, number>;
 	} = $props();
@@ -39,6 +44,8 @@
 	const c = $derived(summary.catchment);
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
 	const lede = $derived(runSentence(summary));
+	/** Farm figures here are whole-record means; the curtailment table has its own window. */
+	const wholeRecord = $derived(startDate && endDate ? `the whole record, ${startDate} to ${endDate} (${fmtNum(days)} days)` : 'the whole record');
 
 	let sortKey = $state<FarmSortKey>('network');
 	let sortDir = $state<'asc' | 'desc'>('asc');
@@ -124,6 +131,7 @@
 		<dd class="sub">
 			{shortCount ? `${shortCount} of ${farms.length} farms below ${fmtPct(SUPPLY_TARGET, 0)}` : `all farms ≥ ${fmtPct(SUPPLY_TARGET, 0)}`}
 		</dd>
+		<dd class="sub">over the whole record</dd>
 	</div>
 	{#if cal && cal.days > 0}
 		<div class="stat">
@@ -159,7 +167,7 @@
 			{:else}
 				All farms received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
 			{/if}
-			Daily averages over the run; click a heading to sort.
+			<span data-testid="farms-period">Daily averages over {wholeRecord}; the curtailment targets cover the reporting window.</span> Click a heading to sort.
 		</p>
 		{#if sortKey !== 'network'}
 			<button type="button" class="btn btn-sm" onclick={() => ((sortKey = 'network'), (sortDir = 'asc'))}>Network order</button>

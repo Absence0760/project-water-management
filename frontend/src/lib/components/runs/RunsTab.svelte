@@ -9,7 +9,6 @@
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
 import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
@@ -23,6 +22,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { notesPreview } from './notes';
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
+	import ReportWindowPanel from './ReportWindowPanel.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -507,7 +507,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} />
+					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} startDate={detail.run.startDate} endDate={detail.run.endDate} />
 				</section>
 			</section>
 			<RunCharts
@@ -552,7 +552,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{/snippet}
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
-						<CurtailmentTable {summary} {farmNames} />
+						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
+						<ReportWindowPanel {projectId} run={shownRun} refs={runSeries} nodes={editor.model.nodes} {farmNames} />
 					</section>
 				{/snippet}
 				{#snippet modelTail()}

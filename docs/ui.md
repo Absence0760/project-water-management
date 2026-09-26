@@ -1274,6 +1274,46 @@ run's report to chosen members every week or month.
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
   green at or above 95 %, amber below; themed tokens, so it follows dark mode, and
   solid `CanvasText` under forced colours); the number stays the content.
+  The farm table and the **Irrigation supplied** card are means over the
+  **whole record**, and say so ("Daily averages over the whole record,
+  <first day> to <last day> (N days); the curtailment targets cover the
+  reporting window", "over the whole record"), so they can't be mistaken for
+  the curtailment table's figures, which cover the reporting window.
+- <a id="report-window"></a>**Reporting window** (issue #44;
+  `runs/ReportWindowPanel.svelte`, pure helpers in `runs/reportWindow.ts` and
+  `runs/windowedCurtailment.ts`). A picker at the top of the curtailment panel
+  (`#res-curtailment`) chooses the days the curtailment, other water users and
+  EWR sites tables average over: **Project window** (the window the run
+  reported over, from the project setting, with its dates in the option; the
+  default), **Last 7 / 14 / 30 days** (ending on the run's last day), **Whole
+  record**, or **Custom range** (From / To date fields, starting from the days
+  shown, cut to the run with a note; a backwards range or one outside the run
+  says so and shows the project window). Any window other than the run's own is
+  worked out **in the browser** from the run's stored daily series (per farm
+  and other user: demand, supplied, EWR charge and its irrigation part or the
+  return flow; per EWR site: shortfall, charged and natural), fetched once per
+  run the first time another window is picked, with the engine's
+  `computeCurtailment`. Nothing is re-run and nothing is saved: the project
+  setting, the stored run, the downloads and the printable report keep the
+  project window, and the status line under the picker says so. A viewer can use
+  it (it only reads the run). The choice is `?window=` in the URL (`last7`,
+  `last14`, `last30`, `all`, or `YYYY-MM-DD..YYYY-MM-DD`; absent = the project
+  window), a history entry of its own, so back / forward step through the
+  windows looked at and a reload or a shared link keeps it; it stays as you move
+  between runs. Every period is labelled: the curtailment table leads with the
+  window's name and dates ("Last 7 days: daily averages over 2022-01-22 –
+  2022-01-28 (7 days)", also in its caption), and the other water users and
+  EWR sites tables repeat the dates. The status line adds how many of the days
+  fall in the forecast period (`RunSummary.forecastRain`). Two limits: the **EWR
+  site setting each farm's charge** can't be recomputed (the engine doesn't
+  store the per-day binding site), so over another window that column is blank
+  and the status line says it is shown for the project window only; and a run
+  saved before engine 0.17.0 (no EWR charge series) disables the picker and
+  asks for a new run. `windowedCurtailment.test.ts` checks the browser's table
+  against `runModel` run with the same window as the project setting, on
+  seeded synthetic runs; `e2e/tests/report-window.spec.ts` checks the same
+  against a second run in the app, the URL, back / forward, and axe in both
+  themes and on a phone.
 - <a id="self-checks"></a>**Self-checks** (`#res-checks`,
   `runs/SelfChecksPanel.svelte`, helpers in `runs/checks.ts`; engine ≥ 0.12.0,
   [model.md § Verification](./model.md#verification)). It has three
@@ -1341,7 +1381,8 @@ run's report to chosen members every week or month.
   "junior (curtailed)" or "senior (not curtailed)"; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
-  charged to farms and the natural part over the reporting window; with the
+  charged to farms and the natural part over the reporting window (all three
+  tables follow the [reporting window picker](#report-window)); with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* The
   hydrograph (observed flow as a line

@@ -1101,6 +1101,20 @@ yet; each lands with the work package named.
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its
       `aria-label` says so.
+- [ ] **Reporting window picker: move the re-windowing into the engine**
+      (issue #44, [ui.md § Reporting window](./ui.md#report-window)). The
+      Runs tab re-windows the curtailment table in the browser with
+      `computeCurtailment`, but mirrors two things the engine doesn't export
+      (`otherUserCurtailment` and the consumptive share k) and can't give the
+      EWR site setting each farm's charge over another window, since the
+      per-day binding site isn't stored. Durable fix: generalise
+      `analyseSeason` (`views/farmProjection.ts`, which already recomputes
+      the binding site from the stored flows) into a
+      `curtailmentOverWindow(run, window)` the frontend and the farmer
+      projection share, and drop the mirrors in
+      `runs/windowedCurtailment.ts`. Trigger: the next engine change to
+      curtailment or the farmer projection, or when the binding-site column
+      is asked for over a picked window.
 
 ## Roles and what each member sees
 
