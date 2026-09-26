@@ -60,8 +60,8 @@ describe('handle: the worker protocol', () => {
 			{ type: 'extract', options: { gaugeAsReference: { scalingFrom: '2021-10-01', scaleFactor: 0.8 } } }
 		]);
 		const reads = out.flatMap((m) => (m.type === 'progress' && m.progress.stage === 'read' ? [`${m.progress.step}/${m.progress.steps} ${m.progress.sheet}`] : []));
-		expect(reads[0]).toBe('1/9 AppSettings');
-		expect(reads.at(-1)).toBe('9/9 EWR Cfg');
+		expect(reads[0]).toBe('1/10 AppSettings');
+		expect(reads.at(-1)).toBe('10/10 EWR Cfg');
 		const results = out.filter((m): m is Extract<FromWorker, { type: 'result' }> => m.type === 'result');
 		expect(results).toHaveLength(2);
 		const expected = JSON.parse(readFileSync(new URL('synthetic_b023.project.json', FIXTURE), 'utf8'));

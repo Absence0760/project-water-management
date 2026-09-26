@@ -23,6 +23,10 @@ export type ImportNoteCode =
 	| 'dam-min-is-transfer-minimum'
 	/** WARNING: a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d). */
 	| 'probable-run-of-river'
+	/** WARNING: a transfer whose draw formula is the constant 0 is imported switched off (issue #54). */
+	| 'transfer-switched-off'
+	/** The run covers [Home]'s calculation window, not all of [Flow data] (issue #54). */
+	| 'model-window'
 	/** Dams have no surface area in the workbook; runs estimate it (audit N2). */
 	| 'dam-area-unknown'
 	/** A [Farm demand] farm isn't in [Network]. */

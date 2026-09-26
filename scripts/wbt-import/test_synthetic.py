@@ -76,8 +76,11 @@ class SyntheticWorkbook(unittest.TestCase):
         self.assertEqual(nodes["Foxtrot Farm"]["divertCapacityM3Day"], 4320)  # typed as text
         self.assertEqual(nodes["India Farm"]["damCapacityM3"], 20)  # the dummy dam is imported as it is, and only flagged
         self.assertEqual(project["settings"]["flowShareMethod"], "manual")
-        self.assertEqual(len(m["transfers"]), 4)  # 7 columns: no destination, rate 0 and unknown element dropped
-        self.assertEqual([t["months"] for t in m["transfers"]], [[1, 2, 3, 4, 11, 12], [11, 12], [7], [5, 6, 7]])
+        self.assertEqual(len(m["transfers"]), 5)  # 8 columns: no destination, rate 0 and unknown element dropped
+        self.assertEqual([t["months"] for t in m["transfers"]], [[1, 2, 3, 4, 11, 12], [11, 12], [7], [5, 6, 7], [10]])
+        # The last column's draw formula is =0: switched off in the workbook, imported disabled (issue #54).
+        self.assertEqual([t["enabled"] for t in m["transfers"]], [True, True, True, True, False])
+        self.assertIsNone(project["settings"]["simulationStart"])  # [Home] calculates the whole flow record
         self.assertEqual(project["settings"]["calibration"]["summerMonths"], [3, 10, 11, 12])
         self.assertEqual(
             [s["kind"] for s in project["series"]], ["flow_observed_m3s", "flow_logger_m3s", "rain_catchment_mm", "rain_chirps_mm"]

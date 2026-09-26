@@ -16,6 +16,22 @@ export interface WorkbookTransfer {
 	/** The column's letter (part of the rule's id) and 1-based index. */
 	column: string;
 	col: number;
+	/** False when the column's draw formula is the constant 0: switched off in the workbook (issue #54). */
+	enabled: boolean;
+}
+
+/** A [Transfers] text-copy formula that is the constant 0 ("=0", or "0"): the transfer is switched off (is_zero_formula). */
+export function isZeroFormula(v: Cell): boolean {
+	if (typeof v === 'number') return v === 0;
+	return typeof v === 'string' && /^=?\s*0+(?:\.0*)?\s*$/.test(v.trim());
+}
+
+/** The WARNING for a switched-off transfer (transfer_off_note; same text). */
+export function transferOffNote(from: string, to: string, column: string): string {
+	return (
+		`WARNING: transfer ${from} -> ${to} (column ${column}): its draw formula is the constant 0, so the workbook never ` +
+		'moved this water; it is imported switched off (Transfers tab, Enabled) (issue #54)'
+	);
 }
 
 type ConfigKey = 'cap' | 'min' | 'to' | 'months' | 'rate' | 'daily';
@@ -41,6 +57,7 @@ export function readTransfers(wb: B023Workbook, report: Report): WorkbookTransfe
 	const missing = (['to', 'months', 'rate', 'min'] as const).filter((k) => !labels.has(k)).sort();
 	if (missing.length) throw new InvalidWorkbookError(`[Transfers] config rows not found: ${pyRepr(missing)}`, sheet);
 	const at = (key: ConfigKey, c: number): Cell => (labels.has(key) ? wb.cell(sheet, c, labels.get(key)!) : null);
+	const txt = wb.has('zTransfers_FormulasAsTxt') ? wb.ref('zTransfers_FormulasAsTxt') : null;
 
 	const out: WorkbookTransfer[] = [];
 	for (let c = c1 + 1; c <= c2; c++) {
@@ -81,6 +98,8 @@ export function readTransfers(wb: B023Workbook, report: Report): WorkbookTransfe
 			report.note('transfer-months-substring', message, where);
 			report.unmap({ code: 'transfer-months-substring', message, ...where, text: clean(monthsRaw) });
 		}
+		const enabled = !(txt && isZeroFormula(wb.cell(txt.sheet, c, txt.r1)));
+		if (!enabled) report.note('transfer-switched-off', transferOffNote(from, to, column), { sheet, cell: txt ? cellAddress(c, txt.r1) : undefined, element: from });
 		out.push({
 			from,
 			to,
@@ -88,7 +107,8 @@ export function readTransfers(wb: B023Workbook, report: Report): WorkbookTransfe
 			maxRateM3s: rate,
 			minStoragePct: report.num(at('min', c), { sheet, col: c, row: labels.get('min')!, what: 'Min capacity (%)', element: from }),
 			column,
-			col: c
+			col: c,
+			enabled
 		});
 	}
 	return out;

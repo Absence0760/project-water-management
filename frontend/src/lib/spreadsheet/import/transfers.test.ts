@@ -12,8 +12,29 @@ const read = (b = syntheticB023()) => {
 describe('readTransfers', () => {
 	it('reads each draw column with a destination and a rate', () => {
 		const { transfers, report } = read();
-		expect(transfers).toEqual([{ from: 'Farm A', to: 'Farm B', months: [1, 2, 3], maxRateM3s: 0.1, minStoragePct: 0.2, column: 'O', col: 15 }]);
+		expect(transfers).toEqual([{ from: 'Farm A', to: 'Farm B', months: [1, 2, 3], maxRateM3s: 0.1, minStoragePct: 0.2, column: 'O', col: 15, enabled: true }]);
 		expect(report.notes).toEqual([]);
+	});
+
+	// Issue #54: the second configuration's transfers had a draw formula of 0, so the workbook never moved the water.
+	it('imports a column whose draw formula is the constant 0 switched off, with a warning', () => {
+		for (const f of ['=0', '0', ' = 0 ', 0]) {
+			const b = syntheticB023().set('Transfers', 'O8', f).name('zTransfers_FormulasAsTxt', 'Transfers!$I$8:$P$8');
+			const { transfers, report } = read(b);
+			expect(transfers[0]!.enabled, String(f)).toBe(false);
+			expect(report.notes).toEqual([
+				expect.objectContaining({
+					code: 'transfer-switched-off',
+					severity: 'warning',
+					element: 'Farm A',
+					message:
+						'WARNING: transfer Farm A -> Farm B (column O): its draw formula is the constant 0, so the workbook never moved this water; it is imported switched off (Transfers tab, Enabled) (issue #54)'
+				})
+			]);
+		}
+		// Positive control: a real draw formula stays on.
+		const on = syntheticB023().set('Transfers', 'O8', "=IF(fIsMthIn($H7, O$14), fGetTrfVolCapped('Farm A'!$Q6,O$10,O$11,O$16), 0)").name('zTransfers_FormulasAsTxt', 'Transfers!$I$8:$P$8');
+		expect(read(on).transfers[0]!.enabled).toBe(true);
 	});
 
 	it('notes and lists a month list the substring match reads differently (M1)', () => {
