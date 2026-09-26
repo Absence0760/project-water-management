@@ -5,6 +5,7 @@ import type { RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { headlineSite } from './ewrAssurance';
 import { describePbias } from './rating';
+import { calibrationSample } from '$lib/components/calibration/sample';
 import { SUPPLY_TARGET } from './results';
 
 export type SentenceInput = Pick<RunSummary, 'catchment' | 'calibration' | 'ewrAssurance'> & {
@@ -68,6 +69,10 @@ function calibrationSentence(cal: SentenceInput['calibration']): string | null {
 		const reading = describePbias(cal.pbias);
 		parts.push(`PBIAS ${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}%${reading ? ` (${reading})` : ''}`);
 	}
-	// Not "calibration period (in-sample)": that label belongs to the two calibration cards.
-	return `Calibration fit, in-sample over ${fmtNum(cal.days)} observed days: ${parts.join(', ')}.`;
+	// Not "calibration period (…)": that label belongs to the two calibration cards.
+	// "In-sample" only when the parameters were fitted on these days (issue #45).
+	const { status, qualifier } = calibrationSample(cal);
+	const over = `over ${fmtNum(cal.days)} observed days`;
+	const lead = status === 'fitted' ? `Calibration fit, in-sample ${over}` : qualifier ? `Calibration fit ${over} (${qualifier})` : `Calibration fit ${over}`;
+	return `${lead}: ${parts.join(', ')}.`;
 }

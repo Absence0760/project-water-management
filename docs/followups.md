@@ -389,6 +389,23 @@ collected as a checklist in issue #46; tick it there as they answer.
       fills the form, and (engine 0.31.1) writes where the values came from
       into the row's `panCoefficientSource` note, which fits record
       ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+- [x] **A daily A-pan evaporation series (done, engine 0.38.0, issue #45).**
+      Series kind `evap_apan_mm` (mm/day), uploaded through Add data like
+      rain. On the days it has a value ≥ 0 it replaces the monthly A-pan
+      mean for crop demand, dam evaporation and GR4J's PE under
+      `pe.kind: 'pan'`; other days use the monthly mean, counted in
+      `summary.apanDaily` and a run warning. No series, byte-identical
+      results. Settings → Demand says which source A-pan comes from
+      ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
+- [x] **Fit provenance of the daily A-pan series (done, engine 0.40.0).**
+      The fit record's `forcing.apanDaily` keeps the start, length and
+      SHA-256 of the daily A-pan series the fit ran on (null = none);
+      `fitRecordStatus(settings, record, { apanDaily })` sets
+      `apanDailyChanged` (and `forcingChanged`) when it was added, replaced
+      or removed since a GR4J fit under pan coefficient × A-pan, with its own
+      caveat. Settings hashes the project's series, the Runs page, report and
+      run comparison read each run's snapshot `valuesSha256`
+      ([model.md §2.10b](./model.md)).
 - [ ] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*).** A rain-source
       period scales the alternative gauge by a monthly factor, which keeps
@@ -1256,8 +1273,39 @@ No Afrikaans wording ships yet: none is reviewed.
       #5): the menu's *Account* link opens `/account` (display name, email
       and confirmation status, change password); `PATCH /auth/me` and
       `POST /auth/change-password` (docs/api.md § Auth).
+- [ ] **Dam figures in the run summary** (issue #55; from #17, Summary → Dam levels,
+      [ui.md § Summary](./ui.md#summary)). The Summary's Dam levels panel
+      fetches each dam's daily `dam_storage` series (one request per dam,
+      ~16 000 values each, four at a time) and reduces them in the browser
+      (`overview/damLevels.ts`), because `RunSummary.farms` has no storage
+      figures. Durable fix: the engine adds per-farm end-of-run storage, the
+      lowest in the last year (value and day) and days at the minimum level to
+      `FarmSummary` (an `ENGINE_VERSION` bump), and the panel reads those,
+      keeping the series path only for runs saved before it. Trigger: a
+      catchment with enough dams (tens) that the Summary's fetches are slow,
+      or the next engine release that touches `FarmSummary`.
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
+- [x] **Small flows read 0.000; the FDC table was in no export; download
+      names used the UTC date** (issue #45, done 2026-09-26): `fmtQty`
+      (two significant figures below what the fixed decimals show), the
+      engine's `fdcPercentileTable` in the summary CSV, the workbook and the
+      report, and `project.time_zone` (058) dating every download.
+- [ ] **Other server-side "today"s are still UTC's** (found with issue #45).
+      Download names now use the project's time zone (`project.time_zone`,
+      `projects/timeZone.ts` `localDate`), but a few server dates still count
+      from UTC's calendar day: the alert evaluator's `today`
+      (`alerts/evaluate.ts`), the feeds' `utcToday` (`feeds/fetch.ts`, which
+      is right for CHIRPS's UTC days but not for a data age shown to a
+      person), the portfolio's `today` (api.md § Portfolio) and the farm
+      view's `madeOn`. Between 22:00 and 24:00 UTC they are a day behind a
+      South African reader. **Durable fix:** date each by
+      `localDate(now, project.time_zone)` where a person reads it, keeping
+      UTC only where the source's own days are UTC (CHIRPS). **Trigger:** the
+      next change to any of them, or a persona finding of an off-by-one day.
+      The account's `my-data_<date>.json` belongs to no project, so it is
+      dated in the default zone (`DEFAULT_TIME_ZONE`) by design until users
+      have a zone of their own.
 - [x] **FarmDay help diagram is behind the engine** (fixed 2026-09-25):
       `components/help/diagrams/FarmDay.svelte` now draws rain on the dam,
       open-water evaporation and seepage to the river below the wall, and its

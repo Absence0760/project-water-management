@@ -64,3 +64,19 @@ export function peText(pe: PeInput | EditablePe | null | undefined): string {
 	const source = pe.source.trim();
 	return `monthly, entered directly: ${fmtNum(total)} mm a year${source ? ` (${source})` : ''}`;
 }
+
+/**
+ * Where the model's A-pan comes from (engine ≥ 0.38.0, issue #45,
+ * docs/model.md §2.3a), for the Demand section: the daily A-pan series on the
+ * days it has a value with these monthly means on the rest, or the monthly
+ * means every day. null while the series list is still loading.
+ */
+export function apanSourceNote(seriesKinds: readonly string[] | null): { daily: boolean; text: string } | null {
+	if (seriesKinds === null) return null;
+	return seriesKinds.includes('evap_apan_mm')
+		? {
+				daily: true,
+				text: 'A-pan comes from the daily A-pan series (Data tab) on the days it has a value; these monthly means fill the other days, and each run says how many.'
+			}
+		: { daily: false, text: 'A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.' };
+}

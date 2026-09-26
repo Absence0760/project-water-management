@@ -9,8 +9,9 @@
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
-	import { chirpsSourceOfInput } from '$lib/series/provenance';
+	import { fdcPercentileTable, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
+	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
+	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -29,7 +30,7 @@
 	import { isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
+	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import { loadHumanImpacts } from '$lib/components/runs/humanImpacts';
@@ -49,6 +50,8 @@
 	let series = $state.raw<SeriesMeta[]>([]);
 	// $state.raw: daily arrays, replaced and never mutated (as in RunCharts).
 	let flows = $state.raw<CatchmentFlows>({});
+	/** Gauge or logger behind each observed series (issue #45). */
+	let sources = $state.raw<ObservedSources>({});
 	// The run's sign-offs and the statement a signer confirms (WP-3.13); part of what "ready" waits for.
 	let signoffs = $state.raw<SignoffList | null>(null);
 	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error'>('loading');
@@ -98,6 +101,7 @@
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			await loadOnce(loadHumanImpacts);
 			flows = Object.fromEntries(pairs) as CatchmentFlows;
+			sources = observedSources(detail.series);
 			run = detail.run;
 			status = 'loaded';
 		} catch (e) {
@@ -136,8 +140,16 @@
 	const settings = $derived(effectiveSettings(run?.settings));
 	const conv = (d: { values: readonly (number | null)[] }) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
 	// The printed report has no legend to click, so natural flow shows from the start.
-	const hydro = $derived(hydrographSeries(flows, conv, false));
+	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
 	const ewrLines = $derived(ewrChartSeries(flows, conv));
+	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function.
+	const fdc = $derived(
+		fdcPercentileTable({
+			...(flows.natural ? { natural: conv(flows.natural) } : {}),
+			...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
+			...(flows.observed ? { observed: conv(flows.observed) } : {})
+		})
+	);
 	const days = $derived(run ? toEpochDay(run.endDate) - toEpochDay(run.startDate) + 1 : 0);
 	const farmNames = $derived(Object.fromEntries(nodes.map((n) => [n.id, n.name])));
 	const nodeOrder = $derived(new Map(nodes.map((n) => [n.id, n.sortOrder] as [string, number])));
@@ -270,7 +282,7 @@
 							requestedStart={settings.calibrationStart ?? null}
 							requestedEnd={settings.calibrationEnd ?? null}
 						/>
-						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} />{/if}
+						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} />{/if}
 						<LineChart
 							print
 							bind:ready={hydroDrawn}
@@ -278,8 +290,14 @@
 							unit="m³/s"
 							height={300}
 							series={hydro}
-							caption="The whole run. Observed flow is broken wherever the record has no reading."
+							caption="The whole run. {observedCaption(flows, sources)}"
 						/>
+						{@render table(
+							`Flow-duration percentiles (m³/s): flow equalled or exceeded on 10, 50, 90 and 95 % of days, ${fdcReportDays(fdc)}`,
+							['Flow record', 'Q10', 'Q50', 'Q90', 'Q95', 'Days'],
+							[1, 2, 3, 4, 5],
+							fdcReportRows(fdc)
+						)}
 					{:else if s.id === 'curtailment'}
 						<CurtailmentTable {summary} {farmNames} />
 					{:else if s.id === 'ewr'}

@@ -35,6 +35,10 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	},
 	// One seeded run, so the tab says there is nothing to compare yet.
 	{ id: 'compare', ready: (p) => expect(p.getByRole('heading', { name: 'Only one run so far' })).toBeVisible() },
+	// Nothing made yet on these three: their empty states, once their lists have loaded.
+	{ id: 'scenarios', ready: (p) => expect(p.getByTestId('scenarios-empty')).toBeVisible() },
+	{ id: 'allocations', ready: (p) => expect(p.getByTestId('allocations-empty')).toBeVisible() },
+	{ id: 'applications', ready: (p) => expect(p.getByTestId('applications-empty')).toBeVisible() },
 	{ id: 'history', ready: (p) => expect(p.getByTestId('history-entry').first()).toBeVisible() }
 ];
 

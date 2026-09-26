@@ -49,11 +49,11 @@ const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,
 	windowStart: true, windowEnd: true, firstObservedDate: true, lastObservedDate: true, kge: true, kgeR: true,
 	kgeAlpha: true, kgeBeta: true, r2: true, logNse: true, logEpsilonM3s: true, volumeErrorPct: true,
-	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true
+	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true, fitStatus: true
 };
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [
-	'natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
+	'natural_flow', 'simulated_outflow', 'observed_flow', 'observed_flow_other', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
 	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
 	// EWR attribution (engine 0.17.0, audit Q17)

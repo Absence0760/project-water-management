@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
+import { createHash } from 'node:crypto';
+import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -57,5 +58,22 @@ describe('free product and version (the alternative gauge and the reanalysis, is
 		expect(freeProvenanceFields(' SASSCAL AWS ', ' 1 ')).toEqual({ product: 'SASSCAL AWS', productVersion: '1' });
 		expect(freeProvenanceFields('ERA5', ' ')).toBeNull();
 		expect(freeProvenanceFields('', '')).toBeNull();
+	});
+});
+
+describe('the daily A-pan fingerprint (issue #45)', () => {
+	it('hashes the values as the backend does (SHA-256 of their JSON), so a fit and a run snapshot compare', async () => {
+		const values = [5, null, 6.25, 0];
+		const want = createHash('sha256').update(JSON.stringify(values)).digest('hex');
+		expect(await apanDailyOfValues({ startDate: '2020-10-01', values })).toEqual({ startDate: '2020-10-01', length: 4, valuesSha256: want });
+		expect(await apanDailyOfValues(undefined)).toBeNull();
+	});
+
+	it('reads it from a run snapshot: null without the series, undefined when unknown or unhashed', () => {
+		const snap = { startDate: '2020-10-01', length: 4, valuesSha256: 'e'.repeat(64) };
+		expect(apanDailyOfInput({ evap_apan_mm: snap })).toEqual(snap);
+		expect(apanDailyOfInput({ rain_catchment_mm: snap })).toBeNull();
+		expect(apanDailyOfInput(undefined)).toBeUndefined();
+		expect(apanDailyOfInput({ evap_apan_mm: { startDate: '2020-10-01', length: 4 } })).toBeUndefined();
 	});
 });

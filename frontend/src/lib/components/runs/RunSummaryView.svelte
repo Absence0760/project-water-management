@@ -3,13 +3,14 @@
 	import type { RunSummary } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
 	import { loadHumanImpacts } from './humanImpacts';
+	import { calibrationSample } from '$lib/components/calibration/sample';
 
 	let {
 		summary,
@@ -39,6 +40,8 @@
 		ewr: farms.reduce((s, f) => s + f.avgEwrShortfallM3Day, 0)
 	});
 	const cal = $derived(summary.calibration);
+	// "in-sample" only when the parameters were fitted on the days scored (issue #45).
+	const sample = $derived(calibrationSample(cal));
 	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project has a rule table.
 	const reserve = $derived(headlineSite(summary));
 	const c = $derived(summary.catchment);
@@ -62,11 +65,11 @@
 	const ariaSort = (k: FarmSortKey) => (sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined);
 
 	const COLS: { key: FarmSortKey; label: string; unit: string; title: string }[] = [
-		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean net irrigation demand over the run (after effective rainfall).' },
+		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the farm takes to meet it).' },
 		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
 		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
 		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; farms under ${SUPPLY_TARGET * 100} % are flagged.` },
-		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day', title: 'Mean share of the shortfall at the EWR sites below this farm that is charged to it, pro rata to its net impact (engine 0.17.0; older runs: the reach shortfall it adds).' },
+		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this farm that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).' },
 		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this farm was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
 	];
 	const groups = $derived(warningGroups(summary.warnings));
@@ -98,14 +101,14 @@
 <dl class="stats">
 	<div class="stat">
 		<dt>Mean natural flow <HelpTip key="catchment.meanNaturalFlowM3Day" /></dt>
-		<dd>{fmtNum(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
-		<dd class="sub">{fmtNum(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
+		<dd>{fmtQty(m3DayToM3s(c.meanNaturalFlowM3Day), 3)}<small>m³/s</small></dd>
+		<dd class="sub">{fmtQty(m3DayToMm3a(c.meanNaturalFlowM3Day), 2)} Mm³/a · {fmtNum(c.meanNaturalFlowM3Day)} m³/day</dd>
 	</div>
 	<div class="stat">
 		<dt>Mean simulated outflow</dt>
-		<dd>{fmtNum(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
+		<dd>{fmtQty(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
 		<dd class="sub">
-			{fmtNum(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
+			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
 				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
 		</dd>
 	</div>
@@ -138,13 +141,13 @@
 			<dt><span title={NSE_HELP}>Calibration NSE</span> <HelpTip key="stats.nse" /></dt>
 			<dd>{fmtNum(cal.nse, 2)}</dd>
 			<dd class="sub">{fmtNum(cal.days)} days observed</dd>
-			<dd class="sub">calibration period (in-sample)</dd>
+			<dd class="sub">{sample.short}</dd>
 		</div>
 		<div class="stat">
 			<dt><span title={PBIAS_HELP}>Calibration PBIAS</span> <HelpTip key="stats.pbias" /></dt>
 			<dd>{cal.pbias == null ? '–' : `${cal.pbias > 0 ? '+' : ''}${fmtNum(cal.pbias, 1)}`}<small>%</small></dd>
 			{#if cal.pbias != null}<dd class="sub">{describePbias(cal.pbias)}</dd>{/if}
-			<dd class="sub">calibration period (in-sample)</dd>
+			<dd class="sub">{sample.short}</dd>
 		</div>
 	{:else}
 		<div class="stat">
@@ -225,8 +228,8 @@
 		</table>
 	</div>
 	<p class="muted small after">
-		Annual totals: demand {fmtNum(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtNum(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
-		deficit {fmtNum(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtNum((totals.deficit * 1000) / 86_400, 1)} l/s).
+		Annual totals: demand {fmtQty(m3DayToMm3a(totals.demand), 3)} Mm³/a, supplied {fmtQty(m3DayToMm3a(totals.supplied), 3)} Mm³/a,
+		deficit {fmtQty(m3DayToMm3a(totals.deficit), 3)} Mm³/a ({fmtQty((totals.deficit * 1000) / 86_400, 1)} l/s).
 	</p>
 {/if}
 

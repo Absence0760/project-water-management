@@ -20,7 +20,7 @@
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
 	import { rainSourceNote } from '$lib/components/compare/rainSource';
 	import { asFitRecord } from '$lib/components/compare/fit';
-	import { chirpsSourceOfInput } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
@@ -353,6 +353,8 @@
 						settingsB={data.b.run.inputs.settings}
 						chirpsA={chirpsSourceOfInput(data.a.run.inputs.series)}
 						chirpsB={chirpsSourceOfInput(data.b.run.inputs.series)}
+						apanA={apanDailyOfInput(data.a.run.inputs.series)}
+						apanB={apanDailyOfInput(data.b.run.inputs.series)}
 					/>
 				</section>
 

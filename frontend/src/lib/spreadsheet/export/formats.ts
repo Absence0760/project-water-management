@@ -37,3 +37,21 @@ export function numberFormat(unit: string | null | undefined): string | undefine
 	if (u === 'flag') return '0';
 	return undefined;
 }
+
+/** The format of flows in m³/s or l/s and volumes in Mm³: three decimals. */
+const THREE_DECIMALS = '#,##0.000';
+
+/**
+ * The display format for one summary-sheet cell `v` in a column of `unit`:
+ * numberFormat's, except that a small non-zero flow or volume, which three
+ * decimals would show as 0.000, gets the decimals for two significant
+ * figures (0.00042 → "0.00042"; issue #45, as the app's fmtQty). The value
+ * itself is unrounded either way.
+ */
+export function cellFormat(unit: string | null | undefined, v: number): string | undefined {
+	const z = numberFormat(unit);
+	const a = Math.abs(v);
+	if (z !== THREE_DECIMALS || a === 0 || a >= 0.01) return z;
+	const decimals = Math.min(12, 1 - Math.floor(Math.log10(a)));
+	return `#,##0.${'0'.repeat(decimals)}`;
+}

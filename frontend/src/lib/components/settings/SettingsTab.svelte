@@ -17,8 +17,11 @@
 		type FlowShareMethod,
 		type PeInput,
 		type ProjectSettings,
-		type SeriesProvenance
+		type SeriesProvenance,
+		type ApanDailyFingerprint,
+		type SeriesMeta
 	} from '@water-management/engine';
+	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
@@ -29,7 +32,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { annualMm3 } from '$lib/components/crops/demand';
 	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import {
@@ -56,7 +59,7 @@
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
-	import { annualGr4jPeMm, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
+	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
@@ -72,6 +75,7 @@
 		editor,
 		seriesKinds = null,
 		chirpsSource,
+		apanSeries,
 		readonly,
 		onProjectChange
 	}: {
@@ -81,6 +85,8 @@
 		seriesKinds?: string[] | null;
 		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
+		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
+		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
 	} = $props();
@@ -267,7 +273,35 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	const isGr4j = $derived(s.runoffModel === 'gr4j');
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
-	const petMissing = $derived(!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }));
+	// A daily A-pan series (issue #45) is A-pan too, on the days it covers.
+	const apanSource = $derived(apanSourceNote(seriesKinds));
+	// The daily A-pan series now, as the fit record fingerprints it (issue #45): fetched and hashed only
+	// when the record tracked one, so "forcing changed since fit" can say whether it was replaced.
+	let apanNow = $state<ApanDailyFingerprint | null | undefined>(undefined);
+	const apanTracked = $derived(s.fitRecord?.forcing?.apanDaily !== undefined);
+	$effect(() => {
+		const meta = apanSeries;
+		const tracked = apanTracked;
+		apanNow = meta === null ? null : undefined;
+		if (!meta || !tracked) return;
+		let live = true;
+		api.series
+			.get(project.id, meta.id)
+			.then(apanDailyOfValues)
+			.then((f) => {
+				if (live) apanNow = f;
+			})
+			.catch(() => {
+				// Unknown, not "changed": the caveat then waits for a value it can compare.
+				if (live) apanNow = undefined;
+			});
+		return () => {
+			live = false;
+		};
+	});
+	const petMissing = $derived(
+		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
+	);
 	const num = (k: string) => cal[k] as number;
 
 	// The in-page menu (SectionNav) and the save bar both stick, so in-page jumps
@@ -325,6 +359,7 @@
 		<p class="hint muted">
 			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment.
 		</p>
+		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text}</p>{/if}
 		{#if s.lakeEvapFactorMonthly}
 			<div class="table-wrap">
 				<table class="data compact monthly" data-testid="lake-factor-row">
@@ -773,7 +808,7 @@
 			onApply={applyFit}
 		/>
 		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} />
+			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} apanDaily={apanNow} />
 		{/if}
 	</div>
 
@@ -863,7 +898,7 @@
 			<div class="ewr-side">
 				<MonthlyBars values={s.ewrPragmaticM3PerDay} unit="m³/day" label="Pragmatic EWR" />
 				<p class="muted small">
-					{fmtNum(ewrAnnual, 3)} Mm³/a in total · mean {fmtNum((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
+					{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
 				</p>
 			</div>
 		</div>

@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
-import { DIAGRAM_IDS, GUIDES, SETUP_STEPS, TAB_TITLES, guideFor, inline } from './guides';
+import { NAV_SECTIONS, TAB_LABELS } from '$lib/workspace/tabs';
+import { DIAGRAM_IDS, GUIDES, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline } from './guides';
 import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, type ShotId } from './pictures';
 import { TOUR } from './tour';
 
@@ -67,8 +68,9 @@ describe('catchment tour', () => {
 });
 
 describe('setup path', () => {
-	it('walks every workspace tab once, in tab order, each with a how-to guide', () => {
-		expect(SETUP_STEPS.map((s) => s.tab)).toEqual(Object.keys(TAB_TITLES));
+	it('walks the setup tabs once, in setup order, each with a how-to guide', () => {
+		expect(SETUP_STEPS.map((s) => s.tab)).toEqual([...SETUP_TABS]);
+		for (const id of SETUP_TABS) expect(TAB_TITLES[id], id).toBe(TAB_LABELS[id]);
 		for (const s of SETUP_STEPS) {
 			const g = guideFor(s.guide);
 			expect(g, s.tab).toBeDefined();
@@ -76,5 +78,10 @@ describe('setup path', () => {
 			expect(g!.tab, s.tab).toBe(s.tab);
 		}
 		expect(GUIDES.length).toBeGreaterThan(SETUP_STEPS.length);
+	});
+
+	it("follows the workspace's Build the model section, whose order the help describes", () => {
+		const model = NAV_SECTIONS.find((sec) => sec.id === 'model')!.tabs as readonly string[];
+		expect(SETUP_TABS.filter((id) => model.includes(id))).toEqual([...model]);
 	});
 });

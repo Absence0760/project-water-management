@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { localDate } from '../projects/timeZone.js';
 import {
 	attachment,
 	BOM,
@@ -126,10 +127,33 @@ describe('file names', () => {
 		expect(slugify('a'.repeat(100)).length).toBe(60);
 	});
 
-	it('uses the UTC date, not the server-local one', () => {
-		const now = new Date('2026-03-31T23:30:00Z');
-		expect(exportFilename('Client Catchment', ['Baseline', 'daily'], 'csv', now)).toBe('client-catchment_baseline_daily_2026-03-31.csv');
-		expect(exportFilename('', ['project'], 'json', now)).toBe('project_project_2026-03-31.json');
+	// Whatever zone the server runs in (a skewed TZ on either side of UTC), the date is the project's (issue #45).
+	describe.each(['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])('under TZ=%s', (serverTz) => {
+		const saved = process.env.TZ;
+		beforeEach(() => {
+			process.env.TZ = serverTz;
+		});
+		afterEach(() => {
+			process.env.TZ = saved;
+		});
+
+		it('dates the file by the project’s calendar day: 23:30 UTC is already tomorrow in South Africa', () => {
+			const now = new Date('2026-03-31T23:30:00Z'); // 01:30 SAST on 1 April
+			expect(exportFilename('Client Catchment', ['Baseline', 'daily'], 'csv', 'Africa/Johannesburg', now)).toBe('client-catchment_baseline_daily_2026-04-01.csv');
+			expect(exportFilename('', ['project'], 'json', 'Africa/Johannesburg', now)).toBe('project_project_2026-04-01.json');
+			// A project kept in UTC, or west of it, still has 31 March.
+			expect(exportFilename('P', ['x'], 'csv', 'UTC', now)).toBe('p_x_2026-03-31.csv');
+			expect(exportFilename('P', ['x'], 'csv', 'America/Sao_Paulo', now)).toBe('p_x_2026-03-31.csv');
+		});
+
+		it('turns the date at local midnight, not UTC’s', () => {
+			expect(exportFilename('P', ['x'], 'csv', 'Africa/Johannesburg', new Date('2026-03-31T21:59:59Z'))).toBe('p_x_2026-03-31.csv');
+			expect(exportFilename('P', ['x'], 'csv', 'Africa/Johannesburg', new Date('2026-03-31T22:00:00Z'))).toBe('p_x_2026-04-01.csv');
+		});
+	});
+
+	it('falls back to the default zone for a zone the runtime doesn’t know', () => {
+		expect(localDate(new Date('2026-03-31T23:30:00Z'), 'Mars/Olympus_Mons')).toBe('2026-04-01');
 	});
 
 	it('builds an attachment header without injectable characters', () => {

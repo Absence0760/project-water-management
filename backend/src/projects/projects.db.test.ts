@@ -273,6 +273,48 @@ describe('projects', () => {
 	});
 });
 
+describe('the project’s time zone (058_project_time_zone, issue #45)', () => {
+	it('starts in South Africa, takes a known zone from an editor, refuses an unknown one and a viewer, and is audited', async () => {
+		const owner = await signUp('Zone');
+		const viewer = await signUp('ZoneViewer');
+		const { projectId } = await projectWithModel(owner);
+		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.timeZone).toBe('Africa/Johannesburg');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		// Positive control first: the viewer reads it.
+		expect((await viewer.call('GET', `/projects/${projectId}`)).body.project.timeZone).toBe('Africa/Johannesburg');
+		expect((await viewer.call('PATCH', `/projects/${projectId}`, { timeZone: 'Africa/Windhoek' })).status).toBe(403);
+		const bad = await owner.call('PATCH', `/projects/${projectId}`, { timeZone: 'Mars/Olympus_Mons' });
+		expect(bad.status).toBe(400);
+		const ok = await owner.call('PATCH', `/projects/${projectId}`, { timeZone: 'Africa/Windhoek' });
+		expect(ok.status).toBe(200);
+		expect(ok.body.project.timeZone).toBe('Africa/Windhoek');
+		// A patch without it leaves it alone.
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { description: 'x' })).body.project.timeZone).toBe('Africa/Windhoek');
+		const history = await owner.call('GET', `/projects/${projectId}/history`);
+		const changed = history.body.items.find(
+			(e: { kind: string; subject?: { fields?: string[] } }) => e.kind === 'project.changed' && e.subject?.fields?.includes('time_zone')
+		);
+		expect(changed?.subject).toMatchObject({ timeZone: { from: 'Africa/Johannesburg', to: 'Africa/Windhoek' } });
+	});
+
+	it('travels with a copy and through the project document', async () => {
+		const a = await signUp('ZoneCopy');
+		const { projectId } = await projectWithModel(a);
+		expect((await a.call('PATCH', `/projects/${projectId}`, { timeZone: 'Europe/London' })).status).toBe(200);
+		const copy = await a.call('POST', `/projects/${projectId}/copy`, { name: 'Zone copy 2' });
+		expect(copy.body.project.timeZone).toBe('Europe/London');
+		const doc = await a.call('GET', `/projects/${projectId}/export.json`);
+		expect(doc.body.timeZone).toBe('Europe/London');
+		const imported = await a.call('POST', '/projects/import', doc.body);
+		expect(imported.status).toBe(201);
+		expect(imported.body.project.timeZone).toBe('Europe/London');
+		// A document from before the setting imports with the default.
+		const { timeZone: _dropped, ...older } = doc.body;
+		const old = await a.call('POST', '/projects/import', older);
+		expect(old.body.project.timeZone).toBe('Africa/Johannesburg');
+	});
+});
+
 describe('members and roles', () => {
 	it('enforces viewer < editor < owner', async () => {
 		const owner = await signUp('Own');

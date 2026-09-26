@@ -20,10 +20,11 @@
 		type ProjectModel,
 		type ProjectSettings,
 		type RunoffModelId,
-		type SeriesProvenance
+		type SeriesProvenance,
+		type ApanDailyFingerprint
 	} from '@water-management/engine';
 	import { untrack } from 'svelte';
-	import { chirpsSourceOfInput } from '$lib/series/provenance';
+	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import {
 		BOUNDS_LABEL,
@@ -104,7 +105,7 @@
 	let error = $state<string | null>(null);
 	let handle: FitHandle | null = null;
 	// What the shown report was run on, for its fit record.
-	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null; chirpsSource?: SeriesProvenance | null } | null = null;
+	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null } | null = null;
 
 	const params = $derived(fitParams(runoffModel, x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
@@ -134,7 +135,14 @@
 			const form = settings();
 			const input = fitInput(server, form, model?.());
 			// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
-			const context = { settings: form, validate, validationRecord: chosenRecord, chirpsSource: chirpsSourceOfInput(server.series) };
+			// And the daily A-pan series it runs on (issue #45), by the hash a run's snapshot records.
+			const context = {
+				settings: form,
+				validate,
+				validationRecord: chosenRecord,
+				chirpsSource: chirpsSourceOfInput(server.series),
+				apanDaily: await apanDailyOfValues(server.series.evap_apan_mm)
+			};
 			status = 'running';
 			runStarts = starts;
 			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));

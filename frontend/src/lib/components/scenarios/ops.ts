@@ -131,7 +131,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'borehole.add': 'Add a borehole',
 	'borehole.remove': 'Remove a borehole',
 	'settings.set': 'Change a setting',
-	'series.scale': 'Scale rainfall'
+	'series.scale': 'Scale rainfall or daily A-pan'
 };
 
 /** A node or crop id that neither the base nor any name source knows. */

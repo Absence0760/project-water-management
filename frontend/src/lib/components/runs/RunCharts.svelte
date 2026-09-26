@@ -8,12 +8,12 @@
 	import type { Snippet } from 'svelte';
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
-	import { finiteCount, flowDurationCurves, onDaysOf, percentileFlows } from '$lib/components/charts/fdc';
+	import { FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, type CatchmentFlows } from './flowSeries';
+	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
@@ -94,23 +94,28 @@
 	});
 
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
-	const hydroSeries = $derived(hydrographSeries(catchment, conv));
+	// Gauge or logger, and which one the run is scored against (issue #45).
+	const sources = $derived(observedSources(refs));
+	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
 	// Which days the flow-duration curves rank. With an observed record that
 	// covers only part of the run, the curves are compared on the days it read
 	// (like with like); the whole run is one click away.
 	let fdcDays = $state<'observed' | 'all'>('observed');
 	const fdc = $derived.by(() => {
 		const list = [catchment.natural, catchment.simulated, catchment.observed];
-		const labels = ['Natural', 'Simulated outflow', 'Observed'];
+		const labels = ['Natural', 'Simulated outflow', observedLabels(sources).observed];
 		const colors = ['--series-1', '--series-2', '--chart-obs'];
 		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
 		const obs = catchment.observed ? conv(catchment.observed) : null;
-		const runDays = catchment.simulated?.values.length ?? catchment.natural?.values.length ?? 0;
-		const obsDays = obs ? finiteCount(obs) : 0;
+		const converted = present.map(({ d }) => conv(d));
+		// The Q10–Q95 table is the one the exports carry (engine views/fdc.ts, issue #45).
+		const table = fdcPercentileTable(Object.fromEntries(present.map(({ i }, k) => [FDC_RECORDS[i]!, converted[k]!])));
+		const runDays = table.runDays;
+		const obsDays = table.observedDays;
 		// Only a choice when the gauge misses some of the run's days.
-		const partial = !!obs && obsDays > 0 && obsDays < runDays;
+		const partial = table.onObservedDays !== null;
 		const onObserved = partial && fdcDays === 'observed';
-		const values = present.map(({ d, i }) => (onObserved && i !== 2 ? onDaysOf(conv(d), obs!) : conv(d)));
+		const values = present.map(({ i }, k) => (onObserved && i !== 2 ? onDaysOf(converted[k]!, obs!) : converted[k]!));
 		const xy = flowDurationCurves(values);
 		return {
 			xy,
@@ -119,7 +124,7 @@
 			obsDays,
 			runDays,
 			series: present.map(({ d, i }) => ({ label: labels[i]!, startDate: d!.startDate, values: [], color: colors[i], width: 1.5, style: i === 2 ? ('dashed' as const) : undefined })),
-			q: present.map(({ i }, k) => ({ label: labels[i]!, ...percentileFlows(values[k]!) }))
+			q: (onObserved ? table.onObservedDays! : table.wholeRun).map((r) => ({ ...r, label: labels[FDC_RECORDS.indexOf(r.record)]! }))
 		};
 	});
 	const ewrSeries = $derived(ewrChartSeries(catchment, conv));
@@ -171,7 +176,7 @@
 	const supplySeries = $derived.by<ChartSeries[]>(() => {
 		const out: ChartSeries[] = [];
 		const { demand, supplied } = farmData;
-		if (demand) out.push({ label: 'Demand (net)', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
+		if (demand) out.push({ label: 'Abstraction demand', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
 		if (supplied) out.push({ label: 'Supplied', startDate: supplied.startDate, values: supplied.values, color: '--series-1', width: 1.25 });
 		return out;
 	});
@@ -232,7 +237,7 @@
 			</div>
 			{#if farm}
 				<p class="muted small">
-					Demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
+					Abstraction demand {fmtNum(farm.avgDemandM3Day)} m³/day, supplied {fmtNum(farm.avgSuppliedM3Day)} m³/day
 					({fmtPct(farm.fractionSupplied)}){capacity >= 1 ? ` · dam ${fmtNum(capacity)} m³` : ' · no dam'}.
 				</p>
 			{/if}
@@ -279,7 +284,7 @@
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
 				{band}
-				caption="Observed flow is a line broken wherever the record has no reading (a lone reading is a dot). Natural flow starts hidden: click it in the legend to show it."
+				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>
 		{/if}
 	</section>
@@ -327,10 +332,10 @@
 						{#each fdc.q as q (q.label)}
 							<tr>
 								<th scope="row">{q.label} <span class="u">({flowUnit})</span></th>
-								<td class="num">{fmtNum(q.q10, 3)}</td>
-								<td class="num">{fmtNum(q.q50, 3)}</td>
-								<td class="num">{fmtNum(q.q90, 3)}</td>
-								<td class="num">{fmtNum(q.q95, 3)}</td>
+								<td class="num">{fmtQty(q.q10, 3)}</td>
+								<td class="num">{fmtQty(q.q50, 3)}</td>
+								<td class="num">{fmtQty(q.q90, 3)}</td>
+								<td class="num">{fmtQty(q.q95, 3)}</td>
 							</tr>
 						{/each}
 					</tbody>

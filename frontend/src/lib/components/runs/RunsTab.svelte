@@ -5,7 +5,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { chirpsSourceOfInput, rebuildingNote } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, rebuildingNote } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -649,7 +649,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						/>
 						{#if shownSettings}
 							<div class="provenance">
-								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} />
+								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} />
 							</div>
 						{/if}
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}

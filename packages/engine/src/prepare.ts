@@ -37,6 +37,7 @@ import {
 	type ChirpsCorrection,
 	type ZeroRainMask
 } from './rain';
+import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
@@ -87,6 +88,8 @@ export interface PreparedRun {
 	doubleMass: DoubleMass | null;
 	/** settings.rainSource as applied, and the per-day `rain_source` column (engine ≥ 0.30.0; null without periods). */
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
+	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
+	apanDaily: ApanDailyInfo | null;
 }
 
 /** Merge the settings, work out the run window and align the input series to it. */
@@ -189,6 +192,9 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		warnings.push(...accumulationWarnings(accumulation.info, doubled));
 	}
 
+	// Daily A-pan (issue #45): every consumer reads it through `aligned`; this only counts and warns.
+	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
+
 	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
 		warnings.push(
 			settings.runoffModel === 'legacy'
@@ -211,7 +217,8 @@ export function prepareRun(input: ModelInput): PreparedRun {
 		zeroRain,
 		accumulation,
 		doubleMass,
-		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null
+		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
+		apanDaily
 	};
 }
 

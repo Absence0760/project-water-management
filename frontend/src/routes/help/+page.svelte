@@ -43,7 +43,7 @@
 		<h2 id="setup-h">Set up a catchment</h2>
 		<a href="{base}/help/guides/{start.id}">{start.title} →</a>
 	</div>
-	<p class="muted intro">One step per tab of a project, in order. The project’s Summary keeps a checklist of them.</p>
+	<p class="muted intro">One step per tab, in the order a project’s <strong>Build the model</strong> section lists them. The project’s Summary keeps a checklist of them.</p>
 	<ol class="steps">
 		{#each SETUP_STEPS as step, i (step.tab)}
 			{@const guide = guideFor(step.guide)}

@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
-import { resolvePe, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { resolvePe, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS, LEGACY_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -214,6 +214,13 @@ export interface FitRecord {
 		pe?: PeInput;
 		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
 		panCoefficientSource?: string;
+		/**
+		 * The daily A-pan series the fit ran on (engine ≥ 0.40.0, issue #45,
+		 * docs/model.md §2.3a): its start, length and the SHA-256 of its values,
+		 * as a run's input snapshot records them; null = the project had none.
+		 * Absent on a record made before it was tracked, which is never flagged.
+		 */
+		apanDaily?: ApanDailyFingerprint | null;
 	};
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
@@ -233,6 +240,20 @@ export interface FitRecord {
 	editedParams: string[];
 }
 
+/**
+ * Which daily A-pan series (`evap_apan_mm`) a fit ran on: what a run's input
+ * snapshot records for it (`RunSeriesSnapshot`: start, length, and
+ * `valuesSha256`, the SHA-256 hex of `seriesDigest(values)`).
+ */
+export interface ApanDailyFingerprint {
+	startDate: string;
+	length: number;
+	valuesSha256: string;
+}
+
+const sameApanDaily = (a: ApanDailyFingerprint | null, b: ApanDailyFingerprint | null): boolean =>
+	a === null || b === null ? a === b : a.startDate === b.startDate && a.length === b.length && a.valuesSha256 === b.valuesSha256;
+
 export interface FitContext {
 	/** The Settings form the fit ran on. */
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
@@ -250,6 +271,8 @@ export interface FitContext {
 	fittedAt: string;
 	/** The CHIRPS series' product and version when the fit ran (null = not recorded); omit when not known. */
 	chirpsSource?: SeriesProvenance | null;
+	/** The daily A-pan series the fit ran on (null = none); omit when not known. */
+	apanDaily?: ApanDailyFingerprint | null;
 }
 
 /** The fit record for a report, as Apply stores it. */
@@ -288,7 +311,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.chirpsSource !== undefined ? { chirpsSource: ctx.chirpsSource ? { ...ctx.chirpsSource } : null } : {}),
 			rainSource: structuredClone(ctx.settings.rainSource ?? []),
 			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
-			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {})
+			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
+			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {})
 		},
 		splitSample: r.splitSample,
 		differential: r.differential,
@@ -360,6 +384,15 @@ export interface FitRecordStatus {
 	 * doesn't know the version.
 	 */
 	chirpsSourceChanged: boolean;
+	/**
+	 * The daily A-pan series (engine ≥ 0.40.0, issue #45) was added, removed
+	 * or changed since a GR4J fit that ran on pan coefficient × A-pan, and
+	 * GR4J still does: the PE on the days it covers changed. False when the
+	 * record or the caller doesn't know the series, for a legacy fit, and
+	 * under a monthly PE (the series doesn't reach GR4J). Also sets
+	 * `forcingChanged`.
+	 */
+	apanDailyChanged: boolean;
 }
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -430,6 +463,8 @@ function forcingDiff(
 /** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */
 export interface FitForcingNow {
 	chirpsSource?: SeriesProvenance | null;
+	/** The daily A-pan series a run would read now (null = none); omit when not known. */
+	apanDaily?: ApanDailyFingerprint | null;
 }
 
 /** Compare a fit record with the settings (the form, or a run's snapshot), and with the CHIRPS series' version when `now` gives it. */
@@ -438,6 +473,15 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 	const forcing = forcingDiff(settings, record);
 	const recorded = record.forcing?.chirpsSource;
 	const chirpsSourceChanged = recorded !== undefined && now.chirpsSource !== undefined && !sameProvenance(recorded, now.chirpsSource);
+	// The daily A-pan reaches GR4J only through pan coefficient × A-pan, then and now.
+	const apanThen = record.forcing?.apanDaily;
+	const apanDailyChanged =
+		record.model === 'gr4j' &&
+		resolvePe(settings.pe, []).kind === 'pan' &&
+		resolvePe(record.forcing?.pe, []).kind === 'pan' &&
+		apanThen !== undefined &&
+		now.apanDaily !== undefined &&
+		!sameApanDaily(apanThen, now.apanDaily);
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (settings.runoffModel ?? 'legacy') !== record.model,
@@ -447,9 +491,28 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		forcingChanged:
 			chirpsSourceChanged ||
+			apanDailyChanged ||
 			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
-		chirpsSourceChanged
+		chirpsSourceChanged,
+		apanDailyChanged
 	};
+}
+
+/**
+ * Were these settings' parameters fitted on the days a run scores (issue
+ * #45)? Only then are the calibration statistics in-sample. `flowKind` is
+ * the record the run scored (the default pick resolved). A change of forcing
+ * since the fit doesn't count here, a replaced daily A-pan series included
+ * (apanDailyChanged, engine ≥ 0.40.0): the days are still the ones fitted;
+ * the fit record's forcingChanged says the fit may no longer hold.
+ */
+export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKind: CalibrationFlowKind): CalibrationFitStatus {
+	const record = resolveFitRecord(settings as Partial<ProjectSettings> & Record<string, unknown>);
+	if (!record || record.model !== (settings.runoffModel ?? 'legacy')) return 'notFitted';
+	const status = fitRecordStatus(settings, record);
+	if (status.editedParams.length) return 'edited';
+	if (status.windowChanged || status.exclusionsChanged || record.flowKind !== flowKind) return 'otherPeriod';
+	return 'fitted';
 }
 
 /** Plain-language caveats for a fit record in these settings; empty when it describes them exactly. */
@@ -467,7 +530,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'The CHIRPS series holds another product or version than the fit ran on, so the monthly CHIRPS factors and the rain on every day CHIRPS fills have changed. Refit before relying on the parameters.'
 		);
 	}
-	if (status.forcingChanged && !status.chirpsSourceChanged) {
+	if (status.apanDailyChanged) {
+		out.push(
+			'The daily A-pan evaporation series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
+		);
+	}
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);

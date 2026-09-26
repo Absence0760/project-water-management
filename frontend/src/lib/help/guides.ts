@@ -10,6 +10,7 @@
 //   [[guide:add-data|label]] link to another guide
 // Every reference must resolve (guarded by guides.test.ts).
 
+import { TAB_LABELS } from '$lib/workspace/tabs';
 import { helpFor } from './content';
 import type { ShotId } from './pictures';
 
@@ -21,18 +22,16 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 	concept: 'How it works'
 };
 
-/** Project workspace tabs a guide can point at (`?tab=`). */
-export type TabId = 'overview' | 'network' | 'crops' | 'transfers' | 'series' | 'settings' | 'runs';
+/** The workspace tabs the setup path walks, in the order a catchment is set up. */
+export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
 
-export const TAB_TITLES: Record<TabId, string> = {
-	overview: 'Summary',
-	network: 'Network',
-	crops: 'Crops & demand',
-	transfers: 'Transfers',
-	series: 'Data',
-	settings: 'Settings & calibration',
-	runs: 'Runs & results'
-};
+/** Project workspace tabs a guide can point at (`?tab=`). */
+export type TabId = (typeof SETUP_TABS)[number] | 'compare';
+
+/** Their names, the workspace's own (lib/workspace/tabs.ts), so help can't drift from a rename. */
+export const TAB_TITLES: Record<TabId, string> = Object.fromEntries(
+	[...SETUP_TABS, 'compare'].map((id) => [id, TAB_LABELS[id as TabId]])
+) as Record<TabId, string>;
 
 export const DIAGRAM_IDS = [
 	'workflow',
@@ -112,7 +111,7 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'workflow',
 						caption:
-							'The setup order follows the workspace tabs. Calibrate and run again until the fit is good enough, then use runs and copies of the project for what-ifs.'
+							'The setup order follows the workspace’s **Build the model** section, top to bottom; the results are under **Outcomes**. Calibrate and run again until the fit is good enough, then use runs and copies of the project for what-ifs.'
 					}
 				]
 			},
@@ -129,13 +128,31 @@ export const GUIDES: Guide[] = [
 							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
 							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, how rain gaps are filled, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
 							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
-							'**Iterate**: improve the calibration, run again, and compare runs. Copy the project to try a what-if without touching the original. See [[guide:compare-runs|Compare runs and try what-ifs]].'
+							'**Iterate**: improve the calibration, run again, and compare runs on **Compare runs**. Copy the project to try a what-if without touching the original. See [[guide:compare-runs|Compare runs and try what-ifs]].'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
 						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
+					}
+				]
+			},
+			{
+				heading: 'Getting around a project',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, Runs & results, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds Applications and the History of changes.'
+					},
+					{
+						type: 'p',
+						text: 'On a wide screen the sections are a list down the left. On a narrower one they sit in a row across the top, and on a phone behind a **Sections** button that names the tab you are on. The arrow keys move from one tab to the next.'
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or use the link beside a farm in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
@@ -323,6 +340,11 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'note',
+						tone: 'tip',
+						text: 'To change just one farm, select it on the **Network** and open **Planted areas** under the drawing: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+					},
+					{
+						type: 'note',
 						tone: 'caution',
 						text: 'With A-pan at 0 in every month the crops need no water, and every farm looks fully supplied. The Summary’s checklist warns about this.'
 					}
@@ -359,7 +381,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0.',
+							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0. Commas, semicolons or tabs, and decimal points or decimal commas, are worked out from the file. A daily table exported from the DWS hydrology site loads as it is: days its quality code marks as missing, and negative placeholders such as -999, become gaps.',
 							'Press **Add data** in the project header, or drop the file anywhere on the page.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
@@ -687,7 +709,7 @@ export const GUIDES: Guide[] = [
 		title: 'Compare runs and try what-ifs',
 		summary: 'See exactly which inputs changed between two runs and what that did to the results.',
 		kind: 'howto',
-		tab: 'runs',
+		tab: 'compare',
 		sections: [
 			{
 				heading: 'Steps',
@@ -697,7 +719,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Run a baseline.',
 							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again.',
-							'On **Runs & results**, open **Compare runs**. It starts on the previous run (A) against the latest (B); either side can pick any run from any project you can see.',
+							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (B) against the published baseline (A), or against the run before it when nothing is published; either side can pick any run from any project you can see.',
 							'Read **What changed** (every input difference) before **Headline results** (A, B and the change).'
 						]
 					},
@@ -739,7 +761,7 @@ export const GUIDES: Guide[] = [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
 							'**Natural flow.** The [[runoff-model]] (GR4J or legacy) turns rain and evaporation into the flow the catchment would produce with no farms.',
 							'**Shares.** Natural flow and the EWR are split between the farms by fixed [[flow-share|flow shares]].',
-							'**Demand.** Crops, A-pan and effective rain give each farm’s net irrigation demand.',
+							'**Demand.** Crops, A-pan and effective rain give each farm’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the farm takes from its dam and the river.',
 							'**Farm balance.** Upstream first, each farm fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one farm]].',
 							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the farms upstream of it ([[ewr-charge]]).'
 						]

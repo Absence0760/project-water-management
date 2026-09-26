@@ -18,6 +18,7 @@ import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
@@ -28,6 +29,8 @@ type ProjectRow = {
 	id: string;
 	name: string;
 	description: string;
+	/** IANA zone (058_project_time_zone): dates the project's downloads. */
+	time_zone: string;
 	team_id: string | null;
 	team_name: string | null;
 	settings: unknown;
@@ -59,6 +62,7 @@ const summary = (r: ProjectRow) => ({
 // rerunQueuedFor: when the pending re-run is due (the header's "Re-run queued for 14:05"), or null.
 const full = (r: ProjectRow) => ({
 	...summary(r),
+	timeZone: r.time_zone,
 	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings) },
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null
 });
@@ -67,7 +71,7 @@ const full = (r: ProjectRow) => ({
 // team); app_project_role gives the effective role. The team name is only
 // visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
-	SELECT p.id, p.name, p.description, p.settings, p.created_at, p.updated_at, p.team_id,
+	SELECT p.id, p.name, p.description, p.time_zone, p.settings, p.created_at, p.updated_at, p.team_id,
 		t.name AS team_name, app_project_role(p.id) AS role,
 		-- Data freshness and last run for the project list, in the same query
 		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
@@ -94,6 +98,8 @@ const PatchBody = z.object({
 	/** Move the project into a team you belong to (null = personal). Owner only. */
 	teamId: z.string().uuid().nullable().optional(),
 	description: z.string().max(5000).optional(),
+	/** An IANA zone the runtime knows; dates the project's downloads (issue #45). */
+	timeZone: TimeZone.optional(),
 	settings: SettingsPatch.optional(),
 	/** Why the settings changed, kept with the revision (ignored without settings). */
 	reason: Reason
@@ -151,6 +157,7 @@ const withoutAutoRun = (settings: unknown) => {
 const onlyAutoRun = (body: z.infer<typeof PatchBody>, stored: unknown, next: unknown) =>
 	body.name === undefined &&
 	body.description === undefined &&
+	body.timeZone === undefined &&
 	body.teamId === undefined &&
 	next !== undefined &&
 	stableJson(withoutAutoRun(next)) === stableJson(withoutAutoRun(mergeSettings(stored)));
@@ -250,17 +257,19 @@ export const projectRoutes = new Hono<AuthEnv>()
 				`UPDATE project SET
 					name = COALESCE($2, name),
 					description = COALESCE($3, description),
+					time_zone = COALESCE($8, time_zone),
 					settings = COALESCE($4::jsonb, settings),
 					team_id = CASE WHEN $5 THEN $6::uuid ELSE team_id END,
 					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END
 				 WHERE id = $1`,
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
-					body.teamId !== undefined, body.teamId ?? null, onlyAutoRun(body, current.settings, settings)]
+					body.teamId !== undefined, body.teamId ?? null, onlyAutoRun(body, current.settings, settings), body.timeZone ?? null]
 			);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
 			const fields = [
 				body.name !== undefined && body.name !== current.name && 'name',
 				body.description !== undefined && body.description !== current.description && 'description',
+				body.timeZone !== undefined && body.timeZone !== current.time_zone && 'time_zone',
 				body.teamId !== undefined && body.teamId !== current.team_id && 'team'
 			].filter((f): f is string => !!f);
 			const updated = await getProject(db, id);
@@ -268,6 +277,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				await recordAudit(db, id, 'project.changed', {
 					fields,
 					...(fields.includes('name') ? { from: current.name, to: updated.name } : {}),
+					...(fields.includes('time_zone') ? { timeZone: { from: current.time_zone, to: updated.time_zone } } : {}),
 					...(fields.includes('team') ? { team: updated.team_name } : {})
 				});
 			}
@@ -315,9 +325,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// Fresh node ids for the copy; settings that name a node (the EWR rule tables' sites) follow them.
 			const { model: copied, ids } = freshIds(await loadModel(db, srcId));
 			await db.query(
-				`INSERT INTO project (id, name, description, settings, created_by, team_id)
-				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
-				[newId, body.name, src.description, JSON.stringify(remapSettingNodeIds(src.settings ?? {}, ids)), teamId]
+				`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
+				 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
+				[newId, body.name, src.description, JSON.stringify(remapSettingNodeIds(src.settings ?? {}, ids)), teamId, src.time_zone]
 			);
 			await saveModel(db, newId, copied);
 			await db.query(

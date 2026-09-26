@@ -37,7 +37,7 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  */
 // ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
 // month at either end of the run is not assessed against the Reserve rules.
-const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
@@ -661,9 +661,15 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)) : [...d0.apanMm];
 	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
 	const day0 = toEpochDay(out.startDate);
+	// A daily A-pan series (engine ≥ 0.38.0, issue #45) sets the day's A-pan wherever it has a number ≥ 0.
+	const apanSeries = input.series?.evap_apan_mm;
+	const apanOffset = apanSeries ? day0 - toEpochDay(apanSeries.startDate) : 0;
 	const evapMmDay = Array.from({ length: out.days }, (_, t) => {
 		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
-		return ((lakeMonthly ? lakeMonthly[wy]! : lakeK) * (apan[wy] ?? 0)) / monthLen[wy]!;
+		const k = lakeMonthly ? lakeMonthly[wy]! : lakeK;
+		const a = apanSeries && t + apanOffset >= 0 ? apanSeries.values[t + apanOffset] : undefined;
+		if (typeof a === 'number' && Number.isFinite(a) && a >= 0) return k * a;
+		return (k * (apan[wy] ?? 0)) / monthLen[wy]!;
 	});
 	const rainFinal = get.get('null|rain_final');
 	const damRain = (t: number) => {

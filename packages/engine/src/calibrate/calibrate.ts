@@ -29,6 +29,7 @@ import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, LEGACY_PARAMS, type Gr4jParams } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
+import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
@@ -264,7 +265,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const { settings, days, startDate, aligned, month, warnings } = run;
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
-	if (modelId === 'gr4j' && !hasPotentialEvaporation(settings)) throw new Error(GR4J_NO_PET);
+	if (modelId === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
 	const startParams: ParamSet =
 		modelId === 'gr4j'

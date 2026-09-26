@@ -9,6 +9,7 @@ import type { DoubleMass } from './doublemass';
 import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
+import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
@@ -384,6 +385,17 @@ export interface DataQualitySettings {
 export const CALIBRATION_FLOW_KINDS = ['flow_observed_m3s', 'flow_logger_m3s'] as const;
 export type CalibrationFlowKind = (typeof CALIBRATION_FLOW_KINDS)[number];
 
+/**
+ * The label of a run's observed-flow series by the record it holds: the
+ * calibration record (`observed_flow`) and, when the project has both, the
+ * other one (`observed_flow_other`, engine ≥ 0.39.0). A caller can tell the
+ * gauge from the logger by it (the stored series ref carries the label).
+ */
+export const OBSERVED_SERIES_LABEL: Record<CalibrationFlowKind, string> = {
+	flow_observed_m3s: 'Observed flow',
+	flow_logger_m3s: 'Observed flow (logger)'
+};
+
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 /** Defaults taken from the blank b023 workbook. */
@@ -600,6 +612,13 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * `rain_reanalysis_mm` is a gauge-free reanalysis (ERA5): a reference a
  * rain-source 'fit' can be measured against, and a named fallback for the
  * alternative series' gaps. Neither is ever read outside a period.
+ *
+ * `evap_apan_mm` (engine ≥ 0.38.0, issue #45) is a daily Class-A pan
+ * evaporation record (mm/day), e.g. from a nearby weather station. On the
+ * days it has a value it replaces `settings.apanMm[month] ÷ days in the
+ * month` wherever A-pan is read: GR4J's PE under `pe.kind: 'pan'`, crop
+ * demand and dam evaporation; every other day falls back to the monthly
+ * mean (./evaporation/apanDaily.ts, docs/model.md §2.3a).
  */
 export const SERIES_KINDS = [
 	'rain_catchment_mm',
@@ -609,7 +628,8 @@ export const SERIES_KINDS = [
 	'rain_forecast_mm',
 	'flow_observed_m3s',
 	'flow_logger_m3s',
-	'flow_reference_m3s'
+	'flow_reference_m3s',
+	'evap_apan_mm'
 ] as const;
 export type SeriesKind = (typeof SERIES_KINDS)[number];
 
@@ -1225,7 +1245,26 @@ export interface CalibrationStats {
 	exclusions?: ExclusionRange[];
 	/** Observed days inside the window that the exclusions left out (engine ≥ 0.8.0). */
 	excludedDays?: number;
+	/**
+	 * Whether these are in-sample scores: were the run's parameters fitted on
+	 * the days scored? (engine ≥ 0.39.0, calibrationFitStatus in
+	 * ./calibrate/provenance.ts). Absent on older runs.
+	 */
+	fitStatus?: CalibrationFitStatus;
 }
+
+/**
+ * How a run's parameters relate to its calibration period:
+ * - `fitted`: fitted automatically on these days (the run's fit record, for
+ *   its runoff model, its window, exclusions and record, parameters as
+ *   fitted): the scores are in-sample.
+ * - `notFitted`: no fit record for the run's runoff model; the parameters
+ *   were set by hand, imported or left at their defaults.
+ * - `edited`: a fit exists but parameters were changed by hand since.
+ * - `otherPeriod`: fitted, but on another window, other exclusions or the
+ *   other flow record, so the days scored are not the days fitted.
+ */
+export type CalibrationFitStatus = 'fitted' | 'notFitted' | 'edited' | 'otherPeriod';
 
 /** EWR compliance of one site as a water-year × month grid (see EwrCompliance). */
 export interface EwrComplianceGrid {
@@ -1315,7 +1354,7 @@ export interface EwrAgreement {
 export interface CurtailmentFarm {
 	nodeId: string;
 	name: string;
-	/** [H] Average net irrigation demand. */
+	/** [H] Average abstraction demand D = F / e (engine ≥ 0.16.0; the workbook: net irrigation demand F). */
 	demandM3Day: number;
 	/** [I] Average irrigation supplied. */
 	suppliedM3Day: number;
@@ -1598,6 +1637,13 @@ export interface RunSummary {
 	zeroRainInfill?: ZeroRainInfill | null;
 	/** What settings.rainSource did (engine ≥ 0.30.0, ./rainSourcePeriods.ts); null without periods, absent before 0.30.0. */
 	rainSource?: RainSourceInfo | null;
+	/**
+	 * How the daily A-pan series was used (engine ≥ 0.38.0, issue #45,
+	 * ./evaporation/apanDaily.ts): the run days it covered and the days that
+	 * fell back to the monthly means. Absent when the project has no daily
+	 * A-pan series, and on older runs.
+	 */
+	apanDaily?: ApanDailyInfo;
 	/**
 	 * Untagged multi-day accumulations in the catchment rain (engine ≥ 0.20.0,
 	 * ./accumulation.ts, audit B4): the windows detected or listed, what the

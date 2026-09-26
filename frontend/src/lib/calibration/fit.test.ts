@@ -237,7 +237,8 @@ describe('applyReport', () => {
 			exclusionsChanged: false,
 			flowKindChanged: false,
 			forcingChanged: false,
-			chirpsSourceChanged: false
+			chirpsSourceChanged: false,
+			apanDailyChanged: false
 		});
 	});
 });
@@ -360,6 +361,14 @@ describe('fitRecordFor', () => {
 		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null, chirpsSource: null }).forcing!.chirpsSource).toBeNull();
 		// Not known: nothing recorded, so nothing is ever compared.
 		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing).not.toHaveProperty('chirpsSource');
+	});
+
+	it('records the daily A-pan series the fit ran on, when known (issue #45)', () => {
+		const form = defaultProjectSettings();
+		const pan = { startDate: '2020-10-01', length: 30, valuesSha256: 'c'.repeat(64) };
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null, apanDaily: pan }).forcing!.apanDaily).toEqual(pan);
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null, apanDaily: null }).forcing!.apanDaily).toBeNull();
+		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing).not.toHaveProperty('apanDaily');
 	});
 
 	it('shows the fit time in UTC to the minute', () => {

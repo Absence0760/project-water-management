@@ -53,7 +53,8 @@ first): **Outcomes** (Summary, Runs & results, Compare runs, Scenarios, Allocati
 calibration) and **Review** (Applications, History). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
-section lists joins *Build the model*). It is layout only: the URLs stay
+section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
+the same file, which the help pages share. It is layout only: the URLs stay
 `?tab=<id>` and which tabs a role sees is unchanged (below).
 
 - **1100 px and wider:** a sidebar beside the tab's content, with the section
@@ -64,8 +65,13 @@ section lists joins *Build the model*). It is layout only: the URLs stay
   below that, its name and remove columns kept in view (`model.spec.ts`).
 - **900–1099 px:** one strip across the top, sections side by side with a
   divider and a small label over each.
-- **Below 900 px (phones):** the same strip scrolling sideways; the section labels are read
-  out (each section is a named group) but not shown.
+- **Below 900 px (phones):** a full-width **Sections** button naming the open
+  tab (its accessible name is "Project sections: *Tab*", with the problems dot
+  when a model tab has one) opens the same grouped list in the page, the
+  section labels shown and the open tab marked, with a viewer's **Show model
+  inputs** at the end. Choosing a tab or pressing Escape closes it (Escape puts
+  focus back on the button). It replaced a 12-tab strip that scrolled
+  sideways, where a phone showed about three tabs and none of the grouping.
 
 The arrow keys move through the tabs in the order shown, across sections,
 wrapping at the ends (Right/Down next, Left/Up previous).
@@ -153,7 +159,11 @@ shorter than the cap looks as before.
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
-  Dropping a CSV anywhere on the page opens it with that file.
+  Dropping a CSV anywhere on the page opens it with that file. It reads a
+  date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
+  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
+  rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -184,7 +194,7 @@ put the results first. Top to bottom:
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads: there is nothing to summarise yet.
 2. The latest run's results, the "Needs attention" list, the **Flow vs
-   reserve** chart (below), the active alerts ([§ Alerts](#alerts)) and the
+   reserve** chart and **Dam levels** (below), the active alerts ([§ Alerts](#alerts)) and the
    published baseline.
 3. **Once there is a run**, the setup checklist comes here, below the results
    (usually as the one-line "Setup complete").
@@ -199,6 +209,22 @@ put the results first. Top to bottom:
   pulls in uPlot, so the page's first paint doesn't wait for it. Its series
   come through the Runs tab's `cachedSeries`, and it fetches only the series
   the run stored ("This run stored no outflow or EWR series." otherwise).
+- **Dam levels** (`overview/DamLevels.svelte`, rules in `overview/damLevels.ts`),
+  under Flow vs reserve once the latest run's record is in: every dam in the
+  run (a node with capacity ≥ 1 m³ and a stored `dam_storage` series), emptiest
+  first. Each row has the dam's capacity, its storage at the end of the run as
+  a bar and a % of capacity (a tick marks its minimum operating level, and
+  "below 30%" or "at its minimum level" is written beside the %, so colour is
+  never the only cue), the lowest it reached in the run's last 365 days with
+  the first day of that low, and the days in that year at or below the
+  minimum. Capacity and minimum come from the run's own model
+  (`run.model`, the live model for an older run), so a later edit doesn't skew
+  them. The run summary has no dam figures, so each dam's daily series is
+  fetched through the Runs tab's `cachedSeries`, four at a time, with
+  "Loading dam levels (N of M)…" meanwhile. The first 8 rows show, with
+  **Show all N dams**. Its own chunk. The durable fix for the per-dam fetches,
+  dam figures in the run summary, needs an engine change (`ENGINE_VERSION`)
+  and is open work ([followups.md](./followups.md)).
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -215,9 +241,11 @@ put the results first. Top to bottom:
   tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
   site from `headlineSite`) or, without a rule table, *EWR not met* (days below
   the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
-  M farms below" `SUPPLY_TARGET`); *Calibration NSE* (in-sample; "–" without
-  observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
-  is only in a run's daily series, not its summary, so it has no card. Each
+  M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
+  (in-sample)" only when the parameters were fitted on those days, otherwise
+  why not, as on the Runs tab; "–" without observed flow); *Mean simulated outflow* (m³/s, % of natural). Dam storage
+  is only in a run's daily series, not its summary, so it has no card; the
+  **Dam levels** panel below reads those series. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
@@ -274,6 +302,13 @@ put the results first. Top to bottom:
   kept." Every member sees it, viewers included, so a reviewer or assessor
   can check what the importer interpreted long after the import. All the text
   came from the file and renders as text only.
+- **Time zone** (Project details, under Description; issue #45): the
+  project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
+  from the browser's list of zones, saved with **Save details** (editors;
+  read-only for viewers). Every download of the project (CSV, JSON, the
+  .xlsx workbook, the server report PDF) is dated by the calendar day there,
+  so an export made just after local midnight carries today's date, not
+  UTC's yesterday. A zone the server doesn't know is refused with its error.
 - **Layout**: Project details (and the import record) on the left; on the
   right, "who has access": Team above Members (or "Shared directly with" for a
   team project), so the two panels that refer to each other sit together, then
@@ -808,7 +843,13 @@ its reason. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
-periods* names them. A CSV with several timed readings a day (an automatic
+periods* names them. The **daily A-pan evaporation** kind (*Evaporation —
+A-pan, daily*, `evap_apan_mm`, engine ≥ 0.38.0, issue #45) is listed and
+uploaded like rain (mm, cm or in, stored in mm), badged *Daily evaporation*,
+with a mean annual total in its row like a rain series; a file whose name or
+header says evap, A-pan or A pan is guessed as that kind, and a newer daily
+A-pan record counts as new data since the last run. It replaces the monthly
+A-pan means on the days it covers ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)). A CSV with several timed readings a day (an automatic
 station's hourly log) is not refused: the form asks how to add it up into
 days, **08:00 to 08:00, booked to the day it starts** (the default, the
 manual-gauge day) or **midnight to midnight**, and its summary says how many
@@ -827,7 +868,26 @@ reference (wide screens still show it on the right); the empty state points at
 it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
-summary says so). In number fields, a comma is a thousands separator only in a
+summary says so), and YYYYMMDD. The delimiter (comma, semicolon or tab) is
+worked out from the file's rows, outside double quotes, and quoted fields may
+hold it. The decimal separator is decided once per file (`lib/series/csv.ts`,
+issue #45): a value that settles it (12,5 · 0,359 · 1.234,5 say decimal comma;
+2.5 · 1,234.5 say decimal point) sets it, thousands separators (spaces, or
+commas or dots in valid groups) are dropped, a file mixing both conventions is
+refused naming a line of each, and in a semicolon or tab file with nothing to
+settle it a value that reads either way (1,234) is refused rather than guessed
+(a comma file defaults to the decimal point, since its unquoted values can't
+hold a decimal comma). A row split by another delimiter than the file's is
+reported as that, not as a bad date. **DWS hydrology exports** load as they
+are (`lib/series/dws.ts`, picked by `lib/series/file.ts`): the fixed-width
+daily table HyData.aspx prints (`DATE D AVG F/R QUAL`, YYYYMMDD), as text or
+the saved page, or headerless `YYYYMMDD value [quality]` rows. Rows are read by
+the automatic DWS feed's own code (`@water-management/engine/dws`), so a
+missing-data quality code (151, 165, 170, 172, 246, 247, 255), a blank value or
+a negative placeholder such as -999 is a gap, never a value. The summary adds a
+*DWS export* line (rows, the value column as the file's format block describes
+it, and how many rows were read as gaps and why) and the quality codes met; a
+sub-daily DWS export (a TIME column) is refused. In number fields, a comma is a thousands separator only in a
 valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
@@ -980,7 +1040,12 @@ the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
 which checks every catchment tab).
 
 
-- **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
+- **Demand**: A-pan (Oct–Sep), with a line under it saying where the model's
+  A-pan comes from (`apanSourceNote`, `settings/peInput.ts`, engine ≥ 0.38.0,
+  issue #45): the project's **daily A-pan series** on the days it has a
+  value, these monthly means filling the rest, or these monthly means on
+  every day (with a pointer to the Data tab); nothing while the series list
+  loads. Effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
   the workbook does; [model.md §2.3](./model.md#23-irrigation-demand) step 4),
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
@@ -1061,7 +1126,8 @@ which checks every catchment tab).
       is outside 0–10 000 mm. A row of zeros saves.
     A separate notice appears when GR4J's PE is 0 in every month (A-pan ×
     pan coefficient, or the monthly PE row): the engine then refuses GR4J
-    runs and fits.
+    runs and fits. Under pan coefficient × A-pan a daily A-pan series counts
+    as evaporation, so a project with one isn't warned.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to both models and to
@@ -1185,7 +1251,13 @@ which checks every catchment tab).
     or version than the fit ran on (issue #40 part c; the fit records it, and
     Settings compares the series a run would use), with its own caveat. The
     record's **CHIRPS series** row names the product and version the fit ran
-    on, and the series' current one when it differs. Its **Rain source
+    on, and the series' current one when it differs. Its **Daily A-pan
+    series** row (engine ≥ 0.38.0, issue #45) gives the daily A-pan record
+    the fit ran on (its first day, length and a 12-character SHA-256, or
+    "none (monthly means only)"), and the series now when it was added,
+    replaced or removed since, which also shows **Forcing changed since fit**
+    with its own caveat (Settings fetches and hashes the series only when the
+    record tracked one). Its **Rain source
     periods** row lists the periods the fit ran under (engine ≥ 0.30.0; a
     fit made before them ran with none), and a change of periods also shows
     **Forcing changed since fit**. Its **GR4J potential evaporation** row
@@ -1475,8 +1547,8 @@ run's report to chosen members every week or month.
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
-     self-checks, the plausibility findings, the WR2012 flag and the in-sample
-     fit, each in words with a coloured edge and a link to its panel.
+     self-checks, the plausibility findings, the WR2012 flag and the calibration
+     fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow, EWR by month, and the **Uncertainty bands** (their own
      panel and menu entry, beside the findings they qualify).
@@ -1557,18 +1629,29 @@ run's report to chosen members every week or month.
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
   "Every farm got at least 95 %"; left out when the run has no farms), then,
-  only when the run was scored against observed flow, the in-sample NSE and
-  PBIAS with PBIAS in `rating.ts`'s plain words (NSE unrated). Then the headline cards give mean natural
+  only when the run was scored against observed flow, the NSE and PBIAS with
+  PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
+  parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
   months", the longest run not met and a link to the panel; the days card is
   then labelled "Days below the pragmatic EWR", the secondary measure), irrigation
   supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
-  in plain words by `runs/rating.ts`), labelled **calibration period (in-sample)**: they are
-  scored on the days the parameters were tuned on. When the parameters came
-  from Fit automatically, the fit's validation scores sit beside the in-sample
-  one under **Where the parameters came from** (below). Below them is the per-farm table: sortable, in network
+  in plain words by `runs/rating.ts`), labelled by whether they are in-sample
+  (issue #45, `calibration/sample.ts`, from the run's
+  `summary.calibration.fitStatus`, engine ≥ 0.39.0): **calibration period
+  (in-sample)** only when the run's parameters came from Fit automatically for
+  its runoff model, unedited, on the same calibration window, exclusions and
+  flow record; otherwise **calibration period (parameters not fitted)** (set
+  by hand, imported or defaults), **(parameters edited since the fit)** or
+  **(not the period fitted)**; a run from before engine 0.39.0 says only
+  "calibration period". The calibration panel's note, the checks line, the
+  plain-words sentence, the Summary tab's card and the run comparison use the
+  same words (compare: one label when both runs agree, else "run A …, run B
+  …"). When the parameters came from Fit automatically, the fit's validation
+  scores sit beside the fit's own score under **Where the parameters came
+  from** (below). Below them is the per-farm table: sortable, in network
   order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
   badge and a tinted row). The **Supplied % of demand** column has a small bar
   beside the number (`aria-hidden`, width = the fraction clamped to 0–100 %,
@@ -1675,6 +1758,13 @@ run's report to chosen members every week or month.
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run
   means (`RunSummaryView.svelte`).
+- **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
+  crop water requirement after effective rainfall ÷ irrigation efficiency (D =
+  F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the
+  requirement; supplied, deficit and % supplied are measured against it. The
+  farm detail's supply chart calls the line "Abstraction demand". *EWR charge*
+  is a positive volume charged (m³/day), the same sign the curtailment table
+  and every export use (below).
 - **Curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -1685,7 +1775,14 @@ run's report to chosen members every week or month.
   condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
   pass inflow*, the *Supply cut* (m³/day and l/s) and the *EWR site* setting
-  the charge, with a note on the rule; older runs show the single "EWR
+  the charge, with a note on the rule. **Sign convention** (issue #45): the
+  charge, its irrigate-less and store-less parts, the other users' charge and
+  charge left standing, and the EWR sites' shortfall, charged and natural
+  parts are volumes, shown positive (`fmtCharged`), as the Farms table shows
+  the charge, so one farm reads the same in both tables; the changes they ask
+  for (above/below the equitable share, supply cut, total change) keep − =
+  reduce. The engine's curtailment fields stay ≤ 0 (the workbook's column R
+  sign, so S = N + R holds): only the display and the exports flip them; older runs show the single "EWR
   shortfall" column (AB). *Total change* and *volume left* count only the
   supply cut (Q13): a farm with no demand shows no cut, and a farm with only a
   storage charge gets a "store less / pass inflow X m³/day" badge; a farm
@@ -1701,7 +1798,13 @@ run's report to chosen members every week or month.
   tables follow the [reporting window picker](#report-window)); with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
   at the Reserve determination's EWR sites to protect upstream reaches.* The hydrograph (observed flow as a line
-  under simulated outflow, broken on every day without a reading and never
+  under simulated outflow, labelled by instrument, *Observed gauge* or
+  *Observed logger* (from the stored series' label); when the project has
+  both records (engine ≥ 0.39.0, issue #45) both are drawn: the calibration
+  record solid in the observed colour and labelled "(calibration record)",
+  the other dashed in `--series-4` (its own light and dark value) and not
+  scored, with the caption saying which is which; the flow-duration curve's
+  observed line and Q table row carry the same label. Each record is broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
   scale and unit switches; a switched-off entry is struck through in the
@@ -1720,14 +1823,15 @@ run's report to chosen members every week or month.
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them; the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
-  in-sample note, and adds the gauge vs logger table when years disagree),
+  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
   "Parameters edited since fit" badge when they were edited, and a
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
   PE input, CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
-  CHIRPS series held another product or version, from the run's `inputSeries`), or "No fit
+  CHIRPS series held another product or version, or its daily A-pan series
+  differs from the fit's, from the run's `inputSeries`), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that
@@ -1817,7 +1921,10 @@ run's report to chosen members every week or month.
   an error when the engine is the same version, a warning when it changed),
   **Not reproducible**, or why a stored input can't be used. A run from
   before stored inputs says so instead of offering the check. The
-  flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
+  flow-duration curve with Q10–Q95 (engine `views/fdc.ts`: the Q table is
+  `fdcPercentileTable`, the same function the run summary CSV, the .xlsx
+  workbook's Summary sheet and the report's Calibration section read, so an
+  export carries exactly the chart's numbers, issue #45; when the observed
   record misses some of the run's days, every curve and the Q table rank only
   the days with a reading by default, `onDaysOf`, so they compare like with
   like, and **Observed days / Whole run** switches; the caption says which
@@ -1909,6 +2016,18 @@ run's report to chosen members every week or month.
   residual (to two significant figures, float noise), and the EWR required
   vs met at each site. Runs before engine 0.32.0 show *Not computed by
   engine x.y* in both panels.
+- **Small flows and volumes** (issue #45). Figures in m³/s, l/s and Mm³ keep
+  their fixed decimals (3 for m³/s and Mm³), but a non-zero value those
+  decimals would show with fewer than two significant figures is shown to two
+  significant figures instead (`fmtQty`, `lib/format/number.ts`): a dry
+  season's Q90 of 0.00042 m³/s reads *0.00042*, never *0.000*, and a small
+  dam's volume in the water balance by water year is no longer *0*. Zero stays
+  0 and values from 1 up are unchanged. This covers the headline cards, the
+  FDC percentile table, the water balance, the WR2012 check, the EWR
+  assurance volumes and the farm totals line; the plausibility warnings'
+  text follows the same rule (engine `plausibility/format.ts`). Tables in
+  m³/day (farms, curtailment) keep their decimals: one m³/day is already a
+  fine enough step.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).
@@ -2194,7 +2313,9 @@ exists, says so with a link to Runs & results.
   PE the monthly table shows **GR4J monthly PE (mm)** in place of the pan
   coefficient),
   **Calibration** (the calibration panel with the annual water balance, where
-  the parameters came from, the hydrograph over the whole run),
+  the parameters came from, the hydrograph over the whole run, and the
+  flow-duration percentiles Q10–Q95 in m³/s on the days the Runs tab's FDC
+  chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
   for the outlet and every farm), **Farms, warnings and checks** (the run
@@ -2318,7 +2439,13 @@ page, and closes again when you pick a page.
   width: key points beside a close-up shot, or a diagram.
 - **Overview** (`/help`): the catchment tour (eight stops from rain to the
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
-  workspace tab, `SETUP_STEPS` in `lib/help/guides.ts`) and the model guides.
+  setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
+  order of the workspace's *Build the model* section, which `tour.test.ts`
+  guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
+  the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
+  *The whole process* has a **Getting around a project** section (the three
+  sections, the sidebar, strip and phone Sections menu, and the farm drawer),
+  and *Compare runs and try what-ifs* points at the Compare runs tab.
   An old `/help#<term>` link goes on to `/help/glossary#<term>`.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
   or one idea each, with an "On this page" list, numbered steps, tip and

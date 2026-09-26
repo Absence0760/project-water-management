@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
-import { defaultProjectSettings } from './project';
+import { defaultProjectSettings, OBSERVED_SERIES_LABEL } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
 import { calibrationStats } from './network/stats';
@@ -1211,6 +1211,29 @@ describe('runModel — calibration statistics', () => {
 		const stale = runModelWith(i, () => ({ naturalFlowM3Day: [86_400, 86_400] }));
 		expect(stale.summary.calibration!.flowKind).toBe('flow_observed_m3s');
 		expect(stale.summary.warnings).toContain('unknown calibration flow series "flow_pitman_m3s"; using the default');
+	});
+
+	it('writes the other flow record beside the calibration record, labelled by source, never scored (issue #45)', () => {
+		const nat = () => ({ naturalFlowM3Day: [86_400, 86_400] });
+		const i = input({ nodes: [node('A')], natural: [86_400, 86_400], observed: [5, 5] });
+		const only = runModelWith(i, nat);
+		expect(only.series.find((s) => s.key === 'observed_flow')!.label).toBe('Observed flow');
+		expect(only.series.some((s) => s.key === 'observed_flow_other')).toBe(false);
+
+		i.series.flow_logger_m3s = { startDate: '2020-01-01', values: [1, null] };
+		i.settings.calibrationFlowKind = 'flow_logger_m3s';
+		const both = runModelWith(i, nat);
+		const obs = both.series.find((s) => s.key === 'observed_flow')!;
+		const other = both.series.find((s) => s.key === 'observed_flow_other')!;
+		expect([obs.label, other.label]).toEqual([OBSERVED_SERIES_LABEL.flow_logger_m3s, OBSERVED_SERIES_LABEL.flow_observed_m3s]);
+		expect(obs.values[0]).toBe(86_400);
+		expect(Number.isNaN(obs.values[1])).toBe(true);
+		expect(other.values).toEqual([5 * 86_400, 5 * 86_400]);
+		// Only the calibration record is scored.
+		expect(both.summary.calibration!.flowKind).toBe('flow_logger_m3s');
+		expect(both.summary.calibration!.days).toBe(1);
+		// No fit record: the scores are not in-sample.
+		expect(both.summary.calibration!.fitStatus).toBe('notFitted');
 	});
 
 	it('warns once when it picks the gauge by default over a logger (issue #1)', () => {

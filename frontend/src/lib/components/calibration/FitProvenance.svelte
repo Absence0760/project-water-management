@@ -6,14 +6,14 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type ApanDailyFingerprint, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
 	import { peText } from '$lib/components/settings/peInput';
 	import { fmtNum } from '$lib/format/number';
-	import { chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
@@ -23,7 +23,8 @@
 		heading = 'Where the parameters came from',
 		headingLevel = 3,
 		context = 'run',
-		chirpsSource
+		chirpsSource,
+		apanDaily
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -34,10 +35,12 @@
 		context?: 'run' | 'form';
 		/** The CHIRPS series' product and version now (the run's, or the project's); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
+		/** The daily A-pan series now (the run's, or the project's; issue #45); undefined when not known. */
+		apanDaily?: ApanDailyFingerprint | null;
 	} = $props();
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);
@@ -83,6 +86,11 @@
 					<div data-testid="fit-pan-source"><dt>Pan coefficient source</dt><dd>{record.forcing.panCoefficientSource}</dd></div>
 				{/if}
 				<div><dt>A-pan evaporation <HelpTip key="settings.apanMm" /></dt><dd>{monthsText(record.forcing.apanMm, 0)} mm</dd></div>
+				<!-- Issue #45: the daily A-pan series the fit ran on, and the series now when it differs. -->
+				<div data-testid="fit-apan-daily">
+					<dt>Daily A-pan series <HelpTip key="series.evap_apan_mm" /></dt>
+					<dd>{apanDailyText(record.forcing.apanDaily)}{#if status?.apanDailyChanged}{' '}(now {apanDailyText(apanDaily)}){/if}</dd>
+				</div>
 				<div>
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
 					<dd>{record.forcing.chirpsBiasCorrection ? chirpsBiasLabel(record.forcing.chirpsBiasCorrection) : 'not recorded (fit made before this was tracked)'}</dd>

@@ -101,9 +101,13 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 	const { id, runId, nodes } = await seeded(page.request);
 	const { item, status } = await openRunDownloads(page, id, runId);
 	const download = page.waitForEvent('download');
+	// Dated by the project's calendar day (South Africa by default), not UTC's (issue #45).
+	const sast = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(d);
+	const before = sast(new Date());
 	await item.click();
 	const file = await download;
 	expect(file.suggestedFilename()).toMatch(/^workbook-export_baseline_workbook_\d{4}-\d{2}-\d{2}\.xlsx$/);
+	expect([before, sast(new Date())]).toContain(/_(\d{4}-\d{2}-\d{2})\.xlsx$/.exec(file.suggestedFilename())![1]);
 	await expect(status).toHaveText(/^Downloaded workbook-export_baseline_workbook_\d{4}-\d{2}-\d{2}\.xlsx$/);
 
 	const wb = XLSX.read(await readFile((await file.path())!), { type: 'buffer', cellNF: true, cellText: true });
@@ -148,6 +152,9 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 	// The farm name is defused in every cell, exactly as the CSV does it, and nothing is a formula.
 	const summaryRows = sheetText(wb.Sheets['Summary']!);
 	expect(summaryRows.some((r) => r[0] === "'=Upper farm")).toBe(true);
+	// The Runs tab's FDC Q10–Q95 table is on the Summary sheet (issue #45).
+	expect(summaryRows.some((r) => r[0]?.startsWith('Flow-duration percentiles'))).toBe(true);
+	expect(summaryRows.filter((r) => r[0] === 'Whole run' && ['Natural', 'Simulated outflow'].includes(r[1] ?? ''))).toHaveLength(2);
 	for (const name of wb.SheetNames) {
 		for (const [ref, cell] of Object.entries(wb.Sheets[name]!)) if (!ref.startsWith('!')) expect((cell as XLSX.CellObject).f).toBeUndefined();
 	}

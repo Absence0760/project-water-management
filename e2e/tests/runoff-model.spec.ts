@@ -81,7 +81,8 @@ test('run comparison shows legacy against GR4J on a copy of the project', async 
 	await expect(page.getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();
-	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (in-sample)' })).toBeVisible();
+	// Neither run's parameters were fitted, so neither side is called in-sample (issue #45).
+	await expect(page.getByRole('table', { name: 'Calibration statistics for both runs, calibration period (parameters not fitted)' })).toBeVisible();
 
 	// The EWR test against the observed record, legacy and GR4J side by side (issue #4).
 	const ewr = page.getByRole('region', { name: 'EWR test against observed flow' });

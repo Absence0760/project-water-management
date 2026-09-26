@@ -635,6 +635,48 @@
 //             merges since the entry above; issue #17 step 4 adds the farm
 //             drawer (its own chunk), the Dialog side variant and the entry
 //             links on the Summary and the Network: 945 → 948. Headroom ~5 KB.
+// 2026-09-26  total 945 → 948 KB. Issue #45, series import formats: the
+//             per-file delimiter and decimal-separator reader (semicolon and
+//             tab files with decimal commas, quoted fields, thousands
+//             separators) and the DWS export reader, on the engine's DWS row
+//             parser shared with the feed, plus the upload summary's DWS
+//             lines. Measured 945 → 948 (+3.0 KB, 966 406 → 969 461 bytes)
+//             over main @ 7f49dd4, all in the lazy upload-form chunk (+2.9 KB)
+//             and the help guide; largest chunk unchanged. No headroom left.
+// 2026-09-26  total 953 → 957 KB (measured 952). Merging #17 step 4's farm
+//             drawer (948) with #45's import formats (+3, lazy upload chunk)
+//             and main since. Headroom ~5 KB.
+// 2026-09-26  total 945 → 947 KB. Issue #45's display and export items:
+//             fmtQty (small flows to two significant figures), the FDC
+//             percentile table moved into the engine (views/fdc.ts, now
+//             shared by the Runs tab chart and the report page's new
+//             table), the workbook's per-cell small-value format, and the
+//             project time-zone field in Project details. Measured 945 →
+//             946 over main @ 7f49dd4 (main itself was at its ceiling). No
+//             new dependency; the export code stays in its worker. Headroom
+//             ~1 KB; the ways down are unchanged (English-as-key i18n).
+// 2026-09-26  total 957 → 963 KB (measured 958). #45's display and export
+//             fixes (fmtQty for small values, the FDC percentile table from
+//             the engine, the project time-zone field: ~1 KB) merged with the
+//             #45 import, A-pan and label work. Headroom ~5 KB.
+// 2026-09-26  total 957 → 958 KB. Issue #45, fit provenance of the daily
+//             A-pan series: the fit record's fingerprint (SHA-256 of the
+//             series' values via crypto.subtle), its row and caveat in the
+//             fit record view, Settings' fetch-and-hash of the live series,
+//             and the run comparison's "another daily A-pan series". main
+//             measured 957 at its own ceiling; this measured 958 (+<1 KB,
+//             rounding up). Largest chunk unchanged. No headroom left.
+// 2026-09-26  total stays 963 KB (measured 959): the daily A-pan fit
+//             fingerprint (+1 KB) merged over the entry above. Headroom ~4 KB.
+// 2026-09-26  total 957 → 963 KB. main measured 955 (merges since the 957
+//             entry); the Summary's Dam levels panel (issue #17 follow-on,
+//             its own lazy chunk: the panel and the damLevels reduction)
+//             adds 3: 958. Headroom ~5 KB. The way down is still
+//             English-as-key i18n (~5–7 KB, docs/followups.md).
+// 2026-09-26  total 963 → 967 KB (measured 962). main's own 957 → 963 entry
+//             and this branch's #45 display/export and A-pan fingerprint
+//             entries each assumed the other's growth absent; merged they
+//             measure 962. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -645,7 +687,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 953,
+	totalCodeKb: 967,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

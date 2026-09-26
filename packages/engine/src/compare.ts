@@ -19,6 +19,7 @@ import {
 	resolvePe,
 	upgradeLegacyModel,
 	type Borehole,
+	type CalibrationFitStatus,
 	type CalibrationStats,
 	type CropDef,
 	type FarmSummary,
@@ -128,8 +129,10 @@ export interface RunComparison {
 		modelFractionBelow: MetricDelta;
 		observedFractionBelow: MetricDelta;
 	} | null;
-	/** null when neither run has calibration statistics (whole-record, in-sample scores). */
+	/** null when neither run has calibration statistics. */
 	calibration: {
+		/** Whether each run's scores are in-sample (CalibrationStats.fitStatus, engine ≥ 0.39.0); null = not recorded. */
+		fitStatus: { a: CalibrationFitStatus | null; b: CalibrationFitStatus | null };
 		days: MetricDelta;
 		nse: MetricDelta;
 		/** Kling–Gupta efficiency (absent on runs saved before engine 0.3.0). */
@@ -412,6 +415,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 		calibration:
 			ka || kb
 				? {
+						fitStatus: { a: ka?.fitStatus ?? null, b: kb?.fitStatus ?? null },
 						days: metricDelta(ka?.days, kb?.days),
 						nse: metricDelta(ka?.nse, kb?.nse),
 						kge: metricDelta(ka?.kge, kb?.kge),
@@ -1206,7 +1210,8 @@ const SERIES_LABELS: Record<string, string> = {
 	rain_forecast_mm: 'Rainfall (forecast)',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',
-	flow_reference_m3s: 'Reference gauge (other catchment)'
+	flow_reference_m3s: 'Reference gauge (other catchment)',
+	evap_apan_mm: 'A-pan evaporation (daily)'
 };
 
 /** A run's stored input values by series kind (backend: run_input_series + series_blob), when it has them. */

@@ -27,6 +27,7 @@ export * from './quality';
 export * from './rain';
 export * from './rainSourcePeriods';
 export * from './evaporation/fao56Table5';
+export * from './evaporation/apanDaily';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
@@ -62,6 +63,7 @@ export {
 } from './network/reliability';
 export * from './views/farmView';
 export * from './views/farmProjection';
+export * from './views/fdc';
 export * from './units';
 export * from './seriesProvenance';
 export * from './liability';

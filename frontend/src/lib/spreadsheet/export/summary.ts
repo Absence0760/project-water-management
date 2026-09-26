@@ -32,6 +32,8 @@ const STARTS: [title: string | RegExp, sheet: SummarySheet][] = [
 	[/^Double-mass check/, 'Data checks'],
 	['Plausibility checks', 'Data checks'],
 	[/^Calibration \(/, 'Summary'],
+	// The Runs tab's FDC Q10–Q95 table (issue #45, backend export/fdc.ts).
+	[/^Flow-duration percentiles/, 'Summary'],
 	[/^WR2012 check/, 'Summary'],
 	[/^Farm daily columns/, 'Summary'],
 	['Warnings', 'Warnings']
