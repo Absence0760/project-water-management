@@ -104,7 +104,7 @@
 				</section>
 				<section aria-labelledby="sc-farms-h">
 					<h3 id="sc-farms-h">Farms</h3>
-					<FarmDeltaTable comparison={data.comparison} />
+					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
 				<section aria-labelledby="sc-chart-h">
 					<h3 id="sc-chart-h">Daily series</h3>

@@ -2305,7 +2305,10 @@ them scenarios).
   of a rebased scenario is still compared with its own base), through
   `GET /compare/runs`: headline results, the farms table and the per-node
   daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
-  #8), with **Open the full comparison** (the Compare runs tab; for an
+  #8). A feature the scenario adds or removes shows against 0 in the run
+  without it: a river-first farm's *Pumped from the river* series (the base
+  drawn as zeros, "run B only") and farm column ("A: none (0)"), under
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab; for an
   applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
   edited since that run.
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is

@@ -2,7 +2,17 @@
 // (issue #8, docs/run-comparison.md § Daily series). Kept free of Svelte and
 // the API so scenario comparison (issue #18) can reuse them for a base run
 // against a scenario run.
-import { fromEpochDay, matchByIdThenName, toEpochDay, type DailySeries } from '@water-management/engine';
+import {
+	FARM_COLUMNS,
+	fromEpochDay,
+	GAUGE_COLUMNS,
+	matchByIdThenName,
+	toEpochDay,
+	USER_COLUMNS,
+	type DailySeries,
+	type FarmColumn,
+	type NodeKind
+} from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 /** One stored output series of a run (GET …/runs/:runId `series`). */
@@ -18,13 +28,20 @@ export interface NodeLike {
 	id: string;
 	name: string;
 	sortOrder?: number;
+	/** Farm, gauge or other user: decides which missing series read as 0 (zeroFillable). */
+	kind?: NodeKind;
 }
 
-/** One series that both sides stored with the same unit. */
+/**
+ * One series to overlay: both sides stored it with the same unit, or one side
+ * stored it and the other's absence means 0 (`onlyIn`, see zeroFillable).
+ */
 export interface OverlayOption {
 	key: string;
 	label: string;
 	unit: string;
+	/** Only this run stored it; the other run's side is drawn as 0 (it has no such feature there). */
+	onlyIn?: 'A' | 'B';
 }
 
 /** A place that can be overlaid: the catchment, or one node matched across the two runs. */
@@ -57,10 +74,54 @@ export interface OverlayMatch {
 export const CATCHMENT_GROUP = 'catchment';
 export const CATCHMENT_LABEL = 'Catchment (outflow gauge)';
 
-/** Series keys in both lists with the same unit, in B's order (B's label). */
-export function commonOptions(a: readonly SeriesRefLike[], b: readonly SeriesRefLike[]): OverlayOption[] {
+const optionalKeys = (cols: readonly FarmColumn[]) => new Set(cols.filter((c) => c.optional).map((c) => c.key));
+const OPTIONAL_BY_KIND: Record<NodeKind, ReadonlySet<string>> = {
+	farm: optionalKeys(FARM_COLUMNS),
+	user: optionalKeys(USER_COLUMNS),
+	gauge: optionalKeys(GAUGE_COLUMNS)
+};
+// The catchment's one feature column: the engine stores it only when a node
+// has land cover (run.ts), so a run without land cover removed nothing.
+const OPTIONAL_CATCHMENT: ReadonlySet<string> = new Set(['landcover_reduction']);
+
+/**
+ * Whether a series a run didn't store means 0 there, for a node of this kind
+ * (null = the catchment; undefined = a node whose kind is unknown or differs
+ * between the runs). Only the engine's feature columns qualify, the ones the
+ * column registry marks `optional` (packages/engine/src/verify/columns.ts):
+ * the run simply had no river pump, borehole, release rule, land cover or
+ * senior user there, so nothing was pumped, released or removed. Anything
+ * else missing (observed flow, calibration series, a column an older engine
+ * didn't compute) is unknown, never 0.
+ */
+export function zeroFillable(key: string, kind: NodeKind | null | undefined): boolean {
+	if (kind === undefined) return false;
+	return (kind === null ? OPTIONAL_CATCHMENT : OPTIONAL_BY_KIND[kind]).has(key);
+}
+
+/**
+ * Series keys in both lists with the same unit, in B's order (B's label).
+ * With `kind` given (see zeroFillable), a feature series only one side stored
+ * is offered too, after them (B's, then A's), marked `onlyIn`.
+ */
+export function commonOptions(a: readonly SeriesRefLike[], b: readonly SeriesRefLike[], kind?: NodeKind | null): OverlayOption[] {
 	const unitA = new Map(a.map((r) => [r.key, r.unit]));
-	return b.filter((r) => unitA.get(r.key) === r.unit).map(({ key, label, unit }) => ({ key, label, unit }));
+	const keysB = new Set(b.map((r) => r.key));
+	const out: OverlayOption[] = b.filter((r) => unitA.get(r.key) === r.unit).map(({ key, label, unit }) => ({ key, label, unit }));
+	if (kind === undefined) return out;
+	const only = (refs: readonly SeriesRefLike[], other: { has(k: string): boolean }, side: 'A' | 'B') =>
+		refs.filter((r) => !other.has(r.key) && zeroFillable(r.key, kind)).map(({ key, label, unit }) => ({ key, label, unit, onlyIn: side }));
+	return [...out, ...only(b, unitA, 'B'), ...only(a, keysB, 'A')];
+}
+
+/**
+ * The zeros drawn for the run that has no such series: one per day of that
+ * run's period (startDate … endDate, inclusive), so the overlay, B − A and
+ * the read-out cover exactly the days that run modelled.
+ */
+export function zeroSeries(startDate: string, endDate: string): DailySeries {
+	const n = toEpochDay(endDate) - toEpochDay(startDate) + 1;
+	return { startDate, values: new Array<number>(Math.max(0, n)).fill(0) };
 }
 
 function byNode(refs: readonly SeriesRefLike[]): Map<string | null, SeriesRefLike[]> {
@@ -75,11 +136,11 @@ function byNode(refs: readonly SeriesRefLike[]): Map<string | null, SeriesRefLik
 /** The nodes that stored series, in network order; a node missing from the snapshot keeps its id. */
 function nodesWithSeries(series: Map<string | null, SeriesRefLike[]>, nodes: readonly NodeLike[]) {
 	const known = new Map(nodes.map((n, i) => [n.id, { n, i }]));
-	const out: { id: string; name: string; order: number; named: boolean }[] = [];
+	const out: { id: string; name: string; order: number; named: boolean; kind: NodeKind | undefined }[] = [];
 	for (const id of series.keys()) {
 		if (id === null) continue;
 		const k = known.get(id);
-		out.push({ id, name: k?.n.name ?? 'Unknown node', order: k ? (k.n.sortOrder ?? k.i) : 1e9, named: !!k });
+		out.push({ id, name: k?.n.name ?? 'Unknown node', order: k ? (k.n.sortOrder ?? k.i) : 1e9, named: !!k, kind: k?.n.kind });
 	}
 	return out.sort((x, y) => x.order - y.order || x.name.localeCompare(y.name));
 }
@@ -90,7 +151,9 @@ function nodesWithSeries(series: Map<string | null, SeriesRefLike[]>, nodes: rea
  * then by name (trimmed, case-insensitive), so a renamed node in one project
  * and a node across a copy both match. The catchment comes first. A node only
  * one run has, or whose series share nothing, can't be overlaid and is
- * listed instead.
+ * listed instead. A feature series only one run stored at a matched node (a
+ * river pump the scenario added) is offered with the other side read as 0,
+ * under zeroFillable's rule.
  */
 export function matchOverlay(
 	refsA: readonly SeriesRefLike[],
@@ -101,7 +164,7 @@ export function matchOverlay(
 	const sa = byNode(refsA);
 	const sb = byNode(refsB);
 	const groups: OverlayGroup[] = [];
-	const catchment = commonOptions(sa.get(null) ?? [], sb.get(null) ?? []);
+	const catchment = commonOptions(sa.get(null) ?? [], sb.get(null) ?? [], null);
 	if (catchment.length) groups.push({ id: CATCHMENT_GROUP, nodeIdA: null, nodeIdB: null, label: CATCHMENT_LABEL, wasName: null, options: catchment });
 
 	const na = nodesWithSeries(sa, nodesA);
@@ -111,7 +174,9 @@ export function matchOverlay(
 	const { pairs, onlyA, onlyB } = matchByIdThenName(na, nb, (x) => x.id, matchName);
 	const noCommon: OverlayNodeRef[] = [];
 	for (const [a, b] of pairs) {
-		const options = commonOptions(sa.get(a.id)!, sb.get(b.id)!);
+		// A feature series one run lacks reads as 0 only for a node both snapshots know as the same kind.
+		const kind = a.kind !== undefined && a.kind === b.kind ? a.kind : undefined;
+		const options = commonOptions(sa.get(a.id)!, sb.get(b.id)!, kind);
 		if (!options.length) {
 			noCommon.push({ nodeId: b.id, name: b.name });
 			continue;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commonOptions, deltaStats, fmtSig, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText, type SeriesRefLike } from './overlay';
+import { commonOptions, deltaStats, fmtSig, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText, zeroFillable, zeroSeries, type SeriesRefLike } from './overlay';
 
 const ref = (nodeId: string | null, key: string, unit = 'm³/day', label = key): SeriesRefLike => ({ nodeId, key, label, unit });
 
@@ -77,6 +77,88 @@ describe('matchOverlay', () => {
 
 	it('gives nothing when neither run stored a series', () => {
 		expect(matchOverlay([], [], [], [])).toEqual({ groups: [], onlyA: [], onlyB: [], noCommon: [] });
+	});
+});
+
+describe('series only one run stored (issue #54)', () => {
+	// A scenario puts Rooikloof on river first: its run stores river_abstraction, the base (dam first) doesn't.
+	const nodes = [
+		{ id: 'g', name: 'Outlet', sortOrder: 0, kind: 'gauge' as const },
+		{ id: 'f1', name: 'Rooikloof', sortOrder: 1, kind: 'farm' as const }
+	];
+	const base = [ref(null, 'simulated_outflow'), ref(null, 'observed_flow'), ref('g', 'outflow'), ref('f1', 'outflow'), ref('f1', 'supplied')];
+	const pumped = ref('f1', 'river_abstraction', 'm³/day', 'Pumped from the river below the dam (part of supplied)');
+
+	it('offers a feature series the scenario run stored, with the base side read as 0', () => {
+		const m = matchOverlay(base, [...base, pumped], nodes, nodes);
+		const farm = m.groups.find((g) => g.id === 'f1|f1')!;
+		expect(farm.options.map((o) => [o.key, o.onlyIn])).toEqual([
+			['outflow', undefined],
+			['supplied', undefined],
+			['river_abstraction', 'B']
+		]);
+		expect(farm.options[2]!.label).toBe(pumped.label);
+		// …and the other way round, when the base had the pump and the scenario took it away (A's label).
+		const back = matchOverlay([...base, pumped], base, nodes, nodes).groups.find((g) => g.id === 'f1|f1')!;
+		expect(back.options.at(-1)).toEqual({ key: 'river_abstraction', label: pumped.label, unit: 'm³/day', onlyIn: 'A' });
+	});
+
+	it('draws the missing side as zeros of the right length and dates', () => {
+		const z = zeroSeries('2019-12-30', '2020-01-02');
+		expect(z).toEqual({ startDate: '2019-12-30', values: [0, 0, 0, 0] });
+		// A leap year: every day of 2020.
+		expect(zeroSeries('2020-01-01', '2020-12-31').values).toHaveLength(366);
+		// Against the scenario's pumping, B − A is the pumping itself and the read-out counts every day.
+		const b = { startDate: '2019-12-30', values: [0, 1200, 800, null] };
+		expect(seriesDelta(z, b)).toEqual({ startDate: '2019-12-30', values: [0, 1200, 800, null] });
+		expect(deltaStats(z, b)).toMatchObject({ days: 3, meanA: 0, meanB: 2000 / 3, daysHigher: 2 });
+	});
+
+	it('does not zero-fill a node only one run has: it has no counterpart at all', () => {
+		const nodesB = [...nodes, { id: 'f9', name: 'New farm', sortOrder: 2, kind: 'farm' as const }];
+		const m = matchOverlay(base, [...base, ref('f9', 'outflow'), ref('f9', 'river_abstraction')], nodes, nodesB);
+		expect(m.groups.map((g) => g.id)).not.toContain('f9|f9');
+		expect(m.onlyB).toEqual([{ nodeId: 'f9', name: 'New farm' }]);
+	});
+
+	it('does not zero-fill an observed or calibration series, or a column that is not a feature column', () => {
+		// The catchment: observed flow in A only (no gauge record in B) is unknown in B, not zero flow.
+		const m = matchOverlay(base, [ref(null, 'simulated_outflow'), ref('g', 'outflow'), ref('f1', 'outflow'), ref('f1', 'supplied'), ref('f1', 'dam_storage', 'm³')], nodes, nodes);
+		expect(m.groups[0]!.options.map((o) => o.key)).toEqual(['simulated_outflow']);
+		// dam_storage is a core farm column: missing from A means not stored (an older run), not an empty dam.
+		expect(m.groups.find((g) => g.id === 'f1|f1')!.options.map((o) => o.key)).toEqual(['outflow', 'supplied']);
+		expect(zeroFillable('observed_flow', null)).toBe(false);
+		expect(zeroFillable('natural_flow', null)).toBe(false);
+		expect(zeroFillable('dam_storage', 'farm')).toBe(false);
+	});
+
+	it('zero-fills only for a node both snapshots know as the same kind', () => {
+		const pair = (a: typeof nodes, b: typeof nodes) => matchOverlay(base, [...base, pumped], a, b).groups.find((g) => g.id === 'f1|f1');
+		// Missing from the snapshot (kind unknown): not filled.
+		expect(pair([], [])!.options.map((o) => o.key)).toEqual(['outflow', 'supplied']);
+		// A farm in one run, an other water user in the other: not filled.
+		const asUser = nodes.map((n) => (n.id === 'f1' ? { ...n, kind: 'user' as const } : n));
+		expect(pair(nodes, asUser as unknown as typeof nodes)!.options.map((o) => o.key)).toEqual(['outflow', 'supplied']);
+	});
+
+	it('follows the column registry per node kind, and the catchment only for land cover', () => {
+		for (const k of ['river_abstraction', 'groundwater_used', 'groundwater_to_dam', 'baseflow_depletion', 'dam_release', 'landcover_reduction', 'senior_requirement'])
+			expect(zeroFillable(k, 'farm')).toBe(true);
+		expect(zeroFillable('groundwater_used', 'user')).toBe(true);
+		expect(zeroFillable('river_abstraction', 'user')).toBe(false);
+		expect(zeroFillable('senior_requirement', 'gauge')).toBe(true);
+		expect(zeroFillable('groundwater_used', 'gauge')).toBe(false);
+		expect(zeroFillable('landcover_reduction', null)).toBe(true);
+		expect(zeroFillable('river_abstraction', undefined)).toBe(false);
+	});
+
+	it('keeps a feature series both stored in different units out, as before', () => {
+		const m = matchOverlay([...base, ref('f1', 'river_abstraction', 'm³')], [...base, pumped], nodes, nodes);
+		expect(m.groups.find((g) => g.id === 'f1|f1')!.options.map((o) => o.key)).toEqual(['outflow', 'supplied']);
+	});
+
+	it('leaves commonOptions without a kind as it was: common keys only', () => {
+		expect(commonOptions([ref('f1', 'outflow')], [ref('f1', 'outflow'), pumped])).toEqual([{ key: 'outflow', label: 'outflow', unit: 'm³/day' }]);
 	});
 });
 
