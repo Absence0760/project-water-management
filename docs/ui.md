@@ -993,8 +993,11 @@ which checks every catchment tab).
   to the WR2012 group.
 - **Flow share between farms**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
-  months get the full width) a bar chart and the annual volume, and the
-  curtailment reporting window.
+  months get the full width) a bar chart and the annual volume, the
+  curtailment reporting window (also the assurance of supply's window), and
+  the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
+  default 90 %: a water year counts as met at that supply ratio; engine ≥
+  0.32.0).
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -1332,8 +1335,7 @@ run's report to chosen members every week or month.
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window; with the
   outlet as the only site it says *EWR assessed at 1 site (outlet). Add gauges
-  at the Reserve determination's EWR sites to protect upstream reaches.* The
-  hydrograph (observed flow as a line
+  at the Reserve determination's EWR sites to protect upstream reaches.* The hydrograph (observed flow as a line
   under simulated outflow, broken on every day without a reading and never
   bridged, a lone reading between gaps shown as a dot; natural flow starts
   hidden and its legend entry shows it, and a legend toggle survives the log
@@ -1500,6 +1502,28 @@ run's report to chosen members every week or month.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
+- **Assurance of supply** (`#res-assurance`, under *Farms & users* after the
+  curtailment table; `reliability/AssurancePanel.svelte`, helpers in
+  `reliability/reliability.ts`, loaded lazily; engine ≥ 0.32.0, WP-3.4,
+  [model.md §2.11a](./model.md)): per farm and other water user over the
+  reporting window, the % of demand days fully met, the % of demand
+  supplied, water years met against the annual threshold (Settings), the
+  failures and their mean and longest length, and the mean and largest
+  deficit per failure. Below it the **stress classes by month**: a heat map
+  in the EWR grid's pattern (water-year rows × Oct … Sep, arrow keys move
+  between cells), for all farms and users together or one of them (a *Show*
+  picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
+  colour is never the only cue, with a legend of the ranges and a count of
+  months per class.
+- **Water account** (`#res-water-account`, last under *River & Reserve*;
+  `reliability/WaterAccountPanel.svelte`, lazy; [model.md §2.11b](./model.md)):
+  two bars for the chosen period (*Period*: the whole run or a water year),
+  what came in and where it went or was stored, each with a labelled key;
+  then a table of every term per water year and the whole run (terms a
+  network doesn't have are left out), the change in dam storage and the
+  residual (to two significant figures, float noise), and the EWR required
+  vs met at each site. Runs before engine 0.32.0 show *Not computed by
+  engine x.y* in both panels.
 - Series are fetched one at a time when a chart needs them, and cached
   (`runs/cache.ts`). A run stores well over a hundred series of one value per day of the run
   on a multi-farm catchment (more since engine 0.12.0: each farm adds 11 working columns).

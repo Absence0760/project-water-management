@@ -1174,6 +1174,33 @@ role and not before it.
       forecast-rain change.
 
 
+- **Assurance of supply, stress classes and the water account** (roadmap
+  WP-3.4, engine 0.32.0, 2026-09-26; [model.md §2.11a–b](./model.md)).
+  Built: `network/reliability.ts` → `RunSummary.supplyAssurance`, the Runs
+  tab's two panels, the three summary-CSV blocks,
+  `settings.assuranceAnnualThreshold`, `checkReliability` and
+  `checkWaterAccount` in the soak. Left open:
+  - [ ] **The hydrologist signs off the definitions** (pending, decided from
+        the persona review): demand days, not all days, for the time-based
+        measure; part water years counting for the annual one; the v004
+        stress thresholds as they stand; seepage as a memo rather than an out
+        term. Trigger: the hydrologist's first review of a licensing run.
+  - [ ] **Dam releases in the water account** once WP-3.5 lands: a release
+        that leaves the network is an out term; one that stays is already in
+        the outflow. Owner: WP-3.5.
+  - [ ] **EWR required vs met from the Reserve rule tables** (§2.9c) and
+        WP-3.7's Desktop tables: the account uses the pragmatic EWR at each
+        site today. Owner: WP-3.7.
+  - [ ] **Where else the metrics show**: the printable report
+        (`report/`), the farm view (a farmer's own reliability and stress
+        months) and the scenario compare view (Δ reliability per farm).
+        Trigger: WP-3.10's evidence pack, which needs them in the report.
+  - [ ] **Bundle budget**: the build is 829 KB against the 821 KB ceiling
+        (both panels are lazy; the growth is the engine module in every
+        runModel chunk, the help entries and the Settings field). The
+        coordinator raises the ceiling at merge or trims elsewhere.
+
+
 - **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
   scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
   Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`

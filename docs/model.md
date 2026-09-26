@@ -1823,6 +1823,7 @@ share (§2.11) and the curtailment supply cut count it too.
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
 | (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table | `RunSummary.ewrAssurance` + the Reserve compliance panel, headline and CSV block (§2.9c, engine ≥ 0.21.0) |
+| (none: the node-based model's stress classes, §4) | Reliability per farm, stress class per month, the water account | `RunSummary.supplyAssurance` + the Runs tab's Assurance of supply and Water account panels and three CSV blocks (§2.11a–b, engine ≥ 0.32.0) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -3028,6 +3029,69 @@ values into `computeCurtailment` and checks every column against the cell
 formulas written out unrounded, and the saved window's averages against the
 sheet within its rounding (½ m³/day).
 
+
+### 2.11a Assurance of supply and stress classes (engine ≥ 0.32.0, roadmap WP-3.4)
+
+New outputs only: every figure is read off the run's own daily `demand` and
+`supplied` series, so no result the engine had before changes.
+`packages/engine/src/network/reliability.ts` → `RunSummary.supplyAssurance`
+(its own sub-object, with the water account of §2.11b).
+
+**Reliability** per farm and per other water user (§2.7c), over the
+**reporting window** of §2.11 (`settings.reportStart … reportEnd`):
+
+| Measure | Definition |
+| --- | --- |
+| Time-based | days whose demand D > 0 was fully met ÷ days with D > 0. "Fully met": D − G ≤ 10⁻⁹ D (float noise). Days without demand are neither met nor failed, so a winter without irrigation doesn't inflate it. |
+| Volumetric | Σ G ÷ Σ D. Equals the curtailment table's I ÷ H for the same farm (an invariant). |
+| Annual | water years (touching the window, part years included) with Σ G ÷ Σ D ≥ `settings.assuranceAnnualThreshold` ÷ water years with demand. Default 0.9, a project setting, not a standard. |
+| Resilience | a failure is a run of consecutive demand days not fully met (a day without demand ends it); the mean and the longest length in days. Hashimoto et al. (1982) define resilience as the probability of recovering, 1 ÷ the mean length. |
+| Vulnerability | Σ (D − G) over each failure run: the mean and the largest, m³ (Hashimoto's "severity"). |
+
+Each measure is null without demand; the time-based and volumetric ones are
+also given per water-year month (Oct … Sep), pooled over the window's years.
+Reliability is 1 exactly when no demand day fell short.
+
+**Stress classes** from the node-based model (§4), per farm, per user and
+for the whole system (every farm and user summed, in node-id order), per
+water-year month over the **whole run** (the EWR grid's layout, §2.9): the
+month's supply ratio Σ G ÷ Σ D is **Low** ≥ 95 %, **Moderate** ≥ 85 %,
+**High** ≥ 70 %, **Severe** ≥ 50 %, otherwise **Critical**; a month without
+demand has no class.
+
+Decisions pending the hydrologist: demand days rather than all days for the
+time-based measure; part water years at the ends of the window counting for
+the annual measure; the v004 thresholds as they stand.
+
+### 2.11b Water account (engine ≥ 0.32.0, roadmap WP-3.4)
+
+`RunSummary.supplyAssurance.waterAccount`: one row per water year and one for
+the run, volumes in m³, summed over every node per day in node-id order.
+
+- **In:** natural flow, rain on the dams (§2.7a), groundwater pumped (§2.7d),
+  net transfers (0 up to float noise).
+- **Out:** runoff removed by land cover (§2.5a); natural flow not allocated to
+  any farm (natural − Σ farm runoff − land cover, non-zero only when the flow
+  shares don't sum to 1); **consumptive irrigation** G − T = G(1 − β(1 − e))
+  (§2.7, audit N1: the crop's e·G plus the losses that don't return); other
+  users' take − return; dam evaporation; stream depletion; outflow at the
+  outlet.
+- **Δ storage:** Σ farm dam storage at the end − at the start.
+- **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
+  terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤
+  10⁻¹⁰ × scale in every year. Rows sum each day's totals rather than
+  differencing prefix sums, which would carry the whole run's rounding into a
+  small dry year (fuzz seed 1486).
+- **Memos**, not in the closure: rain on the catchment (rain_final × area)
+  and rain − natural flow; irrigation supplied; dam seepage (it joins the
+  farm's outflow and can be caught again by a dam downstream, so it is not a
+  loss from the network).
+- **EWR required vs met** at each EWR site (outlet, then gauges by id):
+  Σ requirement, Σ MIN(flow, requirement), and the days short.
+
+Dam releases (WP-3.5) are not modelled yet; when they land they join the out
+side only if they leave the network, otherwise they stay inside the outflow.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs
@@ -3089,6 +3153,8 @@ general enough to hold these nodes.
   groundwater (none / supplemental / primary / emergency; direct or to-dam).
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, reported per farm and per month.
+  **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
+  whole system, per water-year month.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
@@ -3209,6 +3275,8 @@ text:
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ capacity and ≤ supplied; the lag store Sd = Sd[t−1] + d × GW − due with due = α × (Sd[t−1] + d × GW) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run d × Σ GW = Σ due + Sd at the end. `checkBalance` and `checkWorkings` add groundwater in and depletion out to the node's day and its supply rule. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
+| `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
+| `checkWaterAccount` | Engine ≥ 0.32.0 (§2.11b): the account closes to 10⁻¹⁰ of Σ\|terms\| in every water year and over the run, the years add up to the run, each year opens with the last year's closing storage, and 0 ≤ EWR met ≤ required. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
 **The ordering rule (engine ≥ 0.26.1).** Floating-point addition is not
@@ -3402,4 +3470,6 @@ step when a definition changes.
 | **Water year** label | The app labels a water year by the year its October falls in: 2010 = Oct 2010 – Sep 2011, shown as 2010/11. |
 | **RMSE** | Root-mean-square error. |
 | **Hydrological unit (HU)** | A sub-catchment with its own area, MAP and rain gauge (runoff module). |
-| **Stress class** | Low / Moderate / High / Severe / Critical, from the supply ratio (node-based model). |
+| **Stress class** | Low / Moderate / High / Severe / Critical, from the supply ratio (node-based model; engine ≥ 0.32.0, §2.11a). |
+| **Assurance of supply** | Reliability of a farm's supply: time-based, volumetric and annual, with resilience and vulnerability (§2.11a). |
+| **Water account** | In − out − Δ storage per water year, closing to float noise (§2.11b). |
