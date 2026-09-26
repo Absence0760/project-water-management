@@ -16,7 +16,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-604 strings: 510 on the site, 70 in emails, 24 in the glossary.
+607 strings: 513 on the site, 70 in emails, 24 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -47,6 +47,7 @@ Words used on several pages (buttons, field labels, the page title in the browse
 | `bcf9b210` | You’re not signed in. Sign in and try again. |  |  |
 | `753da152` | Wrong email or password. |  |  |
 | `ee4b7db1` | Your current password is wrong. |  |  |
+| `4abb303f` | Reload page |  |  |
 | `96d7c65d` | {page} · Water Management | The browser tab title; {page} is the page’s own name. Keep: {page} |  |
 | `43352167` | Email |  |  |
 | `4e167b8c` | Display name |  |  |
@@ -199,6 +200,7 @@ The strip at the top of every page until the email address is confirmed.
 | `1ec5e7a0` | Please confirm your email address. We sent a link to | Followed by the email address in bold. |  |
 | `329d64e6` | Resend email |  |  |
 | `265915f3` | Dismiss |  |  |
+| `25601c1d` | The reminder to confirm your email address could not be loaded. Check your connection, then reload the page. |  |  |
 
 ### account
 
@@ -226,6 +228,7 @@ The account page: name, language and units, password.
 | `8c942903` | Choose which alerts you get by email, and how often. |  |  |
 | `0819f3fe` | Your data |  |  |
 | `745aefa7` | Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file. |  |  |
+| `c4c6488f` | The download could not be loaded. Check your connection, then reload the page. |  |  |
 | `bf0c7feb` | Preparing… |  |  |
 | `7247e23b` | Download my data |  |  |
 | `a51c54d9` | Your data has been downloaded. |  |  |

@@ -12,6 +12,7 @@
 	import { api, ApiError } from '$lib/api';
 	import { passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import EmailText from '$lib/components/common/EmailText.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
@@ -89,15 +90,24 @@
 	// The download helpers load on click, so the page chunk stays lean.
 	let exporting = $state(false);
 	let exportError = $state<string | null>(null);
+	/** The download code's chunk didn't arrive: only a reload can fetch it (common/lazy.ts). */
+	let exportChunkFailed = $state(false);
 	let exported = $state(false);
 	async function downloadData() {
 		exported = false;
 		exportError = null;
+		exportChunkFailed = false;
 		exporting = true;
 		try {
-			const { fetchDownload, saveBlob } = await import('$lib/export/download');
-			const { blob, filename } = await fetchDownload(`${PUBLIC_API_URL}/auth/me/export`);
-			saveBlob(blob, filename);
+			let download: typeof import('$lib/export/download');
+			try {
+				download = await import('$lib/export/download');
+			} catch {
+				exportChunkFailed = true;
+				return;
+			}
+			const { blob, filename } = await download.fetchDownload(`${PUBLIC_API_URL}/auth/me/export`);
+			download.saveBlob(blob, filename);
 			exported = true;
 		} catch (err) {
 			// 429 (one a minute) and anything else: the server's message says what to do.
@@ -246,6 +256,9 @@
 			<h2 id="data-h">{t('Your data')}</h2>
 			<p class="muted intro">{t('Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.')}</p>
 			{#if exportError}<div class="alert alert-error" role="alert">{exportError}</div>{/if}
+			{#if exportChunkFailed}
+				<ChunkFailed text={t('The download could not be loaded. Check your connection, then reload the page.')} reload={t('Reload page')} />
+			{/if}
 			<div class="actions">
 				<button class="btn" type="button" onclick={downloadData} disabled={exporting}>
 					{exporting ? t('Preparing…') : t('Download my data')}
