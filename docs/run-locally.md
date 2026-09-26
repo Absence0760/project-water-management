@@ -140,8 +140,8 @@ the e2e stack uses `log`, so neither needs Mailpit.
 ## Background jobs
 
 Some work runs later, in a worker, instead of inside a request: a queued
-model run (`POST /projects/:id/jobs`) and the data feeds (below), and in step
-2 automatic re-runs and alerts ([architecture.md § Background work](./architecture.md#background-work)).
+model run (`POST /projects/:id/jobs`), the data feeds (below), automatic
+re-runs after new data, and in step 2 alerts ([architecture.md § Background work](./architecture.md#background-work)).
 Locally the worker is one Node process against the same Postgres, with no AWS
 and no queue emulator (`JOB_TRANSPORT=inprocess`, the default). It is opt-in:
 
@@ -158,6 +158,12 @@ since lost the role. Without the worker, jobs just wait in the table: the
 project's `GET /projects/:id/jobs` shows them `queued`, and the next tick runs
 them. Stopping the worker mid-job is safe: the job is claimed again once its
 lease (`JOB_LEASE_SECONDS`, 6 minutes) runs out.
+
+**Automatic runs** (Settings → Automatic runs, off by default) queue a re-run
+after new data, due after the project's wait (15 minutes by default). Set the
+wait to 0 while trying it out: with the worker running (`pnpm dev:full`), an
+upload's run then appears within seconds; without it, `pnpm dev:jobs:tick`
+runs it ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
 
 ## Data feeds
 
