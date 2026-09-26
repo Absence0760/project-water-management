@@ -1,4 +1,4 @@
--- 039_yield — firm yield and storage–yield curves (roadmap WP-3.6;
+-- 040_yield — firm yield and storage–yield curves (roadmap WP-3.6;
 -- docs/model.md §2.13, docs/data-model.md § Yield results, docs/api.md
 -- § Yield).
 --
@@ -172,7 +172,7 @@ CREATE TABLE yield_result (
 	CHECK ((run_id IS NULL) <> (scenario_id IS NULL))
 );
 COMMENT ON TABLE yield_result IS
-	'A firm yield or storage–yield curve of one dam node on a saved run or a scenario (039_yield, WP-3.6), written by a yield job as its acting user. Historical: it replays the record.';
+	'A firm yield or storage–yield curve of one dam node on a saved run or a scenario (040_yield, WP-3.6), written by a yield job as its acting user. Historical: it replays the record.';
 
 -- Covering indexes for every foreign key (catalogue.db.test.ts); the first
 -- two also serve GET /projects/:id/yield (newest first per run or scenario).

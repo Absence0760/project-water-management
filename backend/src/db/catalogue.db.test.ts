@@ -80,14 +80,14 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
- * dam (039_yield.sql).
+ * dam (040_yield.sql).
  */
 const NO_UPDATE = new Set(['yield_result']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
  * (034_farmer_invites.sql). yield_result is a dam's yield on a whole-catchment
- * run or scenario, viewers and above like model_run (039_yield.sql). Every table with a node column needs a
+ * run or scenario, viewers and above like model_run (040_yield.sql). Every table with a node column needs a
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */

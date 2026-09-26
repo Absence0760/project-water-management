@@ -384,8 +384,8 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },
 	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (037_notes.sql)' },
 	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
-	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (039_yield.sql)' },
-	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (039_yield.sql)' },
+	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },
+	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' }
 ];
 

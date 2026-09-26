@@ -1,4 +1,4 @@
-// Firm yield end to end (WP-3.6, 039_yield.sql): the POST /yield request
+// Firm yield end to end (WP-3.6, 040_yield.sql): the POST /yield request
 // checks, the `yield` job run as its acting user (the memory transport: the
 // test runs the tick itself), the stored results and their RLS, progress on
 // the job list, the per-user limit, and the job failing closed when the user

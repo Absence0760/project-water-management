@@ -22,7 +22,7 @@ export interface JobMeta {
 	error: string | null;
 	/** The acting user's display name. */
 	createdBy: string;
-	/** How far a running job is, 0–100, when its handler reports it (039_yield); null otherwise. */
+	/** How far a running job is, 0–100, when its handler reports it (040_yield); null otherwise. */
 	progress: number | null;
 }
 

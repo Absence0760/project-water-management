@@ -21,7 +21,7 @@ import type { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 
-/** Every kind the job table accepts (016_jobs.sql CHECK; 039_yield added `yield`). */
+/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`). */
 export const JOB_KINDS = ['feed_fetch', 'feed_ingest', 'rerun', 'alert_eval', 'report_render', 'yield'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
@@ -43,7 +43,7 @@ export interface JobContext<P> {
 	job: Readonly<ClaimedJob>;
 	payload: P;
 	/**
-	 * Report how far the job is, 0–100 (039_yield app_job_progress). Written
+	 * Report how far the job is, 0–100 (040_yield app_job_progress). Written
 	 * outside the job's transaction, so the status list sees it at once.
 	 * Answers false when the job should stop: someone cancelled it
 	 * (app_cancel_job) or the lease was lost. Optional to call.

@@ -1,5 +1,5 @@
 // Firm yield and storage–yield curves (roadmap WP-3.6, docs/api.md § Yield,
-// 039_yield.sql): the request's shape, the input a yield runs on, and the
+// 040_yield.sql): the request's shape, the input a yield runs on, and the
 // stored results.
 import { createHash } from 'node:crypto';
 import type { ModelInput, StorageYieldCurve, YieldPoint } from '@water-management/engine';

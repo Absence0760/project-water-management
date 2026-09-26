@@ -330,7 +330,7 @@ further kinds.
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
   lease token fences the old worker: if it wakes up and tries to finish, it
   gets nothing and rolls its work back.
-- **Progress and cancel** (039_yield): a handler may call
+- **Progress and cancel** (040_yield): a handler may call
   `progress(pct)`, which writes `job.progress` through `app_job_progress` on
   its own connection, outside the job's transaction (whose writes nobody sees
   until it commits), so `GET /jobs` shows it at once. Only the lease holder

@@ -38,7 +38,7 @@ erDiagram
   model_run ||--o{ scenario : "base run of (cited)"
   scenario |o--o{ model_run : "ran as (nullable)"
   project  ||--o{ job : "background jobs"
-  project  ||--o{ yield_result : "dam yields (039)"
+  project  ||--o{ yield_result : "dam yields (040)"
   project  ||--o{ project_import : "import reports"
   app_user ||--o{ project_import : "imported"
   app_user ||--o{ job : "acts as"
@@ -68,7 +68,7 @@ erDiagram
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, and `scenario_id` (024), the scenario that made it (null for a run of the live model) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
-| `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (039, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-039_yieldsql) | none (the workbook has no yield analysis) |
+| `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
@@ -1111,7 +1111,7 @@ the mapping compares the role as text for that reason.
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 039). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -1228,7 +1228,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (039_yield, WP-3.6) |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
 | `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running` |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
@@ -1236,8 +1236,8 @@ The background job queue's source of truth ([architecture.md § Background work]
 | `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
 | `acting_user_id` | The member who queued it (stamped by the insert trigger): an editor, or any viewer for `report_render` (`023_reports.sql`). The job runs as this user under RLS |
 | `created_at`, `started_at`, `finished_at` | `finished_at` is set exactly when `done` or `dead` |
-| `progress` | 0–100 while a running job reports it (039_yield), else NULL. Written only by `app_job_progress`; cleared by the enqueue trigger and when a worker claims the job (`job_progress_reset`); a finished job keeps its last value |
-| `cancel_requested_at` | When someone cancelled the job while it ran (039_yield, `app_cancel_job`); NULL otherwise. Cleared by the enqueue trigger |
+| `progress` | 0–100 while a running job reports it (040_yield), else NULL. Written only by `app_job_progress`; cleared by the enqueue trigger and when a worker claims the job (`job_progress_reset`); a finished job keeps its last value |
+| `cancel_requested_at` | When someone cancelled the job while it ran (040_yield, `app_cancel_job`); NULL otherwise. Cleared by the enqueue trigger |
 
 - **Enqueue** is a plain INSERT as the signed-in editor. The `job_enqueue`
   trigger stamps the acting user and resets every lifecycle column (a forged
@@ -1260,10 +1260,10 @@ The background job queue's source of truth ([architecture.md § Background work]
     than `age` (at least a day; the tick passes 30 days).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
-  - `app_job_progress(id, lease, pct)` (039): sets `progress` on a running
+  - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
     job, only with the current lease; returns false for anyone else, or once
     the job was cancelled, which tells the handler to stop.
-  - `app_cancel_job(id)` (039): as the session's user, the one who queued
+  - `app_cancel_job(id)` (040): as the session's user, the one who queued
     it or an editor of its project, and for `yield` jobs only: a `queued` or
     `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
     one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
@@ -1273,7 +1273,7 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Yield results (039_yield.sql)
+### Yield results (040_yield.sql)
 
 A dam's firm yield or storage–yield curve (roadmap WP-3.6, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
 written by a `yield` job ([architecture.md § Background work](./architecture.md#background-work)).

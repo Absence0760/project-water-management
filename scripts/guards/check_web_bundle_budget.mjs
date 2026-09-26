@@ -500,7 +500,9 @@
 //             (reserve/) with its settings editors and heat map. No new
 //             dependency; the largest page chunk stays at 41 KB. The engine
 //             split (#9) is the way back for both the total and the worker.
-// 2026-09-26  total 874 → 880 KB (measured 878); other ceilings unchanged.
+// 2026-09-26  total 874 → 885 KB (measured 883 merged with main's WP-2.9
+//             API keys panel, which raised no ceiling of its own; 878
+//             before it); other ceilings unchanged.
 //             WP-3.6's firm yield: the Yield panel on a farm and under a
 //             scenario (its own lazy chunk), its helpers and the jobs/yield
 //             API client. The search itself runs in the job worker on the
@@ -517,7 +519,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 880,
+	totalCodeKb: 885,
 	largestChunkKb: 41,
 	largestWorkerKb: 61,
 	largestSpreadsheetWorkerKb: 95,

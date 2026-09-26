@@ -1744,8 +1744,8 @@ from the WP:
 - [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
       `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
       they own". The `contributor` role is WP-3.3's and doesn't exist yet,
-      so 039_yield gives editors and viewers only. Trigger: WP-3.3 lands its
-      role; its migration adds those policies from 039's definitions (and
+      so 040_yield gives editors and viewers only. Trigger: WP-3.3 lands its
+      role; its migration adds those policies from 040's definitions (and
       023's `job_insert`), with the positive-control DB test (a contributor
       queues a yield for their own scenario, not another's or a run) and the
       fail-closed test (the job dies once they lose the role).

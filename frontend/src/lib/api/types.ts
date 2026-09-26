@@ -1040,7 +1040,7 @@ export interface YieldRequest {
 	params?: Partial<YieldParams>;
 }
 
-/** A stored firm yield or storage–yield curve (GET /projects/:id/yield, 039_yield). */
+/** A stored firm yield or storage–yield curve (GET /projects/:id/yield, 040_yield). */
 export interface YieldResult {
 	id: string;
 	runId: string | null;

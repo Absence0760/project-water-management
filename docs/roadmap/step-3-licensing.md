@@ -780,7 +780,7 @@ must build WP-2.15 Phase B.
   [api.md § Yield](../api.md#yield), [ui.md § Yield](../ui.md#yield-wp-36)):
   `packages/engine/src/network/yield.ts` (`prepareYield`, `firmYield`,
   `storageYieldCurve`, patterns, assurance), `checkYield` invariants and a
-  perf budget; migration `039_yield.sql` (`yield` kind, `yield_result`,
+  perf budget; migration `040_yield.sql` (`yield` kind, `yield_result`,
   job `progress` and cancel); `backend/src/jobs/handlers/yield.ts` and
   `backend/src/yield/`; the Yield panel on a farm in the Network tab's One
   node layout and under a scenario. Where the build differs from the plan:

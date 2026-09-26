@@ -1326,7 +1326,7 @@ A job runs later, in the worker, as the editor who queued it.
 
 - `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.
   Never the payload, and nothing about the worker's lease. `progress`
-  (039_yield) is 0–100 while a job that reports it runs (a `yield` job),
+  (040_yield) is 0–100 while a job that reports it runs (a `yield` job),
   null otherwise; it resets when the job is claimed again, and a finished
   job keeps its last value.
 - `status`: `queued` (due at `runAfter`) → `running` → `done`; or `failed`
