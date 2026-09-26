@@ -2,10 +2,38 @@
 // Portfolio). Every status is written out as text as well as coloured, so
 // colour is never the only signal; every unknown says why. Pure, so it is
 // unit-tested apart from the page.
-import type { PortfolioEwrStatus, PortfolioProject } from '$lib/api/types';
+import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '$lib/api/types';
 import { fmtDay, fmtNum } from '$lib/format/number';
 
 export const STATUS_LABEL: Record<PortfolioEwrStatus, string> = { red: 'Red', amber: 'Amber', green: 'Green', unknown: 'Unknown' };
+
+/** A cut-off as the page writes it: "5 %", "2.5 %". */
+export const pctText = (n: number): string => `${fmtNum(n, 2, true)} %`;
+
+/**
+ * The rule the statuses were judged by, and whose it is: "green when it was
+ * not met on under 5 % of them, amber under 20 %, red otherwise".
+ */
+export function thresholdsRule(t: Pick<PortfolioThresholds, 'green' | 'amber'>): string {
+	return `green when it was not met on under ${pctText(t.green)} of them, amber under ${pctText(t.amber)}, red otherwise`;
+}
+
+/** Whose thresholds these are: the team's own, or the defaults still waiting for the hydrologist's sign-off (D11). */
+export function thresholdsSource(t: Pick<PortfolioThresholds, 'source'>): string {
+	return t.source === 'team' ? 'These are the team’s own thresholds.' : 'These are the default thresholds, still to be confirmed by the hydrologist.';
+}
+
+/**
+ * Why the team page's threshold form can't be saved, or null: both 0–100 %,
+ * green below amber (the API's rule, teams/settings.ts). Empty inputs are
+ * NaN (a number input's valueAsNumber).
+ */
+export function thresholdsError(green: number, amber: number): string | null {
+	if (!Number.isFinite(green) || !Number.isFinite(amber)) return 'Enter both cut-offs as numbers.';
+	if (green < 0 || green > 100 || amber < 0 || amber > 100) return 'Each cut-off is a percentage from 0 to 100.';
+	if (green >= amber) return 'The green cut-off must be below the amber one.';
+	return null;
+}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
 

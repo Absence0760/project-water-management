@@ -10,7 +10,7 @@
 	import { page } from '$app/state';
 	import { api, ApiError, hasRole, hasTeamRole, type Portfolio, type PortfolioProject } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fmtDay, fmtNum } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
 	import {
 		ageText,
 		curtailmentHref as curtailmentLink,
@@ -28,6 +28,8 @@
 		sourceText,
 		statusCounts,
 		STATUS_LABEL,
+		thresholdsRule,
+		thresholdsSource,
 		type PortfolioSort,
 		type PortfolioSortKey
 	} from '$lib/components/portfolio/portfolio';
@@ -69,7 +71,6 @@
 	const sort = $derived(parseSort(page.url.searchParams.get('sort'), page.url.searchParams.get('dir')));
 	const rows = $derived(data ? sortPortfolio(data.projects, sort) : []);
 	const counts = $derived(statusCounts(data?.projects ?? []));
-	const pct = (f: number) => fmtNum(f * 100);
 
 	function setSort(next: PortfolioSort) {
 		const u = new URL(page.url);
@@ -148,8 +149,11 @@
 			<h1>{data.team.name}: portfolio</h1>
 			<p class="muted intro">
 				Every catchment of the team, from its published run, or its latest run when none is published. EWR status
-				is the outlet over the 30 days to the figures' last day: green when it was not met on under
-				{pct(data.thresholds.amber)} % of them, amber under {pct(data.thresholds.red)} %, red otherwise.
+				is the outlet over the 30 days to the figures' last day: {thresholdsRule(data.thresholds)}.
+			</p>
+			<p class="muted intro thresholds">
+				{thresholdsSource(data.thresholds)}
+				{#if hasTeamRole(data.team.role, 'admin')}<a href="{base}/teams/{data.team.id}#pt-h">Change them on the team page</a>.{:else}A team admin can change them on the team page.{/if}
 			</p>
 
 			{#if !rows.length}
@@ -254,6 +258,9 @@
 		margin: 0.35rem 0 1rem;
 		max-width: 80ch;
 		font-size: 0.9rem;
+	}
+	.intro:has(+ .thresholds) {
+		margin-bottom: 0.25rem;
 	}
 	.summary {
 		margin: 0 0 0.75rem;
