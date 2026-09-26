@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BUDGET, kb, measure, violations } from './check_web_bundle_budget.mjs';
+import { BUDGET, calibrationWorkerViolations, kb, measure, violations } from './check_web_bundle_budget.mjs';
 
 const budget = { totalCodeKb: 30, largestChunkKb: 5, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3 };
 
@@ -93,6 +93,21 @@ test('a spreadsheet worker has its own ceiling, apart from the calibration worke
 	assert.match(big[0], /Spreadsheet worker _app\/immutable\/workers\/import\.worker-z\.js is 13 KB, over the 12 KB spreadsheet-worker budget/);
 	// Another worker named "…export…" is not a spreadsheet worker.
 	assert.equal(measure([{ path: '_app/immutable/workers/csvexport.worker-z.js', gzipBytes: 1024 }]).largestSpreadsheetWorker.kb, 0);
+});
+
+test("the calibration worker must share the page build's chunks (issue #9)", () => {
+	const shared = { path: '_app/immutable/workers/autocal.worker-Ab1.js', text: 'import{c as f}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
+	const spreadsheet = { path: '_app/immutable/workers/export.worker-x.js', text: 'self.onmessage=()=>{}' };
+	assert.deepEqual(calibrationWorkerViolations([shared, spreadsheet]), []);
+	// Built on its own (new Worker(new URL(…))): no import from chunks/.
+	const own = calibrationWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }]);
+	assert.equal(own.length, 1);
+	assert.match(own[0], /imports nothing from the page build's chunks/);
+	// Vite's own worker build puts its chunks under workers/chunks/: that is not sharing.
+	assert.equal(calibrationWorkerViolations([{ path: shared.path, text: 'import{c}from"./chunks/x.js"' }]).length, 1);
+	const missing = calibrationWorkerViolations([spreadsheet]);
+	assert.equal(missing.length, 1);
+	assert.match(missing[0], /Expected one calibration worker/);
 });
 
 test('an empty build is a failure, not a pass', () => {

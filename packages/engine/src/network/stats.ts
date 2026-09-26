@@ -1,5 +1,5 @@
 // Goodness-of-fit of simulated outflow against an observed flow record.
-import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { excludedDayMask, type ExclusionRange } from '../calibrate/provenance';
 import type { AnnualVolume, CalibrationStats } from '../project';
 
@@ -188,10 +188,4 @@ export function calibrationStats(
 		volumeErrorPct: sumObs !== 0 ? (100 * (sumSim - sumObs)) / sumObs : null,
 		annualVolumes
 	};
-}
-
-/** South African water year (Oct–Sep) of an epoch day, labelled by the year it starts in. */
-export function waterYearOf(epochDay: number): number {
-	const year = new Date(epochDay * 86_400_000).getUTCFullYear();
-	return monthOfEpochDay(epochDay) >= 10 ? year : year - 1;
 }

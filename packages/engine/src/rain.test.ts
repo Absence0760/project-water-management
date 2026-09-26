@@ -17,8 +17,9 @@ import {
 	zeroRainMask
 } from './rain';
 import { rainVsChirps, usualAnnualRainMm, zeroRainRuns } from './quality';
-import { prepareRun, runModel } from './run';
+import { runModel } from './run';
 import { checkInvariants } from './testing/invariants';
+import { prepareRun } from './prepare';
 
 /** The accumulation fields (engine ≥ 0.20.0) at their defaults. */
 const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'spread', keepReadings: [], addAccumulations: [] };

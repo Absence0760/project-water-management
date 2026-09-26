@@ -19,43 +19,33 @@
 //   parameters scored against another observed record (a logger when the fit
 //   used the gauge, or the reverse), over that record's own days. It tests
 //   the fit against a second instrument, not just a second period.
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { computeNaturalFlow } from '../flow';
 import { simulateNetwork } from '../network/simulate';
-import { waterYearOf } from '../network/stats';
 import type { CalibrationFlowKind, ModelInput } from '../project';
-import { buildNetworkPlan, pickObservedKind, prepareRun } from '../run';
+import { buildNetworkPlan, pickObservedKind } from '../run';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
-import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
-import { LEGACY_PARAMS } from '../runoff/legacy';
-import type { ParamSpec, RunoffModelId } from '../runoff/types';
-import { GR4J_NO_PET, hasPotentialEvaporation, resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { gr4j } from '../runoff/gr4j';
+import { GR4J_PARAMS, LEGACY_PARAMS, type Gr4jParams } from '../runoff/params';
+import type { RunoffModelId } from '../runoff/types';
+import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
+import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
+import { CALIBRATION_PARAMS, MAX_STARTS, type CalibrationBounds, type ParamSet } from './params';
 import { excludedDayMask, exclusionRanges } from './provenance';
-import { fitScores, OBJECTIVE_LABELS, objectiveLoss, type FitScores, type ObjectiveId } from './objective';
+import { fitScores, objectiveLoss, type FitScores } from './objective';
+import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
+import { prepareRun } from '../prepare';
 
 const SEC_PER_DAY = 86_400;
-
-/** Parameter values by key (GR4J's x1…x4, or legacy CalibrationParams keys). */
-export type ParamSet = Record<string, number>;
-
-/** The parameters automatic calibration can fit, per runoff model. */
-export const CALIBRATION_PARAMS: Record<RunoffModelId, ParamSpec<Record<string, number>>[]> = {
-	gr4j: GR4J_PARAMS as unknown as ParamSpec<Record<string, number>>[],
-	legacy: LEGACY_PARAMS as unknown as ParamSpec<Record<string, number>>[]
-};
 
 export interface DateRange {
 	/** Inclusive ISO dates. */
 	start: string;
 	end: string;
 }
-
-/** 'wide': each parameter's min/max. 'typical': Perrin et al.'s (2003) 80 % range. */
-export const CALIBRATION_BOUNDS = ['wide', 'typical'] as const;
-export type CalibrationBounds = (typeof CALIBRATION_BOUNDS)[number];
 
 export interface CalibrateOptions {
 	/** Runoff model to fit. Default: the project's settings.runoffModel. */
@@ -408,10 +398,6 @@ interface FitResult {
 	evaluations: number;
 	cancelled: boolean;
 }
-
-/** Most starts a fit may ask for, and how many the app asks for. */
-export const MAX_STARTS = 10;
-export const DEFAULT_STARTS = 5;
 
 /** Seed of start `i` (0-based) of a fit seeded `seed`: start 0 is the seed itself, so one start reproduces a single-start fit. */
 export const startSeed = (seed: number, i: number): number => (seed + i * 1_000_003) % 2 ** 31;

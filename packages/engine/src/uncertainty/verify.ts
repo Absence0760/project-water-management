@@ -19,10 +19,10 @@ import {
 	type EnsembleHeader,
 	type EnsembleMember,
 	type MemberMetrics,
-	type MemberResult,
-	type ResolvedEnsembleOptions
+	type MemberResult
 } from './ensemble';
 import { pairedHeader, type PairedMember } from './paired';
+import type { ResolvedEnsembleOptions } from './options';
 
 /** Relative tolerance: engine arithmetic is deterministic, but a browser's Math.exp/log may differ in the last place. */
 export const VERIFY_TOLERANCE = 1e-6;

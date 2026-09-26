@@ -21,8 +21,7 @@
 //
 // None of these change a model result. They become run warnings and
 // RunSummary.dataQuality, and the Time series tab shows them before a run.
-import { fromEpochDay, monthOfEpochDay, toEpochDay } from './calendar';
-import { waterYearOf } from './network/stats';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import {
 	defaultProjectSettings,
 	SERIES_KINDS,
@@ -164,9 +163,6 @@ export function resolveDataQuality(raw: unknown, warnings: string[] = []): DataQ
 		agreementMinDays: pick('agreementMinDays', (v) => Number.isInteger(v) && v >= 1 && v <= 366, 'needs a whole number of days, 1–366')
 	};
 }
-
-/** "2016/17" for water year 2016. */
-export const waterYearLabel = (wy: number) => `${wy}/${String((wy + 1) % 100).padStart(2, '0')}`;
 
 /** One human-readable warning for the flagged years, or null. */
 export function agreementWarning(ag: ObservedAgreement | null): string | null {

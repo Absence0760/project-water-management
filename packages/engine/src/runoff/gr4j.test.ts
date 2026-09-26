@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../testing/fuzz';
 import { checkDailyBalance, checkEventScale, checkMonotonicity, checkSteadyState, modelRunner, randomForcing, randomParams } from '../testing/runoff';
-import { gr4j, GR4J_PARAMS, sh1, sh2, uhOrdinates, type Gr4jParams } from './gr4j';
+import { gr4j, sh1, sh2, uhOrdinates } from './gr4j';
+import { GR4J_PARAMS, type Gr4jParams } from './params';
 import type { DayFluxes } from './types';
 
 const day = (): DayFluxes => ({ qMm: 0, aetMm: 0, exchangeMm: 0 });

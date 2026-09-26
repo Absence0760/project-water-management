@@ -9,12 +9,12 @@
 // as calibration does, so a probe is one simulateNetwork call.
 //
 // Pure: no I/O, runs in the browser and in Lambda.
-import { waterYearIndex } from '../calendar';
+import { waterYearIndex, waterYearOf } from '../calendar';
 import type { ModelInput } from '../project';
-import { buildNetworkPlan, prepareRun, type NaturalFlowInput, type RunContext } from '../run';
+import { buildNetworkPlan, type NaturalFlowInput, type RunContext } from '../run';
 import { NATURAL_FLOW } from '../runoff';
-import { waterYearOf } from './stats';
 import { simulateNetwork, type NetworkPlan, type PlanNode } from './simulate';
+import { prepareRun } from '../prepare';
 
 /** A draft shape: flat, the node's own irrigation demand by month, or 12 factors (water year, Oct–Sep). */
 export type YieldPattern = 'constant' | 'demand' | readonly number[];

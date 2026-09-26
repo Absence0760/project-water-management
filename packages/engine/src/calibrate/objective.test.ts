@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../random';
-import { fdcSignatures, fitScores, kgeNp, kgePrime, kgeYearly, nse, objectiveLoss, OBJECTIVES } from './objective';
+import { fdcSignatures, fitScores, kgeNp, kgePrime, kgeYearly, nse, objectiveLoss } from './objective';
+import { OBJECTIVES } from './objectives';
 
 const flows = (seed: number, n = 500) => {
 	const rng = new Rng(seed);
