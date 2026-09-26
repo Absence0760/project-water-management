@@ -6,13 +6,13 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitRecordCaveats, fitRecordStatus, provenanceLabel, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
 	import { fmtNum } from '$lib/format/number';
-	import { fitModelLabel, monthsText, paramLabel } from './provenance';
+	import { chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
@@ -74,6 +74,25 @@
 					<dt>CHIRPS bias correction <HelpTip key="settings.chirpsBiasCorrection" /></dt>
 					<dd>{record.forcing.chirpsBiasCorrection ? chirpsBiasLabel(record.forcing.chirpsBiasCorrection) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
+				<div>
+					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
+					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
+				</div>
+				<!-- Issue #40c: the CHIRPS product and version the fit ran on, and the series' now when it differs. -->
+				<div data-testid="fit-chirps-source">
+					<dt>CHIRPS series</dt>
+					<dd>
+						{record.forcing.chirpsSource !== undefined ? provenanceLabel(record.forcing.chirpsSource) : 'not recorded (fit made before this was tracked)'}{#if status?.chirpsSourceChanged}{' '}(now {provenanceLabel(chirpsSource)}){/if}
+					</dd>
+				</div>
+				{#if record.forcing.chirpsFactors?.length}
+					<div>
+						<dt>CHIRPS factors</dt>
+						<dd>
+							{#each record.forcing.chirpsFactors as f (f.label)}<span class="factor-set">{f.label}{f.fittedOn ? ` (fitted on ${f.fittedOn})` : ''}: {chirpsFactorsText(f.factors)}</span>{/each}
+						</dd>
+					</div>
+				{/if}
 				<div>
 					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" /></dt>
 					<dd>{record.forcing.zeroRainRuns ? describeZeroRain(record.forcing.zeroRainRuns) : 'not recorded (fit made before this was tracked)'}</dd>
@@ -147,6 +166,9 @@
 	}
 	.small {
 		font-size: 0.8rem;
+	}
+	.factor-set {
+		display: block;
 	}
 	.meta {
 		display: grid;

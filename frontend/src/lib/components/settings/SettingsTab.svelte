@@ -47,6 +47,8 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
+	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
+	import { proposeFitRanges } from './proposeFitRanges';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
@@ -108,6 +110,7 @@
 	let calWindowError = $state<string | null>(null);
 	let exclusionsError = $state<string | null>(null);
 	let zeroRainError = $state<string | null>(null);
+	let fitPeriodError = $state<string | null>(null);
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
@@ -115,13 +118,14 @@
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
 		saveBlockers([
 			{ id: 'set-record', message: calWindowError },
 			{ id: 'set-record', message: exclusionsError },
+			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
 			{ id: 'set-wr2012', message: wr2012Error },
@@ -598,6 +602,15 @@
 				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 		</div>
+		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
+		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
+		<ChirpsFitPeriodSection
+			bind:value={s.chirpsFitPeriod}
+			bind:error={fitPeriodError}
+			{readonly}
+			inactive={s.chirpsBiasCorrection !== 'monthly'}
+			propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
+		/>
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 	</section>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitModelLabel, monthsText, paramLabel } from './provenance';
+import { chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
 
 describe('paramLabel', () => {
 	it('names each model’s parameters, and falls back to the key', () => {
@@ -7,6 +7,14 @@ describe('paramLabel', () => {
 		expect(paramLabel('legacy', 'a')).toBe('Peak-flow coefficient a');
 		expect(paramLabel('gr4j', 'a')).toBe('a');
 		expect(paramLabel('nope' as never, 'x1')).toBe('x1');
+	});
+});
+
+describe('chirpsFactorsText', () => {
+	it('shows recorded CHIRPS factors (calendar months) in water-year order, a month without one as a dash', () => {
+		expect(chirpsFactorsText(Array(12).fill(1.5))).toBe('1.50 every month');
+		const jan = [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, null, 2.2];
+		expect(chirpsFactorsText(jan)).toBe('Oct 2.00, Nov –, Dec 2.20, Jan 1.10, Feb 1.20, Mar 1.30, Apr 1.40, May 1.50, Jun 1.60, Jul 1.70, Aug 1.80, Sep 1.90');
 	});
 });
 

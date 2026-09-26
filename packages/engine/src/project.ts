@@ -28,6 +28,26 @@ export const CHIRPS_BIAS_MODES = ['monthly', 'none'] as const;
 export type ChirpsBiasMode = (typeof CHIRPS_BIAS_MODES)[number];
 
 /**
+ * Which part of the record the CHIRPS factors are fitted on
+ * (settings.chirpsFitPeriod, engine ≥ 0.29.0, ./rain.ts, issue #40 (a),
+ * docs/model.md §2.4b):
+ * - 'all' (default): one set of monthly factors over the whole record;
+ * - a list of water-year ranges, each with a reason: one set per range,
+ *   fitted only on that range; a gap outside every range takes the nearest.
+ * The double-mass breaks only ever *propose* ranges (proposeChirpsFitRanges,
+ * ./doublemass.ts) for the hydrologist to confirm: an automatic break can
+ * land a year or two off the real network change (issue #40 amendments).
+ */
+export const CHIRPS_FIT_PERIOD_MODES = ['all'] as const;
+/** One listed fit range: water years `fromWaterYear` … `toWaterYear` (each the calendar year its 1 October falls in), inclusive. */
+export interface ChirpsFitRange {
+	fromWaterYear: number;
+	toWaterYear: number;
+	reason: string;
+}
+export type ChirpsFitPeriod = (typeof CHIRPS_FIT_PERIOD_MODES)[number] | ChirpsFitRange[];
+
+/**
  * What a run does with the zero runs the catchment-rain check flags as
  * probable missing data (settings.zeroRainRuns, ./rain.ts, CR-20). 'missing'
  * treats them as blank, so corrected CHIRPS then forecast rain fill them;
@@ -180,6 +200,11 @@ export interface ProjectSettings {
 	 */
 	chirpsBiasCorrection: ChirpsBiasMode;
 	/**
+	 * Which part of the record the CHIRPS factors are fitted on, and so which
+	 * factors fill a gap (engine ≥ 0.29.0, ./rain.ts, issue #40). Default 'all'.
+	 */
+	chirpsFitPeriod: ChirpsFitPeriod;
+	/**
 	 * Flagged zero runs in the catchment rain, and other periods the
 	 * hydrologist marks, treated as missing (engine ≥ 0.15.0, ./rain.ts, CR-20).
 	 */
@@ -274,6 +299,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		chirpsBiasCorrection: 'monthly',
+		chirpsFitPeriod: 'all',
 		zeroRainRuns: defaultZeroRainSettings(),
 		calibration: {
 			a: 0.09,

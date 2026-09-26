@@ -32,8 +32,10 @@ import {
 	blankMasked,
 	chirpsBiasFactors,
 	chirpsCorrectionWarning,
+	chirpsFactorOn,
 	finishZeroRainInfill,
 	keepDryDoubtWarnings,
+	resolveChirpsFitPeriod,
 	resolveZeroRain,
 	ZERO_RAIN_COLUMN,
 	zeroRainMask,
@@ -88,7 +90,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.28.0';
+export const ENGINE_VERSION = '0.29.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -496,7 +498,7 @@ function runNetwork(
 	if (agreementNote) warnings.push(agreementNote);
 	const checks = seriesChecks(series);
 	// The double-mass check (engine ≥ 0.18.0) follows the catchment rain's own checks.
-	const dmCheck = doubleMassCheck(doubleMass);
+	const dmCheck = doubleMassCheck(doubleMass, chirpsCorrection?.fitPeriod?.period);
 	if (dmCheck) {
 		let at = 0;
 		checks.forEach((c, i) => {
@@ -708,15 +710,18 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	// covers (audit B4), which the zero-run fill then leaves alone. Every
 	// consumer (runoff models, demand, calibration, the runoff coefficient)
 	// reads the rain through `aligned`.
-	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection);
+	// settings.chirpsFitPeriod (engine ≥ 0.29.0, issue #40): which years the CHIRPS factors are fitted on.
+	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
+	const fitOpts = { fitPeriod: settings.chirpsFitPeriod };
+	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
 	const claimed = new Set<number>();
 	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
 	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day));
-	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc));
+	const chirpsCorrection = chirpsBiasFactors(series, settings.chirpsBiasCorrection, settings.zeroRainRuns, fitExcludedWindows(acc), fitOpts);
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
 	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
-	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month) : null;
+	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), month, start) : null;
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
 			? catchment.slice()
@@ -727,7 +732,6 @@ export function prepareRun(input: ModelInput): PreparedRun {
 	if (chirpsNote) warnings.push(chirpsNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
 	// A double-mass break: does CHIRPS fill days in an era whose ratio differs from the fit's?
-	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
 	const dmNote = doubleMassRunWarning(doubleMass, chirpsCorrection, catchment, alignSeries(series.rain_chirps_mm, start, days), start);
 	if (dmNote) warnings.push(dmNote);
 	if (zeroRain) {
@@ -1362,7 +1366,10 @@ export function chirpsColumns(
 	const raw = alignSeries(chirps, start, days).map((v) => (v === null ? NaN : v));
 	const out = [{ key: 'rain_chirps', label: 'CHIRPS rain as uploaded', unit: 'mm', values: raw }];
 	if (corr?.mode === 'monthly' && corr.months.some((m) => m.factor !== null)) {
-		const factor = Array.from(month, (m) => corr.months[m - 1]!.factor ?? NaN);
+		// The day's own fit range's factor with a CHIRPS fit period (engine ≥ 0.29.0), else its calendar month's.
+		const factor = corr.fitPeriod?.segments.length
+			? Array.from({ length: days }, (_, t) => chirpsFactorOn(corr, start + t) ?? NaN)
+			: Array.from(month, (m) => corr.months[m - 1]!.factor ?? NaN);
 		const corrected = raw.map((v, t) => (Number.isNaN(factor[t]!) ? v : v * factor[t]!));
 		out.push({ key: 'rain_chirps_corrected', label: 'CHIRPS rain bias-corrected (× monthly factor)', unit: 'mm', values: corrected });
 		out.push({ key: 'chirps_factor', label: 'CHIRPS bias factor for the month', unit: '×', values: factor });
@@ -1450,6 +1457,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 			);
 		}
 	}
+	s.chirpsFitPeriod = resolveChirpsFitPeriod(raw?.chirpsFitPeriod, warnings);
 	if (!(CHIRPS_BIAS_MODES as readonly string[]).includes(s.chirpsBiasCorrection)) {
 		warnings.push(`unknown CHIRPS bias correction "${String(s.chirpsBiasCorrection)}"; using ${d.chirpsBiasCorrection}`);
 		s.chirpsBiasCorrection = d.chirpsBiasCorrection;

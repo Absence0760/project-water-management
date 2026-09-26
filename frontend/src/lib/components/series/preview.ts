@@ -13,9 +13,9 @@
 // settings unrelated to this table, the other is model-private and applies a
 // threshold that is a natural-flow detail, not part of gap-fill itself).
 import {
+	chirpsFactorOn,
 	exclusionRanges,
 	fromEpochDay,
-	monthOfEpochDay,
 	prepareRun,
 	SERIES_KINDS,
 	seriesRowFlags,
@@ -180,11 +180,11 @@ function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Re
 		const ch = chirps[t] ?? null;
 		const f = forecast[t] ?? null;
 		const rainSource: RainSource = c !== null ? 'catchment' : ch !== null ? 'chirps' : f !== null ? 'forecast' : 'none';
-		const month = monthOfEpochDay(d0 + t);
 		out.set(fromEpochDay(d0 + t), {
 			rainUsedMm: c ?? ch ?? f,
 			rainSource,
-			chirpsFactor: prepared.chirpsCorrection?.months[month - 1]?.factor ?? null,
+			// The day's own fit segment's factor with a CHIRPS fit period (engine ≥ 0.29.0), else its calendar month's.
+			chirpsFactor: chirpsFactorOn(prepared.chirpsCorrection, d0 + t),
 			chirpsCorrectedMm: ch
 		});
 	}

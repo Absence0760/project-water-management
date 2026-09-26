@@ -152,7 +152,7 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
-		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' });
+		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all' });
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -210,7 +210,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[1]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction or zero-rain run handling has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period or zero-rain run handling has changed since the fit/);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
@@ -256,6 +256,25 @@ describe('fit record', () => {
 		const old = { ...rec, forcing: undefined };
 		const zeros = mono([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 		expect(fitRecordStatus({ panCoefficient: zeros, apanMm: zeros }, old).forcingChanged).toBe(false);
+	});
+
+	it('records the CHIRPS fit period and factors, and flags a changed fit period (engine ≥ 0.29.0)', () => {
+		const ranges = [{ fromWaterYear: 1990, toWaterYear: 2004, reason: 'old network' }];
+		const factors = [{ label: 'range 1990/91–2004/05 (old network), filling every year', fittedOn: '1990/91–2004/05', factors: new Array(12).fill(1.5) }];
+		const rec = fitRecordFromReport(report({ chirpsFactors: factors }), { ...ctx, settings: { ...ctx.settings, chirpsFitPeriod: ranges } });
+		expect(rec.forcing!.chirpsFitPeriod).toEqual(ranges);
+		expect(rec.forcing!.chirpsFactors).toEqual(factors);
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const };
+		// Positive control: the same period is no change.
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: [{ ...ranges[0]! }] }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: 'all' }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: [{ ...ranges[0]!, toWaterYear: 2005 }] }, rec).forcingChanged).toBe(true);
+		// Settings without it (a run before engine 0.29.0) fitted the whole record.
+		expect(fitRecordStatus(base, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus(base, fitRecordFromReport(report(), ctx)).forcingChanged).toBe(false);
+		// A forcing recorded before it: nothing to compare, so it alone never flags.
+		const { chirpsFitPeriod: _p, chirpsFactors: _f, ...pre029 } = rec.forcing!;
+		expect(fitRecordStatus({ ...base, chirpsFitPeriod: ranges }, { ...rec, forcing: pre029 }).forcingChanged).toBe(false);
 	});
 
 	it('flags a fit made on another CHIRPS version (issue #40 part c), only when both sides know the version', () => {

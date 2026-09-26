@@ -240,6 +240,18 @@ describe('calibrate', () => {
 		expect(report.fit.scores.days).toBe(700);
 	});
 
+	it('reports the CHIRPS factors its rain used, for fit provenance (engine ≥ 0.29.0)', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
+		// No CHIRPS: nothing to record.
+		expect(prepareCalibration(input).chirpsFactors).toBeNull();
+		const rain = input.series.rain_catchment_mm!;
+		input.series.rain_chirps_mm = { startDate: rain.startDate, values: rain.values.map((v) => (v == null ? null : v / 2)) };
+		const sets = prepareCalibration(input).chirpsFactors!;
+		expect(sets.map((x) => x.label)).toEqual(['whole record']);
+		expect(sets[0]!.factors.every((f) => f !== null && Math.abs(f - 2) < 1e-9)).toBe(true);
+		expect(calibrate(input, { budget: 20, validate: false }).chirpsFactors).toEqual(sets);
+	});
+
 	it('always leaves out the stored exclusions (a whole water year, a range), on top of any passed in', () => {
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 4);
 		const all = prepareCalibration(input).scoredDays.length;
