@@ -13,6 +13,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 const NAME = 'Upper dam +20 %';
 const RAISE = 'Upper farm: Dam capacity 150,000 m³ → 180,000 m³';
@@ -259,14 +260,15 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
-	// The Network opens on its map (914e69df); the fields are in the Table.
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
-	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
+	// The Network is a map (issue #17); the fields are in the node table grid.
+	const grid = await openNodeTable(page);
+	await expect(grid.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
 	const record = page.getByTestId('override-record');
 	await expect(record).toContainText('No edits yet.');
 
-	// One edit in each table.
-	await page.getByLabel('Dam capacity of Lower farm, m³').fill('100000');
+	// One edit in each table (the grid is a modal: close it before switching tables).
+	await grid.getByLabel('Dam capacity of Lower farm, m³').fill('100000');
+	await closeModal(page);
 	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
 	await page.getByLabel('Orchard on Lower farm, ha').fill('15');
 	await mode.getByRole('button', { name: 'Transfers', exact: true }).click();
