@@ -652,11 +652,16 @@ From the client's four sketched outputs; research and recommendations in
 
 - **O1. Risk cut-offs.** In the outcome matrix, what share of Reserve months
   met (or % of days below the EWR) counts as high risk, increasing risk,
-  lower risk? *Planned: project settings with defaults marked pending the
-  hydrologist.*
+  lower risk? *Built as project settings (`settings.outcomes`, Settings →
+  Outcome matrix, issue #53 R4): the defaults (months met 90 % / 75 %, days
+  below the EWR 5 % / 20 %) are marked pending the hydrologist until
+  answered, and a project can already set its own.*
 - **O2. Year classes.** Split water years by the run's own natural-flow
   terciles (dry / normal / wet), or by fixed percentile years (25th, median,
-  75th)? *Planned: terciles, quintiles once the record has 25 years.*
+  75th)? *Built as a project setting (`settings.outcomes.yearClassMethod`):
+  automatic, terciles, quintiles once the record has 25 years, the default;
+  terciles or quintiles can be fixed. Fixed percentile years would be a new
+  method.*
 - **O3. Decision and review dates.** On what date does the WUA set the
   season's irrigation level, and when does it review? *Planned: a project
   setting, default the start of the irrigation season.*

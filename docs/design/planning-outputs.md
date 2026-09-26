@@ -7,10 +7,10 @@ hypothetical figures for the client catchment; they are **not committed**
 describes them generically. The build is tracked in
 [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
 Built so far: R1 (`demand.scale`, engine 0.41.0,
-[scenarios.md](../scenarios.md)), R3's equal-share board
-([ui.md § Share the pain](../ui.md#share-the-pain)), R2's sweeps (§3.2),
-R4's engine half (§3.4) and R5's engine core (§3.5, engine 0.44.0); the
-rest is not yet.
+[scenarios.md](../scenarios.md)), R2's sweeps (§3.2), R3's equal-share board
+([ui.md § Share the pain](../ui.md#share-the-pain)), R4 in full (§3.4: the
+engine, the settings and the matrix screen) and R5's engine core (§3.5,
+engine 0.44.0); the rest is not yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -133,11 +133,20 @@ goes (a second rule kind, labelled as a what-if).
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
 
-**Status: engine half built** (`views/yearClasses.ts`, `views/outcomeMatrix.ts`;
-method, tie and partial-year rules in
+**Status: built.** The engine half: `views/yearClasses.ts`,
+`views/outcomeMatrix.ts` (method, tie and partial-year rules in
 [model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
-Still to build: the project settings for the method and the risk cut-offs
-(after O1 / O2), the demand-level runs (R2 sweeps over R1's `demand.scale`; the sweep itself is built, §3.2) and the matrix view.
+The settings: `settings.outcomes`, the year-class method and the risk
+cut-offs per measure, editable in Settings → Outcome matrix, with the
+engine's defaults marked *pending the hydrologist* until O1 / O2 are
+answered ([ui.md § Settings](../ui.md#settings--calibration), [api.md
+§ Projects](../api.md#projects)). The screen: the Runs tab's **Outcome
+matrix** panel ([ui.md § Outcome matrix](../ui.md#outcome-matrix)), the
+first screen that reads a sweep: an editor starts a demand sweep of the
+shown run (100 / 85 / 70 % by default, one `demand.scale` per level), the
+panel follows the sweep's status, then draws the matrix from the stored
+member series in the browser, so a settings change re-reads it without a
+new sweep.
 
 - **Classify water years** by the run's own natural flow at the outlet
   (annual total): terciles by default (dry / normal / wet) or quintiles

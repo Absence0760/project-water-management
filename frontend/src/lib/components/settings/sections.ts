@@ -15,6 +15,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-reserve', label: 'Reserve rules' },
 	{ id: 'set-period', label: 'Simulation period' },
 	{ id: 'set-quality', label: 'Data quality' },
+	// How the Runs tab's outcome matrix reads a demand sweep (issue #53 R4); changes no result.
+	{ id: 'set-outcomes', label: 'Outcome matrix' },
 	// When the project re-runs itself after new data (WP-2.11); last in the form: it changes no result.
 	{ id: 'set-auto', label: 'Automatic runs' },
 	// After the settings form, saved on its own (feeds/DataFeedsPanel.svelte).

@@ -388,8 +388,9 @@ as one background job. The main use is demand levels: `demand.scale` at
 1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
 and R5's seasonal outlook read. Built as backend and API only
 (`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
-migration 062); the UI waits for R4's matrix view, the first screen that
-needs one.
+migration 062). The first screen that starts and reads one is R4's
+outcome matrix on the Runs tab ([ui.md § Outcome matrix](./ui.md#outcome-matrix)):
+demand levels only, one `demand.scale` op per member.
 
 - **Not a scenario.** A member has no row in `scenario` and makes no
   `model_run`: it stores its **run summary** (the `RunSummary` a run

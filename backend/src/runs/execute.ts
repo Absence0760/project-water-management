@@ -61,8 +61,9 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
 	}
-	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how: it's no model input, so runs don't record it.
-	const { autoRun: _autoRun, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
+	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how, and settings.outcomes
+	// (projects/outcomeSettings.ts) how its results are read: neither is a model input, so runs don't record them.
+	const { autoRun: _autoRun, outcomes: _outcomes, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
 	return { input: { settings: settings as unknown as ModelInput['settings'], model, series }, seriesIds };
 }
 
