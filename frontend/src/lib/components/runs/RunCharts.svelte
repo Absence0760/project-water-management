@@ -8,7 +8,7 @@
 	import type { Snippet } from 'svelte';
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
-	import { flowDurationCurves, percentileFlows } from '$lib/components/charts/fdc';
+	import { finiteCount, flowDurationCurves, onDaysOf, percentileFlows } from '$lib/components/charts/fdc';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import { fmtNum, fmtPct } from '$lib/format/number';
@@ -87,16 +87,31 @@
 
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
 	const hydroSeries = $derived(hydrographSeries(catchment, conv));
+	// Which days the flow-duration curves rank. With an observed record that
+	// covers only part of the run, the curves are compared on the days it read
+	// (like with like); the whole run is one click away.
+	let fdcDays = $state<'observed' | 'all'>('observed');
 	const fdc = $derived.by(() => {
 		const list = [catchment.natural, catchment.simulated, catchment.observed];
 		const labels = ['Natural', 'Simulated outflow', 'Observed'];
 		const colors = ['--series-1', '--series-2', '--chart-obs'];
 		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
-		const xy = flowDurationCurves(present.map((x) => conv(x.d)));
+		const obs = catchment.observed ? conv(catchment.observed) : null;
+		const runDays = catchment.simulated?.values.length ?? catchment.natural?.values.length ?? 0;
+		const obsDays = obs ? finiteCount(obs) : 0;
+		// Only a choice when the gauge misses some of the run's days.
+		const partial = !!obs && obsDays > 0 && obsDays < runDays;
+		const onObserved = partial && fdcDays === 'observed';
+		const values = present.map(({ d, i }) => (onObserved && i !== 2 ? onDaysOf(conv(d), obs!) : conv(d)));
+		const xy = flowDurationCurves(values);
 		return {
 			xy,
+			partial,
+			onObserved,
+			obsDays,
+			runDays,
 			series: present.map(({ d, i }) => ({ label: labels[i]!, startDate: d!.startDate, values: [], color: colors[i], width: 1.5, style: i === 2 ? ('dashed' as const) : undefined })),
-			q: present.map(({ d, i }) => ({ label: labels[i]!, ...percentileFlows(conv(d)) }))
+			q: present.map(({ i }, k) => ({ label: labels[i]!, ...percentileFlows(values[k]!) }))
 		};
 	});
 	const ewrSeries = $derived(ewrChartSeries(catchment, conv));
@@ -203,7 +218,18 @@
 				toolbar={unitToggle}
 				logToggle
 				bind:log={fdcLog}
+				caption={fdc.onObserved
+					? `Every curve ranks the ${fmtNum(fdc.obsDays)} days with an observed reading, so they compare like with like.`
+					: fdc.partial
+						? `Natural and simulated flow rank all ${fmtNum(fdc.runDays)} days of the run; observed flow only its ${fmtNum(fdc.obsDays)} days with a reading.`
+						: undefined}
 			/>
+			{#if fdc.partial}
+				<span class="seg days" role="group" aria-label="Days the curves rank">
+					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'observed'} onclick={() => (fdcDays = 'observed')}>Observed days</button>
+					<button type="button" class="btn btn-sm" aria-pressed={fdcDays === 'all'} onclick={() => (fdcDays = 'all')}>Whole run</button>
+				</span>
+			{/if}
 			{#if fdc.q.length}
 				<table class="data compact q">
 					<thead>
@@ -359,6 +385,9 @@
 	.seg .btn:last-child {
 		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 		margin-left: -1px;
+	}
+	.days {
+		margin-top: 0.5rem;
 	}
 	.q {
 		margin-top: 0.5rem;

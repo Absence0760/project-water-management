@@ -1195,7 +1195,11 @@ run's report to chosen members every week or month.
   uses a different runoff model (legacy (b023 workbook), not GR4J). The
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. The
-  flow-duration curve with Q10–Q95 (`charts/fdc.ts`),
+  flow-duration curve with Q10–Q95 (`charts/fdc.ts`; when the observed
+  record misses some of the run's days, every curve and the Q table rank only
+  the days with a reading by default, `onDaysOf`, so they compare like with
+  like, and **Observed days / Whole run** switches; the caption says which
+  days each curve ranks),
   EWR against outflow, **Reserve compliance by month** when the run has a rule
   table (`#res-reserve`, `runs/EwrAssurancePanel.svelte`, helpers in
   `runs/ewrAssurance.ts`; engine ≥ 0.21.0, model.md §2.9c): a site picker
