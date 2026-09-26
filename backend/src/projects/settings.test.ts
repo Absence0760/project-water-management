@@ -629,6 +629,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, chirpsSource: { product: 'CHIRPS', version: '2.0', extra: 1 } } })).toBe(false);
 	});
 
+	it('accepts an optional apanDaily inside forcing (issue #45): the daily A-pan series fingerprint, or null for none', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const pan = { startDate: '2012-10-01', length: 730, valuesSha256: 'ab'.repeat(32) };
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: pan } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: null } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: { ...pan, valuesSha256: 'not a hash' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: { ...pan, startDate: '2012-10' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: { ...pan, length: -1 } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, apanDaily: { ...pan, extra: 1 } } })).toBe(false);
+	});
+
 	it('accepts an optional, whole zeroRainRuns inside forcing (CR-20)', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
 		const zr = { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real drought' }], missing: [] };

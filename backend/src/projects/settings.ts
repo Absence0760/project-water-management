@@ -422,6 +422,13 @@ export const FitRecord = z
 					.strict()
 					.refine((p) => provenanceError(p) === null, 'not a valid product and version')
 					.nullable()
+					.optional(),
+				// Engine ≥ 0.38.0 (issue #45): the daily A-pan series the fit ran on,
+				// as a run's input snapshot records it (null = none). Optional, as above.
+				apanDaily: z
+					.object({ startDate: isoDate, length: z.number().int().min(0).max(60_000), valuesSha256: z.string().regex(/^[0-9a-f]{64}$/) })
+					.strict()
+					.nullable()
 					.optional()
 			})
 			.strict()
