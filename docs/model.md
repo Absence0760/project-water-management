@@ -4067,8 +4067,10 @@ changes, so `ENGINE_VERSION` doesn't move. Pure
 (`packages/engine/src/views/yearClasses.ts`, `views/outcomeMatrix.ts`).
 The design and its research are in
 [design/planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m).
-The UI, the project settings and the demand-level runs (R1/R2) are not
-built yet; the defaults below wait on the client's O1 and O2
+The screen (Runs tab → Outcome matrix, [ui.md](./ui.md)) reads a demand
+sweep (R1/R2), and the project settings `settings.outcomes` choose the class
+method, the risk cut-offs and the Reserve site. The defaults below still wait
+on the client's O1 and O2
 ([plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
 
 **Year classes** (`classifyWaterYears`, `classifyRunWaterYears`). The
