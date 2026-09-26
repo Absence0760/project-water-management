@@ -684,6 +684,11 @@
 //             and node list, and lib/workspace/overlays.ts. Headroom ~5 KB.
 //             Four raises today: the English-as-key i18n trim (~5–7 KB,
 //             docs/followups.md) is due before the next.
+// 2026-09-26  total 973 → 985 KB. main measured 979 (over the ceiling after
+//             the English-as-key trim, 969, and the merges since: #53's
+//             year classes and demand.scale op, WP-3.8's supply rules);
+//             issue #17's Network map filling the screen adds 1 (980).
+//             Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -694,7 +699,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 973,
+	totalCodeKb: 985,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
