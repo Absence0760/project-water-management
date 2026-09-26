@@ -49,6 +49,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
+			// Count and insert one attach at a time per project, so concurrent attaches can't pass the cap together.
+			await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('data_feed_cap:' || $1::text, 0))`, [id]);
 			const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [id]);
 			if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
 			const fid = await createFeed(db, id, input).catch(conflict);

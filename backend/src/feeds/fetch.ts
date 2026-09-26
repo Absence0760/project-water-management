@@ -100,6 +100,9 @@ export const FetchResult = z.discriminatedUnion('ok', [
 ]);
 export type FetchResult = z.output<typeof FetchResult>;
 
+/** The longest window per source, as fetchWindow caps it (GEFS reads its 16 days whatever the window). */
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: 365 * DWS_MAX_YEARS };
+
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
 	.object({
@@ -114,6 +117,13 @@ export const FetchRequestSchema = z
 		const config = configSchema(v.source).safeParse(v.config);
 		if (!config.success) {
 			ctx.addIssue({ code: 'custom', path: ['config'], message: 'not a valid config for the source' });
+			return z.NEVER;
+		}
+		// No more days than fetchWindow ever asks for: the fetcher is the
+		// door to the internet, and a request is a message off a queue.
+		const days = toEpochDay(v.end) - toEpochDay(v.start) + 1;
+		if (days > MAX_WINDOW_DAYS[v.source]) {
+			ctx.addIssue({ code: 'custom', path: ['end'], message: 'the window is longer than one fetch reads' });
 			return z.NEVER;
 		}
 		return { ...v, config: config.data };
