@@ -2,8 +2,9 @@
 	// One scenario (docs/ui.md § Scenarios): the "Based on run X" banner, its
 	// changes (ops) with their class and the server's check, the red
 	// "Baseline assumptions changed" callout, and for an editor on a draft the
-	// "Add a change" form, undo, the proposer's nodes, rename, rebase onto
-	// another run, run, status and delete. Every edit is a PATCH that answers
+	// "Add a change" form or override mode (the model tables, OverrideEditor),
+	// undo, the proposer's nodes, rename, rebase onto another run, run, status
+	// and delete. Every edit is a PATCH that answers
 	// with the scenario's check against its base, so problems show without
 	// running. Viewers get the same page read only.
 	//
@@ -28,6 +29,8 @@
 
 	// The Yield panel (WP-3.6) and its chart load only once a dam is picked.
 	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
+	// Override mode (the model tables recording changes) loads when opened.
+	const loadOverride = () => import('./OverrideEditor.svelte');
 
 	let {
 		projectId,
@@ -76,7 +79,6 @@
 				if (runId !== s.baseRunId) return;
 				anonymised = new Set(b.anonymisedNodeIds);
 				baseRun = { id: b.baseRunId, model: b.model, settings: b.settings } as unknown as Run;
-				remember(baseRun);
 			} catch (e) {
 				if (runId === s.baseRunId) baseError = msg(e);
 			}
@@ -85,14 +87,12 @@
 		const hit = detailCache.get(runId);
 		if (hit) {
 			baseRun = hit.run;
-			remember(hit.run);
 			return;
 		}
 		baseRun = null;
 		try {
 			const d = await api.runs.get(projectId, runId);
 			detailCache.set(runId, d);
-			remember(d.run);
 			if (runId === s.baseRunId) baseRun = d.run;
 		} catch (e) {
 			if (runId === s.baseRunId) baseError = msg(e);
@@ -102,16 +102,14 @@
 		const id = s.baseRunId;
 		untrack(() => loadBase(id));
 	});
-	/**
-	 * Names of every base this editor has loaded: after a rebase onto a run
-	 * without a node, an op on that node still names it (the new base can't).
-	 */
-	let seenNames = $state.raw(new Map<string, string>());
-	function remember(r: Run) {
-		seenNames = new Map([...seenNames, ...namesOf([snapshotInput(r.model, r.settings).model])]);
-	}
 	const baseInput = $derived(baseRun ? snapshotInput(baseRun.model, baseRun.settings) : null);
-	const names = $derived(new Map([...seenNames, ...namesOf([baseInput?.model], s.ops)]));
+	/**
+	 * The names the server kept with the ops (from the base each op was made
+	 * on), so an op on a node a rebase dropped still reads by name after a
+	 * reload; the current base and the ops' own new nodes and crops win. An
+	 * applicant gets only their own nodes' names (the server filters them).
+	 */
+	const names = $derived(new Map([...s.opNames.map((x) => [x.id, x.name] as const), ...namesOf([baseInput?.model], s.ops)]));
 	// An anonymised node's values are blanks, so an op on one isn't shown "from" them.
 	const list = $derived(opItems(s.ops, data.check?.classified ?? null, data.check, anonymised.size ? null : baseInput, names));
 	/** What a new op meets: the base with every listed op applied. */
@@ -127,14 +125,20 @@
 	// --- editing the ops, with undo ------------------------------------------------
 	let past = $state.raw<ScenarioOp[][]>([]);
 	let saving = $state(false);
+	let running = $state(false);
 	let error = $state<string | null>(null);
 	let note = $state('');
-	// A different scenario starts a fresh undo history and clears the last run's messages.
+	// A different scenario starts a fresh undo history, closes override mode and
+	// clears the last run's messages. Keyed on the id alone: `s` is a new object
+	// after every PATCH, and an effect on it would reset all this on every edit.
+	const scenarioKey = $derived(s.id);
 	$effect(() => {
-		void s.id;
+		void scenarioKey;
 		untrack(() => {
 			past = [];
 			error = null;
+			overriding = false;
+			overrideDirty = false;
 			runProblems = [];
 			rebaseTo = '';
 			rebaseCheck = null;
@@ -165,6 +169,19 @@
 		return ok;
 	}
 	const add = (op: ScenarioOp) => saveOps([...s.ops, op], `Change ${s.ops.length + 1} added.`);
+	/** Override mode's edits, appended as one edit (one undo step). */
+	const addMany = (ops: ScenarioOp[]) => saveOps([...s.ops, ...ops], `${ops.length === 1 ? '1 change' : `${ops.length} changes`} added from the model tables.`);
+
+	// --- override mode: the Network, Crops and Transfers tables on the scenario's model ---
+	let overriding = $state(false);
+	/** Override mode has edits not yet recorded: the list, undo, run, status moves and delete wait for them. */
+	let overrideDirty = $state(false);
+	/**
+	 * Saving, unrecorded override edits, or a run in flight. A status move waits
+	 * for a run too: the run's re-read of the scenario (ScenariosTab `ran`) could
+	 * otherwise land after a submit and put the draft status back on screen.
+	 */
+	const busy = $derived(saving || overrideDirty || running);
 	const removeAt = (i: number) => saveOps(s.ops.filter((_, j) => j !== i), `Change ${i + 1} removed.`);
 	async function undo() {
 		const prev = past[past.length - 1];
@@ -207,7 +224,6 @@
 	}
 
 	// --- run ---------------------------------------------------------------------------
-	let running = $state(false);
 	let runProblems = $state<string[]>([]);
 	async function run() {
 		running = true;
@@ -329,15 +345,23 @@
 	<section aria-labelledby="changes-h">
 		<div class="changes-head">
 			<h3 id="changes-h">Changes</h3>
-			{#if editable}<button type="button" class="btn btn-sm" disabled={!past.length || saving} onclick={undo}>Undo</button>{/if}
+			{#if editable}<button type="button" class="btn btn-sm" disabled={!past.length || busy} onclick={undo}>Undo</button>{/if}
 		</div>
 		{#if s.ops.length}
-			<OpList items={list.items} other={list.other} label="Changes in {s.name}" onremove={editable ? removeAt : undefined} disabled={saving} />
+			<OpList items={list.items} other={list.other} label="Changes in {s.name}" onremove={editable ? removeAt : undefined} disabled={busy} />
 		{:else}
-			<p class="muted">No changes yet. {editable ? 'Add one below: raise a dam, plant a crop, add a transfer…' : ''}</p>
+			<p class="muted">No changes yet. {editable ? 'Add one below, or edit the model tables: raise a dam, plant a crop, add a transfer…' : ''}</p>
 		{/if}
 		{#if editable && effective}
-			<OpForm input={effective} onadd={add} disabled={saving} />
+			{#if overriding}
+				<p class="hint">Editing in the model tables below. Close override mode to add a change with the form instead.</p>
+			{:else}
+				<div class="override-open">
+					<button type="button" class="btn" onclick={() => (overriding = true)}>Edit in the model tables</button>
+					<span class="hint">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
+				</div>
+				<OpForm input={effective} onadd={add} disabled={saving} />
+			{/if}
 		{/if}
 		<p class="visually-hidden" role="status">{note}</p>
 	</section>
@@ -359,23 +383,23 @@
 	{#if canRun || canChange}
 		<div class="actions">
 			{#if canRun}
-				<button type="button" class="btn btn-primary" disabled={running || saving || !data.check || problems > 0 || !s.ops.length} onclick={run}
+				<button type="button" class="btn btn-primary" disabled={running || busy || !data.check || problems > 0 || !s.ops.length} onclick={run}
 					>{running ? 'Running…' : 'Run scenario'}</button
 				>
 			{/if}
 			{#if canChange && !isApplication}
 				{#each SCENARIO_STATUS_MOVES[s.status] as to (to)}
-					<button type="button" class="btn" disabled={saving} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
+					<button type="button" class="btn" disabled={busy} onclick={() => move(to)}>{MOVE_LABEL[to]}</button>
 				{/each}
 			{/if}
 			{#if canChange && (s.status === 'draft' || s.status === 'withdrawn')}
-				<button type="button" class="btn btn-danger" disabled={saving} onclick={remove}>Delete {isApplication ? 'application' : 'scenario'}</button>
+				<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>Delete {isApplication ? 'application' : 'scenario'}</button>
 			{/if}
 		</div>
 		{#if canRun && !s.ops.length && s.status === 'draft'}<p class="hint">Add a change before running: with none, the scenario is its base run.</p>{/if}
 	{/if}
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} locked={busy} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 	{#if error}
 		<div class="alert alert-error" role="alert">
@@ -388,7 +412,7 @@
 		</div>
 	{/if}
 
-	{#if editable && !isApplication}
+	{#if editable && !isApplication && !overriding}
 		<details class="rebase">
 			<summary>Rebase onto another run</summary>
 			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a node removed since, say).</p>
@@ -432,6 +456,26 @@
 		</details>
 	{/if}
 </section>
+
+{#if editable && overriding && effective}
+	<Lazy load={loadOverride}>
+		{#snippet children(OverrideEditor)}
+			<OverrideEditor
+				scenarioName={s.name}
+				input={effective}
+				loadKey="{s.baseRunId} {s.opsSha256}"
+				{saving}
+				anonymisedCount={anonymised.size}
+				onrecord={addMany}
+				onclose={() => {
+					overriding = false;
+					overrideDirty = false;
+				}}
+				bind:dirty={overrideDirty}
+			/>
+		{/snippet}
+	</Lazy>
+{/if}
 
 {#if applicant}
 	<p class="panel muted" data-testid="applicant-results-note">
@@ -535,6 +579,16 @@
 		font-size: 0.82rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
+	}
+	.override-open {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+		margin: 0.75rem 0;
+	}
+	.override-open .hint {
+		margin: 0;
 	}
 	.actions {
 		display: flex;

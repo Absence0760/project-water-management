@@ -1268,12 +1268,17 @@ role and not before it.
       nothing. An engine behaviour change, so the engine owner's call and an
       `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
       or a user asking why a forecast run's first forecast day steps.
-- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
-      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
-      job lands, a GEFS ingest that changes days should also queue a forecast
-      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
-      keeps the newest unkept forecast run), deduped per project like the
-      re-run. Trigger: now (WP-2.11 is merged into this branch).
+- [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
+      [architecture.md § Background work](./architecture.md)). A forecast
+      feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with
+      `trigger: 'forecast'` (`series/newData.ts` `queueForecastFor` →
+      `runs/autoRun.ts` `enqueueForecastRun`, dedupe key `forecast`, the
+      re-run's debounce), only while `settings.autoRun.enabled` (the same
+      opt-in as the re-run: a scheduled forecast run is an automatic run).
+      The job runs `executeRun(db, id, forecastRunLabel, 'forecast')` then
+      `trimRuns` (one unkept forecast run kept), is never auto-published, and
+      does nothing when the observed rain has overtaken the issue. Tests:
+      `runs/autoRun.db.test.ts` § scheduled forecast runs.
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
@@ -1401,27 +1406,31 @@ role and not before it.
         **Scenario base** tags (no ✕ on a cited base), e2e
         (`e2e/tests/scenarios.spec.ts`: a 20 % dam raise run and compared)
         and axe in light, dark and on a phone.
-  - [ ] **Override mode for the Network, Crops and Transfers editors**
-        (roadmap WP-3.2 *Frontend*): editing the base run's model in the
-        familiar tables and recording each edit as an op, instead of the
-        one-change-at-a-time "Add a change" form. The form already builds
-        every op the engine has (`scenarios/ops.ts` `buildOp`), so the
-        durable fix is a `ModelEditor` variant loaded from the base run's
-        snapshot whose edits diff into ops (node fields → `node.set`, rows
-        → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
-        hydrologist building scenarios of more than a handful of changes,
-        or WP-3.3's applicant flow.
-  - [ ] **Names of nodes a rebase dropped are lost on reload**: after a
-        rebase onto a run without a node, a change on that node keeps its
-        name only while the earlier base's snapshot is still in the editor's
-        in-memory `seenNames` (`scenarios/ScenarioEditor.svelte`); after a
-        reload it reads "a node the base run doesn't have". That map also
-        outlives a switch to another scenario (harmless, ids are UUIDs).
-        Durable fix: store the display names an op needs (`{ id, name }`)
-        with the scenario when the op is made, server-side, and drop
-        `seenNames`. Trigger: someone finds a rebased scenario's changes
-        unreadable after coming back to it, or WP-3.3's applicant flow
-        (applicants rebase more often).
+  - [x] **Override mode for the Network, Crops and Transfers editors**
+        (roadmap WP-3.2 *Frontend*, 2026-09-26; [scenarios.md § UI](./scenarios.md#ui),
+        [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)). **Edit in the
+        model tables** opens the three tabs, unchanged, on their own
+        `ModelEditor` loaded with the scenario's model
+        (`scenarios/OverrideEditor.svelte`, its own chunk), under a banner
+        saying it is the scenario, not the catchment. **Record** diffs the
+        edits into ops (`scenarios/overrideDiff.ts` `diffModel`): node fields
+        → `node.set`, crop areas → `cropArea.set`, new and removed nodes,
+        crops, transfers, land cover and boreholes → their ops, each through
+        the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
+        list re-applied to prove it gives back the edited model. Edits no op
+        can express are named and block recording: they wait on the later
+        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        The shared editors weren't changed, so no pinning e2e was needed;
+        e2e covers override mode in `scenarios.spec.ts`.
+  - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
+        `047_scenario_op_names`, `backend/src/scenarios/names.ts`): the
+        server keeps `op_names`, `{ id, name }` for every node and crop the
+        ops name, from the base run's snapshot on create, on a PATCH of the
+        ops and on a rebase, keeping a name a later base no longer has while
+        an op still names it (047 backfilled existing scenarios from their
+        base). The editor names from `Scenario.opNames`, and the in-memory
+        `seenNames` is gone. Tests: `names.test.ts`, the rebase case in
+        `scenarios.db.test.ts`, and the rebase e2e reloads.
   - [x] **One home for the model's save rules** (2026-09-25): the rules are
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz

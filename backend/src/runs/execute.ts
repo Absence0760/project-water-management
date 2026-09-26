@@ -242,6 +242,13 @@ export interface RunScenarioSnapshot {
 	classified: OpClass[];
 }
 
+/** A forecast run asked for with no forecast rain after the last observed day (409; a scheduled forecast run skips instead). */
+export class NoForecastRainError extends ApiError {
+	constructor() {
+		super(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
+	}
+}
+
 /**
  * Run the live model and persist it. Returns the new run id.
  *
@@ -263,9 +270,7 @@ export async function executeRun(
 	// leaves the forecast tail out entirely (withoutForecastTail), so forecast
 	// rain never reaches the figures farmers and regulators rely on; it stores
 	// the input it ran on, so runModel(loadRunInput(run)) still reproduces it.
-	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) {
-		throw new ApiError(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
-	}
+	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
 	return runAndStore(db, projectId, typeof label === 'function' ? label(input) : label, input, undefined, trigger);
 }
