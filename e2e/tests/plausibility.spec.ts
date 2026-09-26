@@ -2,16 +2,9 @@
 // on a synthetic catchment shows the four checks in their own Runs & results
 // panel, with the latest run of the other runoff model overlaid on the
 // dry-season low-flow curves. Names and numbers are invented.
-import { AxeBuilder } from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-async function expectNoViolations(page: Page) {
-	await page.evaluate(() => window.scrollTo(0, 0));
-	const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
-	expect(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }))).toEqual([]);
-}
 
 test('a run shows the plausibility checks, with the other runoff model overlaid on the low-flow curves', async ({ page, owner }) => {
 	void owner;

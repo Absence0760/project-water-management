@@ -3,17 +3,10 @@
 // model, read monthly compliance in the headline and the Reserve compliance
 // panel, and compare two runs. The table and catchment are synthetic: round,
 // invented numbers.
-import { AxeBuilder } from '@axe-core/playwright';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import { copyProject, createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-/** WCAG 2.2 A/AA scan from the top of the page (as wr2012.spec.ts does). */
-async function expectNoViolations(page: Page) {
-	await page.evaluate(() => window.scrollTo(0, 0));
-	const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
-	expect(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }))).toEqual([]);
-}
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];

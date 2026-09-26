@@ -2,22 +2,9 @@
 // naturalised flow in Settings (with its plausibility checks), run the model,
 // read the report on Runs & results, and see it in run comparison.
 // The reference is synthetic: an invented quaternary and round numbers.
-import { AxeBuilder } from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-/**
- * WCAG 2.2 A/AA scan of the whole page from the top, as a11y.spec.ts does:
- * axe's target-size rule counts a control scrolled under the sticky app
- * header as obscured, which depends on the scroll position rather than the
- * control (focused controls clear the header through scroll-padding-top).
- */
-async function expectNoViolations(page: Page) {
-	await page.evaluate(() => window.scrollTo(0, 0));
-	const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
-	expect(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }))).toEqual([]);
-}
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 

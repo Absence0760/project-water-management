@@ -1,8 +1,8 @@
 // Teams: create one, add a colleague, create a catchment in the team, and see
 // it grouped on both people's project lists; the last admin can't leave.
-import { AxeBuilder } from '@axe-core/playwright';
 import { uniqueEmail } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('a team owns catchments together', async ({ page, owner, signIn }) => {
@@ -59,8 +59,7 @@ test('team pages have no WCAG 2.1 AA violations', async ({ page, owner }) => {
 		await page.goto(path);
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(page.getByText('Loading…')).toHaveCount(0);
-		const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-		expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+		await expectNoViolations(page, { tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] });
 	}
 });
 

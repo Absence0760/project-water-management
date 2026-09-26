@@ -1,5 +1,6 @@
-// The axe-core WCAG 2.2 A/AA scan the a11y specs share (a11y.spec.ts, and
-// the pages with specs of their own, such as the printable report). axe finds
+// The axe-core WCAG 2.2 A/AA scan every spec shares (a11y.spec.ts, and the
+// feature specs that scan their own screens). Always go through it rather
+// than a bare AxeBuilder, so every scan gets the fast mode below. axe finds
 // a subset of problems, but anything it does flag must stay fixed: fix it at
 // the source, never by disabling a rule.
 import { AxeBuilder } from '@axe-core/playwright';
@@ -23,20 +24,29 @@ export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a',
  * cross-origin frame testing, and the app has no frames, so this refuses a
  * page that has one rather than scan it partially.
  */
-export async function expectNoViolations(page: Page) {
-	expect(await violations(page)).toEqual([]);
+export interface ScanScope {
+	/** axe tags to run (default WCAG_TAGS). */
+	tags?: string[];
+	/** Named axe rules to run instead of tags. */
+	rules?: string[];
+	/** Scan only this part of the page (a CSS selector). */
+	include?: string;
+}
+
+export async function expectNoViolations(page: Page, scope: ScanScope = {}) {
+	expect(await violations(page, scope)).toEqual([]);
 }
 
 /** The scan behind expectNoViolations: each violation, with up to five of its nodes. */
-export async function violations(page: Page) {
+export async function violations(page: Page, { tags = WCAG_TAGS, rules, include }: ScanScope = {}) {
 	expect(page.frames(), 'the page has a frame: scan it with the default (runPartial) mode instead').toHaveLength(1);
 	await page.evaluate(() => window.scrollTo(0, 0));
-	// options() replaces the whole option object, so it goes before withTags().
-	const results = await new AxeBuilder({ page })
-		.options({ resultTypes: ['violations'] })
-		.withTags(WCAG_TAGS)
-		.setLegacyMode()
-		.analyze();
+	// options() replaces the whole option object, so it goes before withTags()/withRules().
+	const builder = new AxeBuilder({ page }).options({ resultTypes: ['violations'] }).setLegacyMode();
+	if (rules) builder.withRules(rules);
+	else builder.withTags(tags);
+	if (include) builder.include(include);
+	const results = await builder.analyze();
 	return results.violations.map((v) => ({
 		id: v.id,
 		impact: v.impact,

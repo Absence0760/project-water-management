@@ -4,10 +4,10 @@
 // day; the forecast series appears on the Data tab. A feed pointed at the
 // fixture grid's sea cell shows as failing, with the warning above the list,
 // and the panel passes axe (WCAG 2.2 AA) in that state with its form open.
-import { AxeBuilder } from '@axe-core/playwright';
 import type { APIRequestContext } from '@playwright/test';
 import { addMember, createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 
@@ -105,11 +105,7 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Source').selectOption({ label: 'DWS gauge flow' });
 	await expect(panel.getByLabel('DWS station')).toBeVisible();
-	const { violations } = await new AxeBuilder({ page })
-		.include('#set-feeds')
-		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
-		.analyze();
-	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+	await expectNoViolations(page, { include: '#set-feeds' });
 	await panel.getByRole('button', { name: 'Cancel' }).click();
 
 	// Switching it off clears the warning.
@@ -144,11 +140,7 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
 	await expect(separate).toBeFocused();
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
-	const { violations } = await new AxeBuilder({ page })
-		.include('#set-feeds')
-		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
-		.analyze();
-	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+	await expectNoViolations(page, { include: '#set-feeds' });
 
 	// Escape backs out to the name field.
 	await page.keyboard.press('Escape');
@@ -196,11 +188,7 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — CHIRPS” already has data (3 days).' });
 	await expect(ask).toHaveAccessibleDescription(/It holds CHIRPS v2\.0, and this feed writes CHIRPS sat v3\.0\..*never splices one onto the other.*such as “CHIRPS”/);
 	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS' })).toBeFocused();
-	const { violations } = await new AxeBuilder({ page })
-		.include('#set-feeds')
-		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
-		.analyze();
-	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+	await expectNoViolations(page, { include: '#set-feeds' });
 
 	// Replacing: the feed is attached with the replacement confirmed, waiting for its first fetch.
 	await ask.getByRole('button', { name: 'Replace the series with CHIRPS sat v3.0' }).click();
