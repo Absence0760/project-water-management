@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { withoutUser } from '../db/tx.js';
+import { withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
 import { markVerified, verificationMail } from './email-routes.js';
@@ -12,17 +12,20 @@ import { readJson } from '../http/body.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
+const displayName = z.string().trim().min(1).max(100);
 
 const RegisterBody = z.object({
 	email,
 	password,
-	displayName: z.string().trim().min(1).max(100),
+	displayName,
 	/** Token from an invite link (`/register?invite=…`). Signing up with it,
 	 *  for the invited address, proves the inbox: the account starts verified
 	 *  and joins the invited projects/teams straight away. */
 	inviteToken: z.string().max(200).optional()
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
+const MeBody = z.object({ displayName });
+const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 
 /**
  * Sign-in lockout per address: the 5th attempt in a row without a correct
@@ -31,6 +34,15 @@ const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
  * it; a day without attempts forgets it.
  */
 export const LOGIN_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: '15 minutes' } as const;
+
+/** Counts one attempt against the address's lockout; the seconds left on a lock, or 0 to go ahead. */
+async function countAttempt(db: Db, address: string): Promise<number> {
+	const { rows } = await db.query<{ locked: number }>(
+		'SELECT app_login_attempt($1, $2, $3::interval, $4::interval) AS locked',
+		[address, LOGIN_THROTTLE.freeAttempts, LOGIN_THROTTLE.baseLock, LOGIN_THROTTLE.maxLock]
+	);
+	return rows[0]?.locked ?? 0;
+}
 
 export function lockedMessage(seconds: number): string {
 	const wait = seconds <= 60 ? 'a minute' : `${Math.ceil(seconds / 60)} minutes`;
@@ -83,11 +95,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		// the row lock and can't all get past it. Keyed by the typed address,
 		// so an unknown address is locked exactly like a real one.
 		const { lockedSeconds, row } = await withoutUser(async (db) => {
-			const { rows: t } = await db.query<{ locked: number }>(
-				'SELECT app_login_attempt($1, $2, $3::interval, $4::interval) AS locked',
-				[body.email, LOGIN_THROTTLE.freeAttempts, LOGIN_THROTTLE.baseLock, LOGIN_THROTTLE.maxLock]
-			);
-			const lockedSeconds = t[0]?.locked ?? 0;
+			const lockedSeconds = await countAttempt(db, body.email);
 			if (lockedSeconds > 0) return { lockedSeconds, row: undefined };
 			const { rows } = await db.query<UserRow & { password_hash: string }>(
 				`SELECT ${USER_COLS}, password_hash FROM app_user WHERE email = $1`,
@@ -128,4 +136,64 @@ export const authRoutes = new Hono<AuthEnv>()
 		});
 		if (!row) throw new ApiError(401, 'not signed in');
 		return c.json({ user: toUser(row) });
+	})
+	.patch('/me', requireUser, async (c) => {
+		const body = MeBody.parse(await readJson(c));
+		const row = await withoutUser(async (db) => {
+			const { rows } = await db.query<UserRow>(
+				`UPDATE app_user SET display_name = $2 WHERE id = $1 RETURNING ${USER_COLS}`,
+				[c.get('userId'), body.displayName]
+			);
+			return rows[0];
+		});
+		if (!row) throw new ApiError(401, 'not signed in');
+		return c.json({ user: toUser(row) });
+	})
+	// Change the password while signed in. The current password is checked
+	// through the sign-in lockout (a stolen session can't guess it any faster
+	// than the login form can), then every session is revoked, and this device
+	// gets a fresh cookie so it stays signed in.
+	.post('/change-password', requireUser, async (c) => {
+		const body = ChangePasswordBody.parse(await readJson(c));
+		const userId = c.get('userId');
+		// Counted in its own transaction before the bcrypt check, as in login.
+		const { lockedSeconds, row } = await withoutUser(async (db) => {
+			const { rows } = await db.query<{ email: string; password_hash: string }>(
+				'SELECT email, password_hash FROM app_user WHERE id = $1',
+				[userId]
+			);
+			const row = rows[0];
+			if (!row) return { lockedSeconds: 0, row: undefined };
+			return { lockedSeconds: await countAttempt(db, row.email), row };
+		});
+		if (!row) throw new ApiError(401, 'not signed in');
+		if (lockedSeconds > 0) {
+			c.header('Retry-After', String(lockedSeconds));
+			throw new ApiError(429, lockedMessage(lockedSeconds));
+		}
+		if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
+			throw new ApiError(403, 'your current password is wrong');
+		}
+		const newHash = await hashPassword(body.newPassword);
+		// As the user (withUser), so email_token's RLS lets the reset links be deleted.
+		const user = await withUser(userId, async (db) => {
+			// Only if the hash is still the one just checked: a concurrent change
+			// or reset in between wins, and this one is refused below.
+			const { rows } = await db.query<UserRow>(
+				`UPDATE app_user SET password_hash = $3, sessions_revoked_at = $4
+				 WHERE id = $1 AND password_hash = $2 RETURNING ${USER_COLS}`,
+				// Watermark from this server's clock, the one that stamps session iat_ms.
+				[userId, row.password_hash, newHash, new Date()]
+			);
+			const updated = rows[0];
+			if (!updated) return undefined;
+			// Outstanding reset links die with the old password, and the lockout count clears.
+			await db.query("DELETE FROM email_token WHERE user_id = $1 AND purpose = 'reset'", [userId]);
+			await db.query('SELECT app_login_succeeded($1)', [updated.email]);
+			return updated;
+		});
+		if (!user) throw new ApiError(409, 'your password was changed somewhere else a moment ago — sign in again');
+		// Issued after the watermark, so this device stays signed in.
+		await issueSession(c, userId);
+		return c.json({ user: toUser(user) });
 	});

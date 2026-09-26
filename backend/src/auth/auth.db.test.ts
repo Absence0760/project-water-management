@@ -144,3 +144,98 @@ describe('sign-in lockout', () => {
 		expect(await asOwner('SELECT failures FROM login_throttle WHERE email = $1', [u.email])).toEqual([{ failures: 1 }]);
 	});
 });
+
+describe('account: display name and password change (WP-1.9)', () => {
+	const login = (email: string, password: string) => anon('POST', '/auth/login', { email, password });
+	const cookieOf = (res: { headers: Headers }) => res.headers.get('set-cookie')?.split(';')[0] ?? '';
+	const change = (cookie: string, currentPassword: string, newPassword: string) =>
+		anon('POST', '/auth/change-password', { currentPassword, newPassword }, cookie);
+
+	it('PATCH /auth/me renames the account (trimmed), validates the name, and never changes the email', async () => {
+		const u = await signUp('Renamed');
+		const res = await u.call('PATCH', '/auth/me', { displayName: '  Dr Renamed  ' });
+		expect(res.status).toBe(200);
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true });
+		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
+		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
+		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
+		// Unknown keys are ignored: the address isn't editable here.
+		expect((await u.call('PATCH', '/auth/me', { displayName: 'Still me', email: 'hijack@example.com' })).status).toBe(200);
+		expect((await u.call('GET', '/auth/me')).body.user).toMatchObject({ email: u.email, displayName: 'Still me' });
+	});
+
+	it('changing the password keeps this device signed in and gives every other session 401', async () => {
+		const u = await signUp('Changer');
+		const bystander = await signUp('Bystander');
+		// A second device.
+		const second = cookieOf(await login(u.email, 'correct horse'));
+		expect((await anon('GET', '/auth/me', undefined, second)).status).toBe(200);
+
+		const res = await change(u.cookie, 'correct horse', 'battery staple');
+		expect(res.status).toBe(200);
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true });
+		const fresh = cookieOf(res);
+		expect(fresh).toMatch(/^wm_session=.+/);
+
+		// Positive control: this device, with its re-issued cookie, stays signed in.
+		expect((await anon('GET', '/auth/me', undefined, fresh)).status).toBe(200);
+		expect((await anon('GET', '/projects', undefined, fresh)).status).toBe(200);
+		// The other device's next request gets 401, and so does this device's old cookie.
+		expect((await anon('GET', '/auth/me', undefined, second)).status).toBe(401);
+		expect((await u.call('GET', '/auth/me')).status).toBe(401);
+		// Other accounts are untouched.
+		expect((await bystander.call('GET', '/auth/me')).status).toBe(200);
+		// The new password signs in; the old one doesn't.
+		expect((await login(u.email, 'correct horse')).status).toBe(401);
+		expect((await login(u.email, 'battery staple')).status).toBe(200);
+	});
+
+	it('a wrong current password changes nothing and counts towards the sign-in lockout', async () => {
+		const u = await signUp('Guesser');
+		for (let i = 0; i < 4; i++) {
+			const res = await change(u.cookie, 'wrong guess', 'battery staple');
+			expect(res.status).toBe(403);
+			expect(res.body).toEqual({ error: 'your current password is wrong' });
+		}
+		// A wrong guess doesn't end the session.
+		expect((await u.call('GET', '/auth/me')).status).toBe(200);
+		// The 5th attempt, through the login form, is counted in the same lockout...
+		expect((await login(u.email, 'wrong guess')).status).toBe(401);
+		// ...so the address is now locked for both, and the password isn't checked.
+		expect((await login(u.email, 'correct horse')).status).toBe(429);
+		const locked = await change(u.cookie, 'correct horse', 'battery staple');
+		expect(locked.status).toBe(429);
+		expect(Number(locked.headers.get('retry-after'))).toBeGreaterThan(0);
+		expect(locked.body.error).toMatch(/too many sign-in attempts/);
+		expect((await login(u.email, 'battery staple')).status).toBe(429);
+
+		// Positive control: once the lock passes, the right password changes it and clears the count.
+		await asOwner(`UPDATE login_throttle SET locked_until = now() - interval '1 second' WHERE email = $1`, [u.email]);
+		expect((await change(u.cookie, 'correct horse', 'battery staple')).status).toBe(200);
+		expect(await asOwner('SELECT 1 FROM login_throttle WHERE email = $1', [u.email])).toHaveLength(0);
+	});
+
+	it('refuses a new password that is too short, without counting an attempt or changing anything', async () => {
+		const u = await signUp('Short');
+		const res = await change(u.cookie, 'correct horse', 'short');
+		expect(res.status).toBe(400);
+		expect(JSON.stringify(res.body)).not.toMatch(/correct horse/);
+		expect(await asOwner('SELECT 1 FROM login_throttle WHERE email = $1', [u.email])).toHaveLength(0);
+		expect((await u.call('GET', '/auth/me')).status).toBe(200);
+		expect((await login(u.email, 'correct horse')).status).toBe(200);
+	});
+
+	it('kills an outstanding password-reset link', async () => {
+		const u = await signUp('Resetter');
+		await anon('POST', '/auth/forgot-password', { email: u.email });
+		const token = tokenIn(lastMailTo(u.email));
+		expect((await change(u.cookie, 'correct horse', 'battery staple')).status).toBe(200);
+		expect((await anon('POST', '/auth/reset-password', { token, password: 'someone else' })).status).toBe(400);
+		expect((await login(u.email, 'battery staple')).status).toBe(200);
+	});
+
+	it('both routes need a session', async () => {
+		expect((await anon('PATCH', '/auth/me', { displayName: 'X' })).status).toBe(401);
+		expect((await anon('POST', '/auth/change-password', { currentPassword: 'a', newPassword: 'longenough' })).status).toBe(401);
+	});
+});
