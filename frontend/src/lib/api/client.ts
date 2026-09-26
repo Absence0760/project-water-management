@@ -81,7 +81,10 @@ import type {
 	Team,
 	TeamMember,
 	TeamRole,
-	User
+	User,
+	JobMeta,
+	YieldRequest,
+	YieldResult
 } from './types';
 
 /** GET /projects/:id/import-report's 404 message when the project has no report (projects/routes.ts). */
@@ -551,6 +554,26 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)
+		},
+		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
+		jobs: {
+			list: (id: string, q: { status?: JobMeta['status']; limit?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<{ jobs: JobMeta[] }>('GET', `${p(id)}/jobs${qs.size ? `?${qs}` : ''}`).then((r) => r.jobs);
+			}
+		},
+		/**
+		 * Firm yield and storage–yield curves (docs/api.md § Yield, WP-3.6): queue
+		 * a job (editor), follow it on jobs.list, read the stored results.
+		 */
+		yield: {
+			start: (id: string, body: YieldRequest) => request<{ jobId: string; job: JobMeta; created: boolean }>('POST', `${p(id)}/yield`, body),
+			list: (id: string, q: { runId?: string; scenarioId?: string; nodeId?: string; jobId?: string }) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
+				return request<{ results: YieldResult[] }>('GET', `${p(id)}/yield?${qs}`).then((r) => r.results);
+			},
+			/** Stop a yield job: a waiting one at once, a running one at its next progress report. */
+			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/yield/${enc(jobId)}/cancel`)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

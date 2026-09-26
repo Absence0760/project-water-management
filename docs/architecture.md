@@ -279,8 +279,9 @@ goes through one job queue (roadmap WP-2.8; `backend/src/jobs/`,
 `016_jobs.sql`). Its consumers are `rerun` (a model run off the request
 path, `POST /projects/:id/jobs`), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
-`report_render` ([§ Server-side reports](#server-side-reports)); step 2's
-auto re-runs and alerts plug in as further kinds.
+`report_render` ([§ Server-side reports](#server-side-reports)) and the
+dam yield's `yield` (below); step 2's auto re-runs and alerts plug in as
+further kinds.
 
 - **The `job` table is the source of truth in every environment**: status,
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
@@ -329,6 +330,24 @@ auto re-runs and alerts plug in as further kinds.
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
   lease token fences the old worker: if it wakes up and tries to finish, it
   gets nothing and rolls its work back.
+- **Progress and cancel** (040_yield): a handler may call
+  `progress(pct)`, which writes `job.progress` through `app_job_progress` on
+  its own connection, outside the job's transaction (whose writes nobody sees
+  until it commits), so `GET /jobs` shows it at once. Only the lease holder
+  of a running job can write it. It answers false once someone cancelled the
+  job (`app_cancel_job`, which kills a waiting job outright and flags a
+  running one) or the lease was lost, and the handler then stops: dead,
+  `cancelled`, its work rolled back.
+- **`yield`** (WP-3.6, `jobs/handlers/yield.ts`, [api.md § Yield](./api.md#yield)):
+  the engine's firm-yield search (`network/yield.ts`, model.md §2.13) on a
+  saved run's stored inputs or a scenario applied to its base run, as the
+  editor who queued it. Natural flow and the network plan are built once;
+  a curve is one search per capacity, with `progress` between them (a
+  cancel lands there). It writes one `yield_result` row and keeps the newest
+  5 per run or scenario and dam. The engine is synchronous, so the job holds
+  its transaction for the whole search (seconds for a firm yield, under a
+  minute for a curve, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
+  well inside the 360 s lease. At most 2 pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one
   with its key is running. That departs from the roadmap's index over

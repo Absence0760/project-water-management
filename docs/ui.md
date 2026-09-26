@@ -549,6 +549,40 @@ does. The intro states the thresholds the API returns.
   order is `node.sortOrder`, which is display only: runs always use the
   topological order. Every list of nodes uses it (`lib/model/order.ts`).
 
+### Yield (WP-3.6)
+
+`lib/components/yield/YieldPanel.svelte`, its own chunk (with its chart),
+loaded only when a farm is focused. It sits under the farm's form in the
+**One node** layout, and under a scenario (**Yield under this scenario**,
+with a dam picker over the scenario's own farms). The numbers come from a
+background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)).
+
+- A note says every number is **historical**: it replays the one record, and
+  a stochastic yield can be materially lower (not computed here).
+- On the Network tab a **Run** select picks the saved run of the model it
+  works on (the newest by default; scenario runs aren't offered). With no
+  run, it says to run the model first.
+- Editors pick a **Draft pattern** (constant, or this farm's irrigation
+  demand by month) and an **Assurance** (firm, 98, 95, 90 or 80 %), then
+  **Work out the yield** or **Storage–yield curve** (disabled, with a title
+  saying why, for a farm with no dam). Viewers see the results with no
+  controls.
+- The status line (a polite live region) follows the job on
+  `GET /jobs` every 1.5 s: Queued, Running with its % (and a progress bar),
+  then the results; Failed with the server's reason (never database text);
+  Cancelled. **Cancel** stops a waiting job at once and a running curve at
+  its next point.
+- **Results**: the newest firm yield as a definition list (the yield in
+  m³/day and a year, the dam's capacity, the pattern, failure days and
+  years at that draft, who worked it out and the engine version); the
+  newest curve as a uPlot line (yield against capacity in thousand m³) and a
+  table (capacity, yield per day and year, failed water years; the dam's own
+  capacity marked "this dam"). A curve whose yield falls somewhere as the dam
+  grows carries a warning saying why that can be real.
+- Not yet: the instant in-browser preview through the preview worker, and
+  finding a job started in another tab (the panel follows only the jobs it
+  started) ([followups.md](./followups.md)).
+
 ## Crops & demand
 
 Crop factors run October to September and are reorderable. Planted areas

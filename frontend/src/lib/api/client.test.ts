@@ -523,3 +523,34 @@ describe('scenarios client', () => {
 		expect(scenarioProblems(new Error('x'))).toEqual([]);
 	});
 });
+
+describe('jobs and yield client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('lists jobs with an optional filter', async () => {
+		const f = mockFetch(200, { jobs: [{ id: 'j' }] });
+		expect(await createApi('', f).jobs.list('p/1')).toEqual([{ id: 'j' }]);
+		expect(call(f).url).toBe('/projects/p%2F1/jobs');
+		const g = mockFetch(200, { jobs: [] });
+		await createApi('', g).jobs.list('p', { status: 'running', limit: 10 });
+		expect(call(g).url).toBe('/projects/p/jobs?status=running&limit=10');
+	});
+
+	it('queues a yield, lists results and cancels a job', async () => {
+		const start = mockFetch(202, { jobId: 'j', job: { id: 'j' }, created: true });
+		const body = { nodeId: 'n', runId: 'r', kind: 'curve' as const, params: { assurance: 0.95 } };
+		expect((await createApi('', start).yield.start('p', body)).jobId).toBe('j');
+		expect(call(start)).toEqual({ url: '/projects/p/yield', method: 'POST', body });
+
+		const list = mockFetch(200, { results: [{ id: 'y' }] });
+		expect(await createApi('', list).yield.list('p', { scenarioId: 's', nodeId: 'n' })).toEqual([{ id: 'y' }]);
+		expect(call(list).url).toBe('/projects/p/yield?scenarioId=s&nodeId=n');
+
+		const cancel = mockFetch(200, { status: 'dead', cancelled: true });
+		expect(await createApi('', cancel).yield.cancel('p', 'j/1')).toEqual({ status: 'dead', cancelled: true });
+		expect(call(cancel)).toEqual({ url: '/projects/p/yield/j%2F1/cancel', method: 'POST', body: undefined });
+	});
+});

@@ -3276,6 +3276,97 @@ so cumulative supply within a water year ≤ the allocation) and
 `fullAllocation` (demand replaced by the allocation), which will change
 `runModel` and bump `ENGINE_VERSION` (followups.md § Allocations).
 
+### 2.13 Firm yield and storage–yield (engine ≥ 0.34.0, roadmap WP-3.6)
+
+The headline number of a storage application: how much a dam can supply.
+`packages/engine/src/network/yield.ts`, pure. It adds outputs only; a run of
+the model is unchanged (the version moved to 0.34.0 for the new API).
+
+**Definitions.** Every result is **historical**: it replays the one record
+the project has. Stochastic yield, from many synthetic records, can be
+materially less reliable than the historical firm yield (Water SA 2022) and
+is Step 4; the UI says so next to every number.
+
+- **Historical firm yield** of dam *d*: the largest draft *x* (m³/day) that
+  *d* supplies on every day of the record without a single failure day, the
+  rest of the network running as modelled. A *failure day* is a day whose
+  supply falls short of the draft by more than 10⁻⁹ of it (float noise).
+- **Pattern.** The draft on day *t* is *x* × *p(t)*, with *p* a monthly shape
+  normalised so its mean over the record is 1: *x* is then the mean daily
+  draft whatever the shape. Three shapes: `constant` (1 every day),
+  `demand` (the node's own abstraction demand D = F / e, its mean per
+  water-year month) and 12 custom factors (Oct–Sep).
+- **Yield at assurance *p*** (0.5–1): the largest draft whose annual failure
+  rate, water years (October start) with at least one failure day ÷ water
+  years in the record, is at most 1 − *p*. *p* = 1 is the firm yield. A
+  part year at either end of the record counts as a year.
+- **Storage–yield curve**: the yield at 11 capacities evenly from 0 to 2 ×
+  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point).
+
+**How a probe runs.** `prepareYield(input)` does everything a run does
+before the network once: settings, the aligned inputs, natural flow from the
+project's runoff model, and the network plan (`buildNetworkPlan`, as
+calibration reuses it). A probe replaces the dam node's crop requirement
+with *F*(*t*) = *x* × *p*(*t*) × *e*, so its abstraction demand D = F / e is
+the draft, and runs `simulateNetwork` on it. Other nodes keep their own
+demand. The dam's **boreholes are removed** for the search: the yield is
+the dam's, not the dam's plus groundwater. When no transfer touches the dam
+or anything upstream of it, a probe simulates only the dam and the nodes
+upstream of it: nothing below the dam changes what reaches it, and nothing
+above it depends on its draft (senior users' claims are fixed per node
+before the simulation, §2.7c). Otherwise the whole network runs.
+
+**The search** (`firmYield`): a bisection on *x*.
+
+1. A run with no draft gives the **mean-supply bound**
+   *B* = (Σ upstream inflow + own runoff + transfers in + rain on the full
+   dam's surface + initial storage) ÷ days. No draft above *B* can pass
+   without failures, since it would draw more than reaches the dam.
+2. The bracket starts at [0, *B*(1 + tol)]; for *p* < 1, where failures are
+   allowed and a draft above *B* can pass, the top doubles until it fails.
+3. Halve until the bracket is within the relative tolerance (default 0.001)
+   or 10⁻⁶ m³/day, at most 60 runs in all. The reported yield passes; the
+   reported `failsAtM3Day` fails and is at most yield × (1 + tol).
+
+About 12–18 runs a yield. On a synthetic 30-year, 16-node catchment one
+yield takes under a second and an 11-point curve about 7 s
+(`yield.perf.test.ts` budgets 5 s and 30 s), inside the 60 s the WP asks
+of a job.
+
+**A resized dam** (the curve, and any `capacityM3`) keeps its initial and
+dead storage as the same fractions of capacity, and its mean depth: surface
+area when full scales with capacity, so evaporation and rain on it scale
+too. A transfer rule drawing from it keeps its reserve as the same fraction.
+Pending the hydrologist: a real enlargement changes the area–storage curve
+in ways a constant depth doesn't capture; the WP-3.5 dam routine is the
+place for a per-dam area–capacity table.
+
+**Monotonicity.** Yield is non-decreasing in capacity for a lossless dam
+that starts at or above its minimum operating level and is not a transfer
+source or destination (`checkYield`, below). Outside those conditions a
+bigger dam can yield less, and that is the model, not a search bug: a large
+shallow dam evaporates more than the extra storage gains, and a dam that
+starts below its minimum operating level supplies nothing until it fills to
+it, which takes a bigger dam longer. The curve reports `monotone: false`
+rather than smoothing it away.
+
+**Invariants** (`testing/yieldInvariants.ts` `checkYield`, run on random
+networks by `yield.invariants.test.ts`, on the dam made lossless and cut
+off from transfers):
+
+- yield is non-decreasing in capacity;
+- at capacity 0 the yield is the smallest daily supply reaching the dam
+  site, min over *t* of K + M + O (§2.7), within the tolerance;
+- yield ≤ the mean-supply bound *B*;
+- the reported yield has no failure day, and the first failing draft found
+  is within yield × (1 + tol).
+
+The unit tests (`yield.test.ts`) add the analytic case: one dam, full at
+the start, no losses, a constant inflow *q*, capacity *C*, *n* days: yield
+= *q* + *C* / *n*, matched to within the tolerance at every point of its
+curve; and a pattern case: with no storage, yield × the peak factor = the
+inflow.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs

@@ -20,7 +20,8 @@ import type {
 	RunSeriesSnapshot,
 	SignoffStatement,
 	RunSummary,
-	ScenarioOp
+	ScenarioOp,
+	YieldPoint
 } from '@water-management/engine';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 
@@ -1051,4 +1052,57 @@ export interface AllocationPreview {
 	/** The farms and water users a row can be matched to. */
 	nodes: { id: string; name: string }[];
 	summary: { rows: number; valid: number; invalid: number; matched: number; unmatched: number };
+}
+
+/** A background job as the status list shows it (GET /projects/:id/jobs, docs/api.md § Jobs). Never its payload. */
+export interface JobMeta {
+	id: string;
+	kind: string;
+	status: 'queued' | 'running' | 'done' | 'failed' | 'dead';
+	attempts: number;
+	maxAttempts: number;
+	runAfter: string;
+	createdAt: string;
+	startedAt: string | null;
+	finishedAt: string | null;
+	/** Why it failed, in our words (never database text). */
+	error: string | null;
+	createdBy: string;
+	/** 0–100 while a job that reports progress runs (yield); null otherwise. Absent from an older API. */
+	progress?: number | null;
+}
+
+/** A yield request's parameters (backend yield/store.ts YieldParams). */
+export interface YieldParams {
+	/** 'constant', 'demand' (the farm's own demand shape) or 12 factors, Oct–Sep. */
+	pattern: 'constant' | 'demand' | number[];
+	/** 0.5–1; 1 = the firm yield. */
+	assurance: number;
+	tolerance: number;
+	/** Curve points, 8–12. */
+	points: number;
+}
+
+/** POST /projects/:id/yield: exactly one of runId and scenarioId. */
+export interface YieldRequest {
+	nodeId: string;
+	runId?: string;
+	scenarioId?: string;
+	kind: 'firm' | 'curve';
+	params?: Partial<YieldParams>;
+}
+
+/** A stored firm yield or storage–yield curve (GET /projects/:id/yield, 040_yield). */
+export interface YieldResult {
+	id: string;
+	runId: string | null;
+	scenarioId: string | null;
+	nodeId: string;
+	jobId: string | null;
+	kind: 'firm' | 'curve';
+	params: YieldParams;
+	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean };
+	engineVersion: string;
+	createdBy: string | null;
+	createdAt: string;
 }
