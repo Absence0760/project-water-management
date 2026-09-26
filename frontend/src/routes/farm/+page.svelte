@@ -13,7 +13,7 @@
 	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
 	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
 	import { farmSummaryLine, FARMS_PRIVACY, LEVEL_WORD } from '$lib/components/farm/cards';
-	import { farmHref } from '$lib/components/farm/load';
+	import { classify, farmHref } from '$lib/components/farm/load';
 	import { readSaved } from '$lib/components/farm/savedCopy';
 
 	interface Row {
@@ -40,9 +40,12 @@
 			const mine = projects.filter((p) => p.role === 'farmer');
 			hasOther = projects.length > mine.length;
 			const indexes = await Promise.allSettled(mine.map((p) => api.farm.index(p.id)));
+			// A project the farmer just lost (403/404) is left out; any other failure
+			// with nothing to show is the error state, not "no farm linked".
+			const failure = indexes.find((r) => r.status === 'rejected' && classify(r.reason) !== 'removed');
 			const list: Row[] = [];
 			indexes.forEach((r, i) => {
-				if (r.status !== 'fulfilled') return; // a project the farmer just lost: leave it out
+				if (r.status !== 'fulfilled') return;
 				const ix = r.value;
 				for (const f of ix.farms) {
 					list.push({
@@ -56,6 +59,7 @@
 					});
 				}
 			});
+			if (!list.length && failure) throw (failure as PromiseRejectedResult).reason;
 			if (list.length === 1) {
 				await goto(farmHref(base, list[0]!.projectId, list[0]!.nodeId, false), { replaceState: true });
 				return;
@@ -74,8 +78,7 @@
 				})
 			);
 		} catch (e) {
-			const status = e && typeof e === 'object' && 'status' in e ? (e as { status: number }).status : -1;
-			failed = { offline: status === 0, attempts: ++failures };
+			failed = { offline: classify(e) === 'offline', attempts: ++failures };
 		}
 	}
 	onMount(load);
