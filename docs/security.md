@@ -399,7 +399,8 @@ In short:
   note or a run, settings, project or other farm's note. Only the author
   edits a body (`note_guard`); a delete is soft, the body kept for editors'
   audit trail and hidden from everyone else. Bodies are plain text, rendered
-  with Svelte's escaping (no `{@html}`, no markdown). Tests:
+  with Svelte's escaping (no `{@html}`, no markdown; the `rawHtml.test.ts`
+  guard, [§ Input handling](#input-handling)). Tests:
   `notes/notes.db.test.ts`, with positive controls; `farms.db.test.ts` lists
   the note routes among the farmer-allowed ones.
 - **Same-project triggers** reject references to another project's nodes or
@@ -696,8 +697,15 @@ In short:
     never the answer). A compromised fetcher could at worst send wrong
     numbers for the days feeds asked it for, into the series those feeds
     already target.
-- Svelte escapes output by default. Don't use `{@html}` with user-supplied names
-  (farms, crops, projects).
+- Svelte escapes output by default, and nothing in the frontend renders a
+  string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
+  `insertAdjacentHTML` / `document.write` / `createContextualFragment`.
+  `frontend/src/lib/rawHtml.test.ts` fails on any of them anywhere under
+  `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
+  person types are text). Help text has its own parser (`lib/help`), not
+  HTML. A real need for markup would need a sanitiser and a reasoned entry in
+  that guard. Mail templates escape every interpolated value
+  (`mail/templates.ts` `escapeHtml`, `templates.test.ts`).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
