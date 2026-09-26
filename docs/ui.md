@@ -141,7 +141,7 @@ shorter than the cap looks as before.
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
 the published baseline, a "Needs attention" list, eight headline facts, project details, the import
-record (an imported project only), team and members.
+record (an imported project only), recent notes ([§ Notes](#notes)), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
   `overview/latestRun.ts`), shown once the project has a run. It is the
@@ -1665,6 +1665,41 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
 - A small "history" affordance on individual fields is not built
   (followups.md).
 
+## Notes
+
+WP-2.7 (`lib/components/notes/`; [api.md § Notes](./api.md#notes)). Knowledge
+that lives in people's heads ("dam raised in 2019 per owner", "logger moved in
+March") is kept against what it is about.
+
+- **Where.** A notes button with a count badge opens a dialog of the notes on
+  one target (`NotesDrawer.svelte` around `NotesList.svelte`):
+  - on each **Network** node row, beside its name (icon and number; only on a
+    node the server has, not one added since the last save:
+    `ModelEditor.savedNodeIds`);
+  - in a run's **Record** group, under the run's own written explanation
+    (the run notes stay the modeller's one explanation; these are comments
+    from anyone on the team);
+  - in the head of each **Settings** group (Demand, Flow calibration, Rain
+    gaps, Calibration record, Flow share, EWR, Simulation period, Data
+    quality), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
+  - on the **Overview**: *Recent notes*, the newest 8 across the project,
+    each naming and linking to its target, and the project-level notes
+    button.
+  One `GET /notes/counts` per project feeds every badge
+  (`counts.svelte.ts`), refreshed after any change.
+- **Writing.** Every member can add a note; the author edits theirs (marked
+  *edited*); the author or an editor deletes (a confirm, then a soft delete:
+  hidden from everyone, kept for the audit trail). On a farm, *Also show to
+  this farm's farmers* makes a note farm-visible, marked *Shown to the farm*;
+  everything else is read by the project team only.
+- **Farmer view.** *Notes about your farm* (`farm/FarmNotes.svelte`) lists
+  the farmer's own notes and the WUA's farm-visible ones on that farm, and
+  adds a note, always shown to the farm. The WUA previewing the page sees the
+  same farm-visible notes, read only.
+- **Plain text only.** The body is rendered with Svelte's escaping, never
+  `{@html}` or markdown; line breaks are kept with `white-space: pre-line`
+  (the e2e test pins markup showing as typed).
+
 ## Report
 
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
@@ -1849,8 +1884,8 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); the CSV download and the
-  disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+  alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
+  CSV download and the disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
 - **Wording.** Every visible string and number rule lives in pure modules
   under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
   `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture

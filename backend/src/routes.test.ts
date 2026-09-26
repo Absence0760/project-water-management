@@ -157,6 +157,21 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Notes and comments (WP-2.7, 035_notes): auth-gated; the min role is farmer and RLS scopes (notes/notes.db.test.ts).
+	it('inventories the note routes as auth-gated', () => {
+		const notes = [
+			'GET /projects/:id/notes',
+			'GET /projects/:id/notes/counts',
+			'POST /projects/:id/notes',
+			'PATCH /projects/:id/notes/:noteId',
+			'DELETE /projects/:id/notes/:noteId'
+		];
+		for (const r of notes) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
 		for (const r of ['GET /projects/:id/share-links', 'POST /projects/:id/share-links', 'DELETE /projects/:id/share-links/:linkId']) {

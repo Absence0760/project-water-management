@@ -38,6 +38,10 @@ import type {
 	Member,
 	Nomination,
 	Reproduction,
+	Note,
+	NoteCounts,
+	NoteCreate,
+	NotesQuery,
 	Project,
 	ProjectFile,
 	ProjectSummary,
@@ -425,6 +429,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ link: ShareLink & { url: string } }>('POST', `${p(id)}/share-links`, { label, expiresInDays }).then((r) => r.link),
 			/** Withdraw a link (owner): it stops working at once. */
 			revoke: (id: string, linkId: string) => request<void>('DELETE', `${p(id)}/share-links/${enc(linkId)}`)
+		},
+		/** Notes and comments (WP-2.7): farmers and above; RLS scopes what each caller sees. */
+		notes: {
+			/** Newest first; deleted notes are never listed. */
+			list: (id: string, q: NotesQuery = {}) => {
+				const params = new URLSearchParams();
+				for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') params.set(k, String(v));
+				return request<{ notes: Note[] }>('GET', `${p(id)}/notes${params.size ? `?${params}` : ''}`).then((r) => r.notes);
+			},
+			counts: (id: string) => request<NoteCounts>('GET', `${p(id)}/notes/counts`),
+			create: (id: string, body: NoteCreate) => request<{ note: Note }>('POST', `${p(id)}/notes`, body).then((r) => r.note),
+			/** The author only: replaces the body. */
+			edit: (id: string, noteId: string, body: string) =>
+				request<{ note: Note }>('PATCH', `${p(id)}/notes/${enc(noteId)}`, { body }).then((r) => r.note),
+			/** Soft delete (the author or an editor): hidden, kept for the audit trail. */
+			remove: (id: string, noteId: string) => request<void>('DELETE', `${p(id)}/notes/${enc(noteId)}`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */
