@@ -2,6 +2,7 @@
 // session cookie (credentials: 'include') and turns a non-2xx response into an
 // ApiError carrying the HTTP status and the server's message.
 import type {
+	AllocationComparison,
 	DailySeries,
 	DayBoundary,
 	InputChange,
@@ -18,6 +19,12 @@ import type {
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	Allocation,
+	AllocationImportRequest,
+	AllocationInput,
+	AllocationList,
+	AllocationPreview,
+	AllocationSource,
 	Ensemble,
 	ImportReport,
 	ImportResult,
@@ -470,6 +477,34 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Re-apply the ops to another base run: `problems` lists what no longer applies. `dryRun` checks without saving. */
 			rebase: (id: string, sid: string, baseRunId: string, dryRun = false) =>
 				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun })
+		},
+		/**
+		 * Registered and licensed volumes per farm or water user, and a run's
+		 * modelled use against them (docs/api.md § Allocations). Modelled, not
+		 * metered; the app never decides whether a use is lawful.
+		 */
+		allocations: {
+			list: (id: string) => request<AllocationList>('GET', `${p(id)}/allocations`),
+			create: (id: string, body: AllocationInput) =>
+				request<{ allocation: Allocation }>('POST', `${p(id)}/allocations`, body).then((r) => r.allocation),
+			update: (id: string, aid: string, body: Partial<AllocationInput>) =>
+				request<{ allocation: Allocation }>('PATCH', `${p(id)}/allocations/${enc(aid)}`, body).then((r) => r.allocation),
+			remove: (id: string, aid: string) => request<void>('DELETE', `${p(id)}/allocations/${enc(aid)}`),
+			/** Parse and match a file; nothing is written. 422 = the file can't be read (the message says why), 409 = already imported. */
+			preview: (id: string, body: AllocationImportRequest) => request<AllocationPreview>('POST', `${p(id)}/allocations/import`, body),
+			/** Import the file's valid rows; `matches` are the preview's manual choices by file line (null = leave unmatched). */
+			commit: (id: string, body: AllocationImportRequest & { matches: Record<string, string | null> }) =>
+				request<{ source: AllocationSource; imported: number; skipped: number; unmatched: number }>('POST', `${p(id)}/allocations/import/commit`, body),
+			/** Undo an import: the file's record and every allocation it brought. */
+			removeSource: (id: string, sourceId: string) => request<void>('DELETE', `${p(id)}/allocations/sources/${enc(sourceId)}`),
+			/** The allocations as CSV (a plain link: the cookie goes with it). */
+			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
+			/** A run's modelled use against the registered volumes, per water year. */
+			compare: (id: string, runId: string, tolerance?: number) =>
+				request<{ run: { id: string; label: string; startDate: string; endDate: string }; comparison: AllocationComparison }>(
+					'GET',
+					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
+				)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

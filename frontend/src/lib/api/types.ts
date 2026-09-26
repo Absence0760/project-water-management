@@ -737,3 +737,111 @@ export interface ShareSeries {
 	monthly: { startMonth: string; values: (number | null)[] };
 	recent: { startDate: string; values: (number | null)[] };
 }
+
+// --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
+
+export type AllocationAuthorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
+export type AllocationWaterSourceKind = 'surface' | 'groundwater';
+export type AllocationImportKind = 'warms_extract' | 'csv';
+
+/** A registered or licensed volume (GET /projects/:id/allocations). */
+export interface Allocation {
+	id: string;
+	nodeId: string | null;
+	nodeName: string | null;
+	/** The import it came from; null = typed into the app. */
+	sourceId: string | null;
+	registrationNo: string;
+	propertyRef: string;
+	/** null when there is none, or the member may not see names (canSeeHolders false). */
+	holder: string | null;
+	authorisation: AllocationAuthorisation;
+	purpose: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind;
+	volumeM3PerYear: number;
+	storageM3: number | null;
+	validFrom: string | null;
+	validTo: string | null;
+	reference: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** An imported file: the provenance of its rows. */
+export interface AllocationSource {
+	id: string;
+	kind: AllocationImportKind;
+	fileName: string;
+	sha256: string;
+	reference: string;
+	importedAt: string;
+	importedBy: string | null;
+	rows: number;
+}
+
+export interface AllocationList {
+	allocations: Allocation[];
+	sources: AllocationSource[];
+	/** The farms and water users an allocation can be matched to. */
+	nodes: { id: string; name: string }[];
+	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
+	canSeeHolders: boolean;
+}
+
+/** The fields an editor sends to create or change an allocation. */
+export interface AllocationInput {
+	nodeId: string | null;
+	registrationNo?: string;
+	propertyRef?: string;
+	holder?: string;
+	authorisation: AllocationAuthorisation;
+	purpose?: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind;
+	volumeM3PerYear: number;
+	storageM3?: number | null;
+	validFrom?: string | null;
+	validTo?: string | null;
+	reference?: string;
+}
+
+/** One row of an import preview. */
+export interface AllocationPreviewRow {
+	line: number;
+	registrationNo: string;
+	propertyRef: string;
+	farm: string;
+	holder: string;
+	authorisation: AllocationAuthorisation | null;
+	purpose: AllocationPurpose;
+	waterSource: AllocationWaterSourceKind | null;
+	volumeM3PerYear: number | null;
+	storageM3: number | null;
+	validFrom: string | null;
+	validTo: string | null;
+	reference: string;
+	errors: string[];
+	nodeId: string | null;
+	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;
+	alreadyInProject: boolean;
+}
+
+export interface AllocationImportRequest {
+	kind: AllocationImportKind;
+	fileName: string;
+	text: string;
+	reference?: string;
+}
+
+/** POST /projects/:id/allocations/import: nothing is written. */
+export interface AllocationPreview {
+	fileName: string;
+	kind: AllocationImportKind;
+	sha256: string;
+	columns: Record<string, string>;
+	ignoredColumns: string[];
+	rows: AllocationPreviewRow[];
+	/** The farms and water users a row can be matched to. */
+	nodes: { id: string; name: string }[];
+	summary: { rows: number; valid: number; invalid: number; matched: number; unmatched: number };
+}

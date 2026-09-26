@@ -11,8 +11,8 @@ import {
 } from './tabs';
 
 const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'farmer', null, undefined];
-// What the page rendered before the Scenarios tab existed.
-const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'history'];
+// What the page renders.
+const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'allocations', 'history'];
 
 describe('visibleTabs', () => {
 	it('shows owners and editors every tab, in order', () => {
@@ -24,11 +24,12 @@ describe('visibleTabs', () => {
 		}
 	});
 
-	it('shows a viewer Overview, Data and Runs & results (and Scenarios) by default', () => {
+	it('shows a viewer Overview, Data and Runs & results (and Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'scenarios']);
-		expect(visibleTabs('viewer', {}, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
-		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
+		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
+		expect(visibleTabs('viewer')).toEqual(core);
+		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
+		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
@@ -59,6 +60,12 @@ describe('visibleTabs', () => {
 		const withScenarios = PAGE;
 		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, withScenarios)).toContain('scenarios');
 		expect(visibleTabs('farmer', {}, withScenarios)).not.toContain('scenarios');
+	});
+
+	// Viewers read registered volumes (not names: that is RLS, not the tab strip).
+	it('lists Allocations for owners, editors and viewers, never farmers', () => {
+		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, PAGE)).toContain('allocations');
+		expect(visibleTabs('farmer', {}, PAGE)).not.toContain('allocations');
 	});
 
 	it('treats a tab it doesn’t know as a model input', () => {

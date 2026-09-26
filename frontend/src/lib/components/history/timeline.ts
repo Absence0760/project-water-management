@@ -169,6 +169,18 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return `Deleted the scenario “${str(s.name)}”`;
+		case 'allocation.created':
+			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
+		case 'allocation.changed':
+			return `Changed a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
+		case 'allocation.deleted':
+			return `Deleted a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
+		case 'allocation.imported': {
+			const n = num(s.rows) ?? 0;
+			return `Imported ${plural(n, 'registered volume')} from ${str(s.fileName)}`;
+		}
+		case 'allocation.import_deleted':
+			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'share_link.created':
 			return 'Created a share link';
 		case 'share_link.revoked':
