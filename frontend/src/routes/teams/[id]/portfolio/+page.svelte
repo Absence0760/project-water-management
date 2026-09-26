@@ -3,31 +3,36 @@
 	// the team on one screen, from the latest published run (or the latest run
 	// when nothing is published), each figure with how old it is. A sortable
 	// table on a wide screen, stacked cards on a phone (the same rows, and the
-	// sort lives in the URL). Every status is text as well as colour.
+	// sort lives in the URL). Every status is text as well as colour. A
+	// dashboard: on a wide screen it fits the window (issue #17), the table
+	// taking the height left below the header (measured, not assumed) and
+	// scrolling inside with its header row stuck, so the page itself doesn't.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError, hasRole, hasTeamRole, type Portfolio, type PortfolioProject } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { fmtDay } from '$lib/format/number';
+	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
+	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 	import {
 		ageText,
 		curtailmentHref as curtailmentLink,
 		damText,
-		ewrText,
 		farmsShortText,
+		farmsShortTotalText,
 		farmsUnknownText,
 		feedsText,
 		alertsText,
 		nextSort,
 		parseSort,
+		portfolioTotals,
 		restrictionText,
 		SORT_LABELS,
 		sortPortfolio,
 		sourceText,
-		statusCounts,
-		STATUS_LABEL,
+		statusSummary,
 		thresholdsRule,
 		thresholdsSource,
 		type PortfolioSort,
@@ -70,7 +75,27 @@
 
 	const sort = $derived(parseSort(page.url.searchParams.get('sort'), page.url.searchParams.get('dir')));
 	const rows = $derived(data ? sortPortfolio(data.projects, sort) : []);
-	const counts = $derived(statusCounts(data?.projects ?? []));
+	const totals = $derived(portfolioTotals(data?.projects ?? []));
+
+	// Fit the table to the window on a wide screen (the Network map's technique):
+	// the top of the table's box and what sits below it on the page, measured
+	// whenever the page's size changes, so the box takes exactly the height left.
+	let fillEl: HTMLDivElement | undefined = $state();
+	let fillTop = $state(0);
+	let fillBelow = $state(0);
+	$effect(() => {
+		if (!fillEl) return;
+		const measure = () => {
+			if (!fillEl) return;
+			const r = fillEl.getBoundingClientRect();
+			fillTop = r.top + window.scrollY;
+			fillBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
 
 	function setSort(next: PortfolioSort) {
 		const u = new URL(page.url);
@@ -97,7 +122,7 @@
 <svelte:head><title>{data ? `${data.team.name} · ` : ''}Portfolio · Water Management</title></svelte:head>
 
 {#snippet status(p: PortfolioProject)}
-	<span class="st st-{p.ewr.status}">{ewrText(p)}</span>
+	<StatusPill {p} />
 {/snippet}
 
 {#snippet age(p: PortfolioProject)}
@@ -146,28 +171,58 @@
 				<a href="{base}/teams">Teams</a> <span aria-hidden="true">/</span>
 				<a href="{base}/teams/{data.team.id}">{data.team.name}</a> <span aria-hidden="true">/</span>
 			</nav>
-			<h1>{data.team.name}: portfolio</h1>
-			<p class="muted intro">
-				Every catchment of the team, from its published run, or its latest run when none is published. EWR status
-				is the outlet over the 30 days to the figures' last day: {thresholdsRule(data.thresholds)}.
-			</p>
-			<p class="muted intro thresholds">
-				{thresholdsSource(data.thresholds)}
-				{#if hasTeamRole(data.team.role, 'admin')}<a href="{base}/teams/{data.team.id}#pt-h">Change them on the team page</a>.{:else}A team admin can change them on the team page.{/if}
-			</p>
+			<header class="page-head">
+				<div class="title">
+					<h1>{data.team.name}: portfolio</h1>
+					<p class="muted intro">
+						Every catchment of the team, from its published run, or its latest run when none is published. EWR status
+						is the outlet over the 30 days to the figures' last day: {thresholdsRule(data.thresholds)}.
+					</p>
+					<p class="muted intro thresholds">
+						{thresholdsSource(data.thresholds)}
+						{#if hasTeamRole(data.team.role, 'admin')}<a href="{base}/teams/{data.team.id}?settings=1">Change them on the team page</a>.{:else}A team admin can change them on the team page.{/if}
+					</p>
+				</div>
+				<div class="head-actions">
+					<a class="btn" href="{base}/teams/{data.team.id}">Team page</a>
+					{#if hasTeamRole(data.team.role, 'member')}
+						<a class="btn btn-primary" href="{base}/?owner=team:{data.team.id}&new=1">New project in this team</a>
+					{/if}
+				</div>
+			</header>
 
 			{#if !rows.length}
 				<div class="state empty">
 					<p>No catchments in this team yet.</p>
-					{#if hasTeamRole(data.team.role, 'member')}
-						<a class="btn" href="{base}/?owner=team:{data.team.id}&new=1">New project in this team</a>
-					{/if}
 				</div>
 			{:else}
-				<p class="summary" role="status">
-					{rows.length} catchment{rows.length === 1 ? '' : 's'}:
-					{#each (['red', 'amber', 'unknown', 'green'] as const).filter((s) => counts[s]) as s, i (s)}{i ? ', ' : ''}{counts[s]} {STATUS_LABEL[s].toLowerCase()}{/each}
-				</p>
+				<dl class="kpis">
+					<div class="kpi kpi-ewr">
+						<dt>EWR, last 30 days</dt>
+						<dd>
+							<p class="summary" role="status">
+								{rows.length} catchment{rows.length === 1 ? '' : 's'}: {statusSummary(totals.counts)}
+							</p>
+							<StatusBar counts={totals.counts} />
+						</dd>
+					</div>
+					<div class="kpi">
+						<dt>Farms short this week</dt>
+						<dd class="num-big">{farmsShortTotalText(totals) ?? 'Unknown'}</dd>
+					</div>
+					<div class="kpi">
+						<dt>Alerts firing</dt>
+						<dd class="num-big">{totals.alertsFiring}</dd>
+					</div>
+					<div class="kpi">
+						<dt>Stale figures</dt>
+						<dd class="num-big">{totals.stale} <small>of {rows.length}</small></dd>
+					</div>
+					<div class="kpi">
+						<dt>Last run</dt>
+						<dd class="num-big">{totals.lastRunAt ? fmtDay(fmtDate(totals.lastRunAt)) : 'None yet'}</dd>
+					</div>
+				</dl>
 
 				<div class="sort-phone field">
 					<label for="pf-sort">Sort by</label>
@@ -180,48 +235,50 @@
 					</select>
 				</div>
 
-				<!-- Wide screens: one sortable table. -->
-				<div class="table-wrap wide-only">
-					<table class="data portfolio">
-						<caption class="visually-hidden">Catchments of {data.team.name}</caption>
-						<thead>
-							<tr>
-								<th scope="col" aria-sort={ariaSort('name')}>
-									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'name'))}>Catchment <span aria-hidden="true">{indicator('name')}</span></button>
-								</th>
-								<th scope="col" aria-sort={ariaSort('status')}>
-									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'status'))}>EWR, last 30 days <span aria-hidden="true">{indicator('status')}</span></button>
-								</th>
-								<th scope="col" aria-sort={ariaSort('farms')}>
-									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'farms'))}>Farms short <span aria-hidden="true">{indicator('farms')}</span></button>
-								</th>
-								<th scope="col" aria-sort={ariaSort('dam')}>
-									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'dam'))}>Lowest dam <span aria-hidden="true">{indicator('dam')}</span></button>
-								</th>
-								<th scope="col">Restriction</th>
-								<th scope="col" aria-sort={ariaSort('age')}>
-									<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'age'))}>Data <span aria-hidden="true">{indicator('age')}</span></button>
-								</th>
-								<th scope="col">Alerts</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each rows as p (p.id)}
+				<!-- Wide screens: one sortable table, filling the height left in the window. -->
+				<div class="fill wide-only" bind:this={fillEl} style:--fill-top="{fillTop}px" style:--fill-below="{fillBelow}px">
+					<div class="table-wrap">
+						<table class="data portfolio">
+							<caption class="visually-hidden">Catchments of {data.team.name}</caption>
+							<thead>
 								<tr>
-									<th scope="row">
-										<a class="name" href={projectHref(p)}>{p.name}</a>
-										{@render source(p)}
+									<th scope="col" aria-sort={ariaSort('name')}>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'name'))}>Catchment <span aria-hidden="true">{indicator('name')}</span></button>
 									</th>
-									<td>{@render status(p)}{@render age(p)}</td>
-									<td>{@render farms(p)}</td>
-									<td>{#if p.damsKnown}{damText(p)}{:else}<span class="muted">{damText(p)}</span>{/if}</td>
-									<td>{#if p.restriction}{restrictionText(p)}{:else}<span class="muted">{restrictionText(p)}</span>{/if}</td>
-									<td>{@render dataCell(p)}</td>
-									<td>{#if p.alertsFiring > 0}<span class="badge badge-warn">{alertsText(p)}</span>{:else}<span class="muted">{alertsText(p)}</span>{/if}</td>
+									<th scope="col" aria-sort={ariaSort('status')}>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'status'))}>EWR, last 30 days <span aria-hidden="true">{indicator('status')}</span></button>
+									</th>
+									<th scope="col" aria-sort={ariaSort('farms')}>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'farms'))}>Farms short <span aria-hidden="true">{indicator('farms')}</span></button>
+									</th>
+									<th scope="col" aria-sort={ariaSort('dam')}>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'dam'))}>Lowest dam <span aria-hidden="true">{indicator('dam')}</span></button>
+									</th>
+									<th scope="col">Restriction</th>
+									<th scope="col" aria-sort={ariaSort('age')}>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'age'))}>Data <span aria-hidden="true">{indicator('age')}</span></button>
+									</th>
+									<th scope="col">Alerts</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{#each rows as p (p.id)}
+									<tr>
+										<th scope="row">
+											<a class="name" href={projectHref(p)}>{p.name}</a>
+											{@render source(p)}
+										</th>
+										<td>{@render status(p)}{@render age(p)}</td>
+										<td>{@render farms(p)}</td>
+										<td>{#if p.damsKnown}{damText(p)}{:else}<span class="muted">{damText(p)}</span>{/if}</td>
+										<td>{#if p.restriction}{restrictionText(p)}{:else}<span class="muted">{restrictionText(p)}</span>{/if}</td>
+										<td>{@render dataCell(p)}</td>
+										<td>{#if p.alertsFiring > 0}<span class="badge badge-warn">{alertsText(p)}</span>{:else}<span class="muted">{alertsText(p)}</span>{/if}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				</div>
 
 				<!-- Phones: the same rows as cards. -->
@@ -251,20 +308,76 @@
 		color: var(--text-muted);
 		margin-bottom: 0.25rem;
 	}
+	.page-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem 1.5rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
+	}
+	.title {
+		min-width: 0;
+		flex: 1 1 32rem;
+	}
 	h1 {
 		margin: 0;
 	}
+	.head-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
 	.intro {
-		margin: 0.35rem 0 1rem;
-		max-width: 80ch;
+		margin: 0.35rem 0 0;
+		max-width: 90ch;
 		font-size: 0.9rem;
 	}
-	.intro:has(+ .thresholds) {
-		margin-bottom: 0.25rem;
+	.intro.thresholds {
+		margin-top: 0.2rem;
+	}
+	/* The numbers across the top: the statuses, farms short, alerts, stale figures, the last run. */
+	.kpis {
+		margin: 0 0 0.9rem;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+		gap: 0.6rem;
+	}
+	.kpi {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.55rem 0.8rem;
+		min-width: 0;
+	}
+	.kpi-ewr {
+		grid-column: span 2;
+	}
+	.kpi dt {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin-bottom: 0.2rem;
+	}
+	.kpi dd {
+		margin: 0;
+	}
+	.num-big {
+		font-size: 1.15rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.num-big small {
+		font-size: 0.8rem;
+		font-weight: 400;
+		color: var(--text-muted);
 	}
 	.summary {
-		margin: 0 0 0.75rem;
+		margin: 0 0 0.35rem;
 		font-weight: 600;
+	}
+	/* The summary line already says the counts in words; the bar's own words would repeat them. */
+	.kpi-ewr :global(.status-bar .words) {
+		display: none;
 	}
 	.sub {
 		display: block;
@@ -280,35 +393,6 @@
 	}
 	.name {
 		font-weight: 600;
-	}
-	/* The status: its words carry the meaning; the colour repeats it. */
-	.st {
-		display: inline-block;
-		padding: 0.1rem 0.5rem;
-		border-radius: var(--radius);
-		border: 1px solid var(--border);
-		font-weight: 600;
-		font-size: 0.85rem;
-		background: var(--surface-2);
-		color: var(--text-2);
-	}
-	.st-red {
-		background: var(--danger-soft);
-		border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-		color: var(--danger);
-	}
-	.st-amber {
-		background: var(--warning-soft);
-		border-color: color-mix(in srgb, var(--warning) 40%, transparent);
-		color: var(--warning);
-	}
-	.st-green {
-		background: var(--success-soft);
-		border-color: color-mix(in srgb, var(--success) 40%, transparent);
-		color: var(--success);
-	}
-	.st-unknown {
-		border-style: dashed;
 	}
 	.sort {
 		background: none;
@@ -327,15 +411,10 @@
 	.portfolio th {
 		vertical-align: top;
 	}
-	.sort-phone,
-	.phone-only {
-		display: none;
-	}
 	.cards {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: grid;
 		gap: 0.75rem;
 	}
 	.card {
@@ -361,16 +440,46 @@
 	.card dd {
 		margin: 0.1rem 0 0;
 	}
+	/* Wide: the table's box takes the height left in the window, and the page
+	   keeps only a small margin under it, so nothing but the table scrolls.
+	   (The cards stay out: a plain `.cards { display: grid }` used to beat
+	   `.phone-only { display: none }` and showed them under the table.) */
+	@media (min-width: 761px) {
+		.sort-phone,
+		.phone-only {
+			display: none;
+		}
+		.page:has(.fill) {
+			padding-bottom: 1rem;
+		}
+		.fill {
+			height: max(320px, calc(100vh - var(--fill-top, 0px) - var(--fill-below, 0px)));
+		}
+		.fill .table-wrap {
+			height: 100%;
+			max-height: none;
+		}
+	}
 	@media (max-width: 760px) {
 		.wide-only {
 			display: none;
 		}
-		.phone-only {
+		.cards {
 			display: grid;
 		}
 		.sort-phone {
 			display: block;
 			max-width: 20rem;
+		}
+		.kpi-ewr {
+			grid-column: 1 / -1;
+		}
+		.head-actions {
+			width: 100%;
+		}
+		.head-actions > * {
+			flex: 1 1 auto;
+			justify-content: center;
 		}
 	}
 </style>

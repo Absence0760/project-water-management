@@ -99,13 +99,15 @@ test('scenario override mode: the three-button “Part of the model” switch', 
 	});
 });
 
-test('Crops tab: units in the table heads and the small captions', async ({ page, owner }) => {
+test('Crops grids: units in the table heads and the small captions', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Shared CSS crops');
-	await page.goto(`/projects/${project.id}?tab=crops`);
-	const caption = page.getByText('Water year, October → September');
+	// The crop grids open in the grid modal over the Crops page (issue #17).
+	await page.goto(`/projects/${project.id}?tab=crops&grid=planted-areas`);
+	const grid = page.getByRole('dialog', { name: 'Planted areas' });
+	const caption = grid.getByText('Irrigated area per farm and crop, hectares · rows follow the network order');
 	await expect(caption).toBeVisible();
-	const unit = page.locator('thead th .u').filter({ hasText: /^ha$/ }).first();
+	const unit = grid.locator('thead th .u').filter({ hasText: /^ha$/ }).first();
 	await expect(unit).toBeVisible();
 
 	await eachCombo(page, async (at) => {

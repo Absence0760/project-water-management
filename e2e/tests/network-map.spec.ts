@@ -7,7 +7,7 @@ import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openNodeTable } from '../support/network.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
@@ -212,11 +212,17 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await page.goBack();
 	await expect(page.getByRole('dialog', { name: 'Transfers' })).toHaveCount(0);
 
-	// Over the grid's own tab it isn't opened: the grid is already on the page.
+	// The crop grids live only in the modal now (Crops & demand is cards and bars), so they open over the Crops tab too.
 	await page.goto(`/projects/${project.id}?tab=crops&grid=planted-areas`);
-	await expect(page.getByLabel('Orchard on Upper farm, ha')).toHaveValue('30');
-	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByRole('dialog', { name: 'Planted areas' }).getByLabel('Orchard on Upper farm, ha')).toHaveValue('30');
+	await closeModal(page);
 	await expect(page).toHaveURL(/\?tab=crops$/);
+
+	// Over the grid's own tab it isn't opened: the Transfers table is already on the page.
+	await page.goto(`/projects/${project.id}?tab=transfers&grid=transfers`);
+	await expect(page.getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=transfers$/);
 });
 
 test('a viewer reads a grid in the modal, and can only close it', async ({ page, owner, signIn }) => {

@@ -9,8 +9,9 @@ import type { MetricSpec } from '$lib/components/compare/delta';
 import { headlineSite } from '$lib/components/runs/ewrAssurance';
 import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
 import { daysBetween, describeAge } from '$lib/components/series/coverage';
-import { fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
+import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 import { calibrationSample } from '$lib/components/calibration/sample';
+import { AGO_DAYS, LOW_PCT, type DamsToday } from './damLevels';
 
 export interface RunPick {
 	/** The run the strip shows. */
@@ -58,7 +59,7 @@ export function ranAgo(createdAt: string, now: Date = new Date()): string {
 /** Days a run covers, both ends included. */
 export const runDays = (r: Pick<RunMeta, 'startDate' | 'endDate'>) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
 
-export type HeadlineId = 'reserve' | 'ewr' | 'supply' | 'nse' | 'outflow';
+export type HeadlineId = 'reserve' | 'ewr' | 'supply' | 'nse' | 'outflow' | 'dams';
 
 export interface Headline {
 	id: HeadlineId;
@@ -74,6 +75,8 @@ export interface Headline {
 	/** Change from the previous run; null when either run lacks the figure or they aren't comparable. */
 	delta: MetricDelta | null;
 	spec: MetricSpec;
+	/** What the change is against, after it; "vs previous run" when absent. */
+	deltaLabel?: string;
 }
 
 /** Share of all farms' demand supplied (as the Runs tab's "Irrigation supplied"); null without demand. */
@@ -95,8 +98,10 @@ function change(prev: number | null | undefined, cur: number | null | undefined)
  * The four headline cards: the Reserve (the monthly rule-table compliance
  * when the project has a rule table, else days below the pragmatic EWR),
  * irrigation supplied, the calibration NSE and the mean simulated outflow.
- * (Dam storage isn't in a run's summary, only in its daily series, so it has
- * no card here.) `previous` is the run before, for the changes.
+ * (Dam storage isn't in a run's summary, only in its daily series, so its
+ * card is `damsHeadline`, built once they are fetched.) `previous` is the run
+ * before, for the changes. The Summary shows the first three as cards and the
+ * outflow in the line under them.
  */
 export function headlines(s: RunSummary, days: number, previous: RunSummary | null): Headline[] {
 	const out: Headline[] = [];
@@ -197,4 +202,39 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		spec: { format: 'ratio', better: 'neutral', digits: 3 }
 	});
 	return out;
+}
+
+/** Where the dam figures are: still loading, failed, the run has no dams, or all dams together (damLevels.ts damsToday). */
+export type DamsState = { state: 'loading' } | { state: 'error' } | { state: 'none' } | { state: 'ready'; today: DamsToday };
+
+/**
+ * The "Dams today" card: all dams' storage at the end of the run as a share
+ * of their capacity (capacity-weighted), and its change over the run's last
+ * AGO_DAYS days (not against the previous run: the question is which way the
+ * dams are heading). Flagged below LOW_PCT.
+ */
+export function damsHeadline(d: DamsState): Headline {
+	const base = {
+		id: 'dams' as const,
+		term: 'Dams today',
+		unit: '',
+		flagged: false,
+		delta: null,
+		spec: { format: 'fraction', better: 'higher' } as MetricSpec
+	};
+	if (d.state === 'loading') return { ...base, value: '…', sub: ['loading dam levels'] };
+	if (d.state === 'error') return { ...base, value: '–', sub: ['dam levels couldn’t be loaded'] };
+	if (d.state === 'none') return { ...base, value: '–', sub: ['no dams in the run'] };
+	const t = d.today;
+	const low = t.pct < LOW_PCT;
+	return {
+		...base,
+		value: fmtPct(t.pct / 100, 0),
+		unit: 'full',
+		sub: [`${fmtNum(t.dams)} dam${t.dams === 1 ? '' : 's'} on ${fmtDay(t.endDate)}${low ? `, below ${fmtNum(LOW_PCT)}%` : ''}`],
+		flagged: low,
+		delta: t.change === null ? null : change((t.pct - t.change) / 100, t.pct / 100),
+		spec: { format: 'fraction', better: 'higher', digits: 0 },
+		deltaLabel: `in ${fmtNum(AGO_DAYS)} days`
+	};
 }

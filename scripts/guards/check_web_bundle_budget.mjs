@@ -795,6 +795,36 @@
 //             under its 42 KB ceiling, so the next Settings group must
 //             lazy-load its blocker check too. No new dependency. Headroom
 //             ~5 KB.
+// 2026-09-26  total 924 → 935 KB (measured 931). origin/main already measured
+//             926 before this merge (work landed after the entry above without
+//             a raise); issue #17's Summary (board A1: KPI row with Dams today,
+//             the chart's range switch and shaded reserve days, Needs attention
+//             cards, Supply by farm in its own lazy chunk) adds 5. The largest
+//             chunk stays under 42 KB because Supply by farm was split out.
+//             Headroom ~4 KB; the next page needs a trim (the i18n catalogue).
+// 2026-09-26  total 935 → 941 KB (measured 937). Issue #17's Teams pages
+//             (7 KB in their branch, measured from 913): the teams list's cards
+//             (numbers and traffic lights from each team's portfolio), the team
+//             page's projects-first layout with its settings sheet
+//             (teams/TeamSettings), the window-fitting portfolio with its
+//             summary tiles, and the shared StatusPill / StatusBar and
+//             portfolio totals. Route chunks only; no new dependency.
+//             Headroom ~4 KB.
+// 2026-09-26  total 941 → 949 KB (measured 945; the Crops branch measured
+//             938 from 931 on main @ a2013049, +7). Issue #17 A3: Crops &
+//             demand becomes a page of crop cards (factor sparklines), the demand chart and per-farm
+//             stacked bars, with a crop sheet (crops/CropsTab, CropSheet,
+//             cards.ts); the old tab body moved unchanged to CropGrids (the
+//             grid modal and override mode, now with #54's Load crop factors
+//             trigger), the demand table to DemandTable. All in the lazy
+//             Crops chunk; the largest chunk is unchanged (41.7 KB, the
+//             workspace page). No new dependency. Headroom ~4 KB; the i18n
+//             catalogue trim is still the next saving.
+// 2026-09-26  total 949 → 957 KB (measured 953). A merge: the 924 → 939
+//             entry (#53 R5's seasonal outlook) and the 935 → 949 entries
+//             (#17's Summary, Teams and Crops pages) were each measured without
+//             the other's growth; together with #54 2a's Unit labels (+0.3 KB)
+//             they measure 953. Headroom ~4 KB; the i18n catalogue trim is due.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -805,7 +835,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 939,
+	totalCodeKb: 957,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and farms with nothing planted, each a link to where it is fixed); and **Supply by farm**, where a farm’s name opens its planted areas. The checklist, dam levels and the project’s details follow below them.'
 					}
 				]
 			},
@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or use the link beside a farm in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
+						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or pick the farm’s name in the Summary’s **Supply by farm** (or the link on a farm in its **Needs attention**). It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
@@ -330,9 +330,9 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
-							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
-							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any farm with nothing planted, whose demand is zero.',
+							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a card with its area, the month it needs most water and a small chart of its factors; **Edit** on the card opens the sheet again.',
+							'Under **Planted area by farm**, press **Edit areas** and enter the hectares of each crop on each farm in the grid. Leave a crop blank on farms that don’t grow it. Each farm then gets a bar split by crop; a note under the bars names any farm with nothing planted, whose demand is zero.',
+							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
@@ -341,7 +341,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change just one farm, select it on the **Network** and open **Planted areas** under the drawing: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Grids** at the top of the page (Crop factors, Planted areas, Irrigation demand): they open over the page, and Done brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one farm, click its name beside its bar, or select it on the **Network** and open its irrigated area on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',

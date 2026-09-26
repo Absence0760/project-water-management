@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damLevel, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
+import { AGO_DAYS, damLevel, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
 const series = (startDate: string, values: (number | null)[]) => ({ startDate, values });
@@ -16,7 +16,8 @@ describe('damLevel', () => {
 			endDate: '2025-01-05',
 			lowPct: 25,
 			lowDate: '2025-01-03',
-			daysAtMin: 0
+			daysAtMin: 0,
+			agoPct: null
 		});
 	});
 
@@ -44,7 +45,7 @@ describe('damLevel', () => {
 
 describe('sortDamLevels and levelBand', () => {
 	const l = (name: string, endPct: number, minPct = 0): DamLevel =>
-		({ nodeId: name, name, capacityM3: 1, minPct, endPct, endDate: '', lowPct: 0, lowDate: '', daysAtMin: 0 });
+		({ nodeId: name, name, capacityM3: 1, minPct, endPct, endDate: '', lowPct: 0, lowDate: '', daysAtMin: 0, agoPct: null });
 
 	it('puts the emptiest dam first, then by name', () => {
 		expect(sortDamLevels([l('B', 50), l('A', 50), l('C', 5)]).map((x) => x.name)).toEqual(['C', 'A', 'B']);
@@ -80,5 +81,61 @@ describe('loadDamLevels', () => {
 		expect(progress).toEqual([1, 2, 3, 4, 5]);
 		// 'c' has no value: left out.
 		expect(levels.map((l) => [l.nodeId, l.endPct])).toEqual([['e', 10], ['d', 30], ['b', 70], ['a', 90]]);
+	});
+});
+
+describe('damLevel: 30 days before the end', () => {
+	it('reads the storage AGO_DAYS before the last day with a value', () => {
+		const values = [...Array(AGO_DAYS).fill(0), 700, ...Array(AGO_DAYS - 1).fill(500), 400, null];
+		const l = damLevel(dam, series('2025-01-01', values))!;
+		expect(l.endPct).toBe(40);
+		expect(l.agoPct).toBe(70);
+	});
+
+	it('is null when the run is shorter, or has no value that day', () => {
+		expect(damLevel(dam, series('2025-01-01', Array(AGO_DAYS).fill(500)))!.agoPct).toBeNull();
+		expect(damLevel(dam, series('2025-01-01', [null, ...Array(AGO_DAYS).fill(500)]))!.agoPct).toBeNull();
+	});
+});
+
+describe('damsToday', () => {
+	const l = (capacityM3: number, endPct: number, agoPct: number | null, endDate = '2025-06-30'): DamLevel =>
+		({ nodeId: String(capacityM3), name: '', capacityM3, minPct: 0, endPct, endDate, lowPct: 0, lowDate: '', daysAtMin: 0, agoPct });
+
+	it('weights each dam by its capacity, and gives the change over the last 30 days in points', () => {
+		// 90 000 m³ at 20 % and 10 000 m³ at 100 %: 28 000 of 100 000 m³, not the plain mean of 60 %.
+		const d = damsToday([l(90_000, 20, 30), l(10_000, 100, 100, '2025-07-01')])!;
+		expect(d.pct).toBeCloseTo(28, 10);
+		expect(d.change).toBeCloseTo(-9, 10); // 28 − 37
+		expect(d.dams).toBe(2);
+		expect(d.endDate).toBe('2025-07-01');
+	});
+
+	it('has no change when a dam lacks the earlier value, and is null without dams', () => {
+		expect(damsToday([l(100, 50, 40), l(100, 50, null)])!.change).toBeNull();
+		expect(damsToday([])).toBeNull();
+	});
+});
+
+describe('damsInRun', () => {
+	const refs = [
+		{ key: 'dam_storage', nodeId: 'a' },
+		{ key: 'dam_storage', nodeId: 'b' },
+		{ key: 'natural_flow', nodeId: 'c' }
+	];
+	it('keeps nodes with a capacity and a stored dam_storage series, from the run’s own model', () => {
+		const run = [
+			{ id: 'a', name: 'A', damCapacityM3: 500, damMinPct: 10 },
+			{ id: 'b', name: '', damCapacityM3: 0 },
+			{ id: 'c', name: 'C', damCapacityM3: 800 }
+		];
+		const live = [{ id: 'a', name: 'A', damCapacityM3: 9_999, damMinPct: 0 }];
+		expect(damsInRun(run, live, refs)).toEqual([{ nodeId: 'a', name: 'A', capacityM3: 500, minPct: 10 }]);
+	});
+
+	it('falls back to the live model for a run saved without one', () => {
+		expect(damsInRun(undefined, [{ id: 'b', name: '', damCapacityM3: 50, damMinPct: 'x' }], refs)).toEqual([
+			{ nodeId: 'b', name: '(unnamed)', capacityM3: 50, minPct: 0 }
+		]);
 	});
 });

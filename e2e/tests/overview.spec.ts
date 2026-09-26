@@ -1,7 +1,7 @@
 // The Summary tab (id `overview`, issue #17): results, setup checklist and headline facts, built from the lists
 // the project page loads (series, runs) and the model being edited.
 import type { Page } from '@playwright/test';
-import { createProject, createRun, PASSWORD, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, PASSWORD, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -54,8 +54,11 @@ test('the latest run: its headline figures, the change from the run before, and 
 	const card = (term: string) => latest.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
 	await expect(card('EWR not met')).toContainText('of days');
 	await expect(card('Irrigation supplied')).toContainText('of demand');
-	await expect(card('Mean simulated outflow')).toContainText('m³/s');
+	await expect(card('Dams today')).toContainText(/\d+%full/);
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
+	// Reserve · Irrigation supplied · Dams today · NSE, in that order; the mean outflow is the line under them.
+	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams today', 'Calibration NSE']);
+	await expect(latest.locator('[data-headline="outflow"]')).toContainText(/Mean simulated outflow [\d.]+ m³\/s \(\d+% of natural\), 0\s*no change\s*vs previous run\./);
 	// Same inputs, so every change is zero, and it says which run it is against.
 	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
@@ -84,29 +87,147 @@ test('needs attention: stale data links to the Data tab; a project with no runs 
 
 test('the Summary leads with the results once there is a run, the setup checklist before one', async ({ page, owner }) => {
 	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Summary order');
 	await page.goto(`/projects/${project.id}`);
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
-	// No run yet: the checklist is the first thing on the tab, and there is no flow chart.
+	// No run yet: the checklist is the first thing on the tab, and there is no KPI row or flow chart.
 	await expect(setup(page)).toBeVisible();
-	const top = async (name: string | RegExp) => (await page.getByRole('region', { name, exact: typeof name === 'string' }).boundingBox())!.y;
-	expect(await top(/^Set(up| up this catchment)/)).toBeLessThan(await top('Needs attention'));
+	const box = async (name: string | RegExp) => (await page.getByRole('region', { name, exact: typeof name === 'string' }).boundingBox())!;
+	expect((await box(/^Set(up| up this catchment)/)).y).toBeLessThan((await box('Needs attention')).y);
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toHaveCount(0);
 
 	await createRun(page.request, project.id, 'Baseline');
 	await page.reload();
 	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
 	await expect(flow.getByRole('img', { name: /^EWR vs simulated outflow: line chart of Simulated outflow/ })).toBeVisible();
+	await expect(flow.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
-	// Latest run, then what needs attention, then the flow chart, then the checklist, then the model's facts.
-	const order = [await top('Latest run'), await top('Needs attention'), await top('Flow vs reserve'), await top(/^Set(up| up this catchment)/)];
-	expect([...order].sort((a, b) => a - b)).toEqual(order);
+	await expect(page.getByRole('region', { name: 'Dam levels' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Supply by farm' })).toBeVisible();
+
+	// First screen (board A1): the KPI row, then the chart on the left, Needs attention above Supply by farm on the right.
+	const kpis = await box('Latest run');
+	const chart = await box('Flow vs reserve');
+	const attention = await box('Needs attention');
+	const supply = await box('Supply by farm');
+	expect(chart.y).toBeGreaterThan(kpis.y + kpis.height - 1);
+	expect(attention.x).toBeGreaterThan(chart.x + chart.width);
+	expect(Math.abs(attention.y - chart.y)).toBeLessThan(2);
+	expect(supply.y).toBeGreaterThan(attention.y + attention.height - 1);
+	expect(Math.round(supply.x)).toBe(Math.round(attention.x));
+	// It fits the window: the chart and the side column end inside it, on one bottom edge, and fill it.
+	const vh = page.viewportSize()!.height;
+	expect(chart.y + chart.height).toBeLessThanOrEqual(vh);
+	expect(Math.abs(chart.y + chart.height - (supply.y + supply.height))).toBeLessThan(2);
+	expect(chart.y + chart.height).toBeGreaterThan(vh - 40);
+	expect(chart.height).toBeGreaterThan(450);
+
+	// Below it, in order: alerts, the published baseline, dam levels, the checklist, then the model's facts.
+	const below = [
+		chart.y + chart.height,
+		(await box('Active alerts')).y,
+		(await box('Published baseline')).y,
+		(await box('Dam levels')).y,
+		(await box(/^Set(up| up this catchment)/)).y
+	];
+	expect([...below].sort((a, b) => a - b)).toEqual(below);
 	const modelH = (await page.getByRole('heading', { level: 2, name: 'The model' }).boundingBox())!.y;
-	expect(modelH).toBeGreaterThan(order[3]!);
+	expect(modelH).toBeGreaterThan(below[4]!);
 
 	// ?tab=summary is the same page.
 	await page.goto(`/projects/${project.id}?tab=summary`);
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
+});
+
+test('the flow chart: 30 days / 1 year / All, and the days below the reserve shaded', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary flow chart');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}`);
+	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
+	const fig = flow.locator('figure.chart');
+	await expect(fig).toHaveAttribute('data-ready', 'true');
+	const windows = flow.getByRole('group', { name: 'Time window' });
+	// The run is 120 days (1 Oct 2021 – 28 Jan 2022): a year shows all of it, and the chart opens on it.
+	await expect(windows.getByRole('button', { name: '1 year' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(fig).toHaveAttribute('data-view-start', '2021-10-01');
+	await expect(fig).toHaveAttribute('data-view-end', '2022-01-28');
+	await windows.getByRole('button', { name: '30 days' }).click();
+	await expect(fig).toHaveAttribute('data-view-start', '2021-12-29');
+	await expect(fig).toHaveAttribute('data-view-end', '2022-01-28');
+	await expect(windows.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(windows.getByRole('button', { name: '1 year' })).toHaveAttribute('aria-pressed', 'false');
+	await windows.getByRole('button', { name: 'All' }).click();
+	await expect(fig).toHaveAttribute('data-view-start', '2021-10-01');
+	await expect(windows.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+
+	// The shaded days are the run's own EWR-not-met days: the caption's count is the KPI card's.
+	await expect(fig).toHaveAttribute('data-shaded', /^\d+$/);
+	const card = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="ewr"]');
+	const notMet = /(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1];
+	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the dashed EWR line (EWR not met).`);
+});
+
+test('needs attention cards and supply by farm: coloured by how much it matters, each farm opens its drawer', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Summary side column');
+	// Plant far more on Lower farm than its water can serve, so it comes up short.
+	const model = { ...project.model, cropAreas: project.model.cropAreas.map((a, i) => (i === 1 ? { ...a, areaM2: 3_000_000 } : a)) };
+	await putModel(page.request, project.id, model);
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}`);
+
+	const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
+	const short = attention.locator('[data-attention="short-farms"]');
+	await expect(short).toContainText('1 of 2 farms below 95%');
+	await expect(short).toContainText(/Lower farm got \d+% of its demand in the latest run/);
+	await expect(short).toHaveAttribute('data-tone', /^(danger|warning)$/);
+	await expect(attention.locator('[data-attention="stale-data"]')).toHaveAttribute('data-tone', 'warning');
+
+	const supply = page.getByRole('region', { name: 'Supply by farm' });
+	const rows = supply.getByRole('listitem');
+	await expect(rows).toHaveCount(2);
+	// Fullest first, emptiest last, in the Network's supply bands, with a key to them.
+	await expect(rows.first()).toContainText('Upper farm');
+	await expect(rows.last()).toContainText('Lower farm');
+	await expect(rows.last()).toHaveAttribute('data-band', /^(short|low)$/);
+	const pcts = await rows.evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.pct')!.textContent!)));
+	expect(pcts[0]!).toBeGreaterThan(pcts[1]!);
+	await expect(supply).toContainText(/supplied/);
+
+	// A farm's name opens its planted areas over the Summary.
+	await rows.last().getByRole('link', { name: 'Lower farm' }).click();
+	await expect(page).toHaveURL(new RegExp(`\\?farm=${project.model.nodes[2]!.id}$`));
+	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+
+	// The whole card is the link: a click on its detail follows the main action.
+	await short.click({ position: { x: 16, y: 34 } });
+	await expect(page).toHaveURL(/[?&]tab=runs&run=/);
+});
+
+test.describe('the first screen has no accessibility violations', () => {
+	for (const [label, viewport] of [
+		['desktop', { width: 1440, height: 960 }],
+		['phone', { width: 390, height: 844 }]
+	] as const) {
+		test(label, async ({ page, owner }) => {
+			void owner;
+			await page.setViewportSize(viewport);
+			const project = await seedRunnableProject(page.request, `Summary a11y ${label}`);
+			await createRun(page.request, project.id, 'Baseline');
+			await createRun(page.request, project.id, 'Second');
+			await page.goto(`/projects/${project.id}`);
+			await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('full');
+			await expect(page.getByRole('region', { name: 'Supply by farm' })).toBeVisible();
+			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+			await expectNoViolations(page);
+		});
+	}
 });
 
 test('dam levels: every dam in the latest run, emptiest first, with its end-of-run and lowest level', async ({ page, owner }) => {
@@ -126,6 +247,14 @@ test('dam levels: every dam in the latest run, emptiest first, with its end-of-r
 	expect([...ends].sort((a, b) => a - b)).toEqual(ends);
 	await expect(rows.first().locator('td').nth(1)).toContainText(/\d+% · \d{1,2} [A-Z][a-z]{2} \d{4}/);
 	await expect(dams.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
+	// Dams today on the KPI row is every dam together, weighted by capacity (150 000 and 90 000 m³).
+	const today = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]');
+	await expect(today).toContainText('2 dams on 28 Jan 2022');
+	await expect(today).toContainText(/in 30 days/);
+	const caps = await rows.evaluateAll((trs) => trs.map((tr) => parseFloat(tr.querySelector('th .cap')!.textContent!.replace(/,/g, ''))));
+	const weighted = (ends[0]! * caps[0]! + ends[1]! * caps[1]!) / (caps[0]! + caps[1]!);
+	const shownPct = parseFloat((await today.locator('dd.value').textContent())!);
+	expect(Math.abs(shownPct - weighted)).toBeLessThanOrEqual(1);
 	// Below the flow chart, above the setup checklist.
 	const top = async (name: string | RegExp) => (await page.getByRole('region', { name }).boundingBox())!.y;
 	expect(await top('Dam levels')).toBeGreaterThan(await top('Flow vs reserve'));

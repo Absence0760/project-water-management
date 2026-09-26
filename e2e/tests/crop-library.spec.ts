@@ -1,5 +1,5 @@
-// Load crop factors on Crops & demand (issue #54 item 1, docs/ui.md § Crops
-// tab): map a crop to the reference library, see the diff and the demand
+// Load crop factors on Crops & demand (issue #54 item 1, docs/ui.md § Crop
+// grids), from the Crop factors grid (Grids › Crop factors, issue #17): map a crop to the reference library, see the diff and the demand
 // change, apply, save with a reason, reload; and a rejected change leaves
 // the factors as they were.
 import { fileURLToPath } from 'node:url';
@@ -7,7 +7,9 @@ import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal } from '../support/network.ts';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Load crop factors' });
 // The seeded Orchard, Oct … Sep, and the library's citrus (ARC Table 4.13 in water-year order).
@@ -22,9 +24,15 @@ async function savedFactors(page: Page, projectId: string): Promise<number[]> {
 	return model.crops.find((c) => c.name === 'Orchard')!.cropFactor;
 }
 
+/** Opens the Crop factors grid (the grid modal) and, from it, the Load crop factors dialog. */
+async function openLoad(page: Page) {
+	const grid = await openCropGrid(page, 'crop-factors');
+	await grid.getByRole('button', { name: 'Load crop factors…' }).click();
+}
+
 async function openAndMapToCitrus(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=crops`);
-	await page.getByRole('button', { name: 'Load crop factors…' }).click();
+	await openLoad(page);
 	const d = dialog(page);
 	await expect(d).toBeVisible();
 	// "Orchard" matches no library crop by name, so it starts on Keep current and nothing would change.
@@ -55,14 +63,17 @@ test('map Orchard to the library citrus, see the diff and the demand change, app
 	// Nothing is saved until the save bar saves it.
 	expect(await savedFactors(page, project.id)).toEqual(ORCHARD);
 
-	const bar = page.getByRole('region', { name: 'Unsaved model changes' });
-	await bar.getByLabel('Reason for this change (optional)').fill('ARC winter-rainfall citrus');
-	await bar.getByRole('button', { name: 'Save changes' }).click();
-	await expect(bar).toBeHidden();
+	// The grid modal hides the save bar, so its own save row saves, with the reason.
+	const grid = page.getByRole('dialog', { name: 'Crop factors' });
+	await grid.getByLabel('Reason for this change (optional)').fill('ARC winter-rainfall citrus');
+	await grid.getByRole('button', { name: 'Save changes' }).click();
+	await expect(grid).toContainText('No unsaved changes');
 	expect(await savedFactors(page, project.id)).toEqual(CITRUS);
 
+	// A reload keeps the grid open (`grid=` in the URL), with the saved factors.
 	await page.reload();
 	await expect(page.getByLabel('Orchard crop factor, Mar')).toHaveValue('0.5');
+	await closeModal(page);
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'History' }).click();
 	const newest = page.getByTestId('history-entry').first();
 	await expect(newest).toContainText('Model changed');
@@ -73,7 +84,7 @@ test('a staged vegetable needs a planting date; its season comes from Table 4.7'
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Crop library staged');
 	await page.goto(`/projects/${project.id}?tab=crops`);
-	await page.getByRole('button', { name: 'Load crop factors…' }).click();
+	await openLoad(page);
 	const d = dialog(page);
 	await d.getByLabel('Load factors for Orchard from').selectOption({ label: 'Onions' });
 	// No planting month yet, so no new factors to apply.
@@ -96,7 +107,7 @@ test('from a b023 workbook: matched by name, times a pan coefficient', async ({ 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Crop library b023');
 	await page.goto(`/projects/${project.id}?tab=crops`);
-	await page.getByRole('button', { name: 'Load crop factors…' }).click();
+	await openLoad(page);
 	const d = dialog(page);
 	await d.getByRole('radio', { name: 'A b023 workbook' }).check();
 	await d.getByLabel('Workbook (.xlsx, .xlsm)').setInputFiles(fileURLToPath(WORKBOOK));
