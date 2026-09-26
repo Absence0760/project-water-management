@@ -23,6 +23,7 @@ storage.
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -540,7 +541,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
 | GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model: `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine). No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
-| DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "this run is cited, so it is kept" }` for a run something cites (a scenario's base, later an evidence pack; none yet, [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
+| DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited, so it is kept" }` for a run something else cites (a scenario's base, later an evidence pack, [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, `[]` when none | viewer |
 | POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, or a project at its limit of 50 nominations | editor |
 
@@ -551,9 +552,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (engine ≥ 0.27.1) farm flow shares that add up to more than 100 %.
 - A project keeps its newest **20** runs (env `RUNS_KEPT_PER_PROJECT`,
   default 20); each new run deletes the oldest beyond that, with their
-  outputs. Pinned runs (at most 10 per project) and runs the evidence
-  history names are exempt and don't count against the 20.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned }` —
+  outputs. Pinned runs (at most 10 per project), runs the evidence
+  history names and runs a publication holds (at most 12, [Publication](#publication))
+  are exempt and don't count against the 20.
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published }` —
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
   fetch (audit H1, workbook comparison only — not evidence). `notes` is the
@@ -565,6 +567,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   evidence history: `'current'` (the project's nominated evidence run),
   `'past'` (nominated before, since replaced) or `null`. `pinned` is whether
   an editor pinned the run (015_run_pinned), so it survives the run cap.
+  `published` is whether the project's current publication holds the run
+  (022_publication).
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
@@ -783,6 +787,88 @@ the result is stored only after the server has checked it.
 - Nothing about a stored ensemble can change and none can be deleted
   ([data-model.md](./data-model.md), "Uncertainty bands").
 
+## Publication
+
+The run the project's stakeholders see, with the WUA's restriction notice
+(roadmap WP-2.3, [data-model.md § Publications](./data-model.md#publications-022_publicationsql)).
+Publishing projects the run once, per farm and for the catchment, with the
+engine's `farmProjection` / `catchmentView`
+(`packages/engine/src/views/farmProjection.ts`), over the **season**: 1
+October (the water year's start) to the run's last day, never over the
+modeller's report window (design [farmer-view.md §2](./design/farmer-view.md#2-where-the-figures-come-from)).
+`dataUntil` is the last day of observed rain in the run's input snapshot
+(the catchment gauge or CHIRPS): a run that goes on past it on forecast
+rain is projected only to there, so forecast days never count as water
+received (they come as their own block with WP-2.12).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
+| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
+| PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
+
+- `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, noticeEn?: string | null, noticeAf?: string | null }`.
+  A change replaces the whole notice. `pct` is stored to two decimals and is
+  refused with `none`. Notices and the note are trimmed, at most 2 000
+  characters, no NUL; an empty notice is none. `nextExpectedOn` is a date
+  (`YYYY-MM-DD`) or `null` (design E10). Without `restriction` a
+  publication has none.
+- `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt }`;
+  `publishedBy` is a display name (`null` once that account is gone).
+- `Publication = PublicationMeta & { note?, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn, catchmentView, updatedAt, updatedBy }`.
+  `note` is the modeller's note to the project's staff: returned to viewers
+  and above only, never to a farmer.
+- `catchmentView = { runStart, dataUntil, runDays, season: { from, to, days }, last30: { from, to, days }, farmCount, sites: { name, isOutlet, daysNotMet: { run, season, last30 } }[], engineVersion, runoffModel, calibration: { nse, pbias, kge } | null }`:
+  what every member, farmers included, reads about the catchment. Counts
+  and dates only: no flow volume and no total of farm quantities (design
+  §10.3; the roadmap's "mean natural and simulated flow" and "totals at ≥ k"
+  are left out on purpose, since `run_publication` is readable by farmers).
+  `sites` are the EWR sites, the outlet first, then the gauges.
+- A project keeps its newest **12** publications; an older one is deleted
+  with its farm projections, and its run becomes trimmable again.
+- Nothing here is audited yet beyond the `updatedAt` / `updatedBy` stamp:
+  the audit log is WP-2.4.
+
+## Farm
+
+The farmer's farm view (roadmap WP-2.6 API; design
+[farmer-view.md](./design/farmer-view.md)), from the project's **current**
+publication. Every route admits the `farmer` role and viewer and above too
+(the WUA previews a farm as its farmer sees it). A farmer reaches only the
+farms linked to them: any other node, a gauge, or a node that doesn't exist
+answers `404 { error: "not found" }` alike. A farm with nothing published for
+it (no current publication, or a farm added since) answers `404 { error: "not published yet" }`.
+No response names another node, by id or name, beyond the gauges (public
+infrastructure). The contract types are `FarmIndex` and `FarmView` in
+`packages/engine/src/views/farmView.ts`.
+
+| Method | Path | Response | Min role |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above | farmer |
+| GET | `/projects/:id/farm/:nodeId?lang=en\|af` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my farm", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
+
+- `farm` is the stored `FarmProjection` (season and last-30 totals, the dam,
+  last season from the same run, the 12 months to `dataUntil`, the river's
+  share with the E7 headline and its band). `farm.river.equitableFraction`
+  and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
+  `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
+  D2), and `cutBeyondShare` is `false` (it is measured against the even
+  share, so it would bound it); the stored projection keeps them.
+- `context = { farmsUpstream, farmsDownstream, farmCount }` from
+  `app_farm_context`: counts only.
+- `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice, noticeLang? }, nextExpectedOn }`.
+  `notice` is in the `lang` asked for (default `en`), or in the other
+  language when that one is empty; `noticeLang` says which (absent without
+  a notice).
+- `outlet30 = { name, daysNotMet, days }`: the outlet over the 30 days to
+  `dataUntil`, counts only.
+- `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
+  when the response was built.
+- The chart series route (`…/farm/:nodeId/series`) and the publication
+  history per farm (`…/history`) are not built yet (WP-2.6).
+
 ## Jobs
 
 Background work (the job queue, [architecture.md § Background work](./architecture.md#background-work)).
@@ -853,6 +939,62 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   or `the source’s data could not be read: the grid has no data at …`.
 - Strangers get `404`; a viewer's writes and an editor's attach / change /
   remove get `403`.
+
+## Reports
+
+Server-side PDFs of the printable report ([ui.md § Report](./ui.md#report);
+WP-2.15 Phase B, [architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+A `report_render` job prints the report route in headless Chromium, as the
+member who asked (or, for a schedule, the editor who saved it), under RLS.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/reports` | `{ runId?, email? }` | `202 { jobId }`: a render of `runId` (the latest run without one) is queued. `email`: `true` emails the link to you; a list of user ids emails it to those members (editors and owners only; `403` for a viewer naming anyone else). `404` a `runId` not in the project; `409` the project has no runs; `429` over 10 on-demand PDFs an hour per user and project | viewer |
+| GET | `/projects/:id/reports/:jobId` | – | `{ report: ReportView, url? }`. `url` is a pre-signed download link (an hour) once `status` is `done`. `404` unknown job, or not a report's | viewer |
+| GET | `/projects/:id/report-schedules` | – | `{ schedules: ScheduleView[] }` | viewer |
+| POST | `/projects/:id/report-schedules` | `ScheduleInput` | `201 { schedule: ScheduleView }`. `409` past 10 schedules per project | editor |
+| PATCH | `/projects/:id/report-schedules/:scheduleId` | any of `ScheduleInput`'s fields | `200 { schedule }`. Saving makes you its acting user; changing its timing (or pausing / resuming it) starts it afresh from now | editor |
+| DELETE | `/projects/:id/report-schedules/:scheduleId` | – | `204`. PDFs already sent stay until they expire | editor |
+
+- `ReportView = { jobId, status, runId, scheduled, pages, createdAt, finishedAt, error, emailed }`.
+  `status` ∈ `queued` → `rendering` → `done`; `retrying` (the render failed
+  and will be tried again; up to 3 attempts); `failed` (out of attempts, a
+  failure no retry can fix, or, in production, no answer from the renderer
+  within an hour). `error` is the server's own text, never raw database or
+  browser output: e.g. `the render took longer than 90 s`, `the report page
+  did not load: …` (the page's own message), `the run was deleted before its
+  report was made`, `the PDF could not be stored`; after a good render, `the
+  email to 1 of 2 recipients could not be sent`. `emailed` is how many people
+  it was sent to (asked for; each must still be a member when it's sent).
+- Recipients (on demand and scheduled) must be **direct members of the
+  project with viewer or above**, the Sharing panel's list: never a farmer,
+  never an arbitrary address (`400 every recipient must be a member of the
+  project who can read its report (a viewer or above)`). The email carries a
+  link to `/projects/:id/reports/:jobId` in the app, not the PDF: the reader
+  signs in, and the page asks this API for a fresh download link.
+- `ScheduleInput = { frequency, weekday?, monthDay?, hour, timezone, enabled?, recipients }`,
+  strict: `frequency` `weekly` (needs `weekday` 1 = Monday … 7 = Sunday) or
+  `monthly` (needs `monthDay` 1–28); `hour` 0–23 in `timezone` (an IANA zone,
+  e.g. `Africa/Johannesburg`, checked with `Intl`); `enabled` default true;
+  `recipients` 1–20 user ids.
+- `ScheduleView = { id, frequency, weekday, monthDay, hour, timezone, enabled, recipients: { userId, displayName, email }[], actingUser, nextAt, lastSentFor, lastError, updatedAt }`.
+  `nextAt` is the next time it will send (never before it was saved; `null`
+  when paused). `lastError` says why the last due time sent nothing: `the
+  project had no runs to report on`, or `the editor who saved this schedule
+  can no longer edit the project: an editor must save it again`.
+- A schedule's report is of the project's **latest run** at the time it
+  fires, emailed to its recipients. The worker's tick checks schedules every
+  pass (every 5 minutes in production) and queues each due time once.
+- PDFs are kept for 7 days (the bucket's lifecycle; locally the tick deletes
+  them with their rows a day later). Farmers get `403` on every route here.
+- `GET /jobs` lists the `report_render` jobs too.
+- **The render session** (`POST /auth/render-session`) is for the renderer,
+  not people: it exchanges a single-use, 5-minute render token (issued by the
+  worker as the requester) for a 10-minute session that may only `GET`
+  `/auth/me`, `/projects/:id`, `/projects/:id/series` and
+  `/projects/:id/runs/:runId[/…]` of the one project and run; everything else
+  answers `403 this session can only read one report`
+  ([security.md § Render tokens](./security.md#render-tokens)).
 
 ## Compare runs
 

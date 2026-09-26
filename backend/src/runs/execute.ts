@@ -71,8 +71,11 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
  * True for a run the storage cap never trims and the DELETE route refuses, as
  * a SQL expression over `model_run r`: one an editor pinned (015_run_pinned),
  * one the evidence history names, now or before (010_run_nomination), or one
- * something **cites** (`model_run_cited`, 021_series_blob.sql). The single
- * exemption path for all three, so they can't drift apart.
+ * something **cites** (`model_run_cited`, 021_series_blob.sql; a
+ * publication in the project's history cites its run, 022_publication.sql,
+ * so a published run is kept until its last publication is trimmed from the
+ * history of 12). The single exemption path for all of them, so they can't
+ * drift apart.
  *
  * A new kind of citation (a scenario's base run, WP-3.2; an evidence pack or
  * assessment, WP-3.13/3.14) is not added here: its migration adds one EXISTS
@@ -93,13 +96,16 @@ export async function lockProjectRuns(db: Db, projectId: string): Promise<void> 
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('model_run_trim:' || $1::text, 0))`, [projectId]);
 }
 
+/** Also over `model_run r`: a publication (current or in the history) holds the run, for the DELETE route's message. */
+export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id)`;
+
 /**
  * Delete the project's oldest runs beyond the cap (run_series cascades).
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
  *
  * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or
- * cited) is never trimmed and doesn't count against the cap: the cap keeps the
+ * cited, published runs included) is never trimmed and doesn't count against the cap: the cap keeps the
  * newest `keep` runs that are neither.
  *
  * One trim at a time per project, held to the end of the caller's

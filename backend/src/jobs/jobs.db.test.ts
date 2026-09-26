@@ -267,10 +267,10 @@ describe('retries, backoff and dead-lettering', () => {
 	it('a kind with no handler, or a payload its handler rejects, is dead at once', async () => {
 		const u = await signUp('Unhandled');
 		const pid = await project(u);
-		const { job: nohandler } = await enqueue(u, { projectId: pid, kind: 'report_render' });
+		const { job: nohandler } = await enqueue(u, { projectId: pid, kind: 'alert_eval' });
 		const { job: badPayload } = await enqueue(u, { projectId: pid, kind: 'rerun', payload: { label: 5 } });
 		await runTick();
-		expect(await jobRow(nohandler.id)).toMatchObject({ status: 'dead', last_error: 'no handler for "report_render" jobs' });
+		expect(await jobRow(nohandler.id)).toMatchObject({ status: 'dead', last_error: 'no handler for "alert_eval" jobs' });
 		expect(await jobRow(badPayload.id)).toMatchObject({ status: 'dead', last_error: 'the job’s payload is not valid' });
 	});
 });

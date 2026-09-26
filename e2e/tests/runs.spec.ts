@@ -215,6 +215,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
 		'Notes & evidence',
+		'Publication',
 		'EWR & flow duration',
 		'EWR by month',
 		'Curtailment',

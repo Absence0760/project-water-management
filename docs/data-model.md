@@ -147,12 +147,14 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   against the cap: one an editor **pinned** (see **Pinned runs** below), one
   the evidence history names (current or past nomination, see **Evidence
   nomination** below), or one something **cites** (`model_run_cited`, see
-  **Cited runs** below; none yet). All three go through one exemption,
-  `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`, which `trimRuns` and the
-  `DELETE` route share. So a project holds at most 20 unpinned, unnominated,
-  uncited runs, plus at most 10 pinned, plus the runs its (at most 50)
-  nominations name, plus the cited ones. A trimmed run's stored inputs go with
-  it (see **Stored run inputs**).
+  **Cited runs** below): a publication in the history cites its run
+  ([Publications](#publications-022_publicationsql)). All of them go through
+  one exemption, `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`, which
+  `trimRuns` and the `DELETE` route share. So a project holds at most 20
+  unpinned, unnominated, uncited runs, plus at most 10 pinned, plus the runs
+  its (at most 50) nominations name, plus the cited ones (the runs its at most
+  12 publications hold among them). A trimmed run's stored inputs go with it
+  (see **Stored run inputs**).
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -497,7 +499,10 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |
-  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no `run_series` (a farmer will read results only through a publication, WP-2.3), no invites, teams, jobs, feeds or evidence |
+  | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
+  | `publication_farm` | the projections of their linked farms (022) |
+  | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
+  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no other `run_series` (flows such as `inflow_upstream` are a neighbour's outflow when one farm is upstream; catchment series reveal the neighbours' use), no invites, teams, jobs, feeds or evidence |
 
   A farmer writes nothing: every write policy asks for `editor` or `owner`.
 - **A link needs a membership and goes with it**: `farm_link` has a foreign
@@ -508,6 +513,11 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   them (trigger `node_unlink_farmers`), and the Network tab says so first. A trigger allows only `farm`
   nodes and only members whose role is `farmer`; `assert_same_project` keeps
   the node in the project.
+- **Who can see a farm** (022, design §10.2): `app_farm_access(project,
+  node)` lists everyone who can read that farm, by display name and effective
+  role, never an email: its linked farmers, and every viewer-and-above member
+  (direct or through the team). It answers a viewer or a user linked to that
+  farm, and no row to anyone else, so a farmer on another farm can't ask.
 - **Anonymised context** (decision D1, option b): `app_farm_context(project,
   node)` returns the number of farms upstream and downstream of a node and
   the catchment's farm count, never ids or names, to a viewer or a user
@@ -522,8 +532,74 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
 - Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
   and every `/projects/:id` route answering a farmer `400`/`403`), and a
   catalogue test that every table with a node column has a farmer-aware
-  `SELECT` policy or is listed as never read by farmers (`run_series` until
-  WP-2.3).
+  `SELECT` policy or is listed as never read by farmers (none since 022 gave
+  `run_series` its publication-scoped farmer policy).
+
+### Publications (022_publication.sql)
+
+The **published baseline** (roadmap WP-2.3; design
+[design/farmer-view.md](./design/farmer-view.md) §2, §4): the run an editor
+chose for the project's stakeholders, with the WUA's restriction notice.
+
+- `run_publication (id, project_id, run_id → model_run, published_by →
+  app_user SET NULL, published_at, note ≤ 2000, restriction_level none |
+  advisory | restricted, restriction_pct numeric(5,2) NULL (0–100, NULL with
+  none), notice_en / notice_af ≤ 2000, next_expected_on date NULL (E10),
+  catchment_view jsonb, superseded_at, updated_at, updated_by → app_user SET
+  NULL)`. A partial unique index on `(project_id) WHERE superseded_at IS
+  NULL` allows one **current** publication per project; publishing
+  supersedes the current one in the same transaction (under a per-project
+  advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
+  `published_by`, `updated_by`.
+- `publication_farm (publication_id → run_publication CASCADE, project_id,
+  node_id → node CASCADE, view jsonb, PRIMARY KEY (publication_id, node_id))`,
+  indexed on `node_id` and `project_id`: one farm's `FarmProjection`
+  (`packages/engine/src/views/farmView.ts`), computed once by
+  `farmProjection` when the run is published, for every farm of the run's
+  model snapshot that is still a farm of the project. **Append-only**: what
+  the farm's farmers were shown (no `UPDATE` or `DELETE` grant; rows go with
+  their publication or node).
+- `catchment_view` is the engine's `CatchmentView` plus the run's engine
+  version, runoff model and calibration headline: counts and dates only (days
+  the reserve was not met at each EWR site over the run, the season and 30
+  days; the farm count). No flow volume and no total of farm quantities,
+  because every member, farmers included, reads it (design §10.3).
+- **The season.** Every projection figure is over 1 October (the water
+  year's start) to the run's last day (`dataUntil`), and the curtailment
+  row is `computeCurtailment` over that season, not the modeller's report
+  window (E5). The binding EWR site, which a run doesn't store, is
+  recomputed with the engine's attribution on the run's stored flows
+  (exact unless the transfer rules form a loop; see the file header).
+- **Immutable but for the notice.** `water_app` has `UPDATE` on the notice
+  columns (`restriction_level`, `restriction_pct`, `notice_en`, `notice_af`),
+  `note`, `next_expected_on`, `superseded_at`, `updated_at` and `updated_by`
+  only; the run, the projection, the publisher and the date can't change
+  (the catalogue test pins the list).
+- **Keeps its run.** `run_id` has no cascade (`NO ACTION`, checked at the end
+  of the statement, so deleting a whole project still works; `RESTRICT` would
+  fail it), a publication cites its run (`model_run_cited`, so `trimRuns`
+  skips a run any publication holds) and `DELETE
+  …/runs/:runId` answers `409`.
+- **History: the newest 12 per project.** The `run_publication_cap` AFTER
+  INSERT trigger (`SECURITY DEFINER`, since the editor who publishes may not
+  delete publications) deletes the older superseded ones with their farm
+  rows; their runs become trimmable again. `PUBLICATION_HISTORY_MAX` in
+  `backend/src/publish/publish.ts` holds the same number.
+- **RLS.** `run_publication`: SELECT any member, farmers included
+  (`app_has_role(project_id, 'farmer')`); INSERT editor, as yourself
+  (`published_by` = the current user); UPDATE editor; DELETE owner.
+  `publication_farm`: SELECT viewer, or a farmer whose `app_farm_nodes`
+  holds the node; INSERT editor. `run_series` gains
+  `run_series_select_farmer` (above). `assert_same_project` (re-created from
+  001 with `%run_id` → `model_run` and `%publication_id` →
+  `run_publication` branches) keeps a publication's run, and a projection's
+  node and publication, in the project.
+- The modeller's `note` is for the project's staff: the API returns it to
+  viewers and above only. RLS can't hide one column, so it is readable by a
+  farmer at the database level; the publish dialog says farmers don't see it
+  through the app ([security.md](./security.md)).
+- Not built yet: share links (`share_link`, `app_share_view`), WP-2.3 phase 2
+  ([followups.md](./followups.md)); the audit log of notice changes (WP-2.4).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
@@ -600,6 +676,10 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Farmers (`farmer` role, 020): the extra farm-scoped `SELECT` policies of
   § Farmers above; `farm_link`: viewers read every link, a farmer their own,
   owners change them.
+- Publications (022): `run_publication` read by any member, farmers
+  included, written by editors, deleted by owners; `publication_farm` read by
+  viewers and the linked farmers, inserted by editors, never changed (see
+  § Publications above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
@@ -662,7 +742,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
 | `locked_until`, `lease_token` | A running job's lease and its fencing token (set together, only while `running`) |
 | `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
-| `acting_user_id` | The editor who queued it (stamped by the insert trigger). The job runs as this user under RLS |
+| `acting_user_id` | The member who queued it (stamped by the insert trigger): an editor, or any viewer for `report_render` (`023_reports.sql`). The job runs as this user under RLS |
 | `created_at`, `started_at`, `finished_at` | `finished_at` is set exactly when `done` or `dead` |
 
 - **Enqueue** is a plain INSERT as the signed-in editor. The `job_enqueue`
@@ -734,6 +814,68 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 - `feeds/feeds.db.test.ts` checks the RLS with positive controls, the forged
   health, the schedule, the acting user losing the role, and the ingest
   hand-off.
+
+### Reports (023_reports.sql)
+
+Server-side PDFs of the report ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+A farmer (`019_farmer_role.sql`) ranks below viewer, so every rule below
+refuses one.
+
+| Table | Holds |
+| --- | --- |
+| `render_token` | The headless renderer's way in: `purpose` (`report`), `token_hash` (SHA-256, unique; never the token), `user_id` (the requester), `project_id`, `run_id` (a run of that project), `expires_at` (5 minutes after issue, whatever the caller sent: the `render_token_issue` trigger), `created_at` |
+| `report` | One requested PDF: `project_id`, `run_id` (`ON DELETE SET NULL`: a trimmed run fails a queued report), `job_id` (its `report_render` job, unique, `SET NULL` once purged; the API addresses a report by it), `schedule_id` (null on demand), `requested_by`, `email_to` (user ids, ≤ 50, resolved to current members' addresses at send time), `status` (`queued` → `rendering` → `done`, or `failed` when the production renderer answers with a failure), `pages`, `bytes`, `error` (our own text, ≤ 500), `created_at`, `finished_at` (set exactly when done or failed). The PDF is at `reports/<project_id>/<id>.pdf` in the bucket: derived, never stored |
+| `report_schedule` | `frequency` (`weekly` with `weekday` 1–7, or `monthly` with `month_day` 1–28), `hour` 0–23 in `timezone` (IANA), `enabled`, `acting_user_id` (the editor who last saved it; `SET NULL` when that account goes, then skipped), `created_by`, `created_at`, `updated_at`, `anchor_at` (fires only for times after this; reset when the timing or `enabled` changes), `last_fired_for` (the scheduled time last queued), `last_error` (fixed text: why a due time queued nothing) |
+| `report_schedule_recipient` | `(schedule_id, user_id)`: who a schedule's PDF goes to |
+
+- **RLS**:
+  - `render_token`: INSERT as yourself for a project you can view; SELECT
+    your own. **Append-only** for `water_app` (the catalogue test lists it):
+    consumed only by `app_consume_render_token`.
+  - `report`: SELECT for viewers; INSERT for viewers as themselves (the
+    `report_enqueue` trigger stamps the requester and a fresh `queued`
+    state, and checks the run, job and schedule belong to the project, the
+    job being the requester's own `report_render`); UPDATE of the outcome
+    columns only (`status`, `pages`, `bytes`, `error`, `finished_at`, a
+    column grant) and only by the requester, which is who the job runs as;
+    DELETE by the requester.
+  - `report_schedule`: SELECT for viewers; INSERT / UPDATE / DELETE for
+    editors, with the acting user equal to the signed-in user. The
+    `report_schedule_stamp` trigger (on `water_app`'s writes) stamps the
+    acting user and never lets a direct write set `last_fired_for` or
+    `last_error`.
+  - `report_schedule_recipient`: SELECT through a visible schedule; writes
+    for editors of its project. The `report_schedule_recipient_check`
+    trigger refuses anyone who isn't a direct member of the project with
+    viewer or above.
+  - `job`: the insert policy (latest definition here) lets a viewer queue a
+    job of kind `report_render` only; every other kind still needs an editor.
+- **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
+  - `app_consume_render_token(hash)`: deletes the token (single use) and
+    returns its user, project and run, or nothing when unknown, used or
+    expired; drops tokens expired over a day ago. Pre-auth, like
+    `app_consume_email_token`.
+  - `app_report_schedules_to_check()`: the enabled schedules with an acting
+    user and their timing, for the tick (routing and timing only).
+  - `app_claim_report_schedule(id, time)`: true for the first caller only,
+    for a time that has come, is after `anchor_at`, and is later than the
+    last one claimed.
+  - `app_report_schedule_failed(id, reason)`: records a fixed reason.
+  - `app_report_render_target(report)`: the project and requester of a
+    report still waiting for a render, for the production worker's
+    `render-results` messages.
+  - `app_purge_reports(age)`: deletes reports older than `age` (≥ 1 day; the
+    tick passes 8), returning their ids so a local run can delete the PDFs.
+- Indexes cover every foreign key (`render_token` user / project / run,
+  `report` project / run / schedule / requester, `job_id` by its unique
+  constraint, `report_schedule` project / acting user / creator, the
+  recipient's user), plus `render_token.expires_at` and `report.created_at`
+  for the purges.
+- `reports/reports.db.test.ts` checks the token (single use, expiry, scope
+  on other projects' and runs' routes, a requester who lost access), the
+  report and schedule RLS with positive controls, farmers, the recipients
+  rule and the tick; `reports/render.db.test.ts` renders a real PDF into
+  MinIO.
 
 The DB-backed test suite (`pnpm test:backend:db`, database `water_test`) checks
 these rules as `water_app`: that non-members see nothing, that role

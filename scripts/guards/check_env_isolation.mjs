@@ -15,7 +15,8 @@
 //      private infra-secrets repo; `*.sops.yaml.example` key lists are fine);
 //   3. every host a committed dev default names is local;
 //   4. the dev-only placeholders stay placeholders (`AUTH_JWT_SECRET` starts
-//      with `dev-only-`, `CLOUDFRONT_SHARED_SECRET` is empty);
+//      with `dev-only-`, `CLOUDFRONT_SHARED_SECRET` is empty, the object
+//      store is the local MinIO with its default `minioadmin` login);
 //   5. frontend env files define only `PUBLIC_*` keys (anything else in a
 //      Vite env file is either ignored or a secret in the wrong place), and the
 //      production default points the API at same-origin `/api`.
@@ -119,6 +120,13 @@ export function checkEnvFile(file, text) {
 			}
 			if (key === 'CLOUDFRONT_SHARED_SECRET' && value !== '') {
 				out.push({ file, line, rule: 'CLOUDFRONT_SHARED_SECRET must stay empty in a committed dev default (Terraform generates the real one)' });
+			}
+			// Object storage: the local MinIO's documented default login, never a real key pair.
+			if ((key === 'S3_ACCESS_KEY_ID' || key === 'S3_SECRET_ACCESS_KEY') && value !== 'minioadmin') {
+				out.push({ file, line, rule: `${key} must stay MinIO's local default (minioadmin); production S3 uses the Lambda's role, never a key` });
+			}
+			if (key === 'STORAGE' && value !== 'local') {
+				out.push({ file, line, rule: 'STORAGE must be local (MinIO) in a committed dev default' });
 			}
 		}
 	}

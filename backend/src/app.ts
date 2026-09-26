@@ -9,12 +9,15 @@ import { authRoutes } from './auth/routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
+import { farmViewRoutes } from './farms/view.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
+import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
+import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { runRoutes } from './runs/routes.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
@@ -77,6 +80,8 @@ export function createApp() {
 
 	app.route('/auth', authRoutes);
 	app.route('/auth', emailAuthRoutes);
+	// The headless report renderer's sign-in: the render token is the credential.
+	app.route('/auth', renderSessionRoutes);
 
 	const projects = new Hono<AuthEnv>();
 	projects.use('*', requireUser);
@@ -90,7 +95,10 @@ export function createApp() {
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
 	projects.route('/', feedRoutes);
+	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
+	projects.route('/', farmViewRoutes);
+	projects.route('/', publicationRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();

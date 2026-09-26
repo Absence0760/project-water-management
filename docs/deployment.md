@@ -96,7 +96,7 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $58–63/month | ≈ $50–52/month | ≈ $49/month |
+| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $51–53/month | ≈ $50/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
@@ -404,7 +404,7 @@ Each deployable has its own release line, named `<component>@<semver>`
 
 | Tag | Workflow | Deploys |
 | --- | --- | --- |
-| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API Lambda, then the health check |
+| `backend@X.Y.Z` | `deploy-backend.yml` | migrate Lambda (runs the migrations), then the API, worker and fetcher Lambdas, then the renderer's image (pushed to ECR; the renderer moved to it once it exists), then the health check |
 | `web@X.Y.Z` | `deploy-frontend.yml` | the static build to S3, then a CloudFront invalidation |
 
 **Publishing a GitHub Release is the trigger.** Pushing a tag on its own does
@@ -439,7 +439,9 @@ nothing. Step by step:
    - the `production` environment exists **and has a required reviewer**. A
      job that names a missing environment creates it unprotected, so the
      preflight fails instead;
-   - every AWS variable and secret the deploy reads is set. Until the account
+   - every AWS variable and secret the deploy reads is set (the backend's
+     include `RENDERER_FUNCTION_NAME` and `RENDERER_ECR_REPOSITORY`, from
+     `export-tf-vars.sh`). Until the account
      is bootstrapped and `export-tf-vars.sh` has run, **every release stops
      here** with a pointer to the runbook, before anything is built.
 6. **build** installs dependencies and builds the artifact. It has no
@@ -557,6 +559,58 @@ plan-only until the first deploy):
   cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
   No NAT, no new endpoint.
 
+## Reports
+
+Server-side PDFs ([architecture.md § Server-side reports](./architecture.md#server-side-reports))
+run on the job queue, with the rendering done outside the VPC (infra/reports.tf,
+plan-only until the first deploy):
+
+- **The worker** (`REPORT_RENDERER=sqs`) never renders: a `report_render` job
+  issues the render token, sends a versioned request (ids and the token) to
+  `render-requests` and marks the report `rendering`. When the answer comes
+  back on `render-results` it records the PDF and emails the link through SES
+  (`MAIL_TRANSPORT=ses`, the same no-reply-only policy and endpoint as the
+  API).
+- **Renderer Lambda** (`backend/src/lambda-renderer.ts`, handler
+  `lambda-renderer.handler`): a **container image** built from
+  `backend/renderer.Dockerfile` (Playwright's image `v1.63.0-noble`, the
+  Chromium e2e uses, plus the Lambda runtime interface client), x86_64,
+  **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
+  reserved concurrency `renderer_reserved_concurrency` (2). It opens
+  `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,
+  signs in with the render token (`POST /api/auth/render-session`), prints
+  the PDF and puts it in the reports bucket. Its role can do nothing else.
+- **The image**: `deploy-backend.yml`'s build job (no AWS credentials) builds
+  it and hands it over as an artifact; the approved deploy job pushes it to
+  the `water-management-renderer` ECR repository (tags are immutable: the
+  release version) and moves the function to it. **Lambda can't be created
+  from an image that doesn't exist yet**, so the function is created by
+  Terraform only once `renderer_image_tag` names a pushed version: after the
+  first backend deploy, set it and apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
+  Until then the deploy logs a notice and render requests wait in their
+  queue.
+- **The bucket**: `water-management-reports-<account>`, private (public
+  access blocked, bucket-owner objects), SSE-S3, TLS only, and a lifecycle
+  that deletes `reports/` objects after **7 days** (the tick deletes the
+  rows a day later). The API role may only `GetObject` there, to pre-sign
+  one-hour download links; signing is local, so the API needs no S3
+  endpoint. A pre-signed URL is only valid while the Lambda role's
+  temporary credentials are, which normally outlast the hour.
+- **Retries and DLQs:** each render queue dead-letters after 5 receives. A
+  failed render is an answer (the report shows it), not a retry: its token
+  is spent. A render request in the DLQ can't be redriven usefully (the
+  token expired after 5 minutes): purge it; a render result in the DLQ can.
+- **Alarms:** `render-requests-dlq-depth`, `render-results-dlq-depth`,
+  `renderer-errors` (a crash or timeout) and `renderer-duration` (p90 over a
+  minute).
+- **SES**: report emails go to members, so they count against the same SES
+  sending limits as account email; production access (Operator step 8a) is
+  needed before a schedule can mail anyone but verified addresses.
+- **Cost (idle delta ≈ +$1.00–1.20/month):** two more event sources polling
+  (~$0.50), four alarms ($0.40), the image in ECR (~$0.10–0.30); a render is
+  ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
+  endpoint.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same
@@ -575,8 +629,8 @@ plan-only until the first deploy):
 CloudFront, S3, Lambda and SES sending are cents. WAF is ~$7/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
-still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher runs
-outside the VPC for the same reason. Total ≈ $49/month in
+still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
+the report renderer run outside the VPC for the same reason. Total ≈ $50/month in
 us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
 is set from `budget_monthly_usd` (default 60; raise it to ~80 for

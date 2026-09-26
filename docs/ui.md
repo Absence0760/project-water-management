@@ -855,6 +855,26 @@ its own chunk loaded with the tab; WP-2.10,
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
   feed and the form open).
 
+### Scheduled reports
+
+Below Data feeds, **Scheduled reports** (`#set-report-schedules`;
+`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk loaded with
+the tab; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+run's report to chosen members every week or month.
+
+- **The list**, one card per schedule: "Every Monday at 07:00
+  (Africa/Johannesburg)" or "On the 1st of every month at 06:00 (UTC)", who it
+  goes to and who it sends as, and "Next: …" with, when the last due time sent
+  nothing, why ("the project had no runs to report on"); a paused one says
+  **Paused.**
+- **Add a schedule** (editors and owners): every week (on a weekday) or month
+  (on day 1–28), the hour, the time zone (an IANA name, the browser's own by
+  default), and **Send to**: checkboxes of the project's members who can read
+  the report (farmers are not offered; you are ticked if you are one).
+  **Pause / Resume** and **Remove** (with a confirm) on each card.
+- Viewers see the list, with no buttons.
+- Tested by `e2e/tests/server-report.spec.ts`.
+
 ## Runs & results
 
 - **The rail.** On wide screens (over 900px) a left rail holds the runs
@@ -882,7 +902,8 @@ its own chunk loaded with the tab; WP-2.10,
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
   together sit together:
-  1. **Summary**, then **Notes & evidence** (`#res-notes`).
+  1. **Summary**, then **Notes & evidence** (`#res-notes`) and
+     **Publication** (`#res-publication`).
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow beside the flow-duration curve (one menu entry, **EWR &
      flow duration**, since they share a row), EWR by month.
@@ -908,7 +929,7 @@ its own chunk loaded with the tab; WP-2.10,
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
-  (latest, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
+  (latest, Published, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -924,6 +945,28 @@ its own chunk loaded with the tab; WP-2.10,
   server's `409` reason in the tab's error. Viewers see the badge but no
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
   option (read only).
+- **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
+  its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
+  menu entry **Publication**). Says whether the shown run is the project's
+  published baseline ("This run is the published baseline … Published … by
+  …"), another run is, or nothing is published yet, and shows the current
+  notice: the level with its percentage ("Advisory · 10 %"), the English and
+  Afrikaans text, the next update date and who last changed it. Editors get
+  **Publish this run** on any other run: a confirm dialog says what changes
+  for stakeholders (each farmer sees this run's figures for their own farm
+  from 1 October, and the notice; it replaces the current baseline, which
+  stays in the history), warns when farm dams have no stop level ("N farm
+  dams have no stop level (0 %)…", from the run's model snapshot, design
+  §3 Q3), and holds the notice fields (level, cut %, next update date,
+  notice in English and Afrikaans) and an optional note for the staff
+  ("farmers don't see it"). **Publish** answers "Published. N farm views
+  updated." **Edit notice** changes the current notice in place (`PATCH`,
+  no re-publishing): "Notice saved." A legacy-model run says why it can't be
+  published. In the runs list the current published run carries a
+  **Published** tag, and no run a publication holds has a delete button (the
+  server refuses with `409`); the run header repeats the badge as a link to
+  the section. Viewers see the status and the notice, no actions. The farm
+  page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one to three plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve
@@ -1229,7 +1272,7 @@ exists, says so with a link to Runs & results.
   `data-report-ready` once every fetch is in (including the summary's lazy
   human-impact tables) and every chart has drawn (`isReportReady`). Until then
   the bar says "Preparing the report…" and **Download PDF** is disabled. The
-  signal is what e2e waits on, and what a server-side render (Phase B) would.
+  signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
   PDF**. Print CSS: A4 (`@page`, added while the page is open), a page break
   before each section, headings kept with what follows, rows and figures not
@@ -1241,6 +1284,27 @@ exists, says so with a link to Runs & results.
   `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
   the charts redraw synchronously, so the canvas is light before the page is
   laid out; `afterprint` puts the previous theme back.
+- **Generate PDF / Email me the PDF** (WP-2.15 Phase B, issue #26;
+  `lib/components/report/ServerPdf.svelte`, a lazy chunk loaded with the bar)
+  sit beside Download PDF for any viewer. They queue a server-side render of
+  the shown run: the background worker opens this same page in headless
+  Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
+  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+  The bar then follows the job's status (`role="status"`: "PDF queued: waiting
+  for the background worker…", "Making the PDF…", "The first try failed (…);
+  trying again shortly…", "PDF ready (9 pages). The link is on its way by
+  email.", or "The PDF could not be made: …"), polling the API every 1.5 s
+  until it settles, and offers **Download the generated PDF** (a link valid
+  for an hour). The wrapper carries `data-state` (`idle`, `starting`,
+  `queued`, `rendering`, `retrying`, `done`, `failed`). Locally the worker
+  must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
+- **The emailed link** opens `/projects/:id/reports/:jobId`
+  (`routes/projects/[id]/reports/[jobId]/+page.svelte`, its own lazy route):
+  signed out, the reader signs in first and comes back; a member sees the
+  status and, once ready, **Download the PDF** (a fresh one-hour link each
+  visit) and **Open the report in the app**. Anyone else, or a PDF past its 7
+  days, gets "This report doesn't exist any more, or you don't have access to
+  its project." Tested by `e2e/tests/server-report.spec.ts`.
 
 ## Help (`/help`)
 
@@ -1308,6 +1372,62 @@ page, and closes again when you pick a page.
   topic's terms.
 - **Search** (`/help/search?q=`): results update as you type in the sidebar's
   box, which keeps focus; guides first, then glossary terms.
+
+## Farmer view (`/farm`)
+
+The phone-first view for a farmer (WP-2.6); the design is
+[design/farmer-view.md](./design/farmer-view.md) and its prototype boards.
+It renders a `FarmView` (`packages/engine/src/views/farmView.ts`) from
+`GET /projects/:id/farm/:nodeId`, the current publication projected for one
+farm; `GET /projects/:id/farm` lists the farms and says whether anything is
+published.
+
+- **Routes.** `/farm` lists every farm linked to the user across projects
+  (notice level, received %, dam %, or "Not published yet"), and goes
+  straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
+  switcher when the farmer has several there), with `/why` ("Why about
+  83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
+  entries in the `farmer` category ("What do these words mean?"). The root
+  page sends a user whose every membership is `farmer` to `/farm`; the
+  workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
+  `/farm/[id]`.
+- **Frame.** The farm pages have their own header ("My farm", Menu: your
+  farms, the words, "Don't keep a copy on this phone", sign out); the app
+  header isn't shown. One 560 px column, a 16 px base, 44 px targets,
+  nothing under 13 px, existing tokens only, light and dark.
+- **Main page, top to bottom:** the name and the dates line ("Published by
+  the WUA on …. Data up to …", amber with its age when stale); the WUA's
+  notice first (warning or danger fill, icon and level in words), or "No
+  restriction from the WUA"; water received this season with the ML/m³
+  switch (kept on the phone until the account preference exists); the dam
+  (hidden without one) with the days-left line, or the no-stop-level
+  wording; "Looking back", the model's card (dashed, neutral "Model: …"
+  chip, never the notice's fills), a single link line under a `restricted`
+  notice; the last 12 months (inline SVG bars at the rendered width, a
+  summary sentence and a full table behind "Show the numbers"); last
+  season; the farm on the river (counts, the outlet's last 30 days, the
+  privacy sentence and "Who can see my farm", which loads the people by name
+  and role when first opened, `GET …/access`, and falls back to the roles
+  alone if that fails); the CSV download and the
+  disclaimer. "Next 14 days" is left out until forecast mode (WP-2.12).
+- **Wording.** Every visible string and number rule lives in pure modules
+  under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
+  `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture
+  (`fixture.ts`); a test keeps the design's "never says" words out.
+- **States.** Skeleton cards with a hidden status and "Slow signal?" after
+  3 s; no publication; an error with Try again (a contact line after the
+  second failure, never raw error text); access removed (403/404), which
+  also clears the saved copy.
+- **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
+  user and farm in `localStorage`, shown at once with "Updating…". Without a
+  signal it stays under a dark strip ("No signal. These are the figures
+  saved on this phone at …") over a reduced view. Cleared on sign-out, on a
+  403/404, when another user signs in, after 30 days unused, and by the
+  Menu's opt-out. No service worker, no polling: the page refetches when it
+  becomes visible again.
+- **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
+  Network tab's node detail); it shows under a "You're previewing … as its
+  farmer sees it" banner and keeps no copy.
 
 ## Viewers
 

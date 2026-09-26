@@ -20,6 +20,7 @@
 import type { Context, ScheduledEvent, SQSEvent } from 'aws-lambda';
 import { runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
+import { acceptRenderResult } from './reports/schedule.js';
 import { parseWorkerMessage } from './jobs/transport.js';
 
 /** CloudWatch namespace of the worker's embedded metrics (infra/jobs.tf alarm). */
@@ -62,6 +63,11 @@ export const handler = async (event: SQSEvent | ScheduledEvent, context?: Pick<C
 			else if (message.type === 'ingest') {
 				const outcome = await acceptIngestResult(message);
 				if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'feed_result_dropped', messageId: record.messageId, reason: outcome }));
+			}
+			// A render's outcome (render-results queue): becomes a report_render job.
+			else if (message.type === 'rendered') {
+				const outcome = await acceptRenderResult(message);
+				if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'render_result_dropped', messageId: record.messageId, reason: outcome }));
 			}
 		}
 	}

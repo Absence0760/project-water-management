@@ -134,7 +134,13 @@ export interface FarmView {
 		publishedAt: string;
 		publishedBy: string;
 		engineVersion: string;
-		restriction: { level: RestrictionLevel; pct: number | null; notice: string | null };
+		restriction: {
+			level: RestrictionLevel;
+			pct: number | null;
+			notice: string | null;
+			/** The language `notice` is in: the other one when the viewer's language has none (design §7, "not translated"). Absent without a notice. */
+			noticeLang?: 'en' | 'af';
+		};
 		/** E10: when the WUA expects to publish next; null if not set. */
 		nextExpectedOn: string | null;
 	};

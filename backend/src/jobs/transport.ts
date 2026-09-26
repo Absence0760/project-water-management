@@ -76,6 +76,44 @@ export const IngestResultMessage = z
 	.strict();
 export type IngestResultMessage = z.output<typeof IngestResultMessage>;
 
+// Server-side reports' two messages (WP-2.15 Phase B; docs/architecture.md §
+// Server-side reports). The worker, in the VPC with no internet and no
+// Chromium, sends a RenderRequestMessage to `render-requests`; the renderer
+// Lambda (a container image with Chromium, outside the VPC, no database)
+// prints the report, stores the PDF, and answers with a RenderResultMessage
+// on `render-results`, which becomes a follow-up `report_render` job. The
+// request carries a single-use, 5-minute render token; the answer carries
+// only the outcome (the PDF's key is derived from the ids on both sides).
+
+export const RenderRequestMessage = z
+	.object({
+		v: z.literal(1),
+		type: z.literal('render'),
+		reportId: Uuid,
+		projectId: Uuid,
+		runId: Uuid,
+		token: z.string().regex(/^[A-Za-z0-9_-]{43}$/)
+	})
+	.strict();
+export type RenderRequestMessage = z.output<typeof RenderRequestMessage>;
+
+/** A render's outcome. `error` is the renderer's own sanitised text (reports/render.ts RenderError). */
+export const RenderResult = z.discriminatedUnion('ok', [
+	z.object({ ok: z.literal(true), pages: z.number().int().min(0).max(10_000), bytes: z.number().int().min(0), ms: z.number().int().min(0) }).strict(),
+	z.object({ ok: z.literal(false), error: z.string().max(300), retry: z.boolean() }).strict()
+]);
+export type RenderResult = z.output<typeof RenderResult>;
+
+export const RenderResultMessage = z
+	.object({
+		v: z.literal(1),
+		type: z.literal('rendered'),
+		reportId: Uuid,
+		result: RenderResult
+	})
+	.strict();
+export type RenderResultMessage = z.output<typeof RenderResultMessage>;
+
 /** SQS's message limit: a body over it can't be sent, so it can't be received either. */
 export const MAX_MESSAGE_BYTES = 256 * 1024;
 
@@ -89,11 +127,37 @@ const parseJson = (body: string): unknown => {
 };
 
 /** A queue message body the worker understands, or null (logged and dropped by the caller). */
-export function parseWorkerMessage(body: string): WakeMessage | IngestResultMessage | null {
+export function parseWorkerMessage(body: string): WakeMessage | IngestResultMessage | RenderResultMessage | null {
 	const m = parseJson(body) as Partial<WakeMessage> | null;
 	if (m && m.v === 1 && m.type === 'wake' && typeof m.jobId === 'string') return { v: 1, type: 'wake', jobId: m.jobId };
 	const ingest = IngestResultMessage.safeParse(m);
-	return ingest.success ? ingest.data : null;
+	if (ingest.success) return ingest.data;
+	const rendered = RenderResultMessage.safeParse(m);
+	return rendered.success ? rendered.data : null;
+}
+
+/** A `render-requests` message body, or null (the renderer logs and drops it). */
+export function parseRenderRequest(body: string): RenderRequestMessage | null {
+	const m = RenderRequestMessage.safeParse(parseJson(body));
+	return m.success ? m.data : null;
+}
+
+/**
+ * Where a report_render job prints (REPORT_RENDERER):
+ *   inline — the default: in the job itself, with the local Playwright
+ *            Chromium, against RENDER_SITE_URL / RENDER_API_URL. Local dev,
+ *            CI and e2e.
+ *   sqs    — production: the worker has neither Chromium nor internet, so it
+ *            hands the render to the renderer Lambda through
+ *            RENDER_REQUESTS_QUEUE_URL.
+ */
+export const REPORT_RENDERERS = ['inline', 'sqs'] as const;
+export type ReportRenderer = (typeof REPORT_RENDERERS)[number];
+
+export function reportRenderer(value: string | undefined = process.env.REPORT_RENDERER): ReportRenderer {
+	const v = value?.trim() || 'inline';
+	if (!(REPORT_RENDERERS as readonly string[]).includes(v)) throw new Error(`unknown REPORT_RENDERER "${v}" (expected ${REPORT_RENDERERS.join(', ')})`);
+	return v as ReportRenderer;
 }
 
 /** A `fetch-requests` message body, or null (the fetcher logs and drops it). */

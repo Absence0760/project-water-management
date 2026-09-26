@@ -45,5 +45,32 @@ services:
       timeout: 3s
       retries: 30
 
+  # S3-compatible object storage for server-side PDF reports (STORAGE=local in
+  # backend/.env.development; `pnpm dev:s3:up`). The backend creates its
+  # bucket (water-reports) on first use. API on 9002, console on
+  # http://localhost:9003. Upstream MinIO stopped publishing images (the
+  # minio/minio Docker Hub repository is gone), so this is the community
+  # fork's build of the same server (github.com/pgsty/minio), pinned.
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: water-management-s3
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
+    environment:
+      # DEV-ONLY throwaway credentials (MinIO's documented defaults) — grant
+      # access to nothing outside this local container.
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:
+  s3data:
