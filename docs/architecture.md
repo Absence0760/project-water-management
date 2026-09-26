@@ -321,7 +321,7 @@ merges into:
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
-| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs; today's issue, else yesterday's |
+| `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: an HTML page whose `<pre>` holds `DATE D_AVG_FR QUAL` rows; at most 20 years per request. Our network gets HTTP 403 from the site, so this format is taken from two open-source clients that parse it (see [followups.md](./followups.md)) |
 
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
@@ -342,12 +342,18 @@ merges into:
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
-  reads the newest issue. DWS re-reads a year before its newest day (verified
+  reads the newest complete issue and merges all 16 days, so each issue
+  replaces the last from its issue date on; one caught half-written is never
+  merged (the fetch falls back to yesterday's, or fails and retries). DWS re-reads a year before its newest day (verified
   data is revised in arrears), 10 years on the first fetch.
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health
-  commit in the job's transaction, as the job's acting user.
+  commit in the job's transaction, as the job's acting user. A forecast
+  result is keyed by its issue date (`meta.issued`, which its days must start
+  on, 16 at most); one older than the issue the feed last merged (the
+  `ingest-results` queue does not keep order) is dropped, series and health
+  untouched, so an older forecast never overwrites a newer one.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who

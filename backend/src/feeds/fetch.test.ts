@@ -97,6 +97,16 @@ describe('runFetch failures: a result with our message, never a throw or an upst
 		expect(r).toEqual({ ok: false, error: 'the source’s data could not be read: no forecast was issued today or yesterday' });
 	});
 
+	it('a GEFS issue caught half-written, with no complete one to fall back on: unavailable, nothing merged', async () => {
+		const fixture = fixtureHttp(() => '2026-03-10');
+		// Today's issue has its first four days out; yesterday's none (a fresh feed at 08:26 UTC).
+		const halfWritten = broken({
+			range: (url, start, end) => (/\/2026\/03\/10\/c3g_2026\.03\.1[0-3]\.tif$/.test(url) ? fixture.range(url, start, end) : Promise.resolve(null))
+		});
+		const r = await runFetch({ source: 'chirps_gefs', config: grid, start: '2026-03-10', end: '2026-03-25', today: '2026-03-10' }, halfWritten);
+		expect(r).toEqual({ ok: false, error: 'the source is unreachable: the newest forecast (issued 2026-03-10) is still being published: 4 of its 16 days are out' });
+	});
+
 	it('a DWS page that changed format, or went missing', async () => {
 		const page = '<html><pre>DATE FLOW\n20210101 1</pre></html>';
 		const r = await runFetch({ source: 'dws', config: { station: 'X0H000' }, start: '2021-01-01', end: '2021-01-02', today: '2026-03-10' }, broken({ text: async () => page }));
