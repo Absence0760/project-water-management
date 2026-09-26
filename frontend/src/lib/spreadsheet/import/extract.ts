@@ -10,7 +10,7 @@ import type { CalibrationParams, FlowShareMethod, NetworkNode, ProjectModel, Pro
 import type { WorkbookSource } from './source';
 import { clean, num, pyStr } from './cells';
 import { extractCalibration, extractCalibrationWindow, summerMonthsNote } from './calibration';
-import { readCropAreas, readCrops } from './crops';
+import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
 import { type FarmSpec, farmOperatingRules, readFarmSpec } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
@@ -194,6 +194,16 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 				continue;
 			}
 			cropAreas.push({ nodeId: node, cropId: id, areaM2: a });
+		}
+	}
+	const { gross, days } = readFarmGross(wb);
+	if (days !== null && days.length === 12 && days.every((d) => d > 0)) {
+		const factors = new Map(crops.crops.map((c) => [c.name, c.cropFactor]));
+		for (const [farm, perCrop] of areas) {
+			const g = gross.get(farm);
+			if (!nodeId.has(farm) || g === undefined || g.length !== 12) continue;
+			const note = grossDemandNote(farm, perCrop, g, factors, crops.apan, days);
+			if (note) report.note('farm-demand-gross-mismatch', note, { sheet: 'Farm demand', element: farm });
 		}
 	}
 

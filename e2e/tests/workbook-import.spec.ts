@@ -60,8 +60,9 @@ async function review(dialog: Locator, file: { name: string; mimeType: string; b
  */
 async function expectReportLists(notes: Locator, unmapped: Locator) {
 	await expect(notes.getByRole('heading', { level: 3 })).toHaveText('Importer notes');
-	await expect(notes.getByRole('paragraph').first()).toHaveText('12 notes. Read them before relying on a run.');
-	await expect(notes.getByText('Warning', { exact: true })).toHaveCount(0);
+	await expect(notes.getByRole('paragraph').first()).toHaveText('13 notes, 1 of them a warning. Read them before relying on a run.');
+	// Charlie Farm's gross demand is typed over the [Farm demand] formula (issue #54).
+	await expect(notes.getByText('Warning', { exact: true })).toHaveCount(1);
 	await expect(notes.getByText('Note', { exact: true })).toHaveCount(12);
 	await expect(unmapped.getByRole('heading', { level: 3 })).toHaveText('Unmapped report: not carried across as the workbook meant');
 	await expect(unmapped.getByRole('columnheader')).toHaveText(['Where', 'Element', 'What', 'In the workbook']);
@@ -82,9 +83,9 @@ async function expectImportRecord(page: Page, importedBy: string) {
 	// Closed at first: the count sentences show, the lists don't.
 	await expect(notes.getByRole('listitem').first()).toBeHidden();
 	await expect(unmapped.getByRole('table')).toBeHidden();
-	await notes.getByText('Show the 12 notes').click();
+	await notes.getByText('Show the 13 notes').click();
 	await unmapped.getByText('Show the 8 items').click();
-	await expect(notes.getByRole('listitem')).toHaveCount(12);
+	await expect(notes.getByRole('listitem')).toHaveCount(13);
 	await expect(notes.getByRole('listitem').filter({ hasText: 'transfer Alpha Farm -> Zulu Farm names an unknown element; skipped' })).toHaveCount(1);
 	const echo = unmapped.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Echo Farm', exact: true }) }).filter({ hasText: '=S7*0.9-V7' });
 	await expect(echo.getByRole('code')).toHaveText('=S7*0.9-V7');
@@ -117,7 +118,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 
 	// The importer's notes, then the unmapped report with Echo's hand-written InOut formula.
 	const notes = dialog.getByRole('region', { name: 'Importer notes' });
-	await expect(notes.getByRole('listitem')).toHaveCount(12);
+	await expect(notes.getByRole('listitem')).toHaveCount(13);
 	await expect(notes.getByRole('listitem').filter({ hasText: 'transfer Alpha Farm -> Zulu Farm names an unknown element; skipped' })).toHaveCount(1);
 	const unmapped = dialog.getByRole('region', { name: /^Unmapped report/ });
 	const echo = unmapped.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Echo Farm', exact: true }) }).filter({ hasText: '=S7*0.9-V7' });
@@ -259,7 +260,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
 		test('the Overview import record has no violations, open or closed', async ({ page, owner }) => {
 			await importAndOpen(page);
-			await expect(page.getByRole('region', { name: 'Import record' }).getByText('Show the 12 notes')).toBeVisible();
+			await expect(page.getByRole('region', { name: 'Import record' }).getByText('Show the 13 notes')).toBeVisible();
 			await expectNoViolations(page);
 			await expectImportRecord(page, owner.displayName);
 			await expectNoViolations(page);

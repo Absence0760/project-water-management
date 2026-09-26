@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readCropAreas, readCrops } from './crops';
+import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidWorkbookError } from './errors';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
@@ -57,5 +57,69 @@ describe('readCropAreas', () => {
 		const report = new Report();
 		readCropAreas(new B023Workbook(syntheticB023().set('Farm demand', 'H26', '5 ha').build()), report);
 		expect(report.unmapped).toEqual([expect.objectContaining({ code: 'non-numeric-value', sheet: 'Farm demand', cell: 'H26', element: 'Farm B' })]);
+	});
+});
+
+describe('readFarmGross', () => {
+	it('reads the gross demand per farm, and no days without zFarmDemand_GrossMthDays', () => {
+		const b = syntheticB023().row('Farm demand', 'Q25', new Array(12).fill(12.5));
+		const { gross, days } = readFarmGross(new B023Workbook(b.build()));
+		expect([...gross.keys()]).toEqual(['Farm A', 'Farm B']);
+		expect(gross.get('Farm A')).toEqual(new Array(12).fill(12.5));
+		expect(gross.get('Farm B')).toEqual(new Array(12).fill(0));
+		expect(days).toBeNull();
+	});
+
+	it('reads the days per month when the workbook names them', () => {
+		const b = syntheticB023()
+			.row('Farm demand', 'Q19', DAYS)
+			.name('zFarmDemand_GrossMthDays', "'Farm demand'!$Q$19:$AB$19");
+		expect(readFarmGross(new B023Workbook(b.build())).days).toEqual(DAYS);
+	});
+});
+
+const DAYS = [31, 30, 31, 31, 28.25, 31, 30, 31, 30, 31, 31, 30];
+const APAN = new Array(12).fill(200);
+const FACTORS = new Map([
+	['Orchard', new Array(12).fill(0.5)],
+	['Vegetables', new Array(12).fill(0.3)]
+]);
+const formula = (perCrop: Map<string, number>) =>
+	DAYS.map((d, m) => [...perCrop].reduce((s, [c, a]) => s + (FACTORS.has(c) ? (a * FACTORS.get(c)![m]! * APAN[m]!) / 1000 / d : 0), 0));
+
+describe('grossDemandNote (gross_demand_note)', () => {
+	it("leaves the sheet's rounding alone", () => {
+		const areas = new Map([
+			['Orchard', 100000],
+			['Vegetables', 20000]
+		]);
+		expect(grossDemandNote('A', areas, formula(areas).map((v) => Math.round(v * 10) / 10), FACTORS, APAN, DAYS)).toBeNull();
+	});
+
+	it('warns about a demand typed over the formula on a farm with no crop areas', () => {
+		const note = grossDemandNote('Town dam', new Map([['Orchard', 0]]), new Array(12).fill(800), FACTORS, APAN, DAYS);
+		expect(note).toMatch(/^WARNING: \[Farm demand\] Town dam: the gross demand in 12 of 12 months /);
+		expect(note).toContain('the workbook has 800 m³/day on average, the crop areas give 0.');
+	});
+
+	it('warns about a formula that skips a crop', () => {
+		const areas = new Map([
+			['Orchard', 100000],
+			['Vegetables', 200000]
+		]);
+		const gross = formula(new Map([['Orchard', 100000]])).map((v) => Math.round(v * 10) / 10);
+		expect(grossDemandNote('B', areas, gross, FACTORS, APAN, DAYS)).toContain('in 12 of 12 months');
+	});
+
+	it('leaves a difference under 1 % or under 1 m³/day alone, and skips undefined crops', () => {
+		const big = new Map([['Orchard', 1000000]]);
+		expect(grossDemandNote('C', big, formula(big).map((v) => v * 1.009), FACTORS, APAN, DAYS)).toBeNull();
+		const small = new Map([['Orchard', 1000]]);
+		expect(grossDemandNote('D', small, formula(small).map((v) => v + 0.9), FACTORS, APAN, DAYS)).toBeNull();
+		const hops = new Map([
+			['Orchard', 100000],
+			['Hops', 50000]
+		]);
+		expect(grossDemandNote('E', hops, formula(new Map([['Orchard', 100000]])), FACTORS, APAN, DAYS)).toBeNull();
 	});
 });

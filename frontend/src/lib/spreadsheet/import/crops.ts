@@ -1,7 +1,7 @@
 // [Crop demand] (crop factors, A-pan evaporation, effective rainfall) and
-// [Farm demand] (crop areas per farm): extract_project.py read_crops and
-// read_crop_areas.
-import { clean, isName, pyRepr } from './cells';
+// [Farm demand] (crop areas per farm, and the gross demand checked against
+// them): extract_project.py read_crops, read_crop_areas and gross_demand_note.
+import { clean, isName, num, pyRepr } from './cells';
 import { InvalidWorkbookError } from './errors';
 import type { Report } from './report';
 import type { B023Workbook } from './workbook';
@@ -69,4 +69,55 @@ export function readCropAreas(wb: B023Workbook, report: Report): Map<string, Map
 		areas.set(farm, perCrop);
 	});
 	return areas;
+}
+
+/** read_crop_areas()'s gross part: the sheet's gross demand (m³/day per month) by farm, and its days per month (null without zFarmDemand_GrossMthDays). */
+export function readFarmGross(wb: B023Workbook): { gross: Map<string, number[]>; days: number[] | null } {
+	const { sheet, rows, names } = wb.tableRows('zFarmDemand_FarmNameLst');
+	const { c1: gc1, c2: gc2 } = wb.ref('zFarmDemand_GrossMth');
+	const gross = new Map<string, number[]>();
+	rows.forEach((r, i) => gross.set(names[i]!, wb.block(sheet, gc1, r, gc2, r)[0]!.map((v) => num(v))));
+	const days = wb.has('zFarmDemand_GrossMthDays') ? wb.named('zFarmDemand_GrossMthDays')[0]!.map((v) => num(v)) : null;
+	return { gross, days };
+}
+
+// A month's gross demand doesn't follow from the crop areas when it differs
+// from Σ area × factor × A-pan / 1000 / days by more than both of these: the
+// sheet rounds to 0.1 m³/day and each crop's gross mm to 0.01.
+const GROSS_DEMAND_TOLERANCE_M3_DAY = 1.0;
+const GROSS_DEMAND_TOLERANCE_REL = 0.01;
+
+/**
+ * gross_demand_note(): a WARNING when a farm's gross demand doesn't follow
+ * from its crop areas: a town's potable demand typed over the formula, or a
+ * formula whose crop index is blank so it skips that crop (both seen in a
+ * client workbook, issue #54). The app computes demand from crop areas only.
+ */
+export function grossDemandNote(
+	farm: string,
+	perCrop: Map<string, number>,
+	gross: number[],
+	factors: Map<string, number[]>,
+	apan: number[],
+	days: number[]
+): string | null {
+	const formula = Array.from({ length: 12 }, (_, m) => {
+		let sum = 0;
+		for (const [crop, a] of perCrop) {
+			const f = factors.get(crop);
+			if (f) sum += (a * f[m]! * apan[m]!) / 1000 / days[m]!;
+		}
+		return sum;
+	});
+	const off = formula.filter(
+		(f, m) => Math.abs(gross[m]! - f) > Math.max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * Math.max(Math.abs(gross[m]!), Math.abs(f)))
+	).length;
+	if (off === 0) return null;
+	const mean = (xs: number[]) => Math.floor(xs.reduce((a, b) => a + b, 0) / 12 + 0.5);
+	return (
+		`WARNING: [Farm demand] ${farm}: the gross demand in ${off} of 12 months doesn't follow from its crop areas ` +
+		`(a value typed over the formula, or a formula that skips a crop): the workbook has ${mean(gross)} ` +
+		`m³/day on average, the crop areas give ${mean(formula)}. The app computes demand from crop areas ` +
+		"only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)"
+	);
 }

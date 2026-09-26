@@ -27,6 +27,8 @@ export type ImportNoteCode =
 	| 'farm-demand-unknown-farm'
 	/** A [Farm demand] crop isn't in [Crop demand]. */
 	| 'farm-demand-unknown-crop'
+	/** WARNING: a farm's [Farm demand] gross demand doesn't follow from its crop areas (typed over, or a crop skipped; issue #54). */
+	| 'farm-demand-gross-mismatch'
 	/** A transfer names an element that isn't in [Network]; skipped. */
 	| 'transfer-unknown-element'
 	/** The calibration summer months relied on the workbook's substring match (audit M1). */

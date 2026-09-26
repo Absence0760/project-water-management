@@ -6,6 +6,7 @@ farm Golf Farm: [Farm spec] min dam % 0.2 is the workbook's transfer minimum (ea
 6 dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure
 [Farm demand] crop Hops X is not in [Crop demand]; ignored
 [Farm demand] farm Kilo Farm is not in [Network]; ignored
+WARNING: [Farm demand] Charlie Farm: the gross demand in 12 of 12 months doesn't follow from its crop areas (a value typed over the formula, or a formula that skips a crop): the workbook has 150 m³/day on average, the crop areas give 0. The app computes demand from crop areas only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)
 transfer Alpha Farm -> Zulu Farm names an unknown element; skipped
 summer months '10,11,12,3,': the workbook's substring match also makes months [1, 2] summer; the app uses the listed months only (audit M1)
 [Flow data] catchment rain has 1 run(s) of zero rain covering 60+ days in the wet season (months 1,2,3,10,11,12): 2020-12-31 to 2021-03-22 (82 days). Runs treat them as missing (engine >= 0.15.0, settings.zeroRainRuns, default mode 'missing'), so bias-corrected CHIRPS fills them; if they are real dry spells, keep them dry in Settings -> Zero-rain runs

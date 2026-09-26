@@ -256,7 +256,8 @@ export const OPTIONAL_NAMES = [
 	'rUseFlow',
 	'zTransfers_FormulaRow',
 	'zTransfers_FormulasAsTxt',
-	'zTransfers_HeaderFarmsInOut'
+	'zTransfers_HeaderFarmsInOut',
+	'zFarmDemand_GrossMthDays'
 ] as const;
 
 const ALL_NAMES: readonly string[] = [...REQUIRED_NAMES, ...OPTIONAL_NAMES];

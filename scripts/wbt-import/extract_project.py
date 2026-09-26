@@ -308,7 +308,8 @@ def read_crops(wb: Workbook) -> tuple[list[dict[str, Any]], list[float], float]:
     return crops, apan, erf
 
 
-def read_crop_areas(wb: Workbook) -> tuple[dict[str, dict[str, float]], dict[str, list[float]]]:
+def read_crop_areas(wb: Workbook) -> tuple[dict[str, dict[str, float]], dict[str, list[float]], list[float] | None]:
+    """(m² per crop per farm, the sheet's gross demand in m³/day per farm per month, its days per month or None)."""
     sheet, rows, names = table_rows(wb, "zFarmDemand_FarmNameLst")
     _, cc1, hr, cc2, _ = wb.ref("zFarmDemand_CropNameLst")
     crop_hdr = wb.block(sheet, cc1, hr, cc2, hr)[0]
@@ -319,7 +320,42 @@ def read_crop_areas(wb: Workbook) -> tuple[dict[str, dict[str, float]], dict[str
         row = wb.block(sheet, cc1, r, gc2, r)[0]
         areas[name] = {crop: num(row[c - cc1]) for c, crop in crop_cols}
         gross[name] = [num(v) for v in row[gc1 - cc1 : gc2 - cc1 + 1]]
-    return areas, gross
+    try:
+        days = [num(v) for v in wb.named("zFarmDemand_GrossMthDays")[0]]
+    except KeyError:
+        days = None
+    return areas, gross, days
+
+
+# A month's [Farm demand] gross demand doesn't follow from the crop areas when it
+# differs from Σ area × factor × A-pan / 1000 / days by more than both of
+# these: the sheet rounds to 0.1 m³/day and each crop's gross mm to 0.01.
+GROSS_DEMAND_TOLERANCE_M3_DAY = 1.0
+GROSS_DEMAND_TOLERANCE_REL = 0.01
+
+
+def gross_demand_note(
+    farm: str, per_crop: dict[str, float], gross: list[float], factors: dict[str, list[float]], apan: list[float], days: list[float]
+) -> str | None:
+    """A WARNING when a farm's gross demand doesn't follow from its crop areas: a town's potable
+    demand typed over the formula, or a formula whose crop index is blank so it skips that crop
+    (both seen in a client workbook, issue #54). The app computes demand from crop areas only."""
+    formula = [
+        sum(a * factors[crop][m] * apan[m] / 1000 / days[m] for crop, a in per_crop.items() if crop in factors) for m in range(12)
+    ]
+    off = [
+        m
+        for m in range(12)
+        if abs(gross[m] - formula[m]) > max(GROSS_DEMAND_TOLERANCE_M3_DAY, GROSS_DEMAND_TOLERANCE_REL * max(abs(gross[m]), abs(formula[m])))
+    ]
+    if not off:
+        return None
+    return (
+        f"WARNING: [Farm demand] {farm}: the gross demand in {len(off)} of 12 months doesn't follow from its crop areas "
+        f"(a value typed over the formula, or a formula that skips a crop): the workbook has {math.floor(sum(gross) / 12 + 0.5)} "
+        f"m³/day on average, the crop areas give {math.floor(sum(formula) / 12 + 0.5)}. The app computes demand from crop areas "
+        "only, so it models the second figure; a demand that isn't a crop needs demand objects (issue #54, 2b)"
+    )
 
 
 def read_transfers(wb: Workbook) -> list[dict[str, Any]]:
@@ -554,6 +590,14 @@ def zero_rain_note(series: list[dict[str, Any]]) -> str | None:
     )
 
 
+def element_sheet_start(wb: Workbook, name: str) -> str | None:
+    """The first date in an Element sheet's date column (E, from row 20), or None."""
+    for (d,) in wb.wb[name].iter_rows(min_row=20, min_col=5, max_col=5, values_only=True):
+        if isinstance(d, (dt.datetime, dt.date)):
+            return iso(d)
+    return None
+
+
 def read_element_sheet(wb: Workbook, name: str, kind: str, days: int, first_date: str) -> dict[str, list]:
     ws = wb.wb[name]
     cols = FARM_COLS if kind == "farm" else GAUGE_COLS
@@ -569,7 +613,7 @@ def read_element_sheet(wb: Workbook, name: str, kind: str, days: int, first_date
             continue
         if not started:
             if iso(d) != first_date:
-                raise ValueError(f"[{name}] starts on {iso(d)}, [Flow data] on {first_date}")
+                raise ValueError(f"[{name}] starts on {iso(d)}, the other Element sheets on {first_date}")
             started = True
         row = list(row) + [None] * (c1 - c0 + 1 - len(row))
         for k, c in idx.items():
@@ -690,7 +734,7 @@ def extract(
         elements, outflow = read_network(wb)
         spec, method, split, tol = read_farm_spec(wb)
         crops, apan, erf = read_crops(wb)
-        areas, gross_sheet = read_crop_areas(wb)
+        areas, gross_sheet, gross_days = read_crop_areas(wb)
         transfers = read_transfers(wb)
 
         by_name = {e["name"]: e for e in elements}
@@ -752,6 +796,14 @@ def extract(
                     wb.notes.append(f"[Farm demand] crop {crop} is not in [Crop demand]; ignored")
                     continue
                 crop_areas.append({"nodeId": node_id[farm], "cropId": crop_id[crop], "areaM2": a})
+        if gross_days is not None and len(gross_days) == 12 and all(d > 0 for d in gross_days):
+            factors = {c["name"]: c["cropFactor"] for c in crops}
+            for farm, per_crop in areas.items():
+                if farm not in node_id or len(gross_sheet[farm]) != 12:
+                    continue
+                note = gross_demand_note(farm, per_crop, gross_sheet[farm], factors, apan, gross_days)
+                if note:
+                    wb.notes.append(note)
 
         model_transfers = []
         for t in transfers:
@@ -830,6 +882,16 @@ def extract(
             "series": flow["series"],
         }
 
+        # The Element sheets hold the workbook's model window, which can start
+        # after [Flow data] does (a long gauge record before the rain record):
+        # expected.json covers that window.
+        sheets = [e for e in elements if e["name"] in wb.wb.sheetnames]
+        start = element_sheet_start(wb, sheets[0]["name"]) if sheets else None
+        start = start or dates[0]
+        if start not in dates:
+            raise ValueError(f"[{sheets[0]['name']}] starts on {start}, outside [Flow data] ({dates[0]} to {dates[-1]})")
+        offset = dates.index(start)
+        days = len(dates) - offset
         expected_nodes = {}
         for e in elements:
             if e["name"] not in wb.wb.sheetnames:
@@ -837,17 +899,17 @@ def extract(
                 continue
             expected_nodes[e["name"]] = {
                 "kind": e["kind"],
-                **read_element_sheet(wb, e["name"], e["kind"], len(dates), dates[0]),
+                **read_element_sheet(wb, e["name"], e["kind"], days, start),
             }
         expected = {
             "source": path.name,
-            "startDate": dates[0],
-            "days": len(dates),
+            "startDate": start,
+            "days": days,
             "outflowGauge": outflow,
             "shareTolerance": tol,
             "farmShares": {n: s["selectedShare"] for n, s in spec.items()},
             "grossDemandM3Day": gross_sheet,
-            "catchment": flow["calc"],
+            "catchment": {k: v[offset:] for k, v in flow["calc"].items()},
             "nodes": expected_nodes,
             "shortfalls": read_shortfalls(wb),
             "ewrPivot": read_ewr_pivot(wb),

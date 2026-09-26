@@ -98,6 +98,7 @@ class SyntheticWorkbook(unittest.TestCase):
             "run(s) of zero rain",
             "Pitman flow column has 120 days",
             "no Element sheet for Hotel Farm",
+            "WARNING: [Farm demand] Charlie Farm: the gross demand in 12 of 12 months doesn't follow from its crop areas",
         ):
             with self.subTest(note=fragment):
                 self.assertEqual(sum(fragment in n for n in notes), 1, fragment)
@@ -109,11 +110,31 @@ class Variants(unittest.TestCase):
     """Branches the committed workbook can't reach, on a variant of it (not committed)."""
 
     def extract(self, **kwargs):
+        project, _expected, notes = self.extract_all(**kwargs)
+        return project, notes
+
+    def extract_all(self, **kwargs):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / gen.WORKBOOK_NAME
             gen.write_workbook(path)
-            project, _expected, notes = gen.extract(path, **kwargs)
-        return project, notes
+            return gen.extract(path, **kwargs)
+
+    def test_element_sheets_that_start_after_flow_data_set_the_expected_window(self):
+        # A second client workbook: a gauge record from decades before the model window (issue #54).
+        with mock.patch.object(gen, "ELEMENT_START_OFFSET", 30):
+            project, expected, _ = self.extract_all()
+        _, base, _ = self.extract_all()
+        self.assertEqual(expected["startDate"], (gen.START + gen.dt.timedelta(days=30)).isoformat())
+        self.assertEqual(expected["days"], base["days"] - 30)
+        for k, v in expected["catchment"].items():
+            with self.subTest(column=k):
+                self.assertEqual(v, base["catchment"][k][30:])
+        self.assertEqual(len(expected["nodes"]["Alpha Farm"]["demand"]), gen.ELEMENT_DAYS)
+        self.assertEqual({s["startDate"] for s in project["series"]}, {gen.START.isoformat()})  # the project keeps every day
+
+    def test_element_sheets_that_start_before_flow_data_are_refused(self):
+        with mock.patch.object(gen, "ELEMENT_START_OFFSET", -5), self.assertRaisesRegex(ValueError, r"outside \[Flow data\]"):
+            self.extract_all()
 
     def test_unknown_fragmentation_method_falls_back_to_area(self):
         with mock.patch.object(gen, "FRAGMENTATION_METHOD", "Equal shares"):

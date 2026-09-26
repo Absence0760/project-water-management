@@ -130,6 +130,9 @@ FARM_DEMAND: list[tuple[str, list[float | None]] | None] = [
     ("Hotel Farm", [0, 70000, 0, 0, 0, 0]),
     ("Kilo Farm", [50000, 0, 0, 0, 0, 0]),  # not in [Network]
 ]
+# [Farm demand] gross demand typed over the formula (m³/day, every month), as a
+# workbook does for a town's potable demand: the importer warns (issue #54).
+TYPED_GROSS_M3_DAY = {"Charlie Farm": 150.0}
 
 # [Transfers] "Draw from dam" columns: (from, transfer to, months cell, max m3/s, min %, capacity m3/day).
 TRANSFERS: list[tuple[str, str, Any, float, float, float]] = [
@@ -499,7 +502,7 @@ def farm_demand(wb) -> None:
                 for c, a in zip(FARM_DEMAND_CROPS, areas)
                 if c in factors
             )
-            put(ws, f"{col('Q', m)}{r}", round(gross, 1))
+            put(ws, f"{col('Q', m)}{r}", TYPED_GROSS_M3_DAY.get(name, round(gross, 1)))
         r += 1
     sentinel = r
     put(ws, f"D{sentinel}", "-- do NOT delete this row !  Insert here")
@@ -866,6 +869,7 @@ GAUGE_HEADERS = {
     "I": "Upstr Cumm\nThis G. Incr\nEWR short\n(m³/d)     .",
 }
 ELEMENT_DAYS = 7  # Element sheets hold a week of results: only expected.json reads them
+ELEMENT_START_OFFSET = 0  # days after [Flow data]'s first date that the Element sheets (the model window) start
 
 
 def element_sheets(wb) -> None:
@@ -883,7 +887,7 @@ def element_sheets(wb) -> None:
         put(ws, "E20", "init")
         for i in range(ELEMENT_DAYS):
             r = 21 + i
-            put(ws, f"E{r}", dt.datetime.combine(START + dt.timedelta(days=i), dt.time()))
+            put(ws, f"E{r}", dt.datetime.combine(START + dt.timedelta(days=ELEMENT_START_OFFSET + i), dt.time()))
             for c in headers:
                 put(ws, f"{c}{r}", round(rng.uniform(-500, 5000)))
 

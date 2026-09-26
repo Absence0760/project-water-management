@@ -65,7 +65,15 @@ rows and columns don't break it.
   `damAreaFullM2` is null (runs estimate capacity ÷ 3 m and warn, N2),
   `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
-  come from [Farm demand], zero areas omitted.
+  come from [Farm demand], zero areas omitted. The app computes demand from
+  crop areas only, so the importer checks the sheet's gross demand
+  (`zFarmDemand_GrossMth`) against Σ area × factor × A-pan ÷ 1000 ÷ days
+  (`zFarmDemand_GrossMthDays`). A farm that is off by more than 1 m³/day and
+  1 % in any month gets a `WARNING:`. That catches a demand typed over the
+  formula, such as a town's potable demand drawn from a dam, and a formula
+  that skips a crop because its crop index cell is blank (both found in a client
+  workbook, issue #54). The app models the crop-area figure. A demand that isn't
+  a crop waits for demand objects (#54, 2b).
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
@@ -138,11 +146,14 @@ column as observed flow. The seed re-extracts when these options change, or
 when the importer (`extract_project.py`, `calibration.py`) does.
 
 - **Expected results** (`expected.json`): every Element sheet's daily
-  columns, the [Flow data] catchment columns, and `shortfalls`: the
+  columns, the [Flow data] catchment columns over the same window, and `shortfalls`: the
   [Shortfalls] reporting period plus every farm row (H–V: averages, target,
   reduce/gain, EWR shortfall, total change and volume left) and the totals
   row. A `"-"` or error cell becomes `null`. The engine's regression test
-  compares `RunSummary.curtailment` with these values.
+  compares `RunSummary.curtailment` with these values. The Element sheets
+  hold the workbook's model window, which can start after [Flow data] does
+  (a gauge record decades longer than the rain record). `startDate` and
+  `days` are that window, and the project's series keep every [Flow data] day.
 
 Ids are `uuid5` of the project name and the element, crop or transfer name, so
 re-importing a workbook gives the same ids.
@@ -218,6 +229,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | CHIRPS column with a blank header; forecast column empty | a series named after its kind; an empty column skipped |
 | Two dated rows after `zFlowData_DateE_DateSeries` | reading stops at the last date |
 | No Element sheet for Hotel Farm | note "no Element sheet for Hotel Farm" |
+| Charlie Farm: no crop areas, gross demand typed as 150 m³/day | `WARNING:` "the gross demand in 12 of 12 months doesn't follow from its crop areas" (the other farms' rounded sums don't trip it) |
 | [Shortfalls] and [EWR shortfalls Pivot Data] (a "-" where demand is 0) | `expected.json` only |
 
 Branches the committed workbook can't reach, because they exclude a case above
@@ -230,12 +242,17 @@ TypeScript port needs its own tests for them:
   network with more than one outflow;
 - `rUseFlow` 1 (the Pitman warning) and `rUseFlow` on a series with no values
   (the fixture uses the gauge, for the gauge-as-reference warning);
-- a calibration window that ends before it starts (both dates become null).
+- a calibration window that ends before it starts (both dates become null);
+- Element sheets that start after [Flow data] (`ELEMENT_START_OFFSET`):
+  `expected.json` starts on the Element sheets' first date and slices the
+  catchment columns to match, and the project keeps every [Flow data] day.
+  Element sheets that start before [Flow data] are refused.
 
 Not in the fixture at all: `--gauge-as-reference` on a workbook with no gauge
 values (`test_gauge_reference.py`), and the errors (non-consecutive dates, an
 unknown or doubled upstream element, a crop header without Oct, no A-pan row,
-missing [Transfers] labels, an Element sheet starting on another date).
+missing [Transfers] labels, an Element sheet starting on another date than
+the first one).
 
 Both outputs import and run: `pnpm import:project
 scripts/wbt-import/fixtures/synthetic_b023.project.json --email
