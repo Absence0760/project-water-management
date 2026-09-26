@@ -98,7 +98,12 @@ test('the owner sees the seeded farmers with their farms, and a farmer sees only
 // WP-2.3: every example's seeded run is published by its owner, Sandspruit with an
 // advisory notice, so the seeded farmer has figures (the farm page itself is WP-2.6's).
 test('the seeded farmer reads their published farm and the advisory notice', async ({ page }) => {
-	await signInAs(page, FARMER1);
+	// A farmer lands on their farm view, not the project list (WP-2.6).
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(FARMER1.email);
+	await page.getByLabel('Password').fill(FARMER1.password);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page).toHaveURL(/\/farm\//);
 	const projects = (await (await page.request.get(`${API_URL}/projects`)).json()).projects as { id: string; name: string }[];
 	const sandspruit = projects.find((p) => p.name === SANDSPRUIT)!;
 	const index = await (await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm`)).json();

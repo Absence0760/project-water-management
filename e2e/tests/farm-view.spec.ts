@@ -3,11 +3,13 @@
 // run `seed:examples` publishes with an advisory notice (WP-2.3); farmer2@ is
 // linked to Rietspruit (Sandspruit) and Kareebos (Droëvlei).
 //
-// The figures are the synthetic Sandspruit example's (docs/design/farmer-view.md
-// §3). Needs the farm API (GET /projects/:id/farm…, WP-2.3/2.6) and the seeded
-// publication.
+// The seed publishes every example's run, whose record ends on 31 Dec 2024, so
+// the figures are real engine output for that season and already stale; the
+// tests assert shapes and order, not the design doc's Vaalbank numbers (those
+// pin the wording in the unit tests, lib/components/farm/*.test.ts).
 import type { BrowserContext, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
+import { createProject, putModel, sampleModel } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -54,26 +56,35 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	const { projectId } = await farmOf(page.context());
 	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
 	await expect(page.getByRole('heading', { level: 1, name: /^Vaalbank/ })).toBeVisible();
-	await expect(page.getByText(/^Published by the WUA on \d{1,2} \w{3} \d{4}\. Data up to \d{1,2} \w{3} \d{4}/)).toBeVisible();
+	// en-ZA dates ("26 Sept 2026", Intl may join them with non-breaking spaces); the seeded record ends in 2024, so the dates line also says how old it is.
+	const dates = page.getByText(/^Published by the WUA on /);
+	await expect(dates).toHaveText(/^Published\sby\sthe\sWUA\son\s\d{1,2}\s\w{3,4}\s\d{4}\.\sData\sup\sto\s31\sDec\s2024,\s\d+\sdays\sago\./);
 
 	// The WUA's answer comes first, in its own words, marked as a notice.
 	const regions = page.getByRole('main').getByRole('region');
 	await expect(regions.first()).toContainText('Notice from the WUA · Advisory');
 	const supply = page.getByRole('region', { name: 'Water you received this season' });
-	await expect(supply).toContainText('86 %');
-	await expect(supply).toContainText('of what you needed');
-	await expect(page.getByRole('region', { name: 'Your dam' })).toContainText(/\d+ % full/);
+	await expect(supply).toContainText(/this season\s*\d{1,3}\s%\s*of what you needed/);
+	await expect(supply).toContainText(/all when your dam was down to its stop level/);
+	await expect(page.getByRole('region', { name: 'Your dam' })).toContainText(/\d+\s%\s*full/);
 	await expect(page.getByRole('region', { name: /^Looking back/ })).toContainText('Model:');
+
+	// Who can see my farm: the people by name and what they can do, never an email.
+	await page.getByRole('button', { name: 'Who can see my farm' }).click();
+	const who = page.locator('#who-can-see');
+	await expect(who).toContainText('Demo Farmer (you) · linked to this farm');
+	await expect(who).toContainText('Demo Analyst · WUA, manages who has access');
+	await expect(who).not.toContainText('@example.com');
 
 	// The unit switch rewrites the volumes and is remembered on the phone.
 	await supply.getByRole('button', { name: 'ML' }).click();
-	await expect(supply).toContainText(/ ML of [\d.\s]+ ML since 1 Oct/);
+	await expect(supply).toContainText(/\d[\d.]*\sML\sof\s[\d.]+\sML\ssince 1 Oct/);
 	await page.reload();
 	await expect(page.getByRole('region', { name: 'Water you received this season' }).getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
 
 	// Why? and the dam page, and back.
 	await page.getByRole('link', { name: /^Why .*What can I do\?$/ }).click();
-	await expect(page.getByRole('heading', { level: 1, name: /^Why about \d+ %\?$/ })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: /^Why about \d+\s%\?$/ })).toBeVisible();
 	for (const h of ['1. Was water shared fairly?', '2. Did the river keep flowing?', 'What the WUA decided', 'What this is not']) {
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
 	}
@@ -114,11 +125,13 @@ test('the workspace URL sends a farmer to their farm view', async ({ page }) => 
 test('a dropped signal keeps the saved figures on screen under the offline strip', async ({ page, context }) => {
 	await page.setViewportSize(PHONE);
 	await signIn(page, FARMER1);
-	await expect(page.getByRole('region', { name: 'Water you received this season' })).toContainText('86 %');
+	const supply = page.getByRole('region', { name: 'Water you received this season' });
+	await expect(supply).toContainText(/\d{1,3}\s%\s*of what you needed/);
+	const pct = (await supply.textContent())!.match(/(\d{1,3})\s%\s*of what you needed/)![1]!;
 	await context.setOffline(true);
 	await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-	await expect(page.getByRole('status').filter({ hasText: /^No signal\. These are the figures saved on this phone at/ })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'At a glance' })).toContainText('86 %');
+	await expect(page.getByRole('status').filter({ hasText: /No signal\.\sThese are the figures saved on this phone at/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'At a glance' })).toContainText(new RegExp(`\\b${pct}\\s%`));
 	await expect(page.getByText('Charts, “Why?” and downloads need a connection.')).toBeVisible();
 	await context.setOffline(false);
 });
@@ -137,19 +150,31 @@ test('WUA staff preview a farm as its farmer sees it, under a banner', async ({ 
 	await expect(page.getByRole('link', { name: 'Back to the workspace' })).toBeVisible();
 });
 
-test.describe('a farmer with farms in two catchments', () => {
-	test('lists them, and a catchment with nothing published says so', async ({ page }) => {
-		await page.setViewportSize(PHONE);
-		await signIn(page, FARMER2);
-		await expect(page).toHaveURL(/\/farm$/);
-		await expect(page.getByRole('heading', { level: 1, name: 'Your farms' })).toBeVisible();
-		const rietspruit = page.getByRole('link', { name: /Rietspruit/ });
-		const kareebos = page.getByRole('link', { name: /Kareebos/ });
-		await expect(rietspruit).toContainText('% of water needed');
-		// Only the Sandspruit run is published by the seed; Droëvlei has nothing yet.
-		await expect(kareebos).toContainText('Not published yet');
-		await kareebos.click();
-		await expect(page.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();
-		await expectNoSidewaysScroll(page);
-	});
+test('a farmer with farms in two catchments sees them listed, each with its figures', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER2);
+	await expect(page).toHaveURL(/\/farm$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Your farms' })).toBeVisible();
+	for (const farm of [/Rietspruit/, /Kareebos/]) await expect(page.getByRole('link', { name: farm })).toContainText('% of water needed');
+	await page.getByRole('link', { name: /Kareebos/ }).click();
+	await expect(page.getByRole('heading', { level: 1, name: /^Kareebos/ })).toBeVisible();
+	await expectNoSidewaysScroll(page);
+});
+
+// Its own owner and farmer: a catchment whose runs nobody has published yet.
+test('a farm whose catchment has nothing published says so', async ({ page, owner, signIn: signInAs }) => {
+	const project = await createProject(page.context().request, 'Unpublished catchment');
+	const model = sampleModel();
+	await putModel(page.context().request, project.id, model);
+	const farmer = await signInAs('Early farmer');
+	const farmId = model.nodes.find((n) => n.kind === 'farm')!.id as string;
+	const add = await page.context().request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farmId] } });
+	expect(add.status(), await add.text()).toBe(201);
+	expect(owner.id).toBeTruthy();
+
+	await farmer.page.setViewportSize(PHONE);
+	await farmer.page.goto('/');
+	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${project.id}`));
+	await expect(farmer.page.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();
+	await expectNoSidewaysScroll(farmer.page);
 });
