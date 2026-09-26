@@ -121,10 +121,34 @@ that needs them.
 
 - `lib/components/common/lazy.ts` memoises each loader, so a hover prefetch,
   the render and a later remount share one request, and a remount renders at
-  once. A failed import is forgotten so "Try again" refetches.
+  once. A failed import isn't kept, so a later call runs the loader again,
+  but that almost never helps (below).
 - `lib/components/common/Lazy.svelte` renders the standard `LoadState` while
-  the chunk loads (or an error with "Try again"), then the component through a
-  typed snippet, so the tab's props are still type-checked.
+  the chunk loads, then the component through a typed snippet, so the tab's
+  props are still type-checked. A failed download renders `ChunkFailed`.
+- **A chunk that fails to download offers a reload, never "Try again"**
+  (`common/ChunkFailed.svelte`, the chosen behaviour since 2026-09-26). A
+  browser records a module script that failed to fetch in the page's module
+  map and fails every later `import()` of that URL at once, for the life of
+  the page (checked in Chromium), so re-running the import can't recover. A
+  cache-busting retry can't either: the URL is the hashed file name Vite
+  compiled into the loader, the chunk's own imports keep theirs, and after a
+  deploy the old files are gone. Only a reload, which fetches the current
+  `index.html` and its chunk names, gets a working copy. The message says
+  what failed and offers **Reload page**; nothing reloads by itself, so a
+  chunk that is really gone can't cause a reload loop. With unsaved changes
+  the message says so ("save them first, or the browser will ask before the
+  reload discards them"): the reload is a plain `location.reload()`, which
+  meets the page's existing `beforeunload` guard, so nothing is dropped
+  without the browser's prompt. A page reports unsaved changes to it with
+  `provideUnsaved()` (`common/chunkFailed.ts`, a Svelte context; nested
+  providers combine): the workspace page gives its model editor's `dirty`,
+  a scenario's override editor its own. Users: `Lazy`, the project list's
+  import dialog, the workbook reader in that dialog, Overview's alert email
+  settings, the printable report's human-impact tables (it waits for them
+  before it is ready), and the root layout's language catalogue.
+  `e2e/tests/lazy-chunk.spec.ts` blocks each chunk and pins the message, the
+  prompt with unsaved edits, and the recovery by reload.
 - The open tab's chunk starts downloading alongside the project data, and a
   tab link warms its chunk on hover or focus, so switching tabs rarely shows
   the loading state.
@@ -135,8 +159,8 @@ workbook review and the engine's series provenance and kinds code they use:
 18 KB gzip) the same way, without `Lazy`: hovering or focusing either import
 button warms the chunk, and a press opens the dialog as soon as it is there,
 with no loading state (the button keeps focus, so Escape returns to it). If
-the download fails the page says so and offers a reload, because a browser
-keeps a module that failed to fetch for the life of the page. Home's first
+the download fails the page says so and offers a reload (`ChunkFailed`,
+above). Home's first
 load fell 81.5 → 65.5 KB gzip (2026-09-26); the total rose 2 KB (889.4 →
 891.5), the cost of the extra chunks. `components/import/homeSplit.test.ts`
 fails if the page, or anything it imports statically, reaches the import
@@ -298,6 +322,39 @@ catchment downloading about 85 KB (gzip) instead of about 300 KB. The bundle
 guard (`pnpm check:bundle`, `scripts/guards/check_web_bundle_budget.mjs`)
 holds the largest single chunk down, which is what catches a tab's code
 sliding back into the page chunk.
+
+## Shared CSS (frontend)
+
+Styles live in two places. `frontend/src/app.css` is global and loads with
+every page: the design tokens (light and dark), element defaults, and the
+shared classes (`.btn`, `.field`, `.panel`, `table.data`, `.alert`,
+`.badge`, `.stat`, `.muted`, `.num`, …). Everything else is a component's
+own scoped `<style>`, which Svelte compiles with the component's hash class
+and ships in that component's chunk.
+
+The shared utilities at the end of `app.css` (issue #9) were scoped copies
+until then: `.small` (secondary text, 0.8rem; 53 copies), `.u` (a unit in a
+label or table head; 22) and `.seg`, the segmented control (a row of `.btn`
+joined into one, any number of buttons; 5). Use them rather than copying
+the rule into a component. A component that needs a different value keeps
+its own rule, which wins because its selector carries the hash class (a
+few have `.small { font-size: 0.85rem }`, and the Settings sections a `.u`
+with its own size). They come after the other shared rules so they win the same
+ties the scoped copies did. `e2e/tests/shared-css.spec.ts` pins their
+computed styles (light, dark, phone, desktop, the report in print, the
+override editor's three-button switch).
+
+A rule moves into `app.css` only when it is identical in three or more
+components *and* the move lowers the total: global CSS is on every page's
+first load, so a rule only a lazy tab uses costs every other page for
+nothing. Moving these three saved 1.0 KB gzip in total and 0.1–0.2 KB on
+the Runs, Network, Data and Settings tabs and the report, for ~0.06 KB more
+on pages that use none of them (home, sign-in, /farm, /share). Measured and left scoped:
+the loading spinner (−0.3 KB total but +0.1 KB on /farm, /share and sign-in,
+which never show it), `.stat dd.sub` (−0.07 KB, and three components style
+their `dd.sub` differently, so a global rule would leak into them), and the
+Settings sections' repeated field and table rules (their copies share one
+lazy chunk, where gzip already folds them).
 
 ## Request lifecycle (backend)
 

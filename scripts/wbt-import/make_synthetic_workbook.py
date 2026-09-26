@@ -149,7 +149,10 @@ TRANSFERS: list[tuple[str, str, Any, float, float, float]] = [
     ("Echo Farm", "--", "1,2,3", 0.1, 0.25, 8640),  # no destination: not a transfer
     ("Golf Farm", "Foxtrot Farm", "1,2", 0, 0.2, 0),  # max rate 0: not a transfer
     ("Alpha Farm", "Zulu Farm", "6,7,8", 0.05, 0, 4320),  # an element not in [Network]
+    ("Foxtrot Farm", "Golf Farm", "10", 0.05, 0, 4320),  # its draw formula is =0: switched off (issue #54)
 ]
+# Transfers (by index) whose draw formula is the constant 0: the workbook never moves that water.
+TRANSFERS_OFF = {7}
 # InOut columns (one per farm): the hand-written formulas that move the drawn
 # water. {Name} is replaced by that transfer's From column letter. All follow
 # "add to the destination, subtract from the source" except Echo's, which
@@ -159,8 +162,8 @@ IN_OUT: list[tuple[str, str]] = [
     ("Bravo Farm", "=-{T0}7-{T3}7"),
     ("Charlie Farm", "={T3}7"),
     ("Echo Farm", "={T1}7*0.9-{T4}7"),
-    ("Foxtrot Farm", "={T5}7-{T1}7"),
-    ("Golf Farm", "={T2}7-{T5}7"),
+    ("Foxtrot Farm", "={T5}7-{T1}7-{T7}7"),
+    ("Golf Farm", "={T2}7+{T7}7-{T5}7"),
     ("Hotel Farm", "=-{T2}7"),
 ]
 
@@ -267,6 +270,18 @@ def app_settings(wb) -> None:
     put(ws, "D108", "--")
     define(wb, "rAppSet_MonthLbls", "AppSettings", ref("C", 96, "C", 107))
     define(wb, "zAppSet_MonthDays", "AppSettings", ref("D", 96, "D", 107))
+
+
+def home(wb) -> None:
+    # [Home] calculation window: the whole flow record here, so the run covers it all (issue #54 model_window).
+    ws = wb.create_sheet("Home")
+    put(ws, "B1", "Home")
+    put(ws, "D14", "Calc. from")
+    put(ws, "D15", "Calc. to")
+    put(ws, "E14", dt.datetime.combine(START, dt.time()))
+    put(ws, "E15", dt.datetime.combine(END, dt.time()))
+    define(wb, "zHome_CalcDate1", "Home", ref("E", 14))
+    define(wb, "zHome_CalcDateN", "Home", ref("E", 15))
 
 
 def templates(wb) -> None:
@@ -549,8 +564,8 @@ def transfers(wb) -> None:
         c = col(io_first, i)
         put(ws, f"{c}7", formula)
         put_text(ws, f"{c}8", formula)
-    for c, (frm, *_rest) in zip(tr_cols, TRANSFERS):
-        formula = f"=IF(fIsMthIn($H7, {c}$14), fGetTrfVolCapped('{frm}'!$Q6,{c}$10,{c}$11,{c}$16), 0)"
+    for i, (c, (frm, *_rest)) in enumerate(zip(tr_cols, TRANSFERS)):
+        formula = "=0" if i in TRANSFERS_OFF else f"=IF(fIsMthIn($H7, {c}$14), fGetTrfVolCapped('{frm}'!$Q6,{c}$10,{c}$11,{c}$16), 0)"
         put(ws, f"{c}7", formula)
         put_text(ws, f"{c}8", formula)
 
@@ -905,6 +920,7 @@ def build() -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     app_settings(wb)
+    home(wb)
     templates(wb)
     network(wb)
     farm_spec(wb)

@@ -683,6 +683,19 @@
         "minStoragePct": 0.3,
         "enabled": true,
         "priority": 3
+      },
+      {
+        "id": "148bf1d6-4bde-5d7c-932e-423c54c45e5e",
+        "fromNodeId": "97858e33-c69b-5a4f-ad5c-14913924752c",
+        "toNodeId": "380c81d6-4d89-5d87-89ef-4d90acdd117e",
+        "months": [
+          10
+        ],
+        "maxRateM3s": 0.05,
+        "dailyCapM3": null,
+        "minStoragePct": 0.0,
+        "enabled": false,
+        "priority": 4
       }
     ]
   },

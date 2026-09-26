@@ -4,6 +4,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, hasTeamRole, type ProjectSummary, type Team } from '$lib/api';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { loadOnce, peek, prefetch } from '$lib/components/common/lazy';
@@ -42,9 +43,10 @@
 	// the fetch; a press opens the dialog as soon as it's here. No loading
 	// state is shown: the chunk is almost always in by the press, and the
 	// button keeps focus (so Escape still returns focus to it). A failed
-	// download says so and offers a reload, since a browser keeps a module
-	// that failed to fetch for the life of the page; another press still
-	// tries again (lazy.ts forgets the failure) in case it was only the CSS.
+	// download says so and offers a reload (ChunkFailed), since a browser
+	// keeps a module that failed to fetch for the life of the page; another
+	// press still reruns the import (lazy.ts), which helps only if it was the
+	// chunk's CSS that failed.
 	// components/import/homeSplit.test.ts keeps the static imports off it.
 	const loadImportDialog = () => import('$lib/components/import/ImportProjectDialog.svelte');
 	const prefetchImport = () => prefetch(loadImportDialog);
@@ -242,10 +244,7 @@
 		<div class="alert alert-error" role="alert">{actionError}</div>
 	{/if}
 	{#if importFailed}
-		<div class="alert alert-error" role="alert">
-			The import could not be loaded. Check your connection, then reload the page.
-			<button type="button" class="btn btn-sm" onclick={() => location.reload()}>Reload</button>
-		</div>
+		<ChunkFailed what="The import" />
 	{/if}
 
 	<LoadState {loading} error={loadError} retry={load} empty={false}>

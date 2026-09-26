@@ -116,7 +116,4 @@
 	.note {
 		max-width: 72ch;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 </style>

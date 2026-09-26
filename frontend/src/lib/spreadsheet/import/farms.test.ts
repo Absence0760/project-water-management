@@ -132,9 +132,18 @@ describe('runOfRiverNote (run_of_river_note)', () => {
 		expect(runOfRiverNote('Pond', 1, 129.7, 12960, 0.25)).toBeNull();
 	});
 
-	it('leaves less than 100 % upstream inflow, or no dam, alone', () => {
+	it('leaves less than 100 % upstream inflow alone', () => {
 		expect(runOfRiverNote('Off-channel', 0.99, 0.4, 12960, 0.25)).toBeNull();
 		expect(runOfRiverNote('Off-channel', 0, 691200, 0, 0)).toBeNull();
-		expect(runOfRiverNote('No dam', 1, 0, 12960, 0)).toBeNull();
+		expect(runOfRiverNote('No dam', 0.5, 0, 12960, 0)).toBeNull();
+	});
+
+	// The engine lets a dam-less farm irrigate from the river routed to it, with no limit (issue #54).
+	it('flags a farm with no dam that takes all the upstream inflow', () => {
+		expect(runOfRiverNote('No dam', 1, 0, 12960, 0)).toBe(
+			'WARNING: farm No dam: probable run-of-river, for the modeller to confirm: it has no dam but takes 100 % of the ' +
+				'upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. ' +
+				'Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)'
+		);
 	});
 });

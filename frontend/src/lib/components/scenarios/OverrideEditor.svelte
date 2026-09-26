@@ -22,6 +22,7 @@
 	import { beforeNavigate } from '$app/navigation';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { provideUnsaved } from '$lib/components/common/chunkFailed';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import OpList from './OpList.svelte';
@@ -58,6 +59,8 @@
 	} = $props();
 
 	const editor = new ModelEditor();
+	// A table whose chunk fails to download warns about unrecorded edits before offering a reload.
+	provideUnsaved(() => editor.dirty);
 	let loaded = $state.raw<ModelInput | null>(null);
 	$effect(() => {
 		void loadKey;
@@ -131,7 +134,7 @@
 	<IssueList issues={editor.issues} {area} />
 	{#if area === 'network'}
 		<Lazy load={LOAD.network}>
-			{#snippet children(NetworkTab)}<NetworkTab {editor} settings={input.settings as ProjectSettings} readonly={false} />{/snippet}
+			{#snippet children(NetworkTab)}<NetworkTab {editor} settings={input.settings as ProjectSettings} readonly={false} only="table" />{/snippet}
 		</Lazy>
 	{:else if area === 'crops'}
 		<Lazy load={LOAD.crops}>
@@ -210,19 +213,6 @@
 		flex: 1 1 100%;
 		max-width: 80ch;
 		font-size: 0.9rem;
-	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	.seg .btn:not(:first-child) {
-		margin-left: -1px;
-		border-radius: 0;
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 	}
 	.seg .btn[aria-pressed='true'] {
 		background: var(--accent-soft);

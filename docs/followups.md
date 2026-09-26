@@ -1009,12 +1009,26 @@ the suggested order (the IDs carry the detail):
       chunk (`svelteRuntimeChunk`): −12 KB total and every first load 3–6 KB
       lighter. The spreadsheet workers now get the engine treeshake rule
       (−0.7 KB). Ceilings: total 892, spreadsheet worker 32.
-- [ ] **Bundle weight still on the table** (issue #9; measured estimates,
-      none started).
-      Component CSS repeated across files (`.small`, `.u`, `.seg .btn`,
-      `.stat dd.sub`: ~17 KB raw, an estimated 2–3 KB gzip) could move to
-      the global stylesheet, but it changes cascade order in 26 components,
-      so it needs the e2e visual pins first. Trigger: the next ceiling raise.
+- [x] **Component CSS repeated across files** (issue #9, 2026-09-26):
+      `.small` (53 copies), `.u` (22) and the `.seg` segmented control (5)
+      now live once at the end of `app.css` (architecture.md § Shared CSS),
+      pinned first by `e2e/tests/shared-css.spec.ts` (light/dark,
+      phone/desktop, the report in print, the override editor's
+      three-button switch). Total −1.0 KB gzip (over origin/main @ 1a8d058:
+      891.7 → 890.7 KB, 913 069 → 912 108 bytes), not the 2–3 KB estimated:
+      most copies sat in shared chunks where gzip already folded them. Runs
+      and the report load 0.2 KB less, Network, Data and Settings 0.1; pages
+      that use none of them (home, sign-in, /farm, /share) ~0.06 KB more. A
+      computed-style crawl of 15 screens × 2 themes × 2 widths (1 328
+      elements) matched before and after except two intended changes: the
+      Network tab's three-button layout switch (since replaced by the map,
+      issue #17) squared its middle button, which had all four corners
+      rounded, and four components that wrote `class="muted small"` with
+      no `.small` rule (History, the Runs tab's run-inputs panel, Yield,
+      Forecast) now render it small. Measured and not moved: the spinner
+      (−0.3 KB total, +0.1 KB on /farm, /share and sign-in), `.stat dd.sub`
+      (−0.07 KB; would leak into three components that style it their own
+      way), the Settings sections' repeats (one lazy chunk already).
 - [x] **The home page loads the import dialog on demand** (issue #9,
       2026-09-26). It was estimated at ~7.5 KB; with the engine's series
       provenance and kinds code only it used, home's first load fell 81.5 →
@@ -1026,7 +1040,7 @@ the suggested order (the IDs carry the detail):
       code. Pinning the keyboard path found that `Dialog` couldn't be
       reopened straight after Escape (its `close` event is queued, so the
       bound `open` lagged); it now follows `cancel` too.
-- [ ] **A failed chunk download can't be retried without a reload.**
+- [x] **A failed chunk download can't be retried without a reload.**
       `common/lazy.ts` forgets a failed import and `Lazy.svelte` offers
       "Try again", but browsers keep a module that failed to fetch in the
       page's module map (HTML spec; checked in Chromium with the home
@@ -1037,6 +1051,40 @@ the suggested order (the IDs carry the detail):
       reload when something is (the save bar knows), and correct the
       comment in `lazy.ts`. Trigger: the next change to `Lazy.svelte`, or
       a report of a stuck "Try again".
+      **Done 2026-09-26:** a failed chunk now says what failed and offers
+      **Reload page** (`common/ChunkFailed.svelte`), never "Try again", and
+      never reloads by itself. With unsaved changes it says so; the reload is
+      a plain `location.reload()`, so the page's `beforeunload` guard asks
+      first (`provideUnsaved()` in `common/chunkFailed.ts`: the workspace's
+      model editor and a scenario's override editor). No "Save, then reload"
+      button: the save bar stays on screen, and saving can be refused (model
+      issues), so the user saves and then reloads. `lazy.ts` says why a
+      rerun or a cache-busting URL can't recover. The third, fourth and
+      fifth users made the shared piece: `Lazy`, the home import dialog, and
+      three sites found on the way that had the same bug: the workbook
+      reader in the import dialog (a failed download left it stuck on
+      "Reading…" with the file input disabled), Overview's "Set up alert
+      emails" (did nothing), the report's human-impact tables and the root
+      layout's language catalogue ("Try again" that couldn't work).
+      `e2e/tests/lazy-chunk.spec.ts` pins them (the layout's catalogue
+      aside: its chunk has no name or content a test can block it by).
+      Total bundle 891.5 → 892.8 KB gzip.
+- [ ] **Three dynamic imports still report a failed chunk as a raw error.**
+      The run's workbook export (`export/DownloadMenu.svelte`, "Workbook
+      failed: Failed to fetch dynamically imported module …") and the
+      account's data export (`routes/account/+page.svelte`) show the
+      browser's message, and pressing again fails the same way; the
+      verify-email banner (`routes/+layout.svelte`, `{#await import(…)}`)
+      is silently missing. Nothing is stuck or lost. Durable fix: catch the
+      `import()` on its own and say it the `ChunkFailed` way, as the
+      workbook reader now does. Not done with the rest because each needs
+      more than a swap: the menu's status line is an inline `aria-live`
+      span with no room for an alert and a button, and the account page is
+      a translated surface, so its message needs `t()` wording and the
+      translation sheet (`ChunkFailed` is English, which the layout's
+      catalogue failure can use only because the catalogue is what failed).
+      The banner may well stay silent (a reminder, not the page). Trigger:
+      the next change to either export or the banner.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and

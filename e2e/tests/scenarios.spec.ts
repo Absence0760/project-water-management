@@ -5,7 +5,8 @@
 // with its base (headline deltas, the per-node overlay, the compare page's
 // Scenario overrides); a rebase onto a run without the farm reports the
 // change that no longer applies; a licence what-if puts a farm on river first
-// with a 1,200 m³/day pump (WP-3.8); a viewer reads it all but changes nothing.
+// with a 1,200 m³/day pump (WP-3.8), its pumping compared with the base's
+// none as 0 (issue #54); a viewer reads it all but changes nothing.
 // Axe-scanned in both themes and on a phone.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -223,7 +224,22 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 
 	// Run it; the full comparison lists both changes and the input diff names them.
 	await page.getByRole('button', { name: 'Run scenario' }).click();
-	await expect(page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Headline results' })).toBeVisible();
+	const compare = page.getByRole('region', { name: 'Scenario against its base' });
+	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
+
+	// The base (dam first) has no river pump, so its pumping reads as 0 rather than being left out (issue #54):
+	// the farm row shows the scenario's mean pumped against the base's none…
+	const farmRow = compare.getByRole('region', { name: 'Farms' }).getByRole('row', { name: /^Upper farm/ });
+	await expect(farmRow.getByTestId('farm-feature-avgRiverAbstractionM3Day')).toContainText('A: none (0)');
+	await expect(compare.getByTestId('farm-feature-note')).toHaveText('Pumped from the river: a run with no river pump at a farm reads as 0 there (“none”).');
+	// …and the daily overlay offers the farm's river pumping, the base drawn as zeros and said so.
+	const overlay = compare.getByRole('region', { name: 'Daily series' });
+	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	const series = overlay.getByLabel('Series');
+	await expect(series.locator('option[value="river_abstraction"]')).toHaveText('Pumped from the river below the dam (part of supplied) (m³/day) · run B only');
+	await series.selectOption('river_abstraction');
+	await expect(overlay.getByTestId('overlay-zero-note')).toContainText('Not in run A: shown as 0. Run A has no such feature at Upper farm');
+	await expect(overlay.getByTestId('overlay-summary')).toHaveText(/^Over the [\d,]+ days both runs have: mean A 0, mean B /);
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	const recorded = page.getByRole('region', { name: 'Scenario overrides' }).getByRole('list', { name: `Changes in scenario ${name} (run B)` }).getByRole('listitem');
 	await expect(recorded).toHaveCount(2);
@@ -243,9 +259,10 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
-	// The Network opens on its map (914e69df); the fields are in the Table.
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
+	// Override mode shows the node table inline, on the scenario's model: not the map, whose Grids menu opens
+	// the page's grid on the catchment's model (issue #17).
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
+	await expect(mode.locator('details.grids-menu')).toHaveCount(0);
 	const record = page.getByTestId('override-record');
 	await expect(record).toContainText('No edits yet.');
 

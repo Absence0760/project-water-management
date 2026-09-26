@@ -795,15 +795,8 @@
 	.user-name-field input {
 		width: 100%;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: -0.25rem 0 0.6rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	/* Keep the table as narrow as it can readably be: field headers wrap
 	   instead of setting the column width, cells are tighter, and 0–100 %

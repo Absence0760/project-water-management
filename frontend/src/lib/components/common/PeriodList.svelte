@@ -150,9 +150,6 @@
 		max-width: 75ch;
 		margin: 0 0 0.4rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);

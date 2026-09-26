@@ -74,7 +74,11 @@ rows and columns don't break it.
   still imported as it is: its storage, spill and level results mean nothing
   until run-of-river supply with a pump capacity lands (#54, 2c). A real
   on-channel dam holds days to months of its diversion and catches its own
-  farm's runoff, so it doesn't trip either test.
+  farm's runoff, so it doesn't trip either test. A farm with **no dam** that
+  takes 100 % of the upstream inflow gets the same flag with its own text: the
+  engine lets a dam-less farm irrigate from the river routed to it with no
+  limit, where b023's formula gave it nothing (issue #54, two found in a client
+  workbook). The run warns about it too (docs/model.md §2.7e).
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted. The app computes demand from
   crop areas only, so the importer checks the sheet's gross demand
@@ -94,12 +98,25 @@ rows and columns don't break it.
   substring matching (which makes "11" also mean January) is a bug, and the
   script prints a `note:` when a list relied on it (quirk 2 in
   `packages/engine/src/network/README.md`, docs/engine-audit.md M1).
+  A column whose draw formula is the constant 0 (`=0`, or `0` in the text
+  copy `zTransfers_FormulasAsTxt`) was switched off by the hydrologist: the
+  workbook never moved that water. It is imported with `enabled: false` and a
+  `WARNING:` (issue #54, found in a client workbook), so the app doesn't run a
+  transfer the workbook didn't. A workbook without the text copy imports
+  every rule on, as before.
 - **Settings**: A-pan evaporation, effective rainfall %, February days
   (AppSettings), fragmentation method and hi/lo split, pragmatic EWR, and
   calibration (via `calibration.py`; engine defaults with a note if that
   module is missing). `calibrationStart/End` come from [Flow Calibration Cfg]
   `zCalibration_Date1/DateN`, and `calibrationFlowKind` from [Flow data]
   `rUseFlow` (left null, with a note, when that series has no values).
+  `simulationStart/End` come from [Home] `zHome_CalcDate1/CalcDateN`, the
+  window the workbook last calculated, when that window lies inside [Flow
+  data] and cuts some of it off, with a `note:` (issue #54). A gauge record
+  can run decades longer than the rain (a client workbook: flow from 1951,
+  rain from 1996), and a run over all of it has decades of no rain. Otherwise
+  both stay null and runs cover the flow record. Every series keeps its full
+  record either way.
 - **Zero-rain runs** (issue #2): a `note:` lists runs of zero catchment rain
   that look like missing data, by the engine's `zeroRainRuns` rule (60+ days
   in the series' six wettest months, or 180+ days with under two years of
@@ -224,6 +241,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | Min dam % on Bravo, Echo and Golf | note per farm, `damMinPct` 0 (Q5) |
 | Irrigation return flow 0.1–0.3 on most farms, 0 on Charlie and Foxtrot | `irrigationEfficiency` 1 − r with `lossReturnFraction` 1, or 1 and 0 (N1) |
 | 7 farms with a dam, Charlie without one (blank cells) | note "7 dam(s) have no surface area" (N2); blank capacity reads as 0 |
+| Delta Farm: missing from [Farm spec], so no dam but 100 % of the upstream inflow | `WARNING:` "probable run-of-river … it has no dam" (the no-dam case) |
 | India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow, diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
 | Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |
@@ -231,6 +249,8 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | [Crop demand] 5 crops; Fodder E grown nowhere | crops and factors, Oct..Sep header check |
 | [Farm demand]: zero and blank areas, a blank row, Hops X (not in [Crop demand]) on Echo, Kilo Farm (not in [Network]) | zero areas omitted, blank rows skipped, notes "crop Hops X is not in [Crop demand]" and "farm Kilo Farm is not in [Network]" |
 | [Transfers] 7 draw-from-dam columns: months `"1,2,3,4,11,12"`; `"11,12"`; the number `7`; `" 5, 6 ,7"`; to `--`; rate 0; to "Zulu Farm" | month lists, the M1 substring note (`"11,12"`), a numeric month cell, spaces, two rules on one dam (Bravo, priorities 0 and 3 by column order), the two silent skips, note "names an unknown element; skipped" |
+| [Transfers] an 8th column, Foxtrot → Golf, whose draw formula is `=0` | `WARNING:` "its draw formula is the constant 0", imported with `enabled: false`; the InOut formulas include it, so no unmapped row |
+| [Home] `zHome_CalcDate1/CalcDateN` equal to [Flow data]'s first and last dates | `model_window` reads them and leaves `simulationStart/End` null (the window covers the whole record) |
 | [Transfers] InOut formula `=S7*0.9-V7` on Echo (a conveyance loss) beside six add/subtract formulas | a hand-written formula that doesn't fit the rule shape, for the TypeScript unmapped report (the Python importer doesn't read formulas) |
 | [Flow Calibration Cfg] summer months `"10,11,12,3,"` (trailing comma), recession table, calibration window 2019-10-01..2021-09-30 | `extract_calibration`, the summer-months M1 note, `calibrationStart/End` |
 | [Flow data] `rUseFlow` 2 | `calibrationFlowKind: "flow_observed_m3s"` |

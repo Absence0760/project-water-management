@@ -130,15 +130,8 @@
 		font-size: 0.85rem;
 		color: var(--text-2);
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.note .badge {
 		margin-right: 0.35rem;
-	}
-	.small {
-		font-size: 0.8rem;
 	}
 	@media (max-width: 640px) {
 		.field :global(input),

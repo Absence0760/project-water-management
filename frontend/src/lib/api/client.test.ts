@@ -561,6 +561,34 @@ describe('scenarios client', () => {
 	});
 });
 
+describe('sweeps client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('creates a sweep, lists a base run’s sweeps, and reads one with or without its series', async () => {
+		const body = { name: 'Demand levels', baseRunId: 'r', members: [{ name: '100 %', ops: [{ op: 'demand.scale' as const, factor: 1 }] }] };
+		const create = mockFetch(202, { sweep: { id: 's' }, jobId: 'j', job: { id: 'j' } });
+		expect((await createApi('', create).sweeps.create('p', body)).sweep.id).toBe('s');
+		expect(call(create)).toEqual({ url: '/projects/p/sweeps', method: 'POST', body });
+
+		const list = mockFetch(200, { sweeps: [{ id: 's' }] });
+		expect(await createApi('', list).sweeps.list('p', { baseRunId: 'r/1' })).toEqual([{ id: 's' }]);
+		expect(call(list).url).toBe('/projects/p/sweeps?baseRunId=r%2F1');
+		const all = mockFetch(200, { sweeps: [] });
+		await createApi('', all).sweeps.list('p');
+		expect(call(all).url).toBe('/projects/p/sweeps');
+
+		const get = mockFetch(200, { sweep: { id: 's' } });
+		expect(await createApi('', get).sweeps.get('p', 's/1')).toEqual({ id: 's' });
+		expect(call(get).url).toBe('/projects/p/sweeps/s%2F1');
+		const withSeries = mockFetch(200, { sweep: { id: 's' } });
+		await createApi('', withSeries).sweeps.get('p', 's', { series: true });
+		expect(call(withSeries).url).toBe('/projects/p/sweeps/s?series=true');
+	});
+});
+
 describe('jobs and yield client', () => {
 	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
 		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];

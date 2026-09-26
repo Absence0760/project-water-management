@@ -38,6 +38,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { prefetch } from '$lib/components/common/lazy';
+	import { provideUnsaved } from '$lib/components/common/chunkFailed';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
@@ -103,6 +104,10 @@
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
 	const editor = new ModelEditor();
+	// A tab or dialog whose chunk fails to download offers a reload; with
+	// unsaved model edits it warns first (the reload still meets the
+	// beforeunload guard below).
+	provideUnsaved(() => editor.dirty);
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);

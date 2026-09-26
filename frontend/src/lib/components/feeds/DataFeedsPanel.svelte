@@ -447,9 +447,6 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.feeds {
 		list-style: none;
 		margin: 0 0 0.75rem;
