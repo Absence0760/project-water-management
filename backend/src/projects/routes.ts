@@ -20,7 +20,7 @@ import { requireRole, UUID, type Role } from './access.js';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 import { TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
-import { resolveOutcomes } from './outcomeSettings.js';
+import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
 import { readJson } from '../http/body.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
@@ -255,6 +255,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const before = body.settings ? await beginSettingsChange(db, id) : null;
 			const current = await getProject(db, id);
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
+			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
+			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
+			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
+				await checkOutcomeSite(db, id, site, (settings as { ewrRules?: unknown }).ewrRules);
+			}
 			await db.query(
 				`UPDATE project SET
 					name = COALESCE($2, name),
