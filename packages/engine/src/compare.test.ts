@@ -389,6 +389,15 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists a change of the annual assurance threshold (engine ≥ 0.32.0); absent is the default 0.9', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.assuranceAnnualThreshold = 0.9;
+		expect(texts(a, b)).toEqual([]);
+		b.settings.assuranceAnnualThreshold = 0.8;
+		expect(texts(a, b)).toEqual(['Annual assurance threshold: 90% → 80%']);
+	});
+
 	it('lists a change of GR4J\'s PE input (engine ≥ 0.31.0), and a run saved without one ran pan coefficient × A-pan', () => {
 		const a = snapshot();
 		const mm = [110, 130, 150, 160, 140, 115, 75, 45, 30, 30, 45, 75];

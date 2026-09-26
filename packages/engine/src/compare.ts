@@ -6,6 +6,7 @@
 // then modified). Copies get fresh node/crop/transfer ids, so everything is
 // matched by id first (same project, catches renames) and then by name
 // (across copies). See docs/run-comparison.md.
+import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { fromEpochDay, toEpochDay } from './calendar';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
@@ -570,6 +571,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
 	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', fmt: withUnit('mm') },
 	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', fmt: plain },
+	// Engine ≥ 0.32.0; absent = the default 0.9. Changes only the reported annual reliability.
+	assuranceAnnualThreshold: { label: 'Annual assurance threshold', fmt: pct },
 	flowShareMethod: { label: 'Flow-share method', fmt: plain },
 	// Engine ≥ 0.31.1; provenance only. A snapshot without it had none.
 	panCoefficientSource: { label: 'Pan coefficient source', fmt: (v) => (typeof v === 'string' && v ? `"${v}"` : 'none') },
@@ -661,6 +664,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		},
 		// Likewise dams evaporated only from engine 0.16.0 (audit N2).
 		lakeEvapFactor: r.lakeEvapFactor ?? 0,
+		// Engine ≥ 0.32.0: absent means the default; it only changes a reported figure.
+		assuranceAnnualThreshold: r.assuranceAnnualThreshold ?? DEFAULT_ANNUAL_THRESHOLD,
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
