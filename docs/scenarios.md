@@ -61,6 +61,30 @@ are empty and nothing below changes.
   side effects (upstream nodes re-linked, references dropped, days scaled).
   A rebase onto a newer base run is `applyScenario(newBase, ops)`: its
   `problems` are the ops that no longer apply.
+- **Edit groups.** Consecutive `node.set` ops on the same node are one
+  edit: the network rules above (the last item) are checked once, after the
+  group's last op, not after each op. So fields the save rules tie together
+  change together, in any order: a `trigger` farm goes straight to run of
+  river with `supplyRule` → `runOfRiver` and `damCapacityM3` → 0 (either
+  first), and both trigger levels rise without minding which comes first.
+  Any other op, or a `node.set` on another node, ends the group (so two
+  groups on one node with an op between them are checked apart). A group
+  that still breaks a rule is skipped **whole**, so a scenario never keeps
+  half an edit, and reported once, naming its ops and the node as it stood
+  before them: `ops 3–5 (node.set, "Upper farm"): …` (a group of one reads
+  `op 3 (node.set): …` as any op does). An op that fails its own check (the
+  first two items: a missing node, a value out of range, a field its kind
+  lacks) is still refused on its own with its own line, and the rest of its
+  group counts without it: the group line then names only the ops that
+  applied (`ops 3, 5 (…)`). The editor shows a group's line as the
+  problem of every op it names (`ops.ts` `statusByOp`). With `mask`, a group's
+  rule that turns on hidden data reads `doesn't apply to the catchment as
+  modelled` like a single op's, and a hidden node is named by its mask name.
+  `scenarioSteps(base, ops)` gives the input each op meets under these rules
+  (an op in a group meets the group's earlier ops, not yet checked) and what
+  a next op would meet (a last `node.set` group that still breaks a rule
+  included, so a form adding one op at a time builds on it);
+  `classifyScenario` classifies each op against the same inputs.
 
 ### Op catalogue
 
@@ -103,12 +127,13 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `supplyStopPct` (0–1). How they fit together is a save rule, checked
   when the op applies: only a farm has them, `trigger` needs a dam,
   `runOfRiver` has none (`damCapacityM3` 0), and the stop level is at least
-  the trigger level under `trigger`. Each op is checked on its own, so
-  order matters: to put a farm on `trigger` with raised levels, set the
-  stop level before the trigger level; to take a `trigger` farm to run of
-  river, go through `riverFirst` (rule, then dam capacity 0, then
-  `runOfRiver`). "What if this farm pumps from the river at 1,200 m³/day"
-  is two ops: `supplyRule` → `riverFirst` and `pumpCapacityM3Day` → 1200.
+  the trigger level under `trigger`. The rules are checked once after a
+  run of `node.set` ops on the same farm (§ Engine, Edit groups), so set
+  the fields that go together next to each other, in any order: `trigger`
+  to run of river is `supplyRule` → `runOfRiver` and `damCapacityM3` → 0;
+  raised levels are `supplyStopPct` and `supplyTriggerPct`. "What if this
+  farm pumps from the river at 1,200 m³/day" is two ops: `supplyRule` →
+  `riverFirst` and `pumpCapacityM3Day` → 1200.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name` only (a gauge only measures).
@@ -216,8 +241,12 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
 - `overrides.test.ts`: each op applies and rejects bad targets; `node.remove`
   keeps a valid tree (`buildTopology`); a deep-frozen base is never mutated;
   a 20 % dam raise changes that dam and never the farm upstream or beside it,
-  and gives identical results in any node order; the classifier; the
-  validator.
+  and gives identical results in any node order; edit groups (a `trigger`
+  farm to run of river in one group of 3 ops in either order, both trigger
+  levels raised in either order, a group that still breaks a rule skipped
+  whole with one problem naming its ops, an op failing its own check
+  refused alone, an op between two splitting them, masked groups,
+  `scenarioSteps`); the classifier; the validator.
 - `scenario.invariants.test.ts`, over random op lists on `randomInput(seed)`
   (generator `testing/scenarioFuzz.ts`, `randomOps`):
   - `checkAll` (every engine invariant, order invariance included) holds on
@@ -451,8 +480,13 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   re-sends the list as it was before the last edit.
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
-  (`stepInputs`, `applyScenario` one op at a time), for the targets the form
-  offers and the value each op replaces in its description. A node or crop
+  (`stepInputs`, the engine's `scenarioSteps`), for the targets the form
+  offers and the value each op replaces in its description. Adding a
+  change builds on the list as it stands, a last group included while it
+  is still incomplete: after "Supply rule → run of river" on a `trigger`
+  farm the list shows that op's problem (run of river has no dam) and the
+  form offers the farm as run of river, so "Dam capacity → 0" next
+  completes the group and both ops apply. A node or crop
   the base doesn't have is named from the scenario's `opNames` (kept by the
   server), so a change on a node a rebase dropped still reads by name after
   a reload. It never decides
@@ -487,11 +521,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   model is never loaded or saved there. **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.add`, `node.remove` (re-linking as the editor does),
-  `node.set` per changed field the engine lets a scenario set (a node's
-  fields in an order that applies: each step takes the first op that adds
-  no save-rule issue to the node, so a `trigger` farm moved to river first
-  with its dam emptied records the rule before the dam; an edit no order
-  fits, such as `trigger` straight to run of river, is reported), `node.add`
+  `node.set` per changed field the engine lets a scenario set (one node's
+  fields next to each other, in the node's own key order: they are one
+  edit group, so a `trigger` farm moved straight to run of river with its
+  dam emptied records as it is; a node's edit that still breaks a save rule,
+  such as `trigger` with the dam emptied, is reported), `node.add`
   (each after the node it drains into), `cropArea.set` with the farm's new
   total of a crop, `transfer.remove` / `.add` / `.set` per field,
   `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
@@ -513,16 +547,22 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 Tests: `scenarios/fields.test.ts` (every node field, transfer field and
 settings path the engine allows has a spec; values round-trip through the
 form's text and still pass the engine's checks), `scenarios/ops.test.ts`
-(`stepInputs`, `describeOp`, problems lined up with their ops, `buildOp` for
+(`stepInputs`, `describeOp`, problems lined up with their ops, an edit
+group's problem on each of its ops, an incomplete group's status and the
+same ops OK once the last op completes it, `buildOp` for
 every op kind, each built op applying to a base), `scenarios/overrideDiff.test.ts`
 (edits made with the model editor's own methods come back as ops that
-apply and give back the edited model, per table; every edit no op can
-express is named; the engine's refusals in the form's words; a fuzz over
-the engine's own random ops, `randomOps`, round-trips), and
+apply and give back the edited model, per table; a node's supply edit
+recorded as one edit group whatever the save rules tie together; every edit
+no op can express is named; the engine's refusals in the form's words; a
+fuzz over the engine's own random ops, `randomOps`, round-trips, and one
+over any valid supply rule, pump, levels and dam from any valid start), and
 `e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
-read only; override mode recording one edit in each table as changes,
+read only; a `trigger` farm taken to run of river one change at a time
+through the form, both ops of the half-made edit saying why until the dam
+change completes it; override mode recording one edit in each table as changes,
 refusing a kind change, leaving the live model untouched, undone as one
 edit, with axe; submit, withdraw, delete releasing the base; axe in light,
 dark and on a phone) and `e2e/tests/scenario-demand-scale.spec.ts` (Scale

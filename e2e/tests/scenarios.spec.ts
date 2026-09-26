@@ -5,7 +5,9 @@
 // with its base (headline deltas, the per-node overlay, the compare page's
 // Scenario overrides); a rebase onto a run without the farm reports the
 // change that no longer applies; a licence what-if puts a farm on river first
-// with a 1,200 m³/day pump (WP-3.8); a viewer reads it all but changes nothing.
+// with a 1,200 m³/day pump (WP-3.8); a trigger farm goes straight to run of
+// river one change at a time (an edit group: the half-made edit says why, the
+// finished one applies); a viewer reads it all but changes nothing.
 // Axe-scanned in both themes and on a phone.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -230,6 +232,49 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	const changed = page.getByRole('region', { name: 'What changed' });
 	await expect(changed).toContainText('Upper farm: supply rule dam only → river first');
 	await expect(changed).toContainText('Upper farm: river pump capacity no limit → 1,200 m³/day');
+});
+
+test('a trigger farm goes straight to run of river, one change at a time: the half-made edit says why, the finished one applies (docs/scenarios.md § Edit groups)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario edit group');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const name = 'Upper to run of river';
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'supplyRule', value: 'trigger' }], ownedNodeIds: [upper] }
+	});
+	expect(res.status()).toBe(201);
+	const { scenario } = (await res.json()) as { scenario: { id: string } };
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenario.id}`);
+	const items = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
+	await expect(items).toHaveCount(1);
+	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
+
+	// The rule alone: run of river has no dam, and Upper farm still has one. It follows the trigger change on the
+	// same farm, so the two are one edit, skipped whole until it fits: both say why.
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
+	await form.getByLabel('Supply rule').selectOption({ label: 'run of river' });
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(items).toHaveCount(2);
+	await expect(items.nth(1)).toContainText('Upper farm: Supply rule dam, river when low → run of river');
+	for (const i of [0, 1]) await expect(items.nth(i)).toContainText("Doesn't apply: \"Upper farm\": run of river has no dam");
+	await expect(page.getByTestId('scenario-problems')).toContainText("2 changes don't apply");
+	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeDisabled();
+
+	// The form builds on the half-made edit (the farm reads as run of river); emptying the dam next completes it.
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: run of river');
+	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await form.getByLabel('Dam capacity (m³)').fill('0');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(items).toHaveCount(3);
+	await expect(items.nth(2)).toContainText('Upper farm: Dam capacity 150,000 m³ → 0 m³');
+	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
+	for (const i of [0, 1, 2]) await expect(items.nth(i)).not.toContainText("Doesn't apply");
+	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeEnabled();
 });
 
 test('override mode records edits in the Network, Crops and Transfers tables as changes, never touching the catchment', async ({ page, owner }) => {

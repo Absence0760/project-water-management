@@ -11,7 +11,7 @@ import { runModel } from '../run';
 import type { ModelInput, NetworkNode, RunSeries } from '../project';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { MASKED_RULE, applyScenario, classifyOp, classifyScenario, type ScenarioMask } from './overrides';
+import { MASKED_RULE, applyScenario, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
 import { structureIssues } from './structure';
 import { validateScenarioOps, type ScenarioOp } from './ops';
 
@@ -363,6 +363,97 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 2 }).problems[0]).toMatch(/no rain_chirps_mm series/);
 		expect(one({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 2, from: '2030-01-01' }).problems[0]).toMatch(/no day/);
 		expect(one({ op: 'series.scale', kind: 'flow_observed_m3s', factor: 2 } as unknown as ScenarioOp).problems[0]).toMatch(/can't be scaled/);
+	});
+});
+
+describe('applyScenario: edit groups (consecutive node.set on one node, checked once)', () => {
+	const set = (nodeId: string, field: string, value: unknown) => ({ op: 'node.set', nodeId, field, value }) as ScenarioOp;
+	/** A on the trigger rule (it has a dam). */
+	const trig = () => applyScenario(base(), [set('A', 'supplyRule', 'trigger')]).input;
+
+	it('takes a trigger farm straight to run of river in one group of 3 ops, in either order', () => {
+		const orders: ScenarioOp[][] = [
+			[set('A', 'supplyRule', 'runOfRiver'), set('A', 'damCapacityM3', 0), set('A', 'pumpCapacityM3Day', 1500)],
+			[set('A', 'damCapacityM3', 0), set('A', 'pumpCapacityM3Day', 1500), set('A', 'supplyRule', 'runOfRiver')]
+		];
+		for (const ops of orders) {
+			const r = applyScenario(trig(), ops);
+			expect(r.problems).toEqual([]);
+			expect(r.applied.map((a) => a.index)).toEqual([0, 1, 2]);
+			expect(nodeOf(r.input, 'A')).toMatchObject({ supplyRule: 'runOfRiver', damCapacityM3: 0, pumpCapacityM3Day: 1500 });
+		}
+		// Each op alone still breaks a rule (positive control for what grouping buys).
+		expect(one(set('A', 'supplyRule', 'runOfRiver'), trig()).problems[0]).toMatch(/run of river has no dam/);
+		expect(one(set('A', 'damCapacityM3', 0), trig()).problems[0]).toMatch(/trigger supply rule needs a farm dam/);
+	});
+
+	it('raises both trigger levels in either order', () => {
+		for (const ops of [
+			[set('A', 'supplyTriggerPct', 0.7), set('A', 'supplyStopPct', 0.9)],
+			[set('A', 'supplyStopPct', 0.9), set('A', 'supplyTriggerPct', 0.7)]
+		]) {
+			const r = applyScenario(trig(), ops);
+			expect(r.problems).toEqual([]);
+			expect(nodeOf(r.input, 'A')).toMatchObject({ supplyTriggerPct: 0.7, supplyStopPct: 0.9 });
+		}
+	});
+
+	it('skips a group that still breaks a rule whole, with one problem naming all its ops, and applies the ops around it', () => {
+		const ops = [
+			set('B', 'damCapacityM3', 10_000),
+			set('A', 'pumpCapacityM3Day', 800),
+			set('A', 'supplyRule', 'runOfRiver'),
+			set('A', 'supplyStopPct', 0.9),
+			set('C', 'damCapacityM3', 60_000)
+		];
+		const r = applyScenario(trig(), ops);
+		expect(r.problems).toEqual([expect.stringMatching(/^ops 2–4 \(node\.set, "Farm A"\): .*run of river has no dam/)]);
+		expect(r.applied.map((a) => a.index)).toEqual([0, 4]);
+		// All or nothing: A keeps its pump, rule and levels as they were.
+		expect(nodeOf(r.input, 'A')).toMatchObject({ supplyRule: 'trigger', damCapacityM3: 200_000 });
+		expect(nodeOf(r.input, 'A')!.pumpCapacityM3Day ?? null).toBeNull();
+		expect(nodeOf(r.input, 'B')!.damCapacityM3).toBe(10_000);
+		expect(nodeOf(r.input, 'C')!.damCapacityM3).toBe(60_000);
+	});
+
+	it('refuses an op that fails its own check on its own, and names only the group ops that applied', () => {
+		const ops = [set('A', 'supplyRule', 'runOfRiver'), set('A', 'damInitialPct', 1.5), set('A', 'pumpCapacityM3Day', 800)];
+		const r = applyScenario(trig(), ops);
+		expect(r.problems).toEqual([
+			expect.stringMatching(/^op 2 \(node\.set\): damInitialPct .*at most 1/),
+			expect.stringMatching(/^ops 1, 3 \(node\.set, "Farm A"\): .*run of river has no dam/)
+		]);
+		expect(r.applied).toEqual([]);
+		// The bad value alone doesn't sink a group that fits.
+		const ok = applyScenario(trig(), [set('A', 'supplyRule', 'runOfRiver'), set('A', 'damInitialPct', 1.5), set('A', 'damCapacityM3', 0)]);
+		expect(ok.problems).toEqual([expect.stringMatching(/^op 2 \(node\.set\): /)]);
+		expect(ok.applied.map((a) => a.index)).toEqual([0, 2]);
+		expect(nodeOf(ok.input, 'A')).toMatchObject({ supplyRule: 'runOfRiver', damCapacityM3: 0 });
+	});
+
+	it('an op on another node in between splits the ops into two groups, each checked on its own', () => {
+		const r = applyScenario(trig(), [set('A', 'supplyRule', 'runOfRiver'), set('B', 'pumpCapacityM3Day', 500), set('A', 'damCapacityM3', 0)]);
+		expect(r.problems).toEqual([expect.stringMatching(/^op 1 \(node\.set\): .*run of river has no dam/), expect.stringMatching(/^op 3 \(node\.set\): .*trigger supply rule needs a farm dam/)]);
+		expect(r.applied.map((a) => a.index)).toEqual([1]);
+		// Any other op kind in between splits them too.
+		const s = applyScenario(trig(), [set('A', 'supplyRule', 'runOfRiver'), { op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 }, set('A', 'damCapacityM3', 0)]);
+		expect(s.problems).toHaveLength(2);
+		expect(s.applied.map((a) => a.index)).toEqual([1]);
+	});
+
+	it('scenarioSteps: each op meets the earlier ops of its group, and `after` keeps an incomplete last group', () => {
+		const ops = [set('A', 'supplyRule', 'runOfRiver'), set('A', 'damCapacityM3', 0)];
+		const { before, after } = scenarioSteps(trig(), ops);
+		expect(nodeOf(before[0]!, 'A')!.supplyRule).toBe('trigger');
+		expect(nodeOf(before[1]!, 'A')!.supplyRule).toBe('runOfRiver');
+		expect(nodeOf(after, 'A')).toMatchObject({ supplyRule: 'runOfRiver', damCapacityM3: 0 });
+		// An incomplete group (the rule alone) is what the next op would build on, though it doesn't apply yet.
+		expect(nodeOf(scenarioSteps(trig(), ops.slice(0, 1)).after, 'A')!.supplyRule).toBe('runOfRiver');
+		expect(applyScenario(trig(), ops.slice(0, 1)).problems).toHaveLength(1);
+		// After a group that breaks a rule and is closed by another op, the next op meets the input without it.
+		const closed = scenarioSteps(trig(), [ops[0]!, set('B', 'pumpCapacityM3Day', 500), set('C', 'pumpCapacityM3Day', 400)]);
+		expect(nodeOf(closed.before[2]!, 'A')!.supplyRule).toBe('trigger');
+		expect(nodeOf(closed.before[2]!, 'B')!.pumpCapacityM3Day).toBe(500);
 	});
 });
 
@@ -914,6 +1005,20 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(applyScenario(baseM(), [op]).problems[0]).toMatch(/run of river has no dam/);
 		// Their own farm A keeps the rule's words.
 		expect(apply([{ ...op, nodeId: 'A' }]).problems[0]).toMatch(/"Farm A": run of river has no dam/);
+	});
+
+	it('masks a group\'s rule the same way, naming the hidden node by its mask name', () => {
+		// C (hidden) to run of river with its dam emptied: the group fits the supply rule, but C's hidden borehole bh1 needs the dam.
+		const ops: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: 'C', field: 'supplyRule', value: 'runOfRiver' },
+			{ op: 'node.set', nodeId: 'C', field: 'damCapacityM3', value: 0 }
+		];
+		const r = apply(ops);
+		expect(r.problems).toEqual([`ops 1–2 (node.set, "Farm 2"): ${MASKED_RULE}`]);
+		expect(r.applied).toEqual([]);
+		// Unmasked, the real name and the borehole are named.
+		const plain = applyScenario(baseM(), ops).problems;
+		expect(plain).toEqual([expect.stringMatching(/^ops 1–2 \(node\.set, "Farm C"\): .*Secret hole/)]);
 	});
 
 	it('says only that for the catchment-wide value rules too, while any node is hidden', () => {

@@ -44,13 +44,24 @@ describe('snapshotInput and stepInputs', () => {
 		const rename: ScenarioOp = { op: 'node.set', nodeId: '00000000-0000-4000-8000-0000000000d1', field: 'name', value: 'Big dam' };
 		const { before, after } = stepInputs(b, [raise, add, rename]);
 		expect(before).toHaveLength(3);
-		expect(before[0]).toBe(b);
+		expect(before[0]).toEqual(b);
 		expect(before[1]!.model.nodes.find((n) => n.id === UP)!.damCapacityM3).toBe(180_000);
 		expect(before[2]!.model.nodes.map((n) => n.name)).toContain('New dam');
 		expect(after.model.nodes.map((n) => n.name)).toContain('Big dam');
 		expect(JSON.stringify(b)).toBe(frozen);
 		// The same result as applying the whole list at once.
 		expect(after).toEqual(applyScenario(b, [raise, add, rename]).input);
+	});
+
+	it('an op in an edit group meets the group\'s earlier ops, and `after` keeps an incomplete last group for the next op', () => {
+		const trig = applyScenario(base(), [{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'trigger' }]).input;
+		const rule: ScenarioOp = { op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'runOfRiver' };
+		// The rule alone doesn't apply (run of river has no dam), but the form's next op builds on it.
+		const one = stepInputs(trig, [rule]);
+		expect(one.after.model.nodes.find((n) => n.id === UP)!.supplyRule).toBe('runOfRiver');
+		const two = stepInputs(trig, [rule, { op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 0 }]);
+		expect(two.before[1]!.model.nodes.find((n) => n.id === UP)!.supplyRule).toBe('runOfRiver');
+		expect(two.after.model.nodes.find((n) => n.id === UP)).toMatchObject({ supplyRule: 'runOfRiver', damCapacityM3: 0 });
 	});
 });
 
@@ -130,6 +141,24 @@ describe('statusByOp', () => {
 			{ problem: null, notes: [] }
 		]);
 		expect(s.other).toEqual(['op 9 (node.set): out of range', 'something else']);
+	});
+
+	it('gives an edit group\'s problem to every op it names, a node name with parentheses included', () => {
+		const s = statusByOp(5, [{ index: 0, op: raise, notes: [] }], [
+			'op 3 (node.set): damInitialPct must be at most 1',
+			'ops 2–4 (node.set, "Kliphuis (2)"): run of river has no dam',
+			'ops 1, 5 (node.set, "Farm A"): stop level must be at least its trigger level',
+			'ops 4–9 (node.set, "Farm B"): out of range'
+		]);
+		expect(s.ops.map((o) => o.problem)).toEqual([
+			'stop level must be at least its trigger level',
+			'run of river has no dam',
+			'damInitialPct must be at most 1; run of river has no dam',
+			'run of river has no dam',
+			'stop level must be at least its trigger level'
+		]);
+		// A group reaching past the list names ops that aren't there: kept whole, never half-assigned.
+		expect(s.other).toEqual(['ops 4–9 (node.set, "Farm B"): out of range']);
 	});
 });
 
@@ -294,6 +323,23 @@ describe('opItems', () => {
 			{ text: 'Remove “Lower farm”', cls: 'baseline', problem: 'node “Lower farm” not found', notes: [] }
 		]);
 		expect(other).toEqual(['stray']);
+	});
+
+	it('shows an incomplete edit group\'s problem, and every op of it OK once the last op completes it', () => {
+		const trig = applyScenario(base(), [{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'trigger' }]).input;
+		const rule: ScenarioOp = { op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'runOfRiver' };
+		const dam: ScenarioOp = { op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 0 };
+		const names = namesOf([trig.model]);
+		// The server's check is the engine's applyScenario on the run's input.
+		const shown = (ops: ScenarioOp[]) => opItems(ops, null, applyScenario(trig, ops), trig, names).items;
+		const half = shown([rule]);
+		expect(half).toEqual([{ text: 'Upper farm: Supply rule dam, river when low → run of river', cls: null, problem: expect.stringMatching(/^"Upper farm": run of river has no dam/), notes: [] }]);
+		const whole = shown([rule, dam]);
+		expect(whole.map((i) => i.problem)).toEqual([null, null]);
+		expect(whole[1]!.text).toBe('Upper farm: Dam capacity 150,000 m³ → 0 m³');
+		// A group that still breaks a rule marks each of its ops.
+		const broken = shown([rule, { op: 'node.set', nodeId: UP, field: 'pumpCapacityM3Day', value: 900 }]);
+		expect(broken.map((i) => i.problem)).toEqual([expect.stringMatching(/run of river has no dam/), expect.stringMatching(/run of river has no dam/)]);
 	});
 
 	it('still lists the ops with no base and no check', () => {
