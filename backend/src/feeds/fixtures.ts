@@ -53,11 +53,16 @@ function gridFile(f: GridFixture, k: number): Uint8Array {
 	return writeGrid({ width, height, originLon: f.grid.originLon, originLat: f.grid.originLat, scale: f.grid.scale, values });
 }
 
-/** Renders rows in the DWS daily page layout (sources/dws.ts). */
+/**
+ * Renders rows in the DWS daily page layout (sources/dws.ts, dws-sample.html):
+ * fixed columns (date 1-8, flow 10-18, quality 20-24), a gap as a blank flow
+ * with code 170 ("permanent gap").
+ */
 export function renderDwsPage(station: string, rows: { date: string; value: number | null; quality: string }[]): string {
 	if (!rows.length) return `<html><body><pre>\nStation : ${station}100.00\nNo data for this period\n</pre></body></html>`;
-	const lines = rows.map((r) => `${r.date.replaceAll('-', '')}   ${r.value === null ? '' : r.value.toFixed(3).padStart(8)}   ${r.value === null ? '' : r.quality.padStart(3)}`.trimEnd());
-	return `<html><body><pre>\nStation : ${station}100.00  (fixture)\n\nDATE       D_AVG_FR  QUAL\n${lines.join('\n')}\n</pre></body></html>`;
+	const lines = rows.map((r) => `${r.date.replaceAll('-', '')} ${(r.value === null ? '' : r.value.toFixed(3)).padStart(9)} ${(r.value === null ? '170' : r.quality).padStart(5)}`);
+	const format = 'POS.  1-8   = Date of daily flow  CCYYMMDD\nPOS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999\nPOS. 20-24  = Quality code';
+	return `<p><pre>Data are continuously updated and reviewed.\nThe format of this file is as follows:\n${format}\n\n${station} (fixture)\nVariable 100.00 Surface Water Level\n\nDATE     D AVG F/R  QUAL\n${lines.join('\n')}\nZZZZZZZZZZZZ\n</pre></p>\n<!DOCTYPE html>\n<html><body></body></html>`;
 }
 
 export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {

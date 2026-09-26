@@ -1,19 +1,29 @@
 // DWS (South Africa's Department of Water and Sanitation) verified daily
 // gauge flow, from the Hydrological Services site's HyData.aspx page.
 //
-// There is no documented API. The format below is the one two independent
-// open-source clients parse (RivRetrieve-Python, rivretrieve/southafrica.py;
-// aquascope, collectors/south_africa_dws.py), checked 2026-09:
+// There is no documented API. The request is the one two independent
+// open-source clients make (RivRetrieve-Python, rivretrieve/southafrica.py;
+// aquascope, collectors/south_africa_dws.py, checked 2026-09); the page layout
+// is from an archived daily page (web.archive.org, HyData.aspx DataType=Daily,
+// captured 2024-05), since the site answers our network with HTTP 403:
 //
 //   GET https://www.dws.gov.za/Hydrology/Verified/HyData.aspx
 //         ?Station=<code>100.00&DataType=Daily&StartDT=YYYY-MM-DD&EndDT=YYYY-MM-DD&SiteType=RIV
-//   → an HTML page whose <pre> holds a whitespace table:
-//       DATE       D_AVG_FR  QUAL
-//       20230101      1.234     1
-//     one row per day, the daily mean flow in m³/s and a DWS quality code;
-//     "No data for this period" when there is none. At most 20 years per
-//     request. The site can answer HTTP 200 with a Kisters "ScriptServer"
-//     error page instead of data.
+//   → <p><pre> first (the ASP.NET document follows the </pre>), holding a
+//     format block and a fixed-width table:
+//       POS.  1-8   = Date of daily flow  CCYYMMDD
+//       POS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999
+//       POS. 20-24  = Quality code
+//       …
+//       DATE     D AVG F/R  QUAL
+//       20230101     1.234     1
+//       20230102             170        ← a gap: flow blank, code only
+//       ZZZZZZZZZZZZ
+//     one row per day, the daily mean flow in m³/s and a DWS quality code
+//     (legend: Verified/HyCodes.aspx); "No data for this period" when there
+//     is none. The clients call the column D_AVG_FR, which is accepted too.
+//     At most 20 years per request. The site can answer HTTP 200 with a
+//     Kisters "ScriptServer" error page instead of data.
 //
 // Parsed defensively: no <pre>, a different header, or a server error page
 // fails the fetch (FeedFormatError) and writes nothing. A row whose value
@@ -54,6 +64,12 @@ const decode = (s: string) =>
 
 const SERVER_ERROR = /scriptserver|can't connect to|unable to establish connection/i;
 const MAX_ROWS = 20 * 366 + 10;
+/**
+ * The daily table's header, spaces collapsed. The site prints "D AVG F/R"
+ * (an archived page, 2024); the open-source clients call the column D_AVG_FR,
+ * so that spelling is accepted too.
+ */
+const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 
 interface Columns {
 	/** Where the flow column's label ends and the QUAL label ends (exclusive), in the header line. */
@@ -84,7 +100,9 @@ function rowFields(raw: string, cols: Columns | null): [string, string | undefin
 }
 
 /** Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a gap. */
-export function parseDwsDaily(page: string): DwsDays {
+export function parseDwsDaily(raw: string): DwsDays {
+	// A comment is not content: one that mentions <pre> must not be taken for the table.
+	const page = raw.replace(/<!--[\s\S]*?-->/g, '');
 	if (SERVER_ERROR.test(page)) throw new FeedFormatError('the DWS site answered with a server error page');
 	const pre = page.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
 	const body = pre ? decode(pre[1]!) : /^\s*DATE\s/m.test(page) && !/<html/i.test(page) ? page : null;
@@ -98,9 +116,9 @@ export function parseDwsDaily(page: string): DwsDays {
 	const h = lines.findIndex((l) => /^\s*DATE(\s|$)/i.test(l));
 	if (h === -1) throw new FeedFormatError('the DWS table has no DATE header');
 	const headerLine = lines[h]!.toUpperCase();
-	const header = headerLine.trim().split(/\s+/);
-	if (header[0] !== 'DATE' || header[1] !== 'D_AVG_FR') {
-		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D_AVG_FR, got ${header.slice(0, 3).join(' ').slice(0, 60)})`);
+	const header = headerLine.trim().split(/\s+/).join(' ');
+	if (!DAILY_HEADER.test(header)) {
+		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
 	}
 	const cols = headerColumns(headerLine);
 
