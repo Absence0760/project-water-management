@@ -84,3 +84,27 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 		expect(after).toEqual(before);
 	}
 });
+
+test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and wind', async ({ page, owner }) => {
+	void owner;
+	const { id } = await seedRunnableProject(page.request, 'GR4J Kp helper');
+	await page.goto(`/projects/${id}?tab=settings`);
+	await page.getByText('Suggest from FAO-56 Table 5 (humidity, wind, siting)').click();
+	await page.getByLabel('Windward fetch of green crop').selectOption('10');
+	const fill = page.getByRole('button', { name: 'Fill the pan-coefficient row' });
+	await expect(fill).toBeDisabled();
+	// Case A, 10 m green fetch, moderate wind: 0.70 at RH 40–70 %, 0.75 above 70 % (Table 5).
+	const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+	for (const [i, m] of months.entries()) {
+		await page.getByLabel(`Mean relative humidity, ${m}, %`).fill(i < 7 ? '55' : '80');
+		await page.getByLabel(`Mean wind speed at 2 m, ${m}, m/s`).fill('3');
+	}
+	await page.getByLabel('Where the RH and wind came from').fill('Synthetic station, 2010–2020 monthly means');
+	await expect(fill).toBeEnabled();
+	await fill.click();
+	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.7');
+	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');
+	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.75');
+	// It only fills the form: nothing is saved until Save.
+	await expect(page.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+});

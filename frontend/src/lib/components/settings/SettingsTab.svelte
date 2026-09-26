@@ -58,6 +58,7 @@
 	// Data feeds: their own API and chunk, loaded when the tab is (docs/ui.md § Data feeds).
 	const loadFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 	// Scheduled report PDFs: likewise (docs/ui.md § Scheduled reports).
+	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 
 	let {
@@ -538,7 +539,6 @@
 					{#if peError}<span class="err" role="status">{peError}</span>{/if}
 				</div>
 			{:else}
-				<!-- The FAO-56 Table 5 pan-coefficient helper (issue #39) sits here, beside the preset: it fills the row below. -->
 				<div class="field pan-preset">
 					<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
 					<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => applyPanPreset(e.currentTarget.value)} aria-describedby="st-pan-preset-h">
@@ -547,6 +547,14 @@
 					</select>
 					<span class="hint" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; nothing is stored about which preset was picked. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
 				</div>
+				{#if !readonly}
+					<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; code-split, it is collapsed until opened. -->
+					<Lazy load={loadPanHelper}>
+						{#snippet children(PanCoefficientHelper)}
+							<PanCoefficientHelper onapply={(v: number[]) => (s.panCoefficient = [...v] as typeof s.panCoefficient)} />
+						{/snippet}
+					</Lazy>
+				{/if}
 				<div class="table-wrap">
 					<table class="data compact monthly">
 						<thead>
