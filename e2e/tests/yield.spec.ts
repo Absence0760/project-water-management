@@ -9,10 +9,11 @@ import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { openNodeForm } from '../support/network.ts';
 
 async function openUpperFarm(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	return page.getByRole('region', { name: 'Yield of Upper farm' });
 }

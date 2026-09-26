@@ -5,6 +5,7 @@
 
 /** The grids the grid modal can show, with their titles. */
 export const GRIDS = {
+	nodes: 'Node table',
 	'crop-factors': 'Crop factors',
 	'planted-areas': 'Planted areas',
 	demand: 'Irrigation demand preview',
@@ -17,8 +18,13 @@ export function isGridId(v: string | null): v is GridId {
 	return v !== null && Object.hasOwn(GRIDS, v);
 }
 
-/** The workspace tab a grid lives on. The modal isn't offered over that tab: the grid is already on the page. */
-export const GRID_TAB: Record<GridId, string> = {
+/**
+ * The workspace tab a grid is also shown on, where the modal isn't opened
+ * (the grid is already on the page); null: only ever in the modal (the node
+ * table, since the Network became a map, issue #17).
+ */
+export const GRID_TAB: Record<GridId, string | null> = {
+	nodes: null,
 	'crop-factors': 'crops',
 	'planted-areas': 'crops',
 	demand: 'crops',

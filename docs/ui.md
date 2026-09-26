@@ -581,21 +581,25 @@ admin can.
 
 ## Network
 
-Three layouts, switched by the **Layout** buttons in the Schematic panel's
-header and kept in the URL so each can be linked: **Map** (the default, no
-parameter), **Table** (`view=table`) and **One node** (`view=node`).
-`node=<id>` picks a node (a note's link on the Summary, `notes.ts`
-`noteHref`, opens the map with its node picked).
+One page, the **map** (issue #17, option A's simplicity with nothing lost).
+It used to have three layouts (Map, Table, One node); with the Grids menu
+they only made the page jump, so the other two became things the map opens:
+the **node table** is a grid (**Grids → Node table**, `grid=nodes`, the
+[grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
+node's **full form** opens in a sheet over the map from its card's **Edit**
+(`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
+`view=node` becomes `edit=<node or the first>`. `node=<id>` picks a node (a
+note's link on the Summary, `notes.ts` `noteHref`).
 
-- **Map** (issue #17, option A's simplicity with nothing lost; the A2
-  board), a page of its own:
-  - **Header:** "Network" and one line on what it is ("2 farms · 2 dams · 1
-    gauge · draining to Outflow gauge · 32.0 km²"); on the right the
-    **Layout** switch, a **Grids** menu (a disclosure named "Open as a grid":
-    *Crop factors*, *Planted areas* and *Transfers* open in the
-    [grid modal](#grid-modal), *Node table* switches to the Table layout;
-    Escape or a click outside closes it) and, for editors, **+ Add node**
-    (which opens the new node on its form).
+- **Map** (the A2 board), a page of its own:
+  - **Header** (with no nodes yet too): "Network" and one line on what it is
+    ("2 farms · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²";
+    "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
+    as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    each in the [grid modal](#grid-modal); Escape or a click outside closes
+    it) and, for editors, **+ Add node**, which opens the new node's form in
+    the sheet. With no nodes the map card is an empty panel with **Add
+    outflow gauge**.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
     filling the card, and one legend line under it. Colouring by supply is
     **on by default** once the project has a run.
@@ -624,7 +628,7 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
-      which opens the One node layout on it. A farm has two tiles:
+      which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, and "no demand" / "not in this run"
@@ -640,8 +644,19 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
       and "→ downstream" (or "outlet"). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here.
 
-  The Table's and One node's fields aren't on the map: every one is a click
-  away (Edit, Node table, the grids), so nothing was removed.
+  - **Node sheet** (`edit=<id>`, the `Dialog` `side wide` variant, 640 px,
+    the whole width on a phone): "Edit *name*" ("*name*: details" for a
+    viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
+    the dialog's sub-header above the scrolling form (so no control scrolls
+    under it), then the one-node form (`NodeDetail`: every field with its help
+    text, land cover, boreholes, the farmers note, Preview as farmer, move,
+    make outflow gauge, remove) and a farm's Yield panel. The save row
+    (`ModelSaveRow`: status, reason, Discard, Done, Save changes) is pinned
+    under the form. ‹ ›, the picker and a tap on the map move it to another
+    node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.
+
+  Every field of the old Table and One node layouts is a click away (Edit,
+  Grids → Node table), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -676,8 +691,8 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   unsaved model edits it adds that the colours show the run, not the edits.
   Gauges and other water users are not coloured. Selection, hover and drop
   states are unchanged (they live on the halo and opacity).
-- **Table** or **One node** (until issue #17 the defaults, by screen width;
-  now the Map is): every field has
+- **The node table and the one-node form** (the grid and the sheet above):
+  every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
   The flow share in use (with the Settings method) and its total are shown.
@@ -686,7 +701,7 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   switches to the plain number while it is being edited, and typed or pasted
   separators (`300 000`, `300,000`) are accepted (`NumberInput grouped`). The
   editable table keeps plain numbers.
-- **Table layout**: the whole table, through the **In use** share and the ✕
+- **The node table** (`grid=nodes`): the whole table, through the **In use** share and the ✕
   column, fits a 1440px screen without sideways scrolling (the dam physics
   fields live in the one-node form only, see above). Field headers wrap
   (e.g. "Upstream inflow to dam" over three lines) instead of setting the
@@ -701,13 +716,8 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   lines up with the digits above it. Narrower screens scroll the table sideways inside its own
   box, with the **Name** column pinned on the left and the **✕** remove
   column pinned on the right, so every row stays named and removable.
-- **One node layout**: the node picker (‹ select ›) is sticky under the app
-  header, so the node being edited stays named and ‹ › stay in reach while
-  scrolling a long farm form; **+ Add node** sits just below it and scrolls
-  away. Controls reached by Tab stop below the picker, not under it. Tapping
-  a node on the schematic selects it and, when the form is below the lower
-  part of the screen (as on a phone, where the form sits under the drawing),
-  scrolls the picker to the top so the form is in view (`scroll.ts`).
+- **The one-node form** (the node sheet): the picker (‹ select ›) stays in
+  reach above the scrolling form in the sheet's fixed sub-header.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets an indicative efficiency (drip 90 %,
@@ -793,7 +803,7 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
 
 `lib/components/yield/YieldPanel.svelte`, its own chunk (with its chart),
 loaded only when a farm is focused. It sits under the farm's form in the
-**One node** layout, and under a scenario (**Yield under this scenario**,
+node sheet, and under a scenario (**Yield under this scenario**,
 with a dam picker over the scenario's own farms). The numbers come from a
 background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)).
 
@@ -867,11 +877,9 @@ opened from. It is its own chunk, fetched when a URL names a farm.
 
 - **From:** the Summary's Needs attention (a farm below the supply target, a
   single farm with nothing planted) and the Network: on the Map, a farm's
-  card links its irrigated area ("20.00 ha, 1 crop"); on the Table and One
-  node layouts, selecting a farm shows "*Farm*: 20.00 ha planted, 1 crop."
-  under the schematic with a **Planted areas** link (`farmPlanting`). Those
-  links keep the page's other parameters (`withParam`, e.g. `view=table`),
-  so closing the drawer comes back to the same layout.
+  card links its irrigated area ("20.00 ha, 1 crop", `farmPlanting`). The
+  link keeps the page's other parameters (`withParam`), so closing the drawer
+  comes back to exactly where it was opened.
 - **Content:** every crop in the model with this farm's area (ha, the same
   inputs and labels as the Crops tab's row, "Orchard on Upper farm, ha"), the
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
@@ -895,19 +903,22 @@ opened from. It is its own chunk, fetched when a URL names a farm.
 An existing model grid, unchanged, full screen over whichever tab is open
 (`model/GridModal.svelte`; issue #17: the simpler screens keep every grid one
 click away). It opens while the workspace URL has `grid=<id>`
-(`lib/workspace/overlays.ts`): `crop-factors`, `planted-areas` and `demand`
-(the Crops tab's sections, through its `sections` prop) and `transfers` (the
-Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
+(`lib/workspace/overlays.ts`): `nodes` (the Network's node table, `NetworkTab`
+with `only="table"`: every column, reordering, Add node / other user, Sort by
+flow path, the other water users and the field guide; with no nodes, **Add
+outflow gauge**), `crop-factors`, `planted-areas` and `demand` (the Crops tab's
+sections, through its `sections` prop) and `transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
+The node table has no such tab (`GRID_TAB.nodes` is null), so it opens anywhere.
 
-- **From:** the Network's Map (**Open as a grid**). More screens will link to
+- **From:** the Network's **Grids** menu. More screens will link to
   it as they simplify (the #17 checklist).
 - **Editing:** the grid edits the shared `ModelEditor`, so its edits show on
   the tab it comes from and the other way round, and the tab's problems list
   shows above it (`IssueList`). The modal hides the save bar, so it carries
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
-  **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
+  **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
 - **Layout:** the `Dialog` `full` variant with `keepInputs` (the grid's inputs
   keep their own widths; other dialogs stretch text fields to the dialog's

@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import { copyProject, createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -12,7 +13,7 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Invaded');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 
 	const cover = page.getByRole('group', { name: 'Land cover' });
@@ -24,11 +25,11 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	await expect(cover.getByText('Class reductions at full cover: 50 % of flows, 60 % of low flows.')).toBeVisible();
 	// Upper farm is 12 km²: 3 × 50 % = 1.5 km², 13 %.
 	await expect(cover.getByText(/Condensed cover 13 % of the farm's 12 km²/)).toBeVisible();
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
 	await page.reload();
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	await expect(page.getByRole('group', { name: 'Land cover' }).getByLabel('Area (km²)')).toHaveValue('3');
 

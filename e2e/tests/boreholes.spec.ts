@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -13,7 +14,7 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Boreholes');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 
 	const group = page.getByRole('group', { name: 'Groundwater (boreholes)' });
@@ -21,11 +22,11 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await group.getByLabel('Borehole rule').selectOption('primary');
 	await group.getByLabel('Stream depletion (%)').fill('50');
 	await group.getByLabel('Depletion lag (days)').fill('10');
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
 	await page.reload();
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	const again = page.getByRole('group', { name: 'Groundwater (boreholes)' });
 	await expect(again.getByLabel('Borehole capacity (m³/day)')).toHaveValue('600');
@@ -55,7 +56,7 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Individual boreholes');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 
 	const group = page.getByRole('group', { name: 'Individual boreholes', exact: true });
@@ -68,11 +69,11 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await group.getByLabel('Stream depletion (% of pumping)').fill('25');
 	await expect(group.getByTestId('bh-cap-note')).toContainText('Annual caps total 20,000 m³/a');
 	await expectNoViolations(page, { include: '.detail' });
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
 	await page.reload();
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	const again = page.getByRole('group', { name: 'Individual boreholes', exact: true });
 	await expect(again.getByLabel('Name')).toHaveValue('BH-01');

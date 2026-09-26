@@ -4,6 +4,7 @@
 import type { Page } from '@playwright/test';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openNodeTable, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -11,7 +12,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Town on the river');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
+	await openNodeTable(page);
 
 	await page.getByRole('button', { name: '+ Add other user' }).click();
 	const users = page.getByRole('region', { name: /^Other water users/ });
@@ -29,10 +30,10 @@ test('add a town as an other water user, save, run, and see what it took', async
 	// The schematic draws and lists it.
 	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByText(/^\s*Town, user, level 2/)).toBeAttached();
 
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 	await page.reload();
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
+	await openNodeTable(page);
 	const again = page.getByRole('region', { name: /^Other water users/ });
 	await expect(again.getByLabel('Demand of Town in Mar, m³/day')).toHaveValue('800');
 	await expect(again.getByLabel('Share returned (%)')).toHaveValue('40');

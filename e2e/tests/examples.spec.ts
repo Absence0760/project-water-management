@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { ANALYST, DEMO, DROEVLEI, FARMER1, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 // One seeding per run: the tests in this file share the seeded users.
 test.describe.configure({ mode: 'serial' });
@@ -56,10 +57,11 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	// A viewer's model inputs sit behind "Show model inputs" (issue #6).
 	await page.getByLabel('Show model inputs').check();
 	await page.getByRole('link', { name: 'Network' }).click();
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
+	await openNodeTable(page);
 	await expect(page.getByText('You have view-only access to this project.')).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
 	await expect(page.getByRole('button', { name: '+ Add node' })).toHaveCount(0);
+	await closeModal(page);
 
 	await page.getByRole('link', { name: 'Runs & results' }).click();
 	await expect(page.getByRole('button', { name: /^Initial run \(seed\)/ })).toHaveAttribute('aria-current', 'true');

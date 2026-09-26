@@ -34,7 +34,7 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await page.setViewportSize({ width: 900, height: 700 });
 	const project = await createProject(page.request, 'Help tips');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 	const tip = page.getByRole('columnheader', { name: /^Kind/ }).getByRole('button');
 	const bubble = page.locator('.bubble:popover-open');
@@ -56,7 +56,8 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 
 	await tip.click();
 	await expect(bubble).toBeVisible();
-	await page.getByRole('heading', { level: 1, name: 'Help tips' }).click();
+	// Somewhere outside the bubble: the node table's own title (the page behind the grid is inert).
+	await page.getByRole('dialog', { name: 'Node table' }).getByRole('heading', { name: 'Node table' }).click();
 	await expect(bubble).toHaveCount(0);
 
 	// "More in the glossary" lands on the term's entry.
@@ -70,7 +71,7 @@ test('a help tip works from the keyboard alone and is announced to screen reader
 	void owner;
 	const project = await createProject(page.request, 'Help tip keys');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 	const tip = page.getByRole('button', { name: 'About capacity', exact: true }).first();
 	const controls = (await tip.getAttribute('aria-controls'))!;
@@ -121,7 +122,7 @@ test('neighbouring help tips show their own close-up, with their feature ringed'
 	const project = await createProject(page.request, 'Help tip pictures');
 	await putModel(page.request, project.id, sampleModel());
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.goto(`/projects/${project.id}?tab=network&view=table`);
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 	const seen: { src: string; ring: { left: string; top: string } }[] = [];
 	for (const name of ['About capacity', 'About runoff to dam', 'About upstream inflow to dam']) {

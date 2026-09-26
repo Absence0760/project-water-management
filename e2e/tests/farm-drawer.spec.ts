@@ -48,13 +48,10 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	await nav.getByRole('link', { name: 'Crops & demand' }).click();
 	await expect(page.getByLabel('Orchard on Upper farm, ha')).toHaveValue('35');
 
-	// Reopened from the Table layout (the picked farm's line under the schematic), it saves through the page's save, with the reason.
+	// Reopened from the card, now with the unsaved 35 ha, it saves through the page's save, with the reason.
 	await nav.getByRole('link', { name: 'Network' }).click();
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
-	await page.getByRole('textbox', { name: 'Name' }).nth(1).focus();
-	const picked = page.getByTestId('picked-farm');
-	await expect(picked).toHaveText('Upper farm: 35.00 ha planted, 1 crop. Planted areas');
-	await picked.getByRole('link', { name: 'Planted areas' }).click();
+	await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: /^Upper farm/ }).click();
+	await card.getByRole('link', { name: '35.00 ha, 1 crop' }).click();
 	const again = drawer(page, 'Upper farm');
 	await expect(again.getByLabel('Orchard on Upper farm, ha')).toHaveValue('35');
 	await again.getByRole('textbox', { name: 'Reason for this change (optional)' }).fill('New block planted');
@@ -63,7 +60,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	expect(await savedArea(page, project.id, 'Upper farm')).toBe(350_000);
 	await page.keyboard.press('Escape');
 	await expect(again).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network&view=table$/);
+	await expect(page).toHaveURL(/\?tab=network$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 });
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Network → Map layout: the node picked on the map or in the list, at a
-	// glance (issue #17, option A · A2). Edit opens its full form (the One node
-	// layout); a farm's planted areas open in the farm drawer.
+	// glance (issue #17, option A · A2). Edit opens its full form (the node
+	// sheet); a farm's planted areas open in the farm drawer.
 	import type { NetworkNode } from '@water-management/engine';
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtNum, fmtPct } from '$lib/format/number';

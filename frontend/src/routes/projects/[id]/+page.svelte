@@ -539,7 +539,7 @@
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" />
 					<Lazy load={LOAD.network}>
-						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} />{/snippet}
+						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} bind:reason={saveReason} />{/snippet}
 					</Lazy>
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
@@ -645,6 +645,8 @@
 							readonly={!canEdit}
 							onsave={saveModel}
 							bind:reason={saveReason}
+							{projectId}
+							{runs}
 						/>
 					{/snippet}
 				</Lazy>

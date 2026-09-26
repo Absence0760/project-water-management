@@ -6,13 +6,14 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 const entries = (page: Page) => page.getByTestId('history-entry');
 
 async function openCapacity(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
-	await page.getByRole('button', { name: 'One node' }).click();
+	await openNodeForm(page);
 	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
 	return page.getByLabel('Capacity (m³)');
 }
@@ -28,9 +29,10 @@ test('edit a dam capacity with a reason, see it in History, restore the earlier 
 	await expect(capacity).toHaveValue('150000');
 	await capacity.fill('200000');
 	await capacity.blur();
-	await saveBar(page).getByLabel('Reason for this change (optional)').fill('Surveyed in August');
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await page.locator('dialog[open]').getByLabel('Reason for this change (optional)').fill('Surveyed in August');
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
+	await closeModal(page);
 
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'History' }).click();
 	await expect(page).toHaveURL(/tab=history/);
@@ -82,7 +84,7 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 	await expect(capacity).toHaveValue('150000');
 	await capacity.fill('175000');
 	await capacity.blur();
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);

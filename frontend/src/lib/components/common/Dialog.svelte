@@ -15,6 +15,8 @@
 		side = false,
 		// Leave the body's inputs at their own widths: a grid shown as it is (model/GridModal.svelte).
 		keepInputs = false,
+		// Fixed under the title, above the scrolling body (a side sheet's picker), so nothing scrolls under it.
+		subhead,
 		children,
 		actions
 	}: {
@@ -24,6 +26,7 @@
 		full?: boolean;
 		side?: boolean;
 		keepInputs?: boolean;
+		subhead?: Snippet;
 		children: Snippet;
 		actions: Snippet;
 	} = $props();
@@ -40,6 +43,7 @@
 
 <dialog bind:this={el} class:wide class:full class:side class:keep-inputs={keepInputs} aria-labelledby={titleId} onclose={() => (open = false)}>
 	<h2 id={titleId}>{title}</h2>
+	{#if subhead}<div class="subhead">{@render subhead()}</div>{/if}
 	<div class="body">{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
 	<!-- A visible way out for people who don't know Esc closes it. Last in the DOM so
@@ -93,12 +97,26 @@
 		border-width: 0 0 0 1px;
 		border-radius: 0;
 	}
+	dialog.side.wide {
+		width: min(640px, 100%);
+	}
 	dialog.side[open] {
 		display: flex;
 		flex-direction: column;
 	}
+	.subhead {
+		margin: 0 0 0.75rem;
+	}
+	/* The body scrolls; the title and the actions (a save row) stay in view. */
+	dialog.side {
+		overflow: hidden;
+	}
 	dialog.side .body {
 		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		margin: 0 -1.25rem;
+		padding: 0 1.25rem;
 	}
 	/* Room for the close button so a long title never runs under it. */
 	h2 {

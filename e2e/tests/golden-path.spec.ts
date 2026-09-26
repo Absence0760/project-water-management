@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { PASSWORD, uniqueEmail } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { closeModal, openNodeTable } from '../support/network.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -39,10 +40,10 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 
 	// --- network: outflow gauge + three farms, one nested ------------------------
 	await tab(page, 'Network').click();
-	await page.getByRole('button', { name: 'Add outflow gauge' }).click();
-	// A new node opens on its form; this path builds the network in the Table.
-	await page.getByRole('button', { name: 'Table', exact: true }).click();
-	for (let i = 0; i < 3; i++) await page.getByRole('button', { name: '+ Add node' }).click();
+	// This path builds the network in the node table (Grids → Node table).
+	const grid = await openNodeTable(page);
+	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
+	for (let i = 0; i < 3; i++) await grid.getByRole('button', { name: '+ Add node' }).click();
 	const names = page.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(4);
 	await names.nth(0).fill('D outlet weir');
@@ -66,6 +67,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	const tree = page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem');
 	await expect(tree).toHaveText([/^D outlet weir/, /^Middle farm/, /^Ridge farm/, /^River farm/]);
 	await expect(tree.nth(0)).toContainText('outlet');
+	await closeModal(page);
 
 	// --- crops: one crop with monthly factors, planted on every farm -------------
 	await tab(page, 'Crops').click();

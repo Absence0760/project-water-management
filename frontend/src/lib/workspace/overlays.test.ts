@@ -5,7 +5,9 @@ describe('overlays', () => {
 	it('knows its grids and the tab each lives on', () => {
 		expect(Object.keys(GRID_TAB).sort()).toEqual(Object.keys(GRIDS).sort());
 		expect(isGridId('planted-areas')).toBe(true);
-		expect(isGridId('nodes')).toBe(false);
+		expect(isGridId('nodes')).toBe(true);
+		expect(GRID_TAB.nodes).toBeNull();
+		expect(isGridId('network')).toBe(false);
 		expect(isGridId(null)).toBe(false);
 		expect(isGridId('toString')).toBe(false);
 	});
