@@ -44,18 +44,24 @@ export async function replaceSeries(
 	db: Db,
 	projectId: string,
 	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null },
-	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown> } = {}
+	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
 ): Promise<SeriesMetaRow> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
 	const provenance = body.provenance ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		// A person's replace (or restore) makes the whole series the user's: a
+		// data feed writing it keeps every day from here on (feed_id NULL clears
+		// feed_days, 031_feed_days). A data feed's confirmed replacement
+		// (opts.feedId, feeds/ingest.ts) makes it the feed's: every day of the
+		// new record is one it wrote, so its later re-reads still revise them.
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid,
+			CASE WHEN $9::uuid IS NULL THEN NULL ELSE datemultirange(daterange($5::date, $5::date + cardinality($6::float8[]))) END)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
-			product_version = EXCLUDED.product_version, updated_at = now()
+			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days
 		 RETURNING ${META}`,
-		[projectId, body.kind, body.name, body.unit, body.startDate, body.values, provenance?.product ?? null, provenance?.version ?? null]
+		[projectId, body.kind, body.name, body.unit, body.startDate, body.values, provenance?.product ?? null, provenance?.version ?? null, opts.feedId ?? null]
 	);
 	const meta = rows[0]!;
 	const restore = opts.restoredFrom ? { target: 'series', restoredFrom: opts.restoredFrom } : null;

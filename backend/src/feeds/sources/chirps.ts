@@ -20,7 +20,7 @@
 // (feeds/config.ts CHIRPS_DAILY_PRODUCTS), never rnl before 1998 and sat
 // after: that splice would be a break of its own (issue #40 part c).
 // Units are mm/day; the sea is -9999.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import type { FeedHttp } from '../http.js';
 import { openGrid, readPoints } from './tiff.js';

@@ -924,23 +924,28 @@ its own chunk loaded with the tab; WP-2.10,
   choose rnl). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
-- **Taking over a series.** A feed replaces its series' values on every day
-  it fetches, uploaded or imported ones included ([architecture.md § Data
-  feeds](./architecture.md#data-feeds)). So when the chosen series already
+- **Attaching to a series that has data.** A feed keeps the values already
+  in its series, uploaded or imported ones included, and fills only the days
+  without one ([architecture.md § Data feeds](./architecture.md#data-feeds),
+  #30), so the series would mix two records. So when the chosen series already
   holds data (read from the project's series list), **Attach feed** first
   asks, inline (`role="alertdialog"`, named and described by its text):
-  "“Rainfall — catchment” already has data (1,200 days)", why, and a
-  suggested separate series name no series or feed of that kind uses
-  ("CHIRPS", "CHIRPS 2", "DWS A2H012"). Focus lands on **Use a separate
-  series: CHIRPS**, which fills the name and focuses the name field;
-  **Replace its values** attaches into the existing series; Escape backs out
-  to the name field. Changing the series drops the question. When the series
-  holds another CHIRPS product or version (or an unrecorded one), the
-  question says so instead ("It holds CHIRPS v2.0, and this feed writes CHIRPS
-  sat v3.0 … never splices one onto the other"), and the second button is
-  **Replace the series with CHIRPS sat v3.0**: the feed is attached with the
-  replacement confirmed (`replaceSeries`), and its first fetch replaces the
-  series whole, backfilling from its first day.
+  "“Rainfall — catchment” already has data (1,200 days)", that the values
+  already there stay and the records would mix, and a suggested separate
+  series name no series or feed of that kind uses ("CHIRPS", "CHIRPS 2",
+  "DWS A2H012"). Focus lands on **Use a separate series: CHIRPS**, which
+  fills the name and focuses the name field; **Fill its empty days**
+  attaches into the existing series; Escape backs out to the name field.
+  Changing the series drops the question. Once it runs, the card says how
+  many days the last fetch left alone ("· 12 days kept your own values",
+  `keptNote` from `last_meta.kept`). When the series holds another CHIRPS
+  product or version (or an unrecorded one), filling it would splice two
+  records, so the question says so instead ("It holds CHIRPS v2.0, and this
+  feed writes CHIRPS sat v3.0 … never splices one onto the other"), and the
+  second button is **Replace the series with CHIRPS sat v3.0**: the feed is
+  attached with the replacement confirmed (`replaceSeries`), backfills the
+  new record from the series' first day in a stage, and swaps it in whole
+  when caught up.
 - **Keyboard and screen readers**: opening the form focuses **Source**, and
   closing it (Cancel or a successful attach) returns focus to **Attach a
   feed**; a bad cell or code marks its field `aria-invalid`, describes it by

@@ -62,7 +62,7 @@ origin**, so the session cookie is first-party.
 
 | Path | Package | What it is |
 | --- | --- | --- |
-| `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. |
+| `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
 | `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. |
@@ -280,7 +280,11 @@ auto re-runs and alerts plug in as further kinds.
   transport reaches the runner, and so `pg`, every handler and the engine,
   which Lambdas without a database must not carry (`lambda-fetcher.test.ts`
   checks the fetcher's import graph; `package-lambdas.sh` refuses either
-  bundle if esbuild's metafile lists a `pg` input).
+  bundle if esbuild's metafile lists a `pg` input). The feed sources and
+  `series/limits.ts` take their date helpers from
+  `@water-management/engine/calendar`, never the package root, so the only
+  engine module in the fetcher bundle is `calendar.ts` (the same test asserts
+  it).
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.
@@ -362,13 +366,24 @@ merges into:
   with no data rather than asking for the same empty window forever (#29).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
-  value for never erases one already there. **A feed owns the days it
-  fetches in its target series**: on a day the source has a value, that value
-  replaces what was there, whether an earlier fetch, an upload or an import
-  put it (this is how final CHIRPS replaces preliminary). Days outside the
-  fetched window are never touched, and no other series is. To keep your own
-  record next to a feed, give it its own series name (the feed's
-  `targetName`, or the upload's). The merge and the feed's health
+  value for never erases one already there. **A feed replaces only the days
+  it wrote itself** (#30, `031_feed_days`): on a day the source has a value,
+  the feed writes it if the series is empty there or holds a value this feed
+  wrote (so final CHIRPS replaces preliminary, and a re-read revises), and
+  otherwise keeps what is there, an upload's or an import's, counting those
+  days in `last_meta.kept` (the feed card's "N days kept your own values").
+  The series row remembers which days its feed wrote (`time_series.feed_id`
+  and `feed_days`, a `datemultirange`, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
+  changed in the same locked write as the values. A user's write takes days
+  back: `POST …/series/merge` releases the days it sends and `PUT` the whole
+  series, even where the value is the same, so from then on the user's value
+  wins. Removing the feed, or pointing it at another series, releases all its
+  days there: they become ordinary data that any later feed keeps. Days a
+  feed wrote before `031` are nobody's. Days outside the fetched window are
+  never touched, and no other series is. To compare your own record with a
+  feed side by side, give the feed its own series name (its `targetName`);
+  attaching it to a series that already has data asks first, since the two
+  records would mix. The merge and the feed's health
   commit in the job's transaction, as the job's acting user. A forecast
   result is keyed by its issue date (`meta.issued`, which its days must start
   on, 16 at most); one older than the issue the feed last merged (the

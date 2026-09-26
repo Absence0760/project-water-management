@@ -840,39 +840,128 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1]);
 	});
 
-	it('user-entered days: the source’s value replaces the user’s on the same day (the feed owns its series), a gap never erases one, another series is untouched', async () => {
-		const { owner, pid, ingest } = await setup('UserData');
-		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, 20, 30], ...V3 });
+	/** The feed-days columns (031_feed_days) of a project's default-named series of `kind`. */
+	const feedDaysOf = async (pid: string, kind: string) =>
+		(await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND kind = $2 AND name = ''`, [pid, kind]))[0] as {
+			feed_id: string | null;
+			feed_days: string | null;
+		};
+	/** Run `fn` under time zones either side of UTC (rule 7): the days are calendar dates, never shifted. */
+	async function inZones(fn: () => Promise<void>) {
+		const tz = process.env.TZ;
+		try {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				process.env.TZ = zone; // UTC+14, UTC-11
+				await fn();
+			}
+		} finally {
+			process.env.TZ = tz;
+		}
+	}
+
+	it('user-entered days: the feed keeps the user’s values and fills only empty days (#30), a gap never erases one, another series is untouched', async () => {
+		// Until 031_feed_days a feed replaced the user's value on every day it fetched.
+		const { owner, pid, id, ingest } = await setup('UserData');
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [10, null, 30, 40], ...V3 });
+		// (Labelled the feed's own version, so the version guard lets the feed write here: 032.)
 		// The user's own record under another name: a feed writes only the series it targets.
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', name: 'My gauge', unit: 'mm', startDate: '2026-01-01', values: [5, 5, 5] });
-		await ingest(ok('2025-12-31', [0, 1, null, 3, 4]));
-		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2025-12-31', values: [0, 1, 20, 3, 4] });
+		expect(await ingest(ok('2025-12-31', [0, 1, 2, 3, null, 5]))).toEqual({ merged: 3, lastDate: '2026-01-05' });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2025-12-31', values: [0, 10, 2, 30, 40, 5] });
+		// Only the days it wrote are the feed's.
+		expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: id, feed_days: '{[2025-12-31,2026-01-01),[2026-01-02,2026-01-03),[2026-01-05,2026-01-06)}' });
+		expect((await feedRow(id)).last_meta).toMatchObject({ days: 6, merged: 3, kept: 2 });
+		// And the panel says so.
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].lastMeta).toMatchObject({ kept: 2 });
+		// A second fetch still keeps them.
+		expect(await ingest(ok('2026-01-01', [7, 7, 7]))).toEqual({ merged: 1, lastDate: '2026-01-03' });
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([0, 10, 7, 30, 40, 5]);
 		const list = (await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; name: string }[];
 		const mine = list.find((s) => s.name === 'My gauge')!;
 		expect((await owner.call('GET', `/projects/${pid}/series/${mine.id}`)).body).toMatchObject({ startDate: '2026-01-01', values: [5, 5, 5] });
 	});
 
-	it('writes the source’s unit and the exact days whatever the server’s time zone', async () => {
-		const tz = process.env.TZ;
-		try {
-			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
-				process.env.TZ = zone; // UTC+14, UTC-11
-				const { owner, pid, id, ingest } = await setup('Zoned', { source: 'dws', config: { station: 'X0H000' } });
-				await owner.call('PUT', `/projects/${pid}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2026-03-01', values: [9] });
-				expect(await ingest(ok('2026-02-27', [1.25, null, 2.5, null]))).toEqual({ merged: 2, lastDate: '2026-03-01' });
-				expect(await series(owner, pid, 'flow_observed_m3s')).toMatchObject({ startDate: '2026-02-27', unit: 'm³/s', values: [1.25, null, 2.5, null] });
-				expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-03-01', last_value: 2.5 });
-			}
-		} finally {
-			process.env.TZ = tz;
-		}
+	it('its own days: final replaces preliminary, a re-fetch revises, a gap keeps the day (positive control for #30)', async () => {
+		const { owner, pid, id, ingest } = await setup('Revise');
+		expect(await ingest(ok('2026-01-01', [1, 2, 3], { days: 3, prelimDays: 3 }))).toEqual({ merged: 3, lastDate: '2026-01-03' });
+		expect(await ingest(ok('2026-01-01', [1.5, null, 3.5], { days: 3, prelimDays: 0 }))).toEqual({ merged: 2, lastDate: '2026-01-03' });
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1.5, 2, 3.5]);
+		expect((await feedRow(id)).last_meta).toMatchObject({ merged: 2, kept: 0 });
+		// The gap's day is still the feed's: a later revision replaces it.
+		expect(await ingest(ok('2026-01-02', [2.5]))).toEqual({ merged: 1, lastDate: '2026-01-02' });
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1.5, 2.5, 3.5]);
+		expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: id, feed_days: '{[2026-01-01,2026-01-04)}' });
 	});
 
-	it('removing a feed keeps the days it wrote (as the remove dialog says)', async () => {
+	it('a user’s upload over the feed’s days wins from then on, even with the same value, whatever the time zone', async () => {
+		await inZones(async () => {
+			const { owner, pid, id, ingest } = await setup('UserWins');
+			await ingest(ok('2026-01-01', [1, 2, 3, 4]));
+			// A merge of one day, the same value as the feed's on another.
+			expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-02', values: [20, 3] })).status).toBe(200);
+			expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: id, feed_days: '{[2026-01-01,2026-01-02),[2026-01-04,2026-01-05)}' });
+			expect(await ingest(ok('2026-01-01', [9, 9, 9, 9]))).toEqual({ merged: 2, lastDate: '2026-01-04' });
+			expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([9, 20, 3, 9]);
+			expect((await feedRow(id)).last_meta).toMatchObject({ merged: 2, kept: 2 });
+			// Replacing the whole series makes every day the user's. (Said to be the feed's own
+			// version: a PUT that doesn't say records none, and the feed would then refuse it, 032.)
+			expect(
+				(await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2026-01-01', values: [5, 5, 5, 5], ...V3 })).status
+			).toBe(200);
+			expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: null, feed_days: null });
+			expect(await ingest(ok('2026-01-01', [8, 8, 8, 8, 8]))).toEqual({ merged: 1, lastDate: '2026-01-05' });
+			expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([5, 5, 5, 5, 8]);
+		});
+	});
+
+	it('writes the source’s unit and the exact days whatever the server’s time zone, keeping the user’s day', async () => {
+		await inZones(async () => {
+			const { owner, pid, id, ingest } = await setup('Zoned', { source: 'dws', config: { station: 'X0H000' } });
+			await owner.call('PUT', `/projects/${pid}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2026-03-01', values: [9] });
+			expect(await ingest(ok('2026-02-27', [1.25, null, 2.5, null]))).toEqual({ merged: 1, lastDate: '2026-03-01' });
+			expect(await series(owner, pid, 'flow_observed_m3s')).toMatchObject({ startDate: '2026-02-27', unit: 'm³/s', values: [1.25, null, 9, null] });
+			// last_value is the source's newest value, whether or not the series kept its own.
+			expect(await feedRow(id)).toMatchObject({ last_data_date: '2026-03-01', last_value: 2.5, last_meta: { kept: 1 } });
+		});
+	});
+
+	it('removing a feed keeps the days it wrote (as the remove dialog says), as ordinary data the next feed keeps', async () => {
 		const { owner, pid, id, ingest } = await setup('Remover');
 		await ingest(ok('2026-01-01', [1, 2]));
+		expect((await feedDaysOf(pid, 'rain_chirps_mm')).feed_id).toBe(id);
 		expect((await owner.call('DELETE', `/projects/${pid}/feeds/${id}`)).status).toBe(204);
 		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: '2026-01-01', values: [1, 2] });
+		expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: null, feed_days: null });
+		// A new feed on the same series fills after them and keeps them.
+		const next = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] } })).body.feed.id as string;
+		expect(await withUser(owner.id, async (db) => ingestResult(db, (await feedForJob(db, pid, next))!, ok('2026-01-01', [7, 7, 7]), WIDE))).toEqual({
+			merged: 1,
+			lastDate: '2026-01-03'
+		});
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([1, 2, 7]);
+	});
+
+	it('re-targeting a feed hands its days in the old series back; it writes the new one as its own', async () => {
+		const { owner, pid, id, ingest } = await setup('Retarget');
+		await ingest(ok('2026-01-01', [1, 2]));
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { targetName: 'CHIRPS' })).status).toBe(200);
+		expect(await feedDaysOf(pid, 'rain_chirps_mm')).toEqual({ feed_id: null, feed_days: null });
+		// Positive control: saving without a new target keeps them.
+		const { id: id2, pid: pid2, ingest: ingest2, owner: owner2 } = await setup('NoRetarget');
+		await ingest2(ok('2026-01-01', [1, 2]));
+		expect((await owner2.call('PATCH', `/projects/${pid2}/feeds/${id2}`, { enabled: false })).status).toBe(200);
+		expect((await feedDaysOf(pid2, 'rain_chirps_mm')).feed_id).toBe(id2);
+		// The re-targeted feed writes its new series and owns those days.
+		await ingest(ok('2026-01-01', [3]));
+		const [row] = await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND name = 'CHIRPS'`, [pid]);
+		expect(row).toEqual({ feed_id: id, feed_days: '{[2026-01-01,2026-01-02)}' });
+	});
+
+	it('a feed’s days are only ever a feed of the same project (composite foreign key)', async () => {
+		const { pid, ingest } = await setup('SameProject');
+		const { id: other } = await setup('OtherProject');
+		await ingest(ok('2026-01-01', [1]));
+		await expect(asOwner(`UPDATE time_series SET feed_id = $2 WHERE project_id = $1`, [pid, other])).rejects.toThrow(/time_series_feed_fkey/);
 	});
 
 	it('refuses an answer with days the source can’t have yet, which would otherwise pin the newest date in the future', async () => {
@@ -1046,6 +1135,9 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS sat', product_version: '3.0' });
 		expect(await asOwner('SELECT feed_id FROM feed_stage WHERE feed_id = $1', [id])).toEqual([]);
 		expect((await asOwner('SELECT replace_series_from FROM data_feed WHERE id = $1', [id]))[0]).toEqual({ replace_series_from: null });
+		// Every day of the swapped-in record is the feed's own (031_feed_days), so its later re-reads still revise them.
+		const [days] = await asOwner(`SELECT feed_id, feed_days::text AS feed_days FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND name = ''`, [pid]);
+		expect(days).toEqual({ feed_id: id, feed_days: `{[${first},${addDays(-150 + s.values.length)})}` });
 		expect(await feedRow(id)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3), last_meta: { replaced: 'CHIRPS v2.0' } });
 		expect(await pending()).toEqual([]);
 		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0]).toMatchObject({ versionConflict: false, replaceFrom: null, rebuilding: null });

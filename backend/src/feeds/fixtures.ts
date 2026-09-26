@@ -17,7 +17,7 @@
 // place, catchment or measurement.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { utcToday } from './fetch.js';
 import type { FeedHttp } from './http.js';
 import { CHC_BASE, GEFS_DAYS } from './sources/chirps.js';

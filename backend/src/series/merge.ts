@@ -1,29 +1,11 @@
-import {
-	fromEpochDay,
-	provenanceError,
-	provenanceLabel,
-	sameProvenance,
-	scaleValues,
-	SERIES_KINDS,
-	seriesUnit,
-	toEpochDay,
-	type SeriesProvenance
-} from '@water-management/engine';
+import { provenanceError, provenanceLabel, sameProvenance, scaleValues, SERIES_KINDS, seriesUnit, type SeriesProvenance } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
 
-export const MAX_SERIES_VALUES = 60_000;
-
-/**
- * A series' first day: a real calendar date. The regex alone lets 2021-02-30
- * through to Postgres, which fails it as a 500. Shared with the project
- * document (projects/document.ts).
- */
-export const SeriesStartDate = z
-	.string()
-	.regex(/^\d{4}-\d{2}-\d{2}$/)
-	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a calendar date');
+export { MAX_SERIES_VALUES, SeriesStartDate };
 
 /**
  * A series' product and version as a body carries them (032_series_provenance.sql):
@@ -135,6 +117,105 @@ export function mergeDaily(existing: Daily | null, incoming: Daily, { keepOnNull
 	return { startDate: fromEpochDay(start), values: out };
 }
 
+/**
+ * Days as sorted, disjoint, non-adjacent half-open [start, end) epoch-day
+ * runs: the days of a series its data feed wrote (time_series.feed_days,
+ * 031_feed_days).
+ */
+export type DayRuns = [number, number][];
+
+/** The runs of the days k in [0, n) that `pick` holds, as epoch days from `day0`. */
+function runsOf(day0: number, n: number, pick: (k: number) => boolean): DayRuns {
+	const out: DayRuns = [];
+	for (let k = 0; k < n; k++) {
+		if (!pick(k)) continue;
+		const last = out.at(-1);
+		if (last && last[1] === day0 + k) last[1]++;
+		else out.push([day0 + k, day0 + k + 1]);
+	}
+	return out;
+}
+
+/** Both run lists' days, normalised (overlapping and adjacent runs joined). */
+export function unionRuns(a: DayRuns, b: DayRuns): DayRuns {
+	const out: DayRuns = [];
+	for (const [s, e] of [...a, ...b].sort((x, y) => x[0] - y[0])) {
+		const last = out.at(-1);
+		if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+		else out.push([s, e]);
+	}
+	return out;
+}
+
+/** `a` without the days of `b`. */
+export function subtractRuns(a: DayRuns, b: DayRuns): DayRuns {
+	let out: DayRuns = a.map(([s, e]) => [s, e]);
+	for (const [bs, be] of b) {
+		out = out.flatMap(([s, e]): DayRuns => {
+			if (be <= s || bs >= e) return [[s, e]];
+			const keep: DayRuns = [];
+			if (s < bs) keep.push([s, bs]);
+			if (be < e) keep.push([be, e]);
+			return keep;
+		});
+	}
+	return out;
+}
+
+export interface FeedDays {
+	/** The days to merge (with keepOnNull): a day the feed may not replace is null. */
+	incoming: Daily;
+	/** The feed's days afterwards: the ones it held, plus every day it writes now. */
+	owned: DayRuns;
+	/** Days holding a value the feed didn't write, which it keeps rather than replaces. */
+	kept: number;
+	/** Days the feed writes: empty ones, and ones it wrote before. */
+	written: number;
+}
+
+/**
+ * What a data feed may write (issue #30). On a day the source has a value,
+ * the feed writes it only if the series' value there is empty or one the feed
+ * wrote itself (`owned`), so final CHIRPS replaces preliminary and a re-read
+ * revises; any other value (uploaded, imported, entered) is kept. A day the
+ * source has no value for is left alone, and stays the feed's if it was.
+ */
+export function feedDays(existing: Daily | null, owned: DayRuns, incoming: Daily): FeedDays {
+	const i0 = toEpochDay(incoming.startDate);
+	const n = incoming.values.length;
+	const mine = new Uint8Array(n);
+	for (const [s, e] of owned) for (let d = Math.max(s, i0); d < Math.min(e, i0 + n); d++) mine[d - i0] = 1;
+	const e0 = existing ? toEpochDay(existing.startDate) : 0;
+	const current = (d: number) => (existing ? (existing.values[d - e0] ?? null) : null);
+	const values = incoming.values.slice();
+	const writes = new Uint8Array(n);
+	let kept = 0;
+	values.forEach((v, k) => {
+		if (v === null) return;
+		if (mine[k] || current(i0 + k) === null) writes[k] = 1;
+		else {
+			values[k] = null;
+			kept++;
+		}
+	});
+	const mineNow = runsOf(i0, n, (k) => writes[k] === 1);
+	return {
+		incoming: { startDate: incoming.startDate, values },
+		owned: unionRuns(owned, mineNow),
+		kept,
+		written: mineNow.reduce((sum, [s, e]) => sum + e - s, 0)
+	};
+}
+
+/**
+ * A user's write releases the feed's claim on every day it overwrites: the
+ * user wins, even with the same value, and the feed keeps that day from now on.
+ */
+export function releaseDays(owned: DayRuns, incoming: Daily, { keepOnNull = false }: MergeOptions = {}): DayRuns {
+	const i0 = toEpochDay(incoming.startDate);
+	return subtractRuns(owned, runsOf(i0, incoming.values.length, (k) => incoming.values[k] !== null || !keepOnNull));
+}
+
 /** The same days and values (a stored double round-trips exactly, so === is equality). */
 export function sameDaily(a: Daily, b: Daily): boolean {
 	return a.startDate === b.startDate && a.values.length === b.values.length && a.values.every((v, i) => v === b.values[i]);
@@ -163,11 +244,17 @@ export const versionMismatch = (holds: SeriesProvenance | null, incoming: Series
 		`the series holds ${provenanceLabel(holds)} and these days are ${provenanceLabel(incoming)}: merging them would splice two versions into one record. Replace the series whole, or use a series of another name`
 	);
 
-/** What a merge did: the series' meta after it, and its values before (null when the merge created it) and after. */
+/**
+ * What a merge did: the series' meta after it, and its values (and label)
+ * before (null when the merge created it) and after; for a feed's merge, the
+ * days it wrote and the days it kept because their value wasn't its own.
+ */
 export interface MergeResult {
 	meta: SeriesMetaRow;
 	before: { id: string; unit: string; startDate: string; values: (number | null)[]; product: string | null; productVersion: string | null } | null;
 	after: Daily;
+	written: number;
+	kept: number;
 }
 
 /**
@@ -176,41 +263,107 @@ export interface MergeResult {
  * feeds' ingest (feeds/ingest.ts) both go through here, so the lock and merge
  * sequence stay one. The caller checks the role, and records the change in
  * the history (it knows whether a series revision is wanted: not for a feed).
+ *
+ * Which days a data feed wrote travels with the row (time_series.feed_id /
+ * feed_days, 031_feed_days). With `feedId` (the ingest), the merge writes
+ * only the days that feed may replace (feedDays) and records them as its own;
+ * without (a user), it releases the feed's claim on every day it overwrites.
+ * `kept` counts the days a feed left alone because their value wasn't its own.
  */
-export async function mergeSeries(db: Db, projectId: string, body: SeriesBody, options: MergeOptions = {}): Promise<MergeResult> {
+export async function mergeSeries(
+	db: Db,
+	projectId: string,
+	body: SeriesBody,
+	{ keepOnNull = false, feedId, provenance }: MergeOptions & { feedId?: string } = {}
+): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
-	const { rows: cur } = await db.query<{ id: string; unit: string; start_date: string; values: (number | null)[]; product: string | null; productVersion: string | null }>(
-		`SELECT id, unit, start_date, "values", product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+	const { rows: cur } = await db.query<{
+		id: string;
+		start_date: string;
+		unit: string;
+		values: (number | null)[];
+		feed_id: string | null;
+		feed_days: DayRuns;
+		product: string | null;
+		productVersion: string | null;
+	}>(
+		`SELECT id, start_date, unit, "values", feed_id, product, product_version AS "productVersion",
+			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+			 FROM unnest(feed_days) r) AS feed_days
+		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, body.kind, body.name]
 	);
-	const existing = cur[0] ? { startDate: cur[0].start_date, values: cur[0].values } : null;
-	const held = cur[0] ? rowProvenance(cur[0]) : null;
+	const row = cur[0];
+	const existing = row ? { startDate: row.start_date, values: row.values } : null;
+	// The version guard (032_series_provenance): days of another product or
+	// version never go into a series holding values; an empty or new series
+	// takes the incoming days' label, a filled one keeps its own.
+	const held = row ? rowProvenance(row) : null;
 	const filled = !!existing && hasValues(existing.values);
-	if (options.provenance !== undefined && filled && !sameProvenance(held, options.provenance)) throw versionMismatch(held, options.provenance);
-	// An empty or new series takes the incoming days' label; a filled one keeps its own (the same, or not said).
-	const provenance = options.provenance !== undefined && !filled ? options.provenance : held;
-	const merged = mergeDaily(existing, { startDate: body.startDate, values: body.values }, options);
+	if (provenance !== undefined && filled && !sameProvenance(held, provenance)) throw versionMismatch(held, provenance);
+	const label = provenance !== undefined && !filled ? provenance : held;
+	let incoming: Daily = { startDate: body.startDate, values: body.values };
+	let owner = row?.feed_id ?? null;
+	let owned: DayRuns = row?.feed_days ?? [];
+	let kept = 0;
+	let written = incoming.values.filter((v) => v !== null || !keepOnNull).length;
+	if (feedId) {
+		// The days of a feed that no longer writes here (it was removed or re-targeted, which clears them anyway) aren't this one's.
+		const plan = feedDays(existing, owner === feedId ? owned : [], incoming);
+		({ incoming, kept, written } = plan);
+		owner = feedId;
+		owned = plan.owned;
+	} else {
+		owned = releaseDays(owned, incoming, { keepOnNull });
+	}
+	if (owned.length === 0) owner = null;
+	const merged = mergeDaily(existing, incoming, { keepOnNull });
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
-	const c = cur[0];
-	const before = c ? { id: c.id, unit: c.unit, startDate: c.start_date, values: c.values, product: c.product, productVersion: c.productVersion } : null;
+	const before = row
+		? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values, product: row.product, productVersion: row.productVersion }
+		: null;
+	const sameOwner = !!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
-	// leave the row, so updated_at still says when the values last changed.
-	if (cur[0] && cur[0].unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, provenance)) {
-		const { rows } = await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
-			projectId,
-			body.kind,
-			body.name
-		]);
-		return { meta: rows[0]!, before, after: merged };
+	// leave the values, so updated_at still says when the values last changed.
+	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label)) {
+		const { rows } = sameOwner
+			? await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
+					projectId,
+					body.kind,
+					body.name
+				])
+			: await db.query<SeriesMetaRow>(
+					`UPDATE time_series SET feed_id = $4, feed_days = ${feedDaysSql(5, 6)}
+					 WHERE project_id = $1 AND kind = $2 AND name = $3 RETURNING ${SERIES_META}`,
+					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
+				);
+		return { meta: rows[0]!, before, after: merged, kept, written };
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
-			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
-			product_version = EXCLUDED.product_version, updated_at = now()
+			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(),
+			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
+			product = EXCLUDED.product, product_version = EXCLUDED.product_version
 		 RETURNING ${SERIES_META}`,
-		[projectId, body.kind, body.name, body.unit, merged.startDate, merged.values, provenance?.product ?? null, provenance?.version ?? null]
+		[
+			projectId,
+			body.kind,
+			body.name,
+			body.unit,
+			merged.startDate,
+			merged.values,
+			owner,
+			owned.map((r) => r[0]),
+			owned.map((r) => r[1]),
+			label?.product ?? null,
+			label?.version ?? null
+		]
 	);
-	return { meta: rows[0]!, before, after: merged };
+	return { meta: rows[0]!, before, after: merged, kept, written };
 }
+
+/** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
+const feedDaysSql = (starts: number, ends: number) =>
+	`(SELECT range_agg(daterange(DATE '1970-01-01' + s, DATE '1970-01-01' + e)) FROM unnest(\$${starts}::int[], \$${ends}::int[]) AS t(s, e))`;

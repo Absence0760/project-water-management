@@ -203,6 +203,9 @@ client catchment study for issue #12. The client findings, figures and
 station details are in the private source repo
 (`Research/rainfall-forcing.md`); nothing here identifies the catchment.
 Items marked **(judgement)** are engineering judgement, not a published rule.
+Revised the same day after an independent hydrologist review: the scaling
+test, the runoff checks, the fill rule and the day boundary changed, and a
+neighbouring-gauge flow check was added (§3).
 
 **Why it matters.** GR4J's parameters absorb the level of the rain that
 drove the calibration. If the forcing reads higher in the calibration years
@@ -260,6 +263,12 @@ that needs references.
   rain. MERRA-2's land precipitation is corrected towards
   gauge-based and merged products (CPCU, and GPCP over Africa; Reichle et al.
   2017), so it is a third, partly independent view.
+- **Count independent references honestly (judgement).** Products that
+  share inputs are not separate witnesses. MERRA-2 is corrected towards
+  gauge-merged products, CHIRPS blends in gauge reports, and CHIRPS v3's
+  daily disaggregation uses ERA5. Three gridded products may amount to
+  about one and a half independent views. Agreement among them is weaker
+  than it looks, which is why a flow-based check (§3) is worth adding.
   All three are free: CHIRPS from the CHC server (the app's feed code reads
   it), ERA5 and MERRA-2 without an account through the Open-Meteo archive
   API and NASA POWER. IMERG and the Copernicus CDS need a registered
@@ -302,6 +311,50 @@ arbiter:
   natural MAR for the quaternary or quinary (WR2012; the quinary database),
   remembering those estimates can differ by a factor of two.
 
+Lessons from the review (judgement):
+
+- **Know the flow record's rating before you lean on it.** A logger rated
+  from a handful of low-flow gaugings, with the rest from a hydraulic
+  model, can carry most of a wet year's volume in the extrapolated part.
+  Work out the share of volume above the highest measured gauging. Where
+  it is large, give the volume ±30–50 %, and redo the Budyko test across
+  that range.
+- **Take ω from the region, not the textbook.** Fit ω so Fu's curve
+  reproduces the quaternary's own published water balance (its MAP and
+  natural MAR, at the same PE), then test the catchment with that ω and a
+  bracket around it.
+- **Use the same PE as the model.** Pan data in a workbook may already
+  carry a pan factor. Check what the row is (model.md §2.4a)
+  before converting it again, or the Budyko test runs at
+  the wrong aridity.
+- **Budyko narrows the field; it rarely picks the winner.** With honest
+  inputs it will usually exclude the driest products and leave several
+  candidates standing. The choice of level then rests on consistency with
+  the calibration (§4), with the runoff tests as support. State that
+  plainly.
+- **Rain level and PE interact.** A forcing that reads too wet fits best
+  with PE that reads too low, and GR4J's stores absorb both. Correcting
+  one without revisiting the other can make the fit worse *and* push
+  natural MAR outside the published band. Settle them together: refit on a
+  small grid of fixed rain levels against the corrected PE, and pick by the
+  physical checks first and fit second. The rain level stays a fixed input
+  chosen once, never a calibrated multiplier.
+- **Test time consistency against a neighbouring flow gauge.** A long
+  record from an adjacent gauged catchment shares nothing with any rain
+  product or with the station.
+  - Undo any area scaling the project applied to it.
+  - Fit log(annual flow) against log(annual rain) for each candidate
+    forcing over the reference era.
+  - Read each era's mean residual, divided by the slope, as the rain factor
+    that era would need.
+  - A forcing whose implied factor drifts across eras is inhomogeneous. One
+    that stays near 1 is a good reference for fills.
+  - Where every product needs a factor below 1 in the same recent era, the
+    neighbour's flow response has probably changed (new dams or
+    abstraction). Allow for that before reading the station's factor.
+  - A single year's implied factor is noisy (tens of percent). Use era
+    means.
+
 ### 4. Homogenise to the calibration era
 
 - **Pick a reference era: the years that overlap the calibration flow
@@ -311,11 +364,24 @@ arbiter:
 - **Measure each other era against it** with the gauge-independent
   references (step 2): era factor = (station ÷ reference over the era) ÷
   (station ÷ reference over the reference era), per reference.
-  - If the factors from the different references agree, and the difference
-    from 1 is larger than the year-to-year scatter of the ratio, scale that
-    era by their mean.
-  - If they straddle 1 or disagree, **leave the era as recorded** and carry
-    the spread as uncertainty. Scaling on a disputed break adds error.
+  - **Judge the factor against its standard error, not against the
+    interannual scatter.** The standard error of the ratio of two era means
+    combines the year-to-year variance of the log ratio in *both* windows:
+    √(s²ₑᵣₐ/nₑᵣₐ + s²ᵣₑ𝒻/nᵣₑ𝒻). The interannual CV alone describes one year,
+    not an era mean. Or use a change-point test on the annual log ratio:
+    Pettitt (1979) or Buishand's range test (1982), as in WMO-No. 1245.
+  - If the factors from the different references agree, and differ from 1
+    by clearly more than their standard errors (or a change-point test
+    finds the break), scale that era by their mean.
+  - If they straddle 1, disagree, or sit within one to two standard errors,
+    **leave the era as recorded** and carry the spread as uncertainty,
+    skewed towards the side the evidence leans. Scaling on a disputed break
+    adds error.
+- **Check that the reference era is itself homogeneous.** The network can
+  change inside it too, for example a move to finer-resolution gauges or a
+  different set being averaged. Split it at any metadata or value-resolution
+  change (§1) and compare the parts. If they differ, narrow the reference to
+  the part the calibration flow record actually overlaps.
 - **Replace, don't scale, an era whose seasonal shape changed.** Use an
   in-catchment gauge for that era if one exists, scaled to the reference
   era's level against the gauge-independent references (by season if its
@@ -325,10 +391,31 @@ arbiter:
   tens of percent in a given year, so a gauge anchor is worth a lot.
 - **Fit infill factors per era, not over the whole record.** Today one set
   of monthly CHIRPS factors is fitted over every era (§2.4b), so a gap is
-  filled with a blend of ratios. Factors fitted in the reference era, or in
-  the gap's own double-mass segment, keep the fill consistent with the
-  calibration forcing. This is the *CHIRPS fit period / per-segment
-  factors* followup.
+  filled with a blend of ratios.
+  - **Use one rule everywhere: factors fitted in the reference era.** Fills
+    then land at the calibration forcing's level. Factors fitted on other
+    eras carry those eras' offsets into the fill.
+  - **Check the fills against the neighbouring gauge's flows** where it
+    overlaps the gaps. A zero-filled year shows up at once.
+  - **Leave replaced and filled periods out of every fit.**
+  - **Use explicit date ranges, stated with a reason.** An auto-detected
+    change-point can land a year or two from the real network change.
+  - **Never fit or fill from a product that ingests the gauge being
+    replaced.** Once an in-catchment gauge enters CHIRPS, CHIRPS factors
+    fitted or applied in that era are circular. Use a gauge-free reference
+    (ERA5) there, with factors fitted in the reference era.
+  - This is the *CHIRPS fit period / per-segment factors* followup.
+- **Match the day boundary before splicing.** Manual gauges in South Africa
+  are read at 08:00 and the reading is booked to the previous day. An
+  automatic station reports midnight to midnight. Correlate the two at lags
+  of −1, 0 and +1 day. If the manual series leads, aggregate the automatic
+  station's hourly data to 08:00–08:00 windows booked to the start day.
+- **Check daily intensity, not only totals.** A single automatic gauge has
+  more intense days than a mean of several manual gauges, and a constant
+  scale factor keeps that. Compare the share of rain on heavy days (say
+  ≥ 20 mm) with the reference era. Where it differs, quantile-map the wet-day
+  distribution month by month, preserving monthly totals. Or at least
+  carry the runoff effect, a few percent in a toy GR4J run, in the band.
 - **Don't mix product versions in one series.** A CHIRPS series built from
   v2 for the past and v3 for new days has a break at the join that the
   double-mass check will attribute to the catchment. Replace the whole
@@ -348,9 +435,19 @@ arbiter:
   never a free calibration parameter (Renard et al. 2010; CR-21).
 - Tie the width of each range to how the era was treated (judgement):
   - narrowest in the reference era: point-to-area error only;
-  - wider in an era left as recorded against a disputed break;
-  - widest in an era replaced by a gridded product, where the references
-    themselves can disagree by tens of percent.
+  - wider in an era left as recorded against a disputed break, skewed to
+    the side the evidence leans;
+  - widest in an era replaced by another gauge or a gridded product, where
+    the references themselves can disagree by tens of percent.
+- **Apply the ranges outside the calibration window.** There they are ratios
+  on the recorded forcing, with the calibrated parameters held fixed.
+  Perturbing the forcing *inside* the calibration window only means
+  something with a refit for each perturbation. Otherwise it tests a model
+  inconsistent with its own calibration.
+- **Single years need wider ranges than era means.** A replaced era's scale
+  factor, checked against flows year by year, can vary by ±15 % or more.
+  Year-level results there (one year's EWR compliance) may need ±25–30 %.
+  Multi-year statistics can use the era-level range.
 - Report EWR compliance across those ranges, as CR-21 proposes, and state
   in the data-quality panel (CR-22) which years were scaled or replaced.
 
@@ -365,6 +462,7 @@ SASSCAL WeatherNet, https://sasscalweathernet.org (verified 2026-09-25) ·
 Peterson et al. 1998, *Int. J. Climatol.* 18:1493 ·
 WMO 2020, *Guidelines on homogenization*, WMO-No. 1245 ·
 Fu 1981 and Zhang et al. 2004, *WRR* 40, W02502 (Budyko–Fu form) ·
+Pettitt 1979, *Appl. Statist.* 28:126 · Buishand 1982, *J. Hydrol.* 58:11 ·
 Milly 1994, *WRR* 30:2143 (seasonality and the water balance).
 
 ## Where no authoritative guidance was found

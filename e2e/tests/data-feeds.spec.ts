@@ -121,7 +121,7 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 test('attaching a feed to a series that already has data asks first, and offers a separate series', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feed takeover');
-	// A CHIRPS record of the feed's own product and version (so no version question, #40c) the feed would overwrite.
+	// A CHIRPS record of the feed's own product and version (so no version question, #40c) the feed would mix with (it keeps these values and fills only empty days).
 	await putSeries(page.request, project.id, {
 		kind: 'rain_chirps_mm',
 		unit: 'mm',
@@ -140,7 +140,7 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	// Nothing is attached yet: the form asks, with focus on the safe choice.
 	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — CHIRPS” already has data (1,200 days).' });
 	await expect(ask).toBeVisible();
-	await expect(ask).toHaveAccessibleDescription(/replace its values on every day it fetches, including values you uploaded or imported.*such as “CHIRPS”/);
+	await expect(ask).toHaveAccessibleDescription(/The values already there stay, including ones you uploaded or imported: the feed fills only the days without one.*such as “CHIRPS”/);
 	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
 	await expect(separate).toBeFocused();
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
@@ -167,13 +167,13 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	await expect(feeds).toHaveCount(1);
 	await expect(feeds).toContainText('Rainfall — CHIRPS · CHIRPS');
 
-	// Taking over on purpose: "Replace its values" attaches into the existing series.
+	// Mixing on purpose: "Fill its empty days" attaches into the existing series.
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
 	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 	// "CHIRPS" is taken now (the first feed's series name), so the suggestion moves on.
 	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS 2' })).toBeFocused();
-	await ask.getByRole('button', { name: 'Replace its values' }).click();
+	await ask.getByRole('button', { name: 'Fill its empty days' }).click();
 	await expect(feeds).toHaveCount(2);
 	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: Rainfall — CHIRPS from cell -20.12, 25.17.' })).toBeVisible();
 	await expect(panel.getByRole('alertdialog')).toHaveCount(0);

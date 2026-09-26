@@ -1,11 +1,13 @@
 // Apply a fetch's result to its feed, inside the job's transaction as the
 // feed's acting user: merge the days into the target series through the same
 // path as POST /projects/:id/series/merge (series/merge.ts mergeSeries), then
-// record the feed's health. The change history (030_history.sql) gets a
-// series.merged event for days that changed (no series revision: a feed's
-// merges are append-mostly and would push a person's restore points out) and
-// a feed.failed event when a working feed starts failing, not on every
-// failed attempt after that. A failed fetch records the failure and writes no
+// record the feed's health. The merge replaces only days this feed wrote
+// itself, and fills empty ones: an uploaded or imported value is kept, and
+// counted in last_meta.kept (031_feed_days, #30). The change history
+// (030_history.sql) gets a series.merged event for days that changed (no
+// series revision: a feed's merges are append-mostly and would push a
+// person's restore points out) and a feed.failed event when a working feed
+// starts failing, not on every failed attempt after that. A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
 // queue from the fetcher Lambda, so it is untrusted input. An answer holding a
 // day after the newest the source can have (latestDay), or a day outside the
@@ -37,7 +39,8 @@
 // the confirmation used up, the stage deleted). The fit record then flags the
 // forcing as changed (engine fitRecordStatus), and the run comparison notes
 // the new version.
-import { fromEpochDay, provenanceKey, provenanceLabel, toEpochDay, type SeriesProvenance } from '@water-management/engine';
+import { provenanceKey, provenanceLabel, type SeriesProvenance } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
@@ -153,7 +156,7 @@ async function stageReplacement(
 				db,
 				feed.projectId,
 				{ kind: feed.targetKind, name: feed.targetName, unit, startDate: stage!.startDate, values: stage!.values, provenance: writes },
-				{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source } }
+				{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source }, feedId: feed.id }
 			);
 		} catch (err) {
 			if (!(err instanceof ApiError)) throw err;
@@ -228,6 +231,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 	let lastDate: string | null = null;
 	let lastValue: number | null = null;
 	let merged = 0;
+	let kept = 0;
 	if (result.startDate !== null) {
 		let lastIdx = result.values.length - 1;
 		while (lastIdx >= 0 && result.values[lastIdx] === null) lastIdx--;
@@ -241,8 +245,11 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 			});
 			try {
 				// keepOnNull: a day the source has no value for leaves whatever is there.
+				// feedId: only this feed's own days (and empty ones) are replaced; any
+				// other value, an upload or an import, is kept (031_feed_days, #30).
 				// provenance: labels a new or empty series with what the feed writes.
-				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, ...(writes ? { provenance: writes } : {}) });
+				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id, ...(writes ? { provenance: writes } : {}) });
+				({ written: merged, kept } = r);
 				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
 				if (subject.daysChanged) await recordAudit(db, feed.projectId, r.before ? 'series.merged' : 'series.created', subject);
 			} catch (err) {
@@ -250,13 +257,13 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				if (!(err instanceof ApiError)) throw err;
 				return failed(db, feed, `the series could not take the new days: ${err.message}`);
 			}
-			merged = result.values.filter((v) => v !== null).length;
 			lastDate = fromEpochDay(toEpochDay(result.startDate) + lastIdx);
 			lastValue = result.values[lastIdx]!;
 		}
 	}
-	// `through` last, so a key of that name in the fetcher's meta never stands.
-	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged } : { ...result.meta, merged, through: window.end };
+	// Ours last, so a key of the same name in the fetcher's meta never stands.
+	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
+	const meta = feed.source === 'chirps_gefs' ? { ...result.meta, merged, kept } : { ...result.meta, merged, kept, through: window.end };
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	await continueBackfill(db, feed, window);
 	return { merged, lastDate };

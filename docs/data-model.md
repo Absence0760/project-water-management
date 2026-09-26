@@ -1002,13 +1002,13 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
-| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces whatever that series held on its day, a user-entered one included; a gap never erases ([architecture.md § Data feeds](./architecture.md#data-feeds)) |
+| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
 | `enabled`, `schedule` | `daily` or `hourly` |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29) |
-| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30) |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -1081,6 +1081,37 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   an enqueue failing mid-tick), the acting user losing the role, and the
   ingest hand-off (the window check, late and redelivered answers, the fetch
   columns' guards).
+
+### Feed days (031_feed_days.sql)
+
+Which days of a series its feed wrote, so a feed replaces only those and
+never an uploaded or imported value (#30, [architecture.md § Data
+feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
+
+| Column | Holds |
+| --- | --- |
+| `feed_id` | The feed that wrote `feed_days`, or `NULL`. Composite foreign key `(project_id, feed_id)` → `data_feed (project_id, id)` (a feed of the same project; `data_feed` gains `UNIQUE (project_id, id)` for it), `ON DELETE SET NULL (feed_id)`; covered by `time_series_feed_idx (project_id, feed_id)` |
+| `feed_days` | A `datemultirange` of the days `feed_id` wrote and may replace. Dates, not array offsets, so extending the series backwards moves nothing; a feed writes runs of days, so years of CHIRPS are a range or a few. `CHECK`: only with a `feed_id` |
+
+- **On the series row, not a side table**: every write to a series already
+  locks and rewrites the row (`series/merge.ts mergeInto`, `PUT`), so the
+  days it takes or releases change in the same statement under the same RLS
+  (`time_series_update`, an editor). No new table, policy or grant.
+- **Who changes it**: the ingest (`mergeInto` with the feed's id, via
+  `feedDays`) writes only empty days and days in `feed_days`, and adds the
+  days it wrote. A user's `POST …/series/merge` subtracts the days it sends
+  (`releaseDays`); `PUT` sets `feed_id = NULL`. The `time_series_feed_days`
+  trigger clears `feed_days` whenever `feed_id` is `NULL`, including when the
+  foreign key's `SET NULL` fires on removing the feed. The
+  `data_feed_release_days` trigger (`AFTER UPDATE OF target_kind,
+  target_name`, as the saving owner under RLS) releases the feed's days in
+  its old series when it is re-targeted. A project copy or import writes new
+  rows without them.
+- **No backfill**: days written before `031` are nobody's, so feeds keep them.
+- Tests: `series/merge.test.ts` (the day-run arithmetic and `feedDays`),
+  `feeds/feeds.db.test.ts` (user values kept; final replaces preliminary and
+  a re-fetch revises; a user's merge or PUT wins afterwards, under skewed
+  time zones; removing and re-targeting release; the composite key).
 
 ### Reports (023_reports.sql)
 

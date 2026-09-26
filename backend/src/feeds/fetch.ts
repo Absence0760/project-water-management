@@ -6,14 +6,14 @@
 // A FetchResult is what crosses from the fetcher back to the database. In
 // production it rides the `ingest-results` queue, so the worker treats it as
 // untrusted input and validates it (FetchResult below) before anything merges.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError } from './errors.js';
 import type { FeedHttp } from './http.js';
 import { fetchChirps, fetchGefs } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
-import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/merge.js';
+import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
 /** Today's date in UTC: CHIRPS days, DWS days and the schedule all count UTC calendar days. */
 export const utcToday = (now = new Date()) => now.toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate
 const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
 /**
  * The most bytes of meta JSON a result may carry: data_feed.last_meta holds at
- * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and `through`, and jsonb's
+ * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged`, `kept` and `through`, and jsonb's
  * text form adds a space after each colon and comma. The per-field limits
  * alone allow ~8.5 KB of multi-byte characters.
  */

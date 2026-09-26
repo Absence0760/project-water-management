@@ -17,6 +17,7 @@ import {
 	type FeedState,
 	type HealthReason,
 	healthMessage,
+	keptNote,
 	needsAttention,
 	parseCells,
 	separateName,
@@ -179,6 +180,14 @@ describe('descriptions', () => {
 	it('count the feeds that need attention', () => {
 		const h = (state: string) => ({ health: { state, stale: false, staleAfterDays: 1, reason: { code: 'waiting' } } }) as never;
 		expect(needsAttention([h('ok'), h('stale'), h('failing'), h('pending'), h('disabled')])).toBe(2);
+	});
+	it('say how many days the last fetch kept the user’s own values (last_meta.kept)', () => {
+		expect(keptNote({ days: 60, merged: 58, kept: 2 })).toBe('2 days kept your own values');
+		expect(keptNote({ kept: 1 })).toBe('1 day kept your own value');
+		expect(keptNote({ kept: 0 })).toBeNull();
+		expect(keptNote({ days: 3 })).toBeNull();
+		expect(keptNote({ kept: 'x' })).toBeNull();
+		expect(keptNote(null)).toBeNull();
 	});
 });
 
