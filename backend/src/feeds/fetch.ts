@@ -116,9 +116,11 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError('the DWS page was not found');
-				const r = parseDwsDaily(page);
+				// Never a day after today: the feed's newest day drives its next window and its health.
+				const r = parseDwsDaily(page, { start: req.start, end: req.end < req.today ? req.end : req.today });
 				const meta: Record<string, string | number> = { days: r.values.length, gaps: r.values.filter((v) => v === null).length };
 				if (r.rejected) meta.rejected = r.rejected;
+				if (r.outside) meta.outside = r.outside;
 				for (const [code, n] of Object.entries(r.quality).slice(0, 10)) meta[`quality ${code.slice(0, 20)}`] = n;
 				return r.startDate === null ? { ok: true, startDate: null, values: [], meta } : { ok: true, startDate: r.startDate, values: r.values, meta };
 			}

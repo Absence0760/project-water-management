@@ -78,6 +78,15 @@ describe('runFetch on the fixtures', () => {
 		expect(FetchResult.parse(r)).toEqual(r);
 	});
 
+	it('DWS: keeps only the days asked for, never a day after today', async () => {
+		const table = ['DATE D_AVG_FR QUAL', '20201231 9 1', '20210101 1 1', '20210102 2 1', '20210103 3 1', '20300101 7 1'].join('\n');
+		const http: FeedHttp = { range: async () => null, text: async () => `<pre>${table}</pre>` };
+		const r = await runFetch({ source: 'dws', config: { station: 'X0H000' }, start: '2021-01-01', end: '2021-01-10', today: '2021-01-02' }, http);
+		expect(r).toEqual({ ok: true, startDate: '2021-01-01', values: [1, 2], meta: { days: 2, gaps: 0, outside: 3, 'quality 1': 2 } });
+		const none = await runFetch({ source: 'dws', config: { station: 'X0H000' }, start: '2022-01-01', end: '2022-01-10', today: '2022-01-10' }, http);
+		expect(none).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0, gaps: 0, outside: 5 } });
+	});
+
 	it('CHIRPS with nothing published yet: ok, no days', async () => {
 		const r = await runFetch({ source: 'chirps', config: grid, start: '2026-03-09', end: '2026-03-09', today: '2026-03-10' }, http);
 		expect(r).toEqual({ ok: true, startDate: null, values: [], meta: { days: 0 } });

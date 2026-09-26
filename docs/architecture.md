@@ -322,7 +322,7 @@ merges into:
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
-| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: an HTML page whose `<pre>` holds `DATE D_AVG_FR QUAL` rows; at most 20 years per request. Our network gets HTTP 403 from the site, so this format is taken from two open-source clients that parse it (see [followups.md](./followups.md)) |
+| `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **The GeoTIFFs are read with HTTP range requests** (`feeds/sources/tiff.ts`,
   no dependency): the header, the image directory at the end of the file,
@@ -337,15 +337,16 @@ merges into:
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
   or outside the grid, a server error page answered with HTTP 200: the fetch
   fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
-  feed shows as failing. A DWS row without a usable value is a gap, never a
-  zero.
+  feed shows as failing. A DWS row without a usable value, or with a quality code
+  that says the data is missing (`DWS_GAP_CODES`), is a gap, never a zero.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
   reads the newest complete issue and merges all 16 days, so each issue
   replaces the last from its issue date on; one caught half-written is never
   merged (the fetch falls back to yesterday's, or fails and retries). DWS re-reads a year before its newest day (verified
-  data is revised in arrears), 10 years on the first fetch.
+  data is revised in arrears), 10 years on the first fetch; rows the page
+  dates outside that window, or after today, are dropped (`outside`).
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health
