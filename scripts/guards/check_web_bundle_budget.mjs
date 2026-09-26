@@ -704,6 +704,25 @@
 //             year classes and demand.scale op, WP-3.8's supply rules);
 //             issue #17's Network map filling the screen adds 1 (980).
 //             Headroom ~5 KB.
+// 2026-09-26  ceilings unchanged (issue #53 follow-up). main @ 73311b3
+//             measures 976 KB (998 622 bytes). Measured and not landed:
+//             the share-the-pain board (curtailment/ShareThePainBoard.svelte
+//             + shareThePain.ts) as a Lazy chunk. The total rises 1.3 KB
+//             (999 954 bytes): the board becomes a 3.4 KB JS + 0.8 KB CSS
+//             chunk of its own and leaves the Runs/report shared chunk by
+//             less than that. The Runs tab renders the board whenever a run
+//             has curtailment, so it gains nothing; only the printable
+//             report, which never shows it, would load ~4 KB less. The
+//             Scale demand form (OpForm's demand.scale branch) is ~40 lines
+//             of template in the Scenarios tab's already-lazy chunk, with
+//             its draft logic in scenarios/ops.ts beside every other op's:
+//             splitting it would add a chunk for well under 1 KB. Where the
+//             weight is (gzip, by source via source maps): help text 61 KB
+//             (articles.ts 33, guides.ts 17, tips.ts 11), SheetJS 83 KB (the
+//             export worker only), uPlot 22 KB, CSS 69 KB over 103 files,
+//             and 72 JS chunks under 1 KB (37 KB between them). No module is
+//             duplicated across chunks beyond ~1 KB of engine code the import
+//             worker bundles. None of these moves without a larger change.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
