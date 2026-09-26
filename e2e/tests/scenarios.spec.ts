@@ -194,6 +194,8 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	const mode = page.getByTestId('override-mode');
 	await expect(mode.getByRole('heading', { name: `Editing the scenario “${NAME}”, not the catchment` })).toBeVisible();
 	await expect(page.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
+	// The Network opens on its map (914e69df); the fields are in the Table.
+	await page.getByRole('button', { name: 'Table', exact: true }).click();
 	await expect(page.getByLabel('Dam capacity of Upper farm, m³')).toHaveValue('180000');
 	const record = page.getByTestId('override-record');
 	await expect(record).toContainText('No edits yet.');

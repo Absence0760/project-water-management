@@ -94,6 +94,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `node.add` may also carry a `damCurve`; there is no `node.set` for it
   yet); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
   `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`.
+  A new farm's `node.add` may also carry its supply rule and river pump
+  (WP-3.8: `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`,
+  `supplyStopPct`, under the same model rules as a save); there is no
+  `node.set` for them yet.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name` only (a gauge only measures).
