@@ -545,6 +545,14 @@
 //             and the assessors' Applications tab, each a lazy chunk, and the
 //             applicant mode of the Scenarios tab. No new dependency. #9's
 //             engine split is the way back for the total.
+// 2026-09-26  total 921 → 929 KB; other ceilings unchanged. Scenario
+//             override mode (#18 follow-up): the Network, Crops and Transfers
+//             tables on a scenario's model, its own lazy chunk (~5.7 KB gzip,
+//             loaded only on "Edit in the model tables"), and the scheduled
+//             forecast run's labels. Merged on main after WP-2.16 and WP-3.3
+//             (915); the merge measured 923 KB. No page's first load grew;
+//             no new dependency. Headroom ~6 KB. #9's engine split is still
+//             the way back down.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -555,7 +563,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 921,
+	totalCodeKb: 929,
 	largestChunkKb: 43,
 	largestWorkerKb: 64,
 	largestSpreadsheetWorkerKb: 95,
