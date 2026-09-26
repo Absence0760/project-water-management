@@ -84,6 +84,31 @@ describe('forecast issues in the series', () => {
 		expect((await feedRow(feedId)).last_meta).toMatchObject({ issued: day(1) });
 	});
 
+	it('two ingests of one feed at once: the older issue waits for the newer to commit, then sees it and is dropped', async () => {
+		const { owner, pid, feedId, ingest } = await forecastFeed('RacingIssues');
+		let newerIngested!: () => void;
+		let commitNewer!: () => void;
+		const newerHasIngested = new Promise<void>((r) => (newerIngested = r));
+		const newerMayCommit = new Promise<void>((r) => (commitNewer = r));
+		const newer = withUser(owner.id, async (db) => {
+			const out = await ingestResult(db, (await feedForJob(db, pid, feedId))!, issue(0, 5));
+			newerIngested();
+			await newerMayCommit;
+			return out;
+		});
+		await newerHasIngested;
+		let olderDone = false;
+		const older = ingest(issue(-1, 1)).finally(() => (olderDone = true));
+		// Commit the newer once the older has finished or is waiting on a lock.
+		const waiting = async () => (await asOwner('SELECT 1 FROM pg_locks WHERE NOT granted')).length > 0;
+		await expect.poll(async () => olderDone || (await waiting()), { timeout: 10_000 }).toBe(true);
+		commitNewer();
+		expect(await newer).toEqual({ merged: 16, lastDate: day(15) });
+		expect(await older).toEqual({ merged: 0, lastDate: null });
+		expect((await forecast(owner, pid))!).toEqual(expect.objectContaining({ startDate: day(0), values: new Array(16).fill(5) }));
+		expect((await feedRow(feedId)).last_meta).toMatchObject({ issued: day(0) });
+	});
+
 	it.each([
 		['no issue date', { ...issue(0, 1), meta: { days: 16 } }],
 		['an issue date that is not a date', { ...issue(0, 1), meta: { days: 16, issued: 'today' } }],
