@@ -49,6 +49,7 @@ import {
 	CHIRPS_FACTOR_MIN,
 	factorsFrom,
 	suspectRainDays,
+	withoutReplaced,
 	type AccumulationSpans,
 	type ChirpsFitWindow,
 	type MonthSums
@@ -338,7 +339,7 @@ export function rainSourceFactors(
 	const primary = series.rain_catchment_mm;
 	const replaced = rainSourceSpans(periods);
 	const suspect = suspectRainDays(primary, zr, accumulations, replaced);
-	const low = new Set(rainVsChirps(series)?.flaggedYears ?? []);
+	const low = new Set(rainVsChirps(withoutReplaced(series, replaced))?.flaggedYears ?? []);
 	const trusted = (day: number) => suspect.status(day) === null || suspect.status(day) === 'keptDry' ? !low.has(waterYearOf(day)) : false;
 	const eraSpan = (e: RainSourceReferenceEra) => [toEpochDay(`${e.fromWaterYear}-10-01`), toEpochDay(`${e.toWaterYear + 1}-09-30`)] as const;
 	const catchmentRatio = (e: RainSourceReferenceEra) => {

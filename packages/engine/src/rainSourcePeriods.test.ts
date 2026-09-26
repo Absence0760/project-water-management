@@ -16,6 +16,7 @@ import {
 	rainSourceText,
 	resolveRainSource
 } from './rainSourcePeriods';
+import { rainVsChirps } from './quality';
 import { prepareRun, runModel } from './run';
 
 type Series = Partial<Record<SeriesKind, DailySeries>>;
@@ -91,8 +92,8 @@ const FIT: RainSourcePeriod = {
 
 describe('settings.rainSource: rain from another series over a period', () => {
 	it('uses the alternative × the monthly factor on every day it has a value, CHIRPS × the fit-period factors on its gaps, and marks each day', () => {
-		// The primary reads 3 × CHIRPS from 2005/06 (high, so no year is flagged far below CHIRPS and left out whole).
-		const r = build(3);
+		// The primary reads 0.9 × CHIRPS from 2005/06, far below its usual 2 ×: only the replaced days, not whole water years, leave the fit.
+		const r = build(0.9);
 		// Gaps in the alternative gauge: every day of June 2007 and the first ten days of 2009.
 		for (let i = idx('2007-06-01'); i <= idx('2007-06-30'); i++) r.a[i] = null;
 		for (let i = idx('2009-01-01'); i <= idx('2009-01-10'); i++) r.a[i] = null;
@@ -126,9 +127,12 @@ describe('settings.rainSource: rain from another series over a period', () => {
 		}
 		expect(alt).toBeGreaterThan(1500);
 		expect(gaps).toBe(40);
-		// The replaced primary days (3 × CHIRPS) never reach the CHIRPS fit: every factor is the early era's 2.
+		// The replaced primary days (0.9 × CHIRPS) never reach the CHIRPS fit: every factor is the early era's 2.
 		for (const m of corr.months) expect(m.factor! / 2).toBeCloseTo(1, 2);
 		expect(corr.replacedDaysLeftOut).toBeGreaterThan(0);
+		// Judged without the replaced days, no water year is far below CHIRPS (the data checks still flag the recorded ones).
+		expect(corr.lowVsChirpsYears).toEqual([]);
+		expect(rainVsChirps(toSeries(r))!.flaggedYears).toEqual([2005, 2006, 2007, 2008, 2009]);
 		const info = run.rainSource!.info.periods[0]!;
 		expect(info).toMatchObject({ factorMode: 'fixed', seriesDays: alt, chirpsDays: 40, forecastDays: 0, noneDays: 0, fallback: 'chirps', provenance: FIXED.provenance });
 		expect(info.factors).toEqual(new Array(12).fill(1.25));

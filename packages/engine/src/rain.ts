@@ -294,6 +294,20 @@ export function factorsFrom(t: MonthSums, record?: readonly ChirpsMonthFactor[])
 	return { pooled, months };
 }
 
+/**
+ * The series with the catchment rain blanked on the days of `replaced`
+ * (settings.rainSource periods, engine ≥ 0.30.0), for the fits' own
+ * low-vs-CHIRPS judgement; the same object when there are none. The data
+ * checks keep judging the series as recorded.
+ */
+export function withoutReplaced(series: Partial<Record<SeriesKind, DailySeries>>, replaced: AccumulationSpans | undefined): Partial<Record<SeriesKind, DailySeries>> {
+	const sa = series.rain_catchment_mm;
+	if (!sa || !replaced?.length) return series;
+	const a0 = toEpochDay(sa.startDate);
+	const values = sa.values.map((v, i) => (replaced.some((w) => a0 + i >= w.from && a0 + i <= w.to) ? null : v));
+	return { ...series, rain_catchment_mm: { ...sa, values } };
+}
+
 /** Where the factors are fitted (engine ≥ 0.29.0): settings.chirpsFitPeriod. */
 export interface ChirpsFitOptions {
 	fitPeriod?: ChirpsFitPeriod;
@@ -366,7 +380,8 @@ export function chirpsBiasFactors(
 	const sb = series.rain_chirps_mm;
 	if (!sb) return null;
 	const sa = series.rain_catchment_mm;
-	const lowYears = sa ? (rainVsChirps(series)?.flaggedYears ?? []) : [];
+	// The low-vs-CHIRPS years are judged without the replaced days (engine ≥ 0.30.0): a replaced era far below CHIRPS mustn't take the rest of its water years out too.
+	const lowYears = sa ? (rainVsChirps(withoutReplaced(series, opts.replaced))?.flaggedYears ?? []) : [];
 	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced);
 	const b0 = toEpochDay(sb.startDate);
 
