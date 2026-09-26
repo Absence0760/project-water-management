@@ -3478,6 +3478,19 @@ values.) T has no total. 86.4 converts m³/day to l/s (1 m³/day = 1000 l /
 86 400 s). With nothing rounded, the reductions and gains (N) sum to 0 up to
 floating-point noise.
 
+**Over another window (issue #44).** `curtailmentOverWindow(run, window)`
+(`views/farmProjection.ts`, with `prepareCurtailment` to read a run once for
+several windows) recomputes the whole table (farms, other water users, EWR
+sites) over any window of a saved run from its stored daily series, with no
+re-run: what `runModel` reports with that window as `reportStart … reportEnd`.
+The EWR site setting each farm's charge needs each day's binding site, which
+a run doesn't store, so it re-runs the attribution (§2.7b) on the stored
+flows; that is exact unless the transfer rules form a loop, when the loop's
+closing rule is carried round the rest of it (`bindingApproximate`). The
+farmer projection's season and the Runs tab's reporting-window picker both use
+it; `curtailmentOverWindow.test.ts` checks it against `runModel` on seeded
+networks. It is a view over a saved run, so it leaves `ENGINE_VERSION` alone.
+
 The client catchment regression test feeds the workbook's own daily Element-sheet
 values into `computeCurtailment` and checks every column against the cell
 formulas written out unrounded, and the saved window's averages against the

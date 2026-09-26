@@ -1,7 +1,8 @@
 // The reporting-window picker on Runs & results (issue #44, docs/ui.md §
 // Runs & results): a viewer looks at the last 7 days without re-running or
 // touching the project setting; the table worked out in the browser matches
-// the engine's own table for that window; the choice lives in the URL, so
+// the engine's own table for that window, the EWR site setting each farm's
+// charge included; the choice lives in the URL, so
 // back / forward and a reload keep it; and the Summary says its farm figures
 // are over the whole record.
 import { API_URL } from '../support/env.ts';
@@ -10,14 +11,14 @@ import { addMember, createRun, seedRunnableProject, updateSettings } from '../su
 import { expect, test } from '../support/fixtures.ts';
 import type { Locator } from '@playwright/test';
 
-/** Each farm's first seven figures (demand … EWR charge): what a window changes, before the binding site. */
+/** Each farm's whole row: the figures a window changes and the EWR site setting its charge. */
 async function farmFigures(table: Locator): Promise<string[][]> {
 	return Promise.all(
 		['Upper farm', 'Lower farm'].map((name) =>
 			table
 				.getByRole('row', { name: new RegExp(`^${name}`) })
 				.getByRole('cell')
-				.evaluateAll((tds) => tds.slice(0, 7).map((td) => (td.textContent ?? '').trim()))
+				.evaluateAll((tds) => tds.map((td) => (td.textContent ?? '').trim()))
 		)
 	);
 }
@@ -25,7 +26,7 @@ async function farmFigures(table: Locator): Promise<string[][]> {
 test('a viewer picks the last 7 days on Runs & results: worked out from the run, kept in the URL, the project setting untouched', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Report window');
-	await updateSettings(page.request, project.id, { reportStart: '2021-11-01', reportEnd: '2021-12-31' });
+	await updateSettings(page.request, project.id, { reportStart: '2021-11-01', reportEnd: '2021-12-31', ewrPragmaticM3PerDay: new Array(12).fill(1_000_000) });
 	const first = await createRun(page.request, project.id, 'November to December');
 	// The engine's own table over the last week of the record: a second run with that window set.
 	await updateSettings(page.request, project.id, { reportStart: '2022-01-22', reportEnd: '2022-01-28' });
@@ -43,6 +44,8 @@ test('a viewer picks the last 7 days on Runs & results: worked out from the run,
 	await v.goto(`/projects/${project.id}?tab=runs&run=${second}`);
 	await expect(period).toHaveText('Project window: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
 	const engine = await farmFigures(table);
+	// The reserve is set high enough to be short every day, so the farms carry a charge and the outlet sets it.
+	expect(engine.map((row) => row.includes('Outflow gauge'))).toEqual([true, true]);
 
 	await v.goto(`/projects/${project.id}?tab=runs&run=${first}`);
 	await expect(period).toHaveText('Project window: daily averages over 2021-11-01 – 2021-12-31 (61 days).');
@@ -58,7 +61,8 @@ test('a viewer picks the last 7 days on Runs & results: worked out from the run,
 	await expect(v).toHaveURL(/[?&]window=last7(&|$)/);
 	await expect(period).toHaveText('Last 7 days: daily averages over 2022-01-22 – 2022-01-28 (7 days).');
 	await expect(panel.getByRole('status')).toContainText('Worked out in your browser from this run\'s daily results: nothing is re-run, and the project setting is unchanged.');
-	// The same figures as the engine's run over that week.
+	// The same row as the engine's run over that week, the binding EWR site included (issue #44).
+	await expect(table.getByRole('columnheader', { name: /EWR site\s*setting the charge/ })).toBeVisible();
 	expect(await farmFigures(table)).toEqual(engine);
 	expect(engine).not.toEqual(november);
 
