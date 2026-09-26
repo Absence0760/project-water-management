@@ -1,6 +1,6 @@
 import { defaultProjectSettings, PE_SOURCE_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { annualGr4jPeMm, peFormError, peOf, peText, withPeKind, type EditablePe } from './peInput';
+import { annualGr4jPeMm, apanSourceNote, peFormError, peOf, peText, withPeKind, type EditablePe } from './peInput';
 
 const apanMm = [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110]; // Oct … Sep, 1 630 mm a year
 const panCoefficient = new Array<number>(12).fill(0.7);
@@ -67,5 +67,18 @@ describe('GR4J potential evaporation in the Settings form', () => {
 		expect(peText({ kind: 'pan' })).toBe('pan coefficient × A-pan');
 		expect(peText(monthly(new Array(12).fill(100), ' station ET₀ '))).toBe('monthly, entered directly: 1,200 mm a year (station ET₀)');
 		expect(peText(monthly(new Array(12).fill(100), ''))).toBe('monthly, entered directly: 1,200 mm a year');
+	});
+});
+
+describe('where A-pan comes from (issue #45)', () => {
+	it('names the daily series when the project has one, the monthly means otherwise, nothing while loading', () => {
+		expect(apanSourceNote(null)).toBeNull();
+		const daily = apanSourceNote(['rain_catchment_mm', 'evap_apan_mm'])!;
+		expect(daily.daily).toBe(true);
+		expect(daily.text).toContain('daily A-pan series');
+		expect(daily.text).toContain('monthly means fill the other days');
+		const monthlyOnly = apanSourceNote(['rain_catchment_mm'])!;
+		expect(monthlyOnly.daily).toBe(false);
+		expect(monthlyOnly.text).toContain('monthly means on every day');
 	});
 });

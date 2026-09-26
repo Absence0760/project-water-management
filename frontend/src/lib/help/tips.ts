@@ -933,6 +933,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['series.rain_reanalysis_mm']
 	},
 	{
+		id: 'evap-apan-daily',
+		term: 'Daily A-pan evaporation',
+		short: 'A daily Class-A pan record (mm/day), e.g. a nearby station: replaces the monthly A-pan means on the days it has a value.',
+		units: 'mm/day',
+		category: 'data',
+		fields: ['series.evap_apan_mm']
+	},
+	{
 		id: 'rain-forecast',
 		term: 'Forecast rainfall',
 		short: 'Forecast daily rain in mm, used after the other rain series run out, to look ahead a few days.',

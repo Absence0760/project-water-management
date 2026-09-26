@@ -711,6 +711,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['rain-source', 'chirps-bias'],
 		source: 'docs/calibration-research.md § Rain forcing'
 	},
+	'evap-apan-daily': {
+		long: 'Upload it on the Data tab as its own series kind (mm, cm or inches, stored in mm). Where it has a value it is that day\'s A-pan for crop demand (A-pan × crop factor), dam evaporation (A-pan × lake factor) and, when GR4J\'s PE is pan coefficient × A-pan, the runoff model. Days without a value, with a negative value or outside the record use the monthly A-pan means (Settings → Demand), and each run says how many days did. A monthly PE row for GR4J replaces both for the runoff model only.',
+		aliases: ['daily pan evaporation', 'station evaporation', 'Class A pan record', 'daily evaporation'],
+		related: ['apan', 'pan-coefficient', 'dam-evaporation'],
+		source: 'Not in the workbook; docs/model.md §2.3a'
+	},
 	'rain-forecast': {
 		long: 'Used on days neither catchment rain nor CHIRPS has a value, usually the days after the other records end. Treat results on forecast days as indicative only.',
 		related: ['rain-catchment'],

@@ -36,6 +36,11 @@ export const KIND_ROLES: Record<string, KindRole> = {
 		help: 'A gauge-free reanalysis such as ERA5 (mm). Read only by a rain-source period (Settings → Rain source): the reference its factors are fitted against, or the series its gaps fall through to.',
 		driver: true
 	},
+	evap_apan_mm: {
+		role: 'Daily evaporation',
+		help: 'Daily Class-A pan evaporation (mm), e.g. from a nearby weather station. On the days it has a value it replaces the monthly A-pan means (Settings → Demand) for crop demand, dam evaporation and GR4J\'s potential evaporation (pan coefficient × A-pan); other days use the monthly means, and the run says how many.',
+		driver: true
+	},
 	flow_observed_m3s: {
 		role: 'Calibration target',
 		help: 'Observed flow at the outflow gauge (m³/s, daily mean). Not an input to the water balance: runs compare simulated outflow with it (NSE, PBIAS).',

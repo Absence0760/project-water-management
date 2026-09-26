@@ -389,6 +389,27 @@ collected as a checklist in issue #46; tick it there as they answer.
       fills the form, and (engine 0.31.1) writes where the values came from
       into the row's `panCoefficientSource` note, which fits record
       ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+- [x] **A daily A-pan evaporation series (done, engine 0.38.0, issue #45).**
+      Series kind `evap_apan_mm` (mm/day), uploaded through Add data like
+      rain. On the days it has a value ≥ 0 it replaces the monthly A-pan
+      mean for crop demand, dam evaporation and GR4J's PE under
+      `pe.kind: 'pan'`; other days use the monthly mean, counted in
+      `summary.apanDaily` and a run warning. No series, byte-identical
+      results. Settings → Demand says which source A-pan comes from
+      ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
+- [ ] **Fit provenance of the daily A-pan series.** A fit record's `forcing`
+      holds the monthly A-pan and the pan coefficient, not the daily A-pan
+      series (§2.3a), so uploading, replacing or deleting the daily record
+      after a GR4J fit (under `pe.kind: 'pan'`) doesn't mark the fit stale,
+      though it changes the PE the fit trades X1/X3 against. Durable fix:
+      record a fingerprint of the series in `forcing` (start, length and a
+      hash of the values the run window used, or the run's
+      `run_input_series` SHA-256) and pass today's through
+      `fitRecordStatus(settings, record, now)` as `chirpsSource` is, with a
+      "daily A-pan changed since the fit" caveat. Trigger: the first project
+      that fits GR4J with a daily A-pan record, or the hydrologist asking
+      for it; until then the run comparison's input diff lists the series
+      change (`A-pan evaporation (daily) values changed on …`).
 - [ ] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*).** A rain-source
       period scales the alternative gauge by a monthly factor, which keeps

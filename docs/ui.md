@@ -773,7 +773,13 @@ its reason. The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
-periods* names them. A CSV with several timed readings a day (an automatic
+periods* names them. The **daily A-pan evaporation** kind (*Evaporation —
+A-pan, daily*, `evap_apan_mm`, engine ≥ 0.38.0, issue #45) is listed and
+uploaded like rain (mm, cm or in, stored in mm), badged *Daily evaporation*,
+with a mean annual total in its row like a rain series; a file whose name or
+header says evap, A-pan or A pan is guessed as that kind, and a newer daily
+A-pan record counts as new data since the last run. It replaces the monthly
+A-pan means on the days it covers ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)). A CSV with several timed readings a day (an automatic
 station's hourly log) is not refused: the form asks how to add it up into
 days, **08:00 to 08:00, booked to the day it starts** (the default, the
 manual-gauge day) or **midnight to midnight**, and its summary says how many
@@ -945,7 +951,12 @@ the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
 which checks every catchment tab).
 
 
-- **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**
+- **Demand**: A-pan (Oct–Sep), with a line under it saying where the model's
+  A-pan comes from (`apanSourceNote`, `settings/peInput.ts`, engine ≥ 0.38.0,
+  issue #45): the project's **daily A-pan series** on the days it has a
+  value, these monthly means filling the rest, or these monthly means on
+  every day (with a pointer to the Data tab); nothing while the series list
+  loads. Effective rainfall %, the **soil-water store**
   (mm, `settings.effectiveRainStoreMm`, default 25; 0 carries no rain over, as
   the workbook does; [model.md §2.3](./model.md#23-irrigation-demand) step 4),
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
@@ -1026,7 +1037,8 @@ which checks every catchment tab).
       is outside 0–10 000 mm. A row of zeros saves.
     A separate notice appears when GR4J's PE is 0 in every month (A-pan ×
     pan coefficient, or the monthly PE row): the engine then refuses GR4J
-    runs and fits.
+    runs and fits. Under pan coefficient × A-pan a daily A-pan series counts
+    as evaporation, so a project with one isn't warned.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to both models and to
