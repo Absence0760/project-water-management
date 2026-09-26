@@ -170,6 +170,16 @@ shorter than the cap looks as before.
   days are added and overlapping days corrected. Days the file leaves blank
   keep their stored value. The preview counts new, changed and unchanged
   days before anything is sent. **Replace** overwrites the whole series.
+  **Overwrite confirm** (issue #54 item 3): an upload that would change
+  stored days (a merge with changed days, or a Replace of a series holding
+  values) asks first, in place of the submit button. It says how many days,
+  between which dates, and has a **Show the changes** table (date, stored,
+  from the file, in the stored unit, the first 100). It notes that the
+  replaced values can be restored from History, and its button says
+  **Overwrite N days** / **Replace N days**, next to **Back**. A merge that
+  only adds days uploads straight away. Changing the file, the mode, the
+  series or the unit takes the question back. There is no confirm on the
+  machine `/ingest` API: loggers re-send days on purpose.
   **Unit** is a list of the units the kind accepts (`unitOptions`: m³/s, l/s,
   m³/day, m³/h, ML/day for flow; mm, cm, in for rain), the kind's own first;
   any other says "Values in l/s are converted to m³/s when saved", and the

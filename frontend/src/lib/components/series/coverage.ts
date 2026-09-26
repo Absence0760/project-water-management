@@ -117,6 +117,8 @@ export interface MergePreview {
 	added: number;
 	/** Days whose stored value changes. */
 	changed: number;
+	/** Those days, oldest first: the stored value and the file's. */
+	changes: { date: string; from: number; to: number }[];
 	/** Days in the file equal to what is stored. */
 	unchanged: number;
 	/** Resulting series. */
@@ -133,7 +135,7 @@ export function mergePreview(existing: Daily | null, incoming: Daily): MergePrev
 	const i0 = toEpochDay(incoming.startDate);
 	if (!existing || existing.values.length === 0) {
 		const added = incoming.values.filter((v) => v != null).length;
-		return { added, changed: 0, unchanged: 0, result: { startDate: incoming.startDate, values: [...incoming.values] } };
+		return { added, changed: 0, changes: [], unchanged: 0, result: { startDate: incoming.startDate, values: [...incoming.values] } };
 	}
 	const e0 = toEpochDay(existing.startDate);
 	const start = Math.min(e0, i0);
@@ -143,14 +145,18 @@ export function mergePreview(existing: Daily | null, incoming: Daily): MergePrev
 	let added = 0;
 	let changed = 0;
 	let unchanged = 0;
+	const changes: MergePreview['changes'] = [];
 	incoming.values.forEach((v, k) => {
 		if (v == null) return;
 		const idx = i0 - start + k;
 		const old = out[idx];
 		if (old == null) added++;
 		else if (old === v) unchanged++;
-		else changed++;
+		else {
+			changed++;
+			changes.push({ date: fromEpochDay(i0 + k), from: old, to: v });
+		}
 		out[idx] = v;
 	});
-	return { added, changed, unchanged, result: { startDate: fromEpochDay(start), values: out } };
+	return { added, changed, changes, unchanged, result: { startDate: fromEpochDay(start), values: out } };
 }

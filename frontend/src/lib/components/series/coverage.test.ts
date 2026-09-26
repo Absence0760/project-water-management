@@ -86,7 +86,23 @@ describe('mergePreview', () => {
 
 	it('counts corrected readings as changed and extends backwards', () => {
 		const p = mergePreview({ startDate: '2021-01-02', values: [1, 2] }, { startDate: '2021-01-01', values: [0, 9] });
-		expect(p).toEqual({ added: 1, changed: 1, unchanged: 0, result: { startDate: '2021-01-01', values: [0, 9, 2] } });
+		expect(p).toEqual({
+			added: 1,
+			changed: 1,
+			changes: [{ date: '2021-01-02', from: 1, to: 9 }],
+			unchanged: 0,
+			result: { startDate: '2021-01-01', values: [0, 9, 2] }
+		});
+	});
+
+	it('lists each overwritten day with its stored and new value, oldest first', () => {
+		// 01-02 and 01-04 change; 01-03 is the same; 01-05 fills a gap and 01-06 is new, so neither is overwritten.
+		const p = mergePreview({ startDate: '2021-01-01', values: [1, 2, 3, 4, null] }, { startDate: '2021-01-02', values: [5, 3, 9, 7, 8] });
+		expect(p.changes).toEqual([
+			{ date: '2021-01-02', from: 2, to: 5 },
+			{ date: '2021-01-04', from: 4, to: 9 }
+		]);
+		expect({ changed: p.changed, added: p.added, unchanged: p.unchanged }).toEqual({ changed: 2, added: 2, unchanged: 1 });
 	});
 
 	it('leaves a gap as null between a stored series and a later file', () => {
@@ -96,6 +112,6 @@ describe('mergePreview', () => {
 
 	it('treats a missing series as all new', () => {
 		const p = mergePreview(null, { startDate: '2021-01-01', values: [1, null, 3] });
-		expect(p).toEqual({ added: 2, changed: 0, unchanged: 0, result: { startDate: '2021-01-01', values: [1, null, 3] } });
+		expect(p).toEqual({ added: 2, changed: 0, changes: [], unchanged: 0, result: { startDate: '2021-01-01', values: [1, null, 3] } });
 	});
 });

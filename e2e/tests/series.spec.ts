@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -94,6 +95,8 @@ test('a later file appends to an existing series without erasing stored days', a
 	await expect(summary.nth(4)).toHaveText('2'); // new days
 	await expect(summary.nth(5)).toHaveText('1'); // changed
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	// 10-03 is overwritten, so the form asks first.
+	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
 	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
@@ -251,12 +254,98 @@ test('merging an l/s file into an m³/s series compares like with like and keeps
 	await expect(summary.nth(5)).toHaveText('1'); // changed
 	await expect(summary.nth(6)).toHaveText('1'); // unchanged
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
 	await expect(form.getByRole('status')).toContainText('1 new day, 1 changed');
 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
 	const values = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()).values as number[];
 	// 10-02 keeps its stored 0.8 m³/s (it came back 0.0008 when the merge was sent in l/s).
 	expect(values.map((v) => Math.round(v * 1e6) / 1e6)).toEqual([1.2, 0.8, 0.65, 0.5]);
+});
+
+// Issue #54 item 3: an upload that would overwrite stored days asks first.
+const csvFile = (name: string, body: string) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(body) });
+async function storedValues(page: Page, projectId: string): Promise<(number | null)[]> {
+	const list = (await (await page.request.get(`${API_URL}/projects/${projectId}/series`)).json()).series as { id: string }[];
+	return (await (await page.request.get(`${API_URL}/projects/${projectId}/series/${list[0]!.id}`)).json()).values;
+}
+
+test('a merge that changes stored days says which and how many before it overwrites them; Back sends nothing', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Overwrite confirm');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3, 4] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+
+	// Positive control: a file that only adds days uploads straight away.
+	await form.getByLabel('CSV file').setInputFiles(csvFile('new.csv', 'date,value\n2021-10-04,4\n2021-10-05,5\n'));
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 2021-10-05.');
+	await expect(form.getByTestId('overwrite-confirm')).toHaveCount(0);
+
+	// 10-02 and 10-04 change, 10-03 is the same.
+	await form.getByLabel('CSV file').setInputFiles(csvFile('fix.csv', 'date,value\n2021-10-02,20\n2021-10-03,3\n2021-10-04,40\n'));
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	const confirm = form.getByTestId('overwrite-confirm');
+	await expect(confirm.getByText('This changes 2 days already stored in “Rainfall — catchment”, between 2021-10-02 and 2021-10-04.')).toBeFocused();
+	await expect(confirm).toContainText('you can put them back from the History tab');
+	await expect(form.getByRole('button', { name: 'Upload and merge' })).toHaveCount(0);
+	await confirm.getByText('Show the changes').click();
+	const rows = confirm.getByRole('row');
+	await expect(rows).toHaveCount(3);
+	await expect(rows.nth(0)).toHaveText(/Date\s*Stored \(mm\)\s*From the file \(mm\)/);
+	await expect(rows.nth(1)).toHaveText(/2021-10-02\s*2\.00\s*20\.00/);
+	await expect(rows.nth(2)).toHaveText(/2021-10-04\s*4\.00\s*40\.00/);
+	await expectNoViolations(page);
+
+	await confirm.getByRole('button', { name: 'Back' }).click();
+	await expect(confirm).toHaveCount(0);
+	await expect(form.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
+	expect(await storedValues(page, project.id)).toEqual([1, 2, 3, 4, 5]);
+
+	// Switching to Replace takes the question back: it asks again, about the replace.
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(form.getByRole('button', { name: 'Overwrite 2 days' })).toBeVisible();
+	await form.getByRole('radio', { name: /^Replace the whole series/ }).check();
+	await expect(form.getByTestId('overwrite-confirm')).toHaveCount(0);
+	await form.getByRole('radio', { name: /^Append \/ update/ }).check();
+
+	await form.getByRole('button', { name: 'Upload and merge' }).click();
+	await form.getByRole('button', { name: 'Overwrite 2 days' }).click();
+	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 2021-10-05.');
+	expect(await storedValues(page, project.id)).toEqual([1, 20, 3, 40, 5]);
+});
+
+test('replacing a series asks first, counting every stored day it drops', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Replace confirm');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, null, 3] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = page.getByRole('region', { name: 'Upload CSV' });
+	await form.getByLabel('CSV file').setInputFiles(csvFile('all.csv', 'date,value\n2021-11-01,7\n'));
+	await form.getByRole('radio', { name: /^Replace the whole series/ }).check();
+	await form.getByRole('button', { name: 'Upload and replace' }).click();
+	const confirm = form.getByTestId('overwrite-confirm');
+	await expect(confirm).toContainText('This replaces all 2 days stored in “Rainfall — catchment” (2021-10-01 → 2021-10-03) with the file.');
+	await expect(confirm.getByText('Show the changes')).toHaveCount(0);
+	await confirm.getByRole('button', { name: 'Replace 2 days' }).click();
+	await expect(form.getByRole('status')).toHaveText('Uploaded 1 day to “Rainfall — catchment”.');
+	expect(await storedValues(page, project.id)).toEqual([7]);
+});
+
+test('the Add data dialog asks before it overwrites stored days too', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Overwrite confirm dialog');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2] });
+	await page.goto(`/projects/${project.id}`);
+	await page.getByRole('button', { name: 'Add data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add data' });
+	await dialog.getByLabel('CSV file').setInputFiles(csvFile('rain.csv', 'date,value\n2021-10-02,9\n2021-10-03,3\n'));
+	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(dialog.getByTestId('overwrite-confirm')).toContainText('This changes 1 day already stored in “Rainfall — catchment”, between 2021-10-02 and 2021-10-02.');
+	await dialog.getByRole('button', { name: 'Overwrite 1 day' }).click();
+	await expect(dialog).toBeHidden();
+	expect(await storedValues(page, project.id)).toEqual([1, 9, 3]);
 });
 
 // Issue #40 part c: a CHIRPS series says which product and version it holds.
