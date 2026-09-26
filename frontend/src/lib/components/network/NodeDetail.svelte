@@ -10,6 +10,8 @@
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
 	import BoreholeFields from './BoreholeFields.svelte';
+	import SupplyFields from './SupplyFields.svelte';
+	import { hasSupplySettings } from './supply';
 
 	let {
 		node,
@@ -193,6 +195,14 @@
 			</div>
 		</fieldset>
 	{/each}
+
+	<!-- A farm's; a farm turned into a gauge or user keeps its settings, shown so they can be reset (WP-3.8). -->
+	{#if node.kind === 'farm' || hasSupplySettings(node)}
+		<fieldset>
+			<legend>Supply</legend>
+			<SupplyFields {node} {readonly} />
+		</fieldset>
+	{/if}
 
 	{#if hasDam(node)}
 		<fieldset>

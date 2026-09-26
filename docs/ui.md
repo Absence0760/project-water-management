@@ -788,6 +788,29 @@ note's link on the Summary, `notes.ts` `noteHref`).
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Supply** (engine ≥ 0.42.0, WP-3.8, issue #54 item 2c, [model.md §2.7e](./model.md)),
+  one-node form, farms (`SupplyFields.svelte`, `supply.ts`): **Supply rule**
+  in run comparison's and the scenario form's words (dam only / river first /
+  dam, river when low / run of river, engine `SUPPLY_RULE_LABEL`) with a line
+  on what the chosen rule does. Every rule but dam only shows the river pump:
+  **Number of pumps** × **m³/h per pump**, which fills **River pump capacity**
+  (m³/day, pumps × m³/h × 24, with the sum shown under it), and the capacity
+  itself, which can be typed straight in (typing it clears the calculator).
+  Only the m³/day is stored, so a saved capacity reloads into the m³/day field
+  with the calculator empty, whatever the pumps were; that way a capacity that
+  isn't a whole pumps × rate product (an imported or licensed figure) shows as
+  it is. Blank is no limit, and the note says the run warns. **Switch to river
+  below** and **Back to the dam at** (% of dam) show for dam, river when low
+  only. The save rules show under the fields as alerts and block Save, as the
+  API refuses them (`supplyIssues` in `lib/model/validate.ts`, a test holds it
+  to the engine's `modelRuleIssues`): dam, river when low needs a dam; run of
+  river with a dam says to set the dam capacity to 0 or pick another rule; the
+  switch-back level must be at least the switch-to-river level. A farm with no
+  dam on dam only that has anything routed to its dam gets the run's hint: it
+  irrigates straight from the river with no limit; pick run of river with a
+  pump capacity. A farm turned into a gauge or other user keeps the section
+  while it still has supply settings, so they can be reset. Read-only for
+  viewers (no calculator).
 - **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
