@@ -73,6 +73,27 @@ describe('createApi', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ runId: 'r1', reason: 'why' });
 	});
 
+	it('reads the publication, POSTs a publish and PATCHes the notice by publication id', async () => {
+		const body = { current: null, history: [] };
+		const get = mockFetch(200, body);
+		await expect(createApi('', get).publication.get('p/1')).resolves.toEqual(body);
+		expect((get.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/publication');
+		const publication = { id: 'pub1', runId: 'r1' };
+		const post = mockFetch(201, { publication, farms: 3 });
+		const restriction = { level: 'advisory' as const, pct: null, noticeEn: 'Save water', noticeAf: null };
+		await expect(createApi('', post).publication.publish('p1', { runId: 'r1', restriction })).resolves.toEqual({ publication, farms: 3 });
+		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/projects/p1/publication');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body as string)).toEqual({ runId: 'r1', restriction });
+		const patch = mockFetch(200, { publication });
+		await expect(createApi('', patch).publication.update('p1', 'pub/1', { nextExpectedOn: null })).resolves.toEqual(publication);
+		const [purl, pinit] = patch.mock.calls[0] as unknown as [string, RequestInit];
+		expect(purl).toBe('/projects/p1/publication/pub%2F1');
+		expect(pinit.method).toBe('PATCH');
+		expect(JSON.parse(pinit.body as string)).toEqual({ nextExpectedOn: null });
+	});
+
 	it('returns undefined for 204', async () => {
 		const api = createApi('', mockFetch(204));
 		await expect(api.projects.remove('p1')).resolves.toBeUndefined();

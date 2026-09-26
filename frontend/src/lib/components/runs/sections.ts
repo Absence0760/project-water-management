@@ -24,7 +24,9 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			sections: [
 				{ id: 'res-summary', label: 'Summary' },
 				// The run's written explanation and whether it is the project's evidence run: every run.
-				{ id: 'res-notes', label: 'Notes & evidence' }
+				{ id: 'res-notes', label: 'Notes & evidence' },
+				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
+				{ id: 'res-publication', label: 'Publication' }
 			]
 		},
 		{

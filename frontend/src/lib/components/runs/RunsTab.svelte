@@ -4,7 +4,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
@@ -26,12 +26,15 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultGroups } from './sections';
 	import { filterRuns, RUN_FILTER_FROM, runYears } from './runList';
+	import { publishedRunIds } from './publication';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
 	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
 	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	const loadEvidencePanel = () => import('./EvidencePanel.svelte');
+	// Publishing a run and the WP-2.3 notice editor: their own chunk, like the evidence panel.
+	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
 	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
@@ -64,6 +67,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	let runs = $state<RunMeta[]>(untrack(() => initialRuns ?? []));
 	/** The project's evidence history, oldest first (010_run_nomination). */
 	let nominations = $state<Nomination[]>([]);
+	/** The project's publications (022_publication): the current one and the history, newest first. */
+	let publication = $state<{ current: Publication | null; history: PublicationMeta[] } | null>(null);
+	let publicationError = $state<string | null>(null);
 	let loading = $state(untrack(() => initialRuns === null));
 	let loadError = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
@@ -116,7 +122,27 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			loading = false;
 		}
 	}
-	onMount(load);
+	/** Loaded on its own, so a failure shows in the publication panel without hiding the runs. */
+	async function loadPublication() {
+		publicationError = null;
+		try {
+			publication = await api.publication.get(projectId);
+		} catch (e) {
+			publicationError = msg(e);
+		}
+	}
+	onMount(() => {
+		load();
+		loadPublication();
+	});
+	const currentPublishedRunId = $derived(publication?.current?.runId ?? null);
+	// Every run the history holds: the server keeps them, so they get no delete button.
+	const heldByPublication = $derived(publishedRunIds(publication?.history));
+	function published(p: { current: Publication; history: PublicationMeta[] }) {
+		publication = p;
+		runs = runs.map((r) => ({ ...r, published: r.id === p.current.runId }));
+		onRunsChange?.(runs);
+	}
 	onDestroy(() => clearInterval(timer));
 
 	function select(id: string | null) {
@@ -403,9 +429,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
+										{#if r.id === currentPublishedRunId}<span class="tag tag-owner" title="The published baseline: stakeholders and farmers see this run's figures. Kept while a publication holds it.">Published</span>{/if}
 										{#if evidenceById.get(r.id) === 'current'}<span class="tag tag-owner" title="The project's nominated evidence run. Kept for good: it can't be deleted.">Evidence</span>{:else if evidenceById.get(r.id) === 'past'}<span class="tag" title="Nominated as evidence before, since replaced. Kept for good: it can't be deleted.">Former evidence</span>{/if}
 										{#if r.pinned}<span class="tag" title="Pinned: newer runs never push it out, and it can't be deleted until it is unpinned.">Pinned</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
@@ -423,7 +450,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										onclick={() => togglePin(r)}
 										><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
 									>
-									{#if !evidenceById.has(r.id) && !r.pinned}
+									{#if !evidenceById.has(r.id) && !r.pinned && !heldByPublication.has(r.id)}
 										<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
 									{/if}
 								</div>
@@ -482,6 +509,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						{:else if evidenceById.get(detail.run.id) === 'past'}
 							<span class="badge">Former evidence</span>
 						{/if}
+						{#if detail.run.id === currentPublishedRunId}<a class="badge badge-owner" href="#res-publication">Published</a>{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<span class="muted small">
 							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)}{detail.run.createdBy ? ` by ${detail.run.createdBy}` : ''} · engine {detail.run.engineVersion}
@@ -508,6 +536,24 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						</Lazy>
 					{/key}
 				</div>
+			</section>
+			<section class="panel" id="res-publication">
+				{#if publicationError}
+					<div class="alert alert-error" role="alert">
+						Couldn’t load the publication: {publicationError}
+						<button type="button" class="btn btn-sm" onclick={loadPublication}>Try again</button>
+					</div>
+				{:else if publication}
+					{#key shownRunId}
+						<Lazy load={loadPublicationPanel}>
+							{#snippet children(PublicationPanel)}
+								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
+							{/snippet}
+						</Lazy>
+					{/key}
+				{:else}
+					<p class="muted" role="status">Loading the publication…</p>
+				{/if}
 			</section>
 			<RunCharts
 				{projectId}

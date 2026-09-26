@@ -24,6 +24,10 @@ import type {
 	Project,
 	ProjectFile,
 	ProjectSummary,
+	Publication,
+	PublicationMeta,
+	PublicationPatch,
+	PublishRequest,
 	Role,
 	Run,
 	RunCompareResponse,
@@ -302,6 +306,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
+		},
+		publication: {
+			/** The current publication (null when nothing is published) and the history, newest first (at most 12). */
+			get: (id: string) => request<{ current: Publication | null; history: PublicationMeta[] }>('GET', `${p(id)}/publication`),
+			/** Publish a run (editor): supersedes the current publication; `farms` is how many farm projections were stored. */
+			publish: (id: string, body: PublishRequest) => request<{ publication: Publication; farms: number }>('POST', `${p(id)}/publication`, body),
+			/** Change the current publication's notice, note or next date without re-publishing (editor). */
+			update: (id: string, pubId: string, body: PublicationPatch) =>
+				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication)
 		},
 		uncertainty: {
 			/** A run's own input (its settings and model snapshot with the project's series); 409 when the data changed since. */
