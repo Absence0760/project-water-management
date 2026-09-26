@@ -884,6 +884,18 @@ every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `"supplemental"`, 0.3, 0 and 0. `PUT` refuses boreholes on a gauge and the
 drought rule on a node without a farm dam.
 
+Supply rules and the river pump (engine ≥ 0.42.0, migration 060, WP-3.8,
+[model.md §2.7e](./model.md)): every node carries `supplyRule`
+(`"damFirst"` | `"riverFirst"` | `"trigger"` | `"runOfRiver"`),
+`pumpCapacityM3Day` (≥ 0 or `null` = no limit), `supplyTriggerPct` (0–1) and
+`supplyStopPct` (0–1). A body without them gets `"damFirst"`, `null`, 0.4
+and 0.6 (no change to any run). `PUT` refuses a rule other than
+`"damFirst"` or a pump capacity on a gauge or other user, `"trigger"` on a
+farm without a dam, `"runOfRiver"` on a farm with a dam capacity above 0, and
+a stop level below the trigger. Runs of a farm with a rule other than
+`"damFirst"` store the series `river_abstraction` (m³/day, part of
+`supplied`) and its summary gains `avgRiverAbstractionM3Day`.
+
 Validation on `PUT`: ids unique, node and crop names unique (ignoring case),
 one crop area per node + crop; every `downstreamNodeId`, crop-area and
 transfer reference points at a node/crop in the same document; the network is a
@@ -902,7 +914,7 @@ naming `startDate`, not a server error).
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
 | PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing; a `null` day keeps its stored value, so a file never erases: clear days with a PUT) | editor |
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
@@ -1682,7 +1694,8 @@ CORS (gateways aren't browsers), JSON bodies only.
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist, only the days sent
-  are touched (a `null` clears a day), units are converted to the kind's
+  are touched (a `null` clears a day here, where the UI's merge keeps the
+  stored value), units are converted to the kind's
   canonical unit, and the version and day-boundary guards answer `409` as
   they do there. It is recorded as `series.created` / `series.merged` by the
   key (`actor_label` `API key “<name>”`); unlike a person's merge it keeps no

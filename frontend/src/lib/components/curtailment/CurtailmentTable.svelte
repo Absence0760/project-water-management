@@ -10,12 +10,14 @@
 	import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
+	import ShareThePainBoard from './ShareThePainBoard.svelte';
 
 	let {
 		summary,
 		farmNames = {},
 		curtailment,
-		period
+		period,
+		board = false
 	}: {
 		summary: RunSummary;
 		/** Current farm names by node id, for farms renamed since the run. */
@@ -24,6 +26,8 @@
 		curtailment?: CurtailmentSummary | null;
 		/** The name of the period shown ("Last 7 days"), put before its dates. */
 		period?: string;
+		/** Lead with the share-the-pain board (issue #53 R3) over the same window: the Runs tab shows it, the printable report doesn't. */
+		board?: boolean;
 	} = $props();
 
 	const c = $derived(curtailment === undefined ? (summary.curtailment ?? null) : curtailment);
@@ -54,6 +58,10 @@
 				share of its own demand.
 			{/if}
 		</p>
+		{#if board}
+			<ShareThePainBoard curtailment={c} names={farmNames} {period} />
+			<h4 id="curtailment-farms-heading">Per farm</h4>
+		{/if}
 		<p class="muted small">
 			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = below the equitable share.
 			<em>Above (−) / below (+) equitable share</em> compares the supply with the fairness benchmark (equitable

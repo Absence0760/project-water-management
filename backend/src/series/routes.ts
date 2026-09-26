@@ -173,7 +173,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// Append / merge new days into a series (daily or batch updates). Creates the
-	// series if it doesn't exist. Only the days sent are touched. A person's
+	// series if it doesn't exist. Only the days sent are touched, and a blank
+	// (null) day keeps its stored value: a file never erases. A person's
 	// merge keeps the previous values as a series revision; a data feed's
 	// (feeds/ingest.ts) and an API key's (ingest/routes.ts) don't. The whole
 	// sequence is mergeInto, shared with the ingest.
@@ -183,7 +184,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// mergeInto runs the new-data hook (series/newData.ts): a re-send that changes nothing queues nothing.
-			const r = await mergeInto(db, id, body, { keepRevision: true, via: 'user' });
+			const r = await mergeInto(db, id, body, { keepRevision: true, via: 'user', keepOnNull: true });
 			return { meta: r.meta, queued: r.rerun };
 		});
 		await wakeForRerun(queued);

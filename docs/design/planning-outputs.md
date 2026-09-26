@@ -4,8 +4,12 @@ Research and recommendations for four decision-support outputs the client
 sketched with a chat assistant (received 2026-09-26). The sketches used
 hypothetical figures for the client catchment; they are **not committed**
 (the repo is public and they name the catchment and its users). This doc
-describes them generically. Nothing here is built yet; the build is tracked
-in [issue #53](https://github.com/Absence0760/project-water-management/issues/53).
+describes them generically. The build is tracked in
+[issue #53](https://github.com/Absence0760/project-water-management/issues/53).
+Built so far: R1 (`demand.scale`, engine 0.41.0,
+[scenarios.md](../scenarios.md)), R3's equal-share board
+([ui.md § Share the pain](../ui.md#share-the-pain)) and R4's engine half
+(§3.4); the rest is not yet.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -16,7 +20,7 @@ it is marked **(judgement)**.
 
 | # | Sketch | What it shows | Already built | Gap |
 | --- | --- | --- | --- | --- |
-| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | A three-stage board presenting them; per-category cuts (§3.3) |
+| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The three-stage board, equal share ([ui.md § Share the pain](../ui.md#share-the-pain)); per-category cuts wait for O4 (§3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
 | S3 | **Seasonal irrigation outlook** | From storage and winter inflow at the start of summer: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | 🚧 Forecast mode (engine 0.37.0, model.md §2.4f, 14 days only); the backlog's *Seasonal outlook* (farmer-view ask E3) | The season-long ensemble, the demand comparison, the triggers (WP-3.8) |
 | S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | 🚧 The evidence report design ([evidence-report.md](./evidence-report.md), issue #15), allocations (WP-3.10) | Year classes, the full-allocation run, the summary board |
@@ -85,6 +89,10 @@ baseline (scenarios.md § Classification). S2, S3 and a WUA's "what if
 everyone takes 85 %" all need it; today it takes a `cropArea.set` per farm
 and crop. **(judgement)** Scale demand, not crop area, so efficiency and
 return flows are unchanged and the meaning is "85 % of what they'd take".
+**Built** (engine 0.41.0): months are calendar month numbers 1–12 (the
+engine's convention for month lists), categories `farm` (default) and
+`user`, and ops stack; [scenarios.md § Op catalogue](../scenarios.md#op-catalogue)
+has the rules.
 
 ### 3.2 R2: scenario sweeps as a background job (**M**)
 
@@ -106,7 +114,19 @@ judgement)** Because SA practice cuts per category (§2 finding 1), add a
 irrigation, industry) instead of one equal share, labelled as a what-if
 until the authorisation-based allocation (model.md §2.11) exists.
 
+**Built (equal share only):** `curtailment/ShareThePainBoard.svelte` leads
+the Runs tab's curtailment panel
+([ui.md § Share the pain](../ui.md#share-the-pain)). The category
+restriction waits for plan.md O4; the view model's `ShareRule` is where it
+goes (a second rule kind, labelled as a what-if).
+
 ### 3.4 R4: year classes and the outcome matrix (**M**)
+
+**Status: engine half built** (`views/yearClasses.ts`, `views/outcomeMatrix.ts`;
+method, tie and partial-year rules in
+[model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
+Still to build: the project settings for the method and the risk cut-offs
+(after O1 / O2), the demand-level runs (R2 sweeps over R1's `demand.scale`) and the matrix view.
 
 - **Classify water years** by the run's own natural flow at the outlet
   (annual total): terciles by default (dry / normal / wet) or quintiles

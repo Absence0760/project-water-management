@@ -5,20 +5,14 @@
 // (./fitRangeProposal.ts). The hydrologist then checks and saves them.
 import type { DailySeries, SeriesMeta } from '@water-management/engine';
 import { api } from '$lib/api';
-import { valuesCache } from '$lib/components/series/valuesCache';
+import { cachedValues, cacheValues } from '$lib/components/series/valuesCache';
 import { proposalFrom, type FitRangeProposal } from './fitRangeProposal';
 
 const firstOf = (list: SeriesMeta[], kind: string) => list.filter((s) => s.kind === kind).sort((a, b) => a.name.localeCompare(b.name))[0] ?? null;
 
 async function valuesOf(projectId: string, s: SeriesMeta | null): Promise<DailySeries | null> {
 	if (!s) return null;
-	const key = `${projectId}/${s.id}`;
-	const hit = valuesCache.get(key);
-	if (hit && hit.startDate === s.startDate && hit.values.length === s.length) return hit;
-	const d = await api.series.get(projectId, s.id);
-	const v = { startDate: d.startDate, values: d.values };
-	valuesCache.set(key, v);
-	return v;
+	return cachedValues(projectId, s) ?? cacheValues(projectId, await api.series.get(projectId, s.id));
 }
 
 /** Load the project's catchment rain and CHIRPS and propose ranges from their double-mass breaks. */

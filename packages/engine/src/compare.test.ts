@@ -496,6 +496,22 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('lists a farm’s supply rule and river pump changed, and not an older run’s absent fields (WP-3.8)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, { supplyRule: 'trigger', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.3, supplyStopPct: 0.7 });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: supply rule dam only → dam, river when low',
+			'Rooikloof: river pump capacity no limit → 1,200 m³/day',
+			'Rooikloof: supply switch-to-river level 40% → 30%',
+			'Rooikloof: supply switch-back level 60% → 70%'
+		]);
+		// A run from before engine 0.42.0 has none of the fields: it reads as the defaults, so no change.
+		const c = copyWithFreshIds(a);
+		for (const n of c.model.nodes) Object.assign(n, { supplyRule: 'damFirst', pumpCapacityM3Day: null, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
+		expect(texts(a, c)).toEqual([]);
+	});
+
 	it('lists individual boreholes added, changed and removed, matched across a copy by node and borehole name (WP-3.9)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

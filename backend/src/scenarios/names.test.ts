@@ -27,6 +27,14 @@ describe('opNames', () => {
 		]);
 	});
 
+	it('names the nodes a demand.scale op names (issue #53 R1)', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'demand.scale', factor: 0.85, nodeIds: [c, a] },
+			{ op: 'demand.scale', factor: 0.9 }
+		];
+		expect(opNames(ops, model, []).map((x) => x.id)).toEqual([a, c]);
+	});
+
 	it('names a transfer end set by value, and a new node’s downstream node', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'transfer.set', transferId: t, field: 'toNodeId', value: c },

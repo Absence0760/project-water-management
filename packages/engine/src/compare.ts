@@ -1014,7 +1014,12 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	// Dam storage (WP-3.5); the curve and the monthly release are diffed below.
 	['damReleaseRule', 'dam release rule', (v) => (v === 'passInflow' ? 'pass inflow' : v === 'fixed' ? 'fixed' : 'none')],
 	['damOutletCapacityM3Day', 'dam outlet capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
-	['damSeepageReturnPct', 'share of dam seepage returning', pct]
+	['damSeepageReturnPct', 'share of dam seepage returning', pct],
+	// Supply rule and river pump (WP-3.8).
+	['supplyRule', 'supply rule', (v) => ({ damFirst: 'dam only', riverFirst: 'river first', trigger: 'dam, river when low', runOfRiver: 'run of river' })[String(v)] ?? String(v)],
+	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
+	['supplyTriggerPct', 'supply switch-to-river level', pct],
+	['supplyStopPct', 'supply switch-back level', pct]
 ];
 
 const ha = (m2: number) => `${fmtValue(m2 / 10_000, 2)} ha`;
@@ -1058,6 +1063,9 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
 			if (d) parts.push(`demand ${d}`);
 		}
+		// Demand factor (engine ≥ 0.41.0, the demand.scale scenario op).
+		const df = optionalMonthlyChange(x.demandFactor, y.demandFactor, '×', 'none');
+		if (df) parts.push(`demand factor ${df}`);
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);

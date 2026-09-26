@@ -77,6 +77,10 @@ describe('describeOp', () => {
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 2022-01-01 to end');
+		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every farm: 85 % of what they'd take (× 0.85)");
+		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
+		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
+		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a node the base run doesn’t have: 50 % of what they'd take (× 0.5)");
 	});
 
 	it('describes additions from the op itself', () => {
@@ -158,6 +162,9 @@ describe('buildOp', () => {
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 'big' }), m)).toEqual({ ok: false, error: 'Dam capacity: “big” isn\'t a number' });
 		expect(buildOp(draft({ kind: 'series.scale', changePct: '-150' }), m)).toEqual({ ok: false, error: 'The change must be between −100 % and +900 %' });
 		expect(buildOp(draft({ kind: 'node.add', downstreamNodeId: UP }), m)).toEqual({ ok: false, error: 'Enter a name for the new node' });
+		expect(buildOp(draft({ kind: 'demand.scale', demandPct: '250' }), m)).toEqual({ ok: false, error: "The demand must be between 0 % and 200 % of what they'd take" });
+		expect(buildOp(draft({ kind: 'demand.scale', demandPct: '-5' }), m)).toEqual({ ok: false, error: "The demand must be between 0 % and 200 % of what they'd take" });
+		expect(buildOp(draft({ kind: 'demand.scale' }), m)).toEqual({ ok: false, error: 'Enter the demand' });
 	});
 
 	it('builds a new leaf node with every field the engine needs, placed after the others', () => {
@@ -202,6 +209,24 @@ describe('buildOp', () => {
 		for (const op of built.slice(0, 12)) expect(applyScenario(base(), [op]).problems, op.op).toEqual([]);
 		// A settings change, the PE input included, is a baseline assumption whoever owns what.
 		expect(classifyOp(built[11]!, [UP, LO, G])).toBe('baseline');
+	});
+
+	it('builds a demand scaling (issue #53 R1): none ticked is all, every month is none, farms are the default', () => {
+		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
+		expect(b({ demandPct: '85' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });
+		expect(b({ demandPct: '70', demandNodeIds: [LO, UP, LO], months: [2, 12, 1] })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.7, nodeIds: [LO, UP], months: [1, 2, 12] } });
+		expect(b({ demandPct: '85', months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });
+		expect(b({ demandPct: '90', demandCategory: 'user' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.9, category: 'user' } });
+		// Each farm op applies to the base; on the author's own farm alone it is the proposal, else a baseline assumption.
+		const own = (b({ demandPct: '85', demandNodeIds: [UP] }) as { op: ScenarioOp }).op;
+		const all = (b({ demandPct: '85' }) as { op: ScenarioOp }).op;
+		const r = applyScenario(base(), [own, all]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.nodes.find((n) => n.id === UP)!.demandFactor![0]).toBeCloseTo(0.85 * 0.85, 12);
+		expect(classifyOp(own, [UP])).toBe('proposal');
+		expect(classifyOp(all, [UP])).toBe('baseline');
+		// The base has no other water user, so a user scaling of all of them is the server's problem to report.
+		expect(applyScenario(base(), [(b({ demandPct: '90', demandCategory: 'user' }) as { op: ScenarioOp }).op]).problems).toEqual(['op 1 (demand.scale): the model has no other water user to scale']);
 	});
 
 	it('builds and describes a borehole to add and one to remove (WP-3.9)', () => {

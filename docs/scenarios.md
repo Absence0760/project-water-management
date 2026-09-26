@@ -31,7 +31,9 @@ are empty and nothing below changes.
   deep-copied, and a series is copied only when an op scales it (the other
   series arrays are shared with `base`, so treat the result as read-only).
   `runModel` is unchanged, and so is `ENGINE_VERSION`: a scenario is new
-  input, not new model behaviour.
+  input, not new model behaviour. The one exception is `demand.scale`
+  (engine 0.41.0), whose node field `demandFactor` the engine had to learn
+  to read (§ Demand scaling below); applying ops still never runs the model.
 - **In order.** Each op sees the input the earlier ops left. An op on an
   element an earlier op removed is a problem.
 - **Problems, not exceptions.** An op is skipped, and one line added to
@@ -77,6 +79,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
+| `demand.scale` | `factor, nodeIds?, months?, category?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month). It multiplies each target's `demandFactor`, so ops stack (0.9 twice is 0.81). Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
 `downstreamNodeId` (the network's shape: use `node.add` / `node.remove`) or
@@ -115,6 +118,38 @@ a source that is not blank when trimmed, at most 600 characters. Like every
 `settings.set`, it is classified baseline.
 Every path is one the input diff reports, so no setting changes silently.
 
+**Demand scaling (`demand.scale`, engine ≥ 0.41.0, [planning-outputs.md
+R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).**
+"What if everyone takes 85 %?" in one op, where it used to take a
+`cropArea.set` per farm and crop.
+
+- **It scales demand, not crop area.** Each target node gets a
+  `demandFactor`: 12 multipliers in water-year order (Oct–Sep, like every
+  monthly row), 1 where the op's months don't reach. For a farm the engine
+  multiplies the crop water requirement F (after effective rain and the
+  soil-water store), so the abstraction D = F ÷ e scales with it while the
+  crop area, the gross demand, the rain used, the irrigation efficiency and
+  the loss return stay as they are: 85 % means "85 % of what they'd take".
+  For an other water user it multiplies the monthly demand (and so the
+  senior requirement passed to the farms above it). Model.md §2.3 step 4a.
+- **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
+  every month *list* in the engine (`transfer.months`,
+  `calibration.summerMonths`); the 12-value *rows* (`demandFactor`,
+  `userDemandM3Day`) run Oct–Sep. Left out, every month.
+- **Categories:** `farm` (default) and `user`. One op scales one category;
+  both is two ops. A gauge has no demand.
+- **Problems** (the op is skipped): a factor outside 0–2; an empty or
+  repeating `nodeIds` or `months` (leave the field out for all of them); a
+  month outside 1–12; a category other than the two; a node id the input
+  doesn't have (`node … not found`); a node of another kind (`"Town" is an
+  other water user, not a farm`); no node of the category at all when
+  `nodeIds` is left out (`the model has no other water user to scale`). The
+  first four are the validator's too. Without `nodeIds` the note says how
+  many nodes were scaled.
+- `demandFactor` is set only by this op: the model editor, the model save and
+  `node.set` don't carry it, and override mode keeps a scaled node's factor
+  as it is. The input diff reports it (`demand factor none → 0.85, … (Oct–Sep)`).
+
 **Which series scale.** The rain drivers, `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, and the daily A-pan evaporation
 `evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
@@ -148,6 +183,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | `landCover.remove` | the patch is on an owned node (needs `input`) | baseline |
 | `borehole.add` | on an owned node | baseline |
 | `borehole.remove` | the borehole is on an owned node (needs `input`) | baseline |
+| `demand.scale` | `nodeIds` given, and every one owned | baseline: without `nodeIds` it scales every farm (or user) in the catchment, and a named node that isn't the author's is another party's |
 
 ## Validation: `validateScenarioOps`
 
@@ -175,7 +211,17 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
     resolved input produces at least one `InputChange` from
     `diffInputs`, an empty op list produces none, and a skipped op changes
     nothing;
-  - applied ops keep a valid tree and never touch the base.
+  - applied ops keep a valid tree and never touch the base;
+  - `demand.scale` on 50 networks each: factor 1 on every farm and user in
+    every month gives the same output to the bit; factor 0 on a random set of
+    nodes gives those nodes zero demand, supply and groundwater, and the rest
+    their demand unchanged; a random factor and months give each node the
+    base's demand × the month's factor, never supplied beyond it.
+
+  `overrides.test.ts` has `demand.scale`'s own cases: what it sets (default
+  every farm, some nodes and months, stacking), the run (crop requirement and
+  demand scaled, gross demand, rain and store not), `category: 'user'`, the
+  problems, the input diff, its classification and its validation.
 
   Soak: `SCENARIO_FUZZ_CASES=5000 pnpm -C packages/engine exec vitest run src/scenario/scenario.invariants.test.ts`.
 
@@ -306,6 +352,10 @@ remove, run, rebase}` and `scenarioProblems(err)` (the `422`'s lines), with
 the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 `ScenarioWithCheck`, `CompareScenario`, `RunCitation`).
 
+`schema.ts` `opIds` names each id an op holds; a `demand.scale`'s are
+`nodeIds[i]`, so each must be a UUID and each node's name goes into
+`op_names`.
+
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
 kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
@@ -338,6 +388,12 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   describes the op as "GR4J potential evaporation: pan coefficient × A-pan →
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
+- **Scale demand** (`demand.scale`): whose demand (farms' irrigation or
+  other water users'), the new demand as a % of what they'd take (0–200 %),
+  a checkbox per node of that category and per month, Oct first (none ticked
+  is all of them, and the op then leaves `nodeIds` / `months` out; every
+  month ticked is the same as none). It reads "Irrigation demand of Upper
+  farm: 85 % of what they'd take (× 0.85), in Jan, Feb, Dec".
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. On a team scenario

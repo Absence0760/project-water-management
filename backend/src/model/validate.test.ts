@@ -88,6 +88,26 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, set as never]))).toEqual([]);
 	});
 
+	it('supply rule and river pump (WP-3.8): fills the dam-only defaults, accepts each rule, refuses bad values and invalid combinations', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id, { damCapacityM3: 20_000 });
+		const parsed = ModelBody.parse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ supplyRule: 'damFirst', pumpCapacityM3Day: null, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
+		const trigger = { ...farm, supplyRule: 'trigger', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.3, supplyStopPct: 0.7 };
+		const ok = ModelBody.parse({ nodes: [out, trigger], crops: [], cropAreas: [], transfers: [] });
+		expect(ok.nodes[1]).toMatchObject({ supplyRule: 'trigger', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.3, supplyStopPct: 0.7 });
+		expect(modelProblems(model([out, trigger as never]))).toEqual([]);
+		expect(modelProblems(model([out, { ...farm, supplyRule: 'runOfRiver', damCapacityM3: 0, pumpCapacityM3Day: 500 } as never]))).toEqual([]);
+		for (const bad of [{ supplyRule: 'pumpFirst' }, { pumpCapacityM3Day: -1 }, { supplyTriggerPct: 1.5 }, { supplyStopPct: -0.1 }]) {
+			expect(ModelBody.safeParse({ nodes: [out, { ...farm, ...bad }], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
+		}
+		expect(modelProblems(model([out, { ...farm, supplyRule: 'runOfRiver' } as never])).join()).toMatch(/"A": run of river has no dam/);
+		expect(modelProblems(model([out, { ...farm, damCapacityM3: 0, supplyRule: 'trigger' } as never])).join()).toMatch(/"A": the trigger supply rule needs a farm dam/);
+		expect(modelProblems(model([out, { ...trigger, supplyStopPct: 0.2 } as never])).join()).toMatch(/stop level must be at least its trigger level/);
+		const onGauge = node('Gauge', null, { pumpCapacityM3Day: 10 });
+		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
+	});
+
 	it('refuses bad fields, and a curve that is not monotone or sits on a gauge', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });

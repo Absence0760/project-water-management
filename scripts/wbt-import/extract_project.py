@@ -193,6 +193,50 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
     return {"damMinPct": 0, **irrigation, "damAreaFullM2": None, "damAreaExponent": 0.7, "damSeepagePerDay": 0}
 
 
+# A probable run-of-river unit (issue #54, 2d). b023 has no river abstraction,
+# so a unit that pumps straight from the river is entered as a "dummy dam": a
+# dam that takes 100 % of the upstream inflow and either
+#
+# - is a pool: it holds less than 1 % of a day of its diversion capacity, or
+#   less than 1 m³ (a placeholder, not a dam). At 1 % the diversion refills it
+#   in under 15 minutes, so it stores nothing across the model's daily step; a
+#   real farm dam holds days to months of its diversion (a small one of a few
+#   thousand m³ is tens of % of a 0.1 m³/s = 8,640 m³/day diversion), or
+# - holds exactly a day of river flow: its capacity is a whole number of m³/s
+#   times 86,400 s (within 1 m³; seen as 8 m³/s x 1 day), and none of the farm's
+#   own runoff enters it. A surveyed capacity is rarely an exact multiple of
+#   86,400 m³, and one rounded to 1,000 m³ can be (432,000 m³ is 5 m³/s), so
+#   the runoff condition rules out a real on-channel dam, which catches the
+#   runoff draining into it as well as the river.
+#
+# The importer still imports it as a farm dam and only warns: the modeller
+# confirms it, and run-of-river supply waits for pump capacity (#54, 2c).
+RUN_OF_RIVER_PCT_UPSTREAM = 0.9999  # 100 %, allowing for float rounding
+RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION = 0.01
+RUN_OF_RIVER_POOL_MAX_M3 = 1.0
+SECONDS_PER_DAY = 86400
+
+
+def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: float, pct_runoff: float) -> str | None:
+    """A WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d)."""
+    if pct_upstream < RUN_OF_RIVER_PCT_UPSTREAM or capacity <= 0:
+        return None
+    if capacity < RUN_OF_RIVER_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert:
+        why = f"is a pool of {capacity:g} m³"
+        if divert > 0:
+            why += f" against a diversion capacity of {math.floor(divert + 0.5)} m³/day"
+    else:
+        rate = math.floor(capacity / SECONDS_PER_DAY + 0.5)
+        if rate < 1 or abs(capacity - rate * SECONDS_PER_DAY) > 1 or pct_runoff != 0:
+            return None
+        why = f"holds exactly {rate} m³/s for one day ({math.floor(capacity + 0.5)} m³) and takes none of the farm's own runoff"
+    return (
+        f"WARNING: farm {name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream "
+        f"inflow and {why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; "
+        "the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)"
+    )
+
+
 def month_list(v: Any) -> list[int]:
     """The months a b023 month-list cell ("1,2,11,12") names.
 
@@ -775,6 +819,11 @@ def extract(
                 }
             )
         node_id = {n["name"]: n["id"] for n in nodes}
+        for n in nodes:
+            if n["kind"] == "farm":
+                note = run_of_river_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"], n["pctRunoffToDam"])
+                if note:
+                    wb.notes.append(note)
         dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
         if dams:
             wb.notes.append(

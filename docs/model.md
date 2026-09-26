@@ -174,6 +174,19 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    The result, net demand, is the farm's **crop water requirement** F (run
    series `crop_requirement`, the workbook's net irrigation demand).
 
+4a. **Demand factor (engine ≥ 0.41.0, issue #53 R1).** A scenario's
+   `demand.scale` op ([scenarios.md](./scenarios.md), "what if everyone takes
+   85 %?") gives a farm a `demandFactor`, a multiplier per water-year month
+   (absent = 1). It multiplies F after the soil-water store:
+
+   `F[f][t] = demandFactor[f][month(t)] × (MAX(0, grossFarm) − used)`
+
+   so the store, the effective rain used and the gross demand are what they
+   were, and D below scales with F. The crop area, efficiency and loss
+   return are untouched, so the meaning is "the farm takes 85 % of what it
+   would" (deficit irrigation, or a restriction), not a smaller crop. The
+   run's own check (`verify/checks.ts` `checkWorkings`) reads the factor.
+
 5. **Abstraction demand (engine ≥ 0.16.0, [audit N1](./engine-audit.md))**:
    the farm abstracts enough to cover its application losses,
 
@@ -1524,7 +1537,7 @@ storage to whole m³; the engine doesn't (R1).
 | N | Farm runoff below dam | `I − M` |
 | O | Diverted back to dam | `MIN(divertCapacity, L + N)` |
 | A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
-| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1) |
+| G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1). A farm with a supply rule other than `damFirst` also pumps from the river below the dam (§2.7e) |
 | P | Interim storage | `store[t−1] + Pd − E − Sp + M + O + K + J − G` |
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
@@ -1916,6 +1929,8 @@ kind `user` runs exactly as before (no new series or summary fields).
 
 It has no area, flow share, dam, crops, transfers or EWR share; the API
 refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+A scenario's `demand.scale` with `category: 'user'` (engine ≥ 0.41.0)
+multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 
 **Each day** (network/simulate.ts), with H = Σ upstream outflow and Zs_in =
 Σ upstream senior requirement (below):
@@ -2202,6 +2217,102 @@ cover them.
 
 **Low confidence.** The form and the results always say so: depletion is a
 fixed fraction, not an aquifer model; attach the geohydrology report.
+
+### 2.7e Supply rules and the river pump (engine ≥ 0.42.0, roadmap WP-3.8, issue #54 item 2c)
+
+**Why.** b023 irrigates from the farm dam only; its one m³/day limit is the
+diversion back into the dam (O). A farm that pumps straight from the river
+has to be faked as a small "dam" taking all its inflow, with no pump limit
+(issue #54 item 2d: the importer copies that, so such a unit's storage,
+spills and dam level mean nothing). The node-based AI workbook (v004, §4)
+has a pump capacity per node and four pump scenarios. This ports the
+scenarios and the capacity. **Off by default**: a farm without the fields
+(every stored project) runs to the bit as before; a test asserts it on
+random networks, and the example catchments and the client catchment
+regression suite are unchanged.
+
+**Fields** (farms only; migration 060):
+
+| Field | Meaning |
+| --- | --- |
+| `supplyRule` | `damFirst` (default): the dam only, as before, never the river. `riverFirst`: pump from the river below the dam up to the pump capacity, the dam covers the rest. `trigger`: the dam only until it held less than `supplyTriggerPct` × capacity at the start of a day, then river first until it held at least `supplyStopPct` × capacity (needs a dam). `runOfRiver`: no dam (capacity 0); the pump takes the river up to its capacity, the rest is a deficit |
+| `pumpCapacityM3Day` | the river pump's capacity, m³/day (in the form: pumps × m³/h per pump × 24); null = no limit (the run warns); 0 = no pump; inert under `damFirst` |
+| `supplyTriggerPct` | `trigger` only: the switch-to-river level, 0–1 of dam capacity (default 0.4) |
+| `supplyStopPct` | `trigger` only: the switch-back level, ≥ the trigger (default 0.6); the defaults are v004's "switch at 40–60 %" |
+
+The capacity is stored in m³/day, not as pumps and m³/h: the engine, v004 and
+licence conditions all state it per day, and one stored number can't
+disagree with itself. The pumps × m³/h × 24 calculator belongs in the form,
+like the irrigation-system efficiency helper.
+
+**Each day** (§2.7's columns; S = L + N − O is the flow below the dam, Zs the
+senior users' requirement passing the farm, §2.7c):
+
+```
+on the river:  riverFirst, runOfRiver: always
+               trigger: river[t] = river[t−1] ? Q[t−1] < stop × cap : Q[t−1] < trigger × cap   (river[−1] = false)
+keep  = MAX(Zs, the pass-inflow release's target (its month's amount, or Z), else 0)
+room  = on the river ? MAX(0, MIN(pump capacity, S − keep)) : 0
+river first (riverFirst, trigger):   Gr = MIN(room, D − GWp);   G_dam = MIN(MAX(avail − dead, 0), D − GWp − Gr)
+run of river (K = M = O = 0, cap 0): G_dam = MIN(MAX(J, 0), D − GWp);   Gr = MIN(room, D − GWp − G_dam)
+G  = G_dam + Gr + GW                   (GWp primary groundwater, GW all groundwater to the crop, §2.7d)
+P  = avail + GWd − G_dam               (the dam gives only G_dam)
+U  = R + (S − Gr) + T + returned seepage + release − Dep
+```
+
+`river_abstraction` (Gr, m³/day) is part of `supplied`; the balance keeps its
+form, since G carries Gr in and U carries it out. Supplemental boreholes fill
+what the river and the dam leave; a supplemental dam-target borehole fills the
+dam only for the demand the river leaves.
+
+**Decisions, pending the hydrologist** (roadmap WP-3.8; the conservative
+reading of this document where it didn't settle them):
+
+- *The pump draws only on the flow below the dam, S*, as the roadmap says,
+  never on the dam's inflow (that is K, M and the diversion O).
+- *What must pass comes first.* The pump leaves the senior users'
+  requirement (farms are junior to them, like a junior user, §2.7c) and a
+  pass-inflow release's target in the river: a release exists to keep that
+  flow below the dam, and a pump taking S while the dam released to top it
+  up would move dam water to the pump. A fixed release doesn't interact.
+  The EWR is **not** protected by the pump (as it isn't by the dam, §2.7b);
+  a hands-off flow is the rest of WP-3.8, not built yet.
+- *Run of river takes a transfer in first.* A transfer into a farm is sized
+  to its demand (§2.6), so a run-of-river farm uses it before the river and
+  it never becomes a "spill". The dam split fields (`pctUpstreamToDam`,
+  `pctRunoffToDam`, `divertCapacityM3Day`) are ignored: everything passes
+  below the absent dam.
+- *Trigger on the dam runs as dam first* (no river); on the river as river
+  first (the dam still covers what the pump can't). The switch reads the
+  start-of-day storage, like the drought borehole rule, so it doesn't depend
+  on the order nodes are listed in.
+- *Invalid combinations run and warn; the API refuses them on save*
+  (`modelRuleIssues`): a supply rule or pump on a gauge or other user
+  (ignored), `trigger` without a dam and `runOfRiver` with one (both run as
+  river first), a stop level below the trigger (clamped up to it).
+- *Other water users* keep taking MIN(what reaches them, demand) with no pump
+  limit (§2.7c); a pump capacity on them is a later step (issue #54 item 2b).
+
+**Outputs** (only on a farm with a rule other than `damFirst`): the series
+`river_abstraction` and `FarmSummary.avgRiverAbstractionM3Day`.
+
+**Checks.** `checkWorkings` replays the switch, the room and the split from
+the published columns (independently of the engine's code) and checks
+0 ≤ Gr ≤ pump capacity, Gr ≤ MAX(0, S − keep), K = M = O = 0 on run of river,
+the dam's part G − GW − Gr against the dam, and U with Gr taken out;
+`checkBalance` keeps a run-of-river farm's storage at 0 (its capacity). The
+fuzz generator gives 25 % of networks supply rules on half their farms (every
+rule, pump capacities from none to more than any flow, stop levels now and
+then below the trigger, trigger on dam-less farms, run of river that keeps
+its dam); `droughtBoreholesAsSupplemental` also runs `trigger` as
+`riverFirst` for the doubled-crop-area law, since more demand empties the dam
+sooner and switches to the river earlier. The run comparison's input diff
+lists the four fields. Hand examples: `network/supply.test.ts`.
+
+**Not changed:** no imported project is switched to run of river. Unit 9 of
+the client catchment and v004's other run-of-river units move once the
+hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md and
+the regression suite's deviation list.
 
 ### 2.8 Outputs
 
@@ -3603,6 +3714,14 @@ volume per user category (the way DWS gazettes restrictions), and a re-run of
 the network would check it is feasible; it would ship as a new, separately
 labelled table, not a silent redefinition of M.
 
+**Share the pain (issue #53 R3).** The Runs tab also shows this table as
+three stages per group, each ÷ the group's demand: supplied (K), the
+equitable share (P = K_tot) and volume left (V), with the other water users
+as their own rows (supplied, then supplied + supply cut for a junior user,
+all of it for a senior one). It is a view: every figure comes from this
+table, bounded as *Demand left %* is, and `ENGINE_VERSION` is unchanged
+([ui.md § Share the pain](./ui.md#share-the-pain)).
+
 **Other water users (engine ≥ 0.22.0, WP-1.33).** Users are not rows of this
 table and not in its totals or equitable fraction. `CurtailmentSummary.otherUsers`
 lists each over the same window: demand, taken, returned, the mean EWR charge,
@@ -3847,6 +3966,91 @@ the start, no losses, a constant inflow *q*, capacity *C*, *n* days: yield
 curve; and a pattern case: with no storage, yield × the peak factor = the
 inflow.
 
+### 2.14 Water-year classes and the outcome matrix (issue #53 R4, engine half)
+
+Derived views over saved runs, not part of `runModel`: no run output
+changes, so `ENGINE_VERSION` doesn't move. Pure
+(`packages/engine/src/views/yearClasses.ts`, `views/outcomeMatrix.ts`).
+The design and its research are in
+[design/planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m).
+The UI, the project settings and the demand-level runs (R1/R2) are not
+built yet; the defaults below wait on the client's O1 and O2
+([plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
+
+**Year classes** (`classifyWaterYears`, `classifyRunWaterYears`). The
+classes are the catchment's own: its water years ranked by the annual total
+of the run's natural flow at the outlet (`natural_flow`, m³).
+
+- **Which years.** Only **complete** water years (1 October … 30 September
+  all inside the run, the Reserve's `completeWaterYears`, §2.9d). A part
+  year at either end is listed in `excluded` as `partial`, and a year with a
+  non-finite day as `missingDays`; neither is ranked, since a part total
+  would read as a dry year.
+- **Method.** `terciles` (dry / normal / wet) or `quintiles` (very dry …
+  very wet); `auto` (the default) takes quintiles from
+  `YEAR_CLASS_QUINTILE_MIN_YEARS` = 25 complete years, else terciles
+  **(judgement, pending O2)**. The method is a parameter, so O2's answer
+  changes a default, not code.
+- **Bounds** (`boundsM3`, rising, k − 1 of them for k classes). The annual
+  totals sorted wettest first; the bound between class j − 1 and j is the
+  total at exceedance rank h = (k − j)(n + 1) ÷ k: Weibull plotting
+  positions, linear between ranks, held at the wettest / driest year beyond
+  them, the same rule as the Reserve's natural curve (`durationQuantile`,
+  §2.9c). The rank is worked out in integers, so a bound that falls on a
+  rank is exactly that year's total. Each class carries its lower
+  (exclusive) and upper (inclusive) bound in m³; the driest has no lower
+  bound and the wettest no upper one.
+- **Ties.** A year exactly on a bound goes to the **drier** class ("dry = at
+  or below the lower tercile"), and years with equal totals always share a
+  class, since classes go by value, not by rank. Where the bounds fall on
+  ranks (n + 1 a multiple of k, e.g. 8 years in terciles) the classes are
+  therefore uneven (3 / 3 / 2).
+
+**Outcome matrix** (`outcomeMatrix(levels, classes, options)`). One row per
+demand level (a run each; R1's `demand.scale` at 1.0 / 0.85 / 0.7 once it
+exists), one column per class. Per cell:
+
+| Metric | When | Per water year | Cell value |
+| --- | --- | --- | --- |
+| `reserveMonthsMet` | every level's run has a Reserve rule table at the site (`summary.ewrAssurance`, §2.9c; the outlet by default, a gauge by `siteNodeId`) | months met of months assessed | Σ met ÷ Σ months over the class's years |
+| `daysBelowEwr` | otherwise | days with `ewr_shortfall` < 0 at the outlet (the `ewrDaysNotMet` test, §2.9) of the year's days | Σ days below ÷ Σ days |
+
+- **One metric per matrix.** When only some levels have the table, every
+  cell uses days below the EWR and a warning says why, so the rows compare.
+  `metric` can be forced; forcing `reserveMonthsMet` without a table throws.
+- **Years.** Only the classed years, and in each run only those it covers
+  (a warning names a level whose run misses some). Every cell carries
+  `nYears` and its years. A year is **met in full** when every month met
+  (Reserve) or no day fell below the EWR; `yearsMet` counts those, for the
+  wording.
+- **Not enough years.** Fewer than `OUTCOME_MIN_YEARS` = 3 years:
+  `enoughYears: false`, `value` and `risk` null (**judgement**, design §3.4).
+- **Risk labels** (`outcomeRisk`, O1's wording: *lower*, *increasing*,
+  *high*), from cut-offs passed in, each in its metric's direction, a value
+  on a cut-off counting to the lower risk:
+
+  | Metric | Lower risk | Increasing risk | High risk |
+  | --- | --- | --- | --- |
+  | `reserveMonthsMet` | ≥ 0.90 | ≥ 0.75 | below |
+  | `daysBelowEwr` | ≤ 0.05 | ≤ 0.20 | above |
+
+  These defaults (`DEFAULT_OUTCOME_RISK_CUTOFFS`) are **placeholders
+  pending the hydrologist** (`OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
+  and `cutoffsAreDefault` on the result, so a surface can say so). Days
+  below reuse the portfolio traffic lights' 5 % / 20 % (roadmap D11, also
+  unconfirmed); 90 % / 75 % of months is a judgement.
+- **Wording** (`describeOutcomeCell`) counts years, never "likely": "Reserve
+  met in every month in 7 of 9 dry years (94 % of months met)", "Only 2 wet
+  years in the record: not enough years to judge."
+
+**Tests** (`yearClasses.test.ts`, `outcomeMatrix.test.ts`, synthetic
+series): the 24 / 25-year switch, bounds against `durationQuantile`, a tie
+on a bound, equal totals, part and missing-day years, a skewed `TZ`; both
+metrics, the fallback and forced metric, the gauge site, the 3-year flag,
+every risk label at and beside its cut-offs, cut-off validation, the
+wording; and on random fuzz runs, every day below the EWR and every Reserve
+month of the classed years is counted exactly once.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs
@@ -3907,7 +4111,12 @@ general enough to hold these nodes.
   river-first, no river pumping, drought-saving, opportunistic pumping, and
   groundwater (none / supplemental / primary / emergency; direct or to-dam).
   The groundwater modes and targets are ported (engine ≥ 0.36.0, §2.7d
-  "Individual boreholes"), with annual caps per water year added.
+  "Individual boreholes"), with annual caps per water year added. The four
+  scenarios and the pump capacity are ported (engine ≥ 0.42.0, §2.7e) as
+  `damFirst` (the default, and b023's dam only: v004's "then the river" part
+  of Dam-first is `trigger`), `riverFirst`, `trigger` and `runOfRiver`; the
+  river-abstraction fraction is not (the pump takes the flow below the dam
+  that need not pass, up to its capacity).
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, reported per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the

@@ -3,6 +3,8 @@
 // classifier's rules, the validator, and a dam raise run end to end.
 // Synthetic catchment: invented names and values only (public repo).
 import { describe, expect, it } from 'vitest';
+import { monthOfEpochDay, toEpochDay } from '../calendar';
+import { diffInputs } from '../compare';
 import { buildTopology } from '../network/topology';
 import { blankEwrRuleTable } from '../reserve/rules';
 import { runModel } from '../run';
@@ -394,6 +396,92 @@ describe('a dam raise', () => {
 	});
 });
 
+describe('demand.scale (issue #53 R1)', () => {
+	const series = (out: { series: RunSeries[] }, nodeId: string) =>
+		Object.fromEntries(out.series.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.values]));
+	/** The base with an other water user U below A taking 1,000 m³/day every month. */
+	const withUser = () => {
+		const b = base();
+		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
+		return b;
+	};
+	const ones = new Array<number>(12).fill(1);
+
+	it('scales every farm by default, some farms and months when asked, and stacks', () => {
+		const all = one({ op: 'demand.scale', factor: 0.85 });
+		expect(all.problems).toEqual([]);
+		expect(all.applied[0]!.notes).toEqual(['3 farm(s) scaled']);
+		for (const id of ['A', 'B', 'C']) expect(nodeOf(all.input, id)!.demandFactor).toEqual(new Array(12).fill(0.85));
+		expect(nodeOf(all.input, 'G')!.demandFactor).toBeUndefined();
+		// Only A, in October and November (calendar months 10 and 11: water-year months 0 and 1).
+		const some = one({ op: 'demand.scale', factor: 0.7, nodeIds: ['A'], months: [11, 10] });
+		expect(some.applied[0]!.notes).toEqual([]);
+		expect(nodeOf(some.input, 'A')!.demandFactor).toEqual([0.7, 0.7, ...ones.slice(2)]);
+		expect(nodeOf(some.input, 'B')!.demandFactor).toBeUndefined();
+		// January is water-year month 3, September month 11.
+		expect(nodeOf(one({ op: 'demand.scale', factor: 0.5, nodeIds: ['B'], months: [1, 9] }).input, 'B')!.demandFactor).toEqual([1, 1, 1, 0.5, 1, 1, 1, 1, 1, 1, 1, 0.5]);
+		const twice = applyScenario(base(), [
+			{ op: 'demand.scale', factor: 0.9, nodeIds: ['A'] },
+			{ op: 'demand.scale', factor: 0.9, nodeIds: ['A'], months: [10] }
+		]);
+		expect(nodeOf(twice.input, 'A')!.demandFactor![0]).toBeCloseTo(0.81, 12);
+		expect(nodeOf(twice.input, 'A')!.demandFactor![1]).toBe(0.9);
+	});
+
+	it("scales the farm's crop requirement and abstraction, never its gross demand, rain or efficiency", () => {
+		const b = base();
+		const r = applyScenario(b, [{ op: 'demand.scale', factor: 0.85, nodeIds: ['A'], months: [12, 1, 2] }]);
+		const out = runModel(b);
+		const [x, y] = [series(out, 'A'), series(runModel(r.input), 'A')];
+		expect(y.gross_demand).toEqual(x.gross_demand);
+		expect(y.effective_rain).toEqual(x.effective_rain);
+		expect(y.soil_water).toEqual(x.soil_water);
+		let scaled = 0;
+		const day0 = toEpochDay(out.startDate);
+		for (let t = 0; t < x.demand!.length; t++) {
+			const k = [12, 1, 2].includes(monthOfEpochDay(day0 + t)) ? 0.85 : 1;
+			if (k !== 1 && x.demand![t]! > 0) scaled++;
+			expect(y.crop_requirement![t]).toBeCloseTo(k * x.crop_requirement![t]!, 9);
+			expect(y.demand![t]).toBeCloseTo(k * x.demand![t]!, 9);
+			expect(y.demand![t]).toBeCloseTo(y.crop_requirement![t]! / 0.8, 9);
+			expect(y.supplied![t]!).toBeLessThanOrEqual(y.demand![t]! * (1 + 1e-12));
+		}
+		expect(scaled).toBeGreaterThan(30);
+		expect(checkAll(r.input)).toBeNull();
+	});
+
+	it("category 'user' scales the other water users' demand only", () => {
+		const b = withUser();
+		const r = applyScenario(b, [{ op: 'demand.scale', factor: 0.5, category: 'user' }]);
+		expect(r.problems).toEqual([]);
+		expect(r.applied[0]!.notes).toEqual(['1 other water user(s) scaled']);
+		expect(nodeOf(r.input, 'A')!.demandFactor).toBeUndefined();
+		const [x, y] = [runModel(b), runModel(r.input)];
+		expect(series(y, 'U').demand!.every((v) => v === 500)).toBe(true);
+		expect(series(y, 'A').demand).toEqual(series(x, 'A').demand);
+		expect(checkAll(r.input)).toBeNull();
+	});
+
+	it('refuses a missing node, a node of another category and a category the model has none of', () => {
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A', 'Z'] }).problems).toEqual(['op 1 (demand.scale): node Z not found']);
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['G'] }).problems).toEqual(['op 1 (demand.scale): "Outlet gauge" is a gauge, not a farm']);
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['U'] }, withUser()).problems).toEqual(['op 1 (demand.scale): "Town" is an other water user, not a farm']);
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A'], category: 'user' }, withUser()).problems).toEqual(['op 1 (demand.scale): "Farm A" is a farm, not an other water user']);
+		expect(one({ op: 'demand.scale', factor: 0.8, category: 'user' }).problems).toEqual(['op 1 (demand.scale): the model has no other water user to scale']);
+		// Unchecked input (a stored op from before a validator change) meets the same rules.
+		expect(one({ op: 'demand.scale', factor: 3 }).problems).toEqual(['op 1 (demand.scale): factor must be at most 2']);
+		expect(one({ op: 'demand.scale', factor: 1, months: [] }).problems[0]).toMatch(/months must be a list of at least one calendar month/);
+		// A skipped op changes nothing.
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A', 'Z'] }).input.model).toEqual(base().model);
+	});
+
+	it('run comparison lists it', () => {
+		const r = one({ op: 'demand.scale', factor: 0.85, nodeIds: ['A'], months: [10] });
+		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+		expect(diffInputs(snap(base()), snap(r.input)).map((c) => c.text)).toEqual(['Farm A: demand factor none → 0.85, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 × (Oct–Sep)']);
+	});
+});
+
 describe('classifyOp', () => {
 	const owned = ['A'];
 	const b = base();
@@ -410,6 +498,12 @@ describe('classifyOp', () => {
 	it('settings, series, other parties’ nodes and the own farm’s land and flow share are baseline', () => {
 		expect(cls({ op: 'settings.set', path: 'lakeEvapFactor', value: 0.5 })).toBe('baseline');
 		expect(cls({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('baseline');
+		// demand.scale: a proposal only on the author's own nodes, named (issue #53 R1).
+		expect(cls({ op: 'demand.scale', factor: 0.85, nodeIds: ['A'] })).toBe('proposal');
+		expect(cls({ op: 'demand.scale', factor: 0.85, nodeIds: ['A'], months: [1], category: 'farm' })).toBe('proposal');
+		expect(cls({ op: 'demand.scale', factor: 0.85, nodeIds: ['A', 'B'] })).toBe('baseline');
+		expect(cls({ op: 'demand.scale', factor: 0.85 })).toBe('baseline');
+		expect(classifyOp({ op: 'demand.scale', factor: 0.85, category: 'user' }, ['A', 'B', 'C'], b)).toBe('baseline');
 		expect(cls({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 1 })).toBe('baseline');
 		expect(cls({ op: 'node.set', nodeId: 'A', field: 'areaKm2', value: 9 })).toBe('baseline');
 		expect(cls({ op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.9 })).toBe('baseline');
@@ -467,13 +561,47 @@ describe('validateScenarioOps', () => {
 			{ op: 'landCover.add', patch: { id: 'p', nodeId: 'A', coverClass: 'pine', areaKm2: 1, densityPct: 1, factors: { mar: 0.1, lowFlow: 0.2 } } },
 			{ op: 'landCover.remove', patchId: 'lc1' },
 			{ op: 'settings.set', path: 'reportStart', value: null },
-			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2021-01-01', to: '2021-12-31' }
+			{ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9, from: '2021-01-01', to: '2021-12-31' },
+			{ op: 'demand.scale', factor: 0.85 },
+			{ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm', junk: true }
 		];
 		const { ops, errors } = validateScenarioOps(raw);
 		expect(errors).toEqual([]);
 		expect(ops).toHaveLength(raw.length);
 		expect(ops[0]).toEqual({ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 });
 		expect('junk' in (ops[1] as { node: object }).node).toBe(false);
+		// Optional fields stay out when not given, so the stored op (and its hash) is what was sent.
+		expect(ops[12]).toEqual({ op: 'demand.scale', factor: 0.85 });
+		expect(ops[13]).toEqual({ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm' });
+	});
+
+	it('checks demand.scale: the factor 0–2, a non-empty list of distinct nodes and months, the category', () => {
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'demand.scale', factor: 2.5 },
+			{ op: 'demand.scale', factor: -0.1 },
+			{ op: 'demand.scale' },
+			{ op: 'demand.scale', factor: 1, nodeIds: [] },
+			{ op: 'demand.scale', factor: 1, nodeIds: ['A', 'A'] },
+			{ op: 'demand.scale', factor: 1, nodeIds: 'A' },
+			{ op: 'demand.scale', factor: 1, months: [] },
+			{ op: 'demand.scale', factor: 1, months: [0, 13] },
+			{ op: 'demand.scale', factor: 1, months: [3, 3] },
+			{ op: 'demand.scale', factor: 1, category: 'gauge' },
+			{ op: 'demand.scale', factor: 0, nodeIds: ['A'], months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], category: 'user' }
+		]);
+		expect(errors).toEqual([
+			'ops[0].factor: must be at most 2',
+			'ops[1].factor: must be at least 0',
+			'ops[2].factor: missing',
+			'ops[3].nodeIds: must be a list of at least one node id (leave it out for every node of the category)',
+			'ops[4].nodeIds: names a node more than once',
+			'ops[5].nodeIds: must be a list of at least one node id (leave it out for every node of the category)',
+			'ops[6].months: must be a list of at least one calendar month (leave it out for every month)',
+			'ops[7].months: months must be whole numbers 1–12',
+			'ops[8].months: names a month more than once',
+			'ops[9].category: must be one of farm, user'
+		]);
+		expect(ops).toEqual([{ op: 'demand.scale', factor: 0, nodeIds: ['A'], months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], category: 'user' }]);
 	});
 
 	it('names every error by path and drops the bad entries', () => {

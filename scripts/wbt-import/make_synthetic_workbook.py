@@ -83,7 +83,8 @@ NETWORK: list[tuple[str, str, list[str]]] = [
     ("Midway Gauge", "Gauge", ["Echo Farm"]),  # a gauge inside the network
     ("Foxtrot Farm", "Farm", ["Midway Gauge"]),
     ("Golf Farm", "Farm", []),
-    ("Hotel Farm", "Farm", ["Foxtrot Farm", "Golf Farm"]),  # no Element sheet
+    ("India Farm", "Farm", ["Golf Farm"]),  # a "dummy dam": pumps from the river
+    ("Hotel Farm", "Farm", ["Foxtrot Farm", "India Farm"]),  # no Element sheet
     ("Outlet Gauge", "Gauge", ["Hotel Farm"]),
 ]
 OUTFLOW_GAUGE = "Outlet Gauge"
@@ -103,6 +104,10 @@ FARM_SPEC: list[dict[str, Any]] = [
     # Total area 8.5 km2 is not hi + lo (8.0): the importer keeps both as typed.
     {"name": "Golf Farm", "hi": 4.4, "lo": 3.6, "total": 8.5, "ext": 0.11, "up": 0, "runoff": 0.9, "cap": 120000, "init": 1.0, "min": 0.2, "divert": 0, "ret": 0.3},
     {"name": "Hotel Farm", "hi": 7.0, "lo": 8.0, "total": 15.0, "ext": 0.16, "up": 0.25, "runoff": 0.2, "cap": 45000, "init": 0.5, "min": 0, "divert": 8640, "ret": 0.1},
+    # b023's stand-in for a unit that pumps straight from the river: a 20 m3
+    # pool that takes all the upstream inflow, with a large diversion capacity.
+    # The importer warns "probable run-of-river" (issue #54, 2d).
+    {"name": "India Farm", "hi": 1.5, "lo": 1.0, "total": 2.5, "ext": 0.04, "up": 1, "runoff": 0.2, "cap": 20, "init": 1.0, "min": 0, "divert": 12960, "ret": 0.1},
 ]
 FRAGMENTATION_METHOD = "Specific"
 HI_LO_SPLIT = (0.8, 0.2)
@@ -128,6 +133,7 @@ FARM_DEMAND: list[tuple[str, list[float | None]] | None] = [
     ("Foxtrot Farm", [0, 0, 90000, 0, 0, 0]),
     (" Golf Farm", [30000, 0, 0, 45000, 0, 0]),
     ("Hotel Farm", [0, 70000, 0, 0, 0, 0]),
+    ("India Farm", [0, 0, 0, 40000, 0, 0]),
     ("Kilo Farm", [50000, 0, 0, 0, 0, 0]),  # not in [Network]
 ]
 # [Farm demand] gross demand typed over the formula (m³/day, every month), as a

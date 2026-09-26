@@ -185,6 +185,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day']
 	},
 	{
+		id: 'supply-rule',
+		term: 'Supply rule and river pump',
+		short: 'Where a farm’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
+	},
+	{
 		id: 'stream-depletion',
 		term: 'Stream depletion',
 		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
@@ -326,6 +334,14 @@ export const TIPS: HelpTipText[] = [
 		units: 'fraction 0–1 (shown as %), above 0',
 		category: 'farm',
 		fields: ['node.irrigationEfficiency']
+	},
+	{
+		id: 'demand-factor',
+		term: 'Demand factor',
+		short: 'A scenario’s multiplier on what a farm or other water user would take, per month: 0.85 is 85 % of it.',
+		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
+		category: 'farm',
+		fields: ['node.demandFactor']
 	},
 	{
 		id: 'return-flow',

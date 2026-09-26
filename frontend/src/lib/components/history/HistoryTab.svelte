@@ -7,19 +7,20 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { InputChange } from '@water-management/engine';
-	import { api, type HistoryItem, type HistoryRevision, type Relink } from '$lib/api';
+	import { api, ApiError, type HistoryItem, type HistoryRevision, type Relink } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { filterEntries, groupByChangeSet, groupByDay, itemLines, KIND_FILTERS, localDay, localTime, revisionTitle } from './timeline';
+	import { filterEntries, groupByChangeSet, groupByDay, itemLines, KIND_FILTERS, localDay, localTime, revisionTitle, seriesRestore } from './timeline';
 
 	let {
 		projectId,
 		editor,
 		canEdit,
-		onRestored
+		onRestored,
+		onSeriesRestored
 	}: {
 		projectId: string;
 		/** The model as the page holds it: the farm filter's farms, and whether there are unsaved edits. */
@@ -27,6 +28,8 @@
 		canEdit: boolean;
 		/** A restore changed the saved model and settings: reload them. */
 		onRestored: () => Promise<void>;
+		/** A series' earlier values were put back: reload the series list. */
+		onSeriesRestored?: () => Promise<void>;
 	} = $props();
 
 	const uid = $props.id();
@@ -119,6 +122,41 @@
 			restoring = false;
 		}
 	}
+
+	// --- Restore a series' earlier values ---------------------------------------
+	type SeriesTarget = NonNullable<ReturnType<typeof seriesRestore>> & { at: string };
+	let seriesOpen = $state(false);
+	let seriesTarget = $state<SeriesTarget | null>(null);
+	let seriesRestoring = $state(false);
+	let seriesError = $state<string | null>(null);
+	let seriesDone = $state<string | null>(null);
+
+	function askSeriesRestore(t: SeriesTarget) {
+		seriesTarget = t;
+		seriesError = null;
+		seriesOpen = true;
+	}
+
+	async function restoreSeriesValues() {
+		const t = seriesTarget;
+		if (!t) return;
+		seriesRestoring = true;
+		seriesError = null;
+		try {
+			await api.history.restoreSeries(projectId, t.seriesId, t.revisionId);
+			seriesOpen = false;
+			seriesDone = `Put back the values of ${t.what} from before the change of ${fmtDate(t.at, true)}.`;
+			await onSeriesRestored?.();
+			await load();
+		} catch (e) {
+			seriesError =
+				e instanceof ApiError && e.status === 404
+					? 'Those values are no longer kept: a series keeps its newest 5 earlier versions, for up to 180 days.'
+					: msg(e);
+		} finally {
+			seriesRestoring = false;
+		}
+	}
 </script>
 
 <!-- A plain panel, not a second region: the tab body is already the region
@@ -164,6 +202,12 @@
 			<button type="button" class="btn btn-ghost btn-sm" onclick={() => (restored = null)}>Dismiss</button>
 		</div>
 	{/if}
+	{#if seriesDone}
+		<div class="alert alert-success-ish" role="status">
+			<p>{seriesDone} Run the model again to use them.</p>
+			<button type="button" class="btn btn-ghost btn-sm" onclick={() => (seriesDone = null)}>Dismiss</button>
+		</div>
+	{/if}
 
 	<LoadState {loading} {error} retry={() => load()}>
 		{#if days.length === 0}
@@ -195,7 +239,13 @@
 												</ul>
 												{#if i.reason}<p class="reason"><span class="muted">Reason:</span> {i.reason}</p>{/if}
 											{:else}
+												{@const sr = canEdit ? seriesRestore(i) : null}
 												<p class="event">{itemLines(i)[0]}</p>
+												{#if sr}
+													<button type="button" class="btn btn-sm restore" onclick={() => askSeriesRestore({ ...sr, at: i.createdAt })}>
+														Restore the earlier values
+													</button>
+												{/if}
 											{/if}
 										{/each}
 										{#if canEdit && e.revision}
@@ -242,7 +292,7 @@
 		{:else}
 			<ChangesList changes={preview} />
 		{/if}
-		<p class="muted small">Series values aren't part of a version: restore them from the Data tab. A restored farm comes back without its farmer links.</p>
+		<p class="muted small">Series values aren't part of a version: restore them from their own entries here (“Restore the earlier values”). A restored farm comes back without its farmer links.</p>
 		<div class="field">
 			<label for="{uid}-reason">Reason for restoring <span class="muted">(optional)</span></label>
 			<input id="{uid}-reason" maxlength={REASON_MAX} bind:value={reason} placeholder="e.g. the new dam survey was wrong" />
@@ -253,6 +303,23 @@
 		<button type="button" class="btn" onclick={() => (confirmOpen = false)}>Cancel</button>
 		<button type="button" class="btn btn-primary" onclick={restore} disabled={restoring || preview === null || preview.length === 0}>
 			{restoring ? 'Restoring…' : 'Restore'}
+		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog bind:open={seriesOpen} title="Restore the earlier values?">
+	{#if seriesTarget}
+		<p>
+			{seriesTarget.what[0]!.toUpperCase() + seriesTarget.what.slice(1)} goes back to the values it held before the change of {fmtDate(seriesTarget.at, true)}.
+			The values it holds now are kept too, so this can be undone the same way.
+		</p>
+		<p class="muted small">Runs already made keep the data they used.</p>
+		{#if seriesError}<div class="alert alert-error" role="alert">{seriesError}</div>{/if}
+	{/if}
+	{#snippet actions()}
+		<button type="button" class="btn" onclick={() => (seriesOpen = false)}>Cancel</button>
+		<button type="button" class="btn btn-primary" onclick={restoreSeriesValues} disabled={seriesRestoring}>
+			{seriesRestoring ? 'Restoring…' : 'Restore values'}
 		</button>
 	{/snippet}
 </Dialog>

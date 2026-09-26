@@ -64,6 +64,17 @@ rows and columns don't break it.
   006 (docs/engine-audit.md N1). The workbook has no dam surface areas:
   `damAreaFullM2` is null (runs estimate capacity ÷ 3 m and warn, N2),
   `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
+  b023 has no river abstraction, so a unit that pumps straight from the river
+  is entered as a "dummy dam". A farm whose dam takes 100 % of the upstream
+  inflow and either is a pool (under 1 % of a day of its diversion capacity,
+  or under 1 m³) or holds exactly a whole number of m³/s for one day (the
+  capacity a multiple of 86,400 m³, within 1 m³) with none of the farm's own
+  runoff gets a `WARNING:` "probable run-of-river, for the modeller to
+  confirm" (issue #54, 2d; both kinds found in client workbooks). The dam is
+  still imported as it is: its storage, spill and level results mean nothing
+  until run-of-river supply with a pump capacity lands (#54, 2c). A real
+  on-channel dam holds days to months of its diversion and catches its own
+  farm's runoff, so it doesn't trip either test.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted. The app computes demand from
   crop areas only, so the importer checks the sheet's gross demand
@@ -206,13 +217,14 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 
 | Fixture | Importer branch |
 | --- | --- |
-| [Network]: 8 farms and 2 gauges, a three-way confluence (Echo) and a two-way one (Hotel), a gauge mid-network (Midway Gauge), one outflow (Outlet Gauge) | `read_network`, `downstreamNodeId` as the inverse of the upstream columns, gauge vs farm kind, `sortOrder` |
+| [Network]: 9 farms and 2 gauges, a three-way confluence (Echo) and a two-way one (Hotel), a gauge mid-network (Midway Gauge), one outflow (Outlet Gauge) | `read_network`, `downstreamNodeId` as the inverse of the upstream columns, gauge vs farm kind, `sortOrder` |
 | "Echo&nbsp;&nbsp;Farm" (double space) in [Network], "Echo Farm " and " Golf Farm" in [Farm demand] | `clean()` whitespace normalisation, names matched across sheets |
 | Delta Farm in [Network], not in [Farm spec] | note "missing from [Farm spec]"; zero parameters, `pctUpstreamToDam` 1, `flowShareManual` null |
 | [Farm spec] method "Specific"; Charlie Farm's external fragmentation blank | `flowShareMethod: "manual"`; a blank share reads as 0 (the "Specific with no values" case) |
 | Min dam % on Bravo, Echo and Golf | note per farm, `damMinPct` 0 (Q5) |
 | Irrigation return flow 0.1–0.3 on most farms, 0 on Charlie and Foxtrot | `irrigationEfficiency` 1 − r with `lossReturnFraction` 1, or 1 and 0 (N1) |
-| 6 farms with a dam, Charlie without one (blank cells) | note "6 dam(s) have no surface area" (N2); blank capacity reads as 0 |
+| 7 farms with a dam, Charlie without one (blank cells) | note "7 dam(s) have no surface area" (N2); blank capacity reads as 0 |
+| India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow, diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
 | Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |
 | Hi/lo split 0.8/0.2, tolerance 0.0002, February 28.25 days, A-pan row, effective rain 0.7 | settings read from their named ranges |
@@ -249,7 +261,9 @@ TypeScript port needs its own tests for them:
   Element sheets that start before [Flow data] are refused.
 
 Not in the fixture at all: `--gauge-as-reference` on a workbook with no gauge
-values (`test_gauge_reference.py`), and the errors (non-consecutive dates, an
+values (`test_gauge_reference.py`), the run-of-river test's other branch (a
+dam holding a whole number of m³/s for one day) and its negative controls
+(`test_run_of_river.py`, and `farms.test.ts` with the same text), and the errors (non-consecutive dates, an
 unknown or doubled upstream element, a crop header without Oct, no A-pan row,
 missing [Transfers] labels, an Element sheet starting on another date than
 the first one).

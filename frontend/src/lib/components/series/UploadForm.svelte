@@ -3,21 +3,23 @@
 	// data" dialog. Picking (or dropping) a file guesses which stored series it
 	// updates; an existing series defaults to append / update (POST
 	// …/series/merge), which adds new days and corrects overlapping ones but
-	// never erases a stored value the file leaves blank.
-	import { untrack } from 'svelte';
+	// never erases a stored value the file leaves blank (the server keeps it).
+	// An upload that would overwrite stored days (a merge that changes some,
+	// or a replace) asks first, with the days and what they change.
+	import { tick, untrack } from 'svelte';
 	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { CsvError, type ParsedSeries } from '$lib/series/csv';
 	import { parseSeriesFile } from '$lib/series/file';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { mergePreview, type Daily } from './coverage';
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
-	import type { UploadResult } from './upload';
+	import { inStoredUnit, type UploadResult } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
-	import { valuesCache } from './valuesCache';
+	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 
 	let {
 		projectId,
@@ -62,6 +64,12 @@
 	// A sub-daily file (issue #40 (b) amendment 5): its text, kept to add it up again when the day boundary changes.
 	let subDailyText = $state<string | null>(null);
 	let dayBoundary = $state<DayBoundary>('08:00');
+	// Bumped on every read of a file, so a confirm never outlives the file it was for.
+	let parseSeq = $state(0);
+	// The overwrite the person was asked about (its `sig`); null while not asking.
+	let confirmSig = $state<string | null>(null);
+	let confirmEl: HTMLElement | undefined = $state();
+	const CHANGES_SHOWN = 100;
 
 	$effect(() => {
 		pending = parsed !== null || uploading;
@@ -94,12 +102,33 @@
 	);
 	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
+	// The file in the stored unit, so the preview compares like with like.
+	const stored = $derived(parsed ? inStoredUnit(kind, unit.trim(), parsed.values) : null);
 	const preview = $derived(
-		parsed && target && mode === 'merge' && targetValues
-			? mergePreview(targetValues, { startDate: parsed.startDate, values: parsed.values })
+		parsed && stored && target && mode === 'merge' && targetValues
+			? mergePreview(targetValues, { startDate: parsed.startDate, values: stored.values })
 			: null
 	);
 	// Series are stored in their kind's canonical unit (m³/s, mm); the server converts
+	// An upload that overwrites stored days: a merge's changed days, or every stored day a replace drops.
+	const overwrite = $derived.by(() => {
+		if (!parsed || !target) return null;
+		if (mode === 'merge') {
+			if (!preview || preview.changed === 0) return null;
+			const c = preview.changes;
+			return { days: preview.changed, from: c[0]!.date, to: c.at(-1)!.date, changes: c };
+		}
+		const days = targetValues ? targetValues.values.filter((v) => v != null).length : target.length;
+		if (days === 0) return null;
+		return { days, from: target.startDate, to: seriesEnd(target), changes: null };
+	});
+	const overwriteSig = $derived(overwrite ? [target?.id, mode, unit, parseSeq, overwrite.days, overwrite.from, overwrite.to].join('|') : null);
+	const confirming = $derived(confirmSig !== null && confirmSig === overwriteSig);
+	// Anything that changes the overwrite (another file, mode, series or unit) takes the question back
+	// for good: switching back doesn't bring it back already answered.
+	$effect(() => {
+		if (confirmSig !== null && confirmSig !== overwriteSig) confirmSig = null;
+	});
 	// an upload in any of these (engine units.ts), so a file in l/s is read as l/s.
 	const units = $derived(unitOptions(kind));
 	const converted = $derived(unit && units[0] && unit !== units[0] ? units[0] : null);
@@ -111,9 +140,8 @@
 			targetValues = null;
 			return;
 		}
-		const key = `${projectId}/${t.id}`;
-		const hit = valuesCache.get(key);
-		if (hit && hit.startDate === t.startDate && hit.values.length === t.length) {
+		const hit = cachedValues(projectId, t);
+		if (hit) {
 			targetValues = hit;
 			return;
 		}
@@ -121,8 +149,7 @@
 		api.series
 			.get(projectId, t.id)
 			.then((d) => {
-				const v = { startDate: d.startDate, values: d.values };
-				valuesCache.set(key, v);
+				const v = cacheValues(projectId, d);
 				if (target?.id === t.id) targetValues = v;
 			})
 			.catch(() => {});
@@ -143,6 +170,7 @@
 		uploadDone = null;
 		guessed = null;
 		subDailyText = null;
+		parseSeq++;
 		fileName = f?.name ?? '';
 		if (!f) return;
 		try {
@@ -175,6 +203,7 @@
 	function onBoundary(b: DayBoundary) {
 		dayBoundary = b;
 		if (subDailyText === null) return;
+		parseSeq++;
 		try {
 			parsed = parseSeriesFile(subDailyText, { dayBoundary: b });
 			parseError = null;
@@ -186,23 +215,28 @@
 
 	async function upload(e: SubmitEvent) {
 		e.preventDefault();
-		if (!parsed) return;
+		if (!parsed || !stored) return;
+		if (overwriteSig && !confirming) {
+			confirmSig = overwriteSig;
+			await tick();
+			confirmEl?.focus();
+			return;
+		}
 		uploading = true;
 		error = null;
 		const label = name.trim() || kindLabel(kind);
 		try {
 			let result: UploadResult;
 			if (target && mode === 'merge') {
-				// Send the file's span with its blank days filled from what is
-				// stored, so a partial file adds and corrects but never erases.
-				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: parsed.values });
-				const off = toEpochDay(parsed.startDate) - toEpochDay(p.result.startDate);
+				// The file as it is: the server keeps the stored value of a day
+				// the file leaves blank, under the row lock, so nothing is filled here.
+				const p = preview ?? mergePreview(null, { startDate: parsed.startDate, values: stored.values });
 				const meta = await api.request<SeriesWriteResult>('POST', `/projects/${encodeURIComponent(projectId)}/series/merge`, {
 					kind,
 					name: name.trim(),
 					unit: unit.trim(),
 					startDate: parsed.startDate,
-					values: p.result.values.slice(off, off + parsed.values.length),
+					values: parsed.values,
 					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.
 					...(labelFields ?? {}),
 					// A sub-daily file's day boundary: one of the other window into a filled series is refused (409).
@@ -224,10 +258,11 @@
 					...(askProvenance ? provenanceFields(provenanceKey) : (labelFields ?? {})),
 					...boundaryFields
 				});
-				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${fmtNum(meta.length)} days to “${meta.name || label}”.` };
+				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${plural(meta.length, 'day')} to “${meta.name || label}”.` };
 			}
-			valuesCache.delete(`${projectId}/${result.meta.id}`);
+			forgetValues(projectId, result.meta.id);
 			uploadDone = result.message;
+			confirmSig = null;
 			parsed = null;
 			fileName = '';
 			guessed = null;
@@ -403,9 +438,45 @@
 		<LineChart title="File preview" height={140} {unit} series={[{ label: fileName || 'file', startDate: parsed.startDate, values: parsed.values }]} />
 	{/if}
 	{#if uploadDone}<p class="ok" role="status">{uploadDone}</p>{/if}
-	<button type="submit" class="btn btn-primary" disabled={!parsed || uploading || !unit.trim() || (!!target && mode === 'merge' && !preview)}>
-		{uploading ? 'Uploading…' : target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload'}
-	</button>
+	{#if confirming && overwrite && target}
+		{@const n = plural(overwrite.days, 'day')}
+		<div class="confirm" role="group" aria-labelledby={id('confirm-h')} data-testid="overwrite-confirm">
+			<p class="confirm-h" id={id('confirm-h')} tabindex="-1" bind:this={confirmEl}>
+				{#if overwrite.changes}
+					This changes {n} already stored in “{target.name || kindLabel(target.kind)}”, between {overwrite.from} and {overwrite.to}.
+				{:else}
+					This replaces all {n} stored in “{target.name || kindLabel(target.kind)}” ({overwrite.from} → {overwrite.to}) with the file.
+				{/if}
+			</p>
+			{#if overwrite.changes}
+				<details class="changes">
+					<summary>Show the changes</summary>
+					<table>
+						<thead><tr><th scope="col">Date</th><th scope="col">Stored ({target.unit})</th><th scope="col">From the file ({target.unit})</th></tr></thead>
+						<tbody>
+							{#each overwrite.changes.slice(0, CHANGES_SHOWN) as c (c.date)}
+								<tr><td>{c.date}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+					{#if overwrite.changes.length > CHANGES_SHOWN}
+						<p class="hint muted">…and {plural(overwrite.changes.length - CHANGES_SHOWN, 'more day')}.</p>
+					{/if}
+				</details>
+			{/if}
+			<p class="hint muted">The values it replaces are kept: you can put them back from the History tab (“Restore the earlier values”).</p>
+			<div class="confirm-actions">
+				<button type="button" class="btn" onclick={() => (confirmSig = null)} disabled={uploading}>Back</button>
+				<button type="submit" class="btn btn-primary" disabled={uploading}>
+					{uploading ? 'Uploading…' : overwrite.changes ? `Overwrite ${n}` : `Replace ${n}`}
+				</button>
+			</div>
+		</div>
+	{:else}
+		<button type="submit" class="btn btn-primary" disabled={!parsed || uploading || !unit.trim() || (!!target && mode === 'merge' && !preview)}>
+			{uploading ? 'Uploading…' : target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload'}
+		</button>
+	{/if}
 </form>
 
 <style>
@@ -500,10 +571,62 @@
 	form > .btn-primary {
 		margin-top: 0.75rem;
 	}
+	.confirm {
+		margin-top: 0.75rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--warning);
+		border-radius: var(--radius-sm);
+		font-size: 0.85rem;
+		display: grid;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+	.confirm p {
+		margin: 0;
+	}
+	.confirm-h {
+		font-weight: 600;
+	}
+	.changes summary {
+		cursor: pointer;
+		color: var(--accent);
+		font-weight: 600;
+		min-height: 28px;
+		display: flex;
+		align-items: center;
+	}
+	.changes table {
+		width: 100%;
+		border-collapse: collapse;
+		font-variant-numeric: tabular-nums;
+		margin-top: 0.35rem;
+	}
+	.changes th,
+	.changes td {
+		text-align: right;
+		padding: 0.15rem 0.4rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.changes th:first-child,
+	.changes td:first-child {
+		text-align: left;
+	}
+	.changes th {
+		color: var(--text-muted);
+		font-weight: 600;
+		font-size: 0.75rem;
+	}
+	.confirm-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		justify-content: flex-end;
+	}
 	@media (max-width: 640px) {
 		.field input,
 		.field select,
-		form > .btn-primary {
+		form > .btn-primary,
+		.confirm-actions .btn {
 			min-height: 44px;
 		}
 	}

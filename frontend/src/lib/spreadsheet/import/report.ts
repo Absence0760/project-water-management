@@ -21,6 +21,8 @@ export type ImportNoteCode =
 	| 'farm-missing-from-spec'
 	/** The [Farm spec] min dam % is the transfer minimum, not a minimum operating level (audit Q5). */
 	| 'dam-min-is-transfer-minimum'
+	/** WARNING: a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d). */
+	| 'probable-run-of-river'
 	/** Dams have no surface area in the workbook; runs estimate it (audit N2). */
 	| 'dam-area-unknown'
 	/** A [Farm demand] farm isn't in [Network]. */

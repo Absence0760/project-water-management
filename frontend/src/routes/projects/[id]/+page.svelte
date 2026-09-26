@@ -612,7 +612,7 @@
 					</Lazy>
 				{:else if tab === 'history'}
 					<Lazy load={LOAD.history}>
-						{#snippet children(HistoryTab)}<HistoryTab {projectId} {editor} {canEdit} onRestored={reloadInputs} />{/snippet}
+						{#snippet children(HistoryTab)}<HistoryTab {projectId} {editor} {canEdit} onRestored={reloadInputs} onSeriesRestored={loadLists} />{/snippet}
 					</Lazy>
 				{/if}
 			</section>

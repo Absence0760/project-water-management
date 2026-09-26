@@ -212,7 +212,7 @@ describe('scenario ops', () => {
 			ops: [{ op: 'node.set', nodeId: c.farm.id, field: 'damInitialPct', value: 1.5 }, { op: 'node.remove', nodeId: 'farm-a' }, { op: 'nope' }]
 		});
 		expect(bad.status).toBe(400);
-		expect(bad.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].value: must be at most 1', 'ops[2].op: must be one of node.set, node.add, node.remove, cropArea.set, crop.add, transfer.add, transfer.set, transfer.remove, landCover.add, landCover.remove, borehole.add, borehole.remove, settings.set, series.scale']);
+		expect(bad.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].value: must be at most 1', 'ops[2].op: must be one of node.set, node.add, node.remove, cropArea.set, crop.add, transfer.add, transfer.set, transfer.remove, landCover.add, landCover.remove, borehole.add, borehole.remove, settings.set, series.scale, demand.scale']);
 		const notUuid = await u.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Bad', baseRunId: base, ops: [{ op: 'node.remove', nodeId: 'farm-a' }] });
 		expect(notUuid.status).toBe(400);
 		expect(notUuid.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].nodeId: must be a UUID']);

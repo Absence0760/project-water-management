@@ -203,13 +203,16 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
  * dam is low, so more demand, which empties the dam sooner, switches the
  * boreholes on earlier and can raise the supply fraction legitimately (fuzz
  * seed 4623, GR4J: n24 0.963 → 0.978; seed 1450 before the generator drew EWR rule tables). The property is a law of the rest of
- * the network, so it is checked with the trigger taken out.
+ * the network, so it is checked with the trigger taken out. The trigger
+ * supply rule (WP-3.8) switches to the river the same way, so it runs as
+ * river first here.
  */
 export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	const x = cloneInput(input);
 	for (const n of x.model.nodes) if (n.boreholeRule === 'drought') n.boreholeRule = 'supplemental';
 	// Individual boreholes (WP-3.9): emergency mode triggers on the dam the same way.
 	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency') b.mode = 'supplemental';
+	for (const n of x.model.nodes) if (n.supplyRule === 'trigger') n.supplyRule = 'riverFirst';
 	return x;
 }
 

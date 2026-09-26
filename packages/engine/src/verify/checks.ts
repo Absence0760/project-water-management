@@ -9,9 +9,11 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
+import { demandFactorOf } from '../demand';
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
+import { supplyOf, type PlanSupply } from '../network/supply';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
 
 const SEC_PER_DAY = 86_400;
@@ -160,7 +162,11 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * supplemental add what it lacks for the demand left, emergency fill it while
  * triggered; never above capacity), then the dam and river, then supplemental
  * and triggered emergency units. Each unit pumps at most MIN(capacity, its
- * annual cap − what it pumped since 1 October). Call it once per day, in order.
+ * annual cap − what it pumped since 1 October). A farm's river pump (WP-3.8,
+ * `river` what it may take today) is part of the surface: before the dam
+ * under rules 1 and 2, after it under run of river (rule 3); a supplemental
+ * dam-target unit fills only for the demand the river leaves. Call it once
+ * per day, in order.
  */
 function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const used = b ? b.units.map(() => 0) : [];
@@ -169,7 +175,7 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
 	const toDam = ks.filter((k) => units[k]!.toDam);
 	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
-	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number) => {
+	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1) => {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
 		const pump = (k: number, want: number) => {
 			const u = units[k]!;
@@ -180,15 +186,25 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		let direct = 0;
 		for (const k of primary) direct += pump(k, D - direct);
 		let dam = 0;
+		const left = rule !== 3 ? D - direct - Math.min(river, D - direct) : D - direct;
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
-			const want = u.mode === 1 ? room : u.mode === 2 ? (qPrev < u.triggerM3 ? room : 0) : D - direct - (avail + dam - dead);
+			const want = u.mode === 1 ? room : u.mode === 2 ? (qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
 			dam += pump(k, Math.min(want, room));
 		}
-		const surface = Math.min(Math.max(avail + dam - dead, 0), D - direct);
-		for (const k of later) if (units[k]!.mode === 0 || qPrev < units[k]!.triggerM3) direct += pump(k, D - surface - direct);
-		return { direct, dam, surface };
+		const fromDam = Math.max(avail + dam - dead, 0);
+		let surface: number;
+		let fromRiver: number;
+		if (rule === 3) {
+			surface = Math.min(fromDam, D - direct);
+			fromRiver = Math.max(0, Math.min(river, D - direct - surface));
+		} else {
+			fromRiver = Math.max(0, Math.min(river, D - direct));
+			surface = Math.min(fromDam, D - direct - fromRiver);
+		}
+		for (const k of later) if (units[k]!.mode === 0 || qPrev < units[k]!.triggerM3) direct += pump(k, D - surface - fromRiver - direct);
+		return { direct, dam, surface, river: fromRiver };
 	};
 }
 
@@ -642,8 +658,16 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   dead storage), never < 0; no rule, no release column;
  * - G = MIN(MAX(S0 + M + O + K + J − X − dead storage, 0), D): irrigation
  *   takes what is above the minimum operating level, up to demand (Q5);
- * - P = S0 + M + O + K + J − X − G, Q = MIN(P, capacity), R = MAX(P − capacity, 0);
- * - S = L + N − O, T = β·(1 − e)·G, U = R + S + T + returned seepage + X,
+ * - a farm with a supply rule that pumps from the river (WP-3.8) has the
+ *   column river_abstraction Gr, and only such a farm: while it pumps from
+ *   the river (always under river first and run of river; under trigger from
+ *   the day the start-of-day storage falls below the trigger until the day it
+ *   is back at the stop level) Gr = MIN(pump capacity, MAX(0, S − MAX(Zs,
+ *   a pass-inflow release's target)), demand) taken before the dam, or after
+ *   it under run of river, and 0 otherwise; run of river sends everything
+ *   below the dam (K = M = O = 0); the dam gives G − Gr;
+ * - P = S0 + M + O + K + J − X − (G − Gr), Q = MIN(P, capacity), R = MAX(P − capacity, 0);
+ * - S = L + N − O, T = β·(1 − e)·G, U = R + S − Gr + T + returned seepage + X,
  *   returned seepage = Sp × the seepage return share (WP-3.5), the rest lost;
  * - V is the recomputed balance residual and is float noise.
  */
@@ -708,11 +732,18 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// A farm without a dam has no seepage to split (runModel ignores the share there).
 		const seepRet = n.damCapacityM3 > 0 ? seepageReturnOf(n) : 1;
 		if (!!rel !== !!REL) return `${n.id}: dam_release column ${REL ? 'without' : 'missing for'} a release rule`;
+		// Supply rule and river pump (WP-3.8).
+		const sup = supplyOf(n, []).supply;
+		const RA = g('river_abstraction');
+		if (!!sup !== !!RA) return `${n.id}: river_abstraction column ${RA ? 'without' : 'missing for'} a supply rule that pumps from the river`;
+		let onRiver = false;
 		if ((seepRet < 1) !== !!SPL) return `${n.id}: dam_seepage_lost column ${SPL ? 'with all seepage returning' : 'missing'}`;
 		const Zc = g('ewr_cumulative')!;
 		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
 		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
 		const e = n.irrigationEfficiency;
+		// The demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales F after the soil-water store.
+		const factor = demandFactorOf(n, []);
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
@@ -722,8 +753,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			if (!near(f, Math.max(0, gr) - ef, Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
-				return `${where}: crop requirement ${f} ≠ MAX(0, gross ${gr}) − effective rain used ${ef}`;
+			const df = factor ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
+			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
+				return `${where}: crop requirement ${f} ≠ ${factor ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor ? ')' : ''}`;
 			if (!near(d, f / e, f)) return `${where}: demand ${d} ≠ crop requirement ${f} ÷ efficiency ${e}`;
 			if (!near(k + l, h, 0) || k < 0 || k > h * n.pctUpstreamToDam + tol(h)) return `${where}: upstream split K ${k} + L ${l} ≠ H ${h}`;
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
@@ -767,15 +799,40 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gw = GW?.[t] ?? 0;
 			const gd = GD?.[t] ?? 0;
 			const dep = DEP?.[t] ?? 0;
+			// The river pump (WP-3.8): what it may take today, from the flow below the dam above what must pass it.
+			const gRiv = RA?.[t] ?? 0;
+			let room = 0;
+			let keep = 0;
+			if (sup) {
+				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
+				onRiver = sup.rule !== 2 || (onRiver ? qPrev < sup.stopM3 : qPrev < sup.triggerM3);
+				const month = monthOfEpochDay(day0 + t);
+				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0);
+				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
+				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
+				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
+			}
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
-			const rp = replay(t, d, qPrev, avail, dead, cap);
-			const wantGs = bore ? rp.surface : Math.min(surface, d);
+			const rp = replay(t, d, qPrev, avail, dead, cap, room, sup?.rule ?? 1);
+			let wantGs: number;
+			let wantGr = 0;
+			if (bore) {
+				wantGs = rp.surface;
+				wantGr = rp.river;
+			} else if (sup && sup.rule === 3) {
+				wantGs = Math.min(surface, d);
+				wantGr = Math.max(0, Math.min(room, d - wantGs));
+			} else {
+				wantGr = Math.max(0, Math.min(room, d));
+				wantGs = Math.min(surface, d - wantGr);
+			}
+			if (!near(gRiv, wantGr, Math.max(ss, d, keep))) return `${where}: pumped ${gRiv} from the river ≠ ${wantGr} (supply rule ${sup?.rule}, ${onRiver ? 'on the river' : 'on the dam'})`;
 			if (!near(gw, rp.direct, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${rp.direct} (borehole supply order and caps)`;
 			if (!near(gd, rp.dam, Math.max(availScale, d, cap))) return `${where}: groundwater into the dam ${gd} ≠ ${rp.dam}`;
 			if (gd > 0 && avail + gd > cap + tol(Math.max(cap, availScale))) return `${where}: pumped ${gd} into a dam with no room for it`;
-			if (!near(gg - gw, wantGs, Math.max(availScale, gd)))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J${gd ? ' + groundwater into the dam' : ''} − dead storage ${dead}, 0), D ${d})${bore ? ` + groundwater ${gw}` : ''}`;
-			if (!near(p, avail + gd - (gg - gw), Math.max(availScale, gg, gd))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J + groundwater into the dam − G`;
+			if (!near(gg - gw - gRiv, wantGs, Math.max(availScale, gd, gRiv)))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J${gd ? ' + groundwater into the dam' : ''} − dead storage ${dead}, 0), D ${d})${bore ? ` + groundwater ${gw}` : ''}${sup ? ` + from the river ${gRiv}` : ''}`;
+			if (!near(p, avail + gd - (gg - gw - gRiv), Math.max(availScale, gg, gd))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J + groundwater into the dam − what the dam gave`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (ZS) {
@@ -791,7 +848,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			const spl = SPL?.[t] ?? 0;
 			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
-			if (!near(u, r + ss + tt + (sp - spl) + x - dep, Math.max(r, ss, tt, sp, x))) return `${where}: outflow ${u} ≠ R + S + T + returned seepage${rel ? ' + release' : ''}${bore ? ' − stream depletion' : ''}`;
+			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x - dep, Math.max(r, ss, tt, sp, x))) return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${bore ? ' − stream depletion' : ''}`;
 			const vv = h + i + j + pd + gw + gd - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
 			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;

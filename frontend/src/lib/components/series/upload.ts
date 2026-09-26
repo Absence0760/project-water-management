@@ -1,3 +1,4 @@
+import { scaleValues, seriesUnit } from '@water-management/engine';
 import type { SeriesWriteResult } from '$lib/api/types';
 
 /** What UploadForm reports after a successful upload. */
@@ -8,4 +9,15 @@ export interface UploadResult {
 	added: number;
 	changed: number;
 	message: string;
+}
+
+/**
+ * A file's values in the unit the series is stored in (engine units.ts), so
+ * the merge preview compares them with stored days like for like: compared
+ * raw, 1 200 l/s against a stored 1.2 m³/s counted as a changed day. A unit
+ * the table doesn't know is left as given, for the server to refuse.
+ */
+export function inStoredUnit(kind: string, unit: string, values: (number | null)[]): { unit: string; values: (number | null)[] } {
+	const u = seriesUnit(kind, unit);
+	return u.ok ? { unit: u.unit, values: scaleValues(values, u.factor) } : { unit, values };
 }
