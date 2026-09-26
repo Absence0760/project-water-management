@@ -180,3 +180,18 @@ describe('parseDwsDaily: a gap row with only a quality code', () => {
 		expect(r.quality).toEqual({});
 	});
 });
+
+// The synthetic export the manual series import is tested with too
+// (frontend/src/lib/series/dws.test.ts): both read rows through the engine's
+// parseDwsRow, so the feed and a hand upload of the same table agree day by day.
+describe('parseDwsDaily on the shared DWS export fixture', () => {
+	const shared = readFileSync(new URL('../../../../packages/engine/fixtures/dws-daily-export.txt', import.meta.url), 'utf8');
+
+	it('reads the same days as the manual import: coded-missing, -999 and absent days are gaps', () => {
+		const r = parseDwsDaily(shared);
+		expect(r.startDate).toBe('2021-01-01');
+		expect(r.values).toEqual([0.412, 0.398, 1.897, null, null, null, 12.5, 0.371, null, 0.355, 0.349]);
+		expect(r.rejected).toBe(3);
+		expect(r.quality).toEqual({ '1': 6, '2': 1, '60': 1, '170': 1, '255': 1 });
+	});
+});

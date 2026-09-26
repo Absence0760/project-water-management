@@ -64,8 +64,13 @@ section lists joins *Build the model*). It is layout only: the URLs stay
   below that, its name and remove columns kept in view (`model.spec.ts`).
 - **900–1099 px:** one strip across the top, sections side by side with a
   divider and a small label over each.
-- **Below 900 px (phones):** the same strip scrolling sideways; the section labels are read
-  out (each section is a named group) but not shown.
+- **Below 900 px (phones):** a full-width **Sections** button naming the open
+  tab (its accessible name is "Project sections: *Tab*", with the problems dot
+  when a model tab has one) opens the same grouped list in the page, the
+  section labels shown and the open tab marked, with a viewer's **Show model
+  inputs** at the end. Choosing a tab or pressing Escape closes it (Escape puts
+  focus back on the button). It replaced a 12-tab strip that scrolled
+  sideways, where a phone showed about three tabs and none of the grouping.
 
 The arrow keys move through the tabs in the order shown, across sections,
 wrapping at the ends (Right/Down next, Left/Up previous).
@@ -153,7 +158,11 @@ shorter than the cap looks as before.
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab.
-  Dropping a CSV anywhere on the page opens it with that file.
+  Dropping a CSV anywhere on the page opens it with that file. It reads a
+  date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
+  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
+  rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -249,11 +258,14 @@ put the results first. Top to bottom:
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): one sentence and one link per item, hidden when
   there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
-  worst named, links to the run), the latest run's warnings, rainfall the
-  latest run hasn't used (`newDataSinceRun`, links to Runs to re-run), input
-  data older than `STALE_DAYS` (`freshness`, links to Data), and farms with no
-  planted area once anything is planted (links to Crops; before that the
-  checklist's crops step covers it). Run items wait for the run's summary.
+  worst named, links to the run, and, while it is still a farm in the model,
+  a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
+  the latest run's warnings, rainfall the latest run hasn't used
+  (`newDataSinceRun`, links to Runs to re-run), input data older than
+  `STALE_DAYS` (`freshness`, links to Data), and farms with no planted area
+  once anything is planted (one farm: **Set its planted areas**, the farm
+  drawer; several: Crops; before anything is planted the checklist's crops
+  step covers it). Run items wait for the run's summary.
 
 - **Headline facts** each link to the tab where they are edited or looked at
   (farms, area, dams and the outflow gauge to Network, irrigated area to
@@ -731,6 +743,38 @@ the rest are grouped as "Other" in grey. The chart is an image whose label
 names the crops and the peak month; the table stays the accessible data
 source. It is hidden while there is no demand (no A-pan, crops or areas).
 
+### Farm drawer
+
+One farm's planted areas in a side sheet over whichever tab is open
+(`crops/FarmCropsDrawer.svelte`, helpers in `crops/farmDrawer.ts`; issue #17,
+option A step 4). The grids stay full pages; the drawer is for a quick edit in
+context. It opens while the workspace URL has `farm=<nodeId>`
+(`farmDrawerHref(tab, nodeId)`: `?tab=network&farm=…`, or `?farm=…` over the
+Summary), so it can be linked and Back works; Done, Esc or the ✕ drop `farm`
+from the URL in place (`withoutFarm`), so Back then goes to where it was
+opened from. It is its own chunk, fetched when a URL names a farm.
+
+- **From:** the Summary's Needs attention (a farm below the supply target, a
+  single farm with nothing planted) and the Network: selecting a farm on the
+  schematic or in the table shows "*Farm*: 20.00 ha planted, 1 crop."
+  under the schematic with a **Planted areas** link (`farmPlanting`).
+- **Content:** every crop in the model with this farm's area (ha, the same
+  inputs and labels as the Crops tab's row, "Orchard on Upper farm, ha"), the
+  total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
+  the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
+  and a farm that is no longer in the model each say so.
+- **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
+  tab at once and the other way round. The sheet is modal, which makes the
+  page's save bar unreachable, so it repeats the save row: status (unsaved,
+  problems to fix, saving, save failed), the optional reason (the same value
+  as the save bar's) and **Save changes**, which runs the page's save;
+  **Done** closes and leaves the edit unsaved for the save bar. A viewer
+  gets the values read-only and a Close button.
+- **Layout:** the `Dialog` component's `side` variant: full height down the
+  right edge, 480 px wide, the whole width on a phone. The note linking to
+  Crops & demand sits under the table, so opening the sheet focuses the first
+  area.
+
 On a phone (≤ 640 px) the crop-factor and planted-area tables turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
 top, the twelve factors four to a row and the mean below; each farm's crops two
@@ -793,7 +837,26 @@ reference (wide screens still show it on the right); the empty state points at
 it. Uploads read year-last dates (DD/MM/YYYY or
 MM/DD/YYYY) in one order for the whole file, from any part above 12 (a file
 mixing both is rejected; one with no part above 12 assumes day/month and the
-summary says so). In number fields, a comma is a thousands separator only in a
+summary says so), and YYYYMMDD. The delimiter (comma, semicolon or tab) is
+worked out from the file's rows, outside double quotes, and quoted fields may
+hold it. The decimal separator is decided once per file (`lib/series/csv.ts`,
+issue #45): a value that settles it (12,5 · 0,359 · 1.234,5 say decimal comma;
+2.5 · 1,234.5 say decimal point) sets it, thousands separators (spaces, or
+commas or dots in valid groups) are dropped, a file mixing both conventions is
+refused naming a line of each, and in a semicolon or tab file with nothing to
+settle it a value that reads either way (1,234) is refused rather than guessed
+(a comma file defaults to the decimal point, since its unquoted values can't
+hold a decimal comma). A row split by another delimiter than the file's is
+reported as that, not as a bad date. **DWS hydrology exports** load as they
+are (`lib/series/dws.ts`, picked by `lib/series/file.ts`): the fixed-width
+daily table HyData.aspx prints (`DATE D AVG F/R QUAL`, YYYYMMDD), as text or
+the saved page, or headerless `YYYYMMDD value [quality]` rows. Rows are read by
+the automatic DWS feed's own code (`@water-management/engine/dws`), so a
+missing-data quality code (151, 165, 170, 172, 246, 247, 255), a blank value or
+a negative placeholder such as -999 is a gap, never a value. The summary adds a
+*DWS export* line (rows, the value column as the file's format block describes
+it, and how many rows were read as gaps and why) and the quality codes met; a
+sub-daily DWS export (a TIME column) is refused. In number fields, a comma is a thousands separator only in a
 valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years

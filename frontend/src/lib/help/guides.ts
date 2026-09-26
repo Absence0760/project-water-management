@@ -359,7 +359,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0.',
+							'Prepare a CSV with two columns, **date,value**, one row per day. A header row is optional. Leave a missing day blank rather than writing 0. Commas, semicolons or tabs, and decimal points or decimal commas, are worked out from the file. A daily table exported from the DWS hydrology site loads as it is: days its quality code marks as missing, and negative placeholders such as -999, become gaps.',
 							'Press **Add data** in the project header, or drop the file anywhere on the page.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',

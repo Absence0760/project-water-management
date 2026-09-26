@@ -77,6 +77,15 @@ describe('attention', () => {
 		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 farms below ${target} (of 3).`);
 	});
 
+	it("adds the short farm's planted areas when it is still a farm in the model", () => {
+		const f = (nodeId: string, fraction: number) => ({ ...farm(nodeId, fraction), name: nodeId === 'f2' ? 'Lower' : 'Upper' });
+		const [item] = attention(base({ summary: summary([f('f1', 1), f('f2', 0.6)]) }));
+		expect(item).toMatchObject({ id: 'short-farms', href: '?tab=runs&run=r%2F1', also: { action: 'Its planted areas', href: '?farm=f2' } });
+		// Removed from the model since the run: no link to a farm that isn't there.
+		const gone = attention(base({ model: model({ nodes: [node('f1', 'farm', 'Upper'), node('g', 'gauge')] }), summary: summary([f('f1', 1), f('f2', 0.6)]) }));
+		expect(gone[0]!.also).toBeUndefined();
+	});
+
 	it('uses the supply target, not a fixed figure: a farm just under it is flagged, one at it is not', () => {
 		expect(attention(base({ summary: summary([farm('Upper', SUPPLY_TARGET)]) }))).toEqual([]);
 		expect(attention(base({ summary: summary([farm('Upper', SUPPLY_TARGET - 0.001)]) }))[0]?.id).toBe('short-farms');
@@ -129,15 +138,19 @@ describe('attention', () => {
 			{
 				id: 'unplanted',
 				text: 'Lower has no planted area, so it draws no irrigation water.',
-				action: 'Set crop areas',
-				href: '?tab=crops'
+				action: 'Set its planted areas',
+				href: '?farm=f2'
 			}
 		]);
 		const more = model({
 			nodes: [...model().nodes, node('f3', 'farm', 'A'), node('f4', 'farm', 'B'), node('f5', 'farm', '')],
 			cropAreas: [{ nodeId: 'f1', cropId: 'c', areaM2: 1 }]
 		});
-		expect(attention(base({ model: more }))[0]!.text).toBe('Lower, A, B and 1 more have no planted area, so they draw no irrigation water.');
+		expect(attention(base({ model: more }))[0]).toMatchObject({
+			text: 'Lower, A, B and 1 more have no planted area, so they draw no irrigation water.',
+			action: 'Set crop areas',
+			href: '?tab=crops'
+		});
 		// Nothing planted at all: the setup checklist's crops step covers it.
 		expect(attention(base({ model: model({ cropAreas: [] }) }))).toEqual([]);
 	});

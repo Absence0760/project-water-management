@@ -35,6 +35,7 @@
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow, stripHtmlComments } from '@water-management/engine/dws';
 import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
 import { FeedFormatError } from '../errors.js';
 
@@ -78,25 +79,8 @@ export interface DwsWindow {
 	end: string;
 }
 
-const decode = (s: string) =>
-	s
-		.replace(/<br\s*\/?>/gi, '\n')
-		.replace(/<[^>]*>/g, '')
-		.replace(/&nbsp;/g, ' ')
-		.replace(/&lt;/g, '<')
-		.replace(/&gt;/g, '>')
-		.replace(/&amp;/g, '&');
-
-/**
- * Quality codes that say the day has no flow, whatever number sits in the
- * flow column (DWS's legend, Verified/HyCodes.aspx): print code M (151 and
- * 255 "Data Missing", 170 "Permanent Gap", 172 "Temporary Gap", 246 "No
- * cross-sectional area upstream of notch/structure"), 165 "no flow
- * calculated" and 247 "no calculation performed". Such a row is a gap, so a
- * placeholder 0.000 never lands as a dry day. Other codes (above rating,
- * estimates, unaudited) are real if uncertain flows: kept and counted.
- */
-export const DWS_GAP_CODES: ReadonlySet<string> = new Set(['151', '165', '170', '172', '246', '247', '255']);
+/** Re-exported for the feed's callers; defined once in the engine's DWS module. */
+export { DWS_GAP_CODES };
 
 const SERVER_ERROR = /scriptserver|can't connect to|unable to establish connection/i;
 const MAX_ROWS = 20 * 366 + 10;
@@ -106,35 +90,7 @@ const MAX_ROWS = 20 * 366 + 10;
  * so that spelling is accepted too.
  */
 const M3S = /cubic met(re|er)s?\s*(\/|per)\s*s(ec(ond)?)?\b|\bm(3|³)\s*\/\s*s\b|\bcumecs\b/i;
-const DAILY_HEADER =/^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
-
-interface Columns {
-	/** Where the flow column's label ends and the QUAL label ends (exclusive), in the header line. */
-	valueEnd: number;
-	qualEnd: number;
-}
-
-function headerColumns(headerLine: string): Columns | null {
-	const qual = headerLine.search(/\bQUAL\b/);
-	if (qual === -1) return null;
-	return { valueEnd: headerLine.slice(0, qual).trimEnd().length, qualEnd: qual + 4 };
-}
-
-/**
- * A row's date, flow and quality code. The page is fixed-width with numbers
- * right-aligned under their labels, and a gap row leaves the flow blank
- * ("20210102             170"), so a row with one field after the date is
- * placed by where that field ends: a whole number ending under QUAL is the
- * code, anything else is the flow.
- */
-function rowFields(raw: string, cols: Columns | null): [string, string | undefined, string | undefined] {
-	const fields = [...raw.matchAll(/\S+/g)].map((m) => ({ text: m[0], end: m.index + m[0].length }));
-	const [d, a, b] = fields;
-	if (!a) return [d!.text, undefined, undefined];
-	if (b) return [d!.text, a.text, b.text];
-	const underQual = cols !== null && /^\d+$/.test(a.text) && Math.abs(a.end - cols.qualEnd) < Math.abs(a.end - cols.valueEnd);
-	return underQual ? [d!.text, undefined, a.text] : [d!.text, a.text, undefined];
-}
+const DAILY_HEADER = /^DATE (D AVG F\/R|D_AVG_FR) QUAL( |$)/;
 
 /**
  * Parse a HyData.aspx daily page. Rows are placed by date; a missing date is a
@@ -144,10 +100,9 @@ function rowFields(raw: string, cols: Columns | null): [string, string | undefin
  */
 export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	// A comment is not content: one that mentions <pre> must not be taken for the table.
-	const page = raw.replace(/<!--[\s\S]*?-->/g, '');
+	const page = stripHtmlComments(raw);
 	if (SERVER_ERROR.test(page)) throw new FeedFormatError('the DWS site answered with a server error page');
-	const pre = page.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-	const body = pre ? decode(pre[1]!) : /^\s*DATE\s/m.test(page) && !/<html/i.test(page) ? page : null;
+	const body = dwsTableText(page);
 	if (body === null) {
 		if (/no data for this period/i.test(page)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
 		throw new FeedFormatError('the DWS page has no data table');
@@ -155,14 +110,14 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	if (/no data for this period/i.test(body)) return { startDate: null, values: [], quality: {}, rejected: 0, outside: 0 };
 	// Lines keep their leading spaces: a row's columns are read against the header's.
 	const lines = body.split(/\r?\n/).map((l) => l.trimEnd());
-	const h = lines.findIndex((l) => /^\s*DATE(\s|$)/i.test(l));
+	const h = lines.findIndex((l) => DWS_HEADER.test(l));
 	if (h === -1) throw new FeedFormatError('the DWS table has no DATE header');
 	const headerLine = lines[h]!.toUpperCase();
 	const header = headerLine.trim().split(/\s+/).join(' ');
 	if (!DAILY_HEADER.test(header)) {
 		throw new FeedFormatError(`the DWS table’s columns changed (expected DATE D AVG F/R QUAL, got ${header.slice(0, 60)})`);
 	}
-	const cols = headerColumns(headerLine);
+	const cols = dwsColumns(headerLine);
 	// The page states the flow column's unit in its format block ("POS. 10-18 =
 	// Daily avg flow rate in cubic metres/sec"). The feed writes m³/s series, so
 	// a page that says otherwise is refused rather than merged in the wrong unit.
@@ -178,30 +133,21 @@ export function parseDwsDaily(raw: string, window?: DwsWindow): DwsDays {
 	let rejected = 0;
 	let outside = 0;
 	for (const text of lines.slice(h + 1)) {
-		if (!/^\d{8}(\s|$)/.test(text.trim())) continue;
-		const [d, v, q] = rowFields(text, cols);
-		const iso = `${d!.slice(0, 4)}-${d!.slice(4, 6)}-${d!.slice(6, 8)}`;
-		let day = NaN;
-		try {
-			day = toEpochDay(iso);
-		} catch {
-			// Not a date: refused below.
-		}
-		if (!Number.isFinite(day) || fromEpochDay(day) !== iso) throw new FeedFormatError(`the DWS table has an impossible date ${d}`);
+		if (!DWS_ROW.test(text.trim())) continue;
+		const row = parseDwsRow(text, cols);
+		if (row.iso === null) throw new FeedFormatError(`the DWS table has an impossible date ${row.date}`);
+		const iso = row.iso;
+		const day = toEpochDay(iso);
 		if (day < from || day > to) {
 			outside++;
 			continue;
 		}
 		if (byDay.has(day)) throw new FeedFormatError(`the DWS table lists ${iso} twice`);
 		if (byDay.size >= MAX_ROWS) throw new FeedFormatError('the DWS table has more rows than one request can hold');
-		const n = v !== undefined && /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(v) ? Number(v) : NaN;
-		if (Number.isFinite(n) && n >= 0 && !DWS_GAP_CODES.has(q ?? '')) {
-			byDay.set(day, n);
-		} else {
-			byDay.set(day, null);
-			rejected++;
-		}
-		if (q) quality[q] = (quality[q] ?? 0) + 1;
+		// A missing-data code, a blank, text or a negative (-999) value is a gap (parseDwsRow).
+		byDay.set(day, row.value);
+		if (row.gap !== null) rejected++;
+		if (row.quality) quality[row.quality] = (quality[row.quality] ?? 0) + 1;
 	}
 	if (byDay.size === 0) return { startDate: null, values: [], quality, rejected, outside };
 	const days = [...byDay.keys()];

@@ -412,8 +412,9 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   bundle if esbuild's metafile lists a `pg` input). The feed sources and
   `series/limits.ts` take their date helpers from
   `@water-management/engine/calendar`, never the package root, so the only
-  engine module in the fetcher bundle is `calendar.ts` (the same test asserts
-  it).
+  engine modules in the fetcher bundle are `calendar.ts`, the CHIRPS
+  provenance constants (`/provenance`) and the DWS table reader (`/dws`,
+  which imports only `calendar.ts`); the same test asserts it.
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.
@@ -639,8 +640,13 @@ merges into:
 - **Parsers fail loudly.** A changed page, a corrupt grid, a cell over the sea
   or outside the grid, a server error page answered with HTTP 200: the fetch
   fails with a message we wrote (`feeds/errors.ts`), nothing is merged, and the
-  feed shows as failing. A DWS row without a usable value, or with a quality code
-  that says the data is missing (`DWS_GAP_CODES`), is a gap, never a zero.
+  feed shows as failing. A DWS row without a usable value (blank, text or
+  negative, such as -999), or with a quality code that says the data is missing
+  (`DWS_GAP_CODES`), is a gap, never a zero. The row reading lives in the
+  engine's pure `@water-management/engine/dws` (`parseDwsRow`, `dwsTableText`),
+  shared with the manual series import (`frontend/src/lib/series/dws.ts`), so
+  a hand-uploaded DWS export and the feed read the same table the same way; a
+  synthetic export both are tested on is `packages/engine/fixtures/dws-daily-export.txt`.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
   fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
