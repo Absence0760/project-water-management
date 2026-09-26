@@ -70,7 +70,7 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	await expect(feed.getByText('OK', { exact: true })).toBeVisible();
 	await expect(feed).toContainText(`Last data ${day(15)} · checked `);
-	// The server's health sentence, with its days written the same way (never raw ISO).
+	// The health sentence, written by the panel from the server's reason code, its days formatted the same way (never raw ISO).
 	await expect(feed).toContainText(`OK; newest data ${day(15)}, checked ${day(0)}.`);
 	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
 

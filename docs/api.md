@@ -987,11 +987,23 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   deleted: save the feed again). `lastDataDate` is a calendar day
   (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
   fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, `merged`).
-- `health = { state, stale, staleAfterDays, message }`, `state` ∈ `ok`,
-  `stale`, `failing`, `pending`, `disabled`; `message` is a sentence for the
-  panel. `lastError` and `message` are written by the server, never an
-  upstream body or database text, e.g. `the source is unreachable: HTTP 503`
-  or `the source’s data could not be read: the grid has no data at …`.
+- `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
+  `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
+  and its facts; the client writes the sentence and formats the days (all
+  `YYYY-MM-DD`, UTC), so no date is baked into server text:
+  - `{ code: "off", newest }` (switched off; `newest` is the newest day or null),
+  - `{ code: "failing", failures, error, newest }` (`failures` fetches in a row failed, the last with `error`, which is `lastError`),
+  - `{ code: "old-forecast", newest }` (the forecast reaches fewer than `-staleAfterDays` days ahead),
+  - `{ code: "old-data", newest }` (the newest day is more than `staleAfterDays` old),
+  - `{ code: "no-data" }` (fetches succeed but have found nothing yet),
+  - `{ code: "not-fetched", since, after }` (not fetched since it was `attached` / `changed` on `since`: is the worker running?),
+  - `{ code: "waiting" }` (waiting for its first fetch),
+  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day).
+
+  A client should fall back to the `state` for a code it doesn't know.
+  `lastError` is written by the server, never an upstream body or database
+  text, e.g. `the source is unreachable: HTTP 503` or `the source’s data could
+  not be read: the grid has no data at …`.
 - Strangers get `404`; a viewer's writes and an editor's attach / change /
   remove get `403`.
 

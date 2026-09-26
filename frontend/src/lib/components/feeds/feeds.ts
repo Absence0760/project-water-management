@@ -34,7 +34,25 @@ export interface FeedMeta {
 	consecutiveFailures: number;
 	lastError: string | null;
 	lastMeta: Record<string, string | number> | null;
-	health: { state: FeedState; stale: boolean; staleAfterDays: number; message: string };
+	health: FeedHealth;
+}
+
+/** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
+export type HealthReason =
+	| { code: 'off'; newest: string | null }
+	| { code: 'failing'; failures: number; error: string | null; newest: string | null }
+	| { code: 'old-forecast'; newest: string }
+	| { code: 'old-data'; newest: string }
+	| { code: 'no-data' }
+	| { code: 'not-fetched'; since: string; after: 'attached' | 'changed' }
+	| { code: 'waiting' }
+	| { code: 'ok'; newest: string | null; checked: string };
+
+export interface FeedHealth {
+	state: FeedState;
+	stale: boolean;
+	staleAfterDays: number;
+	reason: HealthReason;
 }
 
 export interface SourceOption {
@@ -177,13 +195,38 @@ export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'
 }
 
 /**
- * The server's health sentence (backend/src/feeds/health.ts) with its calendar
- * days written the way the rest of the panel writes them: "newest data
- * 2026-09-01" → "newest data 1 Sep 2026". Only bare YYYY-MM-DD days are
- * rewritten (never a timestamp), read from the string, so no time zone
- * shifts them.
+ * The health sentence for a feed, from the server's reason code and its facts
+ * (backend/src/feeds/health.ts). Days are calendar days, written with fmtDay
+ * ("1 Sep 2026") straight from their YYYY-MM-DD, so no time zone shifts them.
+ * A code this client doesn't know (a newer server) falls back to the state.
  */
-export const healthMessage = (message: string) => message.replace(/\b\d{4}-\d{2}-\d{2}\b(?![T:\d])/g, (d) => fmtDay(d));
+export function healthMessage(h: FeedHealth): string {
+	const r = h.reason;
+	const newest = (d: string | null) => (d ? `newest data ${fmtDay(d)}` : 'no data yet');
+	switch (r.code) {
+		case 'off':
+			return `Switched off; ${newest(r.newest)}.`;
+		case 'failing': {
+			const what = r.failures === 1 ? 'The last fetch failed' : `The last ${r.failures} fetches failed`;
+			const n = newest(r.newest);
+			return `${what}: ${r.error ?? 'unknown error'}. ${n.charAt(0).toUpperCase()}${n.slice(1)}.`;
+		}
+		case 'old-forecast':
+			return `No new forecast: it reaches only ${fmtDay(r.newest)}, less than ${-h.staleAfterDays} days ahead.`;
+		case 'old-data':
+			return `No new data: the newest day, ${fmtDay(r.newest)}, is more than ${h.staleAfterDays} days old.`;
+		case 'no-data':
+			return 'Fetches succeed but have found no data yet: check the cells or station.';
+		case 'not-fetched':
+			return `Not fetched since it was ${r.after} on ${fmtDay(r.since)}: the background worker may not be running.`;
+		case 'waiting':
+			return 'Waiting for its first fetch.';
+		case 'ok':
+			return `OK; ${newest(r.newest)}, checked ${fmtDay(r.checked)}.`;
+		default:
+			return `${STATE_LABELS[h.state] ?? 'Unknown state'}.`;
+	}
+}
 
 /** How many feeds need attention (stale or failing), for the section's warning. */
 export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
