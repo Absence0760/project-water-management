@@ -10,7 +10,8 @@
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
+	import { CsvError, type ParsedSeries } from '$lib/series/csv';
+	import { parseSeriesFile } from '$lib/series/file';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { mergePreview, type Daily } from './coverage';
 	import { guessSeries, headerLine, seriesEnd } from './freshness';
@@ -67,6 +68,17 @@
 	});
 
 	const id = (s: string) => `${idPrefix}-${s}`;
+	const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
+	const byCode = (r: Record<string, number>) => Object.keys(r).sort((a, b) => Number(a) - Number(b));
+	const qualityList = (r: Record<string, number>) => byCode(r).map((c) => `${c} × ${fmtNum(r[c]!)}`).join(', ');
+	// Why a DWS export's rows were read as gaps, for the summary.
+	function dwsGapParts(d: NonNullable<ParsedSeries['dws']>): string[] {
+		const parts: string[] = [];
+		if (d.gaps.code) parts.push(`${plural(d.gaps.code, 'row')} with a missing-data quality code (${byCode(d.gapCodes).join(', ')})`);
+		if (d.gaps.negative) parts.push(`${plural(d.gaps.negative, 'negative value')} (a placeholder such as -999)`);
+		if (d.gaps.blank) parts.push(`${plural(d.gaps.blank, 'row')} with no value`);
+		return parts;
+	}
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const target = $derived(list.find((s) => s.kind === kind && s.name === name.trim()) ?? null);
 	// Until picked by hand, an existing series' own label (so appending to it just works).
@@ -136,12 +148,12 @@
 		try {
 			const text = await f.text();
 			try {
-				parsed = parseSeriesCsv(text);
+				parsed = parseSeriesFile(text);
 			} catch (err) {
 				// Several timed readings a day: add them up into days, in the window picked below.
 				if (!(err instanceof CsvError) || !err.subDaily) throw err;
 				subDailyText = text;
-				parsed = parseSeriesCsv(text, { dayBoundary });
+				parsed = parseSeriesFile(text, { dayBoundary });
 			}
 			const g = guessSeries(f.name, headerLine(text), list);
 			if (g && !kindTouched) {
@@ -164,7 +176,7 @@
 		dayBoundary = b;
 		if (subDailyText === null) return;
 		try {
-			parsed = parseSeriesCsv(subDailyText, { dayBoundary: b });
+			parsed = parseSeriesFile(subDailyText, { dayBoundary: b });
 			parseError = null;
 		} catch (err) {
 			parsed = null;
@@ -232,7 +244,7 @@
 <form onsubmit={upload}>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<details class="fmt">
-		<summary>CSV format</summary>
+		<summary>File formats</summary>
 		<p>Two columns, <span class="mono">date,value</span>, one row per day; a header row is optional.</p>
 		<pre class="mono">date,value
 2025-04-01,0.0
@@ -240,15 +252,21 @@
 2025-04-03,</pre>
 		<ul>
 			<li>Dates: YYYY-MM-DD (safest), YYYY/MM/DD, DD/MM/YYYY or MM/DD/YYYY. The order is worked out from the whole file; if no day is above 12, day/month is assumed and the summary says so.</li>
-			<li>Separators: comma, semicolon or tab.</li>
+			<li>Separators: comma, semicolon or tab, worked out from the file. Quote a value that holds the separator.</li>
+			<li>Numbers: 12.5 or 12,5 (a decimal comma in a semicolon or tab file, or quoted), with or without thousands separators (1 234,5 · 1,234.5). The decimal separator is worked out from the whole file; a file that mixes them, or where 1,234 could be either, is refused.</li>
 			<li>Blank, NA or - = no reading (stored as a gap).</li>
+			<li>
+				DWS hydrology exports load as they are: the daily table from the DWS site (<span class="mono">DATE D AVG F/R QUAL</span>, dates as
+				YYYYMMDD), as text or the saved page. Days whose quality code says the data is missing (151, 165, 170, 172, 246, 247, 255), and blank
+				or negative values such as -999, are stored as gaps; the summary counts them.
+			</li>
 			<li>Units: rainfall in mm per day; flow as the daily mean in m³/s.</li>
 			<li>Name the file after the series (e.g. <span class="mono">Weir flow.csv</span>) and it is picked for you.</li>
 		</ul>
 	</details>
 	<div class="field">
 		<label for={id('file')}>CSV file</label>
-		<input id={id('file')} type="file" accept=".csv,.txt,text/csv" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
+		<input id={id('file')} type="file" accept=".csv,.tsv,.txt,.htm,.html,text/csv,text/plain" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
 		{#if fileName && !fileInput?.files?.length}<span class="hint">{fileName}</span>{/if}
 	</div>
 	{#if guessed}<p class="hint muted guess">Looks like <strong>{guessed}</strong> — change below if not.</p>{/if}
@@ -339,6 +357,27 @@
 						{fmtNum(parsed.subDaily.readings)} readings, {fmtNum(parsed.subDaily.readingsPerDay)} a day, {parsed.subDaily.dayBoundary}–{parsed.subDaily.dayBoundary}{#if parsed.subDaily.incompleteDays}
 							<span class="warn-text">; {fmtNum(parsed.subDaily.incompleteDays)} days have fewer readings, so their totals may be short</span>{/if}
 					</dd>
+				</div>
+			{/if}
+			{#if parsed.dws}
+				{@const d = parsed.dws}
+				{@const dropped = d.gaps.code + d.gaps.negative + d.gaps.blank}
+				<div class="wide">
+					<dt>DWS export</dt>
+					<dd data-testid="dws-summary">
+						{fmtNum(d.rows)} rows{#if d.column}, {d.column}{/if}.
+						{#if dropped}
+							<span class="warn-text"
+								>{fmtNum(dropped)} read as gaps:{#each dwsGapParts(d) as part, i (part)}{i ? ';' : ''} {part}{/each}.</span
+							>
+						{:else}
+							No rows read as gaps.
+						{/if}
+					</dd>
+				</div>
+				<div class="wide">
+					<dt>Quality codes</dt>
+					<dd data-testid="dws-quality">{qualityList(d.quality) || 'none given'}</dd>
 				</div>
 			{/if}
 			{#if parsed.dateOrder !== 'iso'}

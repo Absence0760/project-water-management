@@ -334,6 +334,22 @@
 	}
 	$effect(() => warmTab(tab));
 
+	// Phones (< 900 px): the sections sit behind a "Sections" button, closed
+	// again by choosing a tab or Escape.
+	let navOpen = $state(false);
+	let navToggle: HTMLButtonElement | undefined = $state();
+	$effect(() => {
+		void tab;
+		navOpen = false;
+	});
+	function navKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || !navOpen) return;
+		e.preventDefault();
+		navOpen = false;
+		navToggle?.focus();
+	}
+	const modelIssues = $derived(editor.issues.some((x) => (MODEL_TABS as readonly string[]).includes(x.area)));
+
 	// Keep the active tab in view in the scrolling strip (narrow screens).
 	let tabStrip: HTMLElement | undefined = $state();
 	$effect(() => {
@@ -442,6 +458,14 @@
 
 			<div class="workspace">
 			<div class="tab-row">
+				<button type="button" class="nav-toggle" aria-expanded={navOpen} aria-controls="project-nav" bind:this={navToggle} onclick={() => (navOpen = !navOpen)}>
+					<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
+					<span class="nav-toggle-label"><span class="visually-hidden">Project sections: </span>{LABEL[tab]}</span>
+					{#if modelIssues}<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>{/if}
+					<svg class="chev" class:up={navOpen} viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+				</button>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="nav-panel" class:open={navOpen} id="project-nav" onkeydown={navKeydown}>
 				<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
 					{#each sections as sec (sec.id)}
 						<div class="section" role="group" aria-labelledby="nav-{sec.id}">
@@ -471,6 +495,7 @@
 						Show model inputs
 					</label>
 				{/if}
+				</div>
 			</div>
 
 			<div class="main-col">
@@ -920,6 +945,100 @@
 		font-size: 0.875rem;
 		white-space: nowrap;
 		cursor: pointer;
+	}
+	/* The phone's "Sections" button (below 900 px); elsewhere the panel is
+	   transparent to layout and the strip or sidebar shows as before. */
+	.nav-toggle {
+		display: none;
+	}
+	.nav-panel {
+		display: contents;
+	}
+	@media (max-width: 899px) {
+		.tab-row {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.5rem;
+			box-shadow: none;
+		}
+		.nav-toggle {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			width: 100%;
+			min-height: 44px;
+			padding: 0 0.75rem;
+			border: 1px solid var(--border-input);
+			border-radius: var(--radius);
+			background: var(--surface);
+			color: var(--text);
+			font: inherit;
+			font-weight: 600;
+			text-align: left;
+			cursor: pointer;
+		}
+		.nav-toggle-label {
+			flex: 1;
+			min-width: 0;
+		}
+		.chev {
+			transition: transform 0.15s;
+		}
+		.chev.up {
+			transform: rotate(180deg);
+		}
+		.nav-panel {
+			display: none;
+		}
+		.nav-panel.open {
+			display: block;
+			padding: 0.5rem 0;
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			background: var(--surface);
+		}
+		.tabs {
+			flex-direction: column;
+			gap: 0.5rem;
+			overflow: visible;
+		}
+		.section {
+			flex-direction: column;
+			gap: 0;
+		}
+		.section + .section {
+			margin-left: 0;
+			padding: 0.5rem 0 0;
+			border-left: 0;
+			border-top: 1px solid var(--border);
+		}
+		.section-label {
+			position: static;
+			width: auto;
+			height: auto;
+			overflow: visible;
+			clip: auto;
+			padding: 0 0.85rem 0.25rem;
+			color: var(--text-muted);
+			font-size: 0.75rem;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+		.tabs a[aria-current='page'] {
+			background: var(--accent-soft);
+			box-shadow: inset 3px 0 0 var(--accent);
+		}
+		.inputs-toggle {
+			padding: 0.25rem 0.85rem 0;
+			border-top: 1px solid var(--border);
+			margin-top: 0.5rem;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.chev {
+			transition: none;
+		}
 	}
 	.issue-dot {
 		display: inline-block;

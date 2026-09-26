@@ -168,7 +168,8 @@
 
 <div class="layout">
 	<section class="panel rail" aria-labelledby="scenarios-h">
-		<div class="panel-head"><h2 id="scenarios-h">{applicant ? 'Your applications' : 'Scenarios'}</h2></div>
+		<!-- Not "Scenarios": the tab body is already the region of that name (landmarks need unique names). -->
+		<div class="panel-head"><h2 id="scenarios-h">{applicant ? 'Your applications' : 'All scenarios'}</h2></div>
 		<LoadState {loading} {error} retry={loadList}>
 			{#if scenarios?.length}
 				<ul class="list">
