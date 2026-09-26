@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FeedInput, FeedPatch, SOURCES } from './config.js';
+import { CHIRPS_FIRST_DAY, FeedInput, FeedPatch, SOURCES } from './config.js';
 
 const cells = [{ lat: -20.12, lon: 25.17 }];
 
@@ -36,9 +36,18 @@ describe('FeedInput', () => {
 		['an unknown config key', { source: 'dws', config: { station: 'X0H000', url: 'http://evil' } }],
 		['an unknown source', { source: 'saws', config: {} }],
 		['an unknown field', { source: 'dws', config: { station: 'X0H000' }, actingUserId: 'x' }],
-		['a start date that isn’t one', { source: 'dws', config: { station: 'X0H000', startDate: '2021-02-30' } }]
+		['a start date that isn’t one', { source: 'dws', config: { station: 'X0H000', startDate: '2021-02-30' } }],
+		// Every day before CHIRPS begins is a 404: the first window would find
+		// nothing, and with no newest day the next fetch would read it again, forever.
+		['a CHIRPS start date before the record begins', { source: 'chirps', config: { cells, startDate: '1980-12-31' } }]
 	])('refuses %s', (_, body) => {
 		expect(FeedInput.safeParse(body).success).toBe(false);
+	});
+
+	it('takes a CHIRPS start date from the first day of the record', () => {
+		expect(FeedInput.parse({ source: 'chirps', config: { cells, startDate: CHIRPS_FIRST_DAY } }).config).toMatchObject({ startDate: '1981-01-01' });
+		const r = FeedInput.safeParse({ source: 'chirps', config: { cells, startDate: '1970-01-01' } });
+		expect(r.error!.issues[0]).toMatchObject({ path: ['config', 'startDate'], message: 'CHIRPS begins on 1981-01-01' });
 	});
 
 	it('points a config issue at config.<field>', () => {
