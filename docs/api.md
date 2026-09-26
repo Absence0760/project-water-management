@@ -476,6 +476,9 @@ clears its invite.
 
 - `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired }` —
   `invitedBy` is the display name of whoever last sent it.
+- Farmer invites ([§ Farmers](#farmers)) are listed here too, with `role:
+  "farmer"`; `GET /projects/:id/farmers` lists them with their farms. The
+  Members panel leaves them to the Farmers panel.
 
 ## Teams
 
