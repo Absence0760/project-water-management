@@ -14,6 +14,11 @@ mode. Every run records `engineVersion`, so results from 0.3.x stay explainable.
 - **Method:** each finding has a failing test first, then the fix. Decisions
   that need hydrological or policy judgement are marked **Needs hydrologist**,
   with a recommendation, and the engine's behaviour for them is unchanged.
+- **Known limitations** (WP-3.13): every item below whose decision is still
+  open (*pending*, *Needs hydrologist*, *Warned*, *Built*) is printed on
+  every report's validation statement and sign-off. The list is generated
+  from the two tables; after changing a decision run `pnpm gen:limitations`
+  (`packages/engine/src/liability/limitations.test.ts` fails until you do).
 - **Policy** (CLAUDE.md rule 10, [STACK.md](./STACK.md)): engine correctness is
   judged by documented hydrology and the invariant tests. The client catchment
   regression suite records where results differ from the workbook, and why

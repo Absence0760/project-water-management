@@ -740,6 +740,37 @@ readable by anyone. The rules:
   alarm, so a model bug in production is paged, not just shown as a warning
   on the one run.
 
+## Liability
+
+Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
+
+- **Disclaimer.** Every report ends with the disclaimer (engine
+  `DISCLAIMER`, versioned). It is **draft** wording until the client's legal
+  adviser agrees it (decision D10; an operator item in followups.md §
+  Blocking releases), and the report says so in bold beside it.
+- **Known limitations can't be left out quietly.** The report's validation
+  statement lists every open engine-audit.md item, generated from the doc;
+  a test fails when the committed list and the doc differ.
+- **Sign-off.** A registered professional signs a run
+  ([data-model.md § Sign-offs](./data-model.md#sign-offs-035_signoffsql)).
+  - *Who:* editors and owners, as themselves only (RLS `user_id =
+    app_current_user_id()`); viewers read; farmers see nothing.
+  - *What:* the server rebuilds the statement (the five confirmations, the
+    limitations, the notes, the disclaimer version, the run's id and engine
+    version) and refuses a sign-off whose SHA-256 isn't that statement's, so
+    a signature is bound to the words shown. Every confirmation must be
+    ticked; a legacy run can't be signed (audit H1).
+  - *Immutable:* `water_app` has no `UPDATE` or `DELETE` on `signoff` and no
+    policy allows either (catalogue guard); the signed run is cited, so it
+    can't be deleted or trimmed. Each sign-off is in the audit log.
+  - *Limits, stated on the report and in the dialog:* the registration
+    number is **self-declared** (not checked against the SACNASP register);
+    dam safety classification (DW793) is for others; there is no MFA on
+    signing yet (Step 4), so a sign-off is as strong as the signer's
+    password. The typed name and registration are personal data: the POPIA
+    export and deletion must cover them (followups.md § Liability and
+    sign-off).
+
 ## Known gaps (tracked in [plan.md](./plan.md))
 
 - No app-level rate limit on `/auth/register` beyond the WAF's per-IP
