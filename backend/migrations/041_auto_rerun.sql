@@ -37,7 +37,7 @@
 --      skips the re-run (no job, no row) rather than refuse, so the key's
 --      ingest still commits.
 --
---   4. job_enqueue (016_jobs, replaced from its latest definition): a
+--   4. job_enqueue (replaced from its latest definition, 040_yield.sql): a
 --      SECURITY DEFINER caller with no signed-in user (app_enqueue_rerun for
 --      an API key) may name the acting user itself. Everything else is as
 --      before: a signed-in enqueuer is always stamped as the acting user, and
@@ -58,7 +58,7 @@ CREATE FUNCTION app_rerun_acting_user(p_project uuid) RETURNS uuid
 		END
 	$$;
 
--- 4. From 016_jobs.sql's job_enqueue, with the one new case.
+-- 4. From 040_yield.sql's job_enqueue (016's, also clearing progress and the cancel flag), with the one new case.
 CREATE OR REPLACE FUNCTION job_enqueue() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
@@ -80,6 +80,8 @@ CREATE OR REPLACE FUNCTION job_enqueue() RETURNS trigger
 		NEW.last_error := NULL;
 		NEW.started_at := NULL;
 		NEW.finished_at := NULL;
+		NEW.progress := NULL;
+		NEW.cancel_requested_at := NULL;
 		NEW.created_at := now();
 		NEW.run_after := GREATEST(COALESCE(NEW.run_after, now()), now());
 		IF NEW.run_after > now() + interval '7 days' THEN
