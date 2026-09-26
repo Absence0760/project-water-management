@@ -6,14 +6,14 @@
 // A FetchResult is what crosses from the fetcher back to the database. In
 // production it rides the `ingest-results` queue, so the worker treats it as
 // untrusted input and validates it (FetchResult below) before anything merges.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import { configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError } from './errors.js';
 import type { FeedHttp } from './http.js';
 import { fetchChirps, fetchGefs } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
-import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/merge.js';
+import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
 /** Today's date in UTC: CHIRPS days, DWS days and the schedule all count UTC calendar days. */
 export const utcToday = (now = new Date()) => now.toISOString().slice(0, 10);

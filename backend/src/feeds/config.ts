@@ -4,7 +4,7 @@
 // the fetcher Lambda all validate with these schemas.
 import type { SeriesKind } from '@water-management/engine';
 import { z } from 'zod';
-import { SeriesStartDate } from '../series/merge.js';
+import { SeriesStartDate } from '../series/limits.js';
 
 export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws'] as const;
 export type FeedSource = (typeof FEED_SOURCES)[number];

@@ -15,7 +15,7 @@
 //
 // `stale` is also reported on its own, so a failing feed that is out of date
 // says both.
-import { toEpochDay } from '@water-management/engine';
+import { toEpochDay } from '@water-management/engine/calendar';
 import { type FeedConfig, type FeedSource, SOURCES } from './config.js';
 
 export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled'] as const;

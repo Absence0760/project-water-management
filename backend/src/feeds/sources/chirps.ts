@@ -14,7 +14,7 @@
 // "sat" is CHIRPS v3 disaggregated to days with IMERG, the only daily
 // preliminary product (the ERA5 "rnl" one lags 5–6 days and has no prelim).
 // Units are mm/day; the sea is -9999.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import type { FeedHttp } from '../http.js';
 import { openGrid, readPoints } from './tiff.js';
