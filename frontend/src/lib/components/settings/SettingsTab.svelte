@@ -592,14 +592,15 @@
 				<span class="hint" id="st-chirps-bias-h">{chirpsOption?.help}</span>
 			</div>
 		</div>
-		{#if s.chirpsBiasCorrection === 'monthly'}
-			<ChirpsFitPeriodSection
-				bind:value={s.chirpsFitPeriod}
-				bind:error={fitPeriodError}
-				{readonly}
-				propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
-			/>
-		{/if}
+		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
+		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
+		<ChirpsFitPeriodSection
+			bind:value={s.chirpsFitPeriod}
+			bind:error={fitPeriodError}
+			{readonly}
+			inactive={s.chirpsBiasCorrection !== 'monthly'}
+			propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
+		/>
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 	</section>
 

@@ -688,7 +688,7 @@ value such as 250000.
   per month, the default, or raw CHIRPS; it applies to both models and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
   A run that corrected CHIRPS lists the monthly factors and the number of
-  days in its warnings. With bias correction on, **CHIRPS fit period**
+  days in its warnings. Below it, **CHIRPS fit period** (always shown; with raw CHIRPS it says it is unused but kept, and an invalid list still blocks Save where it can be fixed)
   (`settings/ChirpsFitPeriodSection.svelte`, `settings.chirpsFitPeriod`,
   engine ≥ 0.29.0): "Whole record (default)" or "Listed water years", the
   latter with rows of from / to water year and a required reason

@@ -18,11 +18,14 @@
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
+		inactive = false,
 		propose
 	}: {
 		value: ChirpsFitPeriod;
 		error?: string | null;
 		readonly?: boolean;
+		/** Bias correction is off: the fit period is kept (and still checked) but not used. */
+		inactive?: boolean;
 		/** Ranges proposed from the double-mass breaks, or why there are none. */
 		propose?: () => Promise<FitRangeProposal>;
 	} = $props();
@@ -97,13 +100,14 @@
 			{#each CHIRPS_FIT_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
 		<span class="hint" id="{uid}-h">{option?.help}</span>
+		{#if inactive}<span class="hint" data-testid="chirps-fit-inactive">Not used while CHIRPS bias correction is off: raw CHIRPS has no factors. The setting is kept for when it is turned back on.</span>{/if}
 	</div>
 	{#if propose && !readonly}
 		<div class="propose">
 			<button type="button" class="btn btn-sm" disabled={proposing} onclick={runProposal}>
 				{proposing ? 'Proposing…' : 'Propose from the double-mass breaks'}
 			</button>
-			{#if proposeNote}<p class="hint" role="status">{proposeNote}</p>{/if}
+			{#if proposeNote}<p class="hint" role="status" data-testid="chirps-fit-proposal">{proposeNote}</p>{/if}
 		</div>
 	{/if}
 	{#if choice === 'ranges'}
