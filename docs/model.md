@@ -1822,7 +1822,7 @@ share (§2.11) and the curtailment supply cut count it too.
 | `[Shortfalls]` | Per farm over a reporting window: average demand, supply, deficit, % supplied, target volume, reduce/gain (m³/day and l/s), average EWR shortfall, total reductions, volume left after irrigation is balanced and the EWR is met | `RunSummary.curtailment` over `settings.reportStart … reportEnd` (§2.11); `RunSummary.farms` keeps the whole-run averages |
 | `[Flow data]` rain columns (I, J, R) | Catchment rain, CHIRPS, rain used | Run series `rain_final`, `rain_chirps`, `rain_chirps_corrected` beside `rain_used` (§2.4b) |
 | `[EWR analysis]` / pivots | Shortfall by farm × year × month, count and % of days not met | `RunSummary.ewrCompliance` + EWR heat map (§2.9) |
-| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table | `RunSummary.ewrAssurance` + the Reserve compliance panel, headline and CSV block (§2.9c, engine ≥ 0.21.0) |
+| (none: the Reserve's assurance rules, from a Reserve determination) | Monthly compliance at each EWR site with a rule table; from engine 0.32.0 also its low flows (maintenance to drought) and freshet / flood components | `RunSummary.ewrAssurance` + the Reserve compliance panel (with a per-site heat map), headline and CSV block (§2.9c, §2.9d) |
 | `[Flow Calibr. Graph Full]`, `[Flow Calibration Cfg]` | Observed vs simulated flow over the calibration window | Calibration chart + `CalibrationStats` (§2.10) |
 
 ### 2.9 EWR compliance grid (`[EWR shortfalls Pivot Data]` → `[EWR analysis]`)
@@ -2074,6 +2074,110 @@ drought index; log interpolation) · Pollard, Mallory, Riddell & Sawunyama
 and monthly compliance; interpolating a requirement between points) ·
 Riddell et al. 2014, *HSJ* 59:831 (historical compliance: share of time,
 months, seasonality, magnitude, contiguity).
+
+### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.32.0, roadmap WP-3.7)
+
+§2.9c judges each EWR site against one rule table. The Desktop Reserve Model
+(Desktop Version 2, Hughes & Hannart 2003; Hughes et al. 2014) gives two
+assurance tables per site: the **total flow** (low flows plus high flows)
+and the **low flows** alone, each per month at the 10 % … 99 % points; the
+low flows fall from the maintenance low flow at the wetter points to the
+drought low flow at 99 %. Reserve studies above desktop level also specify
+**high-flow events**: freshets and floods of a given peak and duration, a
+number of times a year, in given months. Engine 0.32.0 adds both to a rule
+table, at every EWR site (the outlet and each gauge, §2.7b), with nothing
+else changed: a table without them reports exactly as before (key for key,
+tested), so the existing rule tables, runs and exports are unchanged.
+
+**Low flows** (`EwrRuleTable.lowFlow`, optional). On a `total` table, a
+second 12 × points grid in the same unit, read at the **same natural
+percentile** as the total (the same natural curve and interpolation weight,
+§2.9c; below the driest point it scales with the flow as the total does):
+
+```
+R_low   = the low-flow grid read at p           (table unit)
+lowMet  = A ≥ R_low                              (relative tolerance 1e-9, as §2.9c)
+R_high  = MAX(R − R_low, 0)                      the month's high-flow part
+```
+
+A month then reads three ways: met (A ≥ R), **only the high flows short**
+(R_low ≤ A < R), or **the low flows short** (A < R_low). The site report adds
+`lowFlow { months, met, rate, deficitM3, longestNotMetRun }`, each month
+`requiredLowFlow`, `lowFlowMet`, `requiredHighFlow`, and each month of the
+year `lowFlowRate`. A `lowFlow` table (component `lowFlow`) can't carry a
+second low-flow grid (validation refuses it: its own grid is the low flows).
+Plausibility notes (run warnings, not blocking): a low-flow row that rises
+with the % point, and low flows above the total at a point (the high-flow
+part there counts as 0).
+
+Both requirements are judged on the month's **total** flow volume A, as
+§2.9c does. A flood month can therefore pass its low flows on volume while
+its base flow was short; separating base flow from the month's flow (e.g. a
+baseflow filter or the month's lowest daily flows) is the durable measure
+and is pending the hydrologist (docs/followups.md, "Low flows on base
+flow").
+
+**High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
+component: a label, the calendar months an event may start in, a peak
+(m³/s, daily mean; × the table's scale), a duration (1–90 days) and the
+events required per water year (1–12; `duration × per year ≤ 366`).
+Per **complete water year** (1 Oct … 30 Sep inside the run; a part year at
+either end is not assessed):
+
+```
+event     = a maximal run of days with daily flow ≥ peak (relative tolerance 1e-9),
+            at least `duration` days long, whose first day falls in one of the months;
+            a run is cut at the water year's ends, a missing day breaks it
+n_nat     = events in the site's natural flow (Σ runoff of the farms upstream, §2.9c)
+n_sim     = events in the simulated flow at the site (outlet: outflow; gauge: its flow)
+required  = MIN(perYear, n_nat)
+met       = n_sim ≥ required
+```
+
+A year is never asked for a flood its natural flow didn't have: a dry year is
+not failed for it, but a dam that holds back a flood the river would have had
+is. That is the same principle as the monthly rules (the requirement follows
+natural conditions, §2.9c) applied to events. The report per component:
+each year's natural, simulated and required count, and `overall { years,
+required, met, rate }`, where `rate = met ÷ years with required > 0` (null
+when none).
+
+**Several sites.** Every site with a table is assessed on its own natural
+and simulated flow, so a dam upstream of one gauge changes that gauge and
+every site below it (the outlet), but not a site on another branch (tested:
+two branches, a gauge on each, a dam on one, `lowHighFlows.test.ts`). Farm
+attribution is unchanged: the daily charge still follows the pragmatic EWR at
+each site (§2.7b); a charge driven by the rule tables is the open
+follow-up "Daily charge from the rule table".
+
+**Invariants (tested, `reserve/lowHighFlows.test.ts`).**
+- A table with neither addition reports exactly as before (no new keys).
+- Natural flow meets its own low flows whenever the low-flow grid is at most
+  the natural curve, and its own high flows always (n_sim = n_nat ≥ required).
+- With low flows ≤ the total at every point, a month that meets the total
+  meets its low flows.
+- Less flow never meets more low-flow months (R_low depends only on natural
+  flow); a site with no event fails every year that required one.
+- The months of the year add up to the site's low-flow totals.
+- The fuzz generator adds low-flow grids (now and then above the total) and
+  high-flow components to its random rule tables from their own random
+  stream, so order invariance and finiteness cover them.
+
+**Entry** (Settings → Reserve rule tables): a *total* table's "Also enter the
+low flows" adds the grid; every grid (EWR, low flows, natural flows) fills
+from a paste or a CSV file (the layout of a DRM table: month rows, % point
+columns, an optional heading row; synthetic example files to download), and
+the high-flow components from a pasted or loaded CSV (name, months, peak,
+days, per year). The API (the settings schema, `backend/src/projects/settings.ts`, runs the engine's
+`ewrRuleTableIssues`) refuses a malformed grid or component, so a missing
+table is a validation error, never "0 required".
+
+**Pending the hydrologist.** Whether the low flows should be judged on base
+flow rather than the month's volume; whether a freshet's "per year" should be
+capped by natural events (as here) or required outright in maintenance years
+only; whether events should be counted per month rather than per water year;
+the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
+this is signed off.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
@@ -3379,6 +3483,9 @@ step when a definition changes.
 | **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. by ecological category and regional hydrological type). |
 | **Pragmatic EWR** | b023's simplification: one fixed m³/day per month instead of a flow-dependent requirement, so farmers can plan for it. |
 | **Ecological category** | A–F class of river condition that the EWR aims to maintain. |
+| **Maintenance / drought low flows** | The low-flow part of a Reserve: the base flow a river needs in normal years (maintenance, the wetter % points of the DRM low-flow table) down to the least it needs in a drought (its 99 % point) (§2.9d). |
+| **Freshet / flood (high flows)** | A Reserve high-flow event: a peak held for some days, a number of times a water year, in given months; checked per water year against the events natural flow had (§2.9d). |
+| **Percentile (natural condition)** | Where a month's natural flow sits on that month's natural flow duration curve, as % exceedance: low = wet, high = dry; it picks the row of a Reserve rule table (§2.9c). |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
 | **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with 0 or blank on the unread days and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d). |

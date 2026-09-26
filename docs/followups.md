@@ -637,6 +637,28 @@ the reports):
       - [x] **Uncertainty on compliance.** Phase 9's bands include the
             monthly Reserve compliance rate per site beside days not met
             (engine 0.26.0).
+      - [x] **Low flows and high flows (WP-3.7, engine 0.32.0).** The DRM
+            low-flow table beside a total table and freshet / flood
+            components per site, entered by paste or CSV, with a heat map
+            per site ([model.md §2.9d](./model.md)). Method choices pending
+            the hydrologist (plan.md question 17).
+      - [ ] **Low flows on base flow.** Engine 0.32.0 judges the low-flow
+            requirement on the month's total volume, so a flood month can
+            pass its low flows while its base flow was short. The durable
+            fix is a base-flow measure of the month (a recursive baseflow
+            filter, or the mean of the month's lowest daily flows) compared
+            with the low-flow requirement, behind a new engine version.
+            Trigger: the hydrologist's answer on which measure a Reserve
+            monitoring report uses.
+      - [ ] **Site source and confidence labels (WP-3.7 UI).** Each rule
+            table has a free-text source; the WP asks for a typed source
+            (`gazetted` | `desktop` | `other`) with a confidence line
+            ("Desktop estimate, low confidence" / "Gazetted Reserve, GN …")
+            and, in scenarios and evidence packs, a changed table shown in
+            red as a baseline assumption. Durable fix: an optional
+            `sourceKind` on `EwrRuleTable` (engine, schema, editor,
+            the panel and packs). Trigger: WP-3.5 packs quoting the
+            Reserve, or the assessor persona asking.
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version

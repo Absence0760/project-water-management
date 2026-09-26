@@ -845,6 +845,26 @@ must build WP-2.15 Phase B.
 
 ### WP-3.7 Full EWR tables and several EWR sites
 
+- **Status (2026-09-26): built, first slice** (engine 0.32.0,
+  [model.md §2.9d](../model.md)). Where the build differs from the plan
+  below: the tables stay in `settings.ewrRules` (one per EWR site: the
+  outlet and every gauge, engine 0.21.0 / 0.17.0) rather than an `ewr_site`
+  table, so there is no migration and no `ewrMethod` switch (a table adds a
+  report; the pragmatic EWR still drives the daily charge). Built: the
+  DRM's **low-flow table** (maintenance to drought) beside a total-flow
+  table, read at the same natural percentile, so each month is met / only the
+  high flows short / the low flows short; **freshet and flood components**
+  per site, checked per complete water year against the events the site's
+  natural flow had; entry by grid, paste or CSV file with synthetic example
+  layouts; API validation; a Reserve **heat map** per site in the Reserve
+  compliance panel; low-flow and high-flow rates in run comparison and the
+  summary CSV; the two-branch acceptance test (a dam on one branch changes
+  that gauge and the outlet, not the other branch). Left, in
+  [followups.md](../followups.md) under the Reserve item: low flows judged on
+  base flow, the daily charge from the rule table, per-site
+  source/confidence labels (gazetted / desktop), and showing a method switch
+  in red in scenarios and packs. All method choices are pending the
+  hydrologist.
 - **Goal.** Replace the single pragmatic EWR (quirk Q10) with the Reserve
   as it is actually determined: flow-dependent monthly requirements at more
   than one site.
