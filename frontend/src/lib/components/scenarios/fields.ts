@@ -1,0 +1,311 @@
+// The values a scenario op can set (docs/scenarios.md § Op catalogue), as
+// the override editor shows and reads them: a label and a value spec per
+// node field, transfer field and settings path the engine's ScenarioOp union
+// allows, plus parsing typed text into the stored value and formatting a
+// stored value for people. Fractions are stored 0–1 and shown as %. Pure:
+// no Svelte, no API.
+import {
+	ACCUMULATION_MODES,
+	BOREHOLE_RULES,
+	CALIBRATION_FLOW_KINDS,
+	CHIRPS_BIAS_MODES,
+	NODE_SET_FIELDS,
+	RUNOFF_MODELS,
+	SETTINGS_PATHS,
+	TRANSFER_SET_FIELDS,
+	USER_PRIORITIES,
+	ZERO_RAIN_MODES,
+	isIsoDate,
+	type NodeKind,
+	type NodeSetField,
+	type SettingsPath,
+	type TransferSetField
+} from '@water-management/engine';
+import { fmtNum, parseNum } from '$lib/format/number';
+import { kindLabel } from '$lib/series/kinds';
+
+export interface EnumOption {
+	value: string;
+	label: string;
+}
+
+/** How a value is typed in and shown. `scale` 100 shows a stored fraction as a percentage. */
+export type ValueSpec =
+	| { t: 'text' }
+	| { t: 'number'; unit: string; scale: number; nullable: boolean; nullLabel?: string; int?: boolean }
+	| { t: 'enum'; options: readonly EnumOption[]; nullable?: boolean; nullLabel?: string }
+	/** 12 values, one per water-year month (Oct–Sep). */
+	| { t: 'monthly'; unit: string; scale: number; nullable: boolean }
+	/** A set of calendar months 1–12. */
+	| { t: 'months' }
+	| { t: 'bool' }
+	/** An ISO date; empty is null. */
+	| { t: 'date'; nullLabel: string }
+	/** A node of the model, by id. */
+	| { t: 'node' };
+
+export interface FieldSpec {
+	label: string;
+	spec: ValueSpec;
+}
+
+const num = (unit: string, opts: { scale?: number; nullable?: boolean; nullLabel?: string; int?: boolean } = {}): ValueSpec => ({
+	t: 'number',
+	unit,
+	scale: opts.scale ?? 1,
+	nullable: opts.nullable ?? false,
+	nullLabel: opts.nullLabel,
+	int: opts.int
+});
+const pct = (nullable = false, nullLabel?: string): ValueSpec => num('%', { scale: 100, nullable, nullLabel });
+const plain = (list: readonly string[], labels: Record<string, string> = {}): readonly EnumOption[] => list.map((v) => ({ value: v, label: labels[v] ?? v }));
+
+// ---------------------------------------------------------------------------
+// node.set
+// ---------------------------------------------------------------------------
+
+export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
+	name: { label: 'Name', spec: { t: 'text' } },
+	areaKm2: { label: 'Area', spec: num('km²') },
+	areaHiKm2: { label: 'High-MAP area', spec: num('km²') },
+	areaLoKm2: { label: 'Low-MAP area', spec: num('km²') },
+	flowShareManual: { label: 'Manual flow share', spec: pct(true, 'none') },
+	pctUpstreamToDam: { label: 'Upstream inflow to the dam', spec: pct() },
+	pctRunoffToDam: { label: 'Own runoff to the dam', spec: pct() },
+	damCapacityM3: { label: 'Dam capacity', spec: num('m³') },
+	damInitialPct: { label: 'Dam level at the start', spec: pct() },
+	damMinPct: { label: 'Dam minimum operating level', spec: pct() },
+	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (capacity ÷ 3 m)' }) },
+	damAreaExponent: { label: 'Dam area exponent', spec: num('') },
+	damSeepagePerDay: { label: 'Dam seepage per day', spec: pct() },
+	divertCapacityM3Day: { label: 'Diversion capacity', spec: num('m³/day') },
+	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct() },
+	lossReturnFraction: { label: 'Share of losses returning', spec: pct() },
+	boreholeCapacityM3Day: { label: 'Borehole capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no boreholes' }) },
+	boreholeRule: { label: 'Borehole rule', spec: { t: 'enum', options: plain(BOREHOLE_RULES) } },
+	boreholeTriggerPct: { label: 'Borehole drought trigger', spec: pct() },
+	streamDepletionFrac: { label: 'Stream depletion share', spec: pct() },
+	streamDepletionLagDays: { label: 'Stream depletion lag', spec: num('days') },
+	userDemandM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
+	userReturnPct: { label: 'Share returned', spec: pct() },
+	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES) } }
+};
+
+/** The fields node.set may change on a node of this kind, in the engine's order. */
+export function nodeFields(kind: NodeKind): { field: NodeSetField; label: string }[] {
+	return (NODE_SET_FIELDS[kind] as readonly NodeSetField[]).map((field) => ({ field, label: NODE_FIELD_SPECS[field].label }));
+}
+
+// ---------------------------------------------------------------------------
+// transfer.set
+// ---------------------------------------------------------------------------
+
+export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
+	fromNodeId: { label: 'Source', spec: { t: 'node' } },
+	toNodeId: { label: 'Destination', spec: { t: 'node' } },
+	months: { label: 'Months it runs', spec: { t: 'months' } },
+	maxRateM3s: { label: 'Maximum rate', spec: num('m³/s') },
+	dailyCapM3: { label: 'Daily cap', spec: num('m³', { nullable: true, nullLabel: 'no cap' }) },
+	minStoragePct: { label: 'Source dam minimum level', spec: pct() },
+	enabled: { label: 'Enabled', spec: { t: 'bool' } },
+	priority: { label: 'Priority (lower moves first)', spec: num('', { int: true }) }
+};
+
+export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
+
+// ---------------------------------------------------------------------------
+// settings.set
+// ---------------------------------------------------------------------------
+
+const MONTH_MM: ValueSpec = { t: 'monthly', unit: 'mm', scale: 1, nullable: false };
+
+export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
+	februaryDays: { label: 'Days in February', spec: num('days', { int: true }) },
+	effectiveRainFraction: { label: 'Effective rain fraction', spec: pct() },
+	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', spec: num('mm') },
+	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', spec: num('') },
+	apanMm: { label: 'A-pan evaporation by month', spec: MONTH_MM },
+	panCoefficient: { label: 'Pan coefficient by month', spec: { t: 'monthly', unit: '', scale: 1, nullable: false } },
+	ewrPragmaticM3PerDay: { label: 'Pragmatic EWR by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: false } },
+	flowShareMethod: {
+		label: 'Flow-share method',
+		spec: { t: 'enum', options: plain(['area', 'hiLo', 'manual'], { area: 'By area', hiLo: 'High/low MAP', manual: 'Manual' }) }
+	},
+	'hiLoSplit.hi': { label: 'High-MAP share of runoff', spec: pct() },
+	'hiLoSplit.lo': { label: 'Low-MAP share of runoff', spec: pct() },
+	runoffModel: { label: 'Runoff model', spec: { t: 'enum', options: plain(RUNOFF_MODELS, { legacy: 'Legacy (b023 recession)', gr4j: 'GR4J' }) } },
+	'gr4j.x1': { label: 'GR4J production store X1', spec: num('mm') },
+	'gr4j.x2': { label: 'GR4J groundwater exchange X2', spec: num('mm/day') },
+	'gr4j.x3': { label: 'GR4J routing store X3', spec: num('mm') },
+	'gr4j.x4': { label: 'GR4J unit hydrograph time base X4', spec: num('days') },
+	'gr4j.warmupDays': { label: 'GR4J warm-up', spec: num('days', { int: true }) },
+	chirpsBiasCorrection: { label: 'CHIRPS bias correction', spec: { t: 'enum', options: plain(CHIRPS_BIAS_MODES, { monthly: 'Monthly factors', none: 'None' }) } },
+	'zeroRainRuns.mode': { label: 'Zero-rain runs', spec: { t: 'enum', options: plain(ZERO_RAIN_MODES, { missing: 'Treat as missing', asRecorded: 'As recorded' }) } },
+	'zeroRainRuns.accumulationMode': {
+		label: 'Rain accumulations',
+		spec: { t: 'enum', options: plain(ACCUMULATION_MODES, { spread: 'Spread over the days', asRecorded: 'As recorded' }) }
+	},
+	'calibration.a': { label: 'Calibration peak flow coefficient a', spec: num('') },
+	'calibration.b': { label: 'Calibration peak flow exponent b', spec: num('') },
+	'calibration.rainThresholdMm': { label: 'Calibration rain threshold', spec: num('mm') },
+	'calibration.summerFactor': { label: 'Calibration summer factor', spec: num('') },
+	'calibration.winterFactor': { label: 'Calibration winter factor', spec: num('') },
+	'calibration.baseFlowInitial': { label: 'Calibration initial base flow', spec: num('m³/day') },
+	'calibration.catchmentAreaKm2': { label: 'Calibration catchment area', spec: num('km²', { nullable: true, nullLabel: 'sum of farm areas' }) },
+	'calibration.summerMonths': { label: 'Calibration summer months', spec: { t: 'months' } },
+	simulationStart: { label: 'Simulation start', spec: { t: 'date', nullLabel: 'start of data' } },
+	simulationEnd: { label: 'Simulation end', spec: { t: 'date', nullLabel: 'end of data' } },
+	reportStart: { label: 'Curtailment report start', spec: { t: 'date', nullLabel: 'start of run' } },
+	reportEnd: { label: 'Curtailment report end', spec: { t: 'date', nullLabel: 'end of run' } },
+	calibrationStart: { label: 'Calibration window start', spec: { t: 'date', nullLabel: 'start of record' } },
+	calibrationEnd: { label: 'Calibration window end', spec: { t: 'date', nullLabel: 'end of record' } },
+	calibrationFlowKind: {
+		label: 'Calibration flow series',
+		spec: { t: 'enum', options: CALIBRATION_FLOW_KINDS.map((k) => ({ value: k, label: kindLabel(k) })), nullable: true, nullLabel: 'default (observed, else logger)' }
+	}
+};
+
+export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));
+
+/** A dotted settings path's current value in a settings object (`gr4j.x1` → settings.gr4j.x1). */
+export function settingsValue(settings: Record<string, unknown> | undefined, path: string): unknown {
+	const [head, leaf] = path.split('.') as [string, string | undefined];
+	const v = settings?.[head];
+	if (leaf === undefined) return v;
+	return v && typeof v === 'object' ? (v as Record<string, unknown>)[leaf] : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Months
+// ---------------------------------------------------------------------------
+
+export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+/** Water-year order (Oct–Sep), as monthly settings and crop factors are stored. */
+export const WATER_YEAR_MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'] as const;
+
+/** [11, 12, 1] → "Jan, Nov, Dec" (calendar order); [] → "no months"; all 12 → "every month". */
+export function monthsText(ms: readonly number[]): string {
+	const set = [...new Set(ms)].filter((m) => m >= 1 && m <= 12).sort((a, b) => a - b);
+	if (!set.length) return 'no months';
+	if (set.length === 12) return 'every month';
+	return set.map((m) => MONTH_NAMES[m - 1]).join(', ');
+}
+
+// ---------------------------------------------------------------------------
+// Parsing and formatting
+// ---------------------------------------------------------------------------
+
+export type Parsed = { ok: true; value: unknown } | { ok: false; error: string };
+
+const round = (n: number) => Math.round(n * 1e9) / 1e9;
+
+/**
+ * Typed text (or, for months, the ticked months) → the stored value. Empty
+ * is null where the field allows it. Percentages are divided by 100. The
+ * range checks are the engine's, run on the op afterwards.
+ */
+export function parseValue(spec: ValueSpec, input: string | readonly number[]): Parsed {
+	if (spec.t === 'months') {
+		if (!Array.isArray(input)) return { ok: false, error: 'pick the months' };
+		return { ok: true, value: [...new Set(input as number[])].sort((a, b) => a - b) };
+	}
+	const text = typeof input === 'string' ? input.trim() : '';
+	switch (spec.t) {
+		case 'text':
+			return text ? { ok: true, value: text } : { ok: false, error: 'enter a name' };
+		case 'number': {
+			if (text === '') return spec.nullable ? { ok: true, value: null } : { ok: false, error: 'enter a number' };
+			const n = parseNum(text);
+			if (n === null) return { ok: false, error: `“${text}” isn't a number` };
+			if (spec.int && !Number.isInteger(n)) return { ok: false, error: 'enter a whole number' };
+			return { ok: true, value: round(n / spec.scale) };
+		}
+		case 'enum':
+			if (text === '') return spec.nullable ? { ok: true, value: null } : { ok: false, error: 'pick one' };
+			return spec.options.some((o) => o.value === text) ? { ok: true, value: text } : { ok: false, error: 'pick one of the options' };
+		case 'monthly': {
+			if (text === '') return spec.nullable ? { ok: true, value: null } : { ok: false, error: 'enter 12 monthly values' };
+			// Semicolons, whitespace or a comma and a space separate values, so a
+			// decimal comma (1,5) still reads as one number; "1,2,…" with eleven
+			// bare commas is twelve values.
+			let parts = text.split(/\s*;\s*|,\s+|\s+/).filter(Boolean);
+			if (parts.length === 1 && (parts[0]!.match(/,/g)?.length ?? 0) === 11) parts = parts[0]!.split(',');
+			const one = parts.length === 1 ? parseNum(parts[0]!) : null;
+			// One number is the same value every month.
+			const values = one !== null ? new Array<number | null>(12).fill(one) : parts.map((p) => parseNum(p));
+			if (values.length !== 12) return { ok: false, error: `enter 12 values, Oct to Sep (got ${values.length})` };
+			const bad = values.findIndex((v) => v === null);
+			if (bad >= 0) return { ok: false, error: `${WATER_YEAR_MONTHS[bad]}: “${parts[bad]}” isn't a number` };
+			return { ok: true, value: (values as number[]).map((v) => round(v / spec.scale)) };
+		}
+		case 'bool':
+			return text === 'true' || text === 'false' ? { ok: true, value: text === 'true' } : { ok: false, error: 'pick yes or no' };
+		case 'date':
+			if (text === '') return { ok: true, value: null };
+			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
+		case 'node':
+			return text ? { ok: true, value: text } : { ok: false, error: 'pick a node' };
+	}
+}
+
+/** A stored value as editable text: the inverse of parseValue (months are ticked, not typed). */
+export function valueText(spec: ValueSpec, v: unknown): string {
+	if (v === null || v === undefined) return '';
+	switch (spec.t) {
+		case 'number':
+			return typeof v === 'number' ? String(round(v * spec.scale)) : '';
+		case 'monthly':
+			return Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? String(round(x * spec.scale)) : '')).join(' ') : '';
+		case 'bool':
+			return v === true ? 'true' : v === false ? 'false' : '';
+		case 'months':
+			return Array.isArray(v) ? monthsText(v as number[]) : '';
+		default:
+			return typeof v === 'string' ? v : String(v);
+	}
+}
+
+/**
+ * A stored value for people, with its unit: 150000 m³ → "150,000 m³",
+ * 0.8 → "80 %", null → the field's "none" wording. `nodeName` names a node id.
+ */
+export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) => string = (id) => id): string {
+	switch (spec.t) {
+		case 'number': {
+			if (v === null || v === undefined) return spec.nullLabel ?? 'none';
+			if (typeof v !== 'number') return String(v);
+			const x = v * spec.scale;
+			const s = fmtNum(x, Math.abs(x) >= 1000 ? 0 : 4, true).replace('-', '−');
+			return spec.unit === '%' ? `${s} %` : spec.unit ? `${s} ${spec.unit}` : s;
+		}
+		case 'enum':
+			if (v === null || v === undefined) return spec.nullLabel ?? 'none';
+			return spec.options.find((o) => o.value === v)?.label ?? String(v);
+		case 'monthly': {
+			if (!Array.isArray(v)) return 'none';
+			const xs = v.map((x) => (typeof x === 'number' ? x * spec.scale : NaN));
+			const u = spec.unit ? ` ${spec.unit}` : '';
+			if (xs.every((x) => x === xs[0])) return `${fmtNum(xs[0], 4, true)}${u} every month`;
+			return `${xs.map((x) => fmtNum(x, 4, true)).join(', ')}${u} (Oct–Sep)`;
+		}
+		case 'months':
+			return Array.isArray(v) ? monthsText(v as number[]) : 'none';
+		case 'bool':
+			return v === true ? 'yes' : v === false ? 'no' : '–';
+		case 'date':
+			return typeof v === 'string' && v ? v : spec.nullLabel;
+		case 'node':
+			return typeof v === 'string' ? nodeName(v) : '–';
+		case 'text':
+			return typeof v === 'string' ? `“${v}”` : String(v);
+	}
+}
+
+/**
+ * The engine's range message for a percentage field, in the percent the
+ * person typed: "must be at most 1" → "must be at most 100 %".
+ */
+export function percentMessage(spec: ValueSpec, message: string): string {
+	if (!('scale' in spec) || spec.scale !== 100) return message;
+	return message.replace(/(at least|at most|above) (-?\d+(?:\.\d+)?)$/, (_, w: string, n: string) => `${w} ${round(Number(n) * 100)} %`);
+}

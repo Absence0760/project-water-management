@@ -1,0 +1,478 @@
+// The override editor's pure side (docs/scenarios.md, docs/ui.md § Scenarios):
+// the input each op meets, each op in words, the server's problems matched to
+// their ops, and the "Add a change" form's draft turned into a ScenarioOp.
+// The engine owns the rules (applyScenario, validateScenarioOps); this only
+// reads and builds its data. No Svelte, no API.
+import {
+	LAND_COVER_CLASSES,
+	SCALABLE_SERIES_KINDS,
+	applyScenario,
+	upgradeLegacyModel,
+	validateScenarioOps,
+	type AppliedOp,
+	type ModelInput,
+	type NetworkNode,
+	type NodeSetField,
+	type OpClass,
+	type ProjectModel,
+	type ScalableSeriesKind,
+	type ScenarioOp,
+	type ScenarioOpName,
+	type SettingsPath,
+	type TransferSetField
+} from '@water-management/engine';
+import { newNode } from '$lib/model/editor.svelte';
+import { fmtNum, parseNum } from '$lib/format/number';
+import { kindLabel } from '$lib/series/kinds';
+import { NODE_FIELD_SPECS, SETTINGS_SPECS, TRANSFER_FIELD_SPECS, formatValue, monthsText, parseValue, percentMessage, settingsValue, type ValueSpec } from './fields';
+
+// ---------------------------------------------------------------------------
+// The base, and the input each op meets
+// ---------------------------------------------------------------------------
+
+/**
+ * A run's model and settings snapshot as a ModelInput without series. Enough
+ * for every op but `series.scale` (which then doesn't apply here, and changes
+ * nothing): the editor only reads names and current values from it; which
+ * ops apply is the server's check, made on the run's stored series.
+ */
+export function snapshotInput(model: unknown, settings: unknown): ModelInput {
+	const m = (model && typeof model === 'object' ? model : {}) as Partial<ProjectModel>;
+	return {
+		settings: (settings && typeof settings === 'object' ? settings : {}) as ModelInput['settings'],
+		model: upgradeLegacyModel({ nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [], ...m } as ProjectModel),
+		series: {}
+	};
+}
+
+/** The input each op meets (`before[i]`, the base with ops 0…i−1 applied) and the input after them all. */
+export function stepInputs(base: ModelInput, ops: readonly ScenarioOp[]): { before: ModelInput[]; after: ModelInput } {
+	const before: ModelInput[] = [];
+	let cur = base;
+	for (const op of ops) {
+		before.push(cur);
+		cur = applyScenario(cur, [op]).input;
+	}
+	return { before, after: cur };
+}
+
+/** Every node and crop name the base or an op gives an id, for describing an op whose target is gone. */
+export function namesOf(models: readonly (ProjectModel | undefined)[], ops: readonly ScenarioOp[] = []): Map<string, string> {
+	const names = new Map<string, string>();
+	for (const m of models) {
+		for (const n of m?.nodes ?? []) names.set(n.id, n.name);
+		for (const c of m?.crops ?? []) names.set(c.id, c.name);
+	}
+	for (const op of ops) {
+		if (op.op === 'node.add' && op.node?.id) names.set(op.node.id, op.node.name);
+		if (op.op === 'crop.add' && op.crop?.id) names.set(op.crop.id, op.crop.name);
+	}
+	return names;
+}
+
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+/** An engine message with each id it names swapped for that node's or crop's name. */
+export function nameIds(text: string, names: ReadonlyMap<string, string>): string {
+	return text.replace(UUID, (id) => {
+		const n = names.get(id);
+		return n ? `“${n}”` : id;
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Problems and notes, per op
+// ---------------------------------------------------------------------------
+
+export interface OpStatus {
+	/** The engine's reason this op doesn't apply to the base (without its "op 3 (node.set):" prefix), or null. */
+	problem: string | null;
+	/** What applying it did besides its own edit (re-links, dropped references, days scaled). */
+	notes: string[];
+}
+
+/**
+ * Line the check's `applied` and `problems` up with the ops. A problem names
+ * its op as `op N (kind): …` (1-based); one that names no op in range is
+ * returned in `other`, so nothing the server said is dropped.
+ */
+export function statusByOp(count: number, applied: readonly AppliedOp[], problems: readonly string[]): { ops: OpStatus[]; other: string[] } {
+	const ops: OpStatus[] = Array.from({ length: count }, () => ({ problem: null, notes: [] }));
+	for (const a of applied) if (ops[a.index]) ops[a.index]!.notes = a.notes;
+	const other: string[] = [];
+	for (const p of problems) {
+		const m = /^op (\d+) \([^)]*\): (.*)$/s.exec(p);
+		const i = m ? Number(m[1]) - 1 : -1;
+		if (m && ops[i]) ops[i]!.problem = ops[i]!.problem ? `${ops[i]!.problem}; ${m[2]}` : m[2]!;
+		else other.push(p);
+	}
+	return { ops, other };
+}
+
+export const CLASS_LABEL: Record<OpClass, string> = { proposal: 'Proposal', baseline: 'Baseline assumption' };
+
+// ---------------------------------------------------------------------------
+// Each op in words
+// ---------------------------------------------------------------------------
+
+export const OP_LABEL: Record<ScenarioOpName, string> = {
+	'node.set': "Change a node's value",
+	'node.add': 'Add a node',
+	'node.remove': 'Remove a node',
+	'cropArea.set': "Set a farm's crop area",
+	'crop.add': 'Add a crop',
+	'transfer.add': 'Add a transfer',
+	'transfer.set': 'Change a transfer',
+	'transfer.remove': 'Remove a transfer',
+	'landCover.add': 'Add land cover',
+	'landCover.remove': 'Remove land cover',
+	'settings.set': 'Change a setting',
+	'series.scale': 'Scale rainfall'
+};
+
+/** A node or crop id that neither the base nor any name source knows. */
+export const UNKNOWN_NODE = 'a node the base run doesn’t have';
+export const UNKNOWN_CROP = 'a crop the base run doesn’t have';
+
+const KIND_WORD: Record<string, string> = { farm: 'farm', user: 'other water user', gauge: 'gauge' };
+const ha = (m2: number) => `${fmtNum(m2 / 10_000, 2, true)} ha`;
+const coverLabel = (id: string) => LAND_COVER_CLASSES.find((c) => c.id === id)?.label ?? id;
+const change = (spec: ValueSpec, was: unknown, now: unknown, name: (id: string) => string) =>
+	was === undefined ? `→ ${formatValue(spec, now, name)}` : `${formatValue(spec, was, name)} → ${formatValue(spec, now, name)}`;
+
+/**
+ * One op as a sentence: "Upper farm: Dam capacity 150,000 m³ → 180,000 m³".
+ * `before` is the input the op meets (for the value it replaces); `names`
+ * names ids it no longer has (namesOf). An id nothing names (a node removed
+ * from a newer base the scenario was rebased onto) reads as UNKNOWN_NODE.
+ */
+export function describeOp(op: ScenarioOp, before: ModelInput | null, names: ReadonlyMap<string, string> = new Map()): string {
+	const m = before?.model;
+	const nodeName = (id: string) => m?.nodes.find((n) => n.id === id)?.name ?? names.get(id) ?? UNKNOWN_NODE;
+	const cropName = (id: string) => m?.crops.find((c) => c.id === id)?.name ?? names.get(id) ?? UNKNOWN_CROP;
+	const transferName = (id: string) => {
+		const t = m?.transfers.find((x) => x.id === id);
+		return t ? `the transfer ${nodeName(t.fromNodeId)} → ${nodeName(t.toNodeId)}` : 'a transfer';
+	};
+	switch (op.op) {
+		case 'node.set': {
+			const f = NODE_FIELD_SPECS[op.field as NodeSetField];
+			const node = m?.nodes.find((n) => n.id === op.nodeId);
+			const was = node ? (node as unknown as Record<string, unknown>)[op.field] : undefined;
+			return `${nodeName(op.nodeId)}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+		}
+		case 'node.add': {
+			const n = op.node;
+			const dam = n.kind === 'farm' && n.damCapacityM3 > 0 ? `, dam ${fmtNum(n.damCapacityM3)} m³` : '';
+			const demand = n.kind === 'user' && Array.isArray(n.userDemandM3Day) ? `, demand ${formatValue(NODE_FIELD_SPECS.userDemandM3Day.spec, n.userDemandM3Day)}` : '';
+			return `Add the ${KIND_WORD[n.kind] ?? n.kind} “${n.name}”, draining into ${nodeName(n.downstreamNodeId ?? '')}${dam}${demand}`;
+		}
+		case 'node.remove':
+			return `Remove “${nodeName(op.nodeId)}”`;
+		case 'cropArea.set': {
+			const was = m?.cropAreas.filter((a) => a.nodeId === op.nodeId && a.cropId === op.cropId).reduce((s, a) => s + a.areaM2, 0);
+			const from = m ? `${ha(was ?? 0)} → ` : '→ ';
+			return `${nodeName(op.nodeId)}: ${cropName(op.cropId)} ${from}${op.areaM2 > 0 ? ha(op.areaM2) : 'none'}`;
+		}
+		case 'crop.add':
+			return `Add the crop “${op.crop.name}”`;
+		case 'transfer.add': {
+			const t = op.transfer;
+			const cap = t.dailyCapM3 != null ? `, at most ${fmtNum(t.dailyCapM3)} m³/day` : '';
+			return `Add a transfer ${nodeName(t.fromNodeId)} → ${nodeName(t.toNodeId)} (${monthsText(t.months)}, up to ${fmtNum(t.maxRateM3s, 4, true)} m³/s${cap})`;
+		}
+		case 'transfer.set': {
+			const f = TRANSFER_FIELD_SPECS[op.field as TransferSetField];
+			const t = m?.transfers.find((x) => x.id === op.transferId);
+			const was = t ? (t as unknown as Record<string, unknown>)[op.field] : undefined;
+			const what = transferName(op.transferId);
+			return `${what.charAt(0).toUpperCase()}${what.slice(1)}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
+		}
+		case 'transfer.remove':
+			return `Remove ${transferName(op.transferId)}`;
+		case 'landCover.add': {
+			const p = op.patch;
+			return `${nodeName(p.nodeId)}: add ${coverLabel(p.coverClass)}, ${fmtNum(p.areaKm2, 3, true)} km² at ${fmtNum(p.densityPct * 100, 1, true)} % cover`;
+		}
+		case 'landCover.remove': {
+			const p = m?.landCover?.find((x) => x.id === op.patchId);
+			return p ? `${nodeName(p.nodeId)}: remove ${coverLabel(p.coverClass)} (${fmtNum(p.areaKm2, 3, true)} km²)` : 'Remove a land-cover patch';
+		}
+		case 'settings.set': {
+			const f = SETTINGS_SPECS[op.path as SettingsPath];
+			const was = before ? settingsValue(before.settings, op.path) : undefined;
+			return `${f?.label ?? op.path}: ${f ? change(f.spec, was ?? (f.spec.t === 'date' ? null : undefined), op.value, nodeName) : `→ ${String(op.value)}`}`;
+		}
+		case 'series.scale': {
+			const pct = (op.factor - 1) * 100;
+			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
+			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true).replace('-', '−')} %)${days}`;
+		}
+		default:
+			return `Unknown change ${(op as { op?: string }).op ?? ''}`;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The "Add a change" form
+// ---------------------------------------------------------------------------
+
+/** Everything the form can hold; each op reads its own fields. Numbers stay text until built. */
+export interface OpDraft {
+	kind: ScenarioOpName;
+	nodeId: string;
+	/** node.set / transfer.set field, or settings.set path. */
+	field: string;
+	/** node.set / transfer.set / settings.set value, as typed. */
+	value: string;
+	/** Months, for a months field or a new transfer. */
+	months: number[];
+	cropId: string;
+	areaHa: string;
+	transferId: string;
+	patchId: string;
+	newKind: 'farm' | 'user';
+	newName: string;
+	downstreamNodeId: string;
+	damCapacityM3: string;
+	demandM3Day: string;
+	cropName: string;
+	cropFactors: string;
+	fromNodeId: string;
+	toNodeId: string;
+	maxRateM3s: string;
+	dailyCapM3: string;
+	minStoragePct: string;
+	priority: string;
+	coverClass: string;
+	coverAreaKm2: string;
+	densityPct: string;
+	seriesKind: ScalableSeriesKind;
+	changePct: string;
+	from: string;
+	to: string;
+}
+
+export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
+	return {
+		kind,
+		nodeId: '',
+		field: '',
+		value: '',
+		months: [],
+		cropId: '',
+		areaHa: '',
+		transferId: '',
+		patchId: '',
+		newKind: 'farm',
+		newName: '',
+		downstreamNodeId: '',
+		damCapacityM3: '0',
+		demandM3Day: '0',
+		cropName: '',
+		cropFactors: '',
+		fromNodeId: '',
+		toNodeId: '',
+		maxRateM3s: '',
+		dailyCapM3: '',
+		minStoragePct: '0',
+		priority: '0',
+		coverClass: LAND_COVER_CLASSES[0].id,
+		coverAreaKm2: '',
+		densityPct: '100',
+		seriesKind: SCALABLE_SERIES_KINDS[0],
+		changePct: '',
+		from: '',
+		to: ''
+	};
+}
+
+/** The value spec of the field a node.set / transfer.set / settings.set draft names, or null. */
+export function draftSpec(d: Pick<OpDraft, 'kind' | 'field'>): ValueSpec | null {
+	const table =
+		d.kind === 'node.set' ? NODE_FIELD_SPECS : d.kind === 'transfer.set' ? TRANSFER_FIELD_SPECS : d.kind === 'settings.set' ? SETTINGS_SPECS : null;
+	return (table as Record<string, { spec: ValueSpec }> | null)?.[d.field]?.spec ?? null;
+}
+
+export type Built = { ok: true; op: ScenarioOp } | { ok: false; error: string };
+
+const need = (v: string, what: string): string => {
+	if (!v) throw new DraftError(`pick ${what}`);
+	return v;
+};
+class DraftError extends Error {}
+function number(text: string, what: string, opts: { nullable?: boolean; scale?: number; int?: boolean } = {}): number | null {
+	const t = text.trim();
+	if (t === '') {
+		if (opts.nullable) return null;
+		throw new DraftError(`enter ${what}`);
+	}
+	const n = parseNum(t);
+	if (n === null) throw new DraftError(`${what}: “${t}” isn't a number`);
+	if (opts.int && !Number.isInteger(n)) throw new DraftError(`${what} must be a whole number`);
+	return Math.round((n / (opts.scale ?? 1)) * 1e9) / 1e9;
+}
+function parsed(spec: ValueSpec, input: string | number[], what: string): unknown {
+	const p = parseValue(spec, input);
+	if (!p.ok) throw new DraftError(`${what}: ${p.error}`);
+	return p.value;
+}
+
+/**
+ * The form's draft as one op, checked by the engine's own validator
+ * (validateScenarioOps) so the ranges are exactly the backend's. `model` is
+ * the input the new op will meet (after the ops already listed), for the
+ * new node's place in the order. Whether the op applies to the base (its
+ * target still exists, the network stays valid) is the server's check.
+ */
+export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = () => crypto.randomUUID()): Built {
+	let op: ScenarioOp;
+	let spec: ValueSpec | null = null;
+	try {
+		switch (d.kind) {
+			case 'node.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick what to change');
+				const node = model.nodes.find((n) => n.id === need(d.nodeId, 'a node'));
+				const value = parsed(spec, spec.t === 'months' ? d.months : d.value, NODE_FIELD_SPECS[d.field as NodeSetField].label);
+				op = { op: 'node.set', nodeId: node?.id ?? d.nodeId, field: d.field, value } as ScenarioOp;
+				break;
+			}
+			case 'node.add': {
+				const name = d.newName.trim();
+				if (!name) throw new DraftError('enter a name for the new node');
+				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'the node it drains into')), id: newId(), name, kind: d.newKind };
+				if (d.newKind === 'farm') node.damCapacityM3 = number(d.damCapacityM3, 'the dam capacity')!;
+				else node.userDemandM3Day = new Array<number>(12).fill(number(d.demandM3Day, 'the demand')!);
+				op = { op: 'node.add', node };
+				break;
+			}
+			case 'node.remove':
+				op = { op: 'node.remove', nodeId: need(d.nodeId, 'a node') };
+				break;
+			case 'cropArea.set':
+				op = { op: 'cropArea.set', nodeId: need(d.nodeId, 'a farm'), cropId: need(d.cropId, 'a crop'), areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })! };
+				break;
+			case 'crop.add': {
+				const name = d.cropName.trim();
+				if (!name) throw new DraftError('enter a name for the new crop');
+				const cropFactor = parsed({ t: 'monthly', unit: '', scale: 1, nullable: false }, d.cropFactors, 'Crop factors') as number[];
+				op = { op: 'crop.add', crop: { id: newId(), name, cropFactor } };
+				break;
+			}
+			case 'transfer.add':
+				op = {
+					op: 'transfer.add',
+					transfer: {
+						id: newId(),
+						fromNodeId: need(d.fromNodeId, 'the source'),
+						toNodeId: need(d.toNodeId, 'the destination'),
+						months: [...new Set(d.months)].sort((a, b) => a - b),
+						maxRateM3s: number(d.maxRateM3s, 'the maximum rate')!,
+						dailyCapM3: number(d.dailyCapM3, 'the daily cap', { nullable: true }),
+						minStoragePct: number(d.minStoragePct, 'the minimum level', { scale: 100 })!,
+						enabled: true,
+						priority: number(d.priority, 'the priority', { int: true })!
+					}
+				};
+				break;
+			case 'transfer.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick what to change');
+				const value = parsed(spec, spec.t === 'months' ? d.months : d.value, TRANSFER_FIELD_SPECS[d.field as TransferSetField].label);
+				op = { op: 'transfer.set', transferId: need(d.transferId, 'a transfer'), field: d.field, value } as ScenarioOp;
+				break;
+			}
+			case 'transfer.remove':
+				op = { op: 'transfer.remove', transferId: need(d.transferId, 'a transfer') };
+				break;
+			case 'landCover.add':
+				op = {
+					op: 'landCover.add',
+					patch: {
+						id: newId(),
+						nodeId: need(d.nodeId, 'a farm'),
+						coverClass: need(d.coverClass, 'a land-cover class') as never,
+						areaKm2: number(d.coverAreaKm2, 'the area')!,
+						densityPct: number(d.densityPct, 'the cover', { scale: 100 })!,
+						factors: null
+					}
+				};
+				break;
+			case 'landCover.remove':
+				op = { op: 'landCover.remove', patchId: need(d.patchId, 'a land-cover patch') };
+				break;
+			case 'settings.set': {
+				spec = draftSpec(d);
+				if (!spec) throw new DraftError('pick a setting');
+				const value = parsed(spec, spec.t === 'months' ? d.months : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
+				op = { op: 'settings.set', path: d.field, value } as ScenarioOp;
+				break;
+			}
+			case 'series.scale': {
+				const pct = number(d.changePct, 'the change');
+				const s: Extract<ScenarioOp, { op: 'series.scale' }> = { op: 'series.scale', kind: d.seriesKind, factor: Math.round((1 + pct! / 100) * 1e9) / 1e9 };
+				if (d.from.trim()) s.from = d.from.trim();
+				if (d.to.trim()) s.to = d.to.trim();
+				op = s;
+				break;
+			}
+			default:
+				throw new DraftError('pick a kind of change');
+		}
+	} catch (e) {
+		if (e instanceof DraftError) return { ok: false, error: capital(e.message) };
+		throw e;
+	}
+	const { errors } = validateScenarioOps([op]);
+	if (errors.length) {
+		const text = errors.map((x) => x.replace(/^ops\[0\]\.?/, '').replace(/^value: /, '')).join('; ');
+		return { ok: false, error: capital(spec ? percentMessage(spec, text) : scaleNote(d.kind, text)) };
+	}
+	return { ok: true, op };
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ---------------------------------------------------------------------------
+// The op list as shown
+// ---------------------------------------------------------------------------
+
+export interface OpItem {
+	text: string;
+	/** null when the server hasn't classed it (no check: the base can't be rebuilt). */
+	cls: OpClass | null;
+	problem: string | null;
+	notes: string[];
+}
+
+/**
+ * Each op as the list shows it: in words (against the input it meets, when
+ * the base is known), its class, and the check's problem and notes with ids
+ * named. `check` null: the server couldn't check (the list still shows).
+ */
+export function opItems(
+	ops: readonly ScenarioOp[],
+	classified: readonly OpClass[] | null,
+	check: { applied: readonly AppliedOp[]; problems: readonly string[] } | null,
+	base: ModelInput | null,
+	names: ReadonlyMap<string, string>
+): { items: OpItem[]; other: string[] } {
+	const before = base ? stepInputs(base, ops).before : null;
+	const status = statusByOp(ops.length, check?.applied ?? [], check?.problems ?? []);
+	const items = ops.map((op, i) => {
+		const s = status.ops[i]!;
+		return {
+			text: describeOp(op, before?.[i] ?? null, names),
+			cls: classified?.[i] ?? null,
+			problem: s.problem === null ? null : nameIds(s.problem, names),
+			notes: s.notes.map((x) => nameIds(x, names))
+		};
+	});
+	return { items, other: status.other.map((x) => nameIds(x, names)) };
+}
+
+/** series.scale's factor is typed as a % change: say its limits that way. */
+function scaleNote(kind: ScenarioOpName, text: string): string {
+	return kind === 'series.scale' ? text.replace(/^factor: must be (at least 0|at most \d+)$/, 'the change must be between −100 % and +900 %') : text;
+}
