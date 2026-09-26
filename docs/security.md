@@ -587,8 +587,11 @@ In short:
     `SECURITY DEFINER` `app_published_run_input` / `app_published_run_series`
     (only a run a publication names, only to a contributor or above); what
     leaves is the applicant projection (`scenarios/applicant.ts`: their own
-    farms and the gauges in full, every other node anonymised and blanked,
-    engine messages renamed). The DB test scans everything the applicant
+    farms and the gauges in full, every other node anonymised and blanked).
+    An application is checked in its applicant's namespace (049: the engine
+    meets every hidden node under its anonymous name and every hidden crop
+    under a name made of its id, `applyScenario`'s `maskedNames`), so its
+    messages quote no hidden name without any text redaction. The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -619,12 +622,24 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
-  - **Known oracles, accepted for now.** Sharing an application by email
-    answers the same `404` for an unknown address and a non-member, but a
-    success tells the applicant that address is a contributor-or-above
-    member. Renaming their own farm to a neighbour's name gets the engine's
-    duplicate-name problem, which says a node of that name exists (the name
-    itself comes back anonymised). Both are in followups.md.
+  - **No existence oracles** (049_applicant_oracles,
+    `scenarios/oracles.db.test.ts`: each probe answered identically for the
+    hidden and the free case, each with a positive control).
+    *Sharing*: an applicant can't name an address; they pick from
+    `…/share-candidates`, the other members of their own applying party as
+    the project owner set it, and every other id (a member or not) gets one
+    `404`, every address one `403`; the insert trigger enforces the same rule
+    (`app_share_allowed`), and moving someone out of a party ends the shares
+    it allowed. *Names*: renaming their own farm to a hidden neighbour's
+    name, or naming a crop like a hidden one, applies exactly as a free name
+    does; the hidden one is renamed with a suffix in that application's runs,
+    and only the assessors are told (`check.renamed`). An application's name
+    is unique among its owner's applications only, so naming a draft after
+    someone else's says nothing either. What remains: the id of a hidden
+    crop, transfer, land-cover patch or borehole can still be probed by an
+    op that targets or reuses it, which needs the id (random UUIDs from the
+    UI; imports derive them from the project and element names) and is
+    tracked in followups.md with the counts an op on a hidden farm reports.
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.

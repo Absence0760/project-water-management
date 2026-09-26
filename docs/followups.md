@@ -1914,14 +1914,31 @@ Applicant view and the Applications tab. Left:
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
-- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
-      a contributor-or-above member of the project; renaming their own farm
-      to a neighbour's name gets the duplicate-name problem (the name comes
-      back anonymised, but its existence shows). Durable fix: share by a
-      member picker the owner curates (the assessor adds consultants to an
-      application), and check names against the projected base for
-      contributors. Trigger: before applicants from competing parties share a
-      project.
+- [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
+      `maskedNames`. The project owner puts an applicant and their
+      consultant in an applying party (`project_member.party`); an applicant
+      shares only within it, picked from `…/share-candidates`, so every other
+      id or address gets one answer. An application is checked in its
+      applicant's namespace (hidden farms under their anonymous names, hidden
+      crops under their ids), so a rename to a hidden name applies like a
+      free one and the hidden farm is suffixed in that application's runs,
+      for the assessors to see. Application names are unique per owner, not
+      per project. Tests: `scenarios/oracles.db.test.ts`
+      ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+- [ ] **Hidden ids and counts in an application's messages.** An op that
+      targets or reuses the id of a hidden crop, transfer, land-cover patch
+      or borehole answers differently from a free id (`… not found` against
+      applied, `… already in use`), and an op on a hidden farm reports what
+      it dropped (`dropped 2 crop area(s)`); value rules (flow shares over
+      100 %, no catchment area left) can refuse an op because of hidden
+      values. The ids are random UUIDs from the UI, but an import derives
+      them from the project and element names. Durable fix: extend the mask
+      to ids (hidden items' ids swapped for opaque ones while the ops apply,
+      restored afterwards) and have `applyScenario` in masked mode report
+      no counts for hidden nodes; decide with the client whether a value
+      rule refused because of hidden farms says only "doesn't apply to the
+      catchment as modelled". Trigger: the applicant results slice, or
+      before applicants from competing parties share a project.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.

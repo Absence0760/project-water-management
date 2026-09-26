@@ -228,6 +228,10 @@ record (an imported project only), recent notes ([§ Notes](#notes)), team and m
   team project), so the two panels that refer to each other sit together, then
   **Farmers**. Below 900 px it is one column in the order details, import
   record, team, members, farmers, share links.
+- **Members**: each applicant row has an **Applying party** box for owners
+  (saved on change; blank for none): an applicant shares applications only
+  with the members of their own party, so put an applicant and their
+  consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
@@ -1947,7 +1951,15 @@ farm view if they have links, and the Scenarios tab in applicant mode
   the owner's **Submit to the assessors** (confirmed; disabled while a change
   doesn't apply), **Withdraw** and **Reopen as a draft**, the decision once
   made (outcome, by whom, when, the reasons), and **Shared with**: the
-  people who read it, the owner's share-by-email form, and Remove / Leave.
+  people who read it, Remove / Leave, and for the owner a **Share with**
+  picker of the people they may share it with (`…/share-candidates`: an
+  applicant's own applying party; no address box, so it says nothing about
+  who else is a member). With nobody to pick it says why ("Nobody to share
+  it with yet: the project owner lists who is in your party", or "Everyone
+  you can share it with already reads it"). An assessor opening an
+  application whose names displaced a hidden farm's or crop's sees which
+  ("… in this application's runs Kliphuis is called “Kliphuis (2)”",
+  `check.renamed`); the applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`): every submitted, withdrawn or decided application
