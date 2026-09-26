@@ -56,7 +56,8 @@ export const ERROR_CODES = [
 	'note_author_only',
 	'note_delete_denied',
 	'unsubscribe_link_gone',
-	'export_throttled'
+	'export_throttled',
+	'alerts_resume_throttled'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 

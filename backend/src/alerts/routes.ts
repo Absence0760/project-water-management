@@ -152,7 +152,7 @@ async function resumeMail(userId: string): Promise<void> {
 		return me[0]?.suppressed ? ('too soon' as const) : null;
 	});
 	if (claim === null) return;
-	if (claim === 'too soon') throw new ApiError(429, 'you turned alert emails back on less than a day ago and the address was refused again: check it, then try again tomorrow');
+	if (claim === 'too soon') throw ApiError.coded(429, 'alerts_resume_throttled', 'you turned alert emails back on less than a day ago and the address was refused again: check it, then try again tomorrow');
 	try {
 		await releaseAddress(claim.email);
 	} catch (err) {

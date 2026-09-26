@@ -128,7 +128,9 @@ describe('turning mail back on (POST /me/alerts/resume)', () => {
 		expect((await me(owner)).mailSuppressed).toBeNull();
 		expect(await acceptMailEvent(event(owner, 'bounce', new Date(Date.now() + 1000)))).toMatchObject({ suppressed: 1 });
 		// Bounced again within a day of turning it back on: wait until tomorrow.
-		expect((await owner.call('POST', '/me/alerts/resume')).status).toBe(429);
+		const again = await owner.call('POST', '/me/alerts/resume');
+		expect(again.status).toBe(429);
+		expect(again.body.code).toBe('alerts_resume_throttled');
 		expect((await me(owner)).mailSuppressed).not.toBeNull();
 		// A day later it works again.
 		await asOwner(`UPDATE app_user SET mail_resumed_at = now() - interval '25 hours' WHERE id = $1`, [owner.id]);

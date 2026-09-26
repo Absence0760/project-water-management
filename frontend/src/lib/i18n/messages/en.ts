@@ -584,6 +584,7 @@ export const en = {
 	'error.note_delete_denied': 'Only the person who wrote a note, or the WUA, can delete it.',
 	'error.unsubscribe_link_gone': 'This link doesn’t work any more.',
 	'error.export_throttled': 'You downloaded your data a moment ago. Try again in {wait}.',
+	'error.alerts_resume_throttled': 'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.',
 	// By status, for an error without a code.
 	'error.status.network': 'Couldn’t reach the server. Check your connection and try again.',
 	'error.status.server': 'Something went wrong on our side. Try again in a moment.',
@@ -664,6 +665,7 @@ export const notes: Partial<Record<MessageKey, string>> = {
 	'share.chart.span': '{from} and {to} are months like “Nov 2023”.',
 	'error.signin_locked': '{wait} is “1 minute” or “3 minutes” (the error.minutes rows).',
 	'error.export_throttled': 'On the account page’s “Download my data”. {wait} is “1 minute” (the error.minutes rows).',
+	'error.alerts_resume_throttled': 'On the alert-email banner’s “Turn alert emails back on”, when the mail server refused the address again within a day.',
 	'common.and': 'Joins the last two items of a list: “Nov and Dec”.',
 	'common.pageTitle': 'The browser tab title; {page} is the page’s own name.',
 	'auth.brandPoint3': 'EWR is the modeller’s word; this panel is shown to everyone who signs in.',

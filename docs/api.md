@@ -173,6 +173,7 @@ unless it is listed there with why its status says enough.
 | `note_delete_denied` | 403 | deleting someone else's note without the editor role |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
+| `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
