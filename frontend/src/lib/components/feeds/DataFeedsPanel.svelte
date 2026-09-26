@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import { kindLabel } from '$lib/series/kinds';
-	import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, feedsApi, needsAttention, STATE_LABELS } from './feeds';
+	import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, type FeedDraft, type FeedList, type FeedMeta, feedsApi, healthMessage, needsAttention, STATE_LABELS } from './feeds';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -132,7 +132,7 @@
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)} · {f.schedule}{f.actingUser ? ` · runs as ${f.actingUser}` : ' · no acting owner: save it again'}</p>
-						<p class="health">{f.health.message}</p>
+						<p class="health">{healthMessage(f.health.message)}</p>
 						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">

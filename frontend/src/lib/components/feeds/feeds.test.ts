@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, feedsApi, needsAttention, parseCells } from './feeds';
+import { describePlace, describeTarget, describeTimes, draftToBody, emptyDraft, feedsApi, healthMessage, needsAttention, parseCells } from './feeds';
 
 describe('parseCells', () => {
 	it('reads one cell per line (or ;), with an optional weight', () => {
@@ -58,6 +58,18 @@ describe('descriptions', () => {
 	it('say when data last arrived as a calendar day, whatever the time zone', () => {
 		expect(describeTimes({ lastDataDate: '2026-09-21', lastAttemptAt: null })).toBe('Last data 21 Sep 2026 · not checked yet');
 		expect(describeTimes({ lastDataDate: null, lastAttemptAt: '2026-09-24T06:00:00Z' })).toMatch(/^No data yet · checked 2026-09-2\d \d\d:\d\d$/);
+	});
+
+	it('write the health sentence’s calendar days as "1 Sep 2026", leaving other numbers alone', () => {
+		// The shapes backend/src/feeds/health.ts produces.
+		expect(healthMessage('OK; newest data 2026-10-10, checked 2026-09-25.')).toBe('OK; newest data 10 Oct 2026, checked 25 Sep 2026.');
+		expect(healthMessage('The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 2026-09-01.')).toBe(
+			'The last 2 fetches failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.'
+		);
+		expect(healthMessage('No new data: the newest day, 2026-01-31, is more than 240 days old.')).toBe('No new data: the newest day, 31 Jan 2026, is more than 240 days old.');
+		expect(healthMessage('Switched off; no data yet.')).toBe('Switched off; no data yet.');
+		expect(healthMessage('the grid has no data at -20.27, 25.37')).toBe('the grid has no data at -20.27, 25.37');
+		expect(healthMessage('at 2026-09-24T06:00:00Z')).toBe('at 2026-09-24T06:00:00Z');
 	});
 
 	it('count the feeds that need attention', () => {

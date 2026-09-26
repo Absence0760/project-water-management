@@ -828,7 +828,8 @@ its own chunk loaded with the tab; WP-2.10,
   card carries `data-state`), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
   schedule and who it runs as, the server's health sentence ("The last fetch
-  failed: the source is unreachable: HTTP 503. Newest data 2026-09-01."), and
+  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.", its
+  days written like the rest of the app's calendar days), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.

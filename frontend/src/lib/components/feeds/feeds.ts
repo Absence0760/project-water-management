@@ -165,6 +165,15 @@ export function describeTimes(f: Pick<FeedMeta, 'lastDataDate' | 'lastAttemptAt'
 	return f.lastAttemptAt ? `${data} · checked ${fmtDate(f.lastAttemptAt, true)}` : `${data} · not checked yet`;
 }
 
+/**
+ * The server's health sentence (backend/src/feeds/health.ts) with its calendar
+ * days written the way the rest of the panel writes them: "newest data
+ * 2026-09-01" → "newest data 1 Sep 2026". Only bare YYYY-MM-DD days are
+ * rewritten (never a timestamp), read from the string, so no time zone
+ * shifts them.
+ */
+export const healthMessage = (message: string) => message.replace(/\b\d{4}-\d{2}-\d{2}\b(?![T:\d])/g, (d) => fmtDay(d));
+
 /** How many feeds need attention (stale or failing), for the section's warning. */
 export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
 	feeds.filter((f) => f.health.state === 'failing' || f.health.state === 'stale').length;
