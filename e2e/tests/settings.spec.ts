@@ -87,6 +87,7 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 		'Reserve rules',
 		'Simulation period',
 		'Data quality',
+		'Automatic runs',
 		'Data feeds'
 	]);
 	await expect(menu.getByRole('link', { name: 'Demand' })).toHaveAttribute('aria-current', 'location');

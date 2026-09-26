@@ -1464,9 +1464,9 @@ role and not before it.
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
   - [ ] Marking a fed series on the Data tab ("from CHIRPS feed"), and an
         audit event per merge (needs WP-2.4's `audit_event`).
-  - [ ] A debounced re-run after new data (WP-2.11) and emailing owners about
-        a stale or failing feed (WP-2.13): today the panel and the CloudWatch
-        alarms are how anyone hears.
+  - [x] A debounced re-run after new data (WP-2.11, built).
+  - [ ] Emailing owners about a stale or failing feed (WP-2.13): today the
+        panel and the CloudWatch alarms are how anyone hears.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
   - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
         last 50 days daily (~200 range requests). Trigger: more than ~20
@@ -1737,14 +1737,12 @@ role and not before it.
 - [x] **`api_key.*` audit kinds are recorded** now that per-project API
       keys exist (WP-2.9, `039_api_keys.sql`): `api_key.created/revoked`,
       and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
-- [ ] **Auto re-run after an ingest or a feed merge** (WP-2.11). `mergeInto`
-      calls the no-op `series/newData.ts` `onSeriesDaysChanged` on every
-      merge that changed days, and the ingest returns `rerunQueuedFor: null`.
-      Durable fix: WP-2.11 enqueues the debounced `rerun` there, and calls
-      the same hook from the data feeds' ingest (`feeds/ingest.ts`). A key's
-      transaction has no user, so the enqueue needs an acting user (e.g. the
-      key's creator) or a `SECURITY DEFINER` enqueue, plus a job policy for
-      keys. Trigger: WP-2.11.
+- [x] **Auto re-run after an ingest or a feed merge** (WP-2.11,
+      `042_auto_rerun.sql`): `series/newData.ts` `onSeriesDaysChanged`
+      queues the debounced `rerun` from `mergeInto`, the PUT route and the
+      data feeds' ingest. A key's re-run runs as the key's creator through
+      `SECURITY DEFINER app_enqueue_rerun` (no job policy for keys); a key
+      whose creator was deleted skips it.
 
 ## Allocations (WP-3.10)
 

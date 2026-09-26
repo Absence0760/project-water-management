@@ -8,7 +8,8 @@ describe('SETTINGS_SECTIONS', () => {
 		expect(ids[0]).toBe('set-demand');
 		// Data feeds sits after the form: it saves on its own, never through the save bar.
 		expect(ids.at(-1)).toBe('set-feeds');
-		expect(ids.at(-2)).toBe('set-quality');
+		expect(ids.at(-2)).toBe('set-auto');
+		expect(ids.at(-3)).toBe('set-quality');
 	});
 });
 

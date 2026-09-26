@@ -16,7 +16,8 @@ const ListQuery = z.object({
 	limit: z.coerce.number().int().min(1).max(200).default(50)
 });
 
-const EnqueueBody = z.object({ kind: z.literal('rerun') }).extend(RerunPayload.shape).strict();
+// A person's re-run: the label only. `trigger: 'auto'` is the server's own (runs/autoRun.ts), never a client's to claim.
+const EnqueueBody = z.object({ kind: z.literal('rerun'), label: RerunPayload.shape.label }).strict();
 
 export const jobRoutes = new Hono<AuthEnv>()
 	.get('/:id/jobs', async (c) => {

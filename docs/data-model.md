@@ -67,7 +67,7 @@ erDiagram
 | `borehole` | An individual borehole on a farm or other user (migration 042, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, and `scenario_id` (024), the scenario that made it (null for a run of the live model) | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, or `auto` for the re-run after new data | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
@@ -231,6 +231,15 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   its (at most 50) nominations name, plus the cited ones (the runs its at most
   12 publications hold among them). A trimmed run's stored inputs go with it
   (see **Stored run inputs**).
+- **Each trigger is capped apart** (`model_run.trigger`, 042_auto_rerun.sql:
+  `manual`, the default and every existing row; `auto`, the debounced re-run
+  after new data, WP-2.11; `forecast`, reserved for WP-2.12). The 20 above
+  count `manual` runs only; of the unkept runs of each automatic trigger only
+  the newest is kept (`AUTOMATIC_RUNS_KEPT`, 1). So a project with a daily
+  feed holds at most 20 manual runs, 1 auto run, and the kept ones (a pinned,
+  nominated, published or scenario-cited auto run is kept like any other),
+  and an auto run never pushes a person's run out. Scenario runs and imports
+  are `manual`.
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -1067,6 +1076,14 @@ merges daily readings without a session (WP-2.9;
   any), and NULL in a transaction that also has a user;
   `app_api_key_allows(kind, name)` checks `allowed_series`;
   `app_api_key_label()` is the audit actor label.
+- **Automatic re-runs** (042_auto_rerun.sql, [§ Jobs](#jobs-016_jobssql)):
+  a key's ingest that changes days queues the project's re-run (when it has
+  automatic runs on) with the key's **creator** as the acting user; the job
+  runs as that person and fails closed if they are no longer an editor. When
+  the creator's account was deleted (`created_by` SET NULL) there is nobody
+  to run as, so the re-run is **skipped** (no job, `rerunQueuedFor: null`)
+  and the ingest still commits: data from a logger is never lost for want of
+  a run. Any owner can fix it by replacing the key.
 - **Key policies** (permissive, beside the role policies):
   `time_series_api_key_select/insert/update` (`project_id =
   app_api_key_project('series:write') AND app_api_key_allows(kind, name)`;
@@ -1279,6 +1296,30 @@ The background job queue's source of truth ([architecture.md § Background work]
     `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
     one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
     cancel.
+  - `app_enqueue_rerun(project, cause)` (042_auto_rerun.sql): the
+    debounced automatic re-run behind the new-data hook
+    ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
+    Nothing unless `settings.autoRun.enabled` (it reads the setting itself,
+    defaults as `runs/autoRun.ts` `resolveAutoRun`); otherwise it pushes the
+    project's pending auto re-run (`dedupe_key = 'rerun'`, `payload.trigger =
+    'auto'`) to `LEAST(now() + debounce, created_at + 2 h)`, leaves a pending
+    manual or failed re-run alone, or inserts a new one due `now() +
+    debounce`. `cause` is `series`, `feed` or `ingest`, kept in the payload.
+    The caller must be someone `app_rerun_acting_user(project)` answers for,
+    else `42501`. Returns the pending job's id, due time and whether it
+    created it; serialised per project by an advisory lock.
+  - `app_rerun_acting_user(project)` (plain `SQL`, pinned `search_path`):
+    who a re-run queued now runs as: the signed-in user when an editor; for
+    a live key of the project ([§ API keys](#api-keys-039_api_keyssql)) the
+    key's creator, `api_key.created_by`; else `NULL`. A live key whose
+    creator's account was deleted (`created_by` NULL) is the one `NULL` that
+    doesn't refuse: `app_enqueue_rerun` skips the re-run (no job, no row), so
+    the ingest still commits.
+- **`job_enqueue`** (replaced in 042 from 040's definition, itself 016's plus the progress and cancel resets): as before, a
+  signed-in enqueuer is stamped as the acting user and a plain insert with no
+  user is refused; the one new case is a `SECURITY DEFINER` function with no
+  signed-in user (`current_user` ≠ `session_user`), which may name the acting
+  user itself: `app_enqueue_rerun` for an API key.
 - Cascades: a job goes with its project or its acting user's account.
 - Indexes: `(status, run_after)` for the claim; `(project_id, created_at)`,
   `acting_user_id` (covering the foreign keys); the dedupe index; and

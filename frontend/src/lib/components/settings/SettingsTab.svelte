@@ -44,6 +44,8 @@
 		typicalRange
 	} from './calibration';
 	import { dataQualityError } from './dataQuality';
+	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
+	import type { AutoRunSettings } from '$lib/api/types';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -93,11 +95,17 @@
 		calibration: CalibrationParams & Record<string, unknown>;
 		/** Absent on settings saved before engine 0.31.0: pan coefficient × A-pan. */
 		pe?: EditablePe;
+		/** When the project re-runs itself after new data (WP-2.11); defaults filled in for an older API. */
+		autoRun: AutoRunSettings;
 	};
-	const clone = (v: ProjectSettings): Editable => JSON.parse(JSON.stringify(v));
+	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings> }): Editable => {
+		const c = JSON.parse(JSON.stringify(v)) as Editable;
+		c.autoRun = resolveAutoRun(v);
+		return c;
+	};
 
 	let s = $state<Editable>(clone(untrack(() => project.settings)));
-	let saved = $state(JSON.stringify(untrack(() => project.settings)));
+	let saved = $state(JSON.stringify(clone(untrack(() => project.settings))));
 	let listText = $state<Record<string, string>>({});
 	let listInvalid = $state<Record<string, boolean>>({});
 	let saving = $state(false);
@@ -136,10 +144,11 @@
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
 	const dqError = $derived(dataQualityError(s.dataQuality));
+	const autoError = $derived(autoRunError(s.autoRun));
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -155,7 +164,8 @@
 			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: reserveError },
 			{ id: 'set-period', message: dateError },
-			{ id: 'set-quality', message: dqError }
+			{ id: 'set-quality', message: dqError },
+			{ id: 'set-auto', message: autoError }
 		])
 	);
 	const farmAreaKm2 = $derived(
@@ -232,7 +242,7 @@
 			reason = '';
 			onProjectChange(p);
 			s = clone(p.settings);
-			saved = JSON.stringify(p.settings);
+			saved = JSON.stringify(clone(p.settings));
 			x2Open = s.gr4j.x2 !== 0;
 			resetListText();
 			justSaved = true;
@@ -956,6 +966,41 @@
 		</div>
 		<p class="hint muted">These thresholds only decide which years are flagged; they never change the model results.</p>
 		{#if dqError}<p class="err" role="alert">{dqError}</p>{/if}
+	</section>
+
+	<!-- Automatic runs (WP-2.11) ------------------------------------------------------------------>
+	<section class="panel" id="set-auto" aria-labelledby="auto-h">
+		<div class="panel-head">
+			<h2 id="auto-h">Automatic runs</h2>
+			<span class="muted small">Run the model by itself when new data arrives</span>
+		</div>
+		<label class="check">
+			<input type="checkbox" disabled={readonly} bind:checked={s.autoRun.enabled} aria-describedby="auto-on-h" />
+			Re-run the model after new data
+		</label>
+		<p class="hint" id="auto-on-h">
+			An upload, a data feed or a logger queues one run, labelled “Auto · data to …”. Only the newest automatic run is kept (unless it is
+			pinned or published), so automatic runs never push out the runs you made.
+		</p>
+		<div class="fields">
+			<div class="field">
+				<label for="auto-wait">Wait after the latest new data <span class="u">(minutes)</span></label>
+				<NumberInput id="auto-wait" min={0} max={AUTO_RUN_DEBOUNCE_MAX} step={1} disabled={readonly || !s.autoRun.enabled} bind:value={s.autoRun.debounceMinutes} aria-describedby="auto-wait-h" />
+				<span class="hint" id="auto-wait-h">More data within the wait pushes the run back, but never more than {AUTO_RUN_MAX_WAIT_MINUTES / 60} hours after the first of it. Default 15.</span>
+			</div>
+			<div class="field">
+				<label for="auto-publish">Publishing</label>
+				<select id="auto-publish" disabled={readonly || !s.autoRun.enabled} bind:value={s.autoRun.publish} aria-describedby="auto-publish-h">
+					<option value="never">Never: a person publishes (default)</option>
+					<option value="if_no_new_warnings">Publish if there are no new warnings</option>
+				</select>
+				<span class="hint" id="auto-publish-h">
+					With “no new warnings”, an automatic run replaces the published baseline when it raises no warning the published run didn’t and
+					every self-check passes; the notice carries over. The first publication is always yours.
+				</span>
+			</div>
+		</div>
+		{#if autoError}<p class="err" role="alert">{autoError}</p>{/if}
 	</section>
 
 	{#if !readonly}

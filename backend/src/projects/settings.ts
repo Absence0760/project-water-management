@@ -40,6 +40,7 @@ import {
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
+import { AutoRunPatch } from '../runs/autoRun.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -520,7 +521,9 @@ export const SettingsPatch = z
 				calibrationPenalty: Wr2012CalibrationPenalty
 			})
 			.partial()
-			.strict()
+			.strict(),
+		// When the project re-runs itself after new data (runs/autoRun.ts, WP-2.11): any subset. Not a model input.
+		autoRun: AutoRunPatch
 	})
 	.partial()
 	.passthrough()

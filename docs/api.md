@@ -143,8 +143,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
 - `PATCH { teamId }` moves the project into a team where you're a member or
   admin (`404 team not found` if you're not in it, `403 requires team member`
   if you're a team viewer) or, with `null`, back to personal. Owner only.
-- `project = ProjectSummary & { settings: ProjectSettings }` — settings are
+- `project = ProjectSummary & { settings: ProjectSettings, rerunQueuedFor }` — settings are
   returned merged over the defaults, so the client always sees every field.
+  `settings.autoRun = { enabled, debounceMinutes, publish }` (WP-2.11,
+  [architecture.md § Automatic runs](./architecture.md#automatic-runs)) is
+  always present, defaults `{ enabled: false, debounceMinutes: 15, publish:
+  'never' }`; `PATCH` takes any subset: `enabled` boolean,
+  `debounceMinutes` a whole number 0–120, `publish` `never` |
+  `if_no_new_warnings` (no other value, no other key; `400`). It is not a
+  model input: runs don't record it, and a `PATCH` that changes nothing but
+  `autoRun` leaves `updatedAt` alone. `rerunQueuedFor` is when the project's
+  pending re-run (automatic or queued through `POST /jobs`) is due, ISO, or
+  `null`; on `GET /projects/:id` and the other routes that answer
+  `{ project }`, not on the list.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
@@ -676,8 +687,8 @@ naming `startDate`, not a server error).
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
-| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
+| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing) | editor |
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
@@ -686,6 +697,13 @@ naming `startDate`, not a server error).
 series (its values stay as they are until the swap);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
+
+`rerunQueuedFor` (`PUT` and merge only; WP-2.11): when the write changed days
+and the project has automatic runs on, it queued the project's debounced
+re-run (or pushed the pending one back), and this is when it is due, ISO.
+`null` when automatic runs are off or no day changed (re-sending the same
+values queues nothing). A data feed's merges and an API key's ingest queue it
+the same way ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
 
 **Product and version** (issue #40 part c, [data-model.md § Series
 provenance](./data-model.md#series-provenance-032_series_provenancesql)):
@@ -776,8 +794,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   outputs. Pinned runs (at most 10 per project), runs the evidence
   history names, runs a publication holds (at most 12, [Publication](#publication))
   and cited runs (a scenario's base) are exempt and don't count against the
-  20. A scenario's runs count like any other.
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible }` —
+  20. A scenario's runs count like any other. **Automatic runs**
+  (`trigger: 'auto'`, WP-2.11) are capped apart: only the newest unkept auto
+  run is kept, and auto runs never count against, or push out, the 20.
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger }` —
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed), so the app can badge it without a second
   fetch (audit H1, workbook comparison only — not evidence). `notes` is the
@@ -800,7 +820,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   published, `YYYY-MM-DD` UTC, a sign-off's the signer's name; `[]` when
   none). `reproducible` is whether the run's input series are stored
   (021_series_blob), so `…/reproduce` can re-run it; `false` for a run from
-  before stored inputs.
+  before stored inputs. `trigger` is what made the run:
+  `'manual'` (a person: Run, a queued re-run, an import, a scenario) or
+  `'auto'` (the re-run after new data, labelled `Auto · data to <day>`, made
+  as the person whose data queued it); `'forecast'` is reserved (WP-2.12).
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
@@ -1343,8 +1366,11 @@ CORS (gateways aren't browsers), JSON bodies only.
   series revision (a logger's merges are append-mostly, like a data feed's).
 - **Idempotent.** Re-sending the same days and values changes nothing,
   answers `daysChanged: 0` and records nothing.
-- `rerunQueuedFor`: when an automatic re-run is queued for. Always `null`
-  until auto re-runs are built (WP-2.11, `series/newData.ts`).
+- `rerunQueuedFor`: when the project's automatic re-run is due (ISO), when the
+  merge changed days and the project has automatic runs on (WP-2.11,
+  [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
+  runs as the key's creator. `null` otherwise, and when the key's creator's
+  account was deleted: the re-run is skipped, the days are still merged.
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in
@@ -1413,7 +1439,7 @@ A job runs later, in the worker, as the editor who queued it.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/jobs?status=&limit=` | – | `{ jobs: JobMeta[] }`, newest first. `status` ∈ `queued`, `running`, `done`, `failed`, `dead` (`400` otherwise); `limit` 1–200, default 50 | viewer |
-| POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field | editor |
+| POST | `/projects/:id/jobs` | `{ kind: "rerun", label? }` | `202 { job: JobMeta, created: true }`: a model run is queued, due now. If one is already pending (queued, or failed and waiting to retry; an automatic re-run included, which may be due later) the answer is `200 { job, created: false }` with that job, and nothing new is queued. `label` as for `POST /runs` (trimmed, ≤ 200). Only `rerun` is accepted (`400`), and no other field (a client can't queue an automatic re-run) | editor |
 
 - `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.
   Never the payload, and nothing about the worker's lease. `progress`
@@ -1434,6 +1460,9 @@ A job runs later, in the worker, as the editor who queued it.
 - A queued re-run is `POST /runs` off the request path: the same engine run,
   the same 20-run cap, as the editor who queued it. It appears in
   `GET /runs` once the job is `done`.
+- `GET /jobs` also lists the automatic re-runs new data queues (`kind:
+  'rerun'`, `runAfter` the debounced due time; WP-2.11). One pending re-run
+  per project, automatic or not.
 - `GET /jobs` also lists the data feeds' `feed_fetch` / `feed_ingest` jobs
   ([§ Data feeds](#data-feeds)); they are queued by the server, never through
   `POST /jobs`. It lists `yield` jobs too, queued through `POST /yield`

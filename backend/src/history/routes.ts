@@ -367,7 +367,8 @@ export const historyRoutes = new Hono<AuthEnv>()
 			// The values it replaces are kept as a revision in turn, so a restore can be undone.
 			// The label comes back with the values (032_series_provenance): they are what it describes.
 			// So does the day boundary (033_series_day_boundary).
-			const meta = await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev });
+			// A restore puts back values the project had, not new data, so it queues no automatic re-run.
+			const { meta } = await replaceSeries(db, id, { ...rows[0], provenance: rowProvenance(rows[0]) }, { restoredFrom: rev });
 			return c.json(await setDayBoundary(db, id, meta, rows[0].dayBoundary));
 		});
 	});

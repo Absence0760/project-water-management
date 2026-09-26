@@ -278,6 +278,15 @@ and nothing else.
   key, history or feed (`ingest.db.test.ts` checks each, with its own series
   as the positive control). It can't write a series revision either, so a
   key's merge keeps none (like a data feed's).
+- **Automatic re-runs from a key** (042_auto_rerun). A key's ingest that
+  changes days queues the project's automatic re-run (when it has them on)
+  as the key's **creator** (`api_key.created_by`), through `SECURITY DEFINER
+  app_enqueue_rerun`; the key itself gets no job policy. The re-run runs as
+  that person under RLS and fails closed if they are no longer an editor, so
+  a key never makes a run its creator couldn't. If the creator's account was
+  deleted (`created_by` NULL), the re-run is **skipped** (no job,
+  `rerunQueuedFor: null`) and the ingest still commits: never a run as
+  nobody, never lost data.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
@@ -480,6 +489,18 @@ In short:
   user and validates it as untrusted input. `water_app` has no `UPDATE` or
   `DELETE` on `job`. A job's stored error is written by the server, never
   database text, and wake messages carry a job id only.
+  **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
+  runs](./architecture.md#automatic-runs)) are queued and pushed back by
+  `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's
+  pending re-run, and only for someone `app_rerun_acting_user` answers for:
+  the signed-in editor, or a live API key of the project, whose re-run runs
+  as the key's creator and fails closed if they are no longer an editor
+  ([§ API keys](#api-keys)). `job_enqueue` still stamps any signed-in enqueuer
+  and refuses a plain insert with no user; only a definer function
+  (`current_user` ≠ `session_user`) may name the acting user. A client can't
+  queue an auto re-run (`POST /jobs` takes a label only), and an auto run
+  never publishes itself unless the project opted in to "if no new
+  warnings", never for the first publication.
 - **An import report can't be forged or rewritten** (017_project_import). What
   the importer flagged is the audit trail of a workbook's mistakes, so only the
   import that created the project may write it (the insert trigger checks the

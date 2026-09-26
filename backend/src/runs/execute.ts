@@ -39,7 +39,9 @@ export async function loadModelInput(db: Db, projectId: string): Promise<ModelIn
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
 		series[r.kind] = { startDate: r.start_date, values: r.values, provenance };
 	}
-	return { settings: mergeSettings(p[0]?.settings) as unknown as ModelInput['settings'], model, series };
+	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how: it's no model input, so runs don't record it.
+	const { autoRun: _autoRun, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
+	return { settings: settings as unknown as ModelInput['settings'], model, series };
 }
 
 /**
@@ -57,6 +59,21 @@ export function logSelfCheckFailure(projectId: string, runId: string, output: { 
 	if (checks.length === 0) return;
 	console.error(JSON.stringify({ event: 'self_check_failed', projectId, runId, checks }));
 }
+
+/**
+ * What made a run (model_run.trigger, 042_auto_rerun.sql): a person (`manual`:
+ * Run, a queued re-run, an import, a scenario), the debounced re-run after
+ * new data (`auto`, WP-2.11), or a forecast run (`forecast`, WP-2.12).
+ */
+export const RUN_TRIGGERS = ['manual', 'auto', 'forecast'] as const;
+export type RunTrigger = (typeof RUN_TRIGGERS)[number];
+
+/**
+ * How many unkept runs of each automatic trigger a project keeps: the newest
+ * auto run (and, with WP-2.12, forecast run) replaces the one before, so a
+ * daily feed doesn't grow storage and never pushes a person's run out.
+ */
+export const AUTOMATIC_RUNS_KEPT = 1;
 
 /** Default for RUNS_KEPT_PER_PROJECT. */
 export const DEFAULT_RUNS_KEPT = 20;
@@ -154,7 +171,10 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  *
  * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or
  * cited, published runs included) is never trimmed and doesn't count against the cap: the cap keeps the
- * newest `keep` runs that are neither.
+ * newest `keep` manual runs that are neither, and the newest
+ * AUTOMATIC_RUNS_KEPT of each automatic trigger (`auto`, `forecast`;
+ * model_run.trigger), counted apart: an auto run replaces the older auto run
+ * and never pushes a person's run out, however often data arrives.
  *
  * One trim at a time per project, held to the end of the caller's
  * transaction (as the pin limit's trigger does, 015_run_pinned.sql). Without
@@ -171,11 +191,14 @@ export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProj
 	await lockProjectRuns(db, projectId);
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
-			SELECT r.id FROM model_run r
-			WHERE r.project_id = $1 AND NOT ${RUN_KEPT_SQL}
-			ORDER BY r.created_at DESC, r.id DESC OFFSET $2
+			SELECT t.id FROM (
+				SELECT r.id, r.trigger, row_number() OVER (PARTITION BY r.trigger ORDER BY r.created_at DESC, r.id DESC) AS n
+				FROM model_run r
+				WHERE r.project_id = $1 AND NOT ${RUN_KEPT_SQL}
+			) t
+			WHERE t.n > CASE WHEN t.trigger = 'manual' THEN $2::int ELSE $3::int END
 		) RETURNING id`,
-		[projectId, keep]
+		[projectId, keep, AUTOMATIC_RUNS_KEPT]
 	);
 	// The storage cap's removals are in the project's history too (030_history.sql).
 	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'trimmed' });
@@ -220,8 +243,14 @@ export interface RunScenarioSnapshot {
  * and start date the run used, so loadRunInput can rebuild the exact input
  * later, whatever happens to the live series.
  */
-export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
-	return runAndStore(db, projectId, label, await loadModelInput(db, projectId));
+export async function executeRun(
+	db: Db,
+	projectId: string,
+	label: string | ((input: ModelInput) => string),
+	trigger: RunTrigger = 'manual'
+): Promise<{ id: string; output: ModelOutput }> {
+	const input = await loadModelInput(db, projectId);
+	return runAndStore(db, projectId, typeof label === 'function' ? label(input) : label, input, undefined, trigger);
 }
 
 /**
@@ -235,7 +264,8 @@ export async function runAndStore(
 	projectId: string,
 	label: string,
 	input: ModelInput,
-	scenario?: RunScenarioSnapshot
+	scenario?: RunScenarioSnapshot,
+	trigger: RunTrigger = 'manual'
 ): Promise<{ id: string; output: ModelOutput }> {
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
 	const output = runModelChecked(input);
@@ -263,9 +293,9 @@ export async function runAndStore(
 		...(scenario ? { scenario } : {})
 	};
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id)
-		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null]
+		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
+		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);
 	const runId = rows[0]!.id;
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).
@@ -288,7 +318,8 @@ export async function runAndStore(
 		engineVersion: output.engineVersion,
 		startDate: output.startDate,
 		endDate: output.endDate,
-		...(scenario ? { scenarioId: scenario.id } : {})
+		...(scenario ? { scenarioId: scenario.id } : {}),
+		...(trigger !== 'manual' ? { trigger } : {})
 	});
 	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };
