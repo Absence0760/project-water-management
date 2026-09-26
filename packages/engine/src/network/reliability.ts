@@ -158,6 +158,7 @@ export interface WaterAccountRow {
 	catchmentLossM3: number | null;
 	naturalFlowM3: number;
 	rainOnDamsM3: number;
+	/** Groundwater pumped: to the crops and users, and (engine ≥ 0.36.0, WP-3.9) into the dams. */
 	groundwaterM3: number;
 	/** Σ transfers in − out over all farms: 0 up to float noise (a transfer moves water inside the network). */
 	transfersM3: number;
@@ -250,7 +251,10 @@ export interface AccountNodeInput {
 	seepageLost?: ArrayLike<number>;
 	/** Released below the dam (WP-3.5); missing = none. */
 	release?: ArrayLike<number>;
+	/** Groundwater to the crop or user (part of supplied). */
 	groundwater: ArrayLike<number>;
+	/** Groundwater pumped into the farm dam (WP-3.9, engine ≥ 0.36.0); missing = none. */
+	groundwaterToDam?: ArrayLike<number>;
 	depletion: ArrayLike<number>;
 	/** End-of-day storage. */
 	storage: ArrayLike<number>;
@@ -546,7 +550,8 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 			day.seepage += n.seepage?.[t] ?? 0;
 			day.seepageLost += n.seepageLost?.[t] ?? 0;
 			day.release += n.release?.[t] ?? 0;
-			day.groundwater += n.groundwater[t]!;
+			// Groundwater into supply and (WP-3.9) into the dam: both come into the network.
+			day.groundwater += n.groundwater[t]! + (n.groundwaterToDam?.[t] ?? 0);
 			day.depletion += n.depletion[t]!;
 			storage += n.storage[t]!;
 		}

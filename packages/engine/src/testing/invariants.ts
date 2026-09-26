@@ -208,6 +208,8 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	const x = cloneInput(input);
 	for (const n of x.model.nodes) if (n.boreholeRule === 'drought') n.boreholeRule = 'supplemental';
+	// Individual boreholes (WP-3.9): emergency mode triggers on the dam the same way.
+	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency') b.mode = 'supplemental';
 	return x;
 }
 

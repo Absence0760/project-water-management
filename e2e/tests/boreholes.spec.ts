@@ -1,7 +1,9 @@
 // Boreholes and stream depletion (roadmap WP-1.34, docs/model.md §2.7d): give
 // a farm boreholes in the one-node form, save, reload, run, and read what it
-// pumped and the depletion the river took for it.
+// pumped and the depletion the river took for it; and (WP-3.9) add an
+// individual borehole with an annual cap and read its use per water year.
 import type { Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -47,4 +49,47 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await expect(row.getByRole('cell').nth(2)).not.toHaveText('0');
 	// The run warns about the calibration record measured while they pumped.
 	await expect(page.getByText(/boreholes that deplete the river/).first()).toBeAttached();
+});
+
+test('add an individual borehole with an annual cap, run, and read its use per water year against the cap (WP-3.9)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Individual boreholes');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.getByRole('button', { name: 'One node' }).click();
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+
+	const group = page.getByRole('group', { name: 'Individual boreholes', exact: true });
+	await expect(group.getByText('Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology report.')).toBeVisible();
+	await group.getByRole('button', { name: '+ Add borehole' }).click();
+	await group.getByLabel('Name').fill('BH-01');
+	await group.getByLabel('Capacity (m³/day)').fill('300');
+	await group.getByLabel('Annual cap (m³/a)').fill('20000');
+	await group.getByLabel('Mode').selectOption('primary');
+	await group.getByLabel('Stream depletion (% of pumping)').fill('25');
+	await expect(group.getByTestId('bh-cap-note')).toContainText('Annual caps total 20,000 m³/a');
+	await expectNoViolations(page, { include: '.detail' });
+	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await expect(saveBar(page)).toHaveCount(0);
+
+	await page.reload();
+	await page.getByRole('button', { name: 'One node' }).click();
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · farm' });
+	const again = page.getByRole('group', { name: 'Individual boreholes', exact: true });
+	await expect(again.getByLabel('Name')).toHaveValue('BH-01');
+	await expect(again.getByLabel('Annual cap (m³/a)')).toHaveValue('20,000');
+	await expect(again.getByLabel('Mode')).toHaveValue('primary');
+
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByLabel(/^Run label/).fill('Capped');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Capped' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 4, name: 'Groundwater by water year' })).toBeVisible();
+	await expect(page.getByTestId('gw-annual-note')).toContainText('never decides whether a use is lawful');
+	const row = page.locator('table.groundwater-annual').getByRole('row', { name: /^Upper farm/ });
+	await expect(row).toBeVisible();
+	// The cap column shows the borehole's 20 000 m³/a; no year pumps more than it.
+	await expect(row.getByRole('cell').nth(2)).toHaveText('20,000');
+	const most = Number((await row.getByRole('cell').nth(1).innerText()).split(' ')[0]!.replace(/,/g, ''));
+	expect(most).toBeGreaterThan(0);
+	expect(most).toBeLessThanOrEqual(20_000);
 });

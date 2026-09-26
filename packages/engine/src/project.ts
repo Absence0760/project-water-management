@@ -892,6 +892,58 @@ export interface ProjectModel {
 	transfers: Transfer[];
 	/** Land-cover patches that reduce runoff (engine ≥ 0.24.0, WP-1.35). Absent on older documents = none. */
 	landCover?: LandCoverPatch[];
+	/**
+	 * Individual boreholes on farms and other users (engine ≥ 0.36.0, WP-3.9,
+	 * docs/model.md §2.7d): each with its own capacity, annual cap, supply
+	 * mode, target and depletion factor. Absent on older documents = none.
+	 * They add to a node's combined borehole capacity (WP-1.34), if it has one.
+	 */
+	boreholes?: Borehole[];
+}
+
+/**
+ * When an individual borehole runs (WP-3.9, docs/model.md §2.7d):
+ * 'none' — never (kept on record, e.g. a borehole not equipped);
+ * 'supplemental' — only for the demand the dam and river leave unmet;
+ * 'primary' — first, before the dam and river;
+ * 'emergency' — supplemental, but only while the farm dam holds less than
+ *   `emergencyBelowPct` of its capacity at the start of the day (farms with a dam only).
+ */
+export const BOREHOLE_MODES = ['none', 'supplemental', 'primary', 'emergency'] as const;
+export type BoreholeMode = (typeof BOREHOLE_MODES)[number];
+
+/**
+ * Where an individual borehole's water goes (WP-3.9): 'direct' to the crop or
+ * user (part of supplied), or 'dam' into the farm dam (farms with a dam only),
+ * from which irrigation then draws.
+ */
+export const BOREHOLE_TARGETS = ['direct', 'dam'] as const;
+export type BoreholeTarget = (typeof BOREHOLE_TARGETS)[number];
+
+/**
+ * The GN 538 (2016) general authorisation's upper limit on groundwater taken
+ * per property, m³ per year (roadmap WP-3.9, [GA538]). What a property may
+ * take under the GA depends on its size and where it is; this is the ceiling,
+ * shown beside modelled use for context. The app never decides legality.
+ */
+export const GA538_GROUNDWATER_LIMIT_M3_YEAR = 40_000;
+
+export interface Borehole {
+	id: string;
+	/** The farm or other user it supplies. */
+	nodeId: string;
+	/** A label, e.g. the borehole number on the geohydrology report. */
+	name: string;
+	/** Most it can pump per day, m³/day (the specialist's sustainable yield). */
+	capacityM3Day: number;
+	/** Most it may pump in a water year (Oct–Sep), m³; null = no annual cap. */
+	annualCapM3: number | null;
+	mode: BoreholeMode;
+	/** 'emergency' only: it runs while the dam holds less than this fraction (0–1) of its capacity at the start of the day. */
+	emergencyBelowPct: number;
+	target: BoreholeTarget;
+	/** Share d (0–1) of what it pumps that is eventually taken from the river at its node (the node's lag applies). */
+	depletionFactor: number;
 }
 
 /**
@@ -1025,6 +1077,8 @@ export interface FarmSummary {
 	avgGroundwaterM3Day?: number;
 	/** Mean stream depletion taken from the river below it (WP-1.34); only for a node with boreholes. */
 	avgBaseflowDepletionM3Day?: number;
+	/** Mean groundwater pumped into the farm dam (engine ≥ 0.36.0, WP-3.9); only with dam-target boreholes. Not part of supplied. */
+	avgGroundwaterToDamM3Day?: number;
 }
 
 /**
@@ -1408,12 +1462,47 @@ export interface ForecastRainDays {
 	lastRecorded: string | null;
 }
 
+/** One node's groundwater abstraction in one water year (WP-3.9, RunSummary.groundwaterAnnualUse). */
+export interface GroundwaterAnnualUse {
+	nodeId: string;
+	name: string;
+	kind: 'farm' | 'user';
+	/** The water year's starting calendar year: 2003 = 1 Oct 2003 – 30 Sep 2004. */
+	waterYear: number;
+	/** e.g. "2003/04". */
+	label: string;
+	/** Run days in this water year (a run's first and last years may be partial). */
+	days: number;
+	/** Everything pumped, m³: to the crop or user plus into the dam. */
+	abstractionM3: number;
+	/** The part pumped into the farm dam, m³ (0 without dam-target boreholes). */
+	toDamM3: number;
+	/** Stream depletion taken from the river at the node this water year, m³ (lagged, so it can include earlier years' pumping). */
+	streamDepletionM3: number;
+	/** Σ of the boreholes' annual caps, m³; null when any borehole that can pump has no cap. */
+	annualCapM3: number | null;
+	/** GA538_GROUNDWATER_LIMIT_M3_YEAR, for context: the GA's ceiling per property, not a decision on legality. */
+	gaLimitM3: number;
+	/** Per borehole, in id order; `id` null = the node's combined borehole capacity (WP-1.34). */
+	boreholes: { id: string | null; name: string; abstractionM3: number; annualCapM3: number | null; capReached: boolean }[];
+}
+
 export interface RunSummary {
 	farms: FarmSummary[];
 	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
 	users?: UserSummary[];
 	/** Land-cover streamflow reductions (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
 	landCover?: LandCoverSummary;
+	/**
+	 * Groundwater abstraction per farm or other user and water year (engine ≥
+	 * 0.36.0, WP-3.9, docs/model.md §2.7d): what its boreholes pumped (to the
+	 * crop and into the dam), against their annual caps and the GN 538
+	 * general-authorisation ceiling. One entry per node with boreholes per
+	 * water year the run touches, nodes in id order, years ascending. The
+	 * licensing comparisons (WARMS, WP-3.10) read their volumes here. Absent
+	 * without boreholes, and on older runs.
+	 */
+	groundwaterAnnualUse?: GroundwaterAnnualUse[];
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
 	catchment: {
@@ -1596,7 +1685,7 @@ export interface WaterBalanceRow {
 	damEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
-	/** Groundwater pumped into supply, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
+	/** Groundwater pumped into supply and (engine ≥ 0.36.0, WP-3.9) into the dams, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
 	groundwaterM3?: number;
 	/** Stream depletion taken from the river (WP-1.34); absent without boreholes. */
 	streamDepletionM3?: number;

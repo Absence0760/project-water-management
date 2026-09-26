@@ -94,7 +94,13 @@ For a run, per farm or water user, per water source and per **water year**
   the water year inside the run. Groundwater is the `groundwater_used` series
   (boreholes, [model.md §2.7d](./model.md#27d-groundwater-abstraction-and-stream-depletion-engine--0230-roadmap-wp-134-audit-n5));
   surface water is supplied minus groundwater. Supply includes what the farm
-  takes from its own dam.
+  takes from its own dam. Groundwater pumped **into** a farm dam (a
+  dam-target borehole, WP-3.9, `groundwater_to_dam`) counts as groundwater use
+  on the day it is pumped, so the groundwater side of a water year equals the
+  run's groundwater use table (to the crop + into the dam). Water pumped into
+  the dam and later supplied from it is also in `supplied`, so it counts under
+  surface water too when it is drawn; pending the hydrologist (whether to net
+  it out of the surface side).
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated

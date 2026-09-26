@@ -552,6 +552,18 @@ does. The intro states the thresholds the API returns.
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Individual boreholes** (engine ≥ 0.36.0, WP-3.9, `BoreholeFields.svelte`),
+  one-node form, farms and other users: always the note **Low confidence:
+  Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
+  report.** **+ Add borehole** adds one (supplemental, straight to the crop, no
+  capacity or cap yet); each has a **Name**, **Capacity** (m³/day), **Annual
+  cap** (m³/a, empty = none), **Mode** (supplemental / primary / emergency /
+  none; emergency only with a dam), **Runs below** (% of dam, emergency only),
+  **Pumps into** (the crop or the farm dam; farms only, the dam only with one)
+  and **Stream depletion** (% of pumping). Below them: the caps' total and the
+  GN 538 context (up to 40 000 m³/a per property, depending on its size; the
+  app never decides legality). Read-only for viewers; fields stack on a phone.
+  Removing the node asks about its boreholes too.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -1487,7 +1499,15 @@ run's report to chosen members every week or month.
   over that area (`RunSummaryView.svelte`).
 - **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
   a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes (`RunSummaryView.svelte`).
+  stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
+  (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
+  by water year**: the GN 538 context note (up to 40 000 m³/a per property;
+  modelled use only, the app never decides legality), the low-confidence note,
+  then per farm or user the mean pumped per year (partial years weighted by
+  their days), the most in one year, the annual caps, how many years pumped
+  above the GN 538 ceiling (flagged) and how many reached a cap; and per node
+  a collapsed table of every water year: days, pumped, into the dam, stream
+  depletion and each borehole's volume (of its cap, marked when reached).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   under the farms with each user's priority, demand, taken, deficit, % of
   demand supplied (flagged below 95 %), returned and EWR charge, whole-run

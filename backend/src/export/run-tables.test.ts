@@ -6,6 +6,7 @@ import {
 	ewrAssuranceLines,
 	otherUserLines,
 	landCoverLines,
+	groundwaterAnnualLines,
 	ewrSiteLines,
 	zeroRainLines,
 	rainSourceCsvLines,
@@ -193,6 +194,34 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines[0]).toBe('Land-cover streamflow reductions (invasive plants and forestry)');
 		expect(lines).toContain('Share of natural flow (%),2.9');
 		expect(lines.at(-1)).toBe('invasive,1.5,50,12.175');
+	});
+
+	it('WP-3.9: lists groundwater use per farm and water year against the caps and the GN 538 ceiling, then per borehole', () => {
+		const lines = [
+			...groundwaterAnnualLines([
+				{
+					nodeId: 'a',
+					name: 'Farm A',
+					kind: 'farm',
+					waterYear: 2003,
+					label: '2003/04',
+					days: 366,
+					abstractionM3: 42_000,
+					toDamM3: 2000,
+					streamDepletionM3: 8000,
+					annualCapM3: null,
+					gaLimitM3: 40_000,
+					boreholes: [
+						{ id: null, name: 'Combined boreholes', abstractionM3: 30_000, annualCapM3: null, capReached: false },
+						{ id: 'b1', name: 'BH1', abstractionM3: 12_000, annualCapM3: 12_000, capReached: true }
+					]
+				}
+			])
+		];
+		expect(lines[0]).toMatch(/^"Groundwater abstraction by water year/);
+		expect(lines).toContain('Farm A,2003/04,366,42000,2000,8000,,40000');
+		expect(lines).toContain('Farm A,2003/04,Combined boreholes,30000,,');
+		expect(lines.at(-1)).toBe('Farm A,2003/04,BH1,12000,12000,yes');
 	});
 
 	it('WP-1.33: lists other water users and whether each is curtailed', () => {
@@ -523,7 +552,7 @@ describe('farm column guide', () => {
 		const lines = [...columnGuideLines()];
 		expect(lines[1]).toBe('Column,Series,Formula');
 		expect(lines).toHaveLength(2 + FARM_COLUMNS.length);
-		expect(lines).toContain('V,balance_residual,(H + I + J + rain on dam + GW) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW and Dep only with boreholes)');
+		expect(lines).toContain('V,balance_residual,"(H + I + J + rain on dam + GW + GWd) − (G − T) − evaporation − (Q[t] − Q[t−1]) − U − Dep − seepage lost; 0 up to float noise (GW, GWd and Dep only with boreholes)"');
 	});
 });
 
