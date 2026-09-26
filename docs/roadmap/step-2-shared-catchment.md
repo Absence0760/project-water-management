@@ -1613,10 +1613,13 @@ in dev.
 >   projection: the forecast then always comes from the same model snapshot
 >   as the figures beside it. The farm view reads `farm.forecast` (not a
 >   top-level `forecast`), with the day the forecast was made.
-> - **Not built here:** scheduled forecast runs. WP-2.11 owns re-run
->   enqueueing; its re-run job makes ordinary runs. A nightly forecast run
->   after each GEFS ingest is the natural hand-off (`executeRun(…, 'forecast')`
->   then `trimRuns`, whose per-trigger cap keeps the newest unkept forecast run).
+> - **Scheduled forecast runs** (the WP-2.11 hand-off, built 2026-09-26): a
+>   CHIRPS-GEFS ingest that changes days queues a forecast run (`rerun` job,
+>   `trigger: 'forecast'`, dedupe key `forecast`) when the project has
+>   automatic runs on, after the re-run's debounce; it runs
+>   `executeRun(…, 'forecast')` then `trimRuns`, whose per-trigger cap keeps
+>   the newest unkept forecast run. Never auto-published
+>   ([architecture.md § Background work](../architecture.md)).
 
 **Goal.** Show the next 7–14 days distinctly, with early warnings. Forecast
 rain must never change the historical figures farmers and regulators rely on.
@@ -2097,6 +2100,58 @@ section), WP-2.7 (notes). D9, D10.
 - Run the load checks: 60-farm synthetic run timings on the API Lambda
   (manual) and the worker (auto); DB size after 30 simulated days.
 
+**Results, first pass (2026-09-26), over what Step 2 has built.** WP-2.5
+(i18n), WP-2.12 (forecast) and WP-2.13 (alerts) are still being built, so
+their rows stay pending and the pass runs again when they land. Status: ✅
+proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
+(a WP not built yet, or an item for the client, tracked in
+[followups.md § POPIA and the Step 2 release](../followups.md#popia-and-the-step-2-release-wp-216)).
+
+*Threats (§7 abuse cases and trust boundaries)*
+
+| Threat | Status | Test or fix |
+| --- | --- | --- |
+| Farmer IDOR on `nodeId` (another farm, a gauge, an unknown id, a malformed id) | ✅ | `publish/publication.db.test.ts` "404s a farm the farmer isn't linked to" (view and CSV, own farm as control); `farms/farms.db.test.ts` "404s any other node" |
+| Every other project route refuses a farmer | ✅ | `farms/farms.db.test.ts` "%s refuses a farmer" (every `/projects/:id` route not on `FARMER_ALLOWED`) |
+| Response scan per farmer route (no other farm's id or name) | ✅ | `publish/publication.db.test.ts` (farm view, publication list, CSV), `farms/series-privacy.db.test.ts` (series, the access list), `notes/notes.db.test.ts` (list and counts) |
+| Differencing through totals (the `k` rule) | ✅ | `publish/publication.db.test.ts` "the aggregate rule on the even share"; `share/share.db.test.ts` k boundary at 4 and 5 holders; `farms/farms.db.test.ts` holder count (one user's farms once) |
+| Flow volumes reveal a neighbour's use | ✅ | `farms/series-privacy.db.test.ts` (downstream farmer gets no series equal to the upstream outflow; positive control as a viewer) |
+| A leaked or mis-configured gateway key poisons a series | 🔧 partly | Allowlist, scope, revocation, other project, key reads nothing: `ingest/ingest.db.test.ts`. **Built** (designed, was missing): the data-quality hold (`series/hold.ts`); a key's push with negative days, or days above the outlier limit of the series *without* that push, records `series.held`, queues no re-run and holds every automatic run until a person runs the model: `ingest/ingest.db.test.ts` "a key pushing days that look wrong holds the automatic re-run", `series/hold.test.ts`. **Partially mitigated**, see the Limits in [security.md § API keys](../security.md#api-keys): the outlier check needs 100 non-zero days; a key's earlier pushes still count towards the 99th percentile, so slow poisoning can shift it (tracked in followups); plausible-but-wrong values aren't caught. Recovery: deployment.md § Runbooks 1 |
+| Key escalation (another project, another scope, a read) | ✅ | `ingest/ingest.db.test.ts` "writes only its own project", "checks the scope in the database", "can't read the model, runs, members, the project, keys or the history" |
+| Share-link scraping / overreach | ✅ | `share/share.db.test.ts` (catchment-level only, response scan for the note and every farm name and id, farm keys refused, same 404 for every dead link, owner-only); WAF attached: `infra/tests/guardrails.tftest.hcl` "edge_security"; `noindex`: `e2e/tests/share-links.spec.ts` |
+| Stored XSS through notes, notices, the share page | 🔧 | **Added** `frontend/src/lib/rawHtml.test.ts`: no `{@html}` and no `innerHTML`-style write anywhere under `src/` (there was a rule, no guard). Mail: `mail/templates.test.ts` escapes names |
+| A farmer using a removed membership | 🔧 | Leaving was tested; removal by an owner wasn't. **Added** `publish/publication.db.test.ts` "ends a removed farmer's access on their next request, with the same session" (farm view, CSV, index, publication, notes, series). Per alert: ⏳ WP-2.13 |
+| Farmer mail built from the recipient's own scope | ✅ | `farms/invites.db.test.ts` (only the invited farms); `reports/reports.db.test.ts` "a farmer can't … be a recipient" |
+| Background jobs run as a person and fail closed | ✅ | `jobs/jobs.db.test.ts` "fails closed … when the acting user lost the editor role"; `ingest/ingest.db.test.ts` key re-run as its creator, skipped when the creator is gone; `feeds/feeds.db.test.ts` feed of a deleted acting user skipped |
+| Internet fetch output as untrusted input | ✅ | `feeds/fetch.test.ts` "FetchResult (the fetcher's output is untrusted)" and the parse-failure cases |
+| History: farmers and strangers see nothing; append-only; masked addresses | ✅ | `history/history.db.test.ts` |
+| Render tokens (server PDFs) | ✅ | `reports/reports.db.test.ts` "render tokens", `reports/scope.test.ts` |
+| Portfolio: no other team's or personal project; farmers 404 | ✅ | `portfolio/portfolio.db.test.ts` |
+| Every route auth-gated or public by design | ✅ | `routes.test.ts` (ingest key-gated, share on the allowlist) |
+| Alert mail-bombing, unsubscribe abuse | ⏳ | WP-2.13 |
+
+*Data export and deletion (every Step 2 personal-data table)*
+
+| Item | Status | Test or fix |
+| --- | --- | --- |
+| Project deletion removes every row of the project | ✅ | `db/catalogue.db.test.ts` "cascades every foreign key to project" (new guard); `invites/invites.db.test.ts` "deleting the project deletes its invites" |
+| Every foreign key to `app_user` has a decided outcome | 🔧 | **Added** `db/catalogue.db.test.ts` `APP_USER_ON_DELETE` (cascade / set null / restrict for evidence) |
+| Account deletion: memberships, farm links, notes, keys, share links, publications, invites | 🔧 | **Fixed** (048): deleting the author, or the deleter, of a soft-deleted note failed (`note_guard` refused the foreign key's SET NULL); a run note kept pointing at a deleted account (`model_run_stamp_notes` put the id back). `auth/account-deletion.db.test.ts` |
+| Audit log on account deletion (D12: pseudonymise) | 🔧 | **Built** (048 `app_user_pseudonymise`): "Deleted user" as actor and in subjects, `note.deleted` now carries `authorId`. `auth/account-deletion.db.test.ts`; D12 itself ⏳ for the information officer to confirm |
+| Lapsed invites (an address of someone who never signed up) | 🔧 | **Built** (048 `app_purge_invites`, job tick): purged 90 days past expiry with their farms. `farms/invites.db.test.ts` "purging lapsed invites" |
+| Data-subject export | ⏳ | Not built (plan.md Phase 7); the operator answers by query; what it must include is in followups |
+| Self-service account deletion; evidence that names its maker | ⏳ | Operator act today (deployment.md § Runbooks 7); restricted keys need a decision |
+
+*Lawful basis, consent, retention; the other WP-2.16 items*
+
+| Item | Status | Where |
+| --- | --- | --- |
+| What is kept, why, how long, what deletion does | ✅ | [security.md § Personal information](../security.md#personal-information-popia) |
+| Privacy notice, lawful basis, operator agreement, region, deleted-note bodies, backups | ⏳ | followups.md § POPIA and the Step 2 release (client / information officer) |
+| Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm ⏳ WP-2.13) |
+| `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (unsubscribe ⏳ WP-2.13) |
+| Personas (§9) and load checks | ⏳ | Once WP-2.5, WP-2.12 and WP-2.13 land (three personas judge those) |
+
 **Size.** S. **Depends on.** Everything above.
 
 **Total, realistically:** about 5–6 months for one developer (one L for RLS,
@@ -2150,8 +2205,9 @@ logger key.
 - **Farmer IDOR** on `nodeId` → 404 from RLS.
 - **Differencing** through totals → the `k` rule.
 - **A leaked or mis-configured gateway key poisons a series** → key
-  allowlist; data-quality checks (engine `checkSeries`) on each ingest, with
-  large anomalies holding the auto re-run for review; one-click revoke;
+  allowlist; data-quality checks (engine `seriesRowFlags`) on each key
+  ingest, with negative or outlier days holding the auto re-run for review
+  (`series.held`, built in WP-2.16, `series/hold.ts`); one-click revoke;
   `series.merged` events identify the key.
   - Recovery: for UI merges, restore from `series_revision`. Key and feed
     merges don't write revisions, so recovery means re-fetching or

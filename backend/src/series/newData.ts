@@ -22,13 +22,15 @@
 //     the project hasn't turned automatic runs on: the `rerunQueuedFor` the
 //     merge routes answer with. The enqueue itself is runs/autoRun.ts
 //     enqueueRerun → app_enqueue_rerun (debounce, maximum wait, dedupe).
+//   - A forecast feed's new days also queue the scheduled forecast run
+//     (queueForecastFor, WP-2.12), under the same setting.
 //   - It never wakes the worker (that has to wait for the commit): a route
 //     wakes it after committing when the re-run is due at once
 //     (series/routes.ts wakeForRerun); inside a job nothing is needed (the job
 //     table's insert trigger NOTIFYs the local worker, and the production tick
 //     finds due jobs every 5 minutes).
 import type { Db } from '../db/tx.js';
-import { enqueueRerun, type NewDataCause, type QueuedRerun } from '../runs/autoRun.js';
+import { enqueueForecastRun, enqueueRerun, type NewDataCause, type QueuedRerun } from '../runs/autoRun.js';
 
 export interface SeriesDaysChanged {
 	seriesId: string;
@@ -47,7 +49,20 @@ export async function queueRerunFor(db: Db, projectId: string, change: SeriesDay
 	return change.daysChanged > 0 ? enqueueRerun(db, projectId, CAUSE[change.via]) : null;
 }
 
+/**
+ * A forecast feed's new days (a CHIRPS-GEFS issue merged into the forecast
+ * series) also queue a scheduled forecast run (WP-2.12, runs/autoRun.ts
+ * enqueueForecastRun), under the same opt-in: null when off, or for any
+ * other change. Only a feed's: a person who uploads a forecast runs it from
+ * the Runs tab (Run forecast), and an API key pushes observed data.
+ */
+export async function queueForecastFor(db: Db, projectId: string, change: SeriesDaysChanged): Promise<QueuedRerun | null> {
+	return change.daysChanged > 0 && change.via === 'feed' && change.kind === 'rain_forecast_mm' ? enqueueForecastRun(db, projectId) : null;
+}
+
 /** The hook (see the header). Returns `rerunQueuedFor`: when the re-run is due, or null. */
 export async function onSeriesDaysChanged(db: Db, projectId: string, change: SeriesDaysChanged): Promise<string | null> {
-	return (await queueRerunFor(db, projectId, change))?.runAfter ?? null;
+	const rerun = await queueRerunFor(db, projectId, change);
+	await queueForecastFor(db, projectId, change);
+	return rerun?.runAfter ?? null;
 }

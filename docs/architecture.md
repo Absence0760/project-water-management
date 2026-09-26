@@ -319,7 +319,9 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   `app_finish_job` **in the same transaction**, so the work and its "done"
   commit together. There is no principal that bypasses RLS: only claim,
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
-  functions that never return a payload.
+  functions that never return a payload. Each tick also purges finished jobs
+  after 30 days, report rows after 8, and invites 90 days past their expiry
+  (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),
@@ -406,6 +408,24 @@ Settings → Automatic runs.
   `model_run.trigger = 'auto'`, then `trimRuns`, which caps each trigger
   apart: the newest unkept auto run replaces the older one, and never pushes
   a person's run out ([data-model.md](./data-model.md), **Run output volume**).
+- **Scheduled forecast runs** (WP-2.12, `series/newData.ts`
+  `queueForecastFor` → `runs/autoRun.ts` `enqueueForecastRun`): a forecast
+  feed's (CHIRPS-GEFS) merge that changes days in the forecast series also
+  queues a `rerun` job with `trigger: 'forecast'`, due after the same
+  debounce, under dedupe key `forecast` (one pending per project, apart from
+  the re-run's; a second issue before it runs joins it, and it reads the
+  newest issue when it runs). **Only when automatic runs are on**
+  (`settings.autoRun.enabled`): a scheduled forecast run is an automatic run,
+  so it takes the same opt-in, and a project that turned them off since gets
+  nothing when the job runs. It runs `executeRun(db, id, forecastRunLabel,
+  'forecast')` (`Forecast · from <first forecast day>`), then `trimRuns`,
+  which keeps the newest unkept forecast run, so daily issues never pile up.
+  An issue the observed rain has overtaken (no forecast day after the last
+  observed one) leaves nothing to run: the job ends done, with no run. Never
+  auto-published, whatever `autoRun.publish` says: a forecast is guidance,
+  and publishing one stays a person's act. Only a feed's forecast queues
+  one: a person who uploads a forecast runs it from the Runs tab (Run
+  forecast), and an API key's ingest carries observed data.
 - **Publication stays a person's act** (roadmap D5): the Overview offers
   the editor "New auto run: publish?". A project may opt in to
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run

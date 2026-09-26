@@ -287,6 +287,35 @@ and nothing else.
   deleted (`created_by` NULL), the re-run is **skipped** (no job,
   `rerunQueuedFor: null`) and the ingest still commits: never a run as
   nobody, never lost data.
+- **A push that looks wrong holds the automatic runs** (WP-2.16, the
+  "leaked or mis-configured gateway key" abuse case; `series/hold.ts`). A
+  key's days that the engine's data-quality rules flag (a negative rain or
+  flow, or a value above its series' outlier limit) are merged, so nothing
+  is lost, but the merge records `series.held` as the key, queues no re-run
+  and answers `rerunHeld`; the re-run handler then does nothing while a
+  `series.held` event is newer than the project's latest run a person made,
+  so neither an already-queued re-run nor a later clean push can carry the
+  bad days into an automatic run, or an automatic publication. The hold
+  ends when a person runs the model. A person's own merge is never held; a
+  data feed's values are checked by its parser. The outlier limit is the
+  engine's (5× the 99th percentile of the series' non-zero days for rain,
+  10× for flow), taken from the series **without** the push (its days before
+  the merge, less the days the push overwrites), so one push can't lift the
+  limit over itself. **Limits** (a partial mitigation):
+  - a plausible wrong value, inside the series' usual range, isn't caught;
+  - the outlier rule needs 100 non-zero days in the series, so a new or
+    short series is checked for negatives only;
+  - days an earlier push of the same key wrote still count towards the
+    limit (a series keeps no per-day author), so a key that poisons slowly,
+    push by push, can shift the 99th percentile it is later judged by
+    (followups.md § POPIA and the Step 2 release tracks excluding them).
+
+  Recovery is the runbook in
+  [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
+  days from the key's events, re-push; a key's merge keeps no series
+  revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
+  handler waiting, a person's run ending it, a person's merge not held),
+  `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
@@ -400,7 +429,8 @@ In short:
   note or a run, settings, project or other farm's note. Only the author
   edits a body (`note_guard`); a delete is soft, the body kept for editors'
   audit trail and hidden from everyone else. Bodies are plain text, rendered
-  with Svelte's escaping (no `{@html}`, no markdown). The project export
+  with Svelte's escaping (no `{@html}`, no markdown; the `rawHtml.test.ts`
+  guard, [§ Input handling](#input-handling)). The project export
   (`export.json`, viewers and above) carries the undeleted notes the
   exporter can read and never a deleted body, even to an editor; the import
   ignores them and a copy takes none, so a note is never re-authored under
@@ -777,8 +807,16 @@ In short:
     never the answer). A compromised fetcher could at worst send wrong
     numbers for the days feeds asked it for, into the series those feeds
     already target.
-- Svelte escapes output by default. Don't use `{@html}` with user-supplied names
-  (farms, crops, projects).
+- Svelte escapes output by default, and nothing in the frontend renders a
+  string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
+  `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
+  `bind:innerHTML` / `bind:outerHTML` on a contenteditable element.
+  `frontend/src/lib/rawHtml.test.ts` fails on any of them anywhere under
+  `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
+  person types are text). Help text has its own parser (`lib/help`), not
+  HTML. A real need for markup would need a sanitiser and a reasoned entry in
+  that guard. Mail templates escape every interpolated value
+  (`mail/templates.ts` `escapeHtml`, `templates.test.ts`).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
@@ -846,8 +884,83 @@ database:
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does.
-- Still open with the rest of POPIA (Known gaps below): allocations and names
-  in a data-subject export and deletion.
+- Still open with the rest of POPIA ([§ Personal information](#personal-information-popia)):
+  allocations and names in a data-subject export.
+
+## Personal information (POPIA)
+
+What the app keeps about people, why, for how long, and what happens on a
+data-subject request, as built at the end of Step 2 (roadmap WP-2.16). This
+is a record of the system, not legal advice: the lawful bases below are how
+the roadmap reads them, and every one marked *(confirm)* is an open item for
+the client's information officer ([followups.md § POPIA and the Step 2
+release](./followups.md#popia-and-the-step-2-release-wp-216)). Loop in the
+CISO or security analyst before go-live.
+
+**Roles.** The client (the WUA, or the consultancy for a hydrologist-only
+project) is the **responsible party**: it decides whom to invite and why.
+The operator (whoever runs this deployment) is its **operator** under POPIA
+s20–21 and needs a written agreement with it *(confirm)*. Farmers are invited
+by the WUA; nobody is added to a project without an owner acting.
+
+**Lawful basis and consent, today.**
+- Accounts, memberships and farm links: to provide the service the member
+  signed up for, and for farmers the WUA's function of managing its members'
+  water use (legitimate interest or a legal duty under its constitution)
+  *(confirm)*. There is **no consent screen and no privacy notice yet**:
+  both are needed before a farmer is invited on production.
+- Notes, the audit log, publications and sign-offs: the project's record,
+  kept for the regulator's audit trail (roadmap §7).
+- Alerts (WP-2.13, not built): opt-out service messages with one-click
+  unsubscribe *(confirm)*.
+- Cookies: one session cookie (`wm_session`, strictly necessary). No
+  analytics, no third-party scripts or fonts (the CSP allows none), so no
+  cookie banner.
+- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
+  in the region chosen at deploy (`af-south-1` recommended; any other region
+  is a cross-border transfer under s72 *(confirm)*). The data-feed hosts
+  (CHIRPS, DWS) receive no personal data ([§ Input handling](#input-handling)).
+
+**What is kept, and what deletion does.** Every foreign key to `app_user` is
+classified (cascade, set null, or restrict) in `catalogue.db.test.ts`
+`APP_USER_ON_DELETE`, and every foreign key to `project` cascades (the same
+file), so a new column can't ship without a decision.
+`auth/account-deletion.db.test.ts` checks the outcome end to end.
+
+| Data | Tables | Retention | Account deleted | Project deleted |
+| --- | --- | --- | --- | --- |
+| Account: email, display name, password hash, session watermark | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
+| Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
+| Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
+| Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
+| A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
+| Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
+| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
+| Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
+| API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
+| Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
+| Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
+| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
+| Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination holds the project |
+| Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
+| Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
+| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
+
+**Data-subject requests.**
+- **Access / export: not built.** There is no "download my data" yet
+  (plan.md Phase 7). Until then the operator answers a request by querying
+  the tables above for the person (the WUA confirms who is asking). The
+  project exports (`export.json`, CSV, the farm CSV) are project data, not a
+  data-subject export.
+- **Deletion: an operator act.** There is no self-service deletion. On a
+  request the operator deletes the `app_user` row as the schema owner
+  ([deployment.md § Runbooks](./deployment.md#runbooks), item 7): the table
+  above is what happens. An account that made evidence (the last row but
+  two) can't be deleted until the operator and the client decide what
+  happens to it.
+- **Correction:** a person edits their own name (Account); an owner fixes
+  anything else in the project.
 
 ## Public repo hygiene
 
@@ -1015,7 +1128,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- POPIA: privacy notice, data export and account deletion. (Phase 7)
+- POPIA: no privacy notice, no data-subject export and no self-service
+  account deletion yet (Phase 7); what exists today and the open items are in
+  [§ Personal information](#personal-information-popia).
 
 ## Incident playbook
 

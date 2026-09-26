@@ -133,6 +133,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${s.feedId ? `The ${feedName(s.source)} feed added days to` : 'Merged days into'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed`;
 		case 'series.deleted':
 			return `Deleted ${seriesName(s)}${range(s)}`;
+		case 'series.held': {
+			// An API key pushed days the data-quality rules flag (backend series/hold.ts): automatic runs wait for a person.
+			const parts = [num(s.negative) ? `${plural(num(s.negative)!, 'negative day')}` : '', num(s.outlier) ? `${plural(num(s.outlier)!, 'day')} far above its usual range` : ''].filter(Boolean);
+			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}). Check the data, then run the model`;
+		}
 		case 'series.labelled': {
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;

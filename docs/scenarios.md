@@ -227,6 +227,15 @@ bodies), `execute.ts` (`executeScenarioRun`).
   longer apply to the newer base (for example a node removed since). It saves
   the new base with the ops unchanged, or with `dryRun` only reports; the
   scenario won't run until its ops apply again (edit them with `PATCH`).
+- **Names kept with the ops** (`names.ts` `opNames`, migration 047). An op
+  names nodes and crops by id, and the editor reads their names from the base
+  run's snapshot. After a rebase onto a run without a node, that snapshot
+  can't name it, so the scenario keeps `op_names`: `{ id, name }` for every
+  node and crop its ops name, taken from the base run's snapshot on `POST`,
+  on a `PATCH` of the ops, and on a rebase. A name stays while an op still
+  names that id; the current base's name wins when it has one. It is display
+  only (not in `opsSha256` or a run's snapshot), and the server writes it:
+  clients never send names.
 - **Status.** `draft → submitted → withdrawn | decided`, and `withdrawn →
   draft`. Only a draft's ops, owned nodes and base change; a submitted or
   decided scenario can't be deleted. On a team scenario any editor moves it;
@@ -245,10 +254,10 @@ Migration `024_scenarios.sql`
 
 - `scenario (id, project_id, name, description, base_run_id → model_run,
   ops jsonb, ops_sha256, owned_node_ids uuid[], owner_user_id, status,
-  created_at, updated_at)`: a team scenario's name unique among the
-  project's team scenarios, an application's among its owner's applications
-  (ignoring case; 049, so naming a draft never says a hidden one exists), at
-  most 500 ops.
+  created_at, updated_at, op_names jsonb)`: a team scenario's name unique
+  among the project's team scenarios, an application's among its owner's
+  applications (ignoring case; 049, so naming a draft never says a hidden one
+  exists), at most 500 ops. `op_names` (047) is the ops' display names above.
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only.
 - Triggers: the base is a run of the same project and not a scenario run; a
@@ -290,7 +299,8 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 `ScenarioWithCheck`, `CompareScenario`, `RunCitation`).
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
-end, RLS with positive controls, cited bases, status) and `schema.test.ts`.
+end, RLS with positive controls, cited bases, status, a dropped node's name
+kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
 
 ## UI
 
@@ -307,7 +317,10 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
   (`stepInputs`, `applyScenario` one op at a time), for the targets the form
-  offers and the value each op replaces in its description. It never decides
+  offers and the value each op replaces in its description. A node or crop
+  the base doesn't have is named from the scenario's `opNames` (kept by the
+  server), so a change on a node a rebase dropped still reads by name after
+  a reload. It never decides
   whether an op applies or how it is classed: those are the server's check,
   on the run's stored series (a `series.scale` can only be checked there).
 - **Compound settings.** `settings.set pe` (GR4J's PE input) is edited as a
@@ -326,21 +339,48 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's
   headline, farm and daily-overlay components (issue #8); the compare page
   lists each scenario side's recorded ops in its Scenario overrides section.
-- **Where the build differs from the roadmap**: the roadmap's "override mode"
-  of the Network, Crops and Transfers editors (recording their edits as ops)
-  is not built; the op form covers every op instead, one change at a time.
-  Tracked in [followups.md § Scenarios](./followups.md).
+- **Override mode** (`OverrideEditor.svelte`, `overrideDiff.ts`, its own
+  chunk): the workspace's Network, Crops and Transfers tabs, unchanged, on
+  their own `ModelEditor` loaded with the scenario's model (the base run's
+  snapshot with the listed ops applied, `stepInputs(...).after`). The live
+  model is never loaded or saved there. **Record** diffs the edited model
+  against the one it was loaded with (`diffModel`) into ops, in an order
+  that applies: `crop.add`, `node.remove` (re-linking as the editor does),
+  `node.set` per changed field the engine lets a scenario set, `node.add`
+  (each after the node it drains into), `cropArea.set` with the farm's new
+  total of a crop, `transfer.remove` / `.add` / `.set` per field,
+  `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
+  borehole edited in place is removed and added again). Each op goes
+  through the form's own check (`ops.ts` `checkOp`, which `buildOp` also
+  ends with: the engine's `validateScenarioOps`, worded in the form's
+  units), and the whole list is applied to the loaded model
+  (`applyScenario`): it must apply cleanly and give back the edited model
+  (ignoring display order), or nothing is recorded. The ops are appended
+  with one `PATCH`, so one **Undo** takes them all back.
+- **What override mode can't record**, named in its record panel and
+  holding the rest back until undone (the engine has no op for them yet;
+  [§ Not yet supported](#not-yet-supported)): editing or removing an
+  existing crop, changing a node's kind, moving a node (what it drains
+  into), a new node that drains nowhere, a dam survey curve, and a field the
+  engine doesn't let a scenario set on that kind of node (a gauge's area).
+  Row order is display only and isn't recorded.
 
 Tests: `scenarios/fields.test.ts` (every node field, transfer field and
 settings path the engine allows has a spec; values round-trip through the
 form's text and still pass the engine's checks), `scenarios/ops.test.ts`
 (`stepInputs`, `describeOp`, problems lined up with their ops, `buildOp` for
-every op kind, each built op applying to a base), and
+every op kind, each built op applying to a base), `scenarios/overrideDiff.test.ts`
+(edits made with the model editor's own methods come back as ops that
+apply and give back the edited model, per table; every edit no op can
+express is named; the engine's refusals in the form's words; a fuzz over
+the engine's own random ops, `randomOps`, round-trips), and
 `e2e/tests/scenarios.spec.ts` (the golden path: a 20 % dam raise created,
 classed, undone, run and compared, with the compare page's overrides; a
 rebase reporting a change that no longer applies and the `422`; a viewer
-read only; submit, withdraw, delete releasing the base; axe in light, dark
-and on a phone).
+read only; override mode recording one edit in each table as changes,
+refusing a kind change, leaving the live model untouched, undone as one
+edit, with axe; submit, withdraw, delete releasing the base; axe in light,
+dark and on a phone).
 
 ## Applications (WP-3.3)
 
@@ -421,6 +461,15 @@ scenario is `'team'`, and behaves exactly as above).
   `app_scenario_run_meta` and `app_trim_application_runs`, and of its series
   they read the application's own nodes and the catchment allowlist only
   (046, [data-model.md § Applicants](./data-model.md#applicants-044045)).
+- **Names kept with the ops** (`op_names`, above) are captured from the full
+  published base, server-side, and a contributor is only ever shown those of
+  the scenario's own nodes (`names.ts` `applicantOpNames`): a neighbour's
+  real name, anonymised in the projection, never reaches them this way.
+- **Override mode** (§ UI) is offered only to whoever may change the
+  scenario (`canChange`: its owner on an application, an editor on a team
+  scenario), and for an applicant it edits the applicant projection: the
+  anonymised nodes' blanked values are what they see, and an edit to one is
+  recorded like any `node.set` on it (a baseline assumption).
 - **Results for the applicant** are not built: the assessors compare a run
   with its base (`/compare/runs` refuses a contributor, since it returns
   `inputs`); the applicant projection of results (catchment series, their own

@@ -68,7 +68,7 @@ erDiagram
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period). `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
-| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
+| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
@@ -471,14 +471,17 @@ the result change?", and put back any earlier version.
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
-  PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
+  PATCH, `provenance: { from, to }`), `series.held` (WP-2.16: an API key's
+  pushed days the data-quality rules flag, with `negative`, `outlier`, up to
+  5 `examples` and the `source` label; automatic runs wait until a person
+  runs the model, `series/hold.ts`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`, the
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
   it is decided),
   `note.deleted` (a note hidden by its author or an editor: its target, the
-  author's name and whether it was their own, never the body),
+  author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
   registration, statement version and hash),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
@@ -487,6 +490,18 @@ the result change?", and put back any earlier version.
   series, lifetime; never the key or its hash), and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
+- **Account deletion (048, decision D12).** Deleting an `app_user` row (an
+  operator act on a POPIA request; there is no self-service path yet)
+  pseudonymises instead of deleting: the `app_user_pseudonymise` trigger
+  (`SECURITY DEFINER`, before the row goes) sets `actor_label` to
+  `Deleted user` on every event they acted in, `displayName` to
+  `Deleted user` in every event whose subject's `userId` is theirs, and
+  `author` in every `note.deleted` about their note; then the foreign key
+  clears `actor_user_id`. The events, kinds and times stay (the project's
+  audit trail). What every other foreign key to `app_user` does is
+  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
+  null, or restrict for evidence that names its maker);
+  `auth/account-deletion.db.test.ts` checks the outcome.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -647,8 +662,15 @@ run's stored input (above), never the live model.
   written by the API), `owned_node_ids uuid[]` (≤ 500: the proposer's own
   nodes; ops on them are proposals, the rest baseline assumptions),
   `owner_user_id` (→ `app_user`), `status` (`draft` | `submitted` |
-  `withdrawn` | `decided`), `created_at`, `updated_at`. Indexes cover
-  `base_run_id` and `owner_user_id`.
+  `withdrawn` | `decided`), `created_at`, `updated_at`, and since
+  `047_scenario_op_names` `op_names jsonb` (an array of `{ id, name }`,
+  sorted by id, ≤ 2 000 entries: the display names of the nodes and crops
+  the ops name, taken by the API from the base run's snapshot whenever the
+  ops or the base are written, so an op on a node a rebase dropped still
+  reads by name; display only, not in `ops_sha256`; 047 backfilled it from
+  each scenario's base). An application (`origin = 'applicant'`) keeps only
+  its own nodes' names, since its applicant sees every other node
+  anonymised. Indexes cover `base_run_id` and `owner_user_id`.
 - **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
   end of the statement, so deleting a whole project (which cascades to both
   `model_run` and `scenario`) still works, as for `run_nomination`. Any other
@@ -1404,7 +1426,13 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   invite (`farm_link` from `invite_node`, only where the membership really is
   `farmer`: someone already on the project with another role keeps it and
   gets no link), records `member.added` and `farmer.linked` (cause `invite`),
-  and deletes those invites. Invites cascade away with their project or team.
+  and deletes those invites. Invites cascade away with their project or team,
+  and with the account that sent them (`invited_by` cascade). An invite that
+  lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
+  the job tick deletes it with its `invite_node` rows
+  (`app_purge_invites(age)`, 048, `SECURITY DEFINER`; `invites.ts`
+  `purgeInvites`, `INVITE_RETENTION_DAYS`): it holds the address of someone
+  who never signed up.
 - `invite_node` RLS mirrors `invite`: project owners only, for every
   operation. Farmers never read it (the catalogue's "farmers never read"
   list).

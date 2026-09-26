@@ -115,5 +115,6 @@ export const ingestRoutes = new Hono<IngestEnv>()
 		const r = await withApiKey(key.id, (db) => mergeInto(db, key.projectId, body, { keepRevision: false, via: 'api_key', audit: source ? { source } : {} }));
 		await wakeForRerun(r.rerun);
 		c.header('Cache-Control', 'no-store');
-		return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor });
+		// rerunHeld: the pushed days the data-quality rules flag; the automatic re-run waits for a person (series/hold.ts).
+		return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor, rerunHeld: r.held });
 	});

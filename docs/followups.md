@@ -1268,12 +1268,17 @@ role and not before it.
       nothing. An engine behaviour change, so the engine owner's call and an
       `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
       or a user asking why a forecast run's first forecast day steps.
-- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
-      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
-      job lands, a GEFS ingest that changes days should also queue a forecast
-      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
-      keeps the newest unkept forecast run), deduped per project like the
-      re-run. Trigger: now (WP-2.11 is merged into this branch).
+- [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
+      [architecture.md § Background work](./architecture.md)). A forecast
+      feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with
+      `trigger: 'forecast'` (`series/newData.ts` `queueForecastFor` →
+      `runs/autoRun.ts` `enqueueForecastRun`, dedupe key `forecast`, the
+      re-run's debounce), only while `settings.autoRun.enabled` (the same
+      opt-in as the re-run: a scheduled forecast run is an automatic run).
+      The job runs `executeRun(db, id, forecastRunLabel, 'forecast')` then
+      `trimRuns` (one unkept forecast run kept), is never auto-published, and
+      does nothing when the observed rain has overtaken the issue. Tests:
+      `runs/autoRun.db.test.ts` § scheduled forecast runs.
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
@@ -1401,27 +1406,31 @@ role and not before it.
         **Scenario base** tags (no ✕ on a cited base), e2e
         (`e2e/tests/scenarios.spec.ts`: a 20 % dam raise run and compared)
         and axe in light, dark and on a phone.
-  - [ ] **Override mode for the Network, Crops and Transfers editors**
-        (roadmap WP-3.2 *Frontend*): editing the base run's model in the
-        familiar tables and recording each edit as an op, instead of the
-        one-change-at-a-time "Add a change" form. The form already builds
-        every op the engine has (`scenarios/ops.ts` `buildOp`), so the
-        durable fix is a `ModelEditor` variant loaded from the base run's
-        snapshot whose edits diff into ops (node fields → `node.set`, rows
-        → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
-        hydrologist building scenarios of more than a handful of changes,
-        or WP-3.3's applicant flow.
-  - [ ] **Names of nodes a rebase dropped are lost on reload**: after a
-        rebase onto a run without a node, a change on that node keeps its
-        name only while the earlier base's snapshot is still in the editor's
-        in-memory `seenNames` (`scenarios/ScenarioEditor.svelte`); after a
-        reload it reads "a node the base run doesn't have". That map also
-        outlives a switch to another scenario (harmless, ids are UUIDs).
-        Durable fix: store the display names an op needs (`{ id, name }`)
-        with the scenario when the op is made, server-side, and drop
-        `seenNames`. Trigger: someone finds a rebased scenario's changes
-        unreadable after coming back to it, or WP-3.3's applicant flow
-        (applicants rebase more often).
+  - [x] **Override mode for the Network, Crops and Transfers editors**
+        (roadmap WP-3.2 *Frontend*, 2026-09-26; [scenarios.md § UI](./scenarios.md#ui),
+        [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)). **Edit in the
+        model tables** opens the three tabs, unchanged, on their own
+        `ModelEditor` loaded with the scenario's model
+        (`scenarios/OverrideEditor.svelte`, its own chunk), under a banner
+        saying it is the scenario, not the catchment. **Record** diffs the
+        edits into ops (`scenarios/overrideDiff.ts` `diffModel`): node fields
+        → `node.set`, crop areas → `cropArea.set`, new and removed nodes,
+        crops, transfers, land cover and boreholes → their ops, each through
+        the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
+        list re-applied to prove it gives back the edited model. Edits no op
+        can express are named and block recording: they wait on the later
+        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        The shared editors weren't changed, so no pinning e2e was needed;
+        e2e covers override mode in `scenarios.spec.ts`.
+  - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
+        `047_scenario_op_names`, `backend/src/scenarios/names.ts`): the
+        server keeps `op_names`, `{ id, name }` for every node and crop the
+        ops name, from the base run's snapshot on create, on a PATCH of the
+        ops and on a rebase, keeping a name a later base no longer has while
+        an op still names it (047 backfilled existing scenarios from their
+        base). The editor names from `Scenario.opNames`, and the in-memory
+        `seenNames` is gone. Tests: `names.test.ts`, the rebase case in
+        `scenarios.db.test.ts`, and the rebase e2e reloads.
   - [x] **One home for the model's save rules** (2026-09-25): the rules are
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz
@@ -1796,8 +1805,8 @@ from the WP:
 - [ ] **Dam filling vs registered storage** (s21b): the comparison counts
       supply from the farm's own dam as abstraction and compares storage with
       the dam capacity only. Pending the hydrologist.
-- [ ] **POPIA**: allocations and holder names in the data-subject export and
-      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **POPIA**: allocations and holder names in the data-subject export,
+      with the rest of the POPIA work ([§ POPIA and the Step 2 release](#popia-and-the-step-2-release-wp-216)).
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
@@ -2025,3 +2034,95 @@ Left, each with its trigger:
       (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
       years lists only the first ones. Trigger: a catchment that hits it;
       the fix is a full list on the check or in the statement.
+
+## POPIA and the Step 2 release (WP-2.16)
+
+The Step 2 release-hardening pass (2026-09-26,
+[step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
+documented what is true today in
+[security.md § Personal information](./security.md#personal-information-popia)
+and fixed what it could in code (048_account_deletion). These need the
+client, its information officer or legal, and none is a code change on its
+own. Loop in the CISO or security analyst before acting on any of them.
+
+- [ ] **Privacy notice for farmers and members.** What is collected (the
+      security.md table), why, who sees a farm's figures (D1, FV-D5), the
+      retention periods, the rights and how to exercise them, and the
+      responsible party's contact. Needs the client's information officer
+      and the Afrikaans translation (WP-2.5). Then a link on sign-up, the
+      invite email and the farm view. Trigger: **blocking** before the first
+      farmer is invited on production.
+- [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
+      security.md: farmers' accounts and farm links (the WUA's function or
+      legitimate interest, not consent), notes and the audit log kept for
+      the life of the project, alerts as opt-out service messages (WP-2.13).
+      Who: the client's information officer. Trigger: with the privacy
+      notice.
+- [ ] **Operator agreement** (POPIA s20–21) between the client as
+      responsible party and the operator: security measures, sub-processors
+      (AWS), breach notification to the client. Who: operator + client
+      legal. Trigger: before production holds client data.
+- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
+      Africa; any other region is a transfer under s72 and needs the client's
+      agreement. Trigger: the region choice in § Blocking releases.
+- [ ] **Data-subject export** ("download my data", plan.md Phase 7). Not
+      built: the operator answers a request by query today. Durable fix: a
+      `GET /auth/me/export` that returns, as JSON, the account, memberships,
+      farm links, notes written, the audit events about or by the person
+      (through a `SECURITY DEFINER` reader, since farmers can't read the log
+      under RLS), pending invites to their address, sign-offs, and the farm
+      projections of their linked farms. Trigger: before the first farmer is
+      invited on production, or the first request, whichever comes first.
+- [ ] **Self-service account deletion, and evidence that names its maker.**
+      Deleting an account is an operator act today (deployment.md §
+      Runbooks, item 7), and it is refused for anyone who created a
+      project, team, run, scenario, ensemble, import or nomination (those
+      keys restrict: `catalogue.db.test.ts` `APP_USER_ON_DELETE`). Decide
+      with the information officer whether that evidence keeps the name (the
+      regulator's record, like a sign-off), is reassigned, or is
+      pseudonymised, then change those keys to match and build the Account
+      page's "delete my account". Trigger: before public registration opens,
+      or the first deletion request from a modeller.
+- [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
+      body for editors for the life of the project (037). Decide a limit (for
+      example a year, then purge the body and keep the event). Who: client.
+      Trigger: with the privacy notice.
+- [ ] **Backups after an erasure.** A deleted account stays in RDS automated
+      backups for up to `db_backup_retention_days` (7–35). The usual
+      answer is that backups age out and are never restored into live use
+      without re-applying erasures; confirm and put it in the notice. Who:
+      operator + information officer. Trigger: with the privacy notice.
+- [ ] **D12 confirmation.** The audit log is pseudonymised on account
+      deletion ("Deleted user", 048) as the roadmap recommends; the
+      information officer confirms it (or asks for full deletion of the
+      events, which would weaken the regulator's trail). Trigger: with the
+      privacy notice.
+- [ ] **Personal-information incident procedure** for the "a farmer sees the
+      wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
+      WUA decides on notifying the Information Regulator and the data
+      subject (s22), and in what time. Who: client. Trigger: before go-live.
+- [ ] **The ingest hold's outlier limit still counts a key's earlier
+      pushes.** Each push is judged against the series without its own days
+      (`series/hold.ts` `limitWithout`), but days the same key pushed before
+      count, so a key that poisons slowly can lift the 99th percentile it is
+      later judged by. Durable fix: record which days each key wrote
+      (a `key_days datemultirange` on `time_series`, like `feed_days` for
+      feeds, 031) and leave them out of the limit, or take the limit from
+      the published run's inputs. Trigger: the first production gateway
+      key, or a hold that should have fired and didn't.
+- [ ] **Deleting an assessor's account is refused (session B, WP-3.3).**
+      `scenario_guard` (045_contributor_scope.sql, the branch that raises
+      "a decision is recorded when the scenario is decided, and never
+      changes") also refuses the foreign key's `ON DELETE SET NULL` on
+      `scenario.decided_by`, so an account that decided an application can't
+      be deleted: the same bug 048 fixed in `note_guard`. Fix (session B's
+      to make, from 045's definition): let an update through untouched when
+      its only change is `decided_by` becoming NULL (water_app can't write
+      `decided_by` outside a decision, which the guard stamps), then add the
+      case to `auth/account-deletion.db.test.ts`. Trigger: before the first
+      application is decided on production.
+- [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
+      pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
+      with the verdicts recorded in step-2 §9, and the 60-farm load
+      timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
+      since three of the personas judge those.

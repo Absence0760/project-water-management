@@ -14,6 +14,7 @@
 		isOwner,
 		canDecide,
 		problems,
+		locked = false,
 		onchange,
 		onleft
 	}: {
@@ -25,6 +26,12 @@
 		canDecide: boolean;
 		/** How many of its changes don't apply to its base (a submit is refused until none). */
 		problems: number;
+		/**
+		 * The scenario editor is running it or saving it: the status moves wait,
+		 * or the run's re-read of the scenario could land after a submit and put
+		 * the old status back on screen.
+		 */
+		locked?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
 		/** You stopped reading it (left the share): it leaves your list. */
 		onleft: () => void;
@@ -147,11 +154,11 @@
 	{#if isOwner}
 		<div class="actions">
 			{#if s.status === 'draft'}
-				<button type="button" class="btn btn-primary" disabled={busy || problems > 0} onclick={submit}>Submit to the assessors</button>
+				<button type="button" class="btn btn-primary" disabled={busy || locked || problems > 0} onclick={submit}>Submit to the assessors</button>
 			{:else if s.status === 'submitted'}
-				<button type="button" class="btn" disabled={busy} onclick={withdraw}>Withdraw</button>
+				<button type="button" class="btn" disabled={busy || locked} onclick={withdraw}>Withdraw</button>
 			{:else if s.status === 'withdrawn'}
-				<button type="button" class="btn" disabled={busy} onclick={reopen}>Reopen as a draft</button>
+				<button type="button" class="btn" disabled={busy || locked} onclick={reopen}>Reopen as a draft</button>
 			{/if}
 		</div>
 		{#if s.status === 'draft' && problems > 0}<p class="hint">Remove the changes that don't apply before submitting.</p>{/if}
@@ -170,7 +177,7 @@
 				<label for="decide-note">Reasons and conditions</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons}></textarea>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || !outcome}>Record the decision</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome}>Record the decision</button>
 			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
 	{/if}

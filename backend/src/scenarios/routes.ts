@@ -36,6 +36,7 @@ import {
 	type ScenarioCheck,
 	type ScenarioRow
 } from './execute.js';
+import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 
 const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
@@ -54,11 +55,12 @@ function checkView(c: ScenarioCheck, role: Role) {
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
+	const scenario = applicantOpNames(s, role);
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario: s, check: checkView(checkScenario(base, s), role), checkError: null };
+		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario: s, check: null, checkError: err.message };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message };
 		throw err;
 	}
 }
@@ -90,6 +92,10 @@ function assertCanChange(s: ScenarioRow, role: Role, userId: string) {
 		throw new ApiError(403, 'requires editor role');
 	}
 }
+
+/** op_names as stored: an application keeps only its own nodes' names (047; its applicant sees the rest anonymised). */
+const namesToStore = (s: ScenarioRow, names: OpName[], ownedNodeIds: string[]): OpName[] =>
+	isApplication(s) ? ownNames({ opNames: names, ownedNodeIds }).opNames : names;
 
 /** The current user's farm links in the project: an applicant's own nodes (045; classifyOp's proposal nodes). */
 async function ownFarms(db: Db, projectId: string): Promise<string[]> {
@@ -127,9 +133,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			// RLS lists what the caller reads: a contributor, their own applications and those shared with them.
-			await requireRole(db, id, 'contributor');
+			const role = await requireRole(db, id, 'contributor');
 			const { rows } = await db.query<ScenarioRow>(`${SCENARIO_SELECT} WHERE s.project_id = $1 ORDER BY s.created_at DESC, s.id DESC`, [id]);
-			return c.json({ scenarios: rows });
+			return c.json({ scenarios: rows.map((s) => applicantOpNames(s, role)) });
 		});
 	})
 	.post('/:id/scenarios', async (c) => {
@@ -143,13 +149,16 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (applicant && body.ownedNodeIds.length) throw new ApiError(403, "an applicant's own nodes are their farm links");
 			// Citing a run: not while a trim or delete of this project's runs is under way (it would miss the citation).
 			await lockProjectRuns(db, id);
-			await loadBaseInput(db, id, body.baseRunId, role);
+			const base = await loadBaseInput(db, id, body.baseRunId, role);
+			// The names the ops need, from the full base (server-side; applicantOpNames filters them for an applicant).
+			const all = opNames(body.ops, base.model, []);
 			const owned = applicant ? await ownFarms(db, id) : body.ownedNodeIds;
+			const names = applicant ? ownNames({ opNames: all, ownedNodeIds: owned }).opNames : all;
 			const { rows } = await db
 				.query<{ id: string }>(
-					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), owned]
+					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, op_names)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), owned, JSON.stringify(names)]
 				)
 				.catch(duplicateName(applicant));
 			const s = await loadScenario(db, id, rows[0]!.id);
@@ -211,7 +220,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const set: [string, unknown][] = [];
 			if (body.name !== undefined) set.push(['name', body.name]);
 			if (body.description !== undefined) set.push(['description', body.description]);
-			if (body.ops !== undefined) set.push(['ops', JSON.stringify(body.ops)], ['ops_sha256', opsSha256(body.ops)]);
+			if (body.ops !== undefined)
+				set.push(
+					['ops', JSON.stringify(body.ops)],
+					['ops_sha256', opsSha256(body.ops)],
+					// The names the ops need, from the base as it is now, keeping those an earlier base gave (a node a rebase dropped).
+					['op_names', JSON.stringify(namesToStore(s, opNames(body.ops, await baseNames(db, id, s.baseRunId, role), s.opNames), owned ?? s.ownedNodeIds))]
+				);
 			if (owned !== undefined) set.push(['owned_node_ids', owned]);
 			if (body.status !== undefined) set.push(['status', body.status]);
 			await db
@@ -312,8 +327,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (!rowCount) throw frozen(await loadScenario(db, id, sid));
 			}
 			const s = await loadScenario(db, id, sid);
-			if (!body.dryRun) await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
-			return c.json({ scenario: s, ...checkView(checkScenario(base, s), role) });
+			if (!body.dryRun) {
+				// Names from the new (full) base, keeping the old base's for nodes the new one dropped.
+				s.opNames = namesToStore(s, opNames(s.ops, base.model, s.opNames), s.ownedNodeIds);
+				await db.query('UPDATE scenario SET op_names = $3 WHERE project_id = $1 AND id = $2', [id, sid, JSON.stringify(s.opNames)]);
+				await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
+			}
+			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s), role) });
 		});
 	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------
