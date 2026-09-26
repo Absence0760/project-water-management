@@ -14,7 +14,19 @@ const NO_RLS = new Set(['app_user', 'schema_migrations']);
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
-	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary']
+	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
+	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql).
+	run_publication: [
+		'next_expected_on',
+		'note',
+		'notice_af',
+		'notice_en',
+		'restriction_level',
+		'restriction_pct',
+		'superseded_at',
+		'updated_at',
+		'updated_by'
+	]
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -22,8 +34,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * (010_run_nomination.sql). A job's row changes only through the queue's
  * SECURITY DEFINER claim / finish / purge functions (016_jobs.sql). An import
  * report is the record of what the importer flagged (017_project_import.sql).
+ * A farm's projection is what its farmers were shown (022_publication.sql).
  */
-const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import']);
+const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'publication_farm']);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
  * its run or project). Every uncertainty ensemble started is kept, so a band
@@ -31,14 +44,13 @@ const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import']);
  */
 const NO_DELETE = new Set(['run_uncertainty']);
 /**
- * Tables with a node column that farmers never read (020_farm_scope.sql). A
- * farmer reads run results only through a publication (WP-2.3), so run_series
- * stays closed to them until that adds its own policy. Every other table with
- * a node column needs a farmer-aware SELECT policy (one that calls
- * app_farm_nodes), so a new per-farm table can't ship without a decision about
- * farmers.
+ * Tables with a node column that farmers never read (020_farm_scope.sql).
+ * Empty since run_series gained its publication-scoped farmer policy
+ * (022_publication.sql). Every table with a node column needs a farmer-aware
+ * SELECT policy (one that calls app_farm_nodes) or a place here, so a new
+ * per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set(['run_series']);
+const FARMERS_NEVER_READ = new Set<string>();
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
