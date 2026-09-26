@@ -301,13 +301,6 @@
 	h3:first-of-type {
 		margin-top: 0;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	/* Six headline cards: 3 + 3 on a desktop results column, 2 + … on phones. */
 	.stats {
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));

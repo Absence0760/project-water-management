@@ -312,13 +312,6 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.site {
 		max-width: 320px;
 		margin: 0.25rem 0 0.5rem;

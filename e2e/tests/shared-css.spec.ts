@@ -1,10 +1,11 @@
 // Pins the rendered result of the shared utility classes (`.small`, `.u`, the
 // `.seg` segmented control) on the screens that use them most, in light and
-// dark and at a desktop and a phone width. Each class is a scoped rule copied
-// into dozens of components, and issue #9 moves the copies into app.css. A
-// scoped rule carries the component's hash class and a global one doesn't, so
-// the move could change which rule wins: these computed styles must stay what
-// the components rendered with their own copies.
+// dark and at a desktop and a phone width. Each class was a scoped rule copied
+// into dozens of components until issue #9 moved the copies into app.css
+// (docs/architecture.md § Shared CSS). A scoped rule carries the component's
+// hash class and a global one doesn't, so the move could change which rule
+// wins: these are the computed styles the components rendered with their own
+// copies, and they must stay so.
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -114,8 +115,12 @@ test('Runs tab: the flow-unit switch, a small link and units in a table head', a
 	await expect(compare).toBeVisible();
 	const unit = page.locator('th .u').filter({ hasText: /^% of demand$/ }).first();
 	await expect(unit).toBeVisible();
+	// RunInputsPanel had `class="muted small"` but no rule for .small until it became global: it now renders small like every other hint.
+	const restoreHint = page.getByText(/^Puts back the settings and model this run used/);
+	await expect(restoreHint).toBeVisible();
 
 	await eachCombo(page, async (at) => {
+		expect(await styleOf(restoreHint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
 		expect(await styleOf(units.getByRole('button', { name: 'm³/s' }), SEG), at).toEqual(FIRST);
 		expect(await styleOf(units.getByRole('button', { name: 'm³/day' }), SEG), at).toEqual(LAST);
 		expect(await styleOf(compare, ['font-size', 'color']), at).toEqual({ 'font-size': SMALL, color: await token(page, '--accent') });

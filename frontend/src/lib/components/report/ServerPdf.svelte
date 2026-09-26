@@ -85,9 +85,6 @@
 	.server-pdf {
 		display: contents;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	p {
 		margin: 0;
 	}

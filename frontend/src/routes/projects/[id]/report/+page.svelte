@@ -429,9 +429,6 @@
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	h3 {
 		margin: 1.25rem 0 0.5rem;
 	}

@@ -455,9 +455,6 @@
 	.run-notes .lbl {
 		font-weight: 500;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.alert:last-child {
 		margin-bottom: 0;
 	}

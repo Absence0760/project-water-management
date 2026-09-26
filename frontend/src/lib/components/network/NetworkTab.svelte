@@ -753,29 +753,8 @@
 	.user-name-field input {
 		width: 100%;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: -0.25rem 0 0.6rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
-	.seg {
-		display: inline-flex;
-	}
-	.seg .btn:first-child {
-		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-	}
-	/* Three buttons: the middle one joins both neighbours, square and overlapping. */
-	.seg .btn:not(:first-child) {
-		margin-left: -1px;
-		border-radius: 0;
-	}
-	.seg .btn:last-child {
-		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 	}
 	.seg .btn[aria-pressed='true'] {
 		background: var(--accent-soft);

@@ -193,9 +193,6 @@
 	label {
 		display: block;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.notes {
 		padding-left: 1.2rem;
 	}

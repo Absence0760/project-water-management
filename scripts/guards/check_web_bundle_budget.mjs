@@ -733,6 +733,15 @@
 // 2026-09-26  total 985 → 895 KB (measured 890). The two entries above
 //             were written in parallel; merged, #9's reductions and #17's
 //             Network map measure 890. Headroom ~5 KB.
+// 2026-09-26  total 895 → 894 KB (measured 889: 910 738 → 909 682 bytes).
+//             Issue #9: `.small` (53 scoped copies), `.u` (22) and the `.seg`
+//             segmented control (5) live once in app.css (docs/architecture.md
+//             § Shared CSS). −1.0 KB total, not the 2–3 KB estimated: gzip
+//             had already folded the copies that shared a chunk. First loads:
+//             Runs −0.2, the report −0.2, Network and Data −0.1; home,
+//             sign-in, /farm and /share +0.06 (global CSS is on every page).
+//             Measured and not moved: the spinner (−0.3 total, +0.1 on /farm,
+//             /share and sign-in) and `.stat dd.sub` (−0.07). Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -743,7 +752,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 895,
+	totalCodeKb: 894,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

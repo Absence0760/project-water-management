@@ -149,13 +149,6 @@
 </fieldset>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	.hint {
 		font-size: 0.8rem;
 		max-width: 75ch;

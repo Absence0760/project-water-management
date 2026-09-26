@@ -1008,9 +1008,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	.pin[aria-pressed='true'] svg {
 		fill: currentColor;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.empty {
 		color: var(--text-muted);
 		text-align: center;

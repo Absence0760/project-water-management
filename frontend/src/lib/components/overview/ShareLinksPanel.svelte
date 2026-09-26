@@ -168,9 +168,6 @@
 </section>
 
 <style>
-	.small {
-		font-size: 0.8rem;
-	}
 	.intro {
 		margin: -0.25rem 0 0.75rem;
 	}
