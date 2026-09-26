@@ -59,7 +59,7 @@ import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex
 import { farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
-import { boreholeOf } from './network/boreholes';
+import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -102,7 +102,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.31.1';
+export const ENGINE_VERSION = '0.32.0';
 
 const SEC_PER_DAY = 86_400;
 
@@ -292,7 +292,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [keyof NodeResult, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -343,6 +343,8 @@ function runNetwork(
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.
 			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
+			// Dam-target boreholes (WP-3.9): pumped into the farm dam, not straight to the crop.
+			if (plan.nodes[i]!.borehole!.units.some((u) => u.toDam)) push(node.id, 'groundwater_to_dam', 'Groundwater pumped into the dam', 'm³/day', r.groundwaterToDam);
 			push(node.id, 'baseflow_depletion', 'Stream depletion taken from the river below (from pumping)', 'm³/day', r.depletion);
 			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
@@ -369,7 +371,13 @@ function runNetwork(
 	};
 	/** A node with boreholes: its mean pumping and stream depletion (WP-1.34). */
 	const groundwaterMeans = (p: NetworkPlan['nodes'][number], r: NodeResult) =>
-		p.borehole ? { avgGroundwaterM3Day: mean(r.groundwater), avgBaseflowDepletionM3Day: mean(r.depletion) } : {};
+		p.borehole
+			? {
+					avgGroundwaterM3Day: mean(r.groundwater),
+					avgBaseflowDepletionM3Day: mean(r.depletion),
+					...(p.borehole.units.some((u) => u.toDam) ? { avgGroundwaterToDamM3Day: mean(r.groundwaterToDam) } : {})
+				}
+			: {};
 	const farms: FarmSummary[] = [];
 	nodes.forEach((node, i) => {
 		if (node.kind !== 'farm') return;
@@ -397,6 +405,8 @@ function runNetwork(
 	});
 
 	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
+	// Groundwater per node and water year (WP-3.9), for the caps, the GA context and the licensing comparisons.
+	const gwAnnual = groundwaterAnnualUse(nodes, plan, sim, start);
 
 	// Other water users (WP-1.33): whole-run means, like FarmSummary.
 	const users: UserSummary[] = [];
@@ -566,6 +576,7 @@ function runNetwork(
 			farms,
 			...(users.length ? { users } : {}),
 			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days) } : {}),
+			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
@@ -901,6 +912,7 @@ export function buildNetworkPlan(
 
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings);
 	const cover = resolveLandCover(model, warnings);
+	const bores = boreholesByNode(model, warnings);
 
 	const plan: NetworkPlan = {
 		days,
@@ -934,7 +946,7 @@ export function buildNetworkPlan(
 				rainOffset: demand[i]!.rainOffset,
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
-				...boreholeOf(n, warnings),
+				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
@@ -1016,18 +1028,39 @@ function boreholeWarnings(nodes: readonly NetworkNode[], plan: NetworkPlan, sim:
 			unmet += u;
 			names.push(nodes[i]!.name);
 		}
-		if (p.borehole.depletionFrac > 0) depleting++;
+		if (p.borehole.units.some((u) => u.depletionFrac > 0)) depleting++;
 	});
 	if (unmet > 1e-9) {
 		warnings.push(
 			`stream depletion of ${unmet.toFixed(0)} m³ over the run could not be taken from the river, which had no flow left there; it is drawn from aquifer storage instead and not counted (${names.join('; ')})`
 		);
 	}
+	// An annual cap that stopped a borehole (WP-3.9): the demand it would have met is left to the dam and river.
+	const capped = [...new Set(plan.nodes.flatMap((p, i) => (p.borehole?.units.some((u) => Number.isFinite(u.annualCapM3)) ? capHits(p.borehole, sim.nodes[i]!.boreholePumped!, plan) : []).map((u) => `${nodes[i]!.name}: ${u}`)))];
+	if (capped.length) warnings.push(`borehole annual cap reached in a water year, after which the borehole pumps nothing until 1 October (${capped.join('; ')})`);
 	if (depleting && observed) {
 		warnings.push(
 			`${depleting} node${depleting === 1 ? ' has' : 's have'} boreholes that deplete the river: if the gauge or logger record was measured while they pumped, keep them in the model when calibrating, so the fitted natural flow isn't reduced twice (docs/model.md §2.7d)`
 		);
 	}
+}
+
+/** The units of a node whose annual cap was reached in some water year, by name. */
+function capHits(b: NonNullable<NetworkPlan['nodes'][number]['borehole']>, pumped: Float64Array[], plan: NetworkPlan): string[] {
+	const hit: string[] = [];
+	b.units.forEach((u, k) => {
+		if (!Number.isFinite(u.annualCapM3)) return;
+		let used = 0;
+		for (let t = 0; t < plan.days; t++) {
+			if (t > 0 && plan.month[t] === 10 && plan.month[t - 1] !== 10) used = 0;
+			used += pumped[k]![t]!;
+			if (u.annualCapM3 > 0 && used >= u.annualCapM3 * (1 - 1e-9)) {
+				hit.push(u.name);
+				return;
+			}
+		}
+	});
+	return hit;
 }
 
 /** k: the share of what a node is supplied that it consumes, 1 − β(1 − e) for a farm (audit N1), 1 − r for an other user (WP-1.33). */

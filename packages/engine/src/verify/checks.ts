@@ -8,7 +8,7 @@
 // algorithms change. See docs/model.md §6 "Verification".
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
-import { boreholeOf } from '../network/boreholes';
+import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput } from '../project';
@@ -38,6 +38,7 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 const GAPPY_SERIES = new Set(['observed_flow', 'rain_final', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule']);
 
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
+	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
 	for (const s of out.series) {
 		// Inputs shown as they are: a missing day is NaN (a gap), never a made-up value.
@@ -65,7 +66,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		}
 		if (n.kind === 'gauge') continue;
 		if (n.kind === 'user') {
-			const bad = checkUserDay(n, get, ups.map((u) => u.id), out.days);
+			const bad = checkUserDay(n, bores.get(n.id) ?? [], toEpochDay(out.startDate), get, ups.map((u) => u.id), out.days);
 			if (bad) return bad;
 			const G = get.get(`${n.id}|supplied`)!;
 			const T = get.get(`${n.id}|return_flow`)!;
@@ -89,14 +90,15 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const Pd = get.get(`${n.id}|rain_on_dam`);
 		const Ev = get.get(`${n.id}|dam_evaporation`);
 		const Sp = get.get(`${n.id}|dam_seepage`);
-		// Boreholes (WP-1.34): groundwater comes in with the supply, stream depletion leaves with the river.
+		// Boreholes (WP-1.34, WP-3.9): groundwater comes in with the supply and into the dam, stream depletion leaves with the river.
 		const GW = get.get(`${n.id}|groundwater_used`);
+		const GD = get.get(`${n.id}|groundwater_to_dam`);
 		const DEP = get.get(`${n.id}|baseflow_depletion`);
 		for (let t = 0; t < out.days; t++) {
 			const T = G![t]! * returnPerSupplied;
 			const pd = Pd?.[t] ?? 0;
 			const ev = Ev?.[t] ?? 0;
-			const gw = GW?.[t] ?? 0;
+			const gw = (GW?.[t] ?? 0) + (GD?.[t] ?? 0);
 			const dep = DEP?.[t] ?? 0;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw;
 			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep;
@@ -146,6 +148,45 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 }
 
 /**
+ * The checks' own replay of a node's borehole supply order (WP-1.34, WP-3.9,
+ * docs/model.md §2.7d), from the day's published columns: primary units to
+ * the crop first, then the units that pump into the dam (primary fill it,
+ * supplemental add what it lacks for the demand left, emergency fill it while
+ * triggered; never above capacity), then the dam and river, then supplemental
+ * and triggered emergency units. Each unit pumps at most MIN(capacity, its
+ * annual cap − what it pumped since 1 October). Call it once per day, in order.
+ */
+function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
+	const used = b ? b.units.map(() => 0) : [];
+	const units = b?.units ?? [];
+	const ks = units.map((_, k) => k);
+	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
+	const toDam = ks.filter((k) => units[k]!.toDam);
+	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
+	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number) => {
+		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
+		const pump = (k: number, want: number) => {
+			const u = units[k]!;
+			const v = Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - used[k]!, want));
+			used[k]! += v;
+			return v;
+		};
+		let direct = 0;
+		for (const k of primary) direct += pump(k, D - direct);
+		let dam = 0;
+		for (const k of toDam) {
+			const u = units[k]!;
+			const room = cap - avail - dam;
+			const want = u.mode === 1 ? room : u.mode === 2 ? (qPrev < u.triggerM3 ? room : 0) : D - direct - (avail + dam - dead);
+			dam += pump(k, Math.min(want, room));
+		}
+		const surface = Math.min(Math.max(avail + dam - dead, 0), D - direct);
+		for (const k of later) if (units[k]!.mode === 0 || qPrev < units[k]!.triggerM3) direct += pump(k, D - surface - direct);
+		return { direct, dam, surface };
+	};
+}
+
+/**
  * One other water user's day (WP-1.33, docs/model.md §2.7c): it takes
  * 0 ≤ G ≤ D from what reaches it, G = MIN(D, H) when senior and
  * MIN(D, MAX(0, H − Zs)) when junior (Zs = the senior requirement passing it);
@@ -153,7 +194,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
  * a senior user takes its demand out of the senior requirement below it.
  */
-function checkUserDay(n: ModelInput['model']['nodes'][number], get: SeriesMap, ups: string[], days: number): string | null {
+function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: string[], days: number): string | null {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
 	const [D, G, W, H, U, T, Z, AA] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'outflow', 'return_flow', 'ewr_cumulative', 'ewr_shortfall'].map(g);
 	if (!D || !G || !W || !H || !U || !T || !Z || !AA) return `${n.id}: user series missing`;
@@ -164,7 +205,8 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], get: SeriesMap, u
 	// Boreholes (WP-1.34): G = river take + groundwater; the river part follows the priority rule.
 	const GW = g('groundwater_used');
 	const DEP = g('baseflow_depletion');
-	const bore = boreholeOf(n, []).borehole;
+	const bore = boreholeOf(n, own, []).borehole;
+	const replay = boreholeReplay(bore, day0);
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
@@ -175,8 +217,9 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], get: SeriesMap, u
 		const dep = DEP?.[t] ?? 0;
 		const river = senior ? h : Math.max(0, h - zIn);
 		// Primary boreholes pump first; otherwise the river goes first and groundwater tops it up.
-		const wantGw = !bore ? 0 : bore.rule === 1 ? Math.min(bore.capacityM3Day, d) : Math.min(bore.capacityM3Day, d - Math.min(river, d));
-		const want = (bore?.rule === 1 ? Math.min(river, d - wantGw) : Math.min(d, river)) + wantGw;
+		const rp = replay(t, d, 0, river, 0, 0);
+		const wantGw = rp.direct;
+		const want = rp.surface + wantGw;
 		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − senior requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
 		if (Math.abs(gw - wantGw) > tol(d)) return `${where}: user pumped ${gw} ≠ ${wantGw} (borehole rule)`;
 		if (Math.abs(W[t]! - (d - G[t]!)) > tol(d)) return `${where}: user deficit ≠ demand − taken`;
@@ -591,6 +634,7 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  * - V is the recomputed balance residual and is float noise.
  */
 export function checkWorkings(input: ModelInput, out: ModelOutput): string | null {
+	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
 	// Open-water evaporation depth per day and the day's rain on a dam (audit N2), from the run's own settings and rain.
 	const d0 = defaultProjectSettings();
@@ -622,11 +666,14 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const PASSED = g('passed_for_senior');
 		if (ZS && !PASSED) return `${n.id}: working column passed_for_senior missing`;
 		const upZS = input.model.nodes.filter((u) => u.downstreamNodeId === n.id).map((u) => get.get(`${u.id}|senior_requirement`));
-		// Boreholes (WP-1.34).
-		const bore = boreholeOf(n, []).borehole;
+		// Boreholes (WP-1.34, WP-3.9).
+		const bore = boreholeOf(n, bores.get(n.id) ?? [], []).borehole;
+		const replay = boreholeReplay(bore, day0);
 		const GW = g('groundwater_used');
+		const GD = g('groundwater_to_dam');
 		const DEP = g('baseflow_depletion');
 		if (bore && (!GW || !DEP)) return `${n.id}: groundwater columns missing for a farm with boreholes`;
+		if (!!GD !== !!bore?.units.some((u) => u.toDam)) return `${n.id}: groundwater_to_dam ${GD ? 'without' : 'missing for'} a borehole that pumps into the dam`;
 		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream node has no senior_requirement series`;
 		// The dam's area–storage relation, as runModel resolves it (audit N2).
 		const areaFull = n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0;
@@ -664,18 +711,17 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const availScale = Math.max(Math.abs(qPrev), pd, ev, sp, m, o, k, Math.abs(j), dead, d);
 			const surface = Math.max(avail - dead, 0);
 			const gw = GW?.[t] ?? 0;
+			const gd = GD?.[t] ?? 0;
 			const dep = DEP?.[t] ?? 0;
-			// Boreholes: primary pump first; supplemental (and drought, while the dam is below its trigger) top up what the dam leaves.
-			let wantGw = 0;
-			let wantGs = Math.min(surface, d);
-			if (bore?.rule === 1) {
-				wantGw = Math.min(bore.capacityM3Day, d);
-				wantGs = Math.min(surface, d - wantGw);
-			} else if (bore && (bore.rule === 0 || qPrev < bore.triggerM3)) wantGw = Math.min(bore.capacityM3Day, d - wantGs);
-			if (!near(gw, wantGw, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${wantGw} (borehole rule, capacity ${bore?.capacityM3Day})`;
-			if (!near(gg - gw, wantGs, availScale))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − dead storage ${dead}, 0), D ${d})${bore ? ` + groundwater ${gw}` : ''}`;
-			if (!near(p, avail - (gg - gw), Math.max(availScale, gg))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − G`;
+			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
+			const rp = replay(t, d, qPrev, avail, dead, cap);
+			const wantGs = bore ? rp.surface : Math.min(surface, d);
+			if (!near(gw, rp.direct, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${rp.direct} (borehole supply order and caps)`;
+			if (!near(gd, rp.dam, Math.max(availScale, d, cap))) return `${where}: groundwater into the dam ${gd} ≠ ${rp.dam}`;
+			if (gd > 0 && avail + gd > cap + tol(Math.max(cap, availScale))) return `${where}: pumped ${gd} into a dam with no room for it`;
+			if (!near(gg - gw, wantGs, Math.max(availScale, gd)))
+				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J${gd ? ' + groundwater into the dam' : ''} − dead storage ${dead}, 0), D ${d})${bore ? ` + groundwater ${gw}` : ''}`;
+			if (!near(p, avail + gd - (gg - gw), Math.max(availScale, gg, gd))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J + groundwater into the dam − G`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (ZS) {
@@ -690,8 +736,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			}
 			if (!near(tt, gg * returnPerSupplied, 0)) return `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			if (!near(u, r + ss + tt + sp - dep, Math.max(r, ss, tt, sp))) return `${where}: outflow ${u} ≠ R + S + T + seepage${bore ? ' − stream depletion' : ''}`;
-			const vv = h + i + j + pd + gw - (gg - tt) - ev - (q - qPrev) - u - dep;
-			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw);
+			const vv = h + i + j + pd + gw + gd - (gg - tt) - ev - (q - qPrev) - u - dep;
+			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
 		}
@@ -700,48 +746,101 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 }
 
 /**
- * Boreholes and stream depletion (WP-1.34, docs/model.md §2.7d), on every farm
- * and other user with boreholes:
- * - 0 ≤ groundwater ≤ the borehole capacity, and ≤ supplied;
- * - the lag store S[t] = S[t−1] + d × pumped − due, due = α × (S[t−1] + d × pumped),
- *   S ≥ 0, starting empty;
- * - taken + unmet = due, both ≥ 0, and taken ≤ the flow the node would have
- *   passed without it (outflow + taken), so the river never goes negative;
- * - the lag conserves volume: d × Σ pumped = Σ taken + Σ unmet + S at the end.
- * A node without boreholes has none of these columns.
+ * Boreholes and stream depletion (WP-1.34, WP-3.9, docs/model.md §2.7d), on
+ * every farm and other user with boreholes:
+ * - 0 ≤ groundwater to the crop ≤ supplied, 0 ≤ into the dam, and together
+ *   ≤ Σ the pumping units' capacities;
+ * - the lag store S[t] = S[t−1] + infeed − due, due = α × (S[t−1] + infeed),
+ *   S ≥ 0, starting empty, with the day's infeed between the smallest and the
+ *   largest depletion factor × what was pumped;
+ * - taken + unmet = due, both ≥ 0, and unmet only when nothing flows out, so
+ *   the river never goes negative;
+ * - the lag conserves volume: Σ infeed = Σ taken + Σ unmet + S at the end,
+ *   and Σ infeed = Σ over the boreholes of d × their volume
+ *   (RunSummary.groundwaterAnnualUse);
+ * - groundwaterAnnualUse has one row per water year of the run, its volumes
+ *   add up to the daily columns and over its boreholes, and no borehole
+ *   pumps more than its annual cap in a water year.
+ * A node without boreholes has none of these columns or rows.
  */
 export function checkGroundwater(input: ModelInput, out: ModelOutput): string | null {
 	const get = seriesMap(out);
+	const bores = boreholesByNode(input.model, []);
+	const annual = out.summary.groundwaterAnnualUse ?? [];
+	const day0 = toEpochDay(out.startDate);
 	for (const n of input.model.nodes) {
-		const b = boreholeOf(n, []).borehole;
+		const b = boreholeOf(n, bores.get(n.id) ?? [], []).borehole;
 		const g = (k: string) => get.get(`${n.id}|${k}`);
+		const rows = annual.filter((r) => r.nodeId === n.id);
 		if (!b) {
-			if (g('groundwater_used')) return `${n.id}: groundwater series without boreholes`;
+			if (g('groundwater_used') || g('groundwater_to_dam')) return `${n.id}: groundwater series without boreholes`;
+			if (rows.length) return `${n.id}: groundwater annual use without boreholes`;
 			continue;
 		}
 		const [GW, DEP, UN, ST, G, U] = ['groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_store', 'supplied', 'outflow'].map(g);
 		if (!GW || !DEP || !UN || !ST || !G || !U) return `${n.id}: groundwater series missing`;
+		const GD = g('groundwater_to_dam');
+		const capSum = b.units.reduce((s, u) => s + u.capacityM3Day, 0);
+		const dMin = Math.min(...b.units.map((u) => u.depletionFrac));
+		const dMax = Math.max(...b.units.map((u) => u.depletionFrac));
 		let prev = 0;
-		let pumped = 0;
+		let infeed = 0;
 		let gone = 0;
+		let row = -1;
+		let wy = NaN;
+		const sums = rows.map(() => ({ days: 0, all: 0, dam: 0, dep: 0 }));
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
 			const gw = GW[t]!;
-			if (gw < 0 || gw > b.capacityM3Day + tol(b.capacityM3Day) || gw > G[t]! + tol(G[t]!)) return `${where}: groundwater ${gw} outside [0, MIN(capacity ${b.capacityM3Day}, supplied ${G[t]})]`;
-			const inStore = prev + b.depletionFrac * gw;
+			const gd = GD?.[t] ?? 0;
+			if (gw < 0 || gw > G[t]! + tol(G[t]!) || gd < 0 || gw + gd > capSum + tol(capSum)) return `${where}: groundwater ${gw} outside [0, MIN(Σ capacity ${capSum}, supplied ${G[t]})]${gd ? ` (with ${gd} into the dam)` : ''}`;
+			const scale = Math.max(prev, U[t]! + DEP[t]!, gw + gd);
+			// One depletion factor: the infeed is d × pumped. Several: it lies between the smallest and largest share of it.
+			const inf = dMin === dMax ? dMin * (gw + gd) : ST[t]! + DEP[t]! + UN[t]! - prev;
+			if (inf < dMin * (gw + gd) - tol(scale) || inf > dMax * (gw + gd) + tol(scale)) return `${where}: depletion infeed ${inf} outside [${dMin}, ${dMax}] × pumped ${gw + gd}`;
+			const inStore = prev + inf;
 			const due = b.depletionAlpha * inStore;
-			const scale = Math.max(inStore, U[t]! + DEP[t]!);
-			if (DEP[t]! < 0 || UN[t]! < -tol(0) || Math.abs(DEP[t]! + UN[t]! - due) > tol(scale)) return `${where}: depletion ${DEP[t]} + unmet ${UN[t]} ≠ due ${due}`;
-			if (Math.abs(ST[t]! - (inStore - due)) > tol(scale) || ST[t]! < -tol(scale)) return `${where}: depletion store ${ST[t]} ≠ ${inStore - due}`;
+			if (DEP[t]! < 0 || UN[t]! < -tol(0) || Math.abs(DEP[t]! + UN[t]! - due) > tol(Math.max(scale, inStore))) return `${where}: depletion ${DEP[t]} + unmet ${UN[t]} ≠ due ${due}`;
+			if (Math.abs(ST[t]! - (inStore - due)) > tol(Math.max(scale, inStore)) || ST[t]! < -tol(scale)) return `${where}: depletion store ${ST[t]} ≠ ${inStore - due}`;
 			if (U[t]! < -tol(scale)) return `${where}: stream depletion took the river below 0 (outflow ${U[t]})`;
 			if (UN[t]! > tol(scale) && U[t]! > tol(scale)) return `${where}: depletion left unmet (${UN[t]}) while ${U[t]} still flowed`;
-			pumped += gw;
+			infeed += inf;
 			gone += DEP[t]! + UN[t]!;
 			prev = ST[t]!;
+			const y = waterYearOfDay(day0 + t);
+			if (y !== wy) {
+				wy = y;
+				row++;
+				if (rows[row]?.waterYear !== y) return `${n.id}: groundwater annual use has no row for water year ${y}`;
+			}
+			const s = sums[row]!;
+			s.days++;
+			s.all += gw + gd;
+			s.dam += gd;
+			s.dep += DEP[t]!;
 		}
-		const total = b.depletionFrac * pumped;
-		if (Math.abs(total - gone - prev) > 1e-9 * Math.max(1, total)) return `${n.id}: the depletion lag does not conserve volume: d × Σ pumped ${total} ≠ Σ due ${gone} + still to come ${prev}`;
+		if (rows.length !== row + 1) return `${n.id}: groundwater annual use has ${rows.length} rows for ${row + 1} water years`;
+		if (Math.abs(infeed - gone - prev) > 1e-9 * Math.max(1, infeed)) return `${n.id}: the depletion lag does not conserve volume: Σ infeed ${infeed} ≠ Σ due ${gone} + still to come ${prev}`;
+		let byBorehole = 0;
+		for (const [k, r] of rows.entries()) {
+			const s = sums[k]!;
+			const where = `${n.id} water year ${r.label}`;
+			if (r.days !== s.days || Math.abs(r.abstractionM3 - s.all) > tol(s.all) || Math.abs(r.toDamM3 - s.dam) > tol(s.all) || Math.abs(r.streamDepletionM3 - s.dep) > tol(s.dep))
+				return `${where}: annual use ${r.abstractionM3} / into the dam ${r.toDamM3} / depletion ${r.streamDepletionM3} over ${r.days} days ≠ the daily columns ${s.all} / ${s.dam} / ${s.dep} over ${s.days}`;
+			if (r.boreholes.length !== b.units.length) return `${where}: ${r.boreholes.length} boreholes ≠ ${b.units.length}`;
+			let sum = 0;
+			for (const [j, u] of r.boreholes.entries()) {
+				const unit = b.units[j]!;
+				if (u.abstractionM3 < 0 || u.abstractionM3 > unit.capacityM3Day * r.days + tol(unit.capacityM3Day * r.days)) return `${where}: borehole ${u.name} pumped ${u.abstractionM3}, more than its capacity allows`;
+				if (u.annualCapM3 !== null && u.abstractionM3 > u.annualCapM3 + tol(u.annualCapM3)) return `${where}: borehole ${u.name} pumped ${u.abstractionM3} over its annual cap ${u.annualCapM3}`;
+				sum += u.abstractionM3;
+				byBorehole += unit.depletionFrac * u.abstractionM3;
+			}
+			if (Math.abs(sum - r.abstractionM3) > tol(r.abstractionM3)) return `${where}: the boreholes' ${sum} ≠ the node's ${r.abstractionM3}`;
+		}
+		if (Math.abs(byBorehole - infeed) > 1e-9 * Math.max(1, infeed)) return `${n.id}: Σ d × each borehole's volume ${byBorehole} ≠ the depletion infeed ${infeed}`;
 	}
+	for (const r of annual) if (!input.model.nodes.some((n) => n.id === r.nodeId)) return `groundwater annual use for unknown node ${r.nodeId}`;
 	return null;
 }
 

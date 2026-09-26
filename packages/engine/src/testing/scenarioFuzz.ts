@@ -238,5 +238,34 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			}
 		}
 	}
+	// Borehole ops (WP-3.9), from their own stream so every seed's other ops are
+	// what they were; only when the caller didn't ask for an exact count.
+	const h = new Rng(seed ^ 0x2545f491);
+	if (count === undefined && h.bool(0.3)) {
+		const bores = (input.model.boreholes ?? []).map((b) => b.id);
+		for (let k = h.int(1, 3); k > 0; k--) {
+			if (bores.length && h.bool(0.3)) {
+				ops.push({ op: 'borehole.remove', boreholeId: h.bool(0.9) ? h.pick(bores) : missing() });
+				continue;
+			}
+			const x = nodes.length && !h.bool(0.05) ? h.pick(nodes) : null;
+			const id = `sb${k}`;
+			ops.push({
+				op: 'borehole.add',
+				borehole: {
+					id,
+					nodeId: x?.id ?? missing(),
+					name: `Scenario borehole ${k}`,
+					capacityM3Day: h.pick([0, h.logFloat(1, 1e4), 1e9]),
+					annualCapM3: h.bool(0.5) ? null : h.logFloat(1, 1e6),
+					mode: h.pick(['none', 'supplemental', 'primary', 'emergency'] as const),
+					emergencyBelowPct: h.frac(),
+					target: h.pick(['direct', 'dam'] as const),
+					depletionFactor: h.frac()
+				}
+			});
+			bores.push(id);
+		}
+	}
 	return ops;
 }

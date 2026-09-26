@@ -23,6 +23,19 @@ describe('modelRuleIssues', () => {
 		expect(modelRuleProblems(m)).toEqual(['duplicate node name "farm"', 'the network needs exactly one outflow node (drains into nothing); found 2']);
 	});
 
+	it('individual boreholes (WP-3.9): on a farm or user, and emergency mode or pumping into a dam only on a farm with a dam', () => {
+		const n = (id: string, kind: string, damCapacityM3: number, downstreamNodeId: string | null) => ({ id, name: id, kind, damCapacityM3, downstreamNodeId }) as ProjectModel['nodes'][number];
+		const b = (id: string, nodeId: string, over: object = {}) => ({ id, nodeId, name: id, capacityM3Day: 1, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0, ...over });
+		const m = {
+			nodes: [n('g', 'gauge', 0, null), n('dam', 'farm', 100, 'g'), n('dry', 'farm', 0, 'g')],
+			crops: [],
+			cropAreas: [],
+			transfers: [],
+			boreholes: [b('ok', 'dam', { mode: 'emergency', target: 'dam' }), b('ok2', 'dry'), b('off', 'dry', { mode: 'none', target: 'dam' }), b('x', 'g'), b('y', 'zz'), b('e', 'dry', { mode: 'emergency' }), b('d', 'dry', { target: 'dam' }), b('ok', 'dam')]
+		} as unknown as ProjectModel;
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['bhDam:d', 'bhEmergency:e', 'bhGauge:x', 'bhNode:y', 'dup:borehole id:ok']);
+	});
+
 	it('a scenario applied to a valid model leaves a model the backend would save', () => {
 		let checked = 0;
 		for (let seed = 1; checked < CASES && seed < CASES * 4; seed++) {

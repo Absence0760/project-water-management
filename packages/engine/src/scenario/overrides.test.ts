@@ -211,6 +211,22 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
 	});
 
+	it('borehole.add / remove (WP-3.9), and a removed node takes its boreholes with it', () => {
+		const b = { id: 'bh1', nodeId: 'A', name: 'New', capacityM3Day: 500, annualCapM3: 40_000, mode: 'supplemental' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0.2 };
+		const added = one({ op: 'borehole.add', borehole: b });
+		expect(added.input.model.boreholes).toEqual([b]);
+		expect(one({ op: 'borehole.add', borehole: { ...b, nodeId: 'G' } }).problems[0]).toMatch(/is a gauge/);
+		expect(applyScenario(base(), [{ op: 'borehole.add', borehole: b }, { op: 'borehole.add', borehole: b }]).problems[0]).toMatch(/already in use/);
+		expect(applyScenario(base(), [{ op: 'borehole.add', borehole: b }, { op: 'borehole.remove', boreholeId: 'bh1' }]).input.model.boreholes).toEqual([]);
+		expect(one({ op: 'borehole.remove', boreholeId: 'zz' }).problems[0]).toMatch(/not found/);
+		const gone = applyScenario(base(), [{ op: 'borehole.add', borehole: { ...b, nodeId: 'B' } }, { op: 'node.remove', nodeId: 'B' }]);
+		expect(gone.input.model.boreholes).toEqual([]);
+		expect(gone.applied.flatMap((a) => a.notes)).toContain('dropped 1 borehole(s)');
+		expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...b, mode: 'sometimes' } }]).errors[0]).toMatch(/ops\[0\]\.borehole\.mode/);
+		expect(classifyOp({ op: 'borehole.add', borehole: b }, ['A'], base())).toBe('proposal');
+		expect(classifyOp({ op: 'borehole.add', borehole: { ...b, nodeId: 'B' } }, ['A'], base())).toBe('baseline');
+	});
+
 	it('settings.set writes a whitelisted path, nested ones over what is there', () => {
 		const r = applyScenario(base(), [
 			{ op: 'settings.set', path: 'lakeEvapFactor', value: 0.7 },

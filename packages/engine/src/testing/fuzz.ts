@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
+import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type Borehole, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -320,7 +320,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
-	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}) }, series };
+	// Individual boreholes (WP-3.9), from their own stream too.
+	const boreholes = randomBoreholes(new Rng(seed ^ 0x3c6ef372), nodes);
+	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}), ...(boreholes.length ? { boreholes } : {}) }, series };
 }
 
 /**
@@ -361,6 +363,38 @@ function addBoreholes(g: Rng, nodes: NetworkNode[]): void {
 		n.streamDepletionFrac = g.frac(0.25, 0.25);
 		n.streamDepletionLagDays = g.pick([0, 0, g.float(0.1, 5), g.logFloat(1, 5000)]);
 	}
+}
+
+/**
+ * Individual boreholes (WP-3.9) in 25 % of seeds: up to three per farm or
+ * other user (now and then one on a gauge, which the engine skips), any mode
+ * (emergency and dam-target on dam-less nodes too, which run as supplemental
+ * and direct), capacities from a trickle to more than any demand, no annual
+ * cap, a small one that binds within weeks or one that never does, any
+ * depletion factor.
+ */
+function randomBoreholes(g: Rng, nodes: NetworkNode[]): Borehole[] {
+	if (!g.bool(0.25)) return [];
+	const out: Borehole[] = [];
+	for (const n of nodes) {
+		if ((n.kind === 'gauge' && !g.bool(0.05)) || !g.bool(0.5)) continue;
+		const count = g.int(1, 3);
+		for (let k = 0; k < count; k++) {
+			const cap = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), 1e9]);
+			out.push({
+				id: `bh-${n.id}-${k}`,
+				nodeId: n.id,
+				name: `Borehole ${n.id}.${k}`,
+				capacityM3Day: cap,
+				annualCapM3: g.pick([null, null, g.logFloat(1, 1e5), cap * g.float(1, 400), 0]),
+				mode: g.pick(['none', 'supplemental', 'supplemental', 'primary', 'emergency'] as const),
+				emergencyBelowPct: g.frac(0.1, 0.1),
+				target: g.pick(['direct', 'direct', 'dam'] as const),
+				depletionFactor: g.frac(0.25, 0.25)
+			});
+		}
+	}
+	return out;
 }
 
 /**
@@ -474,6 +508,7 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	// Rule tables (engine ≥ 0.21.0) are assessed outlet first, then by site id, whatever their order.
 	if (Array.isArray(x.settings.ewrRules)) rng.shuffle(x.settings.ewrRules);
 	if (m.landCover) rng.shuffle(m.landCover);
+	if (m.boreholes) rng.shuffle(m.boreholes);
 	return x;
 }
 
@@ -492,6 +527,11 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 	for (let k = 0; k < (m.landCover?.length ?? 0); k++) {
 		const x = cloneInput(input);
 		x.model.landCover!.splice(k, 1);
+		yield x;
+	}
+	for (let k = 0; k < (m.boreholes?.length ?? 0); k++) {
+		const x = cloneInput(input);
+		x.model.boreholes!.splice(k, 1);
 		yield x;
 	}
 	const hasUpstream = new Set(m.nodes.map((nd) => nd.downstreamNodeId).filter((v): v is string => v !== null));

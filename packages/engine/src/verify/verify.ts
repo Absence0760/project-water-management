@@ -119,15 +119,17 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		const r = farm(n.id, 'return_flow');
 		for (let t = 0; t < out.days; t++) userUse[t]! += (g[t] ?? 0) - (r[t] ?? 0);
 	}
-	// Boreholes (WP-1.34), farms and other users: groundwater into supply, stream depletion out of the river.
+	// Boreholes (WP-1.34, WP-3.9), farms and other users: groundwater into supply
+	// and into the dams, stream depletion out of the river.
 	const gwNodes = input.model.nodes.filter((n) => series.has(`${n.id}|groundwater_used`));
 	const gwIn = new Float64Array(out.days);
 	const depOut = new Float64Array(out.days);
 	for (const n of gwNodes) {
 		const g = farm(n.id, 'groundwater_used');
+		const gd = farm(n.id, 'groundwater_to_dam');
 		const d = farm(n.id, 'baseflow_depletion');
 		for (let t = 0; t < out.days; t++) {
-			gwIn[t]! += g[t] ?? 0;
+			gwIn[t]! += (g[t] ?? 0) + (gd[t] ?? 0);
 			depOut[t]! += d[t] ?? 0;
 		}
 	}
