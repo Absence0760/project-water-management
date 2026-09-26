@@ -8,8 +8,10 @@ in [run comparison](./run-comparison.md). Build plan:
 [roadmap WP-3.2](./roadmap/step-3-licensing.md#wp-32-scenarios-within-a-project),
 issue #18.
 
-Status: the **engine part** is built (`packages/engine/src/scenario/`). The
-backend, data model and UI are not (headings below).
+Status: the **engine part** (`packages/engine/src/scenario/`), the **backend
+and data model** (`backend/src/scenarios/`, migration 024) and the frontend's
+API client are built. The UI (the Scenarios tab, the override-mode editor and
+the compare page's Scenario overrides section) is not.
 
 ## Engine: `applyScenario`
 
@@ -34,9 +36,11 @@ applyScenario(base: ModelInput, ops: ScenarioOp[]): { input: ModelInput; applied
     user, land cover on a non-farm, a drought borehole rule without a dam,
     a catchment with no land left (`runModel` refuses 0 km²), or a
     simulation, reporting or calibration window that ends before it starts.
-    These are the backend's save rules (`backend/src/model/validate.ts`
-    `modelProblems`) plus the windows and the area, in
-    `scenario/structure.ts`. Only issues the op *introduces* count, so an
+    These are the model's save rules (`modelRuleIssues`,
+    `packages/engine/src/modelRules.ts`, the one home the backend's
+    `modelProblems` also calls) plus the windows and the area, in
+    `scenario/structure.ts`. So a scenario can only produce a model the
+    backend would accept as a save. Only issues the op *introduces* count, so an
     old base that already has one can still take unrelated ops.
 
   A skipped op changes nothing, and the ops after it still apply. `applied`
@@ -130,7 +134,7 @@ only (unknown keys are dropped) and names every error by path
 (`ops[3].value: must be at most 1`). At most 500 ops. The backend rejects the
 body when `errors` is non-empty. Whether a target id exists depends on the
 base run, so that is `applyScenario`'s job, not the validator's. Ids are any
-non-empty string here; the backend's schema can tighten them to UUIDs.
+non-empty string here; the backend tightens them to UUIDs (`backend/src/scenarios/schema.ts` `checkOps`).
 
 ## Tests
 
@@ -167,13 +171,102 @@ Each of these is a follow-up, not a gap in what's listed above:
 - **Scaling observed flow** (see above: deliberately not a scenario).
 - **Climate and stochastic transforms** (WP-4.11) will sit beside
   `overrides.ts` in `scenario/`.
-- `scenario/structure.ts` repeats the backend's `modelProblems` save rules.
-  When the backend's scenario routes are built, move the rules into the
-  engine and have `modelProblems` call them, so the two can't drift
-  ([followups.md § Features left half-way](./followups.md#features-left-half-way)).
 
-## Backend (not built yet)
+## Backend
 
-## Data model (not built yet)
+`backend/src/scenarios/`: `routes.ts` (the API below), `schema.ts` (request
+bodies), `execute.ts` (`executeScenarioRun`).
+
+- **Ops in.** `schema.ts` wraps the engine's `validateScenarioOps` in zod, so
+  the backend accepts exactly the ops the engine defines, with every error by
+  path, and tightens every id to a UUID (the ids end up in `uuid` columns such
+  as `run_series.node_id`). `opsSha256` is the SHA-256 of the ops as RFC 8785
+  canonical JSON (engine `canonicalJson`).
+- **Base in.** The base run's exact input is `loadRunInput(db, baseRunId)`
+  (WP-3.1): its settings and model snapshot plus its stored series, never the
+  live model. A run saved before stored inputs (migration 021) is refused with
+  `409` and `loadRunInput`'s reason. A scenario run can't be a base: compare
+  lists every op a scenario makes against its base, which a chain would hide.
+- **The check.** `checkScenario(base, ops, ownedNodeIds)` is `applyScenario`
+  plus `classifyScenario`: which ops applied, which don't (`problems`) and how
+  each is classed. `GET`, `POST` and `PATCH` return it beside the scenario,
+  so the editor shows it without running anything.
+- **The run.** `executeScenarioRun` = `loadRunInput(base)` → `applyScenario` →
+  `runAndStore`, the one save path `executeRun` also uses (the engine's
+  checked run, the outputs, the stored inputs), with `model_run.scenario_id`
+  set and `inputs.scenario = { id, name, baseRunId, ops, opsSha256,
+  ownedNodeIds, classified }` in the run's snapshot. It refuses (`422`, the
+  problems listed) when any op doesn't apply: a result with an op silently
+  skipped would not be the scenario its name says. The run then counts toward
+  the project's 20-run cap like any other (`trimRuns`).
+- **Why the result can't drift.** The base is a stored snapshot and the ops
+  are stored, so running a scenario again gives the same result whatever has
+  happened to the live model since, even a node deleted from it
+  (`scenarios.db.test.ts` checks it is identical, and equal to
+  `runModel(applyScenario(loadRunInput(base), ops))`).
+- **Rebase** is `applyScenario(newBase, ops)`: `problems` are the ops that no
+  longer apply to the newer base (for example a node removed since). It saves
+  the new base with the ops unchanged, or with `dryRun` only reports; the
+  scenario won't run until its ops apply again (edit them with `PATCH`).
+- **Status.** `draft → submitted → withdrawn | decided`, and `withdrawn →
+  draft`. Only a draft's ops, owned nodes and base change; a submitted or
+  decided scenario can't be deleted. Who may submit and decide is WP-3.3's
+  (the applicant role); today any editor may.
+- **The base is cited** (`model_run_cited`), so it can't be deleted,
+  trimmed or unpinned while the scenario exists, and its pin doesn't count
+  against the 10-pin ceiling. `RunMeta.citedBy` lists the publications holding it and the scenarios based on
+  a run. Deleting the scenario releases it; the scenario's own runs stay, as
+  ordinary runs that remember their scenario's name.
+
+## Data model
+
+Migration `024_scenarios.sql`
+([data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)):
+
+- `scenario (id, project_id, name, description, base_run_id → model_run,
+  ops jsonb, ops_sha256, owned_node_ids uuid[], owner_user_id, status,
+  created_at, updated_at)`: names unique per project (ignoring case), at most
+  500 ops.
+- `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
+  only.
+- Triggers: the base is a run of the same project and not a scenario run; a
+  run's scenario is its own project's; the owner is stamped from the session;
+  a non-draft is frozen; status moves as above.
+- RLS: viewer read, editor write; **farmers read nothing** (a scenario's ops
+  and base name every farm; the catchment report makes the same call).
+  WP-3.3 adds the applicant's own policies.
+- `model_run_cited` gains a clause (a scenario's base) beside 022's
+  publication clause, and the pin ceiling stops counting cited runs.
+- The publication-history cap (newest 12) spares a publication whose run a
+  scenario is based on, so the base keeps its "published" record. Editors
+  may base a scenario on any run of the model, published or not; WP-3.3
+  requires a published base for applicants.
+- `run_series.node_id` stops being a foreign key to the live `node` table: a
+  scenario run has nodes the live model doesn't (`node.add`), and the old
+  cascade deleted a node's series from every earlier run when the node was
+  deleted from the model. A trigger now checks each series names a node of
+  its own run's snapshot.
+
+## API
+
+[api.md § Scenarios](./api.md#scenarios):
+
+- `GET|POST /projects/:id/scenarios`
+- `GET|PATCH|DELETE /projects/:id/scenarios/:sid` (PATCH replaces `ops`;
+  `409` once submitted)
+- `POST /projects/:id/scenarios/:sid/runs`
+- `POST /projects/:id/scenarios/:sid/rebase { baseRunId, dryRun? }`
+- `GET /compare/runs` adds `scenario: { id, name, baseRunId, ops, opsSha256,
+  ownedNodeIds, classified } | null` per side, from the run's own snapshot
+  ([run-comparison.md § Scenario runs](./run-comparison.md#scenario-runs)).
+- `RunMeta` gains `scenarioId`, `scenarioName` and `citedBy`.
+
+The frontend's client has them as `api.scenarios.{list, get, create, update,
+remove, run, rebase}` and `scenarioProblems(err)` (the `422`'s lines), with
+the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
+`ScenarioWithCheck`, `CompareScenario`, `RunCitation`).
+
+Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
+end, RLS with positive controls, cited bases, status) and `schema.test.ts`.
 
 ## UI (not built yet)

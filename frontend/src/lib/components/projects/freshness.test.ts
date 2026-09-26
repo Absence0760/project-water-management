@@ -31,16 +31,16 @@ describe('daysSince', () => {
 describe('dataFreshness', () => {
 	const now = at(2026, 9, 23);
 	it('flags missing and stale data', () => {
-		expect(dataFreshness(null, now)).toMatchObject({ label: 'no data yet', stale: true });
-		expect(dataFreshness('2026-09-23', now)).toMatchObject({ label: 'data up to date', stale: false });
-		expect(dataFreshness('2026-09-30', now)).toMatchObject({ label: 'data up to date', stale: false });
-		expect(dataFreshness('2026-09-22', now)).toMatchObject({ label: 'data 1 day old', stale: false });
-		expect(dataFreshness('2026-09-16', now)).toMatchObject({ label: 'data 7 days old', stale: false });
-		expect(dataFreshness('2026-09-11', now)).toMatchObject({ label: 'data 12 days old', stale: true, detail: 'Input data runs to 2026-09-11' });
+		expect(dataFreshness(null, now)).toMatchObject({ label: 'no rain yet', stale: true });
+		expect(dataFreshness('2026-09-23', now)).toMatchObject({ label: 'rain up to date', stale: false });
+		expect(dataFreshness('2026-09-30', now)).toMatchObject({ label: 'rain up to date', stale: false });
+		expect(dataFreshness('2026-09-22', now)).toMatchObject({ label: 'rain 1 day old', stale: false });
+		expect(dataFreshness('2026-09-16', now)).toMatchObject({ label: 'rain 7 days old', stale: false });
+		expect(dataFreshness('2026-09-11', now)).toMatchObject({ label: 'rain 12 days old', stale: true, detail: 'Recorded rain runs to 2026-09-11' });
 	});
 	it('switches to months and years for old records', () => {
-		expect(dataFreshness('2026-06-01', now).label).toBe('data 3 months old');
-		expect(dataFreshness('2025-09-30', now).label).toBe('data 11 months old');
-		expect(dataFreshness('2021-09-30', now).label).toBe('data 4 years old');
+		expect(dataFreshness('2026-06-01', now).label).toBe('rain 3 months old');
+		expect(dataFreshness('2025-09-30', now).label).toBe('rain 11 months old');
+		expect(dataFreshness('2021-09-30', now).label).toBe('rain 4 years old');
 	});
 });

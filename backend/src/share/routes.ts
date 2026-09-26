@@ -1,6 +1,6 @@
 // Share-link routes (roadmap WP-2.3 phase 2, docs/api.md § Share).
 //
-// Owners list, create and revoke links (RLS in 024_share_links.sql enforces
+// Owners list, create and revoke links (RLS in 025_share_links.sql enforces
 // the same). The public reads, POST /share/view and /share/series, have no
 // session: the token is the credential, read only through the SECURITY
 // DEFINER app_share_view / app_share_series, and every dead link (unknown,

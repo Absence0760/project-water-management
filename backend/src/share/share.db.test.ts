@@ -1,4 +1,4 @@
-// Read-only share links (WP-2.3 phase 2, 024_share_links.sql). Every "cannot"
+// Read-only share links (WP-2.3 phase 2, 025_share_links.sql). Every "cannot"
 // has a positive control: the owner can, a live link answers, enough farm
 // holders open the series.
 import { FARMER_K } from '@water-management/engine';

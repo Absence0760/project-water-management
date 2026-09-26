@@ -5,9 +5,9 @@
 // catchments, re-uploading a series doesn't change an old run's input, blobs
 // are readable only through a run the user can see (with positive controls),
 // trimmed runs' blobs are garbage-collected while kept runs' stay, a run from
-// before stored inputs says so, and the cited-run hook keeps a run.
+// before stored inputs says so. (Cited runs: scenarios/scenarios.db.test.ts.)
 import { canonicalJson, runModelChecked, type SeriesKind } from '@water-management/engine';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
 import { importProjectData } from '../../scripts/import-project.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
@@ -275,33 +275,5 @@ describe('deleting a project with stored run inputs', () => {
 	});
 });
 
-describe('cited runs (model_run_cited)', () => {
-	// The scenarios migration (WP-3.2) adds its clause to model_run_cited with
-	// CREATE OR REPLACE. Stand in for it here with a clause that cites runs by
-	// label, then put the real body back.
-	const ORIGINAL = `CREATE OR REPLACE FUNCTION model_run_cited(p_run uuid) RETURNS boolean
-		LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-		AS $$ SELECT false $$`;
-	beforeAll(async () => {
-		await asOwner(`CREATE OR REPLACE FUNCTION model_run_cited(p_run uuid) RETURNS boolean
-			LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-			AS $$ SELECT EXISTS (SELECT 1 FROM model_run r WHERE r.id = p_run AND r.label = 'cited by a test') $$`);
-	});
-	afterAll(() => asOwner(ORIGINAL));
-
-	it('keeps a cited run past the cap and refuses to delete it, through the one exemption', async () => {
-		const u = await signUp('Cited');
-		const p = await importProjectData(examples[1]!, u.email);
-		const cited = await newRun(u, p, 'cited by a test');
-		const plain = await newRun(u, p, 'plain');
-		await newRun(u, p, 'newest');
-		const removed = await withUser(u.id, (db) => trimRuns(db, p, 1));
-		// The uncited run of the same age went (positive control); the cited one didn't count against the cap.
-		expect(removed).toEqual([plain]);
-		const del = await u.call('DELETE', `/projects/${p}/runs/${cited}`);
-		expect(del.status).toBe(409);
-		expect(del.body.error).toBe('this run is cited, so it is kept');
-		// Its stored inputs stay with it.
-		expect(Object.keys((await withUser(u.id, (db) => loadRunInput(db, cited))).series)).toHaveLength(examples[1]!.series.length);
-	});
-});
+// Cited runs (model_run_cited) are tested with the real citation, a scenario's
+// base run, in scenarios/scenarios.db.test.ts ("a cited base run").

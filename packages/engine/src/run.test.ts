@@ -1033,6 +1033,28 @@ describe('runModel — flow shares', () => {
 		expect(out.summary.warnings.some((w) => w.includes('sum to 80.00%'))).toBe(true);
 	});
 
+	it('refuses manual shares over 100 %: the farms would make water the catchment never had', () => {
+		const over = () =>
+			run({
+				nodes: [node('A', { flowShareManual: 0.5 }), node('B', { flowShareManual: 0.6, sortOrder: 1 })].map((n) =>
+					n.id === 'A' ? { ...n, downstreamNodeId: 'B' } : n
+				),
+				settings: { flowShareMethod: 'manual' },
+				natural: [1000]
+			});
+		expect(over).toThrow(/sum to 110\.00%, more than 100%/);
+	});
+
+	it('refuses a high/low MAP split over 100 %, and runs one within the tolerance', () => {
+		const nodes = [
+			node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
+			node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
+		];
+		expect(() => run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.9, lo: 0.9 } }, natural: [1000] })).toThrow(/sum to 180\.00%/);
+		const out = run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.81, lo: 0.1901 } }, natural: [1000] });
+		expect(out.summary.warnings.some((w) => w.includes('flow shares sum'))).toBe(false);
+	});
+
 	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
 		const out = run({
 			nodes: [
@@ -2009,5 +2031,39 @@ describe('catchment area', () => {
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: null }, input)).toBe(50.5);
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 0 }, input)).toBe(50.5);
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, input)).toBe(150);
+	});
+});
+
+describe('runModel — forecast rain days (engine 0.28.0)', () => {
+	// 10 days: recorded catchment rain on the first 7, forecast on the last 3.
+	const withForecast = (settings: Partial<ProjectSettings> = {}) => {
+		const x = input({ nodes: [node('A')], natural: new Array(10).fill(100), rain: [1, 0, 2, 0, 0, 3, 0, null, null, null], settings });
+		x.series!.rain_forecast_mm = { startDate: '2020-01-06', values: [9, 9, 4, 5, 6] };
+		return runModelWith(x, () => ({ naturalFlowM3Day: new Array(10).fill(100) }));
+	};
+
+	it('names the days that ran on forecast rain and how many the reporting window holds', () => {
+		const out = withForecast();
+		// Days 6–7 have recorded rain, so their forecast values are not used.
+		expect(out.summary.forecastRain).toEqual({ days: 3, from: '2020-01-08', to: '2020-01-10', inReport: 3, lastRecorded: '2020-01-07' });
+		expect(out.summary.warnings).toContain(
+			'3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS); all of them fall in the reporting window (2020-01-01 to 2020-01-10), so curtailment and the EWR sites cover forecast days'
+		);
+	});
+
+	it('counts only the forecast days inside a narrower reporting window, and says nothing of it when none are', () => {
+		expect(withForecast({ reportStart: '2020-01-04', reportEnd: '2020-01-08' }).summary.forecastRain?.inReport).toBe(1);
+		const before = withForecast({ reportStart: '2020-01-01', reportEnd: '2020-01-07' });
+		expect(before.summary.forecastRain?.inReport).toBe(0);
+		expect(before.summary.warnings.find((w) => w.includes('forecast rain'))).toBe('3 days (2020-01-08 to 2020-01-10) of this run use forecast rain, not recorded rain (catchment or CHIRPS)');
+	});
+
+	it('is null when a forecast series is never used, and absent without one (positive control: no warning)', () => {
+		const x = input({ nodes: [node('A')], natural: new Array(5).fill(100), rain: [1, 1, 1, 1, 1] });
+		x.series!.rain_forecast_mm = { startDate: '2020-01-01', values: [9, 9, 9, 9, 9] };
+		const used = runModelWith(x, () => ({ naturalFlowM3Day: new Array(5).fill(100) }));
+		expect(used.summary.forecastRain).toBeNull();
+		expect(used.summary.warnings.some((w) => w.includes('forecast rain'))).toBe(false);
+		expect('forecastRain' in run({ nodes: [node('A')], natural: [100] }).summary).toBe(false);
 	});
 });

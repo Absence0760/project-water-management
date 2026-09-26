@@ -29,7 +29,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'updated_at',
 		'updated_by'
 	],
-	// A share link is withdrawn, never edited: who revoked it and when (024_share_links.sql).
+	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
 	share_link: ['revoked_at', 'revoked_by']
 };
 /**
@@ -51,7 +51,7 @@ const APPEND_ONLY = new Set(['run_nomination', 'job', 'project_import', 'series_
  * its run or project). Every uncertainty ensemble started is kept, so a band
  * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
  * not deleted: the row is the record of who made and withdrew it until the
- * audit log (WP-2.4) has events for both (024_share_links.sql).
+ * audit log (WP-2.4) has events for both (025_share_links.sql).
  */
 const NO_DELETE = new Set(['run_uncertainty', 'share_link']);
 /**

@@ -76,6 +76,14 @@ function flowSeries(rng: Rng, days: number, scale: number): (number | null)[] {
  * One random valid ModelInput. Node ids are "n0", "n1", …; the outflow node is
  * always n0 (the invariance test shuffles the array, so nothing may rely on it).
  */
+function capFlowShares(settings: Partial<ProjectSettings>, nodes: NetworkNode[]): void {
+	const split = settings.hiLoSplit!;
+	if (split.hi + split.lo > 1) settings.hiLoSplit = { hi: split.hi / (split.hi + split.lo), lo: split.lo / (split.hi + split.lo) };
+	const farms = nodes.filter((n) => n.kind === 'farm');
+	const sum = farms.reduce((a, n) => a + (n.flowShareManual ?? 0), 0);
+	if (sum > 1) for (const n of farms) if (n.flowShareManual !== null) n.flowShareManual /= sum;
+}
+
 export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const rng = new Rng(seed);
 	// Irrigation efficiency and loss return (engine ≥ 0.16.0) come from their own
@@ -300,6 +308,12 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			};
 		});
 	}
+
+	// Flow shares over 100 % are refused by the run (engine 0.27.1: they make
+	// water from nowhere), so scale them down to 100 % after every draw: the
+	// random stream, and so the rest of each seed, is unchanged. Under 100 %
+	// stays, since the run allows it with a warning.
+	capFlowShares(settings, nodes);
 
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);

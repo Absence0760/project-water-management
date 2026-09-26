@@ -1,4 +1,4 @@
--- 024_share_links — read-only share links to a project's published baseline
+-- 025_share_links — read-only share links to a project's published baseline
 -- (roadmap WP-2.3 phase 2; docs/data-model.md § Share links, docs/security.md
 -- § Share links, docs/api.md § Share).
 --
@@ -48,7 +48,7 @@ CREATE TABLE share_link (
 	CHECK (revoked_by IS NULL OR revoked_at IS NOT NULL)
 );
 COMMENT ON TABLE share_link IS
-	'Read-only links to a project''s current publication (024, WP-2.3 phase 2). Owner only; the public reads only through app_share_view / app_share_series. Token stored as SHA-256.';
+	'Read-only links to a project''s current publication (025, WP-2.3 phase 2). Owner only; the public reads only through app_share_view / app_share_series. Token stored as SHA-256.';
 
 -- The owner's list (newest first); also covers the project_id foreign key.
 CREATE INDEX share_link_project_idx ON share_link (project_id, created_at DESC);

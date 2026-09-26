@@ -155,7 +155,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
-- `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems)
+- `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/design/`: design specs written before a build (the farmer view, issue #14), each with its prototype

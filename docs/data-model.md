@@ -34,7 +34,9 @@ erDiagram
   model_run ||--o{ run_nomination : "nominated as"
   model_run ||--o{ run_uncertainty : "uncertainty ensembles"
   run_uncertainty |o--o{ run_uncertainty : "paired on (baseline)"
-  node     |o--o{ run_series : "per node (null = catchment)"
+  project  ||--o{ scenario : "scenarios"
+  model_run ||--o{ scenario : "base run of (cited)"
+  scenario |o--o{ model_run : "ran as (nullable)"
   project  ||--o{ job : "background jobs"
   project  ||--o{ project_import : "import reports"
   app_user ||--o{ project_import : "imported"
@@ -60,8 +62,9 @@ erDiagram
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS`. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a gauge on another river, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made | A "Calc. Model" press plus the `[Log]` entry |
-| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, and `scenario_id` (024), the scenario that made it (null for a run of the live model) | A "Calc. Model" press plus the `[Log]` entry |
+| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
+| `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
 ### Field mapping details
@@ -148,7 +151,8 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   the evidence history names (current or past nomination, see **Evidence
   nomination** below), or one something **cites** (`model_run_cited`, see
   **Cited runs** below): a publication in the history cites its run
-  ([Publications](#publications-022_publicationsql)). All of them go through
+  ([Publications](#publications-022_publicationsql)), and a scenario its base
+  ([Scenarios](#scenarios-024_scenariossql)). All of them go through
   one exemption, `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`, which
   `trimRuns` and the `DELETE` route share. So a project holds at most 20
   unpinned, unnominated, uncited runs, plus at most 10 pinned, plus the runs
@@ -211,7 +215,8 @@ skips it and it doesn't count against `RUNS_KEPT_PER_PROJECT`, and
 column `water_app` may update (`GRANT UPDATE (pinned)`, next to `notes`); the
 `model_run_update` policy is unchanged, so only editors and owners can pin
 and a viewer's `UPDATE` matches no row. **Ceiling: 10 pinned runs per
-project**, so storage stays bounded (a long run is up to a few tens of MB, so
+project** (a **cited** run's pin doesn't count, since 024: it is kept anyway,
+and unpinning it is refused with `409 this run is cited by …`), so storage stays bounded (a long run is up to a few tens of MB, so
 10 pins add at most half the cap again). The `model_run_pin_limit` BEFORE
 UPDATE OF `pinned` trigger (`SECURITY DEFINER`, `search_path` pinned) refuses
 an 11th pin with `check_violation`, under a per-project advisory lock so two
@@ -386,23 +391,92 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   lock is held from the input writes to commit, where the trim already held
   it).
 
-**Cited runs (021_series_blob.sql).** A run a scenario is based on (WP-3.2),
-or that an evidence pack or assessment cites (WP-3.13, WP-3.14), must never be
-trimmed or deleted, and no editor action may lift that (unlike a pin).
-"Cited" is derived, not stored: `model_run_cited(p_run uuid)` (SQL, `STABLE
-SECURITY DEFINER`, `search_path` pinned) is part of `RUN_KEPT_SQL`, so
-`trimRuns` spares a cited run, it doesn't count against the cap, and the
-`DELETE` route answers `409 this run is cited, so it is kept`. No table cites a
-run yet, so its body is `SELECT false`. **Each citing table's migration adds
-one clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest
-body plus `OR EXISTS (SELECT 1 FROM <table> WHERE <run column> = p_run)`,
-same signature, `SECURITY DEFINER` and `search_path` (020's header has the
-scenarios example), alongside a `RESTRICT`/`NO ACTION` foreign key to
-`model_run`. `RUN_KEPT_SQL`, `trimRuns` and the route need no change.
-`SECURITY DEFINER` so a citation the caller can't see still keeps the run.
-Still to come with the first citing table (WP-3.2): the unpin `409`, `citedBy`
-on `RunMeta`, and skipping cited runs in WP-2.3's publication trim
-([followups.md](./followups.md)).
+**Cited runs (021_series_blob.sql, 022_publication.sql, 024_scenarios.sql).**
+A run a publication holds (WP-2.3), a scenario is based on (WP-3.2), or that
+an evidence pack or assessment cites (WP-3.13, WP-3.14) must never be trimmed
+or deleted, and no editor action may lift that (unlike a pin). "Cited" is
+derived, not stored: `model_run_cited(p_run uuid)` (SQL, `STABLE SECURITY
+DEFINER`, `search_path` pinned) is part of `RUN_KEPT_SQL`, so `trimRuns`
+spares a cited run, it doesn't count against the cap, and the `DELETE` route
+answers `409` (`run is published: …` for a publication, `this run is cited by
+scenario "…", so it is kept` for a scenario). Its body since 024 is
+`EXISTS (… run_publication p WHERE p.run_id = p_run) OR EXISTS (… scenario s
+WHERE s.base_run_id = p_run)`. **Each later citing table's migration adds one
+clause**: `CREATE OR REPLACE FUNCTION model_run_cited` with the latest body
+(024's) plus `OR EXISTS (SELECT 1 FROM <table> WHERE <run column> = p_run)`,
+same signature, `SECURITY DEFINER` and `search_path`, alongside a `NO ACTION`
+foreign key to `model_run`, and adds its kind to `CITED_BY_SQL`
+(`backend/src/runs/execute.ts`, `RunMeta.citedBy`: `publication` and
+`scenario` today). `RUN_KEPT_SQL`, `trimRuns` and the routes need no change.
+`SECURITY DEFINER` so a citation the caller can't see still keeps the run. A
+cited run's pin doesn't count against the 10-pin ceiling, and unpinning one
+is `409`. **The publication-history cap (keep the newest 12) skips a
+publication whose run a scenario is based on** (024 re-creates
+`run_publication_cap` from 022's body): the scenario still keeps the run
+either way, but its "published" provenance, what a scenario base's banner and
+WP-3.3's "the base must be published" rest on, would otherwise vanish. So a
+project holds at most 12 publications plus one per scenario base.
+
+### Scenarios (024_scenarios.sql)
+
+Roadmap WP-3.2, [scenarios.md](./scenarios.md). A scenario is a named, ordered
+list of overrides (engine `ScenarioOp`) on a **base run**, applied to that
+run's stored input (above), never the live model.
+
+- **`scenario`**: `id`, `project_id` (→ `project`, cascade), `name` (1–200
+  characters, unique per project ignoring case and surrounding spaces:
+  `scenario_name_idx`, which also covers the project foreign key),
+  `description` (≤ 4 000), `base_run_id` (→ `model_run`, `NO ACTION`), `ops
+  jsonb` (an array of at most 500 ops and 1 MiB of JSON text, `CHECK`),
+  `ops_sha256` (hex, the SHA-256 of the ops as RFC 8785 canonical JSON,
+  written by the API), `owned_node_ids uuid[]` (≤ 500: the proposer's own
+  nodes; ops on them are proposals, the rest baseline assumptions),
+  `owner_user_id` (→ `app_user`), `status` (`draft` | `submitted` |
+  `withdrawn` | `decided`), `created_at`, `updated_at`. Indexes cover
+  `base_run_id` and `owner_user_id`.
+- **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
+  end of the statement, so deleting a whole project (which cascades to both
+  `model_run` and `scenario`) still works, as for `run_nomination`. Any other
+  delete of a base run fails, and `model_run_cited` keeps it from being tried.
+- **`model_run.scenario_id`** (→ `scenario`, `ON DELETE SET NULL`, partial
+  index `WHERE scenario_id IS NOT NULL`): which scenario made the run. Set on
+  insert only (the app has no `UPDATE` on it). The run's own snapshot keeps
+  what the scenario was when it ran, in `inputs.scenario`: `{ id, name,
+  baseRunId, ops, opsSha256, ownedNodeIds, classified }`, so deleting,
+  editing or rebasing the scenario never changes what its runs say.
+- **Triggers.** `scenario_guard` (BEFORE INSERT, UPDATE, DELETE; `SECURITY
+  DEFINER`, `search_path` pinned): stamps `owner_user_id` from the session and
+  the times; the base must be a run of the **same project** and not itself a
+  scenario run (`foreign_key_violation` / `check_violation`); `project_id`,
+  owner and creation time never change; a scenario that isn't a `draft` is
+  **frozen** (its `ops`, `ops_sha256`, `base_run_id` and `owned_node_ids`
+  can't change) and a `submitted` or `decided` one can't be deleted; status
+  moves only `draft → submitted → withdrawn | decided`, `withdrawn → draft`.
+  `model_run_scenario_same_project` (BEFORE INSERT): a run's scenario is one
+  of its own project's. The API answers each of these with a `409` first.
+- **RLS**: `SELECT` viewer, `INSERT` / `UPDATE` / `DELETE` editor. **Farmers
+  read nothing** (no policy names them, so the viewer floor refuses them), as
+  for `model_run`: a scenario's ops and base name every farm. WP-3.3 adds the
+  applicant's own policies. `water_app` has `SELECT, INSERT, UPDATE, DELETE`.
+- **`run_series.node_id` since 024.** 001 made it a foreign key to `node`
+  (`ON DELETE CASCADE`) with a same-project trigger. A scenario run stores
+  series for nodes the live model never had (`node.add`), and the cascade
+  deleted a node's series from every earlier run when the node was deleted
+  from the model, so a kept or cited run silently lost part of its results.
+  The key, its trigger and its index are gone; the statement-level
+  `run_series_nodes_in_run` triggers (AFTER INSERT and AFTER UPDATE, one
+  read of each run's snapshot per statement) check that every row's run is
+  in the same project and its `node_id` is a node of that run's
+  `inputs.model.nodes`. A run's series now go only with the run.
+- **Concurrency.** Creating, rebasing and deleting a scenario take the
+  project's run lock (`lockProjectRuns`) first, as `trimRuns` does, so a trim
+  never misses a citation being added in the same moment. A scenario run
+  takes the same lock, then holds its scenario `FOR KEY SHARE` until it
+  commits, so the scenario can't be deleted under it (lock first, row second
+  on every path, so the two wait for each other instead of deadlocking).
+- Guards: `backend/src/scenarios/scenarios.db.test.ts` (with positive
+  controls), the catalogue tests (RLS, grants, covering indexes,
+  `search_path`) and the route inventories (auth and farmer `403`).
 
 ### Import reports (017_project_import.sql)
 
@@ -502,7 +576,7 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
   | `publication_farm` | the projections of their linked farms (022) |
   | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
-  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no other `run_series` (flows such as `inflow_upstream` are a neighbour's outflow when one farm is upstream; catchment series reveal the neighbours' use), no invites, teams, jobs, feeds or evidence |
+  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no other `run_series` (flows such as `inflow_upstream` are a neighbour's outflow when one farm is upstream; catchment series reveal the neighbours' use), no `scenario` (its ops and base name every farm; 024), no invites, teams, jobs, feeds or evidence |
 
   A farmer writes nothing: every write policy asks for `editor` or `owner`.
 - **A link needs a membership and goes with it**: `farm_link` has a foreign
@@ -599,10 +673,10 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   farmer at the database level; the publish dialog says farmers don't see it
   through the app ([security.md](./security.md)).
 - Share links read the current publication through their own definer
-  functions ([§ Share links](#share-links-024_share_linkssql)). Not built
+  functions ([§ Share links](#share-links-025_share_linkssql)). Not built
   yet: the audit log of notice changes (WP-2.4).
 
-### Share links (024_share_links.sql)
+### Share links (025_share_links.sql)
 
 Read-only links to the current publication for people outside the project
 (WP-2.3 phase 2; [api.md § Share](./api.md#share),
@@ -702,6 +776,8 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `project_import` (import reports): SELECT needs `viewer`; INSERT needs
   `owner`, as yourself, and only in the transaction that created the project;
   no UPDATE or DELETE for anyone (see § Import reports above).
+- `scenario`: SELECT needs `viewer`, INSERT / UPDATE / DELETE `editor`; a
+  submitted scenario is frozen by trigger (see § Scenarios above).
 - Farmers (`farmer` role, 020): the extra farm-scoped `SELECT` policies of
   § Farmers above; `farm_link`: viewers read every link, a farmer their own,
   owners change them.
@@ -709,7 +785,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   included, written by editors, deleted by owners; `publication_farm` read by
   viewers and the linked farmers, inserted by editors, never changed (see
   § Publications above).
-- Share links (024): `share_link` read, created and revoked by owners only,
+- Share links (025): `share_link` read, created and revoked by owners only,
   never deleted; the public reads only through `app_share_view` /
   `app_share_series` (see § Share links above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
@@ -717,9 +793,11 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - A project you are not a member of is simply **invisible**: the API returns
   `404`, never `403`, so it doesn't reveal that the project exists.
 - **Cross-project references are blocked** by `assert_same_project()` triggers.
-  An editor of project A cannot attach a crop area, transfer, downstream link or
-  run series to a node or crop id that belongs to project B, even if they know
-  the UUID.
+  An editor of project A cannot attach a crop area, transfer or downstream link
+  to a node or crop id that belongs to project B, even if they know the UUID.
+  A run series names a node of its own run's snapshot (`run_series_nodes_in_run`,
+  024), a scenario's base run and a run's scenario are checked the same way
+  (`scenario_guard`, `model_run_scenario_same_project`).
 - RLS is `ENABLE`d but not `FORCE`d. The table owner (`water`) and the
   `SECURITY DEFINER` helpers bypass it on purpose, and `water_app` is never the
   owner.

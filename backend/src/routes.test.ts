@@ -65,6 +65,23 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Scenarios (WP-3.2, 024_scenarios): auth-gated like every project route (and farmer-403, farms.db.test.ts).
+	it('inventories the scenario routes as auth-gated', () => {
+		const scenarios = [
+			'GET /projects/:id/scenarios',
+			'POST /projects/:id/scenarios',
+			'GET /projects/:id/scenarios/:sid',
+			'PATCH /projects/:id/scenarios/:sid',
+			'DELETE /projects/:id/scenarios/:sid',
+			'POST /projects/:id/scenarios/:sid/runs',
+			'POST /projects/:id/scenarios/:sid/rebase'
+		];
+		for (const r of scenarios) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Server-side PDF reports and their schedules (WP-2.15 Phase B): auth-gated like every project route.
 	it('inventories the report routes as auth-gated, and the render-session exchange as public', () => {
 		const reports = [

@@ -1,4 +1,4 @@
-// Read-only share links (roadmap WP-2.3 phase 2, 024_share_links.sql,
+// Read-only share links (roadmap WP-2.3 phase 2, 025_share_links.sql,
 // docs/api.md § Share): the request bodies, the row shapes and the URL. The
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
@@ -6,9 +6,9 @@
 import type { RestrictionLevel, CatchmentSite } from '@water-management/engine';
 import { z } from 'zod';
 
-/** Longest label, in characters (024_share_links.sql CHECK). */
+/** Longest label, in characters (025_share_links.sql CHECK). */
 export const SHARE_LABEL_MAX = 100;
-/** Longest a link lives, in days (024_share_links.sql CHECK). */
+/** Longest a link lives, in days (025_share_links.sql CHECK). */
 export const SHARE_DAYS_MAX = 365;
 
 /** The catchment series a share link may read (app_share_series' allowlist). */

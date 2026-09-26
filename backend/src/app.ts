@@ -20,6 +20,7 @@ import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { runRoutes } from './runs/routes.js';
+import { scenarioRoutes } from './scenarios/routes.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
 import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
@@ -92,6 +93,7 @@ export function createApp() {
 	projects.route('/', runRoutes);
 	projects.route('/', uncertaintyRoutes);
 	projects.route('/', evidenceRoutes);
+	projects.route('/', scenarioRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);

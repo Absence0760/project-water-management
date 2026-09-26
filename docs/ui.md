@@ -46,8 +46,8 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 Settings has its own save button, which sits above that bar.
 
 **Popups and Escape.** Every popup closes on Escape: help tips (ⓘ), the
-account menu, the "Data up to" dropdown, the download menu and the dialogs.
-Help tips, the account menu and the "Data up to" dropdown also close on a
+account menu, the "Rain up to" dropdown, the download menu and the dialogs.
+Help tips, the account menu and the "Rain up to" dropdown also close on a
 click outside. The one exception guards
 unsaved input: while **Add data** holds a file that is read but not uploaded
 (or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
@@ -67,9 +67,13 @@ shorter than the cap looks as before.
 
 ## Header: data freshness and "Add data"
 
-- **Data up to 14 Jun 2026 · 12 days ago**: the latest end date across the
-  input series. Click it for each series' end date. It turns amber when the
-  newest data is more than 7 days old (`STALE_DAYS` in
+- **Rain up to 14 Jun 2026 · 12 days ago**: the latest end of the
+  **recorded rain** (catchment or CHIRPS, `isRecordedRain`), which is what a
+  run is driven by. A forecast runs into the future and observed flow only
+  scores a run, so neither counts: either would read "up to date" while the
+  rain lags. With no recorded rain it reads "No recorded rain yet". Click it
+  for every series' end date. It turns amber when the recorded rain is more
+  than 7 days old (`STALE_DAYS` in
   `series/freshness.ts`; a candidate for a project setting). Ages count
   calendar days up to the viewer's **local** date (`localIsoDate`); the
   project list's badge (`projects/freshness.ts`) counts the same way from its
@@ -928,7 +932,9 @@ run's report to chosen members every week or month.
   panel; the order above is the page's.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
-  rainfall series. While a run is going it shows progress. A note says when
+  rainfall series, and while the farms' flow shares add up to more than 100 %
+  (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
+  the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
   run shown; editors delete one with its ✕. Rows are compact so several fit

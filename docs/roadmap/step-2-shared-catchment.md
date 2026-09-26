@@ -455,7 +455,7 @@ first if needed).
 ### WP-2.3 Published baseline, restriction notice and share links
 
 > **Status (2026-09-25).** Phase 1 (publications, the farm projection and
-> the publish flow) and phase 2 (share links: `024_share_links.sql`,
+> the publish flow) and phase 2 (share links: `025_share_links.sql`,
 > `backend/src/share/`, the `/share` page and the Overview's Share links
 > panel) are built. Phase 2 departs from this plan in three places, each
 > stricter: `app_share_series` answers only with at least `FARMER_K` = 5
