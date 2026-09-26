@@ -10,6 +10,8 @@ import {
 	ProjectionInputError,
 	upgradeLegacyModel,
 	type CatchmentView,
+	type CropArea,
+	type CropDef,
 	type FarmProjection,
 	type ForecastSummary,
 	type NetworkNode,
@@ -217,7 +219,8 @@ async function loadProjectionRun(
 		start_date: string;
 		end_date: string;
 		engine_version: string;
-		model: { nodes?: NetworkNode[]; transfers?: Transfer[] } | null;
+		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[] } | null;
+		apan_mm: unknown;
 		runoff_model: string;
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
 		observed_until: string | null;
@@ -236,7 +239,7 @@ async function loadProjectionRun(
 				 FROM jsonb_each(inputs->'series') s
 				 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0)) AS observed_until,
 			summary->'forecast' AS forecast, created_at, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone,
-			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, summary->'calibration' AS calibration
+			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, inputs->'settings'->'apanMm' AS apan_mm, summary->'calibration' AS calibration
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -258,6 +261,10 @@ async function loadProjectionRun(
 			...(r.observed_until ? { dataUntil: r.observed_until } : {}),
 			nodes,
 			transfers: (model.transfers ?? []) as Transfer[],
+			// Crops under their own irrigation efficiency (engine ≥ 0.43.0) set the farm's efficiency and consumptive share.
+			crops: (model.crops ?? []) as CropDef[],
+			cropAreas: (model.cropAreas ?? []) as CropArea[],
+			apanMm: Array.isArray(r.apan_mm) ? r.apan_mm : [],
 			series: (nodeId, key) => byKey.get(`${nodeId ?? ''}|${key}`)
 		},
 		engineVersion: r.engine_version,

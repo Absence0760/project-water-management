@@ -35,7 +35,14 @@ function runs(count: number) {
 }
 
 const cases = runs(8);
-const network = (input: ModelInput) => ({ nodes: input.model.nodes, transfers: input.model.transfers });
+// The run's snapshot as ReportWindowPanel hands it over: the crops, crop areas and A-pan too (engine 0.43.0).
+const network = (input: ModelInput) => ({
+	nodes: input.model.nodes,
+	transfers: input.model.transfers,
+	crops: input.model.crops,
+	cropAreas: input.model.cropAreas,
+	apanMm: input.settings.apanMm as number[] | undefined
+});
 
 describe('the reporting window, worked out by the engine', () => {
 	it('equals runModel with the picked window as the project setting, the binding EWR site included', () => {
@@ -62,6 +69,23 @@ describe('the reporting window, worked out by the engine', () => {
 		}
 		// The column the browser couldn't fill before: some picked window has a farm charged by a site.
 		expect(bound).toBeGreaterThan(0);
+	});
+
+	it('curtails a farm whose crops carry their own irrigation efficiency on the efficiency the run used', () => {
+		let checked = 0;
+		for (const { input } of cases) {
+			const drip = structuredClone(input);
+			drip.model.crops.forEach((c, i) => (c.irrigationEfficiency = i % 2 ? 0.95 : 0.55));
+			const run = runModel(drip);
+			if (!run.summary.curtailment?.farms.length) continue;
+			const res = resolveWindow({ preset: 'project' }, run, run.summary.curtailment);
+			if (!res.ok) throw new Error(res.error);
+			const got = prepareWindowed(run, network(drip), storedLookup(run)).over(res.window);
+			if (got.bindingApproximate) continue;
+			expect(got.curtailment.farms).toEqual(run.summary.curtailment.farms);
+			checked++;
+		}
+		expect(checked).toBeGreaterThan(0);
 	});
 
 	it('fetches every series the engine reads, and the run stores each of them', () => {

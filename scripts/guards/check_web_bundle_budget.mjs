@@ -694,7 +694,12 @@
 //             sign-in 71.5 → 63.0, /share 74.3 → 65.7). New measurement + 5
 //             would be 974, over the current ceiling, so it stays; headroom
 //             ~4 KB. Build-time key shortening is moot: no keys are left.
-// 2026-09-26  total 973 → 985 KB. main measured 979 (over the ceiling after
+// 2026-09-26  total 973 → 978 KB (measured 975). Issue #54 adds ~6 KB: the
+//             upload's overwrite confirm, History's "Restore the earlier
+//             values", the scenario and compare support and help entries for
+//             the supply rules (engine 0.42.0) and the crop demand options
+//             (0.43.0). The i18n trim above has landed; headroom ~3 KB.
+// 2026-09-26  total 978 → 985 KB. main measured 979 (over the ceiling after
 //             the English-as-key trim, 969, and the merges since: #53's
 //             year classes and demand.scale op, WP-3.8's supply rules);
 //             issue #17's Network map filling the screen adds 1 (980).

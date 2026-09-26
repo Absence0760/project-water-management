@@ -16,6 +16,10 @@ function asRun(input: ModelInput, out: ModelOutput): ProjectionRun {
 		endDate: out.endDate,
 		nodes: input.model.nodes,
 		transfers: input.model.transfers,
+		// Crops under their own irrigation efficiency (engine 0.43.0) set a farm's consumptive share.
+		crops: input.model.crops,
+		cropAreas: input.model.cropAreas,
+		apanMm: input.settings?.apanMm,
 		series: (nodeId, key) => byKey.get(`${nodeId ?? ''}|${key}`)
 	};
 }
@@ -86,6 +90,26 @@ function scenario(opts: { startDate?: string; days?: number } = {}) {
 	const out = runModelWith(input, () => ({ naturalFlowM3Day: natural }));
 	return { input, out, run: asRun(input, out) };
 }
+
+describe('a crop under its own irrigation efficiency (engine 0.43.0)', () => {
+	it('shows the efficiency the run used and curtails with its consumptive share, given the snapshot’s crops', () => {
+		const { input } = scenario();
+		// Maize, the only crop, on drip at 0.9: every farm runs at 0.9, not its own 0.75.
+		const drip: ModelInput = { ...input, model: { ...input.model, crops: input.model.crops.map((c) => ({ ...c, irrigationEfficiency: 0.9 })) } };
+		const d0 = Date.parse('2021-10-01T00:00:00Z');
+		const natural = Array.from({ length: 822 }, (_, t) => ([0, 1].includes(new Date(d0 + t * 86_400_000).getUTCMonth()) ? 40_000 : 3_000));
+		// Reported over the season, so runModel's own table is the one the projection must match.
+		const seasonal = { ...drip, settings: { ...drip.settings, reportStart: '2023-10-01', reportEnd: '2023-12-31' } };
+		const out = runModelWith(seasonal, () => ({ naturalFlowM3Day: natural }));
+		const run = asRun(seasonal, out);
+		expect(farmProjection(run, 'dam').irrigationEfficiency).toBeCloseTo(0.9, 12);
+		expect(analyseSeason(run).curtailment.farms).toEqual(out.summary.curtailment!.farms);
+		// Without the crops (an older caller) it falls back to the farm's own efficiency, and the table is off.
+		const bare: ProjectionRun = { ...run, crops: undefined, cropAreas: undefined };
+		expect(farmProjection(bare, 'dam').irrigationEfficiency).toBe(0.75);
+		expect(analyseSeason(bare).curtailment.farms).not.toEqual(out.summary.curtailment!.farms);
+	});
+});
 
 describe('windowSummary', () => {
 	const v = [1, 2, 3, null, 5];

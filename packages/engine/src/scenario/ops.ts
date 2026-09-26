@@ -15,6 +15,7 @@ import {
 	LAND_COVER_CLASSES,
 	PE_KINDS,
 	PE_SOURCE_MAX,
+	SUPPLY_RULES,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
 	type CalibrationFlowKind,
@@ -204,6 +205,8 @@ export function transferFieldError(field: string, value: unknown): string | null
 export interface SettingsPathValues {
 	februaryDays: number;
 	effectiveRainFraction: number;
+	/** Monthly effective-rain fractions (engine ≥ 0.43.0); null = the one fraction in every month. */
+	effectiveRainFractionMonthly: number[] | null;
 	effectiveRainStoreMm: number;
 	lakeEvapFactor: number;
 	/** Monthly lake factors (WP-3.5); null = the one factor in every month. */
@@ -273,6 +276,7 @@ const gr4j = (key: string): Check => {
 const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	februaryDays: range(28, 29),
 	effectiveRainFraction: frac,
+	effectiveRainFractionMonthly: nullable(monthlyOf(frac)),
 	effectiveRainStoreMm: range(0, 500),
 	lakeEvapFactor: range(0, 2),
 	lakeEvapFactorMonthly: nullable(monthlyOf(range(0, 2))),
@@ -492,7 +496,12 @@ const NODE_FIELDS: Record<string, Check> = {
 		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every((r) => isObj(r) && isNum(r.levelM) && isNum(r.areaM2) && isNum(r.volumeM3))
 			? null
 			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
-	)
+	),
+	// Its supply rule and river pump (engine ≥ 0.42.0, WP-3.8): the editor's new node carries them; runModel checks how they fit together.
+	supplyRule: oneOf(SUPPLY_RULES),
+	pumpCapacityM3Day: nullable(nonNeg),
+	supplyTriggerPct: range(0, 1),
+	supplyStopPct: range(0, 1)
 };
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -500,12 +509,27 @@ export function nodeAddFieldError(field: string, value: unknown): string | null 
 	return c ? c(value) : `"${field}" is not a node field`;
 }
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
-const NODE_OPTIONAL = new Set<string>(['sortOrder', 'damAreaFullM2', 'damAreaExponent', 'damSeepagePerDay', 'damCurve', ...DAM_STORAGE, ...USER, ...BOREHOLES]);
+const NODE_OPTIONAL = new Set<string>([
+	'sortOrder',
+	'damAreaFullM2',
+	'damAreaExponent',
+	'damSeepagePerDay',
+	'damCurve',
+	'supplyRule',
+	'pumpCapacityM3Day',
+	'supplyTriggerPct',
+	'supplyStopPct',
+	...DAM_STORAGE,
+	...USER,
+	...BOREHOLES
+]);
 const CROP_FIELDS: Record<string, Check> = {
 	id,
 	name,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
-	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0')
+	cropFactor: (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0'),
+	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
+	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
 };
 const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
 const LAND_COVER_FIELDS: Record<string, Check> = {
@@ -567,7 +591,7 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
 			break;
 		case 'crop.add':
-			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder'])) as unknown as CropDef };
+			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationEfficiency'])) as unknown as CropDef };
 			break;
 		case 'transfer.add':
 			op = { op: 'transfer.add', transfer: sub('transfer', TRANSFER_FIELDS) as unknown as Transfer };
