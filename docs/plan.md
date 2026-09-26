@@ -263,8 +263,10 @@ writing, or gives a ranked change list.
 - 🚧 **Scenarios:** compare two runs or two projects (for example the baseline
   and "farm X's dam +50%"), with difference charts and a difference table.
   Run comparison is built ([run-comparison.md](./run-comparison.md)); scenarios
-  within a project are roadmap step 3
-  ([#18](https://github.com/Absence0760/project-water-management/issues/18)).
+  within a project (roadmap step 3,
+  [#18](https://github.com/Absence0760/project-water-management/issues/18)) have
+  their engine, backend and API ([scenarios.md](./scenarios.md)); the
+  Scenarios tab is next.
 - ⬜ **EWR tooling:** derive the pragmatic EWR from Desktop Reserve tables
   (percentile, scale factor, per-month overrides), as `[EWR Cfg]` does (Q10).
 - ✅ **Reports:** EWR analysis by farm × year × month, count and % of days not
