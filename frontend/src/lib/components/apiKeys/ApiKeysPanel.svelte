@@ -228,10 +228,12 @@
 		font-size: 0.85rem;
 		margin-bottom: 0.25rem;
 	}
+	/* A 24 px row keeps each radio's target clear of its neighbour's (WCAG 2.5.8). */
 	.choice {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
+		min-height: 24px;
 		font-weight: 400;
 		margin: 0.15rem 0;
 	}
