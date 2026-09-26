@@ -134,6 +134,31 @@ test('the import dialogs open and close from the keyboard, focus returning to th
 	}
 });
 
+// The dialog's chunk failing to download (a network blip, or a deploy that
+// removed it) says so on the page and offers a reload: the browser keeps a
+// failed module fetch for the life of the page, so only a reload retries it.
+test('an import dialog that fails to download says so, and a reload recovers', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	// Every code chunk the page asks for from here on is the dialog's.
+	const blocked = '**/_app/immutable/**/*.js';
+	await page.route(blocked, (r) => r.abort());
+	const trigger = page.getByRole('button', { name: 'Import project file (.json)', exact: true });
+	await trigger.click();
+	const alert = page.getByRole('alert');
+	await expect(alert).toHaveText('The import could not be loaded. Check your connection, then reload the page. Reload');
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+
+	await page.unroute(blocked);
+	await alert.getByRole('button', { name: 'Reload' }).click();
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	await trigger.click();
+	const dialog = page.getByRole('dialog', { name: 'Import project file' });
+	await expect(dialog.getByLabel('Project file (.json)')).toBeVisible();
+	await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('a broken file is refused and nothing is created', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/');

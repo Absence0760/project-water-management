@@ -391,7 +391,10 @@ sets its wording and what the file picker offers, and the picked file's type
 decides how it's read, so a workbook picked from the JSON button still works.
 Two buttons rather than one "Import…": the client looks for a named workbook
 import, and the two sources explain themselves differently (a workbook's
-review has options and reports a `.json` file doesn't).
+review has options and reports a `.json` file doesn't). The dialog downloads
+on demand (hovering or focusing a button starts it); if that download fails,
+the list says so and offers **Reload**
+([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
 **A click anywhere on a project's row opens it.** The name link stretches
 over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:

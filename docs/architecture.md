@@ -129,6 +129,19 @@ that needs them.
   tab link warms its chunk on hover or focus, so switching tabs rarely shows
   the loading state.
 
+The project list (`routes/+page.svelte`) loads its import dialog
+(`components/import/ImportProjectDialog.svelte`, with the preview, the
+workbook review and the engine's series provenance and kinds code they use:
+18 KB gzip) the same way, without `Lazy`: hovering or focusing either import
+button warms the chunk, and a press opens the dialog as soon as it is there,
+with no loading state (the button keeps focus, so Escape returns to it). If
+the download fails the page says so and offers a reload, because a browser
+keeps a module that failed to fetch for the life of the page. Home's first
+load fell 81.5 → 65.5 KB gzip (2026-09-26); the total rose 2 KB (889.4 →
+891.5), the cost of the extra chunks. `components/import/homeSplit.test.ts`
+fails if the page, or anything it imports statically, reaches the import
+components or the spreadsheet code again.
+
 Help tooltips (`components/help/HelpTip.svelte`) don't import the help text
 either. The text is three modules, each its own chunk: `lib/help/tips.ts`
 (each entry's term, short text, units and field keys: 10 KB gzip),
