@@ -219,7 +219,11 @@ const WRITE_ROUTES: Entry[] = [
 	{
 		route: `POST ${P}/scenarios/:sid/runs`,
 		records: ['run.created'],
-		call: (c) => c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/runs`, {})
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/runs`, {});
+			c.scenarioRunId = r.body.run?.id;
+			return r;
+		}
 	},
 	{
 		route: `DELETE ${P}/scenarios/:sid`,
@@ -344,6 +348,12 @@ describe('every write route records its change', () => {
 			}
 		});
 	}
+
+	it("refuses to restore a scenario run's inputs into the project", async () => {
+		const res = await ctx.owner.call('POST', `${at(ctx)}/runs/${ctx.scenarioRunId}/restore-inputs`, {});
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/scenario run/);
+	});
 
 	it('gives every exemption a reason', () => {
 		for (const e of WRITE_ROUTES) if ('exempt' in e) expect(e.exempt.length, e.route).toBeGreaterThan(20);

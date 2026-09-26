@@ -223,8 +223,9 @@ const readRestoreBody = async (c: Context): Promise<{ reason?: string }> => {
 /** A run's settings and model (its input snapshot minus series), or null when the run isn't visible. */
 async function runInputs(db: Db, projectId: string, runId: string) {
 	if (!UUID.test(runId)) return null;
-	const { rows } = await db.query<{ inputs: RunInputsSnapshot; created_at: Date; label: string; scenario_id: string | null }>(
-		'SELECT inputs, created_at, label, scenario_id FROM model_run WHERE project_id = $1 AND id = $2',
+	// A scenario run: scenario_id, or its snapshot's scenario once the scenario is deleted (024_scenarios).
+	const { rows } = await db.query<{ inputs: RunInputsSnapshot; created_at: Date; label: string; scenario: boolean }>(
+		`SELECT inputs, created_at, label, (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
 	return rows[0] ?? null;
@@ -311,7 +312,7 @@ export const historyRoutes = new Hono<AuthEnv>()
 			const run = await runInputs(db, id, runId);
 			if (!run) throw new ApiError(404, 'not found');
 			// A scenario run's inputs are its scenario applied to a base run (024_scenarios), not a state the project was ever in.
-			if (run.scenario_id) throw new ApiError(409, "this is a scenario run: its inputs are the scenario's changes on its base run, so they aren't restored into the project");
+			if (run.scenario) throw new ApiError(409, "this is a scenario run: its inputs are the scenario's changes on its base run, so they aren't restored into the project");
 			const settings = { ...(run.inputs.settings ?? {}) };
 			const reason = body.reason ?? `Inputs of the run${run.label ? ` "${run.label}"` : ''} of ${run.created_at.toISOString().slice(0, 10)}`.slice(0, 500);
 			return c.json(await restoreInputs(db, id, { settings, model: run.inputs.model }, { reason, restoredFromRun: runId }), 201);

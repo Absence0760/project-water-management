@@ -8,7 +8,7 @@ const outlet = node('Weir', null);
 const a = node('A', outlet.id);
 const b = node('B', outlet.id);
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
-const model = (over: Partial<ProjectModel> = {}): ProjectModel =>
+const model = (over: Record<string, unknown> = {}): ProjectModel =>
 	({
 		nodes: [outlet, a, b],
 		crops: [crop],
