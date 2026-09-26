@@ -33,7 +33,7 @@
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields } from '$lib/series/provenance';
+	import { asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
@@ -293,6 +293,10 @@
 	</div>
 {/if}
 
+{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+	<p class="alert alert-info" role="status" data-testid="rebuilding-note">{rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}</p>
+{/if}
+
 <section class="panel" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
@@ -340,6 +344,9 @@
 							<th scope="row" role="rowheader">
 								<span class="kind">{kindLabel(s.kind)}</span>
 								<span class="nm">{s.name || '–'} <span class="u">({s.unit})</span></span>
+								{#if s.rebuilding}
+									<span class="rebuilding" data-testid="series-rebuilding" title="A data feed is backfilling a replacement; this series stays as it is until it completes">Being replaced</span>
+								{/if}
 								{#if asksProvenance(s.kind)}
 									{#if readonly}
 										<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
@@ -514,6 +521,16 @@
 		font-weight: 400;
 		color: var(--text-2);
 		font-size: 0.82rem;
+	}
+	.rebuilding {
+		display: inline-block;
+		margin-top: 0.15rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0 0.4rem;
+		border-radius: 999px;
+		background: var(--warning-soft);
+		color: var(--warning);
 	}
 	.prov {
 		display: block;

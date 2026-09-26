@@ -46,6 +46,8 @@ export interface FeedMeta {
 	versionConflict: boolean;
 	/** A confirmed replacement waiting for the next fetch: what it will replace ('' = unrecorded). */
 	replaceFrom: string | null;
+	/** A confirmed replacement being backfilled in its stage: the new record so far. */
+	rebuilding?: { startDate: string; through: string; updatedAt: string } | null;
 }
 
 /** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
@@ -57,7 +59,9 @@ export type HealthReason =
 	| { code: 'no-data' }
 	| { code: 'not-fetched'; since: string; after: 'attached' | 'changed' }
 	| { code: 'waiting' }
-	| { code: 'ok'; newest: string | null; checked: string };
+	| { code: 'ok'; newest: string | null; checked: string }
+	| { code: 'rebuilding'; from: string; through: string }
+	| { code: 'rebuild-stalled'; from: string; through: string; since: string };
 
 export interface FeedHealth {
 	state: FeedState;
@@ -227,11 +231,13 @@ export function versionClash(
 }
 
 /** A listed feed whose target holds another version: what to tell the owner, or null. */
-export function conflictMessage(f: Pick<FeedMeta, 'versionConflict' | 'series' | 'writes' | 'replaceFrom'>): string | null {
+export function conflictMessage(f: Pick<FeedMeta, 'versionConflict' | 'series' | 'writes' | 'replaceFrom' | 'rebuilding'>): string | null {
 	if (!f.versionConflict || !f.writes) return null;
 	const holds = provenanceLabel(f.series?.provenance);
 	const writes = provenanceLabel(f.writes);
-	if (f.replaceFrom !== null) return `Replacement confirmed: the next fetch replaces the series (${holds}) with ${writes}, from the feed’s start date. Refit afterwards.`;
+	if (f.replaceFrom !== null) {
+		return `Replacement confirmed: the feed backfills ${writes} from its start date, then replaces the series (${holds}) with it whole. Until then runs use the series as it is. Refit afterwards.`;
+	}
 	return `The series holds ${holds} and this feed writes ${writes}, so every fetch is refused: two versions spliced into one record would break it. Replace the series, or remove the feed and attach it to a separate series.`;
 }
 
@@ -301,6 +307,10 @@ export function healthMessage(h: FeedHealth): string {
 			return 'Waiting for its first fetch.';
 		case 'ok':
 			return `OK; ${newest(r.newest)}, checked ${fmtDay(r.checked)}.`;
+		case 'rebuilding':
+			return `Replacing the series: the new record runs ${fmtDay(r.from)} to ${fmtDay(r.through)} so far. The series stays as it is until the backfill completes.`;
+		case 'rebuild-stalled':
+			return `The replacement stopped growing on ${fmtDay(r.since)} (the new record runs ${fmtDay(r.from)} to ${fmtDay(r.through)}); the series stays as it is. Run it now, or withdraw the replacement.`;
 		default:
 			return `${STATE_LABELS[h.state] ?? 'Unknown state'}.`;
 	}

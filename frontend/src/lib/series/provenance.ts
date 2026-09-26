@@ -50,6 +50,17 @@ export function chirpsSourceOfInput(series: Partial<Record<string, Pick<RunSerie
 	return c.provenance === undefined ? undefined : c.provenance;
 }
 
+/**
+ * The note a page shows while a data feed backfills a confirmed replacement
+ * of any of these series (issue #40c), or null: runs keep using the series as
+ * it is until the new record swaps in whole.
+ */
+export function rebuildingNote(list: readonly Pick<SeriesMeta, 'kind' | 'name' | 'rebuilding'>[] | null | undefined, label: (s: Pick<SeriesMeta, 'kind' | 'name'>) => string): string | null {
+	const r = (list ?? []).filter((s) => s.rebuilding);
+	if (!r.length) return null;
+	return `A data feed is replacing ${r.map(label).join(', ')} with another CHIRPS product or version. Runs use the current series until the replacement completes; refit after it does.`;
+}
+
 /** "CHIRPS v2.0", or "version not recorded", for a series list. */
 export const describeProvenance = (s: Pick<SeriesMeta, 'product' | 'productVersion'>) => {
 	const p = seriesProvenance(s);

@@ -710,6 +710,8 @@ export interface SeriesMeta {
 	/** What the values are (031_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;
+	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 031). */
+	rebuilding?: boolean;
 }
 
 // ---------------------------------------------------------------------------

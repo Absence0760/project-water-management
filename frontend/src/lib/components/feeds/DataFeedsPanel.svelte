@@ -182,7 +182,7 @@
 		document.getElementById(`${uid}-name`)?.focus();
 	}
 
-	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace') {
+	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace' | 'withdraw') {
 		if (busy) return;
 		if (what === 'remove' && !confirm(`Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
 		if (
@@ -200,7 +200,10 @@
 				message = r.created ? 'Fetch queued. The status below updates once the background worker has run it.' : 'A fetch for this feed is already waiting to run.';
 			} else if (what === 'replace') {
 				await feeds.update(f.id, { replaceSeries: true });
-				message = 'Replacement confirmed: the next fetch replaces the series. Run it now, or wait for the schedule.';
+				message = 'Replacement confirmed: the feed backfills the new record, then replaces the series. Run it now, or wait for the schedule.';
+			} else if (what === 'withdraw') {
+				await feeds.update(f.id, { replaceSeries: false });
+				message = 'Replacement withdrawn: what was backfilled is discarded, and the series stays as it is.';
 			} else if (what === 'toggle') {
 				await feeds.update(f.id, { enabled: !f.enabled });
 				message = f.enabled ? 'Feed switched off.' : 'Feed switched on; it runs on the next schedule.';
@@ -269,6 +272,9 @@
 								{/if}
 								{#if data.canEdit && f.versionConflict && f.replaceFrom === null}
 									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === f.id} aria-label="Replace the series: {describeTarget(f)}" onclick={() => act(f, 'replace')}>Replace the series</button>
+								{/if}
+								{#if data.canEdit && f.replaceFrom !== null}
+									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="Withdraw the replacement: {describeTarget(f)}" onclick={() => act(f, 'withdraw')}>Withdraw the replacement</button>
 								{/if}
 								{#if data.canEdit}
 									<button type="button" class="btn btn-sm" aria-disabled={busy === f.id} aria-label="{f.enabled ? 'Switch off' : 'Switch on'}: {describeTarget(f)}" onclick={() => act(f, 'toggle')}>

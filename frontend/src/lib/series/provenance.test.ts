@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asksProvenance, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, seriesProvenance } from './provenance';
+import { asksProvenance, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -20,6 +20,15 @@ describe('series provenance choices', () => {
 		expect(seriesProvenance(undefined)).toBeNull();
 		expect(describeProvenance({ product: 'CHIRPS', productVersion: '2.0' })).toBe('CHIRPS v2.0');
 		expect(describeProvenance({})).toBe('version not recorded');
+	});
+
+	it('notes a series a feed is replacing, for the Data and Runs tabs', () => {
+		const label = (s: { kind: string; name: string }) => s.name || s.kind;
+		expect(rebuildingNote([{ kind: 'rain_chirps_mm', name: '', rebuilding: false }], label)).toBeNull();
+		expect(rebuildingNote(null, label)).toBeNull();
+		expect(rebuildingNote([{ kind: 'rain_chirps_mm', name: 'Grid', rebuilding: true }, { kind: 'rain_catchment_mm', name: '' }], label)).toBe(
+			'A data feed is replacing Grid with another CHIRPS product or version. Runs use the current series until the replacement completes; refit after it does.'
+		);
 	});
 
 	it('finds the CHIRPS label a run would use: the first CHIRPS series, and says when it can’t know', () => {

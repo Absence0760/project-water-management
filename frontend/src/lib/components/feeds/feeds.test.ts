@@ -104,10 +104,22 @@ describe('the CHIRPS version guard (issue #40c)', () => {
 		expect(versionClash(v2, { source: 'dws', config: { station: 'X0H000' } })).toBeNull();
 	});
 
+	it('says how far a staged replacement has got, or that it stalled', () => {
+		const h = (reason: HealthReason, state: FeedState = 'pending'): FeedHealth => ({ state, stale: false, staleAfterDays: 12, reason });
+		expect(healthMessage(h({ code: 'rebuilding', from: '2001-01-01', through: '2001-04-30' }))).toBe(
+			'Replacing the series: the new record runs 1 Jan 2001 to 30 Apr 2001 so far. The series stays as it is until the backfill completes.'
+		);
+		expect(healthMessage(h({ code: 'rebuild-stalled', from: '2001-01-01', through: '2001-04-30', since: '2026-09-23' }, 'stale'))).toMatch(
+			/^The replacement stopped growing on 23 Sep 2026 .*withdraw the replacement\.$/
+		);
+	});
+
 	it('tells the owner why a listed feed is refused, or that the replacement is waiting', () => {
 		const f = { versionConflict: true, series: { filled: true, provenance: { product: 'CHIRPS', version: '2.0' } }, writes: { product: 'CHIRPS sat', version: '3.0' }, replaceFrom: null };
 		expect(conflictMessage(f)).toMatch(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
-		expect(conflictMessage({ ...f, replaceFrom: 'CHIRPS/2.0' })).toMatch(/^Replacement confirmed: the next fetch replaces the series \(CHIRPS v2\.0\) with CHIRPS sat v3\.0/);
+		expect(conflictMessage({ ...f, replaceFrom: 'CHIRPS/2.0' })).toMatch(
+			/^Replacement confirmed: the feed backfills CHIRPS sat v3\.0 from its start date, then replaces the series \(CHIRPS v2\.0\) with it whole\. Until then runs use the series as it is/
+		);
 		expect(conflictMessage({ ...f, versionConflict: false })).toBeNull();
 	});
 });

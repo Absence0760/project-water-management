@@ -208,18 +208,30 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	await expect(feed).toHaveCount(1);
 	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: its first fetch replaces Rainfall — CHIRPS with CHIRPS sat v3.0.' })).toBeVisible();
 	await expect(feed).toContainText('cell -20.12, 25.17 · CHIRPS sat v3.0');
-	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(/^Replacement confirmed: the next fetch replaces the series \(CHIRPS v2\.0\) with CHIRPS sat v3\.0/);
+	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(
+		/^Replacement confirmed: the feed backfills CHIRPS sat v3\.0 from its start date, then replaces the series \(CHIRPS v2\.0\) with it whole/
+	);
 
-	// The fetch replaces it: the conflict is gone. Then the v2 values come back (a restore, or an upload):
-	// every fetch is refused again, and the card offers the replacement.
+	// The first fetch stages the new record (2001 onwards is a long backfill): the card says how far it has got,
+	// and the Data and Runs tabs say runs keep the current series until it completes.
 	await runJobsTick();
-	await putSeries(page.request, project.id, v2);
 	await page.reload();
+	await expect(feed.getByRole('paragraph').filter({ hasText: /^Replacing the series: the new record runs 1 Jan 2001 to 30 Apr 2001 so far\./ })).toBeVisible();
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.getByTestId('rebuilding-note')).toHaveText(/Runs use the current series until the replacement completes/);
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await expect(page.getByTestId('series-rebuilding')).toHaveText('Being replaced');
+
+	// Withdrawing discards what was staged; the card then says every fetch is refused and offers the replacement again.
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Replacement withdrawn' })).toBeVisible();
 	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
 	page.once('dialog', (d) => void d.accept());
 	await feed.getByRole('button', { name: 'Replace the series: Rainfall — CHIRPS' }).click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Replacement confirmed: the next fetch replaces the series.' })).toBeVisible();
+	await expect(panel.getByRole('status').filter({ hasText: 'Replacement confirmed: the feed backfills the new record' })).toBeVisible();
 	await expect(feed.getByRole('button', { name: /^Replace the series/ })).toHaveCount(0);
+	await expect(feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' })).toBeVisible();
 });
 
 test('an action on a feed changed elsewhere says why it failed and shows the list as it is now', async ({ page, owner }) => {

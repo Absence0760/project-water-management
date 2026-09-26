@@ -900,7 +900,13 @@ its own chunk loaded with the tab; WP-2.10,
   every fetch is refused and why ("The series holds CHIRPS v2.0 and this feed
   writes CHIRPS sat v3.0 …"), and owners get **Replace the series** (after a
   confirm naming the full backfill, the History tab keeping the old values,
-  and the refit). Once confirmed the card says the next fetch replaces it.
+  and the refit). Once confirmed the card says the feed backfills the new
+  record and then replaces the series whole, with **Withdraw the
+  replacement** (discards what was backfilled). While it backfills, the
+  health sentence says how far it has got ("Replacing the series: the new
+  record runs 1 Jan 2001 to 30 Apr 2001 so far …"), or that it stalled; the
+  Data tab marks the series **Being replaced** and both the Data and Runs
+  tabs note that runs use the current series until it completes.
 - **A warning** above the list counts the feeds that are stale or failing
   ("1 feed needs attention: …", `role="alert"`).
 - **Run now** (editors) queues a fetch at once and says so; the status

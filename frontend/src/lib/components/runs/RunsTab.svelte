@@ -4,7 +4,8 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { chirpsSourceOfInput } from '$lib/series/provenance';
+	import { chirpsSourceOfInput, rebuildingNote } from '$lib/series/provenance';
+	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -405,6 +406,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {/if}
 
 {#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
+{#if rebuildingNote(series, (s) => s.name || kindLabel(s.kind))}
+	<p class="alert alert-info" role="status" data-testid="rebuilding-note">{rebuildingNote(series, (s) => s.name || kindLabel(s.kind))}</p>
+{/if}
 {#if drift}<p class="alert alert-warning" role="status" data-testid="evidence-drift">{drift}</p>{/if}
 
 <div class="layout">
