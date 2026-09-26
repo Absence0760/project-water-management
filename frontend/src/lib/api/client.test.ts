@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, createApi } from './client';
+import { ApiError, createApi, scenarioProblems } from './client';
 
 function mockFetch(status: number, body?: unknown, raw?: string) {
 	return vi.fn(async () =>
@@ -318,5 +318,59 @@ describe('teams client', () => {
 		const f = mockFetch(200, { changes: [] });
 		await createApi('http://x', f).compare.runs('p1:r1', 'p2:r2');
 		expect((f.mock.calls[0] as unknown as [string])[0]).toBe('http://x/compare/runs?a=p1%3Ar1&b=p2%3Ar2');
+	});
+});
+
+describe('scenarios client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+	const scenario = { id: 's/1', name: 'Dam raise', status: 'draft' };
+	const check = { applied: [], problems: [], classified: [] };
+
+	it('lists, reads, creates, updates and removes scenarios', async () => {
+		const list = mockFetch(200, { scenarios: [scenario] });
+		expect(await createApi('', list).scenarios.list('p/1')).toEqual([scenario]);
+		expect(call(list)).toEqual({ url: '/projects/p%2F1/scenarios', method: 'GET', body: undefined });
+
+		const get = mockFetch(200, { scenario, check, checkError: null });
+		expect(await createApi('', get).scenarios.get('p', 's/1')).toEqual({ scenario, check, checkError: null });
+		expect(call(get).url).toBe('/projects/p/scenarios/s%2F1');
+
+		const body = { name: 'Dam raise', baseRunId: 'r1', ops: [] };
+		const create = mockFetch(201, { scenario, check, checkError: null });
+		await createApi('', create).scenarios.create('p', body);
+		expect(call(create)).toEqual({ url: '/projects/p/scenarios', method: 'POST', body });
+
+		const update = mockFetch(200, { scenario, check, checkError: null });
+		await createApi('', update).scenarios.update('p', 's', { status: 'submitted' });
+		expect(call(update)).toEqual({ url: '/projects/p/scenarios/s', method: 'PATCH', body: { status: 'submitted' } });
+
+		const remove = mockFetch(204);
+		await expect(createApi('', remove).scenarios.remove('p', 's')).resolves.toBeUndefined();
+		expect(call(remove)).toEqual({ url: '/projects/p/scenarios/s', method: 'DELETE', body: undefined });
+	});
+
+	it('runs a scenario (no trimmed ids from an older server) and rebases it, dry run by choice', async () => {
+		const run = { id: 'r2', scenarioId: 's' };
+		const f = mockFetch(201, { run, applied: [], classified: ['proposal'] });
+		expect(await createApi('', f).scenarios.run('p', 's')).toEqual({ run, applied: [], classified: ['proposal'], removedRunIds: [] });
+		expect(call(f)).toEqual({ url: '/projects/p/scenarios/s/runs', method: 'POST', body: {} });
+
+		const rebase = mockFetch(200, { scenario, ...check });
+		await createApi('', rebase).scenarios.rebase('p', 's', 'r9', true);
+		expect(call(rebase)).toEqual({ url: '/projects/p/scenarios/s/rebase', method: 'POST', body: { baseRunId: 'r9', dryRun: true } });
+	});
+
+	it('reads the problems a scenario run was refused over, and nothing from any other error', async () => {
+		const problems = ['op 2 (node.set): node n not found'];
+		const refused = await createApi('', mockFetch(422, { error: "an op of this scenario doesn't apply to its base run", details: { problems } }))
+			.scenarios.run('p', 's')
+			.catch((e) => e);
+		expect(refused.status).toBe(422);
+		expect(scenarioProblems(refused)).toEqual(problems);
+		expect(scenarioProblems(new ApiError(409, 'x', { problems }))).toEqual([]);
+		expect(scenarioProblems(new Error('x'))).toEqual([]);
 	});
 });
