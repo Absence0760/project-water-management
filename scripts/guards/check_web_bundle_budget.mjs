@@ -779,6 +779,7 @@
 //             crop factors dialog (~9 KB, its own chunk, fetched on first
 //             open: the reference crop library, per-crop diff and demand
 //             comparison). Lazy, so no page's first load grows. Headroom ~3 KB.
+// R5ENTRY
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

@@ -244,6 +244,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'EWR by month',
 		'Uncertainty bands',
 		'Outcome matrix',
+		'Seasonal outlook',
 		'Water account',
 		'Curtailment',
 		'Assurance of supply',
@@ -262,7 +263,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
 	const groups = ['River & Reserve', 'Farms & users', 'Model quality', 'Record', 'Dig deeper'];
 	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Farms & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
-	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR vs outflow', 'EWR by month', 'Uncertainty bands', 'Outcome matrix', 'Water account']);
+	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR vs outflow', 'EWR by month', 'Uncertainty bands', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
 	await expect(menu.getByRole('list', { name: 'Farms & users' }).getByRole('link')).toHaveText(['Curtailment', 'Assurance of supply', 'Farm detail']);
 	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
 	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
