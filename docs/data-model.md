@@ -481,7 +481,7 @@ the result change?", and put back any earlier version.
   (045; an application's events carry `application: true` and no name until
   it is decided),
   `note.deleted` (a note hidden by its author or an editor: its target, the
-  author's name and id (045) and whether it was their own, never the body),
+  author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
   registration, statement version and hash),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
@@ -490,7 +490,7 @@ the result change?", and put back any earlier version.
   series, lifetime; never the key or its hash), and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
-- **Account deletion (045, decision D12).** Deleting an `app_user` row (an
+- **Account deletion (048, decision D12).** Deleting an `app_user` row (an
   operator act on a POPIA request; there is no self-service path yet)
   pseudonymises instead of deleting: the `app_user_pseudonymise` trigger
   (`SECURITY DEFINER`, before the row goes) sets `actor_label` to
@@ -1406,7 +1406,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   and with the account that sent them (`invited_by` cascade). An invite that
   lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
   the job tick deletes it with its `invite_node` rows
-  (`app_purge_invites(age)`, 045, `SECURITY DEFINER`; `invites.ts`
+  (`app_purge_invites(age)`, 048, `SECURITY DEFINER`; `invites.ts`
   `purgeInvites`, `INVITE_RETENTION_DAYS`): it holds the address of someone
   who never signed up.
 - `invite_node` RLS mirrors `invite`: project owners only, for every

@@ -27,7 +27,7 @@ export type InviteKind = 'project' | 'team';
 /**
  * An invite that lapsed unaccepted is kept this long past its expiry (owners
  * see it as expired and can send it again), then the job tick deletes it with
- * its farms (045_account_deletion.sql app_purge_invites): it holds the address
+ * its farms (048_account_deletion.sql app_purge_invites): it holds the address
  * of someone who never signed up (docs/security.md § Personal information).
  */
 export const INVITE_RETENTION_DAYS = 90;

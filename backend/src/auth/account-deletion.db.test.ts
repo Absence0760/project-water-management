@@ -1,5 +1,5 @@
 // What deleting an account does to the Step 2 records that name the person
-// (roadmap WP-2.16, decision D12; 045_account_deletion.sql; docs/security.md
+// (roadmap WP-2.16, decision D12; 048_account_deletion.sql; docs/security.md
 // § Personal information (POPIA)). There is no self-service account deletion
 // yet: on a POPIA request the operator deletes the app_user row as the schema
 // owner, which is what these tests do. Every foreign key to app_user decides

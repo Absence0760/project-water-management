@@ -102,7 +102,7 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
  *   - cascade: the row is the person's own and goes with them (memberships,
  *     tokens, their pending jobs, invites they sent);
  *   - set null: the row is the project's and stays, with who made it cleared
- *     (the audit log is pseudonymised as well, 045_account_deletion.sql);
+ *     (the audit log is pseudonymised as well, 048_account_deletion.sql);
  *   - restrict: the account can't be deleted while the row exists, because
  *     the row is evidence that names its maker (a run, a nomination, an
  *     ensemble, a scenario, an imported project, a project or team they
@@ -138,7 +138,10 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
 	'run_uncertainty.created_by': 'restrict',
+	// The assessor who decided an application (045, WP-3.3): the decision stays with who cleared.
+	'scenario.decided_by': 'set null',
 	'scenario.owner_user_id': 'restrict',
+	'scenario_member.added_by': 'set null',
 	'series_revision.created_by': 'set null',
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
@@ -325,7 +328,7 @@ describe('schema catalogue', () => {
 	});
 
 	// The pseudonymisation that goes with the set-null keys (D12).
-	it('pseudonymises the audit log when an account is deleted (045_account_deletion.sql)', async () => {
+	it('pseudonymises the audit log when an account is deleted (048_account_deletion.sql)', async () => {
 		const { rows } = await db.query<{ tgname: string }>(
 			`SELECT tgname FROM pg_trigger WHERE tgrelid = 'app_user'::regclass AND NOT tgisinternal AND tgenabled <> 'D'`
 		);

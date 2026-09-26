@@ -321,7 +321,7 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
   functions that never return a payload. Each tick also purges finished jobs
   after 30 days, report rows after 8, and invites 90 days past their expiry
-  (`app_purge_invites`, 045).
+  (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),

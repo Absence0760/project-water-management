@@ -1,4 +1,4 @@
--- 045_account_deletion — what the database keeps of a person once their
+-- 048_account_deletion — what the database keeps of a person once their
 -- account is gone or their invite has lapsed (roadmap WP-2.16; decision D12;
 -- docs/security.md § Personal information (POPIA)).
 --
@@ -53,7 +53,7 @@ CREATE FUNCTION app_user_pseudonymise() RETURNS trigger
 		UPDATE audit_event SET actor_label = 'Deleted user' WHERE actor_user_id = OLD.id;
 		UPDATE audit_event SET subject = jsonb_set(subject, '{displayName}', to_jsonb('Deleted user'::text))
 			WHERE subject->>'userId' = OLD.id::text AND subject ? 'displayName';
-		-- note.deleted names the note's author: by id since 045 (authorId), and
+		-- note.deleted names the note's author: by id since 048 (authorId), and
 		-- through the note itself for the events written before.
 		UPDATE audit_event e SET subject = jsonb_set(e.subject, '{author}', to_jsonb('Deleted user'::text))
 			WHERE e.kind = 'note.deleted' AND e.subject ? 'author' AND (

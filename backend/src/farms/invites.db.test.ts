@@ -115,7 +115,7 @@ describe('invite_node RLS', () => {
 	});
 });
 
-// Retention (WP-2.16; 045_account_deletion.sql): a lapsed invite holds the
+// Retention (WP-2.16; 048_account_deletion.sql): a lapsed invite holds the
 // address of someone who never signed up, and the farms it would have linked.
 describe('purging lapsed invites', () => {
 	it(`deletes an invite ${INVITE_RETENTION_DAYS} days past its expiry with its farms, and keeps a newer expired one and a live one`, async () => {
