@@ -17,13 +17,15 @@ overrides section; § UI below).
 ## Engine: `applyScenario`
 
 ```ts
-applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { maskedNames?: MaskedNames }):
-  { input: ModelInput; applied: AppliedOp[]; problems: string[]; renamed: MaskedRename[] }
+applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { mask?: ScenarioMask }):
+  { input: ModelInput; applied: AppliedOp[]; problems: string[]; renamed: MaskedRename[]; reIds: MaskedReId[] }
 ```
 
-`maskedNames` (node or crop id → the name the ops meet it by) is how an
-application is judged in its applicant's namespace
-([§ Applications](#applications-wp-33)); without it `renamed` is empty.
+`mask` (the hidden nodes, id → the anonymous name the ops meet them by, and
+the ids of the hidden crops, transfers, land-cover patches and boreholes) is
+how an application is judged in its applicant's namespace
+([§ Applications](#applications-wp-33)); without it `renamed` and `reIds`
+are empty and nothing below changes.
 
 - **Pure.** It never mutates `base`: settings and the model document are
   deep-copied, and a series is copied only when an op scales it (the other
@@ -407,22 +409,43 @@ scenario is `'team'`, and behaves exactly as above).
   `backend/src/scenarios/applicant.ts`): the settings, their own farms (their
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
-  its values blanked; crops, crop areas, transfers and land cover on their
-  own farms only. This is D2's recommended default
+  its values blanked; crops, crop areas, transfers, land cover and
+  boreholes on their own farms only. This is D2's recommended default
   ([step-3 § 11](./roadmap/step-3-licensing.md#11-open-decisions)),
   **pending the client**.
 - **The applicant's namespace** (049, `applicationMask` in `applicant.ts`,
-  the engine's `applyScenario(…, { maskedNames })`). An application's ops
-  meet every node the projection anonymises under its anonymous name, and
-  every crop it leaves out under a name made of its id, whoever checks or
-  runs it. So the engine's notes and problems quote only names the applicant
-  sees (no text redaction), and a rename of their own farm to a hidden
-  neighbour's name (or a new crop named like a hidden one) applies exactly
-  as a free name does; a name they can see ("Farm 1", the gauge, their own
-  crops) still collides. Afterwards each hidden node and crop gets its real
-  name back, suffixed where an op took it (`Kliphuis` → `Kliphuis (2)` in
-  that application's runs), and the check's `renamed` lists those for the
-  assessors; a contributor never receives it.
+  the engine's `applyScenario(…, { mask })`). An application's ops meet
+  every node the projection anonymises under its anonymous name, and every
+  crop, transfer, land-cover patch and borehole it leaves out under an
+  opaque id (and, for a crop or borehole, name) that none of the ops holds,
+  whoever checks or runs it. So:
+  - the engine's notes and problems quote only names and ids the applicant
+    sees (no text redaction);
+  - a rename of their own farm to a hidden neighbour's name (or a new crop
+    named like a hidden one) applies exactly as a free name does; a name
+    they can see ("Farm 1", the gauge, their own crops) still collides;
+  - an op that targets a hidden item's id answers `… not found`, and one
+    that gives a new item a hidden item's id applies, exactly as for a free
+    id; an id they can see (a node's, their own items') still collides;
+  - `node.remove` counts only what the applicant sees of what it drops
+    (removing a hidden farm reports no crop areas, transfers, patches or
+    boreholes; the EWR tables sited there are settings, which they see);
+  - a rule the op breaks because of hidden data (a rule about a hidden
+    item, a hidden farm's drought borehole rule, and, while any farm is
+    hidden, flow shares over 100 % or no catchment area left, which an op's
+    own range-checked value can't break alone) reads only `op N (…):
+    doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
+    wording is the recommended default, **pending the client**
+    ([issue #50](https://github.com/Absence0760/project-water-management/issues/50));
+    rules about the network's shape and names keep their words.
+
+  Afterwards each hidden node and crop gets its real name back, suffixed
+  where an op took it (`Kliphuis` → `Kliphuis (2)` in that application's
+  runs), and each hidden item its real id; a new item an op gave a hidden
+  item's id moves to a fresh one (`<id>-2`), so the hidden item keeps the id
+  it lines up with the base by (run comparison matches by id). The check's
+  `renamed` and `reIds` list those for the assessors; a contributor never
+  receives either.
 - **Own nodes** are the owner's farm links (`app_farm_nodes`), set at create
   and each time the ops change while a draft. A contributor can't claim
   others' (`403`), so a dam raise on their own farm is a proposal and the
@@ -490,8 +513,10 @@ the published run's row unreadable, its catchment series readable; submit,
 freeze, decide; sharing; the per-application run cap; the contributor route
 inventory), `oracles.db.test.ts` (049: identical answers for member and
 non-member ids and addresses, hidden and free farm, crop and application
-names, each with its positive control; the party prune), `applicant.test.ts`
-(the projection and the mask),
+names, hidden and free item ids, a hidden farm's removal counting nothing,
+each with its positive control; the party prune), `applicant.test.ts`
+(the projection and the mask), the engine's `overrides.test.ts` ("mask:
+names" and "mask: ids, counts and value rules"),
 `history/write-routes.db.test.ts` (each new route records its event), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's
 decision, the owner's party and the applicant's share picker, axe in both

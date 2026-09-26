@@ -348,6 +348,13 @@
 			{data.check.renamed.map((r) => `${r.name} is called “${r.as}”`).join(', ')}.
 		</p>
 	{/if}
+	{#if data.check?.reIds?.length}
+		<!-- The assessors only: an id the applicant gave a new item was a hidden item's, so the new item runs under a fresh one. -->
+		<p class="alert alert-info" role="status" data-testid="scenario-reids">
+			The applicant gave a new item an id already used by one they can't see; in this application's runs
+			{data.check.reIds.map((r) => `their ${r.kind === 'landCover' ? 'land-cover patch' : r.kind} ${r.id} is ${r.as}`).join(', ')}.
+		</p>
+	{/if}
 
 	<section aria-labelledby="changes-h">
 		<div class="changes-head">

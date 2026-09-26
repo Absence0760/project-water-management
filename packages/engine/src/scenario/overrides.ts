@@ -39,27 +39,52 @@ export interface ScenarioResult {
 	 */
 	problems: string[];
 	/**
-	 * With `maskedNames`: the hidden nodes and crops that got their real name
-	 * back with a suffix, because an op gave a visible one that name
+	 * With `mask`: the hidden nodes and crops that got their real name back
+	 * with a suffix, because an op gave a visible one that name
 	 * (`Kliphuis` → `Kliphuis (2)`). For the assessor only; the applicant
 	 * never sees a hidden name.
 	 */
 	renamed: MaskedRename[];
+	/**
+	 * With `mask`: the items an op added under the id of a hidden one, given a
+	 * fresh id so the hidden one keeps its own (and still lines up with the
+	 * base by id). For the assessor only: it says a hidden item has that id.
+	 */
+	reIds: MaskedReId[];
 }
 
 /**
- * Names an application's ops must not meet (roadmap WP-3.3, docs/scenarios.md
- * § Applications): node id → the anonymous name the applicant sees it under
- * ("Farm 3"), crop id → likewise. The ops apply to the base with those names
- * in place of the real ones, so no message quotes a hidden name and no
- * rename collides with one; afterwards each hidden node or crop gets its
- * real name back (with a suffix if an op gave a visible one that name). A
- * hidden node an op renamed keeps the op's name.
+ * What an application's ops must not see (roadmap WP-3.3, docs/scenarios.md
+ * § Applications): the nodes, crops, transfers, land-cover patches and
+ * boreholes its applicant can't see. The ops apply to the base with:
+ *
+ *  - each hidden node under the anonymous name the applicant sees it by
+ *    (`nodes`: id → "Farm 3"); node ids stay, the applicant sees them;
+ *  - each hidden crop, transfer, land-cover patch and borehole under an
+ *    opaque id (and a hidden crop or borehole under an opaque name), chosen
+ *    so no op mentions it: an op that targets or reuses a hidden item's id
+ *    or name meets exactly what it meets for a free one;
+ *  - counts of hidden items left out of the notes (`dropped 2 crop area(s)`),
+ *    and a rule an op breaks because of hidden data (a hidden item, a hidden
+ *    node's hidden values, the catchment's flow shares or area while any
+ *    node is hidden) reported only as `doesn't apply to the catchment as
+ *    modelled` (MASKED_RULE; the wording is pending the client, issue #50).
+ *
+ * Afterwards each hidden item gets its real id and name back: a name an op
+ * gave a visible item suffixes the hidden one (`renamed`), and an id an op
+ * gave a new item moves the new item to a fresh id (`reIds`). A hidden node
+ * an op renamed keeps the op's name.
  */
-export interface MaskedNames {
+export interface ScenarioMask {
 	nodes?: Readonly<Record<string, string>>;
-	crops?: Readonly<Record<string, string>>;
+	crops?: readonly string[];
+	transfers?: readonly string[];
+	landCover?: readonly string[];
+	boreholes?: readonly string[];
 }
+
+/** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #50). */
+export const MASKED_RULE = "doesn't apply to the catchment as modelled";
 
 export interface MaskedRename {
 	kind: 'node' | 'crop';
@@ -70,30 +95,127 @@ export interface MaskedRename {
 	as: string;
 }
 
-export interface ApplyOptions {
-	maskedNames?: MaskedNames;
+export interface MaskedReId {
+	kind: IdKind;
+	/** The id the op gave it: a hidden item's. */
+	id: string;
+	/** The id it has in the scenario's input. */
+	as: string;
 }
 
-type Named = { id: string; name: string };
-type Masked = { model: ModelInput['model']; nodes: Map<string, [real: string, mask: string]>; crops: Map<string, [real: string, mask: string]> };
+export interface ApplyOptions {
+	mask?: ScenarioMask;
+}
 
-/** A copy of `model` with the masked nodes and crops under their mask names, and what each was called. */
-function maskModel(model: ModelInput['model'], names: MaskedNames): Masked {
-	const m = cloneData(model);
-	const swap = (xs: Named[], masks: Readonly<Record<string, string>> | undefined) => {
-		const real = new Map<string, [string, string]>();
-		if (!masks) return real;
-		for (const x of xs) {
-			if (!Object.hasOwn(masks, x.id)) continue;
-			real.set(x.id, [x.name, masks[x.id]!]);
-			x.name = masks[x.id]!;
-		}
-		return real;
-	};
-	return { model: m, nodes: swap(m.nodes, names.nodes), crops: swap(m.crops, names.crops) };
+type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole';
+type Named = { id: string; name: string };
+type Identified = { id: string; name?: string };
+interface Masked {
+	model: ModelInput['model'];
+	/** node id → [real name, mask name]; crop id → the same (by real id, read after the ids are restored). */
+	nodes: Map<string, [real: string, mask: string]>;
+	crops: Map<string, [real: string, mask: string]>;
+	/** opaque id → the hidden item's real id and name, per kind. */
+	ids: Record<IdKind, Map<string, { id: string; name?: string }>>;
+	/** Every opaque id, for spotting a rule issue about a hidden item. */
+	tokens: Set<string>;
 }
 
 const nameKey = (s: string) => s.trim().toLowerCase();
+
+/** Every string anywhere in `v` (an op list): what an opaque id must not be. */
+function strings(v: unknown, out: Set<string>): Set<string> {
+	if (typeof v === 'string') out.add(v).add(nameKey(v));
+	else if (Array.isArray(v)) for (const x of v) strings(x, out);
+	else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) strings(x, out.add(k));
+	return out;
+}
+
+const ID_LISTS = {
+	crop: (m: ModelInput['model']) => m.crops as Identified[],
+	transfer: (m: ModelInput['model']) => m.transfers as Identified[],
+	landCover: (m: ModelInput['model']) => (m.landCover ?? []) as Identified[],
+	borehole: (m: ModelInput['model']) => (m.boreholes ?? []) as Identified[]
+} as const;
+const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes' } as const;
+
+/**
+ * A copy of `model` with the masked nodes under their mask names and the
+ * hidden items under opaque ids (and names), none of which any of `ops`
+ * mentions, and what each really was.
+ */
+function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly unknown[]): Masked {
+	const m = cloneData(model);
+	const nodes = new Map<string, [string, string]>();
+	for (const n of m.nodes) {
+		if (!mask.nodes || !Object.hasOwn(mask.nodes, n.id)) continue;
+		nodes.set(n.id, [n.name, mask.nodes[n.id]!]);
+		n.name = mask.nodes[n.id]!;
+	}
+	// Never a string an op holds, nor an id or name the model already has.
+	const used = strings(ops, new Set());
+	for (const k of Object.keys(ID_LISTS) as IdKind[]) for (const x of ID_LISTS[k](m)) strings([x.id, x.name ?? ''], used);
+	const tokens = new Set<string>();
+	let i = 0;
+	const opaque = (kind: IdKind) => {
+		let t: string;
+		do t = `#${kind}${++i}#`;
+		while (used.has(t));
+		tokens.add(t);
+		return t;
+	};
+	const crops = new Map<string, [string, string]>();
+	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map() } as Masked['ids'];
+	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
+		const hidden = new Set(mask[MASK_KEY[kind]] ?? []);
+		if (!hidden.size) continue;
+		const swapped = new Map<string, string>();
+		for (const x of ID_LISTS[kind](m)) {
+			if (!hidden.has(x.id)) continue;
+			const t = opaque(kind);
+			ids[kind].set(t, { id: x.id, name: x.name });
+			swapped.set(x.id, t);
+			if (kind === 'crop') crops.set(x.id, [x.name!, t]);
+			x.id = t;
+			if (x.name !== undefined) x.name = t;
+		}
+		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = swapped.get(a.cropId) ?? a.cropId;
+	}
+	return { model: m, nodes, crops, ids, tokens };
+}
+
+/**
+ * Hidden items back under their real ids (and a hidden borehole under its
+ * real name): an item an op added under a hidden one's id first moves to a
+ * fresh id (`${id}-2`, …), so the hidden one keeps the id the base knows it by.
+ */
+function restoreIds(m: ModelInput['model'], masked: Masked, out: MaskedReId[]) {
+	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
+		const hidden = masked.ids[kind];
+		if (!hidden.size) continue;
+		const list = ID_LISTS[kind](m);
+		const realIds = new Set([...hidden.values()].map((h) => h.id));
+		const taken = new Set([...list.map((x) => x.id), ...realIds]);
+		for (const x of list) {
+			if (hidden.has(x.id) || !realIds.has(x.id)) continue;
+			let k = 2;
+			while (taken.has(`${x.id}-${k}`)) k++;
+			const as = `${x.id}-${k}`;
+			taken.add(as);
+			if (kind === 'crop') for (const a of m.cropAreas) if (a.cropId === x.id) a.cropId = as;
+			out.push({ kind, id: x.id, as });
+			x.id = as;
+		}
+		for (const x of list) {
+			const h = hidden.get(x.id);
+			if (!h) continue;
+			x.id = h.id;
+			// A crop's name comes back through unmask (suffixed if an op took it); a borehole's name is not unique.
+			if (kind === 'borehole') x.name = h.name!;
+		}
+		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = hidden.get(a.cropId)?.id ?? a.cropId;
+	}
+}
 
 /** Give masked items still under their mask name their real name back, suffixed where a visible one now has it. */
 function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRename['kind'], out: MaskedRename[]) {
@@ -114,6 +236,29 @@ function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRe
 		out.push({ kind, id: x.id, name, as: x.name });
 	}
 }
+
+/**
+ * Does a rule issue (structureIssues' key) turn on data the applicant can't
+ * see? A hidden item (its opaque id is in the key), a hidden node's hidden
+ * borehole rule, or the catchment-wide value rules while any node is hidden
+ * (flow shares over 100 %, no area left: the op's own values are
+ * range-checked, so these trip only with other nodes' values in play). The
+ * network's shape (outflows, loops, what drains where) and names are the
+ * applicant's to see, so those rules keep their words.
+ */
+function hiddenRule(key: string, masked: Masked): boolean {
+	if (key === 'area' || key === 'shares') return masked.nodes.size > 0;
+	if (key.startsWith('bhDrought:')) return masked.nodes.has(key.slice('bhDrought:'.length));
+	for (const t of masked.tokens) if (key.includes(t)) return true;
+	return false;
+}
+
+/** What node.remove may count of what it drops: in masked mode, only what the applicant sees. */
+interface Visibility {
+	node: (id: string) => boolean;
+	item: (id: string) => boolean;
+}
+const SEE_ALL: Visibility = { node: () => true, item: () => true };
 
 class OpError extends Error {}
 const fail = (msg: string): never => {
@@ -143,7 +288,7 @@ function findTransfer(d: Draft, transferId: string): Transfer {
 	return d.model.transfers.find((t) => t.id === transferId) ?? fail(`transfer ${transferId} not found`);
 }
 
-function applyOne(d: Draft, op: ScenarioOp): string[] {
+function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[] {
 	const notes: string[] = [];
 	const m = d.model;
 	switch (op.op) {
@@ -184,17 +329,20 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
 				notes.push(`"${u.name}" now drains into ${n.downstreamNodeId}`);
 			}
 			m.nodes = m.nodes.filter((x) => x.id !== n.id);
-			const drop = <T>(xs: T[], gone: (x: T) => boolean, what: string): T[] => {
+			// Counts only what the caller sees: in masked mode a hidden node's crops, transfers… are not theirs to count.
+			const drop = <T>(xs: T[], gone: (x: T) => boolean, what: string, seen: (x: T) => boolean): T[] => {
 				const kept = xs.filter((x) => !gone(x));
-				if (kept.length < xs.length) notes.push(`dropped ${xs.length - kept.length} ${what}`);
+				const counted = xs.filter((x) => gone(x) && seen(x)).length;
+				if (counted) notes.push(`dropped ${counted} ${what}`);
 				return kept;
 			};
-			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)');
-			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)');
-			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)');
-			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)');
+			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)', (a) => see.node(a.nodeId) && see.item(a.cropId));
+			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)', (t) => see.item(t.id));
+			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)', (p) => see.item(p.id));
+			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
 			if (Array.isArray(d.settings.ewrRules)) {
-				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there');
+				// Settings are catchment-wide and the applicant sees them in full.
+				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there', () => true);
 			}
 			break;
 		}
@@ -319,7 +467,8 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
  * thrown; the ops after it still apply. docs/scenarios.md has the rules.
  */
 export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
-	const masked = options.maskedNames ? maskModel(base.model, options.maskedNames) : null;
+	const masked = options.mask ? maskModel(base.model, options.mask, ops) : null;
+	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id) } : SEE_ALL;
 	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series } };
 	let issues = structureIssues(cur);
 	const applied: AppliedOp[] = [];
@@ -329,14 +478,14 @@ export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], opti
 		const draft: ModelInput = { settings: cloneData(cur.settings), model: cloneData(cur.model), series: cur.series };
 		let notes: string[];
 		try {
-			notes = applyOne(draft, op);
+			notes = applyOne(draft, op, see);
 		} catch (e) {
 			if (!(e instanceof OpError)) throw e;
 			problems.push(`${label}: ${e.message}`);
 			return;
 		}
 		const after = structureIssues(draft);
-		const introduced = [...after].filter(([k]) => !issues.has(k)).map(([, text]) => text);
+		const introduced = [...new Set([...after].filter(([k]) => !issues.has(k)).map(([k, text]) => (masked && hiddenRule(k, masked) ? MASKED_RULE : text)))];
 		if (introduced.length) {
 			problems.push(`${label}: ${introduced.join('; ')}`);
 			return;
@@ -346,11 +495,14 @@ export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], opti
 		applied.push({ index, op, notes });
 	});
 	const renamed: MaskedRename[] = [];
+	const reIds: MaskedReId[] = [];
 	if (masked) {
+		// cur.model is this call's own copy (every op works on a fresh draft), so restoring in place touches nothing shared.
+		restoreIds(cur.model, masked, reIds);
 		unmask(cur.model.nodes, masked.nodes, 'node', renamed);
 		unmask(cur.model.crops, masked.crops, 'crop', renamed);
 	}
-	return { input: cur, applied, problems, renamed };
+	return { input: cur, applied, problems, renamed, reIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -432,8 +584,8 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
  */
 export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: Iterable<string>, options: ApplyOptions = {}): OpClass[] {
 	const owned = new Set(ownedNodeIds);
-	// Masked once up front: each op below meets the names applyScenario's would.
-	let cur = options.maskedNames ? { ...base, model: maskModel(base.model, options.maskedNames).model } : base;
+	// Masked once up front: each op below meets the names and ids applyScenario's would.
+	let cur = options.mask ? { ...base, model: maskModel(base.model, options.mask, ops).model } : base;
 	return ops.map((op) => {
 		const c = classifyOp(op, owned, cur);
 		const r = applyScenario(cur, [op]);

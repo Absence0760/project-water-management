@@ -774,6 +774,12 @@ export interface ScenarioCheck {
 	 * Sent to viewers and up only, never to an applicant.
 	 */
 	renamed?: { kind: 'node' | 'crop'; id: string; name: string; as: string }[];
+	/**
+	 * An application's new crops, transfers, land-cover patches or boreholes
+	 * given an id a hidden one already had, moved to a fresh id in its runs so
+	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
+	 */
+	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
 }
 
 /**

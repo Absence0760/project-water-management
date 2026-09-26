@@ -2010,7 +2010,9 @@ farm view if they have links, and the Scenarios tab in applicant mode
   you can share it with already reads it"). An assessor opening an
   application whose names displaced a hidden farm's or crop's sees which
   ("… in this application's runs Kliphuis is called “Kliphuis (2)”",
-  `check.renamed`); the applicant never does.
+  `check.renamed`), and likewise a new item given the id of one the
+  applicant can't see (`check.reIds`, "their transfer … is …-2"); the
+  applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`): every submitted, withdrawn or decided application

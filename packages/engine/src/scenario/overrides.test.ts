@@ -9,7 +9,8 @@ import { runModel } from '../run';
 import type { ModelInput, NetworkNode, RunSeries } from '../project';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { applyScenario, classifyOp, classifyScenario } from './overrides';
+import { MASKED_RULE, applyScenario, classifyOp, classifyScenario, type ScenarioMask } from './overrides';
+import { structureIssues } from './structure';
 import { validateScenarioOps, type ScenarioOp } from './ops';
 
 function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -508,14 +509,14 @@ describe('validateScenarioOps', () => {
 	});
 });
 
-describe('maskedNames (an application judged in its applicant’s namespace, WP-3.3)', () => {
+describe('mask: names (an application judged in its applicant’s namespace, WP-3.3)', () => {
 	// The applicant owns A; B and C are hidden, shown to them as "Farm 1" and "Farm 2".
-	const masked = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: { c1: 'crop c1' } };
+	const masked = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: ['c1'] };
 	const rename = (nodeId: string, value: string): ScenarioOp => ({ op: 'node.set', nodeId, field: 'name', value });
 
 	it('never mutates the base, and restores every hidden name when nothing took it', () => {
 		const b = deepFreeze(base());
-		const r = applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 250_000 }], { maskedNames: masked });
+		const r = applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 250_000 }], { mask: masked });
 		expect(r.problems).toEqual([]);
 		expect(r.renamed).toEqual([]);
 		expect(r.input.model.nodes.map((n) => n.name)).toEqual(b.model.nodes.map((n) => n.name));
@@ -524,7 +525,7 @@ describe('maskedNames (an application judged in its applicant’s namespace, WP-
 
 	it('lets an op take a hidden name, and suffixes the hidden one past every name in use', () => {
 		const added: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm B (2)', downstreamNodeId: 'G' } };
-		const r = applyScenario(base(), [added, rename('A', 'farm b')], { maskedNames: masked });
+		const r = applyScenario(base(), [added, rename('A', 'farm b')], { mask: masked });
 		expect(r.problems).toEqual([]);
 		expect(nodeOf(r.input, 'A')!.name).toBe('farm b');
 		expect(nodeOf(r.input, 'B')!.name).toBe('Farm B (3)');
@@ -534,7 +535,7 @@ describe('maskedNames (an application judged in its applicant’s namespace, WP-
 	});
 
 	it('quotes the mask name, never the real one, in what it says about a hidden node', () => {
-		const r = applyScenario(base(), [{ op: 'node.remove', nodeId: 'A' }], { maskedNames: masked });
+		const r = applyScenario(base(), [{ op: 'node.remove', nodeId: 'A' }], { mask: masked });
 		expect(r.applied[0]!.notes[0]).toBe('"Farm 2" now drains into G');
 		expect(JSON.stringify([r.applied, r.problems])).not.toContain('Farm C');
 	});
@@ -542,14 +543,159 @@ describe('maskedNames (an application judged in its applicant’s namespace, WP-
 	it('classifies as applyScenario applies: a node added under a hidden name is still the applicant’s', () => {
 		const add: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm C', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 } };
 		const set: ScenarioOp = { op: 'node.set', nodeId: 'N', field: 'damCapacityM3', value: 10 };
-		expect(classifyScenario(base(), [add, set], ['A'], { maskedNames: masked })).toEqual(['proposal', 'proposal']);
+		expect(classifyScenario(base(), [add, set], ['A'], { mask: masked })).toEqual(['proposal', 'proposal']);
 		// Unmasked the add collides, so N never exists and the set on it is the baseline's.
 		expect(classifyScenario(base(), [add, set], ['A'])).toEqual(['proposal', 'baseline']);
 	});
 
 	it('leaves a hidden node an op renamed under the op’s name', () => {
-		const r = applyScenario(base(), [rename('B', 'Something else')], { maskedNames: masked });
+		const r = applyScenario(base(), [rename('B', 'Something else')], { mask: masked });
 		expect(nodeOf(r.input, 'B')!.name).toBe('Something else');
 		expect(r.renamed).toEqual([]);
+	});
+});
+
+describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and counts")', () => {
+	// The applicant owns A. Hidden: nodes B and C, crop c2 (on C), transfer t2
+	// (C → B), land-cover patch lc1 (on B) and borehole bh1 (on C). t1 (C → A)
+	// touches A, so they see it.
+	function baseM(): ModelInput {
+		const b = base();
+		b.model.crops.push({ id: 'c2', name: 'Pecans', cropFactor: new Array(12).fill(0.6) });
+		b.model.cropAreas.push({ nodeId: 'C', cropId: 'c2', areaM2: 100_000 });
+		b.model.transfers.push({ id: 't2', fromNodeId: 'C', toNodeId: 'B', months: [6], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 });
+		b.model.boreholes = [
+			{ id: 'bh1', nodeId: 'C', name: 'Secret hole', capacityM3Day: 100, annualCapM3: null, mode: 'emergency', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
+		];
+		return b;
+	}
+	const mask: ScenarioMask = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: ['c2'], transfers: ['t2'], landCover: ['lc1'], boreholes: ['bh1'] };
+	const apply = (ops: ScenarioOp[], b = baseM()) => applyScenario(b, ops, { mask });
+	/** What the applicant is told: what applied (with its notes) and the problems, the probed id written as ID. */
+	const told = (r: ReturnType<typeof applyScenario>, id: string) => JSON.stringify([r.applied, r.problems]).replaceAll(id, 'ID');
+
+	const targeting: [string, string, (id: string) => ScenarioOp][] = [
+		['transfer.set', 't2', (id) => ({ op: 'transfer.set', transferId: id, field: 'maxRateM3s', value: 1 })],
+		['transfer.remove', 't2', (id) => ({ op: 'transfer.remove', transferId: id })],
+		['landCover.remove', 'lc1', (id) => ({ op: 'landCover.remove', patchId: id })],
+		['borehole.remove', 'bh1', (id) => ({ op: 'borehole.remove', boreholeId: id })],
+		['cropArea.set', 'c2', (id) => ({ op: 'cropArea.set', nodeId: 'A', cropId: id, areaM2: 10 })]
+	];
+
+	it.each(targeting)('%s on a hidden id answers exactly as on a free one (not found)', (_, hidden, op) => {
+		const h = apply([op(hidden)]);
+		const f = apply([op('free-id')]);
+		expect(h.problems).toEqual([expect.stringMatching(/not found$/)]);
+		expect(told(h, hidden)).toBe(told(f, 'free-id'));
+		expect([h.renamed, h.reIds]).toEqual([[], []]);
+		// Positive control: unmasked (a team scenario) the hidden id is found and the op applies.
+		expect(applyScenario(baseM(), [op(hidden)]).problems).toEqual([]);
+	});
+
+	const reusing: [string, string, (id: string) => ScenarioOp][] = [
+		['transfer', 't2', (id) => ({ op: 'transfer.add', transfer: { id, fromNodeId: 'A', toNodeId: 'C', months: [1], maxRateM3s: 0.02, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 1 } })],
+		['crop', 'c2', (id) => ({ op: 'crop.add', crop: { id, name: 'Olives', cropFactor: new Array(12).fill(0.5) } })],
+		['landCover', 'lc1', (id) => ({ op: 'landCover.add', patch: { id, nodeId: 'A', coverClass: 'pine', areaKm2: 0.5, densityPct: 0.4, factors: null } })],
+		[
+			'borehole',
+			'bh1',
+			(id) => ({
+				op: 'borehole.add',
+				borehole: { id, nodeId: 'A', name: 'New hole', capacityM3Day: 50, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 }
+			})
+		]
+	];
+	const listOf = (x: ModelInput, kind: string) =>
+		(({ crop: x.model.crops, transfer: x.model.transfers, landCover: x.model.landCover ?? [], borehole: x.model.boreholes ?? [] }) as Record<string, { id: string }[]>)[kind]!;
+
+	it.each(reusing)('a new %s reusing a hidden id applies exactly as a free one, and moves to a fresh id', (kind, hidden, op) => {
+		// Frozen: masking and restoring never touch the base.
+		const h = apply([op(hidden)], deepFreeze(baseM()));
+		const f = apply([op('free-id')]);
+		expect(h.problems).toEqual([]);
+		expect(told(h, hidden)).toBe(told(f, 'free-id'));
+		expect(h.reIds).toEqual([{ kind, id: hidden, as: `${hidden}-2` }]);
+		expect(f.reIds).toEqual([]);
+		// The hidden item keeps its id and everything else, so it still lines up with the base by id.
+		expect(listOf(h.input, kind).find((x) => x.id === hidden)).toEqual(listOf(baseM(), kind).find((x) => x.id === hidden));
+		expect(listOf(h.input, kind).filter((x) => x.id === `${hidden}-2`)).toHaveLength(1);
+		expect(structureIssues(h.input)).toEqual(structureIssues(baseM()));
+		// Positive control: unmasked, the id is in use.
+		expect(applyScenario(baseM(), [op(hidden)]).problems).toEqual([expect.stringMatching(/already in use$/)]);
+	});
+
+	it('moves the crop areas an op gave a new crop under a hidden crop’s id with it, and leaves the hidden one’s alone', () => {
+		const r = apply([reusing[1]![2]('c2'), { op: 'cropArea.set', nodeId: 'A', cropId: 'c2', areaM2: 5_000 }]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.cropAreas.filter((a) => a.cropId.startsWith('c2'))).toEqual([
+			{ nodeId: 'C', cropId: 'c2', areaM2: 100_000 },
+			{ nodeId: 'A', cropId: 'c2-2', areaM2: 5_000 }
+		]);
+		expect(r.input.model.crops.find((c) => c.id === 'c2')!.name).toBe('Pecans');
+	});
+
+	it('meets no hidden crop whatever the new crop is named (the opaque names are ones no op holds)', () => {
+		for (const name of ['#crop1#', '#crop2#', 'pecans']) {
+			const r = apply([{ op: 'crop.add', crop: { id: 'n1', name, cropFactor: new Array(12).fill(0.5) } }]);
+			expect(r.problems, name).toEqual([]);
+		}
+	});
+
+	it('counts only what the applicant sees of what a removed node drops', () => {
+		// C carries crop areas of c1 and of the hidden c2, t1 (C → A, visible), and the hidden t2 and bh1.
+		expect(apply([{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes).toEqual(['dropped 1 transfer(s)']);
+		expect(apply([{ op: 'node.remove', nodeId: 'B' }]).applied[0]!.notes).toEqual([]);
+		// Positive control: unmasked, every count.
+		expect(applyScenario(baseM(), [{ op: 'node.remove', nodeId: 'C' }]).applied[0]!.notes).toEqual(['dropped 2 crop area(s)', 'dropped 2 transfer(s)', 'dropped 1 borehole(s)']);
+		expect(applyScenario(baseM(), [{ op: 'node.remove', nodeId: 'B' }]).applied[0]!.notes).toEqual(['dropped 1 transfer(s)', 'dropped 1 land-cover patch(es)']);
+		// Their own farm still counts what is theirs, and the EWR table sited there (settings are theirs to see).
+		expect(apply([{ op: 'node.remove', nodeId: 'A' }]).applied[0]!.notes).toEqual([
+			'"Farm 2" now drains into G',
+			'dropped 1 crop area(s)',
+			'dropped 1 transfer(s)',
+			'dropped 1 EWR rule table(s) sited there'
+		]);
+	});
+
+	it('says only that the op doesn’t apply to the catchment as modelled when hidden data breaks a rule', () => {
+		// C's dam gone: the hidden borehole bh1 (emergency mode) and C's drought rule both need it.
+		const b = baseM();
+		Object.assign(nodeOf(b, 'C')!, { boreholeCapacityM3Day: 200, boreholeRule: 'drought' });
+		const op: ScenarioOp = { op: 'node.set', nodeId: 'C', field: 'damCapacityM3', value: 0 };
+		expect(apply([op], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		// Positive control: unmasked, the rules and the borehole are named.
+		const plain = applyScenario(b, [op]).problems;
+		expect(plain).toHaveLength(1);
+		expect(plain[0]).toContain('Secret hole');
+		expect(plain[0]).toContain('drought borehole rule');
+	});
+
+	it('says only that for the catchment-wide value rules too, while any node is hidden', () => {
+		const b = baseM();
+		(b.settings as Record<string, unknown>).flowShareMethod = 'manual';
+		nodeOf(b, 'C')!.flowShareManual = 0.5;
+		const shares: ScenarioOp = { op: 'node.set', nodeId: 'A', field: 'flowShareManual', value: 0.6 };
+		expect(applyScenario(b, [shares]).problems).toEqual([expect.stringContaining('more than 100%')]);
+		expect(apply([shares], b).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		// No land left once their own farm's goes, because no hidden farm has any.
+		const dry = baseM();
+		for (const id of ['B', 'C']) Object.assign(nodeOf(dry, id)!, { areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const noLand: ScenarioOp[] = (['areaKm2', 'areaHiKm2', 'areaLoKm2'] as const).map((field) => ({ op: 'node.set', nodeId: 'A', field, value: 0 }));
+		const plain = applyScenario(dry, noLand).problems;
+		expect(plain).toEqual([expect.stringContaining('the catchment has no area left')]);
+		expect(apply(noLand, dry).problems).toEqual([plain[0]!.replace(/: the catchment has no area left.*$/, `: ${MASKED_RULE}`)]);
+		// With no node hidden, nothing to hide: the rule keeps its words.
+		expect(applyScenario(b, [shares], { mask: { crops: ['c2'] } }).problems).toEqual(applyScenario(b, [shares]).problems);
+	});
+
+	it('classifies as it applies: an op on a hidden id meets the applicant’s own item, never the hidden one', () => {
+		const ops: ScenarioOp[] = [reusing[0]![2]('t2'), { op: 'transfer.set', transferId: 't2', field: 'maxRateM3s', value: 0.03 }];
+		const r = apply(ops);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.transfers.find((t) => t.id === 't2')!.maxRateM3s).toBe(0.01);
+		expect(r.input.model.transfers.find((t) => t.id === 't2-2')!.maxRateM3s).toBe(0.03);
+		expect(classifyScenario(baseM(), ops, ['A', 'C'], { mask })).toEqual(['proposal', 'proposal']);
+		// Unmasked the add collides, so the set meets the C → B transfer: not wholly theirs.
+		expect(classifyScenario(baseM(), ops, ['A', 'C'])).toEqual(['proposal', 'baseline']);
 	});
 });

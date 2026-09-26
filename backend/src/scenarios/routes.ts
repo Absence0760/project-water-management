@@ -46,11 +46,12 @@ const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json(
  * each is classed. The input itself stays server-side. The messages quote
  * only names the caller sees (checkScenario masks an application's hidden
  * nodes for everyone); `renamed`, the hidden nodes an application's ops took
- * the name of, is for the assessors, never a contributor.
+ * the name of, and `reIds`, the new items moved off a hidden item's id, are
+ * for the assessors, never a contributor.
  */
 function checkView(c: ScenarioCheck, role: Role) {
 	const view = { applied: c.applied, problems: c.problems, classified: c.classified };
-	return role === 'contributor' ? view : { ...view, renamed: c.renamed };
+	return role === 'contributor' ? view : { ...view, renamed: c.renamed, reIds: c.reIds };
 }
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
