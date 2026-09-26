@@ -223,7 +223,9 @@ export const OUTLIER_MIN_POSITIVE = 100;
  */
 export const FLATLINE_MIN_DAYS: Partial<Record<SeriesKind, number>> = {
 	rain_catchment_mm: 5,
+	rain_catchment_alt_mm: 5,
 	rain_chirps_mm: 5,
+	rain_reanalysis_mm: 5,
 	rain_forecast_mm: 5,
 	flow_observed_m3s: 14,
 	flow_logger_m3s: 14,
@@ -233,7 +235,9 @@ const MAX_EXAMPLES = 5;
 
 const SERIES_NAME: Record<SeriesKind, string> = {
 	rain_catchment_mm: 'Rainfall (catchment)',
+	rain_catchment_alt_mm: 'Rainfall (alternative catchment gauge)',
 	rain_chirps_mm: 'Rainfall (CHIRPS)',
+	rain_reanalysis_mm: 'Rainfall (reanalysis)',
 	rain_forecast_mm: 'Rainfall (forecast)',
 	flow_observed_m3s: 'Observed flow',
 	flow_logger_m3s: 'Logger flow',

@@ -271,6 +271,45 @@ describe('replaced, missing and filled days stay out of every fit', () => {
 		expect(unlisted.ranges[1]![0]! / listed.ranges[1]![0]!).toBeGreaterThan(1.5);
 	});
 
+	it('a rain-source period (engine ≥ 0.30.0) at a wildly different level leaves every range’s factors unchanged', () => {
+		const ref = build(STEP);
+		const wild = build(STEP);
+		for (let i = 0; i < wild.c.length; i++) if (wyOf(i) === 2003 || wyOf(i) === 2004) wild.c[i] = wild.h[i]! * 10;
+		// The real thing the missing-period test above stands in for: 2003–2004 replaced from an alternative gauge.
+		const alt = { startDate: S, values: ref.h.map((v, i) => (wyOf(i) === 2003 || wyOf(i) === 2004 ? v! * 1.5 : null)) };
+		const rainSource = [
+			{
+				start: '2003-10-01',
+				end: '2005-09-30',
+				series: 'rain_catchment_alt_mm',
+				factors: repeat(0.8, 12),
+				provenance: { source: 'hydrologist', fittedFrom: '2000-10-01', fittedTo: '2003-09-30', method: 'overlap ratio' },
+				reason: 'replaced from the automatic station'
+			}
+		];
+		const factors = (s: Series, periods?: unknown) => {
+			const i = input({ ...s, rain_catchment_alt_mm: alt }, ERAS);
+			const corr = prepareRun({ ...i, settings: { ...i.settings, ...(periods ? { rainSource: periods } : {}) } }).chirpsCorrection!;
+			return { all: corr.months.map((m) => m.factor), ranges: corr.fitPeriod!.segments.map((g) => g.months.map((m) => m.factor)), left: corr.replacedDaysLeftOut };
+		};
+		const replaced = factors(series(wild.c, wild.h), rainSource);
+		// Exactly the factors of the same record with those years blank: no replaced day reaches any fit.
+		const blanked = build(STEP);
+		blank(blanked.c, 2003, 2004);
+		const { left: _l, ...got } = replaced;
+		const { left: _b, ...want } = factors(series(blanked.c, blanked.h));
+		expect(got).toEqual(want);
+		expect(replaced.left).toBeGreaterThan(0);
+		for (const f of replaced.ranges[1]!) expect(f! / 1.2).toBeCloseTo(1, 1);
+		// And the alternative series never enters them either: a different alternative gives the same factors.
+		const alt2 = { ...alt, values: alt.values.map((v) => (v === null ? null : v * 3)) };
+		const i2 = input({ ...series(wild.c, wild.h), rain_catchment_alt_mm: alt2 }, ERAS);
+		const c2 = prepareRun({ ...i2, settings: { ...i2.settings, rainSource } }).chirpsCorrection!;
+		expect(c2.fitPeriod!.segments.map((g) => g.months.map((m) => m.factor))).toEqual(replaced.ranges);
+		// Positive control: without the period, the wild years pull the later range's factors up.
+		expect(factors(series(wild.c, wild.h)).ranges[1]![0]! / replaced.ranges[1]![0]!).toBeGreaterThan(1.5);
+	});
+
 	it('the days a flagged zero run leaves blank (then filled from CHIRPS) are not in the fit', () => {
 		const zeroed = build(STEP);
 		// 61 days of zeros over April–May 2005, both among the six wettest months here: a flagged zero run, treated as missing and

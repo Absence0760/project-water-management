@@ -18,6 +18,7 @@ export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './ca
 export { Rng } from './random';
 export * from './quality';
 export * from './rain';
+export * from './rainSourcePeriods';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
