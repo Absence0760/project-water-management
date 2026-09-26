@@ -849,7 +849,7 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Data feeds (018_feeds.sql)
+### Data feeds (018_feeds.sql, 026_feed_schedule.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
@@ -871,12 +871,25 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   can't forge "last success"). Changing the source, config or target clears
   the health; switching a feed back on makes it due at once.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
-  - `app_claim_due_feeds(limit, all)`: the scheduler, no user context. Claims
-    enabled feeds with an acting user that are due (not scheduled within a
-    day, or an hour; a failing feed after 15 min × 2^(failures − 1), capped at
-    the interval), `FOR UPDATE SKIP LOCKED`, stamping `last_scheduled_at`.
-    `all` claims every enabled feed (`pnpm dev:feeds:run`). Returns id,
-    project and acting user only.
+  - `app_due_feeds(limit, all)` (026): the scheduler, no user context. Lists
+    enabled feeds with an acting user that are due, longest-waiting first,
+    stamping nothing; `all` lists every enabled feed (`pnpm dev:feeds:run`).
+    Returns id, project and acting user only.
+  - `app_claim_feed(feed, all)` (026): claims one feed for the transaction's
+    user, who must be its acting user: still enabled and due, `FOR UPDATE
+    SKIP LOCKED`, stamping `last_scheduled_at`. The scheduler queues the
+    fetch in the same transaction, so a rollback releases the claim (#32).
+    Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
+    from the enqueues.
+  - Due (`app_feed_is_due`, 026, a plain function only the two above call):
+    never scheduled; or not scheduled within a day (or an hour, for hourly),
+    with a minute's slack; or, for a **daily `chirps_gefs`** feed, scheduled
+    before the latest 08:45 UTC (after CHC publishes the day's issue, #33);
+    or, while failing, after 15 min × 2^(failures − 1), capped at the
+    interval. UTC whatever the session time zone.
+  - `app_record_feed_checked(feed)` (026): a fetch whose forecast issue was
+    older than the one merged, dropped by the ingest: stamps
+    `last_attempt_at` only, as an editor.
   - `app_record_feed_result(feed, ok, last_date, last_value, error, meta)`:
     the fetch's outcome, as the job's user, who must be an editor of the
     feed's project. `last_data_date` only moves forward.
@@ -888,10 +901,11 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     `feed_fetch` job of that feed, or nothing.
 - Grants: `SELECT, INSERT, UPDATE, DELETE` to `water_app`. Indexes: the
   unique constraint covers `project_id`; `acting_user_id`, `created_by`; and
-  `last_scheduled_at` (partial, enabled with an acting user) for the claim.
+  `last_scheduled_at` (partial, enabled with an acting user) for the listing.
 - `feeds/feeds.db.test.ts` checks the RLS with positive controls, the forged
-  health, the schedule, the acting user losing the role, and the ingest
-  hand-off.
+  health, the schedule (the GEFS due time under a far-off session time zone,
+  an enqueue failing mid-tick), the acting user losing the role, and the
+  ingest hand-off.
 
 ### Reports (023_reports.sql)
 

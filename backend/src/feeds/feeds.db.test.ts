@@ -7,6 +7,7 @@
 // DB test files run one at a time, so this file owns the data_feed table
 // while it runs: afterEach removes every feed, so no other file's tick finds
 // one due.
+import pg from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
@@ -17,7 +18,7 @@ import { FIXTURE_CELL } from './fixtures.js';
 import { MAX_FEEDS } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
-import { claimDueFeeds, feedForJob } from './store.js';
+import { claimFeed, feedForJob, listDueFeeds } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -50,6 +51,13 @@ const series = async (u: User, pid: string, kind: string) => {
 	const meta = list.find((s) => s.kind === kind);
 	return meta ? ((await u.call('GET', `/projects/${pid}/series/${meta.id}`)).body as { startDate: string; unit: string; values: (number | null)[] }) : null;
 };
+/** What a tick would claim: the listing, then each feed's claim as its acting user (the enqueue left out). */
+async function claimDue(limit = 50, all = false) {
+	const due = await withoutUser((db) => listDueFeeds(db, limit, all));
+	const claimed: typeof due = [];
+	for (const f of due) if (await withUser(f.actingUserId, (db) => claimFeed(db, f.id, all))) claimed.push(f);
+	return claimed;
+}
 /** Run what's queued, with no feed scheduling (the tests schedule explicitly). */
 const tick = () => runTick({ feeds: false });
 
@@ -301,28 +309,28 @@ describe('the scheduler', () => {
 	it('claims due feeds once per interval, never a disabled one; p_all claims every enabled feed', async () => {
 		const owner = await signUp('Scheduler');
 		const pid = await project(owner);
-		const on = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
-		const off = (await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps(), enabled: false })).body.feed.id;
+		const on = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		const off = (await owner.call('POST', `/projects/${pid}/feeds`, { ...chirps({ targetName: 'off' }), enabled: false })).body.feed.id;
 
-		const first = await withoutUser((db) => claimDueFeeds(db, 50));
+		const first = await claimDue(50);
 		expect(first.map((f) => f.id)).toEqual([on]);
 		expect(first[0]).toMatchObject({ projectId: pid, actingUserId: owner.id });
-		expect(await withoutUser((db) => claimDueFeeds(db, 50))).toEqual([]);
-		expect((await withoutUser((db) => claimDueFeeds(db, 50, true))).map((f) => f.id)).toEqual([on]);
+		expect(await claimDue(50)).toEqual([]);
+		expect((await claimDue(50, true)).map((f) => f.id)).toEqual([on]);
 		expect((await feedRow(off)).last_scheduled_at).toBeNull();
 
 		// A day later it is due again (with a minute's slack for the tick).
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '1 day' + interval '30 seconds' WHERE id = $1`, [on]);
-		expect((await withoutUser((db) => claimDueFeeds(db, 50))).map((f) => f.id)).toEqual([on]);
+		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
 		// Hourly feeds, an hour later.
 		await owner.call('PATCH', `/projects/${pid}/feeds/${on}`, { schedule: 'hourly' });
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '61 minutes' WHERE id = $1`, [on]);
-		expect((await withoutUser((db) => claimDueFeeds(db, 50))).map((f) => f.id)).toEqual([on]);
+		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
 		// A failing feed retries sooner than daily: 15 min after one failure.
 		await owner.call('PATCH', `/projects/${pid}/feeds/${on}`, { schedule: 'daily' });
 		await asOwner(`UPDATE data_feed SET consecutive_failures = 1, last_scheduled_at = now() - interval '16 minutes' WHERE id = $1`, [on]);
-		expect((await withoutUser((db) => claimDueFeeds(db, 50))).map((f) => f.id)).toEqual([on]);
-		await expect(withoutUser((db) => claimDueFeeds(db, 0))).rejects.toMatchObject({ code: '22023' });
+		expect((await claimDue(50)).map((f) => f.id)).toEqual([on]);
+		await expect(claimDue(0)).rejects.toMatchObject({ code: '22023' });
 	});
 
 	it('two ticks at once never claim the same feed (FOR UPDATE SKIP LOCKED), and a feed idle for days is claimed once, not once per missed day', async () => {
@@ -332,10 +340,10 @@ describe('the scheduler', () => {
 		for (let i = 0; i < 6; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id);
 		// The worker was down for five days.
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '5 days' WHERE project_id = $1`, [pid]);
-		const [a, b] = await Promise.all([withoutUser((db) => claimDueFeeds(db, 50)), withoutUser((db) => claimDueFeeds(db, 50))]);
+		const [a, b] = await Promise.all([claimDue(50), claimDue(50)]);
 		const claimed = [...a, ...b].map((f) => f.id);
 		expect(claimed.sort()).toEqual([...ids].sort());
-		expect(await withoutUser((db) => claimDueFeeds(db, 50))).toEqual([]);
+		expect(await claimDue(50)).toEqual([]);
 	});
 
 	it('the oldest-scheduled feeds go first when more are due than a tick takes', async () => {
@@ -346,17 +354,17 @@ describe('the scheduler', () => {
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [ids[0]]);
 		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '3 days' WHERE id = $1`, [ids[1]]);
 		// ids[2] was never scheduled: first of all.
-		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[2], ids[1]]);
-		expect((await withoutUser((db) => claimDueFeeds(db, 2))).map((f) => f.id)).toEqual([ids[0]]);
+		expect((await claimDue(2)).map((f) => f.id)).toEqual([ids[2], ids[1]]);
+		expect((await claimDue(2)).map((f) => f.id)).toEqual([ids[0]]);
 	});
 
 	it('a failing feed backs off 15 min × 2^(failures − 1), never beyond its own interval', async () => {
 		const owner = await signUp('Backoff');
 		const pid = await project(owner);
-		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
 		const dueAfter = async (failures: number, minutesAgo: number) => {
 			await asOwner(`UPDATE data_feed SET consecutive_failures = $2, last_scheduled_at = now() - make_interval(mins => $3) WHERE id = $1`, [id, failures, minutesAgo]);
-			return (await withoutUser((db) => claimDueFeeds(db, 50))).length === 1;
+			return (await claimDue(50)).length === 1;
 		};
 		// Three failures: an hour (a minute's slack for the tick).
 		expect(await dueAfter(3, 55)).toBe(false);
@@ -368,6 +376,64 @@ describe('the scheduler', () => {
 		await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { schedule: 'hourly' });
 		expect(await dueAfter(5, 50)).toBe(false);
 		expect(await dueAfter(5, 60)).toBe(true);
+	});
+
+	it('a daily CHIRPS-GEFS feed is due once the day’s 08:45 UTC has passed since it was last scheduled, in UTC whatever the session time zone (#33)', async () => {
+		// The pure timing function, at fixed instants, in a session far from UTC
+		// (UTC+14: its calendar day already differs from UTC's at 08:45 UTC).
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			await client.query(`SET TimeZone = 'Pacific/Kiritimati'`);
+			const due = async (source: string, schedule: string, failures: number, last: string | null, now: string) =>
+				(await client.query<{ due: boolean }>('SELECT app_feed_is_due($1, $2, $3, $4, $5) AS due', [source, schedule, failures, last, now])).rows[0]!.due;
+			// Fetched at 06:00 UTC (yesterday's issue): not due at 08:40, due at 08:45.
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:40:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:45:00Z')).toBe(true);
+			// Fetched after today's issue: not due again until tomorrow's 08:45, however late today it is.
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T08:46:00Z', '2026-03-01T23:59:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T08:46:00Z', '2026-03-02T08:44:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T08:46:00Z', '2026-03-02T08:45:00Z')).toBe(true);
+			// Just after midnight UTC, the latest slot is yesterday's.
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T08:50:00Z', '2026-03-02T00:10:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'daily', 0, '2026-03-01T08:40:00Z', '2026-03-02T00:10:00Z')).toBe(true);
+			// Never scheduled: due at once.
+			expect(await due('chirps_gefs', 'daily', 0, null, '2026-03-01T03:00:00Z')).toBe(true);
+			// Failing: the backoff still applies (one failure, 15 min).
+			expect(await due('chirps_gefs', 'daily', 1, '2026-03-01T09:00:00Z', '2026-03-01T09:13:00Z')).toBe(false);
+			expect(await due('chirps_gefs', 'daily', 1, '2026-03-01T09:00:00Z', '2026-03-01T09:14:00Z')).toBe(true);
+			// Positive controls: other feeds keep the day-after rule, and hourly GEFS its hour.
+			expect(await due('chirps', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-01T08:45:00Z')).toBe(false);
+			expect(await due('chirps', 'daily', 0, '2026-03-01T06:00:00Z', '2026-03-02T05:59:00Z')).toBe(true);
+			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T06:59:00Z')).toBe(true);
+			expect(await due('chirps_gefs', 'hourly', 0, '2026-03-01T06:00:00Z', '2026-03-01T06:58:00Z')).toBe(false);
+		} finally {
+			await client.end();
+		}
+
+		// And the scheduler uses it: a GEFS feed last scheduled just before the
+		// latest 08:45 UTC is due; one scheduled since is not.
+		const owner = await signUp('Gefs');
+		const pid = await project(owner);
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
+		const latestSlot = `(SELECT CASE WHEN s <= now() THEN s ELSE s - interval '1 day' END
+			FROM (SELECT (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '8 hours 45 minutes') AT TIME ZONE 'UTC' AS s) x)`;
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = ${latestSlot} - interval '1 minute' WHERE id = $1`, [id]);
+		expect((await claimDue()).map((f) => f.id)).toEqual([id]);
+		expect(await claimDue()).toEqual([]);
+	});
+
+	it('a feed is claimed only by its acting user (positive control: the acting user claims it)', async () => {
+		const owner = await signUp('Claimer');
+		const other = await signUp('NotActing');
+		const pid = await project(owner);
+		await member(owner, pid, other, 'owner');
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps())).body.feed.id;
+		expect(await withUser(other.id, (db) => claimFeed(db, id))).toBe(false);
+		expect(await withoutUser((db) => claimFeed(db, id))).toBe(false);
+		expect((await feedRow(id)).last_scheduled_at).toBeNull();
+		expect(await withUser(owner.id, (db) => claimFeed(db, id))).toBe(true);
+		expect(await withUser(owner.id, (db) => claimFeed(db, id))).toBe(false); // claimed: not due until tomorrow
 	});
 
 	it('scheduling a feed whose fetch is already waiting ("Run now") adds no second job', async () => {
@@ -420,6 +486,36 @@ describe('the scheduler', () => {
 		expect((await series(b, pid, 'rain_forecast_mm'))!.values).toHaveLength(16);
 	});
 
+	it('an enqueue that fails partway through a tick leaves no feed claimed without a job (#32)', async () => {
+		const owner = await signUp('Blip');
+		const pid = await project(owner);
+		const ids: string[] = [];
+		for (let i = 0; i < 3; i++) ids.push((await owner.call('POST', `/projects/${pid}/feeds`, chirps({ targetName: `f${i}` }))).body.feed.id);
+		// A database blip on the second feed's job insert (not an RLS refusal).
+		await asOwner(`CREATE FUNCTION test_job_blip() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+			BEGIN
+				IF NEW.payload ->> 'feedId' = '${ids[1]}' THEN RAISE EXCEPTION 'blip' USING ERRCODE = '08006'; END IF;
+				RETURN NEW;
+			END $$`);
+		await asOwner('CREATE TRIGGER test_job_blip BEFORE INSERT ON job FOR EACH ROW EXECUTE FUNCTION test_job_blip()');
+		try {
+			await expect(scheduleDueFeeds()).rejects.toMatchObject({ code: '08006' });
+		} finally {
+			await asOwner('DROP TRIGGER test_job_blip ON job; DROP FUNCTION test_job_blip()');
+		}
+		// Every feed either has its fetch queued or is still due.
+		const jobs = async () =>
+			(await asOwner(`SELECT payload ->> 'feedId' AS id FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid])).map((r) => r.id as string).sort();
+		for (const id of ids) {
+			const queued = (await jobs()).includes(id);
+			expect(queued || (await feedRow(id)).last_scheduled_at === null, id).toBe(true);
+		}
+		expect(await jobs()).toEqual([ids[0], ids[2]].sort()); // the others weren't held up by the blip
+		// The next tick queues what the blip missed, and nothing twice.
+		expect(await scheduleDueFeeds()).toEqual({ queued: 1, refused: 0 });
+		expect(await jobs()).toEqual([...ids].sort());
+	});
+
 	it('a feed whose acting user deleted their account is kept but skipped until an owner saves it', async () => {
 		const a = await signUp('Leaver');
 		const b = await signUp('Stayer');
@@ -428,7 +524,7 @@ describe('the scheduler', () => {
 		const id = (await a.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
 		await asOwner('DELETE FROM app_user WHERE id = $1', [a.id]);
 		expect(await feedRow(id)).toMatchObject({ acting_user_id: null });
-		expect(await withoutUser((db) => claimDueFeeds(db, 50))).toEqual([]);
+		expect(await claimDue(50)).toEqual([]);
 		expect((await b.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].actingUser).toBeNull();
 	});
 });
