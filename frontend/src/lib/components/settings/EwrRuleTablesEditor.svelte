@@ -10,7 +10,20 @@
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { applyPaste, naturalComplete, parseGrid, parsePoints, setPoints, tableErrors, tableNotes, type SiteOption } from './ewrRules';
+	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
+	import {
+		applyPaste,
+		exampleGridCsv,
+		naturalComplete,
+		parseGrid,
+		parsePoints,
+		setLowFlowSplit,
+		setPoints,
+		tableErrors,
+		tableNotes,
+		type GridKey,
+		type SiteOption
+	} from './ewrRules';
 
 	let {
 		value = $bindable(),
@@ -64,7 +77,23 @@
 		if (source === 'run' && t.natural && !naturalComplete(t.natural)) t.natural = null;
 	}
 
-	function paste(i: number, which: 'ewr' | 'natural') {
+	/** What the table covers: a low-flow table can't also carry a separate low-flow grid, so switching to it drops one. */
+	function setComponent(i: number, component: EwrRuleTable['component']) {
+		value[i] = { ...value[i]!, component, ...(component === 'lowFlow' ? { lowFlow: null } : {}) };
+	}
+
+	/** A CSV or text file's contents into the paste box, to fill whichever grid the user picks. */
+	async function loadFile(i: number, e: Event & { currentTarget: HTMLInputElement }) {
+		const f = e.currentTarget.files?.[0];
+		e.currentTarget.value = '';
+		if (!f) return;
+		pasteText[i] = await f.text();
+		pasteNote[i] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
+	}
+
+	const exampleHref = (kind: 'total' | 'lowFlow') => `data:text/csv;charset=utf-8,${encodeURIComponent(exampleGridCsv(kind))}`;
+
+	function paste(i: number, which: GridKey) {
 		const g = parseGrid(pasteText[i] ?? '');
 		if ('error' in g) {
 			pasteNote[i] = { ok: false, text: g.error };
@@ -78,7 +107,7 @@
 		value[i] = out;
 		pointsText[i] = out.points.join(', ');
 		pointsBad[i] = false;
-		const what = which === 'ewr' ? 'EWR' : 'natural flow';
+		const what = which === 'ewr' ? 'EWR' : which === 'lowFlow' ? 'low-flow' : 'natural flow';
 		pasteNote[i] = {
 			ok: true,
 			text: [`Filled the ${what} values: 12 months × ${out.points.length} % points${g.monthLabels ? ' (rows matched by month name)' : ' (rows read as Oct … Sep)'}.`, ...g.notes].join(' ')
@@ -117,10 +146,16 @@
 			</div>
 			<div class="field">
 				<label for="{uid}-{i}-comp">The table covers</label>
-				<select id="{uid}-{i}-comp" disabled={readonly} bind:value={t.component}>
+				<select id="{uid}-{i}-comp" disabled={readonly} value={t.component} onchange={(e) => setComponent(i, e.currentTarget.value as EwrRuleTable['component'])}>
 					<option value="total">Total flow (low and high flows)</option>
 					<option value="lowFlow">Low flows only</option>
 				</select>
+				{#if t.component === 'total'}
+					<label class="check">
+						<input type="checkbox" disabled={readonly} checked={!!t.lowFlow} onchange={(e) => (value[i] = setLowFlowSplit(t, e.currentTarget.checked))} />
+						Also enter the low flows (maintenance and drought), to see which part fails
+					</label>
+				{/if}
 			</div>
 			<div class="field">
 				<label for="{uid}-{i}-unit">Unit</label>
@@ -171,8 +206,8 @@
 			</div>
 		</div>
 
-		{#snippet grid(which: 'ewr' | 'natural', label: string)}
-			{@const rows = which === 'ewr' ? t.ewr : t.natural!}
+		{#snippet grid(which: GridKey, label: string)}
+			{@const rows = which === 'ewr' ? t.ewr : which === 'lowFlow' ? t.lowFlow! : t.natural!}
 			<div class="table-wrap">
 				<table class="data compact rulegrid">
 					<caption>{label} at each % point <span class="u">({u})</span></caption>
@@ -204,8 +239,12 @@
 				</table>
 			</div>
 		{/snippet}
-		{@render grid('ewr', 'EWR')}
+		{@render grid('ewr', t.component === 'lowFlow' ? 'EWR (low flows)' : t.lowFlow ? 'EWR (total flow)' : 'EWR')}
 		{#if errs.ewr}<p class="err" role="alert">{errs.ewr}</p>{/if}
+		{#if t.component === 'total' && t.lowFlow}
+			{@render grid('lowFlow', 'Low flows (maintenance to drought)')}
+			{#if errs.lowFlow}<p class="err" role="alert">{errs.lowFlow}</p>{/if}
+		{/if}
 		{#if t.naturalSource === 'table' && t.natural}
 			{@render grid('natural', 'Natural flow')}
 			{#if errs.natural}<p class="err" role="alert">{errs.natural}</p>{/if}
@@ -224,12 +263,24 @@
 				></textarea>
 				<div class="actions">
 					<button type="button" class="btn btn-sm" onclick={() => paste(i, 'ewr')}>Fill the EWR values</button>
+					{#if t.component === 'total' && t.lowFlow}
+						<button type="button" class="btn btn-sm" onclick={() => paste(i, 'lowFlow')}>Fill the low flows</button>
+					{/if}
 					{#if t.naturalSource === 'table'}
 						<button type="button" class="btn btn-sm" onclick={() => paste(i, 'natural')}>Fill the natural flows</button>
 					{/if}
+					<label class="btn btn-sm file">
+						Load a CSV file
+						<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange={(e) => loadFile(i, e)} />
+					</label>
 				</div>
+				<p class="small">
+					Example layouts (synthetic numbers): <a href={exampleHref('total')} download="ewr-total-example.csv">total-flow table</a>,
+					<a href={exampleHref('lowFlow')} download="ewr-low-flow-example.csv">low-flow table</a>.
+				</p>
 			</div>
 		{/if}
+		<EwrHighFlowsEditor bind:value={() => t.highFlows ?? [], (v) => (t.highFlows = v)} {readonly} siteLabel={siteLabel(t.siteNodeId)} />
 		<p id="{uid}-{i}-status" class="small" class:err={pasteNote[i] && !pasteNote[i].ok} role="status">{pasteNote[i]?.text ?? ''}</p>
 		{#if notes.length}
 			<ul class="notes small" aria-label="Checks on this table">
@@ -328,6 +379,27 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
+	}
+	.check {
+		display: flex;
+		gap: 0.4rem;
+		align-items: flex-start;
+		font-size: 0.8rem;
+		margin-top: 0.35rem;
+	}
+	.check input {
+		width: auto;
+		margin-top: 0.15rem;
+	}
+	.file {
+		position: relative;
+		overflow: hidden;
+	}
+	.file input {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		cursor: pointer;
 	}
 	.notes {
 		color: var(--warning);

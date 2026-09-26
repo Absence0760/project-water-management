@@ -4,9 +4,11 @@
 import {
 	blankEwrRuleTable,
 	DEFAULT_ASSURANCE_POINTS,
+	EWR_HIGH_FLOWS_MAX,
 	ewrRuleListIssues,
 	ewrRuleTableIssues,
 	ewrRuleTableNotes,
+	type EwrHighFlowEvent,
 	type EwrRuleTable,
 	type NetworkNode
 } from '@water-management/engine';
@@ -64,7 +66,7 @@ export function setPoints(t: EwrRuleTable, points: number[]): EwrRuleTable {
 			const i = t.points.indexOf(p);
 			return i >= 0 ? row[i]! : NaN;
 		}));
-	return { ...t, points, ewr: move(t.ewr)!, natural: move(t.natural) };
+	return { ...t, points, ewr: move(t.ewr)!, natural: move(t.natural), lowFlow: move(t.lowFlow ?? null) };
 }
 
 /** Every cell of a grid is a number ≥ 0 (a blank is null or NaN). */
@@ -180,13 +182,28 @@ const WY = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'
  * points replace the table's; without one, the paste must have one value per
  * existing point.
  */
-export function applyPaste(t: EwrRuleTable, which: 'ewr' | 'natural', grid: ParsedGrid): EwrRuleTable | { error: string } {
+export function applyPaste(t: EwrRuleTable, which: GridKey, grid: ParsedGrid): EwrRuleTable | { error: string } {
 	const width = grid.rows[0]!.length;
 	if (!grid.points && width !== t.points.length) {
 		return { error: `The paste has ${width} values a row but the table has ${t.points.length} % points: paste the heading row too, or change the points first.` };
 	}
 	const base = grid.points && !same(grid.points, t.points) ? setPoints(t, grid.points) : t;
 	return { ...base, [which]: grid.rows.map((r) => [...r]) };
+}
+
+/** The grids a table holds: the EWR (total or low flows), the natural flows, and the low flows of a total table (engine ≥ 0.32.0). */
+export type GridKey = 'ewr' | 'natural' | 'lowFlow';
+
+/** A blank grid of a table's shape (null cells, so Save stays blocked until it is filled). */
+export const blankGrid = (t: Pick<EwrRuleTable, 'points'>) => Array.from({ length: 12 }, () => t.points.map(() => null as unknown as number));
+
+/**
+ * Split the low flows out of a total table (a blank low-flow grid, or the
+ * one it had), or stop (drop it). A low-flow table has none: its EWR grid is
+ * the low flows.
+ */
+export function setLowFlowSplit(t: EwrRuleTable, on: boolean): EwrRuleTable {
+	return { ...t, lowFlow: on && t.component === 'total' ? (t.lowFlow ?? blankGrid(t)) : null };
 }
 
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -196,3 +213,116 @@ export const DEFAULT_POINTS_TEXT = DEFAULT_ASSURANCE_POINTS.join(', ');
 
 /** Mm³ per month ↔ mean m³/s over a 30.4-day month, for the unit hint. */
 export const mcmToM3s = (mcm: number) => (mcm * 1e6) / (30.4375 * 86_400);
+
+// ---------------------------------------------------------------------------
+// High-flow components (engine ≥ 0.32.0, docs/model.md §2.9d)
+// ---------------------------------------------------------------------------
+
+/** A new freshet: November–January, 3 days, once a year; the name and peak are left blank to fill in. */
+export const blankHighFlow = (): EwrHighFlowEvent => ({ label: '', months: [11, 12, 1], peakM3s: NaN, durationDays: 3, perYear: 1 });
+
+const FULL_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/** "Nov", "november", "Sept" or "11" → 11; null otherwise (at least three letters of the name, nothing after it). */
+function monthOfText(t: string): number | null {
+	if (/^\d+$/.test(t)) {
+		const n = Number(t);
+		return n >= 1 && n <= 12 ? n : null;
+	}
+	const s = t.toLowerCase();
+	const i = s.length >= 3 ? FULL_MONTHS.findIndex((f) => f.startsWith(s)) : -1;
+	return i >= 0 ? i + 1 : null;
+}
+
+/**
+ * "Nov, Dec, Jan" / "11 12 1" / "Nov-Jan" → calendar months, each once, in
+ * the order given; null when a part isn't a month. A range runs forward
+ * through the year and wraps: Nov-Jan is 11, 12, 1.
+ */
+export function parseMonths(text: string): number[] | null {
+	const out: number[] = [];
+	for (const raw of text.split(/[\s,;/]+/).filter(Boolean)) {
+		const range = raw.match(/^([a-z]+|\d+)[-–]([a-z]+|\d+)$/i);
+		if (range) {
+			const a = monthOfText(range[1]!);
+			const b = monthOfText(range[2]!);
+			if (a === null || b === null) return null;
+			for (let m = a; ; m = (m % 12) + 1) {
+				out.push(m);
+				if (m === b) break;
+			}
+			continue;
+		}
+		const m = monthOfText(raw);
+		if (m === null) return null;
+		out.push(m);
+	}
+	return out.length ? [...new Set(out)] : null;
+}
+
+/** Cells of one row: tab-separated, else semicolons, else a CSV row (double quotes group a cell). */
+function splitRow(line: string): string[] {
+	if (line.includes('\t')) return line.split('\t');
+	if (line.includes(';')) return line.split(';');
+	const cells: string[] = [];
+	let cur = '';
+	let quoted = false;
+	for (const ch of line) {
+		if (ch === '"') quoted = !quoted;
+		else if (ch === ',' && !quoted) {
+			cells.push(cur);
+			cur = '';
+		} else cur += ch;
+	}
+	cells.push(cur);
+	return cells;
+}
+
+/**
+ * Read high-flow components pasted from a spreadsheet or a CSV file, one per
+ * row: name, months, peak (m³/s), duration (days), events per year. A first
+ * row whose peak isn't a number is a heading and is skipped. Months are
+ * "Nov-Jan", "Nov Dec Jan" or numbers; in a CSV, quote a months cell that
+ * holds commas. The engine's checks (ranges, fits in a year) run on Save.
+ */
+export function parseHighFlows(text: string): EwrHighFlowEvent[] | { error: string } {
+	const lines = text
+		.replace(/\r/g, '')
+		.split('\n')
+		.map((l) => l.trim())
+		.filter(Boolean);
+	if (!lines.length) return { error: 'Paste the high flows first.' };
+	const num = (c: string) => (c.trim() === '' ? NaN : Number(c.trim().replace(/^(\d+),(\d+)$/, '$1.$2')));
+	const out: EwrHighFlowEvent[] = [];
+	for (const [i, line] of lines.entries()) {
+		const cells = splitRow(line).map((c) => c.trim());
+		if (cells.length < 5) return { error: `Row ${i + 1} needs five cells: name, months, peak (m³/s), duration (days), events per year.` };
+		const [label, months, peak, duration, perYear] = cells as [string, string, string, string, string];
+		if (i === 0 && !Number.isFinite(num(peak))) continue;
+		const m = parseMonths(months);
+		if (!m) return { error: `Row ${i + 1}: “${months}” isn't a list of months (e.g. Nov-Jan, or Nov Dec Jan).` };
+		const e: EwrHighFlowEvent = { label, months: m, peakM3s: num(peak), durationDays: num(duration), perYear: num(perYear) };
+		if (![e.peakM3s, e.durationDays, e.perYear].every(Number.isFinite)) return { error: `Row ${i + 1} has a value that isn't a number.` };
+		out.push(e);
+	}
+	if (!out.length) return { error: 'No high-flow rows under the heading.' };
+	if (out.length > EWR_HIGH_FLOWS_MAX) return { error: `At most ${EWR_HIGH_FLOWS_MAX} high-flow components per table; the paste has ${out.length}.` };
+	return out;
+}
+
+/**
+ * A synthetic example of the CSV the grids read, laid out as a Desktop
+ * Reserve Model table (month rows, % point columns, Mm³ per month), falling
+ * from the wet-condition flow at 10 % to the drought flow at 99 % and wetter
+ * in summer. Invented numbers, for the layout only.
+ */
+export function exampleGridCsv(kind: 'total' | 'lowFlow'): string {
+	const points = DEFAULT_ASSURANCE_POINTS;
+	const season = [0.5, 0.8, 1.2, 1.6, 1.8, 1.5, 0.9, 0.6, 0.45, 0.4, 0.35, 0.4];
+	const scale = kind === 'total' ? 1 : 0.55;
+	const rows = WY.map((m, i) => [m, ...points.map((p) => (season[i]! * scale * (1.1 - p / 100)).toFixed(3))].join(','));
+	return `${['Month', ...points.map((p) => `${p}%`)].join(',')}\n${rows.join('\n')}\n`;
+}
+
+/** A synthetic example of the high-flow CSV. Invented numbers. */
+export const EXAMPLE_HIGH_FLOWS_CSV = 'Name,Months,Peak (m3/s),Duration (days),Events per year\nClass I freshet,Oct-Nov,2.5,2,2\nClass II flood,Dec-Mar,8,3,1\n';
