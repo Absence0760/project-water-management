@@ -22,6 +22,7 @@ export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
 export * from './uncertainty';
+export * from './modelRules';
 export * from './scenario';
 export * from './verify/columns';
 export { verifyRun } from './verify/verify';
