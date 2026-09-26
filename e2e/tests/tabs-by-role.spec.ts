@@ -115,3 +115,51 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v).not.toHaveURL(/\?tab=/);
 	await expect(strip(v).getByRole('link', { name: 'Summary' })).toBeFocused();
 });
+
+test.describe('phone', () => {
+	test.use({ viewport: { width: 390, height: 844 } });
+
+	test('the sections sit behind a "Sections" button naming the open tab', async ({ page, owner, signIn }) => {
+		void owner;
+		const project = await createProject(page.request, 'Tabs on a phone');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}`);
+		const button = page.getByRole('button', { name: 'Project sections: Summary' });
+		await expect(button).toHaveAttribute('aria-expanded', 'false');
+		await expect(strip(page)).toBeHidden();
+
+		await button.click();
+		await expect(button).toHaveAttribute('aria-expanded', 'true');
+		await expect(strip(page).getByRole('group', { name: 'Outcomes' })).toBeVisible();
+		await expect(strip(page).getByRole('group', { name: 'Build the model' })).toBeVisible();
+		await expect(strip(page).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
+		await expect.poll(() => tabNames(page)).toEqual(EVERY_TAB);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		await expectNoViolations(page);
+
+		// Choosing a tab closes the menu and names the new one.
+		await strip(page).getByRole('link', { name: 'Network' }).click();
+		await expect(page).toHaveURL(/\?tab=network$/);
+		const now = page.getByRole('button', { name: 'Project sections: Network' });
+		await expect(now).toHaveAttribute('aria-expanded', 'false');
+		await expect(strip(page)).toBeHidden();
+
+		// Escape closes it and puts focus back on the button.
+		await now.click();
+		await strip(page).getByRole('link', { name: 'Data' }).focus();
+		await page.keyboard.press('Escape');
+		await expect(strip(page)).toBeHidden();
+		await expect(now).toBeFocused();
+
+		// A viewer's "Show model inputs" is inside the menu.
+		const viewer = await signIn('Phone tabs viewer');
+		await addMember(page.request, project.id, viewer.user.email, 'viewer');
+		const v = viewer.page;
+		await v.setViewportSize({ width: 390, height: 844 });
+		await v.goto(`/projects/${project.id}`);
+		await expect(toggle(v)).toBeHidden();
+		await v.getByRole('button', { name: 'Project sections: Summary' }).click();
+		await toggle(v).check();
+		await expect.poll(() => tabNames(v)).toEqual(VIEWER_ALL);
+	});
+});
