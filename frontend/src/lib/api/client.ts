@@ -37,6 +37,7 @@ import type {
 	SeriesRevisionMeta,
 	Member,
 	Nomination,
+	Reproduction,
 	Project,
 	ProjectFile,
 	ProjectSummary,
@@ -402,6 +403,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
 			nominate: (id: string, runId: string, reason: string) =>
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
+			/** Re-run a run from its stored inputs with today's engine and compare (WP-3.1). */
+			reproduce: (id: string, runId: string) => request<Reproduction>('GET', `${p(id)}/runs/${enc(runId)}/reproduce`),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},
