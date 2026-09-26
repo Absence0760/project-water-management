@@ -1189,6 +1189,36 @@ role and not before it.
         failing on a phone or low-memory machine, or a workbook with a longer
         record than the client's.
 
+- **Publication** (roadmap WP-2.3 phase 1, 2026-09-25; [data-model.md §
+  Publications](./data-model.md#publications-022_publicationsql),
+  [api.md § Publication](./api.md#publication)). Built: `022_publication`,
+  `farmProjection` / `catchmentView` in the engine, the publication routes,
+  the farm-view API routes of WP-2.6 (index, view, CSV), publishing from the
+  Runs tab, the seeded publications. Left open:
+  - [ ] **Share links** (WP-2.3 phase 2): `share_link`, `app_share_view` /
+        `app_share_series`, `POST /share/view` and `/share/series`, the
+        `/share` page and the owner's Share links panel, with their tests
+        (revoked or expired tokens answer nothing, farm keys refused).
+        Trigger: the WUA asks to send the catchment result to someone outside
+        the project, and before the Step 2 release (WP-2.16) at the latest.
+  - [ ] **Audit events** for publishing and for notice changes: today only
+        `published_by` and `updated_at` / `updated_by` record them. Needs
+        WP-2.4's `audit_event`; add the writes in the same change.
+  - [ ] **Roadmap UI still to build around it:** the Overview's "Published
+        baseline" card, opening viewers on the published run by default, and
+        run-comparison's "compare with published". Trigger: the WP-2.6 farm
+        page lands (its preview button needs the same card).
+  - [ ] **The binding EWR site is recomputed, not stored.** A run doesn't
+        store which site bound a farm's charge each day, so the projection
+        re-runs the engine's attribution on the stored flows. Exact, except
+        when the transfer rules form a loop (per-rule volumes can't be solved
+        from the farms' net transfer series; the loop is cut and
+        `bindingApproximate` says so). Durable fix: store the per-rule
+        transfer volumes (or the per-day binding site) as run series. Trigger:
+        the next change that bumps `ENGINE_VERSION`.
+  - [ ] **The chart series and per-farm history routes** of WP-2.6
+        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
+
 ## Pipelines
 
 - Releases are `web@X.Y.Z` / `backend@X.Y.Z` GitHub releases, run through a
@@ -1202,6 +1232,18 @@ role and not before it.
       - a CodeQL Python leg for `scripts/wbt-import`.
 
 ## Housekeeping
+
+- [ ] **The feeds and jobs DB tests fail intermittently in a full
+      `pnpm test:backend:db` run** (2026-09-25), and pass when run on their
+      own: a different one or two of `feeds.db.test.ts` / `jobs.db.test.ts`
+      each time, on `eaafecd` as on the publication branch, so it predates
+      WP-2.3. Likely cause, unconfirmed: the job queue and the feed scheduler
+      are global, so a tick in one file also claims (or is crowded out by)
+      jobs and due feeds another file left behind, against the header's
+      assumption that "a tick here sees only this file's jobs". Durable fix:
+      scope each test's ticks to its own projects (or clear the queue and
+      disable leftover feeds before each file), not retries. Trigger: the
+      next change to either file, or the first CI failure from it.
 
 - During early development, work is pushed straight to `main`, without PRs, at
   the operator's request.

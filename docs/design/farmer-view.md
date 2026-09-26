@@ -3,7 +3,8 @@
 Design spec for [issue #14](https://github.com/Absence0760/project-water-management/issues/14).
 It feeds the build of [WP-2.1](../roadmap/step-2-shared-catchment.md#wp-21-farmer-role-and-farm-scoped-rls)
 (farm-scoped RLS) and [WP-2.6](../roadmap/step-2-shared-catchment.md#wp-26-phone-first-farmer-view)
-(the view). Nothing here is built yet. Where this spec and the roadmap
+(the view). WP-2.1 and WP-2.3 (with the WP-2.6 API routes) are built; the
+view itself is not yet (§12). Where this spec and the roadmap
 disagree, this spec is the newer decision; §12 lists every change it asks of
 the roadmap.
 
@@ -535,6 +536,28 @@ criterion "Need verdict at least Adopt if… with no privacy finding").
   the headline fraction (E7).
 - `run_publication.next_expected_on` (E10).
 - The publish dialog warns about farm dams with no stop level.
+
+*Status (2026-09-25): built, with the WP-2.6 API routes (index, view, CSV;
+`packages/engine/src/views/farmProjection.ts`, `022_publication.sql`,
+`backend/src/publish/`, `backend/src/farms/view.ts`). Where the build
+settled something this spec left open:*
+- *`dataUntil` is the last day of observed rain (catchment gauge or CHIRPS)
+  in the run's input snapshot: a run that goes on on forecast rain is
+  projected only to there, so forecast days never count as water received.*
+- *`catchment_view` holds counts and dates only, per §10.3: the roadmap's
+  mean natural and simulated flow and its farm totals at ≥ k are left out,
+  since every member, farmers included, reads it.*
+- *The binding site (`river.bindingSite`) is recomputed from the run's
+  stored flows with the engine's attribution, since a run doesn't store it
+  (exact unless the transfer rules form a loop; followups.md).*
+- *`FarmView.publication.restriction` gains an optional `noticeLang`, so the
+  page can show "not translated" when the notice falls back to the other
+  language (§7).*
+- *A legacy-runoff-model run can't be published (audit H1).*
+- *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop
+  level); "all when your dam was down to its stop level" reads for dam farms
+  only, as §3 Q1 says.*
+- *Share links are WP-2.3 phase 2, not built (followups.md).*
 
 **WP-2.6** (the view):
 - Card order, band, wording and states as in §5 and §6; the model card's

@@ -144,10 +144,13 @@ its `inputs` snapshot plus `engine_version`.
   (`removedRunIds`). A **kept** run is never trimmed and doesn't count
   against the cap: one an editor **pinned** (see **Pinned runs** below), or
   one the evidence history names (current or past nomination, see **Evidence
-  nomination** below). Both go through one exemption, `RUN_KEPT_SQL` in
-  `backend/src/runs/execute.ts`, which `trimRuns` and the `DELETE` route
-  share. So a project holds at most 20 unpinned, unnominated runs, plus at
-  most 10 pinned, plus the runs its (at most 50) nominations name.
+  nomination** below), or one a publication holds (the current one or one in
+  the history, see [Publications](#publications-022_publicationsql)). All three
+  go through one exemption, `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`,
+  which `trimRuns` and the `DELETE` route share. So a project holds at most 20
+  unpinned, unnominated, unpublished runs, plus at most 10 pinned, plus the
+  runs its (at most 50) nominations name, plus the runs its (at most 12)
+  publications hold.
 - **Output keys: none trimmed, on measurement.** On the local examples,
   TOAST compression already shrinks the constant or mostly-zero series
   (`transfer`, `is_summer`, catchment `ewr`, `deficit` on well-supplied farms)
@@ -404,7 +407,10 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |
-  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no `run_series` (a farmer will read results only through a publication, WP-2.3), no invites, teams, jobs, feeds or evidence |
+  | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
+  | `publication_farm` | the projections of their linked farms (022) |
+  | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
+  | everything else | nothing: no `time_series` (observed and logger flows reveal neighbours' use in a small catchment), no `model_run` (its inputs and summary hold every farm), no other `run_series` (flows such as `inflow_upstream` are a neighbour's outflow when one farm is upstream; catchment series reveal the neighbours' use), no invites, teams, jobs, feeds or evidence |
 
   A farmer writes nothing: every write policy asks for `editor` or `owner`.
 - **A link needs a membership and goes with it**: `farm_link` has a foreign
@@ -429,8 +435,73 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
 - Guards: `src/farms/farms.db.test.ts` (every table, with positive controls,
   and every `/projects/:id` route answering a farmer `400`/`403`), and a
   catalogue test that every table with a node column has a farmer-aware
-  `SELECT` policy or is listed as never read by farmers (`run_series` until
-  WP-2.3).
+  `SELECT` policy or is listed as never read by farmers (none since 022 gave
+  `run_series` its publication-scoped farmer policy).
+
+### Publications (022_publication.sql)
+
+The **published baseline** (roadmap WP-2.3; design
+[design/farmer-view.md](./design/farmer-view.md) §2, §4): the run an editor
+chose for the project's stakeholders, with the WUA's restriction notice.
+
+- `run_publication (id, project_id, run_id → model_run, published_by →
+  app_user SET NULL, published_at, note ≤ 2000, restriction_level none |
+  advisory | restricted, restriction_pct numeric(5,2) NULL (0–100, NULL with
+  none), notice_en / notice_af ≤ 2000, next_expected_on date NULL (E10),
+  catchment_view jsonb, superseded_at, updated_at, updated_by → app_user SET
+  NULL)`. A partial unique index on `(project_id) WHERE superseded_at IS
+  NULL` allows one **current** publication per project; publishing
+  supersedes the current one in the same transaction (under a per-project
+  advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
+  `published_by`, `updated_by`.
+- `publication_farm (publication_id → run_publication CASCADE, project_id,
+  node_id → node CASCADE, view jsonb, PRIMARY KEY (publication_id, node_id))`,
+  indexed on `node_id` and `project_id`: one farm's `FarmProjection`
+  (`packages/engine/src/views/farmView.ts`), computed once by
+  `farmProjection` when the run is published, for every farm of the run's
+  model snapshot that is still a farm of the project. **Append-only**: what
+  the farm's farmers were shown (no `UPDATE` or `DELETE` grant; rows go with
+  their publication or node).
+- `catchment_view` is the engine's `CatchmentView` plus the run's engine
+  version, runoff model and calibration headline: counts and dates only (days
+  the reserve was not met at each EWR site over the run, the season and 30
+  days; the farm count). No flow volume and no total of farm quantities,
+  because every member, farmers included, reads it (design §10.3).
+- **The season.** Every projection figure is over 1 October (the water
+  year's start) to the run's last day (`dataUntil`), and the curtailment
+  row is `computeCurtailment` over that season, not the modeller's report
+  window (E5). The binding EWR site, which a run doesn't store, is
+  recomputed with the engine's attribution on the run's stored flows
+  (exact unless the transfer rules form a loop; see the file header).
+- **Immutable but for the notice.** `water_app` has `UPDATE` on the notice
+  columns (`restriction_level`, `restriction_pct`, `notice_en`, `notice_af`),
+  `note`, `next_expected_on`, `superseded_at`, `updated_at` and `updated_by`
+  only; the run, the projection, the publisher and the date can't change
+  (the catalogue test pins the list).
+- **Keeps its run.** `run_id` has no cascade (`NO ACTION`, checked at the end
+  of the statement, so deleting a whole project still works; `RESTRICT` would
+  fail it), `trimRuns` skips a run any publication holds and `DELETE
+  …/runs/:runId` answers `409`.
+- **History: the newest 12 per project.** The `run_publication_cap` AFTER
+  INSERT trigger (`SECURITY DEFINER`, since the editor who publishes may not
+  delete publications) deletes the older superseded ones with their farm
+  rows; their runs become trimmable again. `PUBLICATION_HISTORY_MAX` in
+  `backend/src/publish/publish.ts` holds the same number.
+- **RLS.** `run_publication`: SELECT any member, farmers included
+  (`app_has_role(project_id, 'farmer')`); INSERT editor, as yourself
+  (`published_by` = the current user); UPDATE editor; DELETE owner.
+  `publication_farm`: SELECT viewer, or a farmer whose `app_farm_nodes`
+  holds the node; INSERT editor. `run_series` gains
+  `run_series_select_farmer` (above). `assert_same_project` (re-created from
+  001 with `%run_id` → `model_run` and `%publication_id` →
+  `run_publication` branches) keeps a publication's run, and a projection's
+  node and publication, in the project.
+- The modeller's `note` is for the project's staff: the API returns it to
+  viewers and above only. RLS can't hide one column, so it is readable by a
+  farmer at the database level; the publish dialog says farmers don't see it
+  through the app ([security.md](./security.md)).
+- Not built yet: share links (`share_link`, `app_share_view`), WP-2.3 phase 2
+  ([followups.md](./followups.md)); the audit log of notice changes (WP-2.4).
 
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
@@ -507,6 +578,10 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Farmers (`farmer` role, 020): the extra farm-scoped `SELECT` policies of
   § Farmers above; `farm_link`: viewers read every link, a farmer their own,
   owners change them.
+- Publications (022): `run_publication` read by any member, farmers
+  included, written by editors, deleted by owners; `publication_farm` read by
+  viewers and the linked farmers, inserted by editors, never changed (see
+  § Publications above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns

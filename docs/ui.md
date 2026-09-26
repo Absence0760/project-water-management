@@ -878,7 +878,8 @@ its own chunk loaded with the tab; WP-2.10,
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
   together sit together:
-  1. **Summary**, then **Notes & evidence** (`#res-notes`).
+  1. **Summary**, then **Notes & evidence** (`#res-notes`) and
+     **Publication** (`#res-publication`).
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
      EWR vs outflow beside the flow-duration curve (one menu entry, **EWR &
      flow duration**, since they share a row), EWR by month.
@@ -902,7 +903,7 @@ its own chunk loaded with the tab; WP-2.10,
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1981–2025", `runs/runList.ts`), then small tags
-  (latest, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
+  (latest, Published, Evidence / Former evidence, Pinned, Workbook comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -918,6 +919,28 @@ its own chunk loaded with the tab; WP-2.10,
   server's `409` reason in the tab's error. Viewers see the badge but no
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
   option (read only).
+- **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
+  its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
+  menu entry **Publication**). Says whether the shown run is the project's
+  published baseline ("This run is the published baseline … Published … by
+  …"), another run is, or nothing is published yet, and shows the current
+  notice: the level with its percentage ("Advisory · 10 %"), the English and
+  Afrikaans text, the next update date and who last changed it. Editors get
+  **Publish this run** on any other run: a confirm dialog says what changes
+  for stakeholders (each farmer sees this run's figures for their own farm
+  from 1 October, and the notice; it replaces the current baseline, which
+  stays in the history), warns when farm dams have no stop level ("N farm
+  dams have no stop level (0 %)…", from the run's model snapshot, design
+  §3 Q3), and holds the notice fields (level, cut %, next update date,
+  notice in English and Afrikaans) and an optional note for the staff
+  ("farmers don't see it"). **Publish** answers "Published. N farm views
+  updated." **Edit notice** changes the current notice in place (`PATCH`,
+  no re-publishing): "Notice saved." A legacy-model run says why it can't be
+  published. In the runs list the current published run carries a
+  **Published** tag, and no run a publication holds has a delete button (the
+  server refuses with `409`); the run header repeats the badge as a link to
+  the section. Viewers see the status and the notice, no actions. The farm
+  page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one to three plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve
