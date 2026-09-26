@@ -208,6 +208,9 @@ export type AuditKind =
 	| 'scenario.unshared'
 	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
 	| 'alert_rules.changed'
+	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14
+	// D11, 055_team_settings): recorded on each of the team's projects.
+	| 'team_thresholds.changed'
 	| 'restore';
 
 /**
@@ -223,6 +226,25 @@ export async function recordAudit(db: Db, projectId: string, kind: AuditKind, su
 			coalesce((SELECT left(display_name, 200) FROM app_user WHERE id = app_current_user_id()), app_api_key_label(), ''), $2, $3)`,
 		[projectId, kind, JSON.stringify(subject)]
 	);
+}
+
+/**
+ * Record one audit event on every project of a team, for a team-level change
+ * that changes what each of them shows (the portfolio thresholds). One
+ * statement, as the signed-in user: RLS lets it reach only projects they can
+ * see and write events on (a team admin owns all of the team's). Returns how
+ * many were written; a team with no projects records nothing, since nothing
+ * it holds changed.
+ */
+export async function recordTeamAudit(db: Db, teamId: string, kind: AuditKind, subject: Record<string, unknown> = {}): Promise<number> {
+	const { rowCount } = await db.query(
+		`INSERT INTO audit_event (project_id, actor_user_id, actor_api_key_id, actor_label, kind, subject)
+		 SELECT p.id, app_current_user_id(), NULL,
+			coalesce((SELECT left(display_name, 200) FROM app_user WHERE id = app_current_user_id()), ''), $2, $3
+		 FROM project p WHERE p.team_id = $1`,
+		[teamId, kind, JSON.stringify(subject)]
+	);
+	return rowCount ?? 0;
 }
 
 /** "jane@example.com" → "j•••@example.com": enough for the owner to recognise, not a mailing list for every viewer. */
