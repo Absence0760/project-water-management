@@ -364,6 +364,63 @@ Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
 kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
 
+## Sweeps
+
+A **sweep** (issue #53 R2, [planning-outputs.md §3.2](./design/planning-outputs.md#32-r2-scenario-sweeps-as-a-background-job-m))
+is one saved base run × a list of named **members**, each an op set, run
+as one background job. The main use is demand levels: `demand.scale` at
+1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
+and R5's seasonal outlook read. Built as backend and API only
+(`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
+migration 062); the UI waits for R4's matrix view, the first screen that
+needs one.
+
+- **Not a scenario.** A member has no row in `scenario` and makes no
+  `model_run`: it stores its **run summary** (the `RunSummary` a run
+  stores in `model_run.summary`) and the catchment-level daily series R4's
+  outcome matrix and R5's outlook read (`natural_flow`,
+  `simulated_outflow`, `ewr`, `ewr_shortfall`; `SWEEP_SERIES_KEYS`), never
+  every node's series, so a sweep never counts against the 20-run cap and
+  never shows in the run list. A member's `{ startDate, series, summary }`
+  is what `outcomeMatrix`'s `OutcomeLevelInput.run` takes (map `null`
+  values back to `NaN`). The storage follows the
+  uncertainty ensemble's pattern ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)):
+  the row with everything its result depends on is written first, the
+  result is stored once by whoever asked, and never changed after
+  ([data-model.md § Scenario sweeps](./data-model.md#scenario-sweeps-062_scenario_sweepssql)).
+- **Validation.** Each member's ops are checked as a scenario's are
+  (`scenarios/schema.ts` `checkOps`: the engine's `validateScenarioOps`,
+  ids as UUIDs) when the sweep is asked for. Whether they *apply* to the
+  base run is checked per member by the job, with `checkScenario` as a team
+  scenario with no owned nodes: a member whose ops don't apply stores its
+  problems (`status: problems`, the same lines a scenario's check gives), a
+  member the engine refuses stores the engine's message (`failed`), and the
+  other members still run. A sweep never fails for one member.
+- **The job** (`sweep`, [architecture.md § Background work](./architecture.md#background-work))
+  runs as the editor who asked, under RLS, and fails closed if they lost the
+  role. It rebuilds the base run's stored input once (`loadBaseInput`),
+  applies each member's ops and runs the engine inside the job's
+  transaction, so every member's outcome commits with the job's `done`; it
+  reports progress after each member. A base run that can't be rebuilt any
+  more fails the job, and the sweep stays `pending` with the job's error.
+  Works locally with `JOB_TRANSPORT=inprocess` (`pnpm dev:full`) or
+  `pnpm dev:jobs:tick`.
+- **Limits.** At most **12 members** (`SWEEP_MEMBERS_MAX`, a CHECK on
+  `position`): R4 and R5 use 3–5 demand levels, 12 leaves room for a
+  monthly plan while keeping every member of the largest catchment in one
+  job transaction well inside the job's lease. At most 2 sweep jobs queued
+  or running per user; the project keeps its newest 20 sweeps; a sweep goes
+  with its base run.
+- **Base run.** An ordinary run of the model only, as for a scenario: not a
+  scenario run, not a forecast run (a sweep is judged on history).
+  R5's outlook will need a sweep from a run's state on a decision date;
+  that is R5's to add.
+
+API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
+([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`
+(the body) and `sweeps.db.test.ts` (the job end to end, problems per member,
+RLS with a positive control, write-once outcomes, limits, cascade).
+
 ## UI
 
 The workspace's **Scenarios** tab (`?tab=scenarios&scenario=<id>`,

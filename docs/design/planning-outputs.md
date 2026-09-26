@@ -102,6 +102,16 @@ as run summaries. An example-catchment run takes about 40 ms, so a 3 × 1
 sweep is well under a second in the worker; the job exists for the
 seasonal ensemble (R5), which multiplies by the record's years. Reuses the
 uncertainty ensemble's storage pattern (model.md §2.10e).
+**Built** (backend and API; migration 062): `POST|GET /projects/:id/sweeps`
+and `GET …/sweeps/:sweepId` ([api.md § Sweeps](../api.md#sweeps)), job kind
+`sweep`, tables `scenario_sweep` / `scenario_sweep_member`. Each member
+stores its `RunSummary` and the catchment-level series `outcomeMatrix`
+reads (not a `model_run`, so sweeps never count against the run cap), or
+its problems when its ops don't apply to the base run; one
+member never fails the sweep. At most 12 members, 2 pending sweeps per user,
+the newest 20 kept per project ([scenarios.md § Sweeps](../scenarios.md#sweeps)
+has the rules). **(judgement)** No UI yet: R4's matrix view is the first
+screen that reads a sweep, and a results table now would be replaced by it.
 
 ### 3.3 R3: the share-the-pain board (**S**, presentation only)
 
@@ -126,7 +136,7 @@ goes (a second rule kind, labelled as a what-if).
 method, tie and partial-year rules in
 [model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
 Still to build: the project settings for the method and the risk cut-offs
-(after O1 / O2), the demand-level runs (R2 sweeps over R1's `demand.scale`) and the matrix view.
+(after O1 / O2), the demand-level runs (R2 sweeps over R1's `demand.scale`; the sweep itself is built, §3.2) and the matrix view.
 
 - **Classify water years** by the run's own natural flow at the outlet
   (annual total): terciles by default (dry / normal / wet) or quintiles
