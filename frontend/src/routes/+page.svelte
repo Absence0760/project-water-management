@@ -213,7 +213,7 @@
 
 <svelte:head><title>Projects · Water Management</title></svelte:head>
 
-<main class="page">
+<main class="page projects-page">
 	<div class="page-head">
 		<div>
 			<h1>Projects</h1>
@@ -457,6 +457,9 @@
 </Dialog>
 
 <style>
+	.projects-page {
+		container: projects-page / inline-size;
+	}
 	.page-head {
 		display: flex;
 		align-items: flex-start;
@@ -591,7 +594,9 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 	}
-	@media (max-width: 900px) {
+	/* The owner list beside the table while the page has room for both (its own
+	   width: it sits beside the app sidebar on wide screens, issue #17). */
+	@container projects-page (max-width: 868px) {
 		.layout {
 			grid-template-columns: minmax(0, 1fr);
 		}

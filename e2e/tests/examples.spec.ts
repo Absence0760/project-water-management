@@ -56,7 +56,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 
 	// A viewer's model inputs sit behind "Show model inputs" (issue #6).
 	await page.getByLabel('Show model inputs').check();
-	await page.getByRole('link', { name: 'Network' }).click();
+	await page.getByRole('link', { name: 'Network', exact: true }).click();
 	await openNodeTable(page);
 	await expect(page.getByText('You have view-only access to this project.')).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
