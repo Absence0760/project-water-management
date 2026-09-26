@@ -53,6 +53,7 @@ Tabs follow the modelling workflow:
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
 | Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
 | Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
+| Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
@@ -62,11 +63,12 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip |
-| farmer, none | Overview only (a farmer is redirected to `/farm/:id` anyway) |
+| viewer | Overview, Data, Runs & results, Scenarios; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the strip. Never Applications |
+| contributor, farmer, none | Overview only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
-inputs), so adding a tab is one line; a tab the table doesn't know counts as
+inputs; `assess`: the assessors' Applications list, owners and editors
+only), so adding a tab is one line; a tab the table doesn't know counts as
 an input, and a tab the page doesn't render is dropped. Overview can never be
 hidden. Whether a viewer starts with the inputs shown is one constant,
 `VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT` (`false`; a client question). The
@@ -1890,6 +1892,51 @@ see it; farmers never reach the workspace.
   (a refused file, a file already imported) show in an alert.
 - e2e: `e2e/tests/allocations.spec.ts` (import, manual match, comparison, a
   viewer without names, phone cards, axe).
+
+## Applications (WP-3.3)
+
+A **contributor** (a licence applicant or their consultant; the Members
+panel calls the role "Applicant") never sees the workspace's tabs, which the
+API refuses them. `/projects/:id` shows them the **Applicant view**
+(`lib/components/scenarios/ApplicantView.svelte`, a lazy chunk; the page
+detects the role from the project list after the `403`, as it does for a
+farmer): an "Applicant view" badge, the published baseline (its date, and
+that other farms show only by an anonymous name), links to their own farms'
+farm view if they have links, and the Scenarios tab in applicant mode
+("Your applications"; `?scenario=<id>` selects one):
+
+- **New application**: a name only; it starts on the current publication's
+  run. With nothing published, a note says so and there is no form.
+- **The editor** is the Scenarios editor, with the base from
+  `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
+  values blank, so an op on one isn't described "from" a value). Their own
+  farms are the proposer's nodes, set by the server (no checkbox list); no
+  rebase. **Run scenario** runs it; instead of the comparison, a note says
+  the assessors compare each run with the baseline (an applicant view of
+  results is a follow-up).
+- **The Application panel** (`ApplicationPanel.svelte`) under the changes:
+  where it stands ("Draft: only you and the people you share it with can see
+  it", "Submitted: the assessors can see it, and its changes are frozen", …),
+  the owner's **Submit to the assessors** (confirmed; disabled while a change
+  doesn't apply), **Withdraw** and **Reopen as a draft**, the decision once
+  made (outcome, by whom, when, the reasons), and **Shared with**: the
+  people who read it, the owner's share-by-email form, and Remove / Leave.
+
+The assessors (owners and editors) get an **Applications** tab
+(`?tab=applications`): every submitted, withdrawn or decided application
+(drafts stay with the applicant), as a table of name (a link to it in the
+Scenarios tab), applicant (and how many they shared it with), status
+("Awaiting a decision", or the outcome), submitted date, changes and runs,
+sortable newest first or by status (awaiting a decision first, the
+longest-waiting on top; `applications.ts`), with loading, error ("Retry")
+and empty ("No applications submitted.") states. In the Scenarios tab an
+application shows an "Application" tag and "… application by <name>" in the
+list; only its owner edits it, and an editor who isn't its owner gets the
+**Decide** form (outcome radios, reasons and conditions, **Record the
+decision**; final). Evidence packs (WP-3.14) will be linked from the list.
+
+e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
+the assessor's decision, the empty list, axe in light and dark).
 
 ## History (`?tab=history`)
 

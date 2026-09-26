@@ -451,8 +451,12 @@ last direct owner (including the last owner leaving).
 
 These are **direct** members only. People who reach a team project through the
 team are listed by `GET /teams/:id`, not here. The list includes farmers
-(`role: "farmer"`); `role` in `POST`/`PATCH` is `viewer`, `editor` or `owner`
-only, farmers are added below.
+(`role: "farmer"`); `role` in `POST`/`PATCH` is `contributor`, `viewer`,
+`editor` or `owner`, farmers are added below. A **contributor** is a licence
+applicant or their consultant (WP-3.3; the UI says "Applicant"): below viewer,
+they reach only the farm view, the publication and their own applications
+([Applications](#applications)); every other project route answers them
+`403`. The invite flow is the same for every role.
 
 ### Farmers
 
@@ -469,10 +473,11 @@ the invite will link; revoke a pending one with
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
 | POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: 'en' \| 'af' }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
 | POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
-| PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer here | owner |
+| PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
-  displayName, nodeIds }` or an `InvitedFarmer = { status: 'invited' |
+  displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
+  applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
   'expired', inviteId, email, nodeIds, invitedBy, expiresAt, locale }`. An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
   farm; it never gains one.
@@ -1135,6 +1140,53 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   ops and base name every farm. A scenario's base run is **cited**: it can't
   be deleted, trimmed or unpinned while the scenario exists
   ([Runs](#runs)).
+- The **Min role** column above is for a team scenario. A contributor may call
+  the scenario routes too, for applications ([Applications](#applications)).
+- Since 045 `Scenario` also has `origin: 'team' | 'applicant'`,
+  `submittedAt`, `decidedAt`, `decidedBy` (a display name), `outcome:
+  'approved' | 'approved_with_conditions' | 'refused' | null`,
+  `decisionNote` and `members: { userId, displayName }[]`; `baseRun.label` is
+  `''` and `baseRun.createdAt` `null` for a caller who can't read the run.
+- `GET /projects/:id/scenarios/:sid/base` → `{ baseRunId, settings, model,
+  anonymisedNodeIds }`: the base run's settings and model as the caller may
+  see them, for the op editor. For a viewer and above, as stored
+  (`anonymisedNodeIds: []`); for a contributor, the applicant projection
+  below. Min role: contributor (any reader of the scenario).
+
+### Applications
+
+An **application** is a scenario made by a **contributor** (WP-3.3,
+migrations 044/045, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+`origin: 'applicant'`, on a **published** run, read by its owner and the
+people they share it with, by editors once submitted and by viewers once
+decided. A team scenario (an editor's) is unchanged, and the workflow routes
+below work on it too, for an editor.
+
+| Method | Path | Body | Response | Who |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/scenarios` | – | as above; a contributor gets their own applications and those shared with them | contributor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops? }` | as above. A contributor's `baseRunId` must be a published run (current or in the history): `404 published run not found` otherwise, as if it didn't exist. `ownedNodeIds` are their farm links (sending any is `403`) | contributor (a viewer: `403`) |
+| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
+| DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
+| POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
+| POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
+| POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
+| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted | editor |
+| POST | `/projects/:id/scenarios/:sid/members` | `{ email }` | `201 { members }` (`200` if already shared). `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike; `409` for a team scenario or yourself | owner of the application |
+| DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
+| GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
+
+- **What a contributor sees of the base** (`…/base`, and the check's
+  messages): the settings, their own farms and the gauges in full, every
+  other node by kind and place under an anonymous name ("Farm 3") with its
+  values blanked, and only their own farms' crops, crop areas, transfers and
+  land cover (D2's recommended default, pending the client). They never
+  receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
+  answer them `403`.
+- A contributor linked to a farm also reads its farm view
+  (`GET /projects/:id/farm…`) as a farmer would.
 
 ## Sign-offs
 

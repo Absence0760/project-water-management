@@ -187,7 +187,9 @@ export const noteRoutes = new Hono<AuthEnv>()
 		const userId = c.get('userId');
 		return withUser(userId, async (db) => {
 			const role = await requireRole(db, id, 'farmer');
-			const farmer = role === 'farmer';
+			// An applicant (contributor, WP-3.3) reads what a farmer with the same
+			// links reads (045_contributor_scope), so they note only their own farm too.
+			const farmer = role === 'farmer' || role === 'contributor';
 			const visibility = body.visibility ?? (farmer ? 'farm' : 'team');
 			if (farmer && (!body.nodeId || visibility !== 'farm')) {
 				throw new ApiError(403, 'a farmer may add notes only to their own farm, shown to the farm');

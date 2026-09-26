@@ -135,6 +135,14 @@ describe('FarmState', () => {
 		expect(f.preview).toBe(false);
 	});
 
+	it('treats an applicant linked to the farm as its own, not a preview (WP-3.3)', async () => {
+		const s = new FarmState(fakeApi({ role: 'contributor' }), () => 'u1');
+		await s.load(P, N);
+		expect(s.phase.kind).toBe('ready');
+		expect(s.preview).toBe(false);
+		expect(localStorage.getItem('wm.farm.saved.v1')).not.toBeNull();
+	});
+
 	it('reuses a view fetched a moment ago on the next farm page', async () => {
 		const api = fakeApi();
 		await new FarmState(api, () => 'u1').load(P, N);

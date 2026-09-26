@@ -1,0 +1,124 @@
+// Applications (WP-3.3, docs/ui.md § Applications, docs/scenarios.md
+// § Applications): an applicant (the contributor role), linked to the Upper
+// farm, opens the project and gets the Applicant view; starts an application
+// on the published baseline, sees their own farm in full and the other farm
+// only as "Farm 1", raises their dam, runs and submits it. The assessor (the
+// project's owner) finds it in the Applications tab and decides it. Axe on
+// both views, light and dark. Synthetic data only.
+import type { Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
+import { addMember, createRun, seedRunnableProject, type TestUser } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
+import { expect, test } from '../support/fixtures.ts';
+
+const NAME = 'Raise the Upper farm dam';
+
+/** A published run, and an applicant linked to the Upper farm. */
+async function seedApplicantProject(page: Page, name: string, applicant: TestUser) {
+	const project = await seedRunnableProject(page.request, name);
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	await addMember(page.request, project.id, applicant.email, 'contributor');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	expect((await page.request.put(`${API_URL}/projects/${project.id}/farmers/${applicant.id}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
+	return { project, runId, upper };
+}
+
+test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Applicant');
+	const { project } = await seedApplicantProject(page, 'Applications golden path', applicant.user);
+	const a = applicant.page;
+	a.on('dialog', (d) => d.accept());
+
+	// The workspace shows an applicant their own view, not the tabs.
+	await a.goto(`/projects/${project.id}`);
+	await expect(a.getByTestId('applicant-view')).toHaveText('Applicant view');
+	await expect(a.getByRole('navigation', { name: 'Project sections' })).toHaveCount(0);
+	await expect(a.getByRole('link', { name: 'Upper farm' })).toBeVisible();
+	await expect(a.getByTestId('scenarios-empty')).toContainText('No applications yet.');
+
+	// A new application starts on the published baseline.
+	await a.getByLabel('Name', { exact: true }).fill(NAME);
+	await a.getByRole('button', { name: 'Create application' }).click();
+	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+	await expect(a.getByTestId('scenario-base')).toContainText('Based on run Baseline');
+
+	// Their own farm with its values; the other farm only as "Farm 1", with none.
+	const form = a.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: 150,000 m³');
+	await expect(form.getByLabel('Node').getByRole('option', { name: 'Farm 1' })).toHaveCount(1);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	await form.getByLabel('Dam capacity (m³)').fill('200000');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	const changes = a.getByRole('list', { name: `Changes in ${NAME}` });
+	await expect(changes.getByRole('listitem')).toContainText('Proposal');
+
+	// Run it (the result is the assessors' to compare), then submit it.
+	await a.getByRole('button', { name: 'Run scenario' }).click();
+	await expect(a.getByTestId('applicant-results-note')).toBeVisible();
+	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
+	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
+	await expect(a.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+
+	// The assessor's Applications tab lists it; they open and decide it.
+	page.on('dialog', (d) => d.accept());
+	await page.goto(`/projects/${project.id}?tab=applications`);
+	const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: NAME }) });
+	await expect(row).toContainText('Applicant');
+	await expect(row).toContainText('Awaiting a decision');
+	await row.getByRole('link', { name: NAME }).click();
+	await expect(page).toHaveURL(/tab=scenarios&scenario=/);
+	const decide = page.getByRole('form', { name: 'Decide' });
+	await decide.getByLabel('Approved with conditions').check();
+	await decide.getByLabel('Reasons and conditions').fill('Release 5 % of inflow in dry months.');
+	await decide.getByRole('button', { name: 'Record the decision' }).click();
+	await expect(page.getByTestId('application-decision')).toContainText('Approved with conditions');
+	await expect(page.getByTestId('application-decision')).toContainText('Release 5 % of inflow in dry months.');
+
+	// The applicant sees the decision.
+	await a.reload();
+	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
+	await expect(a.getByTestId('application-decision')).toContainText('Approved with conditions');
+});
+
+test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Drafting applicant');
+	const { project, runId } = await seedApplicantProject(page, 'Applications empty', applicant.user);
+	const res = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'A draft', baseRunId: runId } });
+	expect(res.status()).toBe(201);
+	await page.goto(`/projects/${project.id}?tab=applications`);
+	await expect(page.getByTestId('applications-empty')).toHaveText('No applications submitted.');
+	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	await expect(page.getByRole('button', { name: /^A draft/ })).toHaveCount(0);
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+	test(`the Applicant view and the Applications tab have no violations (${colorScheme})`, async ({ page, owner, signIn }) => {
+		void owner;
+		const applicant = await signIn(`Applicant a11y ${colorScheme}`);
+		await applicant.page.emulateMedia({ colorScheme });
+		await page.emulateMedia({ colorScheme });
+		const { project, runId, upper } = await seedApplicantProject(page, `Applications a11y ${colorScheme}`, applicant.user);
+		const created = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+			data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
+		});
+		const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+		expect((await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/submit`, { data: {} })).status()).toBe(200);
+
+		await applicant.page.goto(`/projects/${project.id}?scenario=${sid}`);
+		await expect(applicant.page.getByTestId('application-panel')).toBeVisible();
+		await expectNoViolations(applicant.page);
+
+		await page.goto(`/projects/${project.id}?tab=applications`);
+		await expect(page.getByRole('rowheader', { name: NAME })).toBeVisible();
+		await expectNoViolations(page);
+		await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+		await expect(page.getByRole('form', { name: 'Decide' })).toBeVisible();
+		await expectNoViolations(page);
+	});
+}

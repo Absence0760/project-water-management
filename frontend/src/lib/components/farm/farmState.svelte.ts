@@ -15,7 +15,7 @@
 // when the page becomes visible again; never polled.
 import type { FarmIndex, FarmView } from '@water-management/engine';
 import type { Api } from '$lib/api/client';
-import type { Role } from '$lib/api/types';
+import { hasRole, type Role } from '$lib/api/types';
 import { classify, pickNode } from './load';
 import { clearSaved, latestSavedNode, readSaved, writeSaved } from './savedCopy';
 
@@ -69,9 +69,13 @@ export class FarmState {
 		private readonly userId: () => string | null
 	) {}
 
-	/** Viewer+ opening a farm page: WUA staff previewing it. A farmer never sees it as a preview. */
+	/**
+	 * Viewer+ opening a farm page: WUA staff previewing it. A farmer, or an
+	 * applicant (contributor, WP-3.3) linked to the farm, never sees it as a
+	 * preview: it is their own farm.
+	 */
 	get preview(): boolean {
-		return this.role != null && this.role !== 'farmer';
+		return hasRole(this.role, 'viewer');
 	}
 
 	/** The role, asked once per project alongside the farm (it decides the banner and whether a copy is kept). */
@@ -163,7 +167,7 @@ export class FarmState {
 		const role = await roleP;
 		if (seq !== this.#seq) return;
 		// A preview keeps no copy on the WUA's machine.
-		if (user && (role == null || role === 'farmer')) writeSaved(user, projectId, nodeId, view, at);
+		if (user && !hasRole(role, 'viewer')) writeSaved(user, projectId, nodeId, view, at);
 		this.#show(index, view, nodeId, at, false);
 	}
 
