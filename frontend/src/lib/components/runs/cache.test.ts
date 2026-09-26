@@ -8,7 +8,7 @@ const ref = (key: string, nodeId: string | null = null) => ({ key, nodeId }) as 
 describe('prefetchSeries', () => {
 	it('starts every wanted series the run stores, and a chart asking later gets the same request', async () => {
 		const runId = crypto.randomUUID();
-		const fetch = vi.fn((key: string) => Promise.resolve(series(key.length)));
+		const fetch = vi.fn((key: string, _nodeId: string | null) => Promise.resolve(series(key.length)));
 		prefetchSeries(runId, [ref('ewr'), ref('simulated_outflow'), ref('ewr', 'farm-1')], [{ key: 'ewr', nodeId: null }, { key: 'simulated_outflow', nodeId: null }, { key: 'natural_flow', nodeId: null }], fetch);
 		// natural_flow isn't stored by this run: not asked for.
 		expect(fetch.mock.calls.map(([key, nodeId]) => [key, nodeId])).toEqual([
