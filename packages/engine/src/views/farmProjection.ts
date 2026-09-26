@@ -36,7 +36,7 @@ export const FARM_VIEW_STALE_DAYS = 7;
  * The daily series a farmer may read of their own farm in the published run
  * (design §10.3): no flow series (inflow_upstream is the upstream
  * neighbour's outflow when there is one farm above), no catchment series.
- * The run_series farmer policy (021_publication.sql) holds the same list.
+ * The run_series farmer policy (022_publication.sql) holds the same list.
  */
 export const FARMER_SERIES_KEYS = ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer'] as const;
 
