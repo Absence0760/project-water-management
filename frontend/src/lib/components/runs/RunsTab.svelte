@@ -25,7 +25,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { activeSectionId, resultGroups } from './sections';
-	import { filterRuns, RUN_FILTER_FROM, runYears } from './runList';
+	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
 	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
@@ -82,7 +82,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const selectedId = $derived(page.url.searchParams.get('run'));
 	let detail = $state<{ run: Run; series: RunSeriesRef[] } | null>(
 		untrack(() => {
-			const id = page.url.searchParams.get('run') ?? initialRuns?.[0]?.id;
+			const id = page.url.searchParams.get('run') ?? defaultRunId(initialRuns ?? [], project.role);
 			return id ? (detailCache.get(id) ?? null) : null;
 		})
 	);
@@ -186,9 +186,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		});
 	});
 
-	// Default to the newest run once the list is known.
+	// Once the list is known and the URL names no run: the newest run, or for a
+	// viewer the published baseline (runList.ts defaultRunId). ?run= always wins.
 	$effect(() => {
-		if (!loading && !selectedId && runs.length) select(runs[0]!.id);
+		if (!loading && !selectedId && runs.length) select(defaultRunId(runs, project.role));
 	});
 
 	async function run(e: SubmitEvent) {
@@ -517,6 +518,10 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 						</span>
 					</div>
 					<div class="head-acts">
+						<!-- This run against the published baseline (docs/run-comparison.md): A = published, B = this run. -->
+						{#if currentPublishedRunId && currentPublishedRunId !== shownRunId}
+							<a class="btn btn-sm" href="{base}/compare?a={encodeURIComponent(`${projectId}:${currentPublishedRunId}`)}&b={encodeURIComponent(`${projectId}:${shownRunId}`)}">Compare with published</a>
+						{/if}
 						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
 						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>
 						<DownloadMenu items={downloadItems} />
