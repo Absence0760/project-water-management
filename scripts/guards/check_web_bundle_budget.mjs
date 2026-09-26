@@ -677,6 +677,13 @@
 //             and this branch's #45 display/export and A-pan fingerprint
 //             entries each assumed the other's growth absent; merged they
 //             measure 962. Headroom ~5 KB.
+// 2026-09-26  total 967 → 973 KB. main measured 963; issue #17's grid modal
+//             and the Network's Map layout add 5 (968): the modal and its
+//             save row (their own lazy chunk; the grids inside are the Crops
+//             and Transfers tabs' existing chunks, not copies), the node card
+//             and node list, and lib/workspace/overlays.ts. Headroom ~5 KB.
+//             Four raises today: the English-as-key i18n trim (~5–7 KB,
+//             docs/followups.md) is due before the next.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -687,7 +694,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 967,
+	totalCodeKb: 973,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
