@@ -12,9 +12,9 @@
 //    new dam can be placed below it, under an anonymous name ("Farm 3",
 //    "Water user 1"); every number zeroed and every list emptied, so no other
 //    farm's area, dam, crops, demand or boreholes leave the server;
-//  - crops, crop areas, transfers and land cover: only those on their own
-//    nodes (a transfer's other end is an anonymised node).
-import type { CropDef, MaskedNames, ModelInput, NetworkNode, NodeKind, ProjectModel } from '@water-management/engine';
+//  - crops, crop areas, transfers, land cover and boreholes: only those on
+//    their own nodes (a transfer's other end is an anonymised node).
+import type { CropDef, ModelInput, NetworkNode, NodeKind, ProjectModel, ScenarioMask } from '@water-management/engine';
 
 export interface ApplicantBase {
 	settings: ModelInput['settings'];
@@ -71,28 +71,38 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			crops,
 			cropAreas,
 			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || own.has(t.toNodeId)),
-			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId))
+			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId)),
+			// Their own farm's boreholes are theirs to see (as the table's RLS lets them, 045).
+			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId))
 		},
 		anonymisedNodeIds
 	};
 }
 
 /**
- * The names an application's ops must not meet (applyScenario's
- * `maskedNames`): every node the projection anonymises, under the anonymous
- * name the applicant sees ("Farm 3"), and every crop it leaves out, under a
- * name made of its id (a crop the applicant never sees has no name for
- * them; its id is as unknowable to them as its name). With these the
- * engine's messages quote only names the applicant sees, and renaming their
- * own farm to a neighbour's name collides with nothing
- * (docs/followups.md § Applicants "Oracles").
+ * What an application's ops must not meet (applyScenario's `mask`): every
+ * node the projection anonymises, under the anonymous name the applicant
+ * sees ("Farm 3"), and every crop, transfer, land-cover patch and borehole it
+ * leaves out, which the engine puts under an opaque id (and name) while the
+ * ops apply. With these the engine's messages quote only names the
+ * applicant sees, a hidden item's id or name answers exactly as a free one,
+ * and nothing counts or quotes what they can't see
+ * (docs/scenarios.md § Applications).
  */
-export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>): MaskedNames {
+export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>): ScenarioMask {
 	const projected = projectBaseForApplicant(input, ownNodeIds);
 	const hidden = new Set(projected.anonymisedNodeIds);
-	const shownCrops = new Set(projected.model.crops.map((c) => c.id));
+	const m = input.model;
+	const shown = projected.model;
+	const outside = <T extends { id: string }>(all: readonly T[] | undefined, seen: readonly T[] | undefined) => {
+		const ids = new Set((seen ?? []).map((x) => x.id));
+		return (all ?? []).filter((x) => !ids.has(x.id)).map((x) => x.id);
+	};
 	return {
-		nodes: Object.fromEntries(projected.model.nodes.filter((n) => hidden.has(n.id)).map((n) => [n.id, n.name])),
-		crops: Object.fromEntries(input.model.crops.filter((c) => !shownCrops.has(c.id)).map((c) => [c.id, `crop ${c.id}`]))
+		nodes: Object.fromEntries(shown.nodes.filter((n) => hidden.has(n.id)).map((n) => [n.id, n.name])),
+		crops: outside(m.crops, shown.crops),
+		transfers: outside(m.transfers, shown.transfers),
+		landCover: outside(m.landCover, shown.landCover),
+		boreholes: outside(m.boreholes, shown.boreholes)
 	};
 }

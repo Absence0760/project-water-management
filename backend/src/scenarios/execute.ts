@@ -4,7 +4,7 @@
 // through the same save path as any other (runAndStore), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -87,6 +87,8 @@ export interface ScenarioCheck {
 	classified: OpClass[];
 	/** An application's hidden nodes and crops renamed because an op took their name (applyScenario's `renamed`). Never shown to a contributor. */
 	renamed: MaskedRename[];
+	/** An application's new items moved off a hidden item's id (applyScenario's `reIds`). Never shown to a contributor. */
+	reIds: MaskedReId[];
 }
 
 /**
@@ -133,13 +135,14 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
  * given the base. An application's ops meet every node and crop its
  * applicant can't see under the anonymous name they see it by
  * (applicationMask, WP-3.3), whoever checks it: the application is judged
- * in its applicant's namespace, so no message quotes a hidden name and no
- * rename collides with one (docs/scenarios.md § Applications).
+ * in its applicant's namespace, so no message quotes a hidden name, a
+ * hidden item's id or name answers as a free one, and nothing counts what
+ * they can't see (docs/scenarios.md § Applications).
  */
 export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>): ScenarioCheck {
-	const options = s.origin === 'applicant' ? { maskedNames: applicationMask(base, s.ownedNodeIds) } : {};
-	const { input, applied, problems, renamed } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+	const options = s.origin === 'applicant' ? { mask: applicationMask(base, s.ownedNodeIds) } : {};
+	const { input, applied, problems, renamed, reIds } = applyScenario(base, s.ops, options);
+	return { input, base, applied, problems, renamed, reIds, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /**

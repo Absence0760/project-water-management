@@ -730,9 +730,12 @@ In short:
     leaves is the applicant projection (`scenarios/applicant.ts`: their own
     farms and the gauges in full, every other node anonymised and blanked).
     An application is checked in its applicant's namespace (049: the engine
-    meets every hidden node under its anonymous name and every hidden crop
-    under a name made of its id, `applyScenario`'s `maskedNames`), so its
-    messages quote no hidden name without any text redaction. The DB test scans everything the applicant
+    meets every hidden node under its anonymous name, and every hidden crop,
+    transfer, land-cover patch and borehole under an opaque id and name,
+    `applyScenario`'s `mask`), so its messages quote no hidden name or id
+    without any text redaction, count nothing hidden, and a rule broken
+    because of hidden data reads only "doesn't apply to the catchment as
+    modelled" (wording pending the client, issue #50). The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -776,11 +779,18 @@ In short:
     does; the hidden one is renamed with a suffix in that application's runs,
     and only the assessors are told (`check.renamed`). An application's name
     is unique among its owner's applications only, so naming a draft after
-    someone else's says nothing either. What remains: the id of a hidden
-    crop, transfer, land-cover patch or borehole can still be probed by an
-    op that targets or reuses it, which needs the id (random UUIDs from the
-    UI; imports derive them from the project and element names) and is
-    tracked in followups.md with the counts an op on a hidden farm reports.
+    someone else's says nothing either. *Ids*: an op that targets the id of
+    a hidden crop, transfer, land-cover patch or borehole answers `… not
+    found`, and one that reuses it applies, exactly as for a free id (the
+    hidden items are under opaque ids no op holds while the ops apply); the
+    new item moves to a fresh id in that application's runs, and only the
+    assessors are told (`check.reIds`). *Counts and rules*: removing a hidden
+    farm reports nothing it carried, and a rule the op breaks only because
+    of hidden data (a hidden item, a hidden farm's borehole rule, flow
+    shares over 100 %, no catchment area left) says only that the op
+    doesn't apply to the catchment as modelled. Whether it applies can't be
+    hidden (a model that breaks a save rule can't run); the words are the
+    client's call (issue #50).
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.

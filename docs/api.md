@@ -1263,7 +1263,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   op still names that id, and the current base's name wins. Display only;
   it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
-  | 'baseline')[], renamed? }`: the ops applied to the base (engine `applyScenario`,
+  | 'baseline')[], renamed?, reIds? }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`
   and `checkError` says why only if the base can't be rebuilt. `renamed:
   { kind: 'node' | 'crop', id, name, as }[]` (viewer and up only, never a
@@ -1271,7 +1271,10 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   hidden farms and crops given a suffixed name in its runs because the
   applicant gave one of theirs that name (049, [scenarios.md §
   Applications](./scenarios.md#applications-wp-33)); always `[]` for a team
-  scenario.
+  scenario. `reIds: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole',
+  id, as }[]` (the same readers) lists the items an application added under
+  the id of one its applicant can't see, and the fresh id each has in its
+  runs; always `[]` for a team scenario.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether

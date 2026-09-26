@@ -1969,8 +1969,11 @@ Applicant view and the Applications tab. Left:
       against its base (the roadmap's D2 default: catchment series, their own
       nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
       downstream: supply −4 %"), built from the run and base server-side like
-      `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
-      next WP-3.3 slice, before an applicant uses it for real.
+      `applicant.ts`, with the WP-2.1 string scan on its output. It must
+      also show an item the application's ops added under a hidden item's id
+      by the id the applicant gave it (the check's `reIds` map it back; the
+      run holds it under a fresh one). Trigger: the next WP-3.3 slice, before
+      an applicant uses it for real.
 - [x] **A contributor can `SELECT` their own application runs' rows**, whose
       `inputs` snapshot holds the whole base (every farm's parameters); the
       API never returns them (RLS can't hide a column). Done in
@@ -1988,7 +1991,7 @@ Applicant view and the Applications tab. Left:
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
-      `maskedNames`. The project owner puts an applicant and their
+      `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
       shares only within it, picked from `…/share-candidates`, so every other
       id or address gets one answer. An application is checked in its
@@ -1998,20 +2001,35 @@ Applicant view and the Applications tab. Left:
       for the assessors to see. Application names are unique per owner, not
       per project. Tests: `scenarios/oracles.db.test.ts`
       ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
-- [ ] **Hidden ids and counts in an application's messages.** An op that
-      targets or reuses the id of a hidden crop, transfer, land-cover patch
-      or borehole answers differently from a free id (`… not found` against
-      applied, `… already in use`), and an op on a hidden farm reports what
-      it dropped (`dropped 2 crop area(s)`); value rules (flow shares over
-      100 %, no catchment area left) can refuse an op because of hidden
-      values. The ids are random UUIDs from the UI, but an import derives
-      them from the project and element names. Durable fix: extend the mask
-      to ids (hidden items' ids swapped for opaque ones while the ops apply,
-      restored afterwards) and have `applyScenario` in masked mode report
-      no counts for hidden nodes; decide with the client whether a value
-      rule refused because of hidden farms says only "doesn't apply to the
-      catchment as modelled". Trigger: the applicant results slice, or
-      before applicants from competing parties share a project.
+- [x] **Hidden ids and counts in an application's messages.** An op that
+      targeted or reused the id of a hidden crop, transfer, land-cover patch
+      or borehole answered differently from a free id (`… not found` against
+      applied, `… already in use`), an op on a hidden farm reported what it
+      dropped (`dropped 2 crop area(s)`), and a rule could quote hidden data.
+      Done in the engine's `mask` (`applyScenario`, built by `applicationMask`):
+      hidden items meet the ops under opaque ids (and names) no op holds, so
+      a hidden id answers exactly as a free one; afterwards they get their
+      ids back, and an item an op added under a hidden id moves to a fresh
+      one (`reIds`, for the assessors), so the hidden item still lines up
+      with the base by id. `node.remove` counts only what the applicant sees.
+      A rule an op breaks because of hidden data (a hidden item, a hidden
+      farm's borehole rule, flow shares over 100 % or no catchment area left
+      while any farm is hidden) reads only "doesn't apply to the catchment as
+      modelled". The applicant projection now shows their own farm's
+      boreholes, which it had left out. Tests: `scenario/overrides.test.ts`
+      ("mask: ids, counts and value rules"), `scenarios/applicant.test.ts`,
+      `scenarios/oracles.db.test.ts` ("ids and counts"), each with its
+      positive control ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+- [ ] **The wording of a value rule refused because of hidden data**
+      ([issue #50](https://github.com/Absence0760/project-water-management/issues/50)).
+      Built on the recommended default: the applicant is told only "doesn't
+      apply to the catchment as modelled" (`MASKED_RULE`), never which rule
+      or the hidden values; the assessors, checking the same application,
+      read the same words (the check is judged in the applicant's
+      namespace). **Pending the client**: whether an applicant may be told
+      more (which rule, or "the catchment's flow shares would pass 100 %").
+      The refusal itself stays: a model breaking a save rule can't run.
+      Trigger: the client's answer on issue #50.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.
