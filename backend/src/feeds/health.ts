@@ -79,7 +79,7 @@ export function feedHealth(f: HealthInput, today: string): FeedHealth {
 					: `Not fetched since it was ${iso(since) === iso(f.createdAt) ? 'attached' : 'changed'} on ${iso(since)}: the background worker may not be running.`
 		};
 	}
-	if (unfetched) return { state: 'pending', stale, staleAfterDays, message: 'Waiting for its first fetch.' };
+	if (unfetched || !f.lastAttemptAt) return { state: 'pending', stale, staleAfterDays, message: 'Waiting for its first fetch.' };
 	return { state: 'ok', stale, staleAfterDays, message: `OK; ${newest}, checked ${iso(f.lastSuccessAt ?? f.lastAttemptAt)}.` };
 }
 
