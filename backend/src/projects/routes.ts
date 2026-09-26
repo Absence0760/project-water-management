@@ -339,7 +339,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
 			const { rows } = await db.query(
-				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role
+				`SELECT m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party
 				 FROM project_member m JOIN app_user u ON u.id = m.user_id
 				 WHERE m.project_id = $1 ORDER BY m.role DESC, u.display_name`,
 				[c.req.param('id')]
@@ -372,7 +372,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (!rowCount) throw new ApiError(409, 'already a member');
 			await dropInvite(db, 'project', id, user.email);
 			await recordAudit(db, id, 'member.added', { userId: user.id, displayName: user.display_name, role: body.role });
-			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } };
+			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role, party: null } };
 		});
 		// Mail goes out after the transaction commits, and never fails the request.
 		if (result.invited) {
@@ -381,23 +381,45 @@ export const projectRoutes = new Hono<AuthEnv>()
 		}
 		return c.json({ member: result.member }, 201);
 	})
+	// A member's role, and their applying party (049: an applicant shares
+	// applications only within their own party; '' or null takes them out of
+	// every party, and a change ends the shares it no longer allows).
 	.patch('/:id/members/:userId', async (c) => {
-		const body = z.object({ role: RoleEnum }).parse(await readJson(c));
+		const body = z
+			.object({
+				role: RoleEnum.optional(),
+				party: z
+					.string()
+					.trim()
+					.max(80)
+					.nullable()
+					.optional()
+					.transform((p) => (p === '' ? null : p))
+			})
+			.strict()
+			.refine((b) => b.role !== undefined || b.party !== undefined, 'give a role, a party or both')
+			.parse(await readJson(c));
 		const { id, userId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
-			if (body.role !== 'owner') await assertNotLastOwner(db, id, userId);
-			const { rows: was } = await db.query<{ role: string }>('SELECT role FROM project_member WHERE project_id = $1 AND user_id = $2', [id, userId]);
+			if (body.role !== undefined && body.role !== 'owner') await assertNotLastOwner(db, id, userId);
+			const { rows: was } = await db.query<{ role: string; party: string | null }>('SELECT role, party FROM project_member WHERE project_id = $1 AND user_id = $2', [
+				id,
+				userId
+			]);
 			const { rows } = await db.query(
-				`UPDATE project_member m SET role = $3 FROM app_user u
+				`UPDATE project_member m SET role = COALESCE($3::project_role, m.role), party = CASE WHEN $4 THEN $5 ELSE m.party END FROM app_user u
 				 WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
-				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role`,
-				[id, userId, body.role]
+				 RETURNING m.user_id AS "userId", u.email, u.display_name AS "displayName", m.role, m.party`,
+				[id, userId, body.role ?? null, body.party !== undefined, body.party ?? null]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
-			if (was[0]?.role !== body.role) {
+			if (body.role !== undefined && was[0]?.role !== body.role) {
 				await recordAudit(db, id, 'member.role', { userId, displayName: rows[0].displayName, from: was[0]?.role ?? null, to: body.role });
+			}
+			if (body.party !== undefined && (was[0]?.party ?? null) !== rows[0].party) {
+				await recordAudit(db, id, 'member.party', { userId, displayName: rows[0].displayName, from: was[0]?.party ?? null, to: rows[0].party });
 			}
 			return c.json({ member: rows[0] });
 		});

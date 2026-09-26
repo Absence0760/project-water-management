@@ -133,5 +133,12 @@ export type ScenarioOutcome = (typeof SCENARIO_OUTCOMES)[number];
 /** POST …/decide: the outcome and the assessor's reasons (scenario.decision_note, ≤ 4000 characters). */
 export const DecideBody = z.object({ outcome: z.enum(SCENARIO_OUTCOMES), note: description.default('') }).strict();
 
-/** POST …/members: the project member to share an application with, by email. */
-export const ShareBody = z.object({ email: z.string().trim().toLowerCase().email().max(254) }).strict();
+/**
+ * POST …/members: whom to share an application with. `userId`, one of the
+ * people …/share-candidates lists; or, for a viewer and up only (who read
+ * the member list anyway), `email` (049: an applicant never probes an address).
+ */
+export const ShareBody = z.union([
+	z.object({ userId: z.string().uuid() }).strict(),
+	z.object({ email: z.string().trim().toLowerCase().email().max(254) }).strict()
+]);

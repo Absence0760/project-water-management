@@ -10,8 +10,12 @@
 //    read it, editors once submitted, viewers once decided. Only its owner
 //    edits, submits, withdraws and reopens it; only an editor who isn't its
 //    owner decides it. A contributor never receives the base run's input:
-//    they get the applicant projection (applicant.ts), with the engine's
-//    messages about other farms renamed;
+//    they get the applicant projection (applicant.ts), and an
+//    application's ops meet other farms under the anonymous names that
+//    projection gives them (checkScenario), so nothing quotes a hidden name.
+//    The owner shares an application only with the people app_share_candidates
+//    lists for them (049: a contributor's own party, which the project owner
+//    curates), never by probing an address;
 //  - farmers: 403, like every viewer route.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -21,7 +25,7 @@ import { ApiError } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { lockProjectRuns, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
-import { applicantRedactor, projectBaseForApplicant } from './applicant.js';
+import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
 	executeScenarioRun,
@@ -36,29 +40,23 @@ import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBod
 
 const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
 
-/** What the editor shows beside the ops: which applied, which don't, and how each is classed. The input itself stays server-side. */
-function checkView(c: ScenarioCheck, redact?: (t: string) => string) {
-	if (!redact) return { applied: c.applied, problems: c.problems, classified: c.classified };
-	return {
-		applied: c.applied.map((a) => ({ ...a, notes: a.notes.map(redact) })),
-		problems: c.problems.map(redact),
-		classified: c.classified
-	};
-}
-
 /**
- * A contributor sees the base through the applicant projection, so the
- * engine's messages must not name a node the projection anonymises. The
- * scenario's own nodes (its owner's farm links) are the ones shown.
+ * What the editor shows beside the ops: which applied, which don't, and how
+ * each is classed. The input itself stays server-side. The messages quote
+ * only names the caller sees (checkScenario masks an application's hidden
+ * nodes for everyone); `renamed`, the hidden nodes an application's ops took
+ * the name of, is for the assessors, never a contributor.
  */
-const redactorFor = (role: Role, base: Parameters<typeof projectBaseForApplicant>[0], s: ScenarioRow) =>
-	role === 'contributor' ? applicantRedactor(base, projectBaseForApplicant(base, s.ownedNodeIds)) : undefined;
+function checkView(c: ScenarioCheck, role: Role) {
+	const view = { applied: c.applied, problems: c.problems, classified: c.classified };
+	return role === 'contributor' ? view : { ...view, renamed: c.renamed };
+}
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario: s, check: checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s)), checkError: null };
+		return { scenario: s, check: checkView(checkScenario(base, s), role), checkError: null };
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 409) return { scenario: s, check: null, checkError: err.message };
 		throw err;
@@ -70,9 +68,14 @@ const scenarioId = (sid: string) => {
 	return sid;
 };
 
-/** A name already used in the project (scenario_name_idx) reads as a 409 that says so. */
-const duplicateName = (err: unknown): never => {
-	if ((err as { code?: string }).code === '23505') throw new ApiError(409, 'this project already has a scenario with that name');
+/**
+ * A name already taken reads as a 409 that says so. A team scenario's name is
+ * unique among the team's scenarios, an application's among its owner's
+ * applications (049: so the answer never says a hidden one exists).
+ */
+const duplicateName = (application: boolean) => (err: unknown): never => {
+	if ((err as { code?: string }).code === '23505')
+		throw new ApiError(409, application ? 'you already have an application with that name' : 'this project already has a scenario with that name');
 	throw err;
 };
 
@@ -148,7 +151,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), owned]
 				)
-				.catch(duplicateName);
+				.catch(duplicateName(applicant));
 			const s = await loadScenario(db, id, rows[0]!.id);
 			await recordAudit(db, id, 'scenario.created', subject(s, { baseRunId: body.baseRunId, ops: body.ops.length }));
 			return c.json(await withCheck(db, id, s, role), 201);
@@ -217,7 +220,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					sid,
 					...set.map(([, v]) => v)
 				])
-				.catch(duplicateName);
+				.catch(duplicateName(isApplication(s)));
 			// Only the fields whose value moved: a PATCH that re-sends the scenario as it is logs nothing.
 			const was: Record<string, unknown> = {
 				name: s.name,
@@ -283,13 +286,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 						r.created_at AS "createdAt", r.scenario_id AS "scenarioId" FROM app_scenario_run_meta($1, $2) r WHERE r.id = $3`,
 					[id, s.id, runId]
 				);
-				const { applied, classified } = checkView(check, redactorFor(role, check.base, s));
+				const { applied, classified } = checkView(check, role);
 				return c.json({ run: rows[0], removedRunIds, applied, classified }, 201);
 			}
 			// A scenario run counts toward the cap like any other.
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META_SQL.meta}, r.summary ${RUN_META_SQL.from} WHERE r.id = $1`, [runId]);
-			return c.json({ run: rows[0], removedRunIds, applied: check.applied, classified: check.classified }, 201);
+			return c.json({ run: rows[0], removedRunIds, ...checkView(check, role) }, 201);
 		});
 	})
 	.post('/:id/scenarios/:sid/rebase', async (c) => {
@@ -310,7 +313,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			}
 			const s = await loadScenario(db, id, sid);
 			if (!body.dryRun) await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
-			return c.json({ scenario: s, ...checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s)) });
+			return c.json({ scenario: s, ...checkView(checkScenario(base, s), role) });
 		});
 	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------
@@ -327,7 +330,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const s = await loadScenario(db, id, sid);
 			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario can't be submitted`);
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
-			const { problems } = checkView(checkScenario(base, s.ops, s.ownedNodeIds), redactorFor(role, base, s));
+			const { problems } = checkScenario(base, s);
 			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems });
 			await move(db, id, s, 'submitted');
 			await recordAudit(db, id, 'scenario.submitted', subject(s, { opsSha256: s.opsSha256 }));
@@ -371,6 +374,25 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// --- sharing an application with a consultant or client (scenario_member) ----------
+	// Whom its owner may share it with (app_share_candidates, 049): for an
+	// applicant, the other members of their own party, which the project owner
+	// curates; for a viewer and up, every contributor-or-above member. Names
+	// only. The only way an applicant names someone to share with, so nothing
+	// they can send says whether an address or an id belongs to a member.
+	.get('/:id/scenarios/:sid/share-candidates', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			if (!isApplication(s)) throw new ApiError(409, 'a team scenario is read by every viewer: there is nothing to share');
+			assertCanChange(s, role, c.get('userId'));
+			const { rows } = await db.query<{ userId: string; displayName: string }>(
+				'SELECT candidate_id AS "userId", candidate_name AS "displayName" FROM app_share_candidates($1)',
+				[id]
+			);
+			return c.json({ candidates: rows });
+		});
+	})
 	.post('/:id/scenarios/:sid/members', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = ShareBody.parse(await json(c));
@@ -379,25 +401,36 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const s = await loadScenario(db, id, scenarioId(sid));
 			if (!isApplication(s)) throw new ApiError(409, 'a team scenario is read by every viewer: there is nothing to share');
 			assertCanChange(s, role, c.get('userId'));
-			// app_user has no RLS (sign-in needs it); the insert's trigger checks the
-			// address belongs to a contributor-or-above member of this project. Every
-			// refusal reads the same, so it says nothing more about the address.
-			const notMember = new ApiError(404, 'no contributor or above on this project has that address');
-			const { rows: users } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [body.email]);
-			const user = users[0];
-			if (!user) throw notMember;
-			if (user.id === s.ownerUserId) throw new ApiError(409, 'you already own this application');
+			// An applicant picks from their candidates; one refusal for every id
+			// that isn't among them, whoever it belongs to. By address: the same
+			// refusal for every address, member or not.
+			let userId: string;
+			if ('email' in body) {
+				if (rank[role] < rank.viewer) throw new ApiError(403, 'an applicant shares with someone from …/share-candidates, by id');
+				// app_user has no RLS (sign-in needs it); the insert's trigger checks
+				// the address belongs to a contributor-or-above member.
+				const { rows: users } = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [body.email]);
+				if (!users[0]) throw new ApiError(404, 'no contributor or above on this project has that address');
+				userId = users[0].id;
+			} else {
+				userId = body.userId;
+			}
+			const refused = () =>
+				'email' in body
+					? new ApiError(404, 'no contributor or above on this project has that address')
+					: new ApiError(404, 'not someone you can share this application with');
+			if (userId === s.ownerUserId) throw new ApiError(409, 'you already own this application');
 			await db.query('SAVEPOINT scenario_share');
 			const added = await db
-				.query('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [s.id, id, user.id])
+				.query('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [s.id, id, userId])
 				.catch(async (err: { code?: string }) => {
 					if (err.code === '23514' || err.code === '23503') {
 						await db.query('ROLLBACK TO SAVEPOINT scenario_share');
-						throw notMember;
+						throw refused();
 					}
 					throw err;
 				});
-			if (added.rowCount) await recordAudit(db, id, 'scenario.shared', subject(s, { userId: user.id }));
+			if (added.rowCount) await recordAudit(db, id, 'scenario.shared', subject(s, { userId }));
 			return c.json({ members: (await loadScenario(db, id, s.id)).members }, added.rowCount ? 201 : 200);
 		});
 	})
