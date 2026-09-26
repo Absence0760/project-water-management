@@ -2113,19 +2113,26 @@ Left, each with its trigger:
       dedicated queue, not the jobs queue: the worker trusts each queue for
       its own kind of message only. Locally: `pnpm dev:mail:bounce <email>`.
       The Terraform is plan-tested, not applied (Phase 6).
-- [ ] **End-to-end through Mailpit.** The roadmap's e2e (a fixture forecast
-      drives a dam below 30 % → an Afrikaans mail for the farmer in Mailpit
-      → one-click unsubscribe → no second mail on the next crossing) isn't
-      built: the flow is proven by `backend/src/alerts/alerts.db.test.ts`
-      (memory outbox, real ticks) and the pages by `e2e/tests/alerts.spec.ts`.
-      Durable fix: a spec that runs `runJobsTick` against Mailpit
-      (`pnpm dev:mail:up`, as `server-report.spec.ts` does) and reads the
-      message through Mailpit's API. Trigger: the reviewed Afrikaans alert
-      wording lands (§ Afrikaans), so the mail it checks is the real one.
+- [x] **End-to-end through Mailpit.** Built in English:
+      `e2e/tests/alerts-mailpit.spec.ts`. A synthetic 14-day dry forecast,
+      run and published, takes a farm's dam below the WUA's level (set
+      between the dam today and the forecast's lowest, so the forecast is
+      what crosses); one worker tick (`runJobsTick`) mails the farmer
+      through Mailpit; the spec reads the email through Mailpit's API (the
+      farm and the forecast named, no other farm, the RFC 8058 headers at
+      the API with the link's token), opens its *Stop these emails* link
+      signed out, and checks the next crossing mails the WUA but not the
+      farmer. It needs `pnpm dev:mail:up` and skips without it locally,
+      never in CI (`server-report.spec.ts`'s rule). The Afrikaans run waits
+      for the reviewed wording: the spec's `LANGUAGES` list has a marked
+      hook for it (next item).
 - [ ] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
       `alerts.*`, `unsubscribe.*` and `farm.alerts.*` page keys are on
       `docs/i18n/af-translation-sheet.md`; until they come back an Afrikaans
-      reader gets English (marked `lang="en"`). Trigger: § Afrikaans.
+      reader gets English (marked `lang="en"`). When they land, add the
+      `af` entry to `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` (the
+      AFRIKAANS HOOK), so the Mailpit e2e checks the Afrikaans mail too.
+      Trigger: § Afrikaans.
 - [x] **Per-feed staleness levels.** Built (054 `alert_rule.feed_id`):
       one `data_stale` rule per feed, each at its own level past that
       feed's usual delay, with a default per source (CHIRPS 3 days,

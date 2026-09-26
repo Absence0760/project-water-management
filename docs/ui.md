@@ -2446,6 +2446,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   otherwise, or when the alerts can't be loaded.
 - **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
   (a warning badge), from `alertsFiring`.
+- Tested by `e2e/tests/alerts.spec.ts` (the pages, the banner, the rule
+  editor's feed levels) and `e2e/tests/alerts-mailpit.spec.ts` (a forecast
+  crossing mailed through Mailpit by the worker, its unsubscribe link, no
+  mail on the next crossing; needs `pnpm dev:mail:up`).
 
 ## Share page (`/share`)
 

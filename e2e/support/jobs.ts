@@ -17,7 +17,8 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * RENDER_API_URL: the built site and the e2e API, not the dev servers) in the
  * worker's own headless Chromium, stores the PDF in the local MinIO
  * (`pnpm dev:s3:up`), and mails through Mailpit (`pnpm dev:mail:up`), with
- * links to the e2e site.
+ * links to the e2e site. Alert emails go to Mailpit too, their one-click
+ * unsubscribe pointing at the e2e API (alerts-mailpit.spec.ts).
  *
  * `schedule: false` runs only jobs already queued: no feed or report
  * schedule queues anything, so a spec that queues its own work (a yield)
@@ -36,6 +37,8 @@ export async function runJobsTick({ schedule = true }: { schedule?: boolean } = 
 			RENDER_SITE_URL: WEB_URL,
 			RENDER_API_URL: API_URL,
 			SITE_URL: WEB_URL,
+			// Alert emails' RFC 8058 one-click address: this checkout's e2e API.
+			API_PUBLIC_URL: API_URL,
 			STORAGE: 'local',
 			MAIL_TRANSPORT: 'smtp'
 		},
