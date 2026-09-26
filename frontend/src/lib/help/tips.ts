@@ -85,7 +85,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'simulation-window',
 		term: 'Simulation window',
-		short: 'Optional first and last day to simulate. Leave empty to run over the whole period covered by the rainfall series.',
+		short: 'Optional first and last day to simulate. Leave empty to run from the first to the last day with rain.',
 		category: 'basics',
 		fields: ['settings.simulationStart', 'settings.simulationEnd']
 	},

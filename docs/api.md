@@ -244,7 +244,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `null`; on `GET /projects/:id` and the other routes that answer
   `{ project }`, not on the list.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
-  `calibrationStart/End` are `YYYY-MM-DD` or `null`, and
+  `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
   (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and

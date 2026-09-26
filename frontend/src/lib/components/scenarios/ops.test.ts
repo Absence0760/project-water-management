@@ -70,7 +70,7 @@ describe('describeOp', () => {
 		expect(d({ op: 'transfer.remove', transferId: T })).toBe('Remove the transfer Upper farm → Lower farm');
 		expect(d({ op: 'landCover.remove', patchId: P })).toBe('Lower farm: remove Pine plantation (mature) (1.5 km²)');
 		expect(d({ op: 'settings.set', path: 'flowShareMethod', value: 'manual' })).toBe('Flow-share method: By area → Manual');
-		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: start of data → 2022-01-01');
+		expect(d({ op: 'settings.set', path: 'simulationStart', value: '2022-01-01' })).toBe('Simulation start: first day with rain → 2022-01-01');
 		// An unset PE input is pan × A-pan (a project saved before engine 0.31.0).
 		expect(d({ op: 'settings.set', path: 'pe', value: { kind: 'monthly', mm: new Array<number>(12).fill(100) as unknown as Monthly, source: 'Station ET₀' } })).toBe(
 			'GR4J potential evaporation: pan coefficient × A-pan → monthly, entered directly: 1,200 mm a year (Station ET₀)'

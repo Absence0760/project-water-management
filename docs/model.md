@@ -73,6 +73,29 @@ Units: flows and volumes are **m³/day** internally. The workbook converts m³/s
 with `86 400 s/day` (`rAppSet_ConvertSecToDay`). Months are laid out in
 **water-year order** (Oct … Sep) wherever the workbook shows a monthly table.
 
+**The run window** (`prepareRun`, `packages/engine/src/prepare.ts`).
+`settings.simulationStart` / `simulationEnd` set it when given, and may reach
+past the rain (those days run as dry, counted by the "no rainfall value" check,
+§2.4). An end left unset follows the **rain record** (engine ≥ 0.45.0, issue
+#54): the first (last) day whose rain the model can use, that is catchment
+rain, a rain-source period's series (§2.4e), bias-corrected CHIRPS or the
+forecast (§2.4b), after the zero-run and accumulation handling (§2.4c–d). A
+recorded catchment reading the zero-run handling set aside counts as rain even
+when nothing fills it: it is suspect data, not a blank, and runs as 0 mm with
+its own warning. Before 0.45.0 the default was the whole span of the rain
+series, blanks included, so a rain column padded with blanks to a longer gauge
+record (the second configuration: flow from 1951, rain from 1996) ran 45 years
+of 0 mm and distorted every whole-run figure (EWR not met on 99.8 % of days). A
+project whose rain has a value on the span's first and last days runs exactly
+as before. With no rain value at all the span is kept. Whenever a default end
+leaves out days on which the observed, logger or reference flow or the daily
+A-pan series has values (trimmed blanks, or a series that starts before the
+rain), the run says so: *the run covers the rain record, 1996-08-01 to
+2025-08-28, and leaves out 16 436 days of observed flow before it (no rain
+there): set Settings → simulation start to include them*. The b023 importers
+also set `simulationStart` / `End` from the workbook's `[Home]` window when it
+cuts the flow record short.
+
 **Rounding.** The workbook rounds at nearly every step (`ROUND(…, 0)` on
 fragmented flows, dam splits, return flow, storage and capacity; `INT` on the
 rain-added flow; 4 dp on recession indices; 2 dp / 1 dp / 0 dp in the demand
@@ -974,7 +997,7 @@ forecast into `rain_forecast_mm`. Neither changes the priority above: rain
 used is catchment rain, else CHIRPS (bias-corrected here, unless the mode is
 `'none'`), else the forecast, so fed CHIRPS fills only the days the catchment
 series doesn't have, and the forecast only days past both. A forecast also
-**extends the run**: the run window runs to the last day of any rain series,
+**extends the run**: the run window runs to the last day with rain from any series (§2.1),
 forecast included, and the reporting window (curtailment, EWR sites) defaults
 to the run's end. So the run records the days that used forecast rain
 (`summary.forecastRain`, engine ≥ 0.28.0: how many, the first and last, how

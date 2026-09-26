@@ -5,7 +5,7 @@
 // so they must balance as exactly as the random fuzz networks do. Built
 // without the stored fit (several seconds; it only changes GR4J's
 // parameters): examples.test.ts covers the examples as seeded.
-import { defaultProjectSettings, runModel, SUPPLY_DEFAULTS } from '@water-management/engine';
+import { defaultProjectSettings, fromEpochDay, runModel, SUPPLY_DEFAULTS, toEpochDay } from '@water-management/engine';
 import { checkAll, sameOutput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
@@ -52,6 +52,28 @@ describe('engine invariants on the example catchments', () => {
 		expect(sameOutput(out, runModel(explicit))).toBe(true);
 		expect(out.series.some((s) => s.key === 'river_abstraction')).toBe(false);
 	}, 60_000);
+
+	// The default run window follows the rain (engine 0.45.0, issue #54): the
+	// examples' rain fills their record, so the default window is the one the
+	// series span gives, and writing it out changes nothing, bit for bit.
+	for (const ex of examples) {
+		it(`${ex.name}: the default window is the whole record, the same run as that window written out`, () => {
+			const base = inputOf(ex);
+			base.settings = { ...base.settings, runoffModel: 'legacy', simulationStart: null, simulationEnd: null };
+			const auto = runModel(base);
+			// The rule before 0.45.0: the span of every rain series (Sandspruit's forecast runs past the record).
+			const spans = (['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'] as const).flatMap((k) => {
+				const s = base.series[k];
+				return s ? [[toEpochDay(s.startDate), toEpochDay(s.startDate) + s.values.length - 1]] : [];
+			});
+			expect(auto.startDate).toBe(fromEpochDay(Math.min(...spans.map((s) => s[0]!))));
+			expect(auto.endDate).toBe(fromEpochDay(Math.max(...spans.map((s) => s[1]!))));
+			expect(auto.summary.warnings.filter((w) => w.startsWith('the run covers the rain record'))).toEqual([]);
+			const pinned = structuredClone(base);
+			pinned.settings = { ...pinned.settings, simulationStart: auto.startDate, simulationEnd: auto.endDate };
+			expect(sameOutput(auto, runModel(pinned))).toBe(true);
+		}, 60_000);
+	}
 
 	// Crop demand options (engine 0.43.0, issue #54): unset, they change nothing,
 	// bit for bit; set, every invariant still holds on a real-sized network.

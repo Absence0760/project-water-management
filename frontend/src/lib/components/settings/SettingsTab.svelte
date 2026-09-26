@@ -969,8 +969,9 @@
 			</div>
 		</div>
 		<p class="hint muted">
-			Leave blank to simulate the full length of the rainfall series. Set a window to focus a run on a drought or
-			a calibration period.
+			Leave blank to simulate from the first to the last day with rain; flow recorded outside that is left out,
+			and the run says so. Set a window to focus a run on a drought or a calibration period, or to reach past the
+			rain record.
 		</p>
 		{#if dateError}<p class="err" role="alert">{dateError}</p>{/if}
 	</section>

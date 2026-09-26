@@ -624,8 +624,8 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	chirpsFitPeriod: { label: 'CHIRPS fit period', fmt: (v) => (v === 'all' || Array.isArray(v) ? fitPeriodText(v as never) : String(v)) },
 	// Engine ≥ 0.30.0; a snapshot without it had none.
 	rainSource: { label: 'Rain-source periods', fmt: rainSourceText },
-	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'start of data') },
-	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'end of data') },
+	simulationStart: { label: 'Simulation start', fmt: (v) => (v ? String(v) : 'first day with rain') },
+	simulationEnd: { label: 'Simulation end', fmt: (v) => (v ? String(v) : 'last day with rain') },
 	reportStart: { label: 'Curtailment report start', fmt: (v) => (v ? String(v) : 'start of run') },
 	reportEnd: { label: 'Curtailment report end', fmt: (v) => (v ? String(v) : 'end of run') },
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },

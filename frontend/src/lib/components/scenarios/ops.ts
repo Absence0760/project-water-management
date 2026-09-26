@@ -217,7 +217,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
-			// An unset date or PE input has a meaning (start of data; pan × A-pan, as the engine runs it): show it as the "was".
+			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
 			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
 			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
