@@ -1277,7 +1277,7 @@ No Afrikaans wording ships yet: none is reviewed.
       #5): the menu's *Account* link opens `/account` (display name, email
       and confirmation status, change password); `PATCH /auth/me` and
       `POST /auth/change-password` (docs/api.md § Auth).
-- [ ] **Dam figures in the run summary** (issue #17, Summary → Dam levels,
+- [ ] **Dam figures in the run summary** (issue #55; from #17, Summary → Dam levels,
       [ui.md § Summary](./ui.md#summary)). The Summary's Dam levels panel
       fetches each dam's daily `dam_storage` series (one request per dam,
       ~16 000 values each, four at a time) and reduces them in the browser
