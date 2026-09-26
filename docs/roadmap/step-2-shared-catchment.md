@@ -608,6 +608,13 @@ published").
 
 ### WP-2.4 Change history and audit log, with restore
 
+**Status (2026-09-26, issue #28).** Built: migration `026_history`, the
+history module, hooks in every write route with a table-driven guard,
+restore, the History tab, the save-bar reason and the Runs additions.
+Differences from the plan below are in [data-model.md § Change history and
+audit log](../data-model.md#change-history-and-audit-log-026_historysql).
+Deferred: the per-field "history" affordance (followups.md).
+
 **Goal.** Answer "who changed which parameter, when, and why did the result
 change?" and put back any earlier version. This is required by the Step 2 → 3
 gate.
