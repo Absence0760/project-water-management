@@ -3,6 +3,7 @@
 // historical series and summaries of the run without it, to the bit.
 // Soak: FORECAST_FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/forecast.invariants.test.ts
 import { describe, expect, it } from 'vitest';
+import { runForecastChecked } from './forecast';
 import { randomInput } from './testing/fuzz';
 import { checkForecastPrefix, withForecastTail } from './testing/forecastInvariants';
 
@@ -21,6 +22,14 @@ describe('forecast mode on random networks', () => {
 		}
 		expect(failures).toEqual([]);
 	}, Math.max(120_000, CASES * 300));
+
+	it('an input the model refuses is refused the same way (soak seeds 3887, 15857: a simulation start after the data)', () => {
+		for (const seed of [3887, 15857]) {
+			const x = withForecastTail(randomInput(seed, { runoffModel: 'gr4j' }), seed);
+			expect(() => runForecastChecked(x), `seed ${seed}`).toThrow(/simulation end .* is before start/);
+			expect(checkForecastPrefix(x), `seed ${seed}`).toBeNull();
+		}
+	});
 
 	it('the random inputs without a tail are unchanged by forecast mode', () => {
 		for (let seed = 1; seed <= 20; seed++) expect(checkForecastPrefix(randomInput(seed)), `seed ${seed}`).toBeNull();

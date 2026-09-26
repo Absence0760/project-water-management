@@ -2,6 +2,7 @@
 // forecast tail starts, the input without it, and the forecast run's summary.
 // The random-network invariant is in forecast.invariants.test.ts.
 import { describe, expect, it } from 'vitest';
+import { fromEpochDay, toEpochDay } from './calendar';
 import { forecastSplit, runForecastChecked, withoutForecastTail } from './forecast';
 import { defaultZeroRainSettings, type ModelInput } from './project';
 import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
@@ -120,8 +121,11 @@ describe('runForecastChecked', () => {
 			expect(p.demandM3).toBeCloseTo(demand, 6);
 			expect(p.deficitDays).toBe(series(p.nodeId, 'deficit').filter((v) => v > 1e-6).length);
 			const cap = farms.find((n) => n.id === p.nodeId)!.damCapacityM3;
-			if (cap > 0) expect(p.minDamPct).toBeCloseTo(Math.min(...series(p.nodeId, 'dam_storage')) / cap, 12);
-			else expect(p.minDamPct).toBeNull();
+			const storage = series(p.nodeId, 'dam_storage');
+			if (cap > 0) {
+				expect(p.minDamPct).toBeCloseTo(Math.min(...storage) / cap, 12);
+				expect(p.minDamDate).toBe(fromEpochDay(toEpochDay('2020-12-31') + storage.indexOf(Math.min(...storage))));
+			} else expect([p.minDamPct, p.minDamDate]).toEqual([null, null]);
 		}
 		expect(f.outletEwrDaysAtRisk).toBe(series(null as unknown as string, 'ewr_shortfall').filter((v) => v < 0).length);
 		const source = out.series.find((s) => s.nodeId === null && s.key === 'rain_source')!.values;

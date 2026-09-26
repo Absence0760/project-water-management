@@ -59,7 +59,17 @@ export function checkForecastPrefix(input: ModelInput): string | null {
 	try {
 		out = runForecastChecked(input);
 	} catch (e) {
-		return `forecast mode threw: ${(e as Error).message}`;
+		// An input the model itself refuses (a simulation start after the last
+		// data, say) must be refused the same way, not as a forecast problem.
+		const own = (() => {
+			try {
+				runModelChecked(input);
+				return null;
+			} catch (f) {
+				return (f as Error).message;
+			}
+		})();
+		return own === (e as Error).message ? null : `forecast mode threw: ${(e as Error).message}${own ? '' : ' (runModel ran)'}`;
 	}
 	const split = forecastSplit(input);
 	if (!split.forecastFrom) {

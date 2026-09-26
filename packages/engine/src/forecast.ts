@@ -140,6 +140,8 @@ export interface ForecastFarm {
 	name: string;
 	/** Lowest dam storage ÷ capacity on any forecast day; null without a dam. */
 	minDamPct: number | null;
+	/** The first forecast day at that lowest level (ISO); null without a dam. */
+	minDamDate: string | null;
 	/** Forecast days with a deficit (demand not met). */
 	deficitDays: number;
 	demandM3: number;
@@ -181,17 +183,22 @@ function forecastSummary(input: ModelInput, full: ModelOutput, split: ForecastSp
 		let s = 0;
 		let short = 0;
 		let minPct = Infinity;
+		let minAt = -1;
 		const cap = n.damCapacityM3 ?? 0;
 		for (let t = from; t <= to; t++) {
 			d += fin(demand?.[t]);
 			s += fin(supplied?.[t]);
 			if (fin(deficit?.[t]) > NOISE_M3) short++;
-			if (cap > 0 && storage) minPct = Math.min(minPct, fin(storage[t]) / cap);
+			if (cap > 0 && storage && fin(storage[t]) / cap < minPct) {
+				minPct = fin(storage[t]) / cap;
+				minAt = t;
+			}
 		}
 		perFarm.push({
 			nodeId: n.id,
 			name: n.name,
 			minDamPct: cap > 0 && Number.isFinite(minPct) ? minPct : null,
+			minDamDate: cap > 0 && minAt >= 0 ? fromEpochDay(d0 + minAt) : null,
 			deficitDays: short,
 			demandM3: d,
 			suppliedM3: s,
