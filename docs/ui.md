@@ -2310,9 +2310,23 @@ chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
   reason. The classes and colours are worked out in the browser from the
   stored sweep, so changing the settings re-reads a sweep without running
   it again.
-- **Around it**: badges for the **measure** (Reserve months met at the
-  outlet when every level has a rule table there, else days below the
-  pragmatic EWR at the outlet), the method and number of complete years,
+- **Reserve site** (`settings.outcomes.siteNodeId`): a picker, shown when
+  there is more than the outlet to pick, of the outlet and every gauge above
+  it with a Reserve rule table (Settings → Reserve rule tables), in network
+  order. It is a **project setting**, not panel state, so the matrix a
+  viewer or a colleague sees is the one the editor chose: an editor's
+  pick is saved at once (`PATCH` `settings.outcomes`), a viewer sees it
+  disabled. At a gauge the matrix reads that gauge's Reserve months met,
+  from each member's stored run summary (no new sweep needed); at the outlet
+  the measure is chosen as before. A sweep with no results at the chosen
+  gauge (its base run was made before the gauge had a table) shows *This
+  sweep has no Reserve results at gauge X … Run the model again, then run a
+  new demand sweep of the new run.* instead of a table. A stored site that
+  has lost its table or gauge falls back to the outlet with a notice saying
+  so. The Settings form doesn't edit or send the site.
+- **Around it**: badges for the **measure**, naming its site (Reserve months
+  met at the chosen site when every level has a rule table there, else days
+  below the pragmatic EWR at the outlet), the method and number of complete years,
   and **Risk cut-offs pending the hydrologist** while the measure in use has
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
@@ -2322,9 +2336,13 @@ chunk loaded when a run is shown, view model `outcomes/matrix.ts`).
   never picks one (a unit test holds the view model to that).
 
 Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
-enough years, default vs custom cut-offs, problem members) and
+enough years, default vs custom cut-offs, problem members; the site list,
+an ineligible stored site, the metric switching with the site, a sweep
+without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
+(who reads and writes the site, which nodes it accepts, copies) and
 `e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
-matrix against the stored series).
+matrix against the stored series; a gauge's matrix against its stored
+Reserve months, the viewer, the fallback).
 
 ## Scenarios (`?tab=scenarios`)
 

@@ -4106,12 +4106,18 @@ exists), one column per class. Per cell:
 
 | Metric | When | Per water year | Cell value |
 | --- | --- | --- | --- |
-| `reserveMonthsMet` | every level's run has a Reserve rule table at the site (`summary.ewrAssurance`, §2.9c; the outlet by default, a gauge by `siteNodeId`) | months met of months assessed | Σ met ÷ Σ months over the class's years |
+| `reserveMonthsMet` | every level's run has a Reserve rule table at the site (`summary.ewrAssurance`, §2.9c; the outlet by default, a gauge by `siteNodeId`, the project's `settings.outcomes.siteNodeId` in the app) | months met of months assessed | Σ met ÷ Σ months over the class's years |
 | `daysBelowEwr` | otherwise | days with `ewr_shortfall` < 0 at the outlet (the `ewrDaysNotMet` test, §2.9) of the year's days | Σ days below ÷ Σ days |
 
 - **One metric per matrix.** When only some levels have the table, every
   cell uses days below the EWR and a warning says why, so the rows compare.
   `metric` can be forced; forcing `reserveMonthsMet` without a table throws.
+- **A gauge site.** Days below the EWR are only counted at the outlet (a
+  sweep stores `ewr_shortfall` there only), so at a gauge the app forces
+  `reserveMonthsMet` and reads each member's stored `summary.ewrAssurance`
+  for that gauge; a sweep whose members lack it (its base run predates the
+  gauge's table) shows no matrix and says to run the model and a new sweep,
+  never the outlet's days in the gauge's name.
 - **Years.** Only the classed years, and in each run only those it covers
   (a warning names a level whose run misses some). Every cell carries
   `nYears` and its years. A year is **met in full** when every month met
