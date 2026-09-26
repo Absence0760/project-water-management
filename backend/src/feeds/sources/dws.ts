@@ -34,7 +34,7 @@
 // isn't a non-negative number is a gap (null), counted in the result. A gap
 // row can leave the flow column blank and still carry a quality code
 // ("20210102             170"): the code is read by its column, never as a flow.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { DWS_RIVER_GAUGE, DWS_RIVER_GAUGE_MESSAGE } from '../config.js';
 import { FeedFormatError } from '../errors.js';
 

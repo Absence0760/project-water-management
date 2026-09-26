@@ -18,7 +18,7 @@
 // fetch before ~08:30 UTC reads yesterday's issue) is dropped without
 // touching the series, so it never overwrites a newer forecast's days; the
 // feed records only that it was checked (last_attempt_at).
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { mergeInto, SeriesBody } from '../series/merge.js';

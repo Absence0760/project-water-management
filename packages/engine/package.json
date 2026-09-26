@@ -7,6 +7,7 @@
 	"description": "Pure TypeScript water-balance model. No I/O, no DB, no DOM — runs in the browser and in Lambda.",
 	"exports": {
 		".": "./src/index.ts",
+		"./calendar": "./src/calendar.ts",
 		"./testing": "./src/testing/index.ts"
 	},
 	"scripts": {

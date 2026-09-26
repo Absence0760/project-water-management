@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
