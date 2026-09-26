@@ -74,6 +74,7 @@ class SyntheticWorkbook(unittest.TestCase):
         self.assertIsNone(nodes["Delta Farm"]["flowShareManual"])  # missing from [Farm spec]
         self.assertEqual(nodes["Charlie Farm"]["flowShareManual"], 0)  # Specific method, blank cell
         self.assertEqual(nodes["Foxtrot Farm"]["divertCapacityM3Day"], 4320)  # typed as text
+        self.assertEqual(nodes["India Farm"]["damCapacityM3"], 20)  # the dummy dam is imported as it is, and only flagged
         self.assertEqual(project["settings"]["flowShareMethod"], "manual")
         self.assertEqual(len(m["transfers"]), 4)  # 7 columns: no destination, rate 0 and unknown element dropped
         self.assertEqual([t["months"] for t in m["transfers"]], [[1, 2, 3, 4, 11, 12], [11, 12], [7], [5, 6, 7]])
@@ -99,6 +100,7 @@ class SyntheticWorkbook(unittest.TestCase):
             "Pitman flow column has 120 days",
             "no Element sheet for Hotel Farm",
             "WARNING: [Farm demand] Charlie Farm: the gross demand in 12 of 12 months doesn't follow from its crop areas",
+            "WARNING: farm India Farm: probable run-of-river",
         ):
             with self.subTest(note=fragment):
                 self.assertEqual(sum(fragment in n for n in notes), 1, fragment)

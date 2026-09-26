@@ -343,6 +343,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
 	// Individual boreholes (WP-3.9), from their own stream too.
 	const boreholes = randomBoreholes(new Rng(seed ^ 0x3c6ef372), nodes);
+	// Supply rules and river pumps (WP-3.8), from their own stream and last, so
+	// the rest of every seed (transfers and boreholes included) is what it was.
+	addSupply(new Rng(seed ^ 0x5be0cd19), nodes);
 	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}), ...(boreholes.length ? { boreholes } : {}) }, series };
 }
 
@@ -418,6 +421,29 @@ function addDamStorage(g: Rng, nodes: NetworkNode[]): void {
 		n.damReleaseM3Day = rule === 'passInflow' && g.bool(0.5) ? null : Array.from({ length: 12 }, () => (g.bool(0.2) ? 0 : g.float(0, scale)));
 		n.damOutletCapacityM3Day = g.bool(0.5) ? null : g.pick([0, g.logFloat(1, 1e6)]);
 		n.damSeepageReturnPct = g.frac(0.25, 0.25);
+	}
+}
+
+/**
+ * Supply rules and river pumps (WP-3.8) in 25 % of seeds, on each farm half
+ * the time: any rule (trigger on a dam-less farm, and run of river on a farm
+ * that keeps its dam, now and then, which the engine runs as river first), a
+ * pump capacity of none, 0, a trickle or more than any flow, a trigger from 0
+ * to 1 and a stop level usually above it (now and then below, which the
+ * engine clamps). Run of river takes the dam away (capacity 0) most of the
+ * time, as the backend requires; whatever else the seed gave that dam then
+ * runs as on any dam-less farm.
+ */
+function addSupply(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.25)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !g.bool(0.5)) continue;
+		const rule = g.pick(['damFirst', 'riverFirst', 'riverFirst', 'trigger', 'trigger', 'runOfRiver', 'runOfRiver'] as const);
+		n.supplyRule = rule;
+		n.pumpCapacityM3Day = g.pick([null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6)]);
+		n.supplyTriggerPct = g.frac(0.1, 0.1);
+		n.supplyStopPct = g.bool(0.9) ? g.float(n.supplyTriggerPct, 1) : g.frac();
+		if (rule === 'runOfRiver' && g.bool(0.8)) n.damCapacityM3 = 0;
 	}
 }
 

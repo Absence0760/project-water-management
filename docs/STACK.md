@@ -259,18 +259,21 @@ Prefer reading these over guessing. Update them when behaviour changes.
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
-- **i18n keys (WP-2.5).** Farmer-facing strings (farm view, sign-in pages,
-  account and alert pages, `/share`) come from `frontend/src/lib/i18n/messages/en.ts` through
-  `t()` / `tn()` / `tRich()`; farmer emails from
-  `backend/src/mail/i18n/en.ts` through `mailT()`. Never hard-code a string
-  there, never write Afrikaans that hasn't been reviewed, and run
-  `pnpm gen:i18n:sheet` after changing a message ([ui.md §
+- **i18n messages (WP-2.5).** Farmer-facing strings (farm view, sign-in
+  pages, account and alert pages, `/share`) are their English, written at the
+  call: `t('Your dam')`, `tRich(…)`, `tn(DAYS, n)`; a message kept in a table
+  or variable is `msg('…')`, a counted word `plural({ one, other })`, and a
+  file's messages sit under an `// i18n-section:` marker. Farmer emails come
+  from `backend/src/mail/i18n/en.ts` (keyed) through `mailT()`. Never show a
+  string there without `t()`, never write Afrikaans that hasn't been
+  reviewed, and run `pnpm gen:i18n:sheet` after changing a message (the
+  tests throw on English that isn't on the sheet; [ui.md §
   Language](./ui.md#language)). The workspace stays English. Those pages
   show a server error through `errorText` (`lib/i18n/apiError.ts`, from the
   API's stable `code`), never its English `error` text; a new error a farmer
-  can meet gets a code in `backend/src/http/errors.ts` `ERROR_CODES` and an
-  `error.<code>` message (`http/errorCodes.test.ts` fails on an uncoded one
-  in those routes).
+  can meet gets a code in `backend/src/http/errors.ts` `ERROR_CODES` and a
+  message in `apiError.ts` `CODES` (`http/errorCodes.test.ts` fails on an
+  uncoded one in those routes).
 - **`pnpm check` doesn't compile components.** svelte-check type-checks the
   TypeScript in `<script lang="ts">`; the Svelte compiler strips it at build
   time, and a stripping bug fails every `vite build` (production and the e2e

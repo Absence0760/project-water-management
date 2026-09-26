@@ -306,11 +306,9 @@ test('the schematic can colour farms by the latest run’s supply, and says whic
 	await page.goto(`/projects/${project.id}?tab=network`);
 
 	const colourBy = page.getByLabel('Colour farms by');
-	await expect(colourBy.locator('option:checked')).toHaveText('Nothing');
+	// On by default once there is a run (issue #17: the map answers "who is short?" first).
+	await expect(colourBy.locator('option:checked')).toHaveText('Supply, latest run');
 	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
-	await expect(upper).not.toHaveAttribute('data-supply');
-
-	await colourBy.selectOption({ label: 'Supply, latest run' });
 	await expect(page.getByText(/^Farms coloured by share of irrigation demand supplied in run “Baseline”, ran today\./)).toBeVisible();
 	await expect(upper).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
 	// Not colour-only: the share (or "no demand") is on the node's label and in the drainage tree.

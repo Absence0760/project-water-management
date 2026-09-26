@@ -35,11 +35,15 @@ describe('checkOps', () => {
 		expect(checkOps([{ op: 'borehole.add', borehole: { ...bh, id: b } }]).errors).toEqual([]);
 		// A non-id value of transfer.set is not an id.
 		expect(checkOps([{ op: 'transfer.set', transferId: t, field: 'priority', value: 3 }]).errors).toEqual([]);
+		// demand.scale (issue #53 R1): each node it names, by its place in the list; none named is every farm.
+		expect(checkOps([{ op: 'demand.scale', factor: 0.85, nodeIds: [a, 'farm-b'] }]).errors).toEqual(['ops[0].nodeIds[1]: must be a UUID']);
+		expect(checkOps([{ op: 'demand.scale', factor: 0.85, nodeIds: [a, b], months: [12, 1], category: 'farm' }, { op: 'demand.scale', factor: 0.7 }]).errors).toEqual([]);
 	});
 
 	it("reports the engine validator's errors first, unchanged", () => {
 		expect(checkOps('nope').errors).toEqual(['ops: must be a list']);
 		expect(checkOps([{ op: 'node.set', nodeId: a, field: 'damMinPct', value: 2 }]).errors).toEqual(['ops[0].value: must be at most 1']);
+		expect(checkOps([{ op: 'demand.scale', factor: 2.5, nodeIds: ['x'] }]).errors).toEqual(['ops[0].factor: must be at most 2']);
 	});
 });
 

@@ -377,6 +377,8 @@ must build WP-2.15 Phase B.
       - `transfer.add | set | remove`;
       - `settings.set { path, value }`;
       - `series.scale { kind, factor, from?, to? }`;
+      - `demand.scale { factor, nodeIds?, months?, category? }` (added
+        later, issue #53 R1, engine 0.41.0: [scenarios.md](../scenarios.md));
       - later ops for the new physics fields: `allocation.set`,
         `ewrSite.set`, `borehole.add`.
     - Each op is classified as **proposal** (the applicant's own or new
@@ -1025,6 +1027,22 @@ must build WP-2.15 Phase B.
 
 ### WP-3.8 Operating rules and pump scenarios
 
+> **Supply rules and pump capacity built 2026-09-26 (engine 0.42.0, migration
+> 060), off by default; pending the hydrologist.** Brought forward for issue
+> #54 item 2c. Per farm: `supplyRule` (`damFirst` default | `riverFirst` |
+> `trigger` | `runOfRiver`), `pumpCapacityM3Day` (null = no limit) and
+> `supplyTriggerPct` / `supplyStopPct` (0.4 / 0.6); series `river_abstraction`,
+> `FarmSummary.avgRiverAbstractionM3Day`; the pump takes only the flow below
+> the dam above the senior users' requirement and a pass-inflow release's
+> target ([model.md §2.7e](../model.md), which lists the decisions taken).
+> Default output is byte-identical (tests on random networks and an example;
+> the examples and the client catchment regression suite unchanged).
+> **Still to do:** hands-off flow, drought restrictions (`restricted_demand`),
+> the Supply section in the node form (pumps × m³/h × 24 calculator), scenario
+> ops for the supply fields, a pump capacity on other water users (issue #54
+> item 2b), and moving the client catchment's run-of-river units (issue #54
+> item 2d) once the hydrologist confirms.
+
 - **Goal.** Model how water is actually taken. These rules are often
   licence conditions: hands-off flows, pump capacity, restrictions.
 - **Already in Step 1 (not repeated here):**
@@ -1040,7 +1058,12 @@ must build WP-2.15 Phase B.
       capacity, then from the dam;
     - `trigger`: switch to the river when storage < trigger %, back at
       stop %;
-    - `runOfRiver`: no dam.
+    - `runOfRiver`: no dam. b023 fakes this with a "dummy dam" (a pool
+      taking all the upstream inflow, or a dam sized as a day of river
+      flow). Both importers already flag those farms with a `WARNING:`
+      "probable run-of-river, for the modeller to confirm" (issue #54, 2d;
+      `scripts/wbt-import/README.md`), so they are the candidates to switch
+      to `runOfRiver` once this lands.
   - **Pump capacity** m³/day (pumps × m³/h × 24).
   - **Hands-off flow**: river abstraction only above a threshold at the
     node (a fixed m³/day by month, or its EWR share).

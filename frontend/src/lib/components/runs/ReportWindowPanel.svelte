@@ -208,7 +208,7 @@
 	{/if}
 {/if}
 <div aria-busy={recompute && loading}>
-	<CurtailmentTable summary={run.summary} {farmNames} curtailment={windowed ? windowed.curtailment : undefined} {period} />
+	<CurtailmentTable summary={run.summary} {farmNames} curtailment={windowed ? windowed.curtailment : undefined} {period} board />
 </div>
 
 <style>

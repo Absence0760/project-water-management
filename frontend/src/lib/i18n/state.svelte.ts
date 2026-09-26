@@ -1,8 +1,7 @@
-// The active language without the catalogue (WP-2.5; docs/ui.md § Language).
-// Number and date formatting read the choice from here, so a module that only
-// formats (the /share page's) never pulls in messages/en.ts. The catalogue
-// and the message functions live in ./locale.svelte.ts, which re-exports all
-// of this.
+// The active language without the message code (WP-2.5; docs/ui.md
+// § Language). Number and date formatting read the choice from here, so a
+// module that only formats (the /share page's) never pulls in the message
+// functions. They live in ./locale.svelte.ts, which re-exports all of this.
 
 export const LOCALES = ['en', 'af'] as const;
 export type Locale = (typeof LOCALES)[number];

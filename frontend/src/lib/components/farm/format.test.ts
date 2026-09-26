@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import {
 	count,
+	DAYS,
+	FARMS,
+	POINTS,
+	WEEKS,
 	daysBetween,
 	fmtDay,
 	fmtDayMonth,
@@ -87,10 +92,11 @@ describe('percentages (§8)', () => {
 
 describe('words', () => {
 	it('pluralises through the catalogue (Intl.PluralRules)', () => {
-		expect(sp(count('farm.n.day', 1))).toBe('1 day');
-		expect(sp(count('farm.n.day', 16))).toBe('16 days');
-		expect(sp(count('farm.n.farm', 0))).toBe('0 farms');
-		expect(count('farm.n.week', 2)).toBe('2\u00a0weeks');
+		expect(sp(count(DAYS, 1))).toBe('1 day');
+		expect(sp(count(DAYS, 16))).toBe('16 days');
+		expect(sp(count(FARMS, 0))).toBe('0 farms');
+		expect(count(WEEKS, 2)).toBe('2\u00a0weeks');
+		expect(sp(count(POINTS, 1))).toBe('1 point');
 	});
 
 	it('joins with "and"', () => {
@@ -119,9 +125,8 @@ describe('in Afrikaans (WP-2.5, D8)', () => {
 	});
 
 	it('writes af-ZA dates once the Afrikaans catalogue is complete', async () => {
-		const { en } = await import('$lib/i18n/messages/en');
-		// A stand-in catalogue (every key filled with its English); only the date locale is under test.
-		await setLocale('af', { ...en });
+		// A stand-in catalogue with every message; only the date locale is under test.
+		await setLocale('af', await markedCatalogue());
 		const want = new Intl.DateTimeFormat('af-ZA', { dateStyle: 'medium', timeZone: 'UTC' })
 			.formatToParts(new Date(Date.UTC(2024, 0, 10)))
 			.map((p) => (p.type === 'day' ? String(Number(p.value)) : p.value))

@@ -4,6 +4,7 @@
 // The engine owns the rules (applyScenario, validateScenarioOps); this only
 // reads and builds its data. No Svelte, no API.
 import {
+	DEMAND_SCALE_MAX,
 	LAND_COVER_CLASSES,
 	SCALABLE_SERIES_KINDS,
 	applyScenario,
@@ -12,6 +13,7 @@ import {
 	type AppliedOp,
 	type BoreholeMode,
 	type BoreholeTarget,
+	type DemandCategory,
 	type ModelInput,
 	type NetworkNode,
 	type NodeSetField,
@@ -131,7 +133,8 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'borehole.add': 'Add a borehole',
 	'borehole.remove': 'Remove a borehole',
 	'settings.set': 'Change a setting',
-	'series.scale': 'Scale rainfall or daily A-pan'
+	'series.scale': 'Scale rainfall or daily A-pan',
+	'demand.scale': 'Scale demand'
 };
 
 /** A node or crop id that neither the base nor any name source knows. */
@@ -224,6 +227,12 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
 			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true).replace('-', '−')} %)${days}`;
 		}
+		case 'demand.scale': {
+			const user = op.category === 'user';
+			const who = op.nodeIds?.length ? op.nodeIds.map(nodeName).join(', ') : user ? 'every other water user' : 'every farm';
+			const months = op.months?.length ? `, in ${monthsText(op.months)}` : '';
+			return `${user ? 'Demand' : 'Irrigation demand'} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
+		}
 		default:
 			return `Unknown change ${(op as { op?: string }).op ?? ''}`;
 	}
@@ -278,6 +287,10 @@ export interface OpDraft {
 	changePct: string;
 	from: string;
 	to: string;
+	/** demand.scale (issue #53 R1): whose demand, which of them (none = all), and the new demand as a % of today's. */
+	demandCategory: DemandCategory;
+	demandNodeIds: string[];
+	demandPct: string;
 }
 
 export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
@@ -319,7 +332,10 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		seriesKind: SCALABLE_SERIES_KINDS[0],
 		changePct: '',
 		from: '',
-		to: ''
+		to: '',
+		demandCategory: 'farm',
+		demandNodeIds: [],
+		demandPct: ''
 	};
 }
 
@@ -475,6 +491,17 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				op = s;
 				break;
 			}
+			case 'demand.scale': {
+				const pct = number(d.demandPct, 'the demand');
+				const s: Extract<ScenarioOp, { op: 'demand.scale' }> = { op: 'demand.scale', factor: Math.round((pct! / 100) * 1e9) / 1e9 };
+				// None ticked is all of them: the op then leaves the field out, as the engine reads it.
+				if (d.demandNodeIds.length) s.nodeIds = [...new Set(d.demandNodeIds)];
+				const months = [...new Set(d.months)].sort((a, b) => a - b);
+				if (months.length && months.length < 12) s.months = months;
+				if (d.demandCategory === 'user') s.category = 'user';
+				op = s;
+				break;
+			}
 			default:
 				throw new DraftError('pick a kind of change');
 		}
@@ -540,7 +567,9 @@ export function opItems(
 	return { items, other: status.other.map((x) => nameIds(x, names)) };
 }
 
-/** series.scale's factor is typed as a % change: say its limits that way. */
+/** series.scale's factor is typed as a % change, demand.scale's as a % of today's demand: say their limits that way. */
 function scaleNote(kind: ScenarioOpName, text: string): string {
-	return kind === 'series.scale' ? text.replace(/^factor: must be (at least 0|at most \d+)$/, 'the change must be between −100 % and +900 %') : text;
+	if (kind === 'series.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, 'the change must be between −100 % and +900 %');
+	if (kind === 'demand.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, `the demand must be between 0 % and ${DEMAND_SCALE_MAX * 100} % of what they'd take`);
+	return text;
 }

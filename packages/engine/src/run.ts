@@ -22,13 +22,14 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, toEpochDay, waterYearIndex } from './calendar';
-import { cropFactorAreaM2, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf, boreholesByNode, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
+import { supplyOf } from './network/supply';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -284,7 +285,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -341,6 +342,8 @@ function runNetwork(
 			push(node.id, 'depletion_unmet', 'Stream depletion due that the river could not give', 'm³/day', r.depletionUnmet);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
+		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
+		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		if (node.kind === 'user') {
 			push(node.id, 'return_flow', 'Returned below the user (treated wastewater)', 'm³/day', r.userReturn);
 			push(node.id, 'ewr_charge', 'EWR charge: share of the shortfall at the EWR sites below (negative)', 'm³/day', attribution.charge[i]!);
@@ -395,7 +398,8 @@ function runNetwork(
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
 			avgEwrShortfallM3Day: 0 - mean(charge),
 			daysEwrNotMet: notMet,
-			...groundwaterMeans(plan.nodes[i]!, r)
+			...groundwaterMeans(plan.nodes[i]!, r),
+			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {})
 		});
 	});
 
@@ -859,6 +863,7 @@ export function buildNetworkPlan(
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
+				...supplyOf(n, warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {})
 			};
@@ -1020,6 +1025,9 @@ function otherUsers(
 				demand[t] = Number.isFinite(v) && v > 0 ? v : 0;
 			}
 		}
+		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month.
+		const factor = demandFactorOf(n, warnings);
+		if (factor) for (let t = 0; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -1454,6 +1462,10 @@ function buildDemand(
 		} else for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
 		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
 		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
+		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
+		// requirement F after the store, so the rain used, the store and the gross demand stay as they were.
+		const factor = demandFactorOf(node, warnings);
+		if (factor) for (let t = 0; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.

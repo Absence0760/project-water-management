@@ -1,3 +1,4 @@
+<!-- i18n-section: verify -->
 <script lang="ts">
 	// Reached from the confirmation email. Works signed in or out (the token is
 	// the proof); signed in, the banner and session update straight away.
@@ -43,7 +44,7 @@
 		resendMsg = null;
 		try {
 			await emailAuth.resendVerification();
-			resendMsg = t('verify.sentNew', { email: session.user?.email ?? t('verify.yourAddress') });
+			resendMsg = t('We’ve sent a new link to {email}.', { email: session.user?.email ?? t('your address') });
 		} catch (err) {
 			resendMsg = errorText(err);
 		} finally {
@@ -53,43 +54,43 @@
 </script>
 
 <svelte:head>
-	<title>{t('common.pageTitle', { page: t('verify.title') })}</title>
+	<title>{t('{page} · Water Management', { page: t('Confirm your email') })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title={t('verify.title')}>
+<AuthCard title={t('Confirm your email')}>
 	{#if status === 'working'}
-		<p role="status">{t('verify.working')}</p>
+		<p role="status">{t('Confirming your email address…')}</p>
 	{:else if status === 'done'}
 		<div class="alert alert-info" role="status">
 			{#if session.user}
-				<Rich text={tRich('verify.doneSignedIn', { email: session.user.email })} />
+				<Rich text={tRich('Thanks — **{email}** is confirmed. Any projects or teams you were invited to are now in your list.', { email: session.user.email })} />
 			{:else}
-				{t('verify.doneSignedOut')}
+				{t('Thanks — your email address is confirmed. Sign in to see any projects or teams you were invited to.')}
 			{/if}
 		</div>
 		{#if session.user}
-			<a class="btn btn-primary" href="{base}/">{t('common.goToProjects')}</a>
+			<a class="btn btn-primary" href="{base}/">{t('Go to your projects')}</a>
 		{:else}
-			<a class="btn btn-primary" href="{base}/login">{t('common.signIn')}</a>
+			<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
 		{/if}
 	{:else}
-		<div class="alert alert-error" role="alert">{t('verify.dead')}</div>
+		<div class="alert alert-error" role="alert">{t('This confirmation link is invalid, already used, or older than 48 hours.')}</div>
 		{#if session.user}
 			<button type="button" class="btn btn-primary" onclick={resend} disabled={resending}>
-				{resending ? t('common.sending') : t('verify.newLink')}
+				{resending ? t('Sending…') : t('Send a new link')}
 			</button>
 			<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
 		{:else}
-			<p><Rich text={tRich('verify.signInToResend')} /></p>
-			<a class="btn btn-primary" href="{base}/login">{t('common.signIn')}</a>
+			<p><Rich text={tRich('Sign in and use **Resend email** in the banner at the top of the page to get a new link.')} /></p>
+			<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
 		{/if}
 	{/if}
 	{#snippet footer()}
 		{#if session.user}
-			<a href="{base}/">{t('common.backToProjects')}</a>
+			<a href="{base}/">{t('Back to your projects')}</a>
 		{:else}
-			{t('verify.noAccount')} <a href="{base}/register">{t('verify.createOne')}</a>
+			{t('No account yet?')} <a href="{base}/register">{t('Create one')}</a>
 		{/if}
 	{/snippet}
 </AuthCard>

@@ -273,5 +273,22 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			bores.push(id);
 		}
 	}
+	// demand.scale (issue #53 R1), from a stream of its own for the same reason.
+	const q = new Rng(seed ^ 0x5bd1e995);
+	if (count === undefined && q.bool(0.3)) {
+		for (let k = q.int(1, 2); k > 0; k--) {
+			const category = q.pick(['farm', 'farm', 'user'] as const);
+			const op: ScenarioOp & { op: 'demand.scale' } = { op: 'demand.scale', factor: q.pick([0, 0.7, 0.85, 1, 1.2, q.float(0, 2)]) };
+			if (q.bool(0.5)) op.category = category;
+			const pool = nodes.filter((x) => x.kind === (op.category ?? 'farm'));
+			if (q.bool(0.5)) {
+				// Now and then a node of the wrong kind or a missing one (a problem).
+				const picked = [...new Set(Array.from({ length: q.int(1, 3) }, () => (pool.length && !q.bool(0.05) ? q.pick(pool).id : q.bool(0.5) && nodes.length ? q.pick(nodes).id : missing())))];
+				op.nodeIds = picked;
+			}
+			if (q.bool(0.4)) op.months = [...new Set(Array.from({ length: q.int(1, 6) }, () => q.int(1, 12)))];
+			ops.push(op);
+		}
+	}
 	return ops;
 }

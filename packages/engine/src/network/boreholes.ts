@@ -7,6 +7,7 @@
 import { GA538_GROUNDWATER_LIMIT_M3_YEAR, type Borehole, type GroundwaterAnnualUse, type NetworkNode, type ProjectModel } from '../project';
 import { cmpStr } from '../order';
 import { waterYearOf } from '../calendar';
+import { surfaceSplit } from './supply';
 
 /** One pumping unit of a node (WP-3.9): its combined capacity (WP-1.34) or one borehole. */
 export interface PlanBoreholeUnit {
@@ -139,9 +140,26 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  * Each unit pumps at most `unitRoom`. Writes each unit's volume to `pumped`
  * and adds it to `used`. `avail` is what the dam holds and receives today
  * before irrigation, `dead` its dead storage, `cap` its capacity (0 for a user).
- * Returns [surface supply Gs, groundwater to the crop, into the dam, Σ d × pumped].
+ * `river` is what a farm's river pump can take today (WP-3.8, ./supply.ts
+ * riverRoom; 0 = no river pump) and `rule` its supply rule: the river is part
+ * of the surface in step 3, before the dam under river first and trigger
+ * (rules 1, 2), after it on a run-of-river farm (rule 3); a supplemental
+ * dam-target unit adds only what the dam lacks for the demand the river leaves.
+ * Returns [from the dam Gs, groundwater to the crop, into the dam, Σ d × pumped, from the river].
  */
-export function groundwaterDay(b: PlanBorehole, used: Float64Array, pumped: Float64Array[], t: number, D: number, qPrev: number, avail: number, dead: number, cap: number): [number, number, number, number] {
+export function groundwaterDay(
+	b: PlanBorehole,
+	used: Float64Array,
+	pumped: Float64Array[],
+	t: number,
+	D: number,
+	qPrev: number,
+	avail: number,
+	dead: number,
+	cap: number,
+	river = 0,
+	rule: 1 | 2 | 3 = 1
+): [number, number, number, number, number] {
 	const { units } = b;
 	let dep = 0;
 	const take = (k: number, v: number) => {
@@ -158,26 +176,31 @@ export function groundwaterDay(b: PlanBorehole, used: Float64Array, pumped: Floa
 		g += v;
 	}
 	let gd = 0;
+	// The demand a supplemental dam-target unit fills for: what the river pump (river first) leaves.
+	const rem = river > 0 && rule !== 3 ? D - g - Math.min(river, D - g) : D - g;
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;
 		if (!u.toDam) continue;
 		const head = cap - (avail + gd);
-		const want = u.mode === 1 ? head : u.mode === 2 ? (qPrev < u.triggerM3 ? head : 0) : D - g - (avail + gd - dead);
+		const want = u.mode === 1 ? head : u.mode === 2 ? (qPrev < u.triggerM3 ? head : 0) : rem - (avail + gd - dead);
 		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), want, head));
 		take(k, v);
 		gd += v;
 	}
-	const Gs = Math.min(Math.max(avail + gd - dead, 0), D - g);
+	let Gs: number;
+	let Gr = 0;
+	if (river > 0) [Gs, Gr] = surfaceSplit(rule, D - g, Math.max(avail + gd - dead, 0), river);
+	else Gs = Math.min(Math.max(avail + gd - dead, 0), D - g);
 	for (const pass of [0, 2] as const) {
 		for (let k = 0; k < units.length; k++) {
 			const u = units[k]!;
 			if (u.toDam || u.mode !== pass || (pass === 2 && !(qPrev < u.triggerM3))) continue;
-			const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - Gs - g));
+			const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - Gs - g - Gr));
 			take(k, v);
 			g += v;
 		}
 	}
-	return [Gs, g, gd, dep];
+	return [Gs, g, gd, dep, Gr];
 }
 
 /**

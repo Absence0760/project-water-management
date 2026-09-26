@@ -36,7 +36,7 @@
         12
       ],
       "baseFlowInitial": 320,
-      "catchmentAreaKm2": 83.5,
+      "catchmentAreaKm2": 86,
       "baseResetRatio": 1.5,
       "winterTodayRainMm": 35,
       "winterNextDayRainMm": 9,
@@ -389,7 +389,7 @@
         "id": "380c81d6-4d89-5d87-89ef-4d90acdd117e",
         "name": "Golf Farm",
         "kind": "farm",
-        "downstreamNodeId": "755ff2cf-a0ab-58ea-beea-b3a9707013c5",
+        "downstreamNodeId": "eabb0b83-489b-5085-8098-556fe7ffeab5",
         "sortOrder": 7,
         "areaKm2": 8.5,
         "areaHiKm2": 4.4,
@@ -408,11 +408,33 @@
         "damSeepagePerDay": 0
       },
       {
+        "id": "eabb0b83-489b-5085-8098-556fe7ffeab5",
+        "name": "India Farm",
+        "kind": "farm",
+        "downstreamNodeId": "755ff2cf-a0ab-58ea-beea-b3a9707013c5",
+        "sortOrder": 8,
+        "areaKm2": 2.5,
+        "areaHiKm2": 1.5,
+        "areaLoKm2": 1.0,
+        "flowShareManual": 0.04,
+        "pctUpstreamToDam": 1.0,
+        "pctRunoffToDam": 0.2,
+        "damCapacityM3": 20.0,
+        "damInitialPct": 1.0,
+        "divertCapacityM3Day": 12960.0,
+        "damMinPct": 0,
+        "irrigationEfficiency": 0.9,
+        "lossReturnFraction": 1,
+        "damAreaFullM2": null,
+        "damAreaExponent": 0.7,
+        "damSeepagePerDay": 0
+      },
+      {
         "id": "755ff2cf-a0ab-58ea-beea-b3a9707013c5",
         "name": "Hotel Farm",
         "kind": "farm",
         "downstreamNodeId": "f94fd2d9-e15a-5328-b020-be5102771a39",
-        "sortOrder": 8,
+        "sortOrder": 9,
         "areaKm2": 15.0,
         "areaHiKm2": 7.0,
         "areaLoKm2": 8.0,
@@ -434,7 +456,7 @@
         "name": "Outlet Gauge",
         "kind": "gauge",
         "downstreamNodeId": null,
-        "sortOrder": 9,
+        "sortOrder": 10,
         "areaKm2": 0,
         "areaHiKm2": 0,
         "areaLoKm2": 0,
@@ -594,6 +616,11 @@
         "nodeId": "755ff2cf-a0ab-58ea-beea-b3a9707013c5",
         "cropId": "7847a2d6-0582-584f-9ca1-cc3bd572d95d",
         "areaM2": 70000.0
+      },
+      {
+        "nodeId": "eabb0b83-489b-5085-8098-556fe7ffeab5",
+        "cropId": "2c21dda6-5238-5f8d-9d3e-0a4f45b6efaa",
+        "areaM2": 40000.0
       }
     ],
     "transfers": [

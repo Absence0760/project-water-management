@@ -719,6 +719,16 @@ export interface NetworkNode {
 	/** kind 'user' only: priority against the farms. Default 'senior'. */
 	userPriority?: UserPriority;
 	/**
+	 * Demand factor (engine ≥ 0.41.0, issue #53 R1): a multiplier on the
+	 * node's demand per water-year month (Oct–Sep), for a farm its crop water
+	 * requirement F (so the abstraction D = F ÷ e scales with it, and the
+	 * efficiency and loss return are unchanged), for an other water user its
+	 * monthly demand. null / absent = 1 in every month; a gauge ignores it.
+	 * Only the `demand.scale` scenario op sets it (docs/scenarios.md): the
+	 * model editor and a model save don't carry it.
+	 */
+	demandFactor?: number[] | null;
+	/**
 	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
 	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
 	 * boreholes, and the other borehole fields are inert.
@@ -732,7 +742,45 @@ export interface NetworkNode {
 	streamDepletionFrac?: number;
 	/** Time constant k (days, ≥ 0) of the linear-reservoir lag between pumping and depletion; 0 = the same day. Default 0. */
 	streamDepletionLagDays?: number;
+	/**
+	 * Farms only (engine ≥ 0.42.0, WP-3.8, issue #54 item 2c, docs/model.md
+	 * §2.7e): where irrigation water comes from. Default 'damFirst', every
+	 * engine before 0.42.0: the dam only, never a pump on the river.
+	 */
+	supplyRule?: SupplyRule;
+	/**
+	 * Farms only: the river pump's capacity, m³/day (pumps × m³/h × 24). It
+	 * limits what the farm pumps from the river under 'riverFirst', 'trigger'
+	 * and 'runOfRiver'; inert under 'damFirst'. null / absent = no limit (the
+	 * run warns); 0 = no river pump.
+	 */
+	pumpCapacityM3Day?: number | null;
+	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
+	supplyTriggerPct?: number;
+	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
+	supplyStopPct?: number;
 }
+
+/**
+ * Where a farm's irrigation water comes from (engine ≥ 0.42.0, WP-3.8,
+ * docs/model.md §2.7e), the node-based AI workbook's (v004) pump scenarios:
+ * 'damFirst' — the dam only, as every engine before 0.42.0 (the default);
+ * 'riverFirst' — pump from the river below the dam up to the pump capacity, the dam covers the rest;
+ * 'trigger' — the dam only, until it falls below the trigger %; then river first until it is back at the stop %;
+ * 'runOfRiver' — no dam: pump from the river up to the pump capacity; the rest is a deficit.
+ * The river pump takes only the flow below the dam (S) above what the farm
+ * must pass: the senior users' requirement and a pass-inflow release's target.
+ */
+export const SUPPLY_RULES = ['damFirst', 'riverFirst', 'trigger', 'runOfRiver'] as const;
+export type SupplyRule = (typeof SUPPLY_RULES)[number];
+
+/** What a node without the supply fields runs as: the dam only, no river pump (WP-3.8). */
+export const SUPPLY_DEFAULTS = {
+	supplyRule: 'damFirst',
+	pumpCapacityM3Day: null,
+	supplyTriggerPct: 0.4,
+	supplyStopPct: 0.6
+} as const;
 
 /**
  * When a node's boreholes run (WP-1.34, docs/model.md §2.7d):
@@ -864,6 +912,11 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.damReleaseM3Day === undefined) n.damReleaseM3Day = DAM_STORAGE_DEFAULTS.damReleaseM3Day;
 				if (n.damOutletCapacityM3Day === undefined) n.damOutletCapacityM3Day = DAM_STORAGE_DEFAULTS.damOutletCapacityM3Day;
 				n.damSeepageReturnPct ??= DAM_STORAGE_DEFAULTS.damSeepageReturnPct;
+				// Supply rule and river pump (WP-3.8): the dam only unless set.
+				n.supplyRule ??= SUPPLY_DEFAULTS.supplyRule;
+				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
+				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
+				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
 				return n;
 			})
 		: model.nodes;
@@ -1101,6 +1154,8 @@ export interface FarmSummary {
 	avgBaseflowDepletionM3Day?: number;
 	/** Mean groundwater pumped into the farm dam (engine ≥ 0.36.0, WP-3.9); only with dam-target boreholes. Not part of supplied. */
 	avgGroundwaterToDamM3Day?: number;
+	/** Mean pumped from the river, part of supplied (engine ≥ 0.42.0, WP-3.8); only for a farm whose supply rule can pump from the river. */
+	avgRiverAbstractionM3Day?: number;
 }
 
 /**

@@ -26,7 +26,7 @@ describe('handleError', () => {
 		expect(await res.json()).toEqual({ error: 'not found' });
 	});
 
-	it('keeps the codes unique and snake_case (each is an `error.<code>` catalogue key)', () => {
+	it('keeps the codes unique and snake_case (each is a key of the frontend apiError.ts CODES)', () => {
 		expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
 		for (const c of ERROR_CODES) expect(c).toMatch(/^[a-z]+(_[a-z]+)*$/);
 	});

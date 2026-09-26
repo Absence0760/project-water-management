@@ -10,6 +10,7 @@ import {
 	NODE_SET_FIELDS,
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
+	demandScaleError,
 	isIsoDate,
 	nodeAddFieldError,
 	nodeFieldError,
@@ -453,6 +454,30 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			notes.push(`${n} day(s) scaled`);
 			break;
 		}
+		case 'demand.scale': {
+			const e = demandScaleError(op);
+			if (e) fail(e);
+			const category = op.category ?? 'farm';
+			const word = category === 'farm' ? 'farm' : 'other water user';
+			const aKind = (k: string) => (k === 'user' ? 'an other water user' : `a ${k}`);
+			let targets: NetworkNode[];
+			if (op.nodeIds) {
+				targets = op.nodeIds.map((id) => findNode(d, id));
+				const wrong = targets.find((n) => n.kind !== category);
+				if (wrong) fail(`"${wrong.name}" is ${aKind(wrong.kind)}, not ${aKind(category)}`);
+			} else {
+				targets = m.nodes.filter((n) => n.kind === category);
+				if (!targets.length) fail(`the model has no ${word} to scale`);
+			}
+			// Water-year index (Oct = 0) of each calendar month the op scales.
+			const wy = new Set((op.months ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map((c) => (c + 2) % 12));
+			for (const n of targets) {
+				const cur = Array.isArray(n.demandFactor) && n.demandFactor.length === 12 ? n.demandFactor : new Array<number>(12).fill(1);
+				n.demandFactor = cur.map((v, i) => (wy.has(i) ? v * op.factor : v));
+			}
+			if (!op.nodeIds) notes.push(`${targets.length} ${word}(s) scaled`);
+			break;
+		}
 		default:
 			fail(`unknown op ${(op as { op?: unknown }).op as string}`);
 	}
@@ -571,6 +596,9 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 			const b = input?.model.boreholes?.find((x) => x.id === op.boreholeId);
 			return ok(!!b && mine(b.nodeId));
 		}
+		case 'demand.scale':
+			// Only the author's own nodes, named: without nodeIds it scales every farm (or user) of the catchment.
+			return ok(!!op.nodeIds?.length && op.nodeIds.every(mine));
 		default:
 			return 'baseline';
 	}

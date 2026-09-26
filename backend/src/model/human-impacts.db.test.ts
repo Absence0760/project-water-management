@@ -309,4 +309,44 @@ describe('dam storage (WP-3.5)', () => {
 		await expect(asOwner(`UPDATE node SET dam_release_rule = 'spill' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
 		await expect(asOwner(`UPDATE node SET dam_curve = '{"a": 1}'::jsonb WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
 	});
+
+	it('stores a farm’s supply rule and river pump, runs them, and refuses invalid combinations (WP-3.8)', async () => {
+		const u = await signUp('Pump');
+		const projectId = await project(u, 'River pumps');
+		const outlet = node('Outlet', null);
+		const upper = node('Upper', outlet.id, { supplyRule: 'riverFirst', pumpCapacityM3Day: 900 });
+		const lower = node('Lower', outlet.id, { damCapacityM3: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: 400 });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = {
+			nodes: [outlet, upper, lower],
+			crops: [crop],
+			cropAreas: [upper, lower].map((f) => ({ nodeId: f.id, cropId: crop.id, areaM2: 20_000 })),
+			transfers: []
+		};
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === upper.id)).toMatchObject({ supplyRule: 'riverFirst', pumpCapacityM3Day: 900, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
+		expect(got.find((n) => n.id === lower.id)).toMatchObject({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 400 });
+		expect(got.find((n) => n.id === outlet.id)).toMatchObject({ supplyRule: 'damFirst', pumpCapacityM3Day: null });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'pumps' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		const farms = summary.farms as { nodeId: string; avgRiverAbstractionM3Day?: number }[];
+		for (const f of [upper, lower]) expect(farms.find((x) => x.nodeId === f.id)!.avgRiverAbstractionM3Day).toBeGreaterThan(0);
+		expect(await seriesKeys(u, projectId, run.body.run.id, lower.id, ['river_abstraction'])).toEqual(['river_abstraction']);
+
+		const bad = async (m: object, pattern: RegExp) => {
+			const res = await u.call('PUT', `/projects/${projectId}/model`, m);
+			expect(res.status).toBe(400);
+			expect(JSON.stringify(res.body)).toMatch(pattern);
+		};
+		await bad({ ...model, nodes: [outlet, upper, { ...lower, damCapacityM3: 5000 }] }, /run of river has no dam/);
+		await bad({ ...model, nodes: [outlet, { ...upper, supplyRule: 'trigger', supplyTriggerPct: 0.5, supplyStopPct: 0.3 }, lower] }, /stop level must be at least its trigger level/);
+		await bad({ ...model, nodes: [{ ...outlet, supplyRule: 'riverFirst' }, upper, lower] }, /only a farm has a supply rule/);
+		await bad({ ...model, nodes: [outlet, { ...upper, supplyRule: 'pumpFirst' }, lower] }, /supplyRule/);
+		await expect(asOwner(`UPDATE node SET supply_rule = 'pumpFirst' WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
+		await expect(asOwner(`UPDATE node SET pump_capacity_m3_day = -1 WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
+	});
 });

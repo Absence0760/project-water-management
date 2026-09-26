@@ -180,7 +180,9 @@ Build order. Step tags say where each lands. S ≤ 3 days, M ≤ 2 weeks, L > 2 
   - **frontend:**
     - `src/lib/i18n/`:
       - `messages/en.ts` is the source of truth: a typed `const` object with
-        nested keys;
+        nested keys (as built, since issue #9, there is no English catalogue:
+        each message is its English at the call and `af.ts` is keyed by a
+        hash of it; [ui.md § Language](../ui.md#language));
       - `messages/af.ts` is typed as `Messages`, so a missing key is a type
         error;
       - `t(key, params)` interpolates;
@@ -737,8 +739,9 @@ rather than add a dependency:
   ICU data **(verify)**
   ([CLDR 47 coverage](https://unicode.org/cldr/charts/47/supplemental/locale_coverage.html)).
 - **Translation workflow:**
-  1. English strings change only in `messages/en.ts` and `help/content.ts`.
-     CI lists new and changed keys per PR.
+  1. English strings change only at their `t()` calls (read by
+     `scripts/guards/i18n_extract.mjs`) and in `help/content.ts`.
+     CI lists new and changed messages per PR.
   2. A translation platform syncs with the repo:
      - Weblate is GPLv3 and self-hostable, and its Libre hosted plan is free
        for public projects ([Weblate](https://weblate.org/en/hosting/)). This

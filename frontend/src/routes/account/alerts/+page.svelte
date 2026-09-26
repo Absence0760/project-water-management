@@ -1,3 +1,4 @@
+<!-- i18n-section: alerts -->
 <script lang="ts">
 	// Alert emails (WP-2.13, docs/ui.md § Alerts): per catchment and kind,
 	// right away, once a day (the 06:00 summary) or off. A farmer sees only
@@ -62,32 +63,32 @@
 </script>
 
 <svelte:head>
-	<title>{t('common.pageTitle', { page: t('alerts.title') })}</title>
+	<title>{t('{page} · Water Management', { page: t('Alert emails') })}</title>
 </svelte:head>
 
 <main class="page alerts-page" data-ready={projects !== null || loadError !== null ? 'true' : undefined}>
-	<p class="crumbs"><a href="{base}/account">{t('alerts.back')}</a></p>
-	<h1>{t('alerts.title')}</h1>
-	<p class="intro">{t('alerts.intro')}</p>
-	<p class="muted intro">{t('alerts.cap', { cap: DAILY_CAP })}</p>
+	<p class="crumbs"><a href="{base}/account">{t('Back to your account')}</a></p>
+	<h1>{t('Alert emails')}</h1>
+	<p class="intro">{t('Choose which alerts you get by email for each catchment, and how often. Alerts come from the catchment model: estimates, not instructions.')}</p>
+	<p class="muted intro">{t('At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).', { cap: DAILY_CAP })}</p>
 	{#if session.user?.mailSuppressed}
 		<div class="alert alert-warning suppressed" data-mail-suppressed={session.user.mailSuppressed.reason}>
 			<p>{suppressedText(session.user.mailSuppressed, session.user.email)}</p>
-			<p>{t('alerts.suppressed.fix', { email: session.user.email })}</p>
+			<p>{t('Once {email} can receive email again, turn alert emails back on. Your choices are kept.', { email: session.user.email })}</p>
 			{#if resumeError}<p class="resume-error" role="alert">{resumeError}</p>{/if}
 			<button type="button" class="btn btn-sm" onclick={resumeMail} disabled={resuming}>
-				{resuming ? t('alerts.suppressed.resuming') : t('alerts.suppressed.resume')}
+				{resuming ? t('Turning them back on…') : t('Turn alert emails back on')}
 			</button>
 		</div>
 	{/if}
-	<p class="status" role="status" aria-live="polite">{resumed ? t('alerts.suppressed.resumed') : ''}</p>
+	<p class="status" role="status" aria-live="polite">{resumed ? t('Alert emails are back on.') : ''}</p>
 
 	{#if loadError}
-		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('common.tryAgain')}</button></div>
+		<div class="alert alert-error" role="alert">{loadError} <button type="button" class="btn btn-sm" onclick={load}>{t('Try again')}</button></div>
 	{:else if projects === null}
 		<p class="muted" role="status">…</p>
 	{:else if !projects.length}
-		<p>{t('alerts.none')}</p>
+		<p>{t('None of your catchments can send you alerts yet.')}</p>
 	{:else}
 		{#each projects as p (p.id)}
 			{@const s = status[p.id] ?? {}}
@@ -95,8 +96,8 @@
 				<h2 id="p-{p.id}">{p.name}</h2>
 				{#if p.muted}
 					<div class="alert alert-info">
-						{t('alerts.muted')}
-						<button type="button" class="btn btn-sm" onclick={() => choose(p, [{ kind: 'all', mode: 'immediate' }])}>{t('alerts.unmute')}</button>
+						{t('All alert emails for this catchment are off.')}
+						<button type="button" class="btn btn-sm" onclick={() => choose(p, [{ kind: 'all', mode: 'immediate' }])}>{t('Turn alert emails back on')}</button>
 					</div>
 				{/if}
 				{#each p.choices as c (slot(p, c))}
@@ -116,10 +117,10 @@
 								</label>
 							{/each}
 						</div>
-						{#if !c.ruleOn}<p class="hint">{t('alerts.notOn')}</p>{/if}
+						{#if !c.ruleOn}<p class="hint">{t('Not switched on for this catchment yet: you get nothing until the WUA turns it on.')}</p>{/if}
 					</fieldset>
 				{/each}
-				<p class="status" role="status" aria-live="polite">{s.saving ? t('alerts.saving') : s.saved ? t('alerts.saved') : ''}</p>
+				<p class="status" role="status" aria-live="polite">{s.saving ? t('Saving…') : s.saved ? t('Saved.') : ''}</p>
 				{#if s.error}<div class="alert alert-error" role="alert">{s.error}</div>{/if}
 			</section>
 		{/each}

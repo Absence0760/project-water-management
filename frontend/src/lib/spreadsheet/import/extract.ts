@@ -12,7 +12,7 @@ import { clean, num, pyStr } from './cells';
 import { extractCalibration, extractCalibrationWindow, summerMonthsNote } from './calibration';
 import { grossDemandNote, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
-import { type FarmSpec, farmOperatingRules, readFarmSpec } from './farms';
+import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
 import { type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
@@ -167,7 +167,12 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	});
 	// A repeated element name maps to its last node, as the Python's dict does.
 	const nodeId = new Map(nodes.map((n) => [n.name, n.id]));
-	const dams = nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
+	for (const n of nodes) {
+		if (n.kind !== 'farm') continue;
+		const note = runOfRiverNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day, n.pctRunoffToDam);
+		if (note) report.note('probable-run-of-river', note, { sheet: 'Farm spec', element: n.name });
+	}
+	const dams =nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
 	if (dams.length) {
 		report.note(
 			'dam-area-unknown',

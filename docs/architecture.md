@@ -144,6 +144,21 @@ keeps HelpTip off `content.ts` and `articles.ts` and the text modules free of
 run-time imports. Splitting costs ~3 KB of total (smaller chunks compress
 worse), the price of a tip fetching 10 KB instead of 42.
 
+The farmer pages' words ship with the code that shows them (issue #9, WP-2.5;
+[ui.md § Language](./ui.md#language)). Each message is its English, written
+at its call (`t('Your dam')`), so there is no English catalogue: it was one
+11 KB gzip chunk that every translated route (sign-in, account, farm, `/share`)
+downloaded whole, with each key written twice (in the catalogue and at the
+call). Now a route carries only its own words: first loads measured 6–9 KB
+lighter (farm page 97.9 → 91.8 KB, farm list 79.4 → 71.5, sign-in 71.5 →
+63.0, account 71.6 → 63.8, `/share` 74.3 → 65.7, sign-up 74.3 → 66.3). The
+total barely moves (969.8 → 968.4 KB): the keys are gone, but the English
+now compresses in many small chunks instead of one. The message code
+(`lib/i18n/locale.svelte.ts`, 1.3 KB) still loads only on the translated
+routes, and the Afrikaans catalogue only for someone who picks it; the list
+of every message id (`messages/ids.generated.ts`) is read only under
+`import.meta.env.DEV`, so the build keeps just its count.
+
 The build targets ES2022 (`frontend/vite.config.ts`). Vite's default target
 down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 KB
 across the bundle). The app already needs newer browsers than ES2022 does
