@@ -5,7 +5,7 @@
 // Synthetic catchment: invented values only (public repo).
 import { describe, expect, it } from 'vitest';
 import { prepareCalibration } from '../calibrate/calibrate';
-import { defaultProjectSettings, type DailySeries, type ModelInput } from '../project';
+import { defaultProjectSettings, type DailySeries, type ModelInput, type PeInput } from '../project';
 import { prepareRun } from '../prepare';
 import { runModel, withVerification } from '../run';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
@@ -150,7 +150,7 @@ describe('runModel with a daily A-pan series', () => {
 	});
 
 	it('under a monthly PE, GR4J ignores it while demand and dams still read it', () => {
-		const pe = { kind: 'monthly', mm: apan.map((v) => v * 0.7), source: 'invented' };
+		const pe: PeInput = { kind: 'monthly', mm: apan.map((v) => v * 0.7) as never, source: 'invented' };
 		const m = runModel(catchment({ pe }));
 		const md = runModel(catchment({ pe }, daily()));
 		expect(col(md, 'pet')).toEqual(col(m, 'pet'));
