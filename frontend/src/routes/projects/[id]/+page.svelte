@@ -37,6 +37,7 @@
 	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
+	import { hasModelInputsToggle, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
 
 	// Workflow order: describe the catchment, feed it data, calibrate, run.
 	const TABS = [
@@ -50,6 +51,7 @@
 		{ id: 'history', label: 'History' }
 	] as const;
 	type TabId = (typeof TABS)[number]['id'];
+	const TAB_IDS: TabId[] = TABS.map((t) => t.id);
 	const MODEL_TABS: TabId[] = ['network', 'crops', 'transfers'];
 	// Friendlier ?tab= spellings that resolve to the canonical keys above.
 	const TAB_ALIASES: Record<string, TabId> = {
@@ -69,6 +71,12 @@
 	});
 
 	let project = $state<Project | null>(null);
+	// Which tabs each role is shown (presentation only; a hidden tab still
+	// opens from a deep link, and then shows in the strip while it's open).
+	let showModelInputs = $state(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT);
+	const shownIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
+	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
+	const strip = $derived(TABS.filter((t) => stripIds.includes(t.id)));
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
@@ -284,7 +292,7 @@
 	function tabKeydown(e: KeyboardEvent, idx: number) {
 		if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
 		e.preventDefault();
-		const next = TABS[(idx + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]!;
+		const next = strip[(idx + (e.key === 'ArrowRight' ? 1 : strip.length - 1)) % strip.length]!;
 		goto(tabHref(next.id), { keepFocus: false, noScroll: true }).then(() =>
 			document.getElementById(`tab-${next.id}`)?.focus()
 		);
@@ -373,24 +381,32 @@
 				</div>
 			{/if}
 
-			<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
-				{#each TABS as t, i (t.id)}
-					<a
-						id="tab-{t.id}"
-						href={tabHref(t.id)}
-						data-sveltekit-noscroll
-						aria-current={tab === t.id ? 'page' : undefined}
-						onkeydown={(e) => tabKeydown(e, i)}
-						onpointerenter={() => warmTab(t.id)}
-						onfocus={() => warmTab(t.id)}
-					>
-						{t.label}
-						{#if MODEL_TABS.includes(t.id) && editor.issues.some((x) => x.area === t.id)}
-							<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
-						{/if}
-					</a>
-				{/each}
-			</nav>
+			<div class="tab-row">
+				<nav class="tabs" aria-label="Project sections" bind:this={tabStrip}>
+					{#each strip as t, i (t.id)}
+						<a
+							id="tab-{t.id}"
+							href={tabHref(t.id)}
+							data-sveltekit-noscroll
+							aria-current={tab === t.id ? 'page' : undefined}
+							onkeydown={(e) => tabKeydown(e, i)}
+							onpointerenter={() => warmTab(t.id)}
+							onfocus={() => warmTab(t.id)}
+						>
+							{t.label}
+							{#if MODEL_TABS.includes(t.id) && editor.issues.some((x) => x.area === t.id)}
+								<span class="issue-dot" title="Has problems to fix"><span class="visually-hidden">(has problems)</span></span>
+							{/if}
+						</a>
+					{/each}
+				</nav>
+				{#if hasModelInputsToggle(project.role)}
+					<label class="inputs-toggle">
+						<input type="checkbox" bind:checked={showModelInputs} />
+						Show model inputs
+					</label>
+				{/if}
+			</div>
 
 			{#if !canEdit && tab !== 'overview'}
 				<div class="readonly-note" role="note">
@@ -415,6 +431,7 @@
 						{canEdit}
 						{isOwner}
 						currentUserId={session.user?.id ?? ''}
+						visibleTabs={shownIds}
 						{onProjectChange}
 						{onLeftProject}
 					/>
@@ -637,11 +654,18 @@
 	/* The strip scrolls sideways on phones. The underline is drawn inside each
 	   tab (inset shadow), so nothing overflows vertically and no stray vertical
 	   scrollbar appears with classic (always-visible) scrollbars. */
-	.tabs {
+	.tab-row {
 		display: flex;
-		gap: 0.15rem;
+		align-items: center;
+		gap: 0.5rem;
 		box-shadow: inset 0 -1px 0 var(--border);
 		margin-bottom: 1rem;
+	}
+	.tabs {
+		display: flex;
+		flex: 1 1 auto;
+		min-width: 0;
+		gap: 0.15rem;
 		overflow: auto hidden;
 		scrollbar-width: thin;
 		overscroll-behavior-x: contain;
@@ -667,6 +691,19 @@
 	.tabs a[aria-current='page'] {
 		color: var(--accent);
 		box-shadow: inset 0 -2px 0 var(--accent);
+	}
+	/* A viewer's "Show model inputs" (lib/workspace/tabs.ts), at the strip's end. */
+	.inputs-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex: none;
+		min-height: 44px;
+		padding: 0 0.25rem;
+		color: var(--text-2);
+		font-size: 0.875rem;
+		white-space: nowrap;
+		cursor: pointer;
 	}
 	.issue-dot {
 		display: inline-block;

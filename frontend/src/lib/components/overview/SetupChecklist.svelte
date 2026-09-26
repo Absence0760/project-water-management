@@ -3,7 +3,18 @@
 	// step is done it collapses to a one-line summary (expandable).
 	import { nextStep, progress, type ChecklistStep, type StepStatus } from './checklist';
 
-	let { steps }: { steps: ChecklistStep[] } = $props();
+	let {
+		steps,
+		tabs
+	}: {
+		steps: ChecklistStep[];
+		/**
+		 * The tabs this member is shown (`visibleTabs`, lib/workspace/tabs.ts).
+		 * A step whose tab is hidden keeps its status but isn't a link, so the
+		 * checklist never points into a tab the strip doesn't show.
+		 */
+		tabs: readonly string[];
+	} = $props();
 
 	const prog = $derived(progress(steps));
 	const next = $derived(nextStep(steps));
@@ -39,7 +50,7 @@
 				</span>
 				<div class="body">
 					<div class="title">
-						<a href="?tab={s.tab}">{s.title}</a>
+						{#if tabs.includes(s.tab)}<a href="?tab={s.tab}">{s.title}</a>{:else}<span>{s.title}</span>{/if}
 						<span class="visually-hidden">: {STATUS[s.status]}.</span>
 						{#if s.optional && s.status !== 'done'}<span class="opt">optional</span>{/if}
 						{#if next?.id === s.id}<span class="badge badge-owner">Next</span>{/if}
