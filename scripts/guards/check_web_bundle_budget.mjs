@@ -715,18 +715,25 @@
 //             total, +1.5–4 KB on every first load) and grouping the small
 //             page-side engine modules (−2 KB total, farm +6, home +2).
 //             Headroom ~5 KB.
-// Run:   pnpm build:frontend && pnpm check:bundle
 // 2026-09-26  total 973 → 978 KB (measured 975). Issue #54 adds ~6 KB: the
 //             upload's overwrite confirm, History's "Restore the earlier
 //             values", the scenario and compare support and help entries for
 //             the supply rules (engine 0.42.0) and the crop demand options
 //             (0.43.0). The i18n trim above has landed; headroom ~3 KB.
+// 2026-09-26  total 978 → 985 KB. main measured 979 (over the ceiling after
+//             the English-as-key trim, 969, and the merges since: #53's
+//             year classes and demand.scale op, WP-3.8's supply rules);
+//             issue #17's Network map filling the screen adds 1 (980).
+//             Headroom ~5 KB.
 // 2026-09-26  total 978 → 893 KB, calibration worker 35 → 32 KB (both down).
 //             Issue #9's reductions (the run export's own xlsx writer, one
 //             Svelte runtime chunk, worker treeshaking; the English-as-key
 //             messages) merged with issue #54's +6 KB: measured 888 KB, the
 //             calibration worker 27 KB. Headroom ~5 KB on each.
-// Run:  pnpm build:frontend && pnpm check:bundle
+// 2026-09-26  total 985 → 895 KB (measured 890). The two entries above
+//             were written in parallel; merged, #9's reductions and #17's
+//             Network map measure 890. Headroom ~5 KB.
+// Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
@@ -736,7 +743,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 893,
+	totalCodeKb: 895,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
