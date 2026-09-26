@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { compareTabHref } from '$lib/components/compare/picker';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -443,7 +444,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			<div class="panel-head">
 				<h2 id="runs-h">Runs</h2>
 				{#if runs.length >= 2}
-					<a class="small" href="{base}/compare?project={encodeURIComponent(projectId)}">Compare runs</a>
+					<a class="small" href={compareTabHref(null, null)}>Compare runs</a>
 				{:else if runs.length}
 					<span class="muted small">{runs.length} stored</span>
 				{/if}
@@ -557,7 +558,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					<div class="head-acts">
 						<!-- This run against the published baseline (docs/run-comparison.md): A = published, B = this run. -->
 						{#if currentPublishedRunId && currentPublishedRunId !== shownRunId}
-							<a class="btn btn-sm" href="{base}/compare?a={encodeURIComponent(`${projectId}:${currentPublishedRunId}`)}&b={encodeURIComponent(`${projectId}:${shownRunId}`)}">Compare with published</a>
+							<a class="btn btn-sm" href={compareTabHref({ projectId, runId: currentPublishedRunId }, { projectId, runId: shownRunId })}>Compare with published</a>
 						{/if}
 						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
 						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>

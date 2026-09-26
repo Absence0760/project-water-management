@@ -625,6 +625,12 @@
 //             largest page chunk is now the Settings tab's, 41.4 KB. No new
 //             dependency. Headroom ~6 KB on the total. The ways down are
 //             unchanged: English-as-key i18n (~5–7 KB, docs/followups.md).
+// 2026-09-26  total 940 → 945 KB. Issue #17, option A steps 2–3: the
+//             Summary's Flow vs reserve chart (its own lazy chunk) and the
+//             Compare runs tab, where the /compare page's body became
+//             CompareView, a chunk shared by the page and the workspace tab
+//             (split overhead), plus the tab's wiring and links. Measured
+//             937 → 940 over main @ d443df7. Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -635,7 +641,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 940,
+	totalCodeKb: 945,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

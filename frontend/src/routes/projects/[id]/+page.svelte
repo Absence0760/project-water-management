@@ -11,6 +11,7 @@
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
 		settings: () => import('$lib/components/settings/SettingsTab.svelte'),
 		runs: () => import('$lib/components/runs/RunsTab.svelte'),
+		compare: () => import('$lib/components/compare/CompareView.svelte'),
 		scenarios: () => import('$lib/components/scenarios/ScenariosTab.svelte'),
 		allocations: () => import('$lib/components/allocations/AllocationsTab.svelte'),
 		applications: () => import('$lib/components/scenarios/ApplicationsTab.svelte'),
@@ -43,6 +44,7 @@
 	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
+	import { compareTabHref } from '$lib/components/compare/picker';
 	import { hasModelInputsToggle, navSections, stripTabs, VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT, visibleTabs } from '$lib/workspace/tabs';
 
 	// The sidebar orders them by section (navSections), not by this list.
@@ -54,6 +56,7 @@
 		{ id: 'series', label: 'Data' },
 		{ id: 'settings', label: 'Settings & calibration' },
 		{ id: 'runs', label: 'Runs & results' },
+		{ id: 'compare', label: 'Compare runs' },
 		{ id: 'scenarios', label: 'Scenarios' },
 		{ id: 'allocations', label: 'Allocations' },
 		{ id: 'applications', label: 'Applications' },
@@ -530,6 +533,17 @@
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
 								onInputsRestored={reloadInputs}
+							/>
+						{/snippet}
+					</Lazy>
+				{:else if tab === 'compare'}
+					<Lazy load={LOAD.compare}>
+						{#snippet children(CompareView)}
+							<CompareView
+								a={page.url.searchParams.get('a')}
+								b={page.url.searchParams.get('b')}
+								project={projectId}
+								hrefFor={(a, b) => `${page.url.pathname}${compareTabHref(a, b)}`}
 							/>
 						{/snippet}
 					</Lazy>

@@ -8,8 +8,8 @@
 	with the comparison against the published run.
 -->
 <script lang="ts">
+	import { compareTabHref } from '$lib/components/compare/picker';
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
 	import { autoRunToPublish } from '$lib/components/autorun/autoRun';
 	import { api, type Publication, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -51,7 +51,7 @@
 	// Publication stays a person's act (D5): a newer auto run is offered, never published here.
 	const autoRun = $derived(canEdit && current ? autoRunToPublish(runs, current.runId) : null);
 	const compareHref = $derived(
-		autoRun && current ? `${base}/compare?a=${encodeURIComponent(`${projectId}:${current.runId}`)}&b=${encodeURIComponent(`${projectId}:${autoRun.id}`)}` : ''
+		autoRun && current ? compareTabHref({ projectId, runId: current.runId }, { projectId, runId: autoRun.id }) : ''
 	);
 </script>
 

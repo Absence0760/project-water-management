@@ -8,8 +8,15 @@ project D copied from C and then modified.
 
 ## Using it
 
-Open `/compare?project=<id>` (the **Compare runs** link on the Runs tab's
-runs list; the page links **Back to runs**). The page starts on that
+Inside a project, open the **Compare runs** tab (under *Outcomes* in the
+workspace, `?tab=compare`; also the **Compare runs** link on the Runs tab's
+runs list). Its pair lives in the workspace URL
+(`?tab=compare&a=<projectId>:<runId>&b=<projectId>:<runId>`, `compareTabHref`
+in `compare/picker.ts`), and a side can still be a run of another project.
+The same view is the standalone page `/compare?project=<id>`, which links
+**Back to runs**; its URL keeps working for bookmarks and cross-project links,
+and an applicant (no workspace tabs) gets it from their application. Either
+way the view starts on that
 project's **latest run (B — changed)** against its **published baseline
 (A — baseline)**, the run stakeholders see (WP-2.3), when there is one and
 it isn't the latest; otherwise against the **previous run**
@@ -344,7 +351,7 @@ fitted values"*). A parameter edit itself still has its own line. Settings keys 
 | --- | --- |
 | `compareRuns`, `diffInputs`, types | `packages/engine/src/compare.ts` (pure, unit-tested in `compare.test.ts`) |
 | `GET /compare/runs` | `backend/src/compare/routes.ts`, contract in [api.md § Compare runs](./api.md#compare-runs) |
-| Page | `frontend/src/routes/compare/+page.svelte` |
+| Page | `frontend/src/routes/compare/+page.svelte` (heading, back link, URL) and the workspace's `compare` tab, both showing `lib/components/compare/CompareView.svelte` (the pickers and the comparison; the host passes the pair and builds URLs through `hrefFor`) |
 | Components + pure helpers | `frontend/src/lib/components/compare/` (`delta.ts` formatting and sorting, `picker.ts` URL state and defaults, `chirpsFit.ts` the CHIRPS factors note, `overlay.ts` the daily series overlay's node matching, B − A and read-out, exported for reuse by scenario comparison, issue #18) |
 | Uncertainty and paired bands | `packages/engine/src/uncertainty/paired.ts`; `frontend/src/lib/components/uncertainty/PairedUncertaintyPanel.svelte` |
 
