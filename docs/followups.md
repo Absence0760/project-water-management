@@ -1260,20 +1260,17 @@ role and not before it.
       `infra/scripts/package-lambdas.sh`) and invoke it with the Lambda
       runtime interface emulator against a local stack; then after the first
       deploy, render one report in production and check its alarms.
-- [ ] **The DB test files run in parallel**, although
+- [x] **The DB test files ran in parallel**, although
       `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
       `db` project and several tests say "a tick here sees only this file's
-      jobs". Vitest 2 ignores that option inside a workspace project (checked
-      2026-09-25 with two sleeping test files: they overlapped; with
-      `--no-file-parallelism` they didn't). So one file's `runTick` can claim
-      another file's queued jobs. The report tests were written to be immune
-      (the render test runs its job's handler directly, on a job not yet
-      due); the job and feed tests assert on their own job ids, which is why
-      they pass. Durable fix, for the operator to choose: either make the db
-      project really serial (`vitest run --project db --no-file-parallelism`
-      in `test:db`: measured 25 s → 123 s) or keep the speed and make every
-      tick-based test hermetic (claim only its own jobs), then correct the
-      comments.
+      jobs": Vitest 2 ignores that option inside a workspace project
+      (checked 2026-09-25 with two sleeping test files). One file's tick then
+      claimed another's jobs, and with the report tests' queued renders in
+      the mix the job and feed tests failed intermittently. Fixed at the
+      root: `test:db` passes `--no-file-parallelism`, which does take
+      effect. The suite now takes ~145 s instead of ~25 s (CI's `db-test`
+      job included); making every tick-based test hermetic instead would buy
+      the speed back.
 - [ ] **MinIO's upstream image is gone** (the `minio/minio` Docker Hub
       repository answers "pull access denied"; MinIO stopped publishing
       community images in 2025). docker-compose pins the community fork's

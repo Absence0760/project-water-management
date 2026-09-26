@@ -29,12 +29,22 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	/** Consecutive failed status checks; after MAX_MISSES the polling stops (the buttons start over). */
+	const MAX_MISSES = 5;
+	let misses = $state(0);
+
 	async function follow(jobId: string) {
 		try {
 			current = await reports.get(jobId);
 			error = null;
+			misses = 0;
 		} catch (e) {
+			misses++;
 			error = `Could not check on the PDF: ${msg(e)}`;
+			if (misses >= MAX_MISSES) {
+				busy = false;
+				return;
+			}
 		}
 		if (!stopped && (!current || isPending(current.report.status))) timer = setTimeout(() => follow(jobId), POLL_MS);
 	}
@@ -44,6 +54,7 @@
 		busy = true;
 		error = null;
 		current = null;
+		misses = 0;
 		emailed = email;
 		try {
 			const jobId = await reports.create({ runId, email: email || undefined });
@@ -55,7 +66,7 @@
 		}
 	}
 
-	const pending = $derived(busy || (current !== null && isPending(current.report.status)));
+	const pending = $derived(busy || (current !== null && isPending(current.report.status) && misses < MAX_MISSES));
 </script>
 
 <div class="server-pdf" data-state={current?.report.status ?? (busy ? 'starting' : 'idle')}>

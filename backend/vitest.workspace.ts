@@ -28,7 +28,11 @@ export default defineWorkspace([
 			setupFiles: ['./src/__tests__/setup.ts'],
 			globalSetup: ['./src/__tests__/db-global-setup.ts'],
 			include: ['src/**/*.db.test.ts'],
-			// Tests share one database; run files serially.
+			// Tests share one database; run files serially. Vitest 2 ignores
+			// this option inside a workspace project (two files overlapped with
+			// it set), so the test:db script also passes --no-file-parallelism,
+			// which does take effect: a tick in one file must never claim
+			// another file's jobs.
 			fileParallelism: false
 		}
 	},

@@ -8,7 +8,9 @@
 //   GET /auth/me                               the layout's session check
 //   GET /projects/<project>                    the project
 //   GET /projects/<project>/series             the input series' coverage
-//   GET /projects/<project>/runs/<run>[/…]     the run, its series and days
+//   GET /projects/<project>/runs/<run>[/…]     the run and anything under it (its series,
+//                                              days, uncertainty, model input): all of that
+//                                              one run, read as the requester under RLS
 //
 // Every other method, project, run or route (another project, the run list,
 // members, exports, teams, compare, any write) answers 403. RLS still applies
