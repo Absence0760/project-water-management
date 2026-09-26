@@ -264,29 +264,23 @@ describe('publications keep their runs', () => {
 	});
 
 	it('keeps the newest 12 publications, and their runs become trimmable', async () => {
-		// A short record: thirteen runs and publications of it.
+		// Thirteen publications of three runs: the first run once, then the other
+		// two in turn. The cap counts publications, not runs, and a model run is
+		// most of a publish's cost, so thirteen runs would only slow this down.
 		const p = await makeProject(owner, 'History cap', false, 60);
-		const runIds: string[] = [];
-		for (let i = 0; i < 13; i++) {
-			const r = await run(owner, p);
-			runIds.push(r);
-			expect((await publish(owner, r, {}, p)).status).toBe(201);
-		}
+		const [first, a, b] = [await run(owner, p), await run(owner, p), await run(owner, p)];
+		const order = [first, ...Array.from({ length: 12 }, (_, i) => (i % 2 ? b : a))];
+		for (const r of order) expect((await publish(owner, r, {}, p)).status).toBe(201);
 		const history = (await owner.call('GET', `/projects/${p}/publication`)).body.history as { runId: string }[];
-		expect(history).toHaveLength(12);
-		expect(history.map((h) => h.runId)).not.toContain(runIds[0]);
-		expect(history[0]!.runId).toBe(runIds[12]);
+		expect(history.map((h) => h.runId)).toEqual(order.slice(1).reverse());
 		// The first run is no longer held; with a newer unpublished run and a cap of 1, it goes.
 		await run(owner, p);
 		const removed = await withUser(owner.id, (db) => trimRuns(db, p, 1));
-		expect(removed).toEqual([runIds[0]]);
+		expect(removed).toEqual([first]);
 		// A project with publications still deletes whole.
 		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
 		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [p])).toEqual([]);
-		// Thirteen model runs and publications are real work: ~2 s on an idle machine,
-		// past vitest's 5 s default when other checkouts load the machine. Sized to
-		// the work, not to a race: nothing in it waits on a signal.
-	}, 20_000);
+	});
 });
 
 describe('what a farmer reads', () => {
