@@ -17,6 +17,7 @@
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
+	import { rainSourceNote } from '$lib/components/compare/rainSource';
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import { chirpsSourceOfInput } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
@@ -286,6 +287,11 @@
 						{#if data.comparison.chirpsFit?.changed}
 							<div class="alert alert-info" role="status" data-testid="chirps-fit-changed">
 								{chirpsFitNote(data.comparison.chirpsFit)}
+							</div>
+						{/if}
+						{#if data.comparison.rainSource?.changed}
+							<div class="alert alert-info" role="status" data-testid="rain-source-changed">
+								{rainSourceNote(data.comparison.rainSource)}
 							</div>
 						{/if}
 						<!-- Either side is, or was, the project's nominated evidence run (010_run_nomination). -->

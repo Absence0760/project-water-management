@@ -48,6 +48,7 @@
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
+	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
@@ -111,6 +112,7 @@
 	let exclusionsError = $state<string | null>(null);
 	let zeroRainError = $state<string | null>(null);
 	let fitPeriodError = $state<string | null>(null);
+	let rainSourceError = $state<string | null>(null);
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
 	);
@@ -118,7 +120,7 @@
 	let wr2012Error = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
+		!!dateError || hasInvalidList || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!reportError || !!dqError || !!wr2012Error || !!reserveError
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -127,6 +129,7 @@
 			{ id: 'set-record', message: exclusionsError },
 			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
+			{ id: 'set-rain', message: rainSourceError },
 			{ id: 'set-flow', message: hasInvalidList ? 'A parameter list under Advanced has a value that is not a number.' : null },
 			{ id: 'set-wr2012', message: wr2012Error },
 			{ id: 'set-ewr', message: reportError },
@@ -591,7 +594,7 @@
 	<section class="panel" id="set-rain" aria-labelledby="rain-h">
 		<div class="panel-head">
 			<h2 id="rain-h">Rain gaps and CHIRPS</h2>
-			<span class="muted small">Which days CHIRPS fills in the catchment rain, and how</span>
+			<span class="muted small">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge</span>
 		</div>
 		<div class="fields">
 			<div class="field">
@@ -612,6 +615,7 @@
 			propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
 		/>
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
+		<RainSourceSection bind:value={s.rainSource} bind:error={rainSourceError} {readonly} />
 	</section>
 
 	<section class="panel" id="set-record" aria-labelledby="rec-h">
