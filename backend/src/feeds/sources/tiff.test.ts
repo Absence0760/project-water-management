@@ -139,6 +139,44 @@ describe('openGrid + readPoints', () => {
 		expect(r.reads - reads).toBe(2); // one read per strip, not per row
 	});
 
+	describe('the GeoKey directory (GeoTIFF 1.0 § 2.4, § 6.3)', () => {
+		// [version 1, revision 1.0, key count], then [key, location 0 (inline), count 1, value] per key.
+		const geoKeys = (keys: Record<number, number>) => {
+			const ids = Object.keys(keys).map(Number);
+			return [1, 1, 0, ids.length, ...ids.flatMap((k) => [k, 0, 1, keys[k]!])];
+		};
+		const CHC = { 1024: 2, 1025: 1, 2048: 4326, 2054: 9102 };
+
+		it('PixelIsPoint: the tiepoint names a pixel centre, so the grid starts half a pixel west / north of it', async () => {
+			const r = reader(
+				writeGrid(spec({ override: { 33922: [12, [0, 0, 0, 25.025, -20.025, 0]], 34735: [3, geoKeys({ ...CHC, 1025: 2 })] } }))
+			);
+			const grid = (await openGrid(r.read))!;
+			expect(grid.originLon).toBeCloseTo(25, 12);
+			expect(grid.originLat).toBeCloseTo(-20, 12);
+			expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([23.5]);
+		});
+
+		it('PixelIsArea, or no raster type (the GeoTIFF default), reads the tiepoint as the corner', async () => {
+			for (const keys of [CHC, { 1024: 2, 2048: 4326 }]) {
+				const grid = (await openGrid(reader(writeGrid(spec({ override: { 34735: [3, geoKeys(keys)] } }))).read))!;
+				expect([grid.originLon, grid.originLat]).toEqual([25, -20]);
+			}
+		});
+
+		const refused: [string, Record<number, [number, number[]] | null>, RegExp][] = [
+			['no GeoKey directory', { 34735: null }, /coordinate system/],
+			['a projected CRS (UTM metres read as degrees)', { 34735: [3, geoKeys({ 1024: 1, 1025: 1, 3072: 32735 })] }, /not in geographic/],
+			['a geographic CRS other than WGS 84', { 34735: [3, geoKeys({ ...CHC, 2048: 4807 })] }, /WGS 84/],
+			['angles in grads', { 34735: [3, geoKeys({ ...CHC, 2054: 9105 })] }, /degrees/],
+			['an unknown raster type', { 34735: [3, geoKeys({ ...CHC, 1025: 7 })] }, /raster type/],
+			['a truncated directory', { 34735: [3, [1, 1, 0, 4, 1024, 0, 1, 2]] }, /GeoKey directory/]
+		];
+		it.each(refused)('refuses %s', async (_, override, message) => {
+			await expect(openGrid(reader(writeGrid(spec({ override }))).read)).rejects.toThrow(message);
+		});
+	});
+
 	it('returns null for a file that is not published (404)', async () => {
 		expect(await openGrid(reader(null).read)).toBeNull();
 	});
