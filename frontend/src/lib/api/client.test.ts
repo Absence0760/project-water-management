@@ -238,6 +238,25 @@ describe('teams client', () => {
 		expect(await createApi('', mockFetch(200, { farmers: [farmer] })).farmers.list('p')).toEqual([farmer]);
 	});
 
+	it('farm.index / farm.view GET the farm routes and return the body as is; exportUrl builds the CSV link', async () => {
+		const index = { project: { id: 'p/1', name: 'P' }, farms: [{ nodeId: 'n/1', name: 'F' }], publication: null };
+		const i = mockFetch(200, index);
+		expect(await createApi('http://x/', i).farm.index('p/1')).toEqual(index);
+		expect(i).toHaveBeenCalledWith('http://x/projects/p%2F1/farm', expect.objectContaining({ method: 'GET', credentials: 'include' }));
+		const view = { project: { id: 'p', name: 'P' }, stale: false };
+		const v = mockFetch(200, view);
+		expect(await createApi('', v).farm.view('p', 'n/1')).toEqual(view);
+		expect(v).toHaveBeenCalledWith('/projects/p/farm/n%2F1', expect.objectContaining({ method: 'GET' }));
+		expect(createApi('http://x/').farm.exportUrl('p/1', 'n 1')).toBe('http://x/projects/p%2F1/farm/n%201/export.csv');
+	});
+
+	it('farm.view keeps the status of a refusal, so the page can tell "access removed" (403/404) from a failure', async () => {
+		await expect(createApi('', mockFetch(403, { error: 'forbidden' })).farm.view('p', 'n')).rejects.toMatchObject({ status: 403 });
+		await expect(createApi('', mockFetch(404)).farm.index('p')).rejects.toMatchObject({ status: 404 });
+		const offline = createApi('', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
+		await expect(offline.farm.view('p', 'n')).rejects.toMatchObject({ status: 0 });
+	});
+
 	it('members.add / teams.addMember return the member or the pending invite, never undefined', async () => {
 		const member = { userId: 'u', email: 'a@b.c', displayName: 'A', role: 'viewer' };
 		const m = await createApi('', mockFetch(201, { member })).members.add('p', 'a@b.c', 'viewer');

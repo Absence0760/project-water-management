@@ -2,40 +2,19 @@
 // see them: several catchments each, some owned, some shared through a team
 // or directly, with a pre-computed run. Seeds them into water_e2e with the
 // backend's own seeding CLI, once per suite run.
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
-import { API_URL, APP_E2E_URL } from '../support/env.ts';
+import { API_URL } from '../support/env.ts';
+import { ANALYST, DEMO, DROEVLEI, FARMER1, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-// DEV-ONLY demo credentials, as printed by `pnpm seed:examples`.
-const DEMO = { email: 'demo@example.com', password: 'demo-password' };
-const ANALYST = { email: 'analyst@example.com', password: 'demo-password' };
-const FARMER1 = { email: 'farmer1@example.com', password: 'demo-password' };
-const KLEINBERG = 'Example · Kleinberg (winter rainfall)';
-const DROEVLEI = 'Example · Droëvlei (water-stressed)';
-const SANDSPRUIT = 'Example · Sandspruit (summer rainfall, larger network)';
-
-const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 
 // One seeding per run: the tests in this file share the seeded users.
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ playwright }) => {
-	// Seeding is real work, not waiting: it runs Kleinberg's automatic GR4J
-	// calibration for its stored fit (~7 s alone) and three 15-year model runs:
-	// 15–20 s on an idle laptop, too close to the default 30 s once the e2e
-	// servers share the machine.
 	test.setTimeout(90_000);
 	const api = await playwright.request.newContext();
-	const probe = await api.post(`${API_URL}/auth/login`, { data: DEMO });
+	await seedExamplesOnce(api);
 	await api.dispose();
-	if (probe.ok()) return; // already seeded earlier in this run (e.g. --repeat-each)
-	execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
-		cwd: backendDir,
-		env: { ...process.env, DATABASE_URL: APP_E2E_URL },
-		stdio: 'pipe'
-	});
 });
 
 async function signInAs(page: Page, who: { email: string; password: string }) {
@@ -97,12 +76,22 @@ test('the owner sees the seeded farmers with their farms, and a farmer sees only
 	// Farmers aren't listed as members.
 	await expect(page.getByRole('region', { name: /Members|Shared directly with/ }).getByText('farmer1@example.com')).toHaveCount(0);
 
+	// A farmer has no workspace (WP-2.6): signing in lands on the farm view,
+	// and the workspace URL of their catchment sends them there too. Their
+	// project list (the API) still holds only their own catchment, as a farmer.
 	const context = await browser.newContext();
 	const farmer = await context.newPage();
-	await signInAs(farmer, FARMER1);
-	await expect(roleIn(farmer, SANDSPRUIT)).toHaveText('farmer');
-	await expect(farmer.getByRole('rowheader', { name: KLEINBERG, exact: true })).toHaveCount(0);
-	await expect(farmer.getByRole('rowheader', { name: DROEVLEI, exact: true })).toHaveCount(0);
+	await farmer.goto('/login');
+	await farmer.getByLabel('Email').fill(FARMER1.email);
+	await farmer.getByLabel('Password').fill(FARMER1.password);
+	await farmer.getByRole('button', { name: 'Sign in' }).click();
+	await expect(farmer).toHaveURL(/\/farm(\/|$)/);
+	const listed = (await (await context.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; name: string; role: string }[] };
+	expect(listed.projects.map((p) => [p.name, p.role])).toEqual([[SANDSPRUIT, 'farmer']]);
+	expect(listed.projects.map((p) => p.name)).not.toContain(KLEINBERG);
+	expect(listed.projects.map((p) => p.name)).not.toContain(DROEVLEI);
+	await farmer.goto(`/projects/${listed.projects[0]!.id}`);
+	await expect(farmer).toHaveURL(new RegExp(`/farm/${listed.projects[0]!.id}`));
 	await context.close();
 });
 
