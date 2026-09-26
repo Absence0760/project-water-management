@@ -362,7 +362,12 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
-kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
+kept through a rebase and a re-read; a `demand.scale` on one farm in one
+month classed baseline, then proposal once the farm is owned, stored with its
+`demandFactor` and run, the stored daily demand the base's × the factor on
+exactly those days and the other farm's untouched; one with no `nodeIds`
+baseline even with every farm owned, the same scale naming them a
+proposal), `schema.test.ts` and `names.test.ts`.
 
 ## UI
 
@@ -448,7 +453,13 @@ rebase reporting a change that no longer applies and the `422`; a viewer
 read only; override mode recording one edit in each table as changes,
 refusing a kind change, leaving the live model untouched, undone as one
 edit, with axe; submit, withdraw, delete releasing the base; axe in light,
-dark and on a phone).
+dark and on a phone) and `e2e/tests/scenario-demand-scale.spec.ts` (Scale
+demand through the form: one farm at 50 % in December and January, the
+200 % limit refused, classed baseline then proposal once the farm is the
+proposer's, kept over a reload, run; the scenario run's daily demand is the
+base's × 0.5 on exactly those days and the base's on the rest, and the
+compare section's farm table shows that farm's demand down to the run's mean
+and the other farm's unchanged).
 
 ## Applications (WP-3.3)
 
