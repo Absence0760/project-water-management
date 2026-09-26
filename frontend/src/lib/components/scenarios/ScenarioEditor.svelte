@@ -50,14 +50,12 @@
 		const hit = detailCache.get(runId);
 		if (hit) {
 			baseRun = hit.run;
-			remember(hit.run);
 			return;
 		}
 		baseRun = null;
 		try {
 			const d = await api.runs.get(projectId, runId);
 			detailCache.set(runId, d);
-			remember(d.run);
 			if (runId === s.baseRunId) baseRun = d.run;
 		} catch (e) {
 			if (runId === s.baseRunId) baseError = msg(e);
@@ -67,16 +65,13 @@
 		const id = s.baseRunId;
 		untrack(() => loadBase(id));
 	});
-	/**
-	 * Names of every base this editor has loaded: after a rebase onto a run
-	 * without a node, an op on that node still names it (the new base can't).
-	 */
-	let seenNames = $state.raw(new Map<string, string>());
-	function remember(r: Run) {
-		seenNames = new Map([...seenNames, ...namesOf([snapshotInput(r.model, r.settings).model])]);
-	}
 	const baseInput = $derived(baseRun ? snapshotInput(baseRun.model, baseRun.settings) : null);
-	const names = $derived(new Map([...seenNames, ...namesOf([baseInput?.model], s.ops)]));
+	/**
+	 * The names the server kept with the ops (from the base each op was made
+	 * on), so an op on a node a rebase dropped still reads by name after a
+	 * reload; the current base and the ops' own new nodes and crops win.
+	 */
+	const names = $derived(new Map([...s.opNames.map((x) => [x.id, x.name] as const), ...namesOf([baseInput?.model], s.ops)]));
 	const list = $derived(opItems(s.ops, data.check?.classified ?? null, data.check, baseInput, names));
 	/** What a new op meets: the base with every listed op applied. */
 	const effective = $derived(baseInput ? stepInputs(baseInput, s.ops).after : null);

@@ -8,6 +8,7 @@ import { applyScenario, classifyScenario, type AppliedOp, type ModelInput, type 
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
+import type { OpName } from './names.js';
 import type { ScenarioStatus } from './schema.js';
 
 /** A scenario row as the API returns it. */
@@ -21,6 +22,8 @@ export interface ScenarioRow {
 	ops: ScenarioOp[];
 	opsSha256: string;
 	ownedNodeIds: string[];
+	/** Names of the nodes and crops the ops name, kept from the base run's snapshot when the ops were written (044_scenario_op_names). */
+	opNames: OpName[];
 	ownerUserId: string;
 	owner: string | null;
 	status: ScenarioStatus;
@@ -33,7 +36,7 @@ export interface ScenarioRow {
 
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description, s.base_run_id AS "baseRunId",
 	jsonb_build_object('id', b.id, 'label', b.label, 'createdAt', b.created_at) AS "baseRun",
-	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.owner_user_id AS "ownerUserId",
+	s.ops, s.ops_sha256 AS "opsSha256", s.owned_node_ids AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
 	u.display_name AS owner, s.status, s.created_at AS "createdAt", s.updated_at AS "updatedAt",
 	(SELECT count(*)::int FROM model_run r WHERE r.scenario_id = s.id) AS "runCount",
 	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM model_run r

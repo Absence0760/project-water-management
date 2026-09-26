@@ -97,6 +97,8 @@ describe('a dam-raise scenario', () => {
 			ops: [damRaise(c.farm.id, 120_000)],
 			opsSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
 			ownedNodeIds: [],
+			// The display names its ops need, from the base run's snapshot (044_scenario_op_names).
+			opNames: [{ id: c.farm.id, name: 'Rooikloof' }],
 			ownerUserId: owner.id,
 			status: 'draft',
 			runCount: 0,
@@ -245,6 +247,16 @@ describe('rebase', () => {
 		expect(rebased.status).toBe(200);
 		expect(rebased.body.scenario.baseRunId).toBe(newer);
 		expect(rebased.body.problems).toHaveLength(1);
+		// Kliphuis is gone from the new base, but the scenario keeps its name (044_scenario_op_names), on a fresh read too.
+		const names = [
+			{ id: c.farm.id, name: 'Rooikloof' },
+			{ id: c.other.id, name: 'Kliphuis' }
+		].sort((x, y) => (x.id < y.id ? -1 : 1));
+		expect(rebased.body.scenario.opNames).toEqual(names);
+		expect((await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.scenario.opNames).toEqual(names);
+		// A PATCH re-sending the ops against the new base still keeps it.
+		const resent = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ops: [damRaise(c.farm.id, 125_000), damRaise(c.other.id, 60_000)] });
+		expect(resent.body.scenario.opNames).toEqual(names);
 		const refused = await u.call('POST', `/projects/${c.projectId}/scenarios/${sid}/runs`, {});
 		expect(refused.status).toBe(422);
 		expect(refused.body.error).toBe("an op of this scenario doesn't apply to its base run");

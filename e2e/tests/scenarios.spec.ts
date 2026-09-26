@@ -168,6 +168,10 @@ test('a rebase onto a run without the farm reports the change that no longer app
 	await expect(page.getByTestId('scenario-problems')).toHaveText("1 change doesn't apply to the base run, so the scenario can't run until it is removed or the base changes.");
 	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: node “Upper farm” not found");
 	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeDisabled();
+	// After a reload the new base can't name the farm, but the scenario kept its name with the change.
+	await page.reload();
+	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: node “Upper farm” not found");
+	await expect(changes(page).getByRole('listitem')).toContainText('Upper farm: Dam capacity → 180,000 m³');
 
 	// The server refuses the run too (422, the problems listed).
 	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });

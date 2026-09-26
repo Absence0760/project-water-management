@@ -11,6 +11,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { lockProjectRuns, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
 import { checkScenario, executeScenarioRun, loadBaseInput, loadScenario, SCENARIO_SELECT, type ScenarioCheck, type ScenarioRow } from './execute.js';
+import { opNames, snapshotNames } from './names.js';
 import { CreateScenarioBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, STATUS_MOVES } from './schema.js';
 
 const json = async (c: { req: { json: () => Promise<unknown> } }) => c.req.json().catch(() => ({}));
@@ -59,11 +60,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// Citing a run: not while a trim or delete of this project's runs is under way (it would miss the citation).
 			await lockProjectRuns(db, id);
 			await loadBaseInput(db, id, body.baseRunId);
+			const names = opNames(body.ops, await snapshotNames(db, body.baseRunId), []);
 			const { rows } = await db
 				.query<{ id: string }>(
-					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), body.ownedNodeIds]
+					`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, op_names)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+					[id, body.name, body.description, body.baseRunId, JSON.stringify(body.ops), opsSha256(body.ops), body.ownedNodeIds, JSON.stringify(names)]
 				)
 				.catch(duplicateName);
 			await recordAudit(db, id, 'scenario.created', { scenarioId: rows[0]!.id, name: body.name, baseRunId: body.baseRunId, ops: body.ops.length });
@@ -89,7 +91,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const set: [string, unknown][] = [];
 			if (body.name !== undefined) set.push(['name', body.name]);
 			if (body.description !== undefined) set.push(['description', body.description]);
-			if (body.ops !== undefined) set.push(['ops', JSON.stringify(body.ops)], ['ops_sha256', opsSha256(body.ops)]);
+			if (body.ops !== undefined)
+				set.push(
+					['ops', JSON.stringify(body.ops)],
+					['ops_sha256', opsSha256(body.ops)],
+					// The names the ops need, from the base as it is now, keeping those an earlier base gave (a node a rebase dropped).
+					['op_names', JSON.stringify(opNames(body.ops, await snapshotNames(db, s.baseRunId), s.opNames))]
+				);
 			if (body.ownedNodeIds !== undefined) set.push(['owned_node_ids', body.ownedNodeIds]);
 			if (body.status !== undefined) set.push(['status', body.status]);
 			await db
@@ -170,7 +178,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (!rowCount) throw frozen(await loadScenario(db, id, sid));
 			}
 			const s = await loadScenario(db, id, sid);
-			if (!body.dryRun) await recordAudit(db, id, 'scenario.changed', { scenarioId: sid, name: s.name, fields: ['base_run_id'], baseRunId: body.baseRunId });
+			if (!body.dryRun) {
+				// Names from the new base, keeping the old base's for nodes the new one dropped.
+				s.opNames = opNames(s.ops, await snapshotNames(db, body.baseRunId), s.opNames);
+				await db.query('UPDATE scenario SET op_names = $3 WHERE project_id = $1 AND id = $2', [id, sid, JSON.stringify(s.opNames)]);
+				await recordAudit(db, id, 'scenario.changed', { scenarioId: sid, name: s.name, fields: ['base_run_id'], baseRunId: body.baseRunId });
+			}
 			return c.json({ scenario: s, ...checkView(checkScenario(base, s.ops, s.ownedNodeIds)) });
 		});
 	});

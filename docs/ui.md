@@ -1814,8 +1814,9 @@ them scenarios).
 - **Rebase onto another run** (drafts): pick a newer run of the model,
   **Check** (a dry run listing any change that no longer applies, for
   example a node removed since), then **Rebase onto this run**. A change on
-  a node the new base lacks is still named, from the bases loaded in this
-  visit; otherwise it reads "a node the base run doesn't have".
+  a node the new base lacks is still named, after a reload too: the server
+  keeps the names each change needed with the scenario (`opNames`, 044).
+  Only a node no base ever named reads "a node the base run doesn't have".
 - **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
   the scenario against the base run *that run* was made on (so an older run
   of a rebased scenario is still compared with its own base), through

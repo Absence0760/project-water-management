@@ -1094,12 +1094,17 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
 - `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
-  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, ownerUserId, owner,
-  status, createdAt, updatedAt, runCount, lastRun: { id, label, createdAt } |
-  null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785 canonical JSON
-  (engine `canonicalJson`); a run of the scenario records the same hash.
-  `owner` is a display name. `ownedNodeIds` are the proposer's own nodes: ops
-  on them are proposals, everything else a baseline assumption.
+  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, opNames, ownerUserId,
+  owner, status, createdAt, updatedAt, runCount, lastRun: { id, label,
+  createdAt } | null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785
+  canonical JSON (engine `canonicalJson`); a run of the scenario records the
+  same hash. `owner` is a display name. `ownedNodeIds` are the proposer's own
+  nodes: ops on them are proposals, everything else a baseline assumption.
+  `opNames: { id, name }[]` (sorted by id; 044) names every node and crop the
+  ops name, as the base run's snapshot named it when the ops (or the base)
+  were written: the server keeps a name a later base no longer has while an
+  op still names that id, and the current base's name wins. Display only;
+  it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
   | 'baseline')[] }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`

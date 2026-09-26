@@ -218,6 +218,15 @@ bodies), `execute.ts` (`executeScenarioRun`).
   longer apply to the newer base (for example a node removed since). It saves
   the new base with the ops unchanged, or with `dryRun` only reports; the
   scenario won't run until its ops apply again (edit them with `PATCH`).
+- **Names kept with the ops** (`names.ts` `opNames`, migration 044). An op
+  names nodes and crops by id, and the editor reads their names from the base
+  run's snapshot. After a rebase onto a run without a node, that snapshot
+  can't name it, so the scenario keeps `op_names`: `{ id, name }` for every
+  node and crop its ops name, taken from the base run's snapshot on `POST`,
+  on a `PATCH` of the ops, and on a rebase. A name stays while an op still
+  names that id; the current base's name wins when it has one. It is display
+  only (not in `opsSha256` or a run's snapshot), and the server writes it:
+  clients never send names.
 - **Status.** `draft → submitted → withdrawn | decided`, and `withdrawn →
   draft`. Only a draft's ops, owned nodes and base change; a submitted or
   decided scenario can't be deleted. Who may submit and decide is WP-3.3's
@@ -235,8 +244,9 @@ Migration `024_scenarios.sql`
 
 - `scenario (id, project_id, name, description, base_run_id → model_run,
   ops jsonb, ops_sha256, owned_node_ids uuid[], owner_user_id, status,
-  created_at, updated_at)`: names unique per project (ignoring case), at most
-  500 ops.
+  created_at, updated_at, op_names jsonb)`: names unique per project
+  (ignoring case), at most 500 ops. `op_names` (044) is the ops' display
+  names above.
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only.
 - Triggers: the base is a run of the same project and not a scenario run; a
@@ -277,7 +287,8 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 `ScenarioWithCheck`, `CompareScenario`, `RunCitation`).
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
-end, RLS with positive controls, cited bases, status) and `schema.test.ts`.
+end, RLS with positive controls, cited bases, status, a dropped node's name
+kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
 
 ## UI
 
@@ -294,7 +305,10 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
   (`stepInputs`, `applyScenario` one op at a time), for the targets the form
-  offers and the value each op replaces in its description. It never decides
+  offers and the value each op replaces in its description. A node or crop
+  the base doesn't have is named from the scenario's `opNames` (kept by the
+  server), so a change on a node a rebase dropped still reads by name after
+  a reload. It never decides
   whether an op applies or how it is classed: those are the server's check,
   on the run's stored series (a `series.scale` can only be checked there).
 - **Compound settings.** `settings.set pe` (GR4J's PE input) is edited as a
