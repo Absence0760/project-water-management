@@ -1,7 +1,11 @@
 <script lang="ts">
 	// Split sign-in / register layout: a navy brand panel with the catchment
 	// illustration on the left (a short band on phones), the form on the right.
+	// The language switch (WP-2.5) sits above the form: the sign-in pages are
+	// the first thing an invited farmer sees.
 	import type { Snippet } from 'svelte';
+	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 	import BrandMark from './BrandMark.svelte';
 	import CatchmentScene from './CatchmentScene.svelte';
 
@@ -17,9 +21,12 @@
 
 	<main class="side-form">
 		<div class="form-box">
-			<div class="lockup">
-				<BrandMark size={40} />
-				<span>Water Management</span>
+			<div class="top">
+				<div class="lockup">
+					<BrandMark size={40} />
+					<span>Water Management</span>
+				</div>
+				<LanguageSwitch compact />
 			</div>
 			<h1 class:solo={!subtitle}>{title}</h1>
 			{#if subtitle}<p class="muted intro">{subtitle}</p>{/if}
@@ -29,15 +36,15 @@
 	</main>
 
 	<!-- After the form in the DOM so the page's h1 comes first; shown on the left. -->
-	<aside class="panel-brand" aria-label="About Water Management">
+	<aside class="panel-brand" aria-label={t('auth.brandLabel')}>
 		<div class="art"><CatchmentScene /></div>
 		<div class="copy">
 			<p class="kicker">Water Management</p>
-			<h2>Catchment water balance, from rainfall to river.</h2>
+			<h2>{t('auth.brandHeading')}</h2>
 			<ul>
-				<li>Model farms, dams and transfers on a river network.</li>
-				<li>Run 40+ years of daily flows in seconds.</li>
-				<li>Check the environmental flow requirement (EWR) against every farm's use.</li>
+				<li>{t('auth.brandPoint1')}</li>
+				<li>{t('auth.brandPoint2')}</li>
+				<li>{t('auth.brandPoint3')}</li>
 			</ul>
 		</div>
 	</aside>
@@ -125,11 +132,18 @@
 		width: 100%;
 		max-width: 380px;
 	}
+	.top {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		margin-bottom: 2rem;
+	}
 	.lockup {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
-		margin-bottom: 2rem;
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 1.35rem;

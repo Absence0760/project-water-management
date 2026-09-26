@@ -226,6 +226,12 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
 	},
+	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
+	{
+		route: `PUT ${P}/alert-rules`,
+		records: ['alert_rules.changed'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] })
+	},
 	{
 		route: `DELETE ${P}/runs/:runId`,
 		records: ['run.deleted'],
@@ -356,13 +362,17 @@ const WRITE_ROUTES: Entry[] = [
 		call: async (c) => {
 			// An application: a contributor's scenario on the published run, shared with another contributor.
 			const [applicant, consultant] = await Promise.all(['Gapplicant', 'Gconsultant'].map((n) => signUp(n)));
-			for (const u of [applicant!, consultant!]) expect((await c.owner.call('POST', `${at(c)}/members`, { email: u.email, role: 'contributor' })).status).toBe(201);
+			for (const u of [applicant!, consultant!]) {
+				expect((await c.owner.call('POST', `${at(c)}/members`, { email: u.email, role: 'contributor' })).status).toBe(201);
+				// One applying party: whom an applicant may share with (049).
+				expect((await c.owner.call('PATCH', `${at(c)}/members/${u.id}`, { party: 'Guard party' })).status).toBe(200);
+			}
 			expect((await c.owner.call('POST', `${at(c)}/publication`, { runId: c.runId })).status).toBe(201);
 			const s = await applicant!.call('POST', `${at(c)}/scenarios`, { name: 'Guard application', baseRunId: c.runId });
 			c.applicant = applicant;
 			c.consultant = consultant;
 			c.applicationId = s.body.scenario.id;
-			return applicant!.call('POST', `${at(c)}/scenarios/${c.applicationId}/members`, { email: consultant!.email });
+			return applicant!.call('POST', `${at(c)}/scenarios/${c.applicationId}/members`, { userId: consultant!.id });
 		}
 	},
 	{

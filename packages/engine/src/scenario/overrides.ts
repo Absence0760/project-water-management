@@ -38,6 +38,81 @@ export interface ScenarioResult {
 	 * changes nothing; later ops still apply.
 	 */
 	problems: string[];
+	/**
+	 * With `maskedNames`: the hidden nodes and crops that got their real name
+	 * back with a suffix, because an op gave a visible one that name
+	 * (`Kliphuis` → `Kliphuis (2)`). For the assessor only; the applicant
+	 * never sees a hidden name.
+	 */
+	renamed: MaskedRename[];
+}
+
+/**
+ * Names an application's ops must not meet (roadmap WP-3.3, docs/scenarios.md
+ * § Applications): node id → the anonymous name the applicant sees it under
+ * ("Farm 3"), crop id → likewise. The ops apply to the base with those names
+ * in place of the real ones, so no message quotes a hidden name and no
+ * rename collides with one; afterwards each hidden node or crop gets its
+ * real name back (with a suffix if an op gave a visible one that name). A
+ * hidden node an op renamed keeps the op's name.
+ */
+export interface MaskedNames {
+	nodes?: Readonly<Record<string, string>>;
+	crops?: Readonly<Record<string, string>>;
+}
+
+export interface MaskedRename {
+	kind: 'node' | 'crop';
+	id: string;
+	/** Its real name in the base. */
+	name: string;
+	/** The name it has in the scenario's input. */
+	as: string;
+}
+
+export interface ApplyOptions {
+	maskedNames?: MaskedNames;
+}
+
+type Named = { id: string; name: string };
+type Masked = { model: ModelInput['model']; nodes: Map<string, [real: string, mask: string]>; crops: Map<string, [real: string, mask: string]> };
+
+/** A copy of `model` with the masked nodes and crops under their mask names, and what each was called. */
+function maskModel(model: ModelInput['model'], names: MaskedNames): Masked {
+	const m = cloneData(model);
+	const swap = (xs: Named[], masks: Readonly<Record<string, string>> | undefined) => {
+		const real = new Map<string, [string, string]>();
+		if (!masks) return real;
+		for (const x of xs) {
+			if (!Object.hasOwn(masks, x.id)) continue;
+			real.set(x.id, [x.name, masks[x.id]!]);
+			x.name = masks[x.id]!;
+		}
+		return real;
+	};
+	return { model: m, nodes: swap(m.nodes, names.nodes), crops: swap(m.crops, names.crops) };
+}
+
+const nameKey = (s: string) => s.trim().toLowerCase();
+
+/** Give masked items still under their mask name their real name back, suffixed where a visible one now has it. */
+function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRename['kind'], out: MaskedRename[]) {
+	const hidden = (x: Named) => real.has(x.id) && x.name === real.get(x.id)![1];
+	const visible = new Set(xs.filter((x) => !hidden(x)).map((x) => nameKey(x.name)));
+	const taken = new Set([...visible, ...xs.filter(hidden).map((x) => nameKey(real.get(x.id)![0]))]);
+	for (const x of xs) {
+		if (!hidden(x)) continue;
+		const name = real.get(x.id)![0];
+		if (!visible.has(nameKey(name))) {
+			x.name = name;
+			continue;
+		}
+		let k = 2;
+		while (taken.has(nameKey(`${name} (${k})`))) k++;
+		x.name = `${name} (${k})`;
+		taken.add(nameKey(x.name));
+		out.push({ kind, id: x.id, name, as: x.name });
+	}
 }
 
 class OpError extends Error {}
@@ -243,8 +318,9 @@ function applyOne(d: Draft, op: ScenarioOp): string[] {
  * leave the network invalid is skipped and reported in `problems`, never
  * thrown; the ops after it still apply. docs/scenarios.md has the rules.
  */
-export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[]): ScenarioResult {
-	let cur: ModelInput = { settings: cloneData(base.settings), model: cloneData(base.model), series: { ...base.series } };
+export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
+	const masked = options.maskedNames ? maskModel(base.model, options.maskedNames) : null;
+	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series } };
 	let issues = structureIssues(cur);
 	const applied: AppliedOp[] = [];
 	const problems: string[] = [];
@@ -269,7 +345,12 @@ export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[]): Sce
 		issues = after;
 		applied.push({ index, op, notes });
 	});
-	return { input: cur, applied, problems };
+	const renamed: MaskedRename[] = [];
+	if (masked) {
+		unmask(cur.model.nodes, masked.nodes, 'node', renamed);
+		unmask(cur.model.crops, masked.crops, 'crop', renamed);
+	}
+	return { input: cur, applied, problems, renamed };
 }
 
 // ---------------------------------------------------------------------------
@@ -349,9 +430,10 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
  * owned. A skipped op (see applyScenario) is classified against the input it
  * would have met.
  */
-export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: Iterable<string>): OpClass[] {
+export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: Iterable<string>, options: ApplyOptions = {}): OpClass[] {
 	const owned = new Set(ownedNodeIds);
-	let cur = base;
+	// Masked once up front: each op below meets the names applyScenario's would.
+	let cur = options.maskedNames ? { ...base, model: maskModel(base.model, options.maskedNames).model } : base;
 	return ops.map((op) => {
 		const c = classifyOp(op, owned, cur);
 		const r = applyScenario(cur, [op]);

@@ -92,6 +92,11 @@ beforeAll(async () => {
 	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
 	expect(linked.status, JSON.stringify(linked.body)).toBe(200);
 	expect(linked.body.farmer).toMatchObject({ role: 'contributor', nodeIds: [rooikloof.id] });
+	// A and their consultant are one applying party (049): whom A may share with.
+	for (const u of [applicantA, consultant]) {
+		const res = await owner.call('PATCH', `${P()}/members/${u.id}`, { party: 'Rooikloof Trust' });
+		expect(res.body.member, u.email).toMatchObject({ role: 'contributor', party: 'Rooikloof Trust' });
+	}
 });
 
 describe('an application', () => {
@@ -135,22 +140,26 @@ describe('an application', () => {
 	});
 
 	it("is shared with the applicant's consultant, who then reads it (and leaves)", async () => {
-		const res = await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email });
+		// Whom A may share with: their party, as the owner set it (049), and nobody else.
+		expect((await asA('GET', `${P()}/scenarios/${sid}/share-candidates`)).body).toEqual({ candidates: [{ userId: consultant.id, displayName: 'Consultant' }] });
+		const res = await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: consultant.id });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		expect(res.body.members).toEqual([{ userId: consultant.id, displayName: 'Consultant' }]);
 		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
 		// Still hidden from the other applicant (control above: the consultant sees it).
 		expect((await applicantB.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
-		// Not a member of the project, or only a farmer: the same refusal as no such address.
-		for (const email of [stranger.email, farmer.email, 'nobody@example.com']) {
-			expect(await asA('POST', `${P()}/scenarios/${sid}/members`, { email }), email).toEqual({ status: 404, body: { error: 'no contributor or above on this project has that address' } });
+		// Anyone else (members outside the party, a farmer, a stranger, no one):
+		// one refusal. oracles.db.test.ts has the full set.
+		for (const u of [applicantB.id, farmer.id, stranger.id, ZERO]) {
+			expect(await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: u }), u).toEqual({ status: 404, body: { error: 'not someone you can share this application with' } });
 		}
-		// Only the owner shares.
-		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/members`, { email: applicantB.email })).status).toBe(403);
+		// Only the owner shares, and lists candidates.
+		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/members`, { userId: applicantB.id })).status).toBe(403);
+		expect((await consultant.call('GET', `${P()}/scenarios/${sid}/share-candidates`)).status).toBe(403);
 		// The consultant leaves, then is added back.
 		expect((await consultant.call('DELETE', `${P()}/scenarios/${sid}/members/${consultant.id}`)).status).toBe(204);
 		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
-		expect((await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email })).status).toBe(201);
+		expect((await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: consultant.id })).status).toBe(201);
 	});
 
 	it('shows the applicant the base with every other farm anonymised', async () => {
@@ -181,11 +190,33 @@ describe('an application', () => {
 		// Metadata only: the summary names every farm.
 		expect(res.body.run.summary).toBeUndefined();
 		expect(res.body.run.scenarioId).toBe(sid);
-		// Positive control: A and the consultant read the run and its series.
+		// A and the consultant read the run's metadata (app_scenario_run_meta,
+		// 046) and the application's run count, never its row: its inputs are
+		// the whole base, every farm's parameters. Nor its stored input series.
 		for (const u of [applicantA, consultant]) {
-			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toHaveLength(1);
-			expect((await rowsAs<{ n: number }>(u, 'SELECT count(*)::int AS n FROM run_series WHERE run_id = $1', [draftRun]))[0]!.n, u.email).toBeGreaterThan(0);
+			expect(await rowsAs(u, 'SELECT id, label FROM app_scenario_run_meta($1, $2)', [projectId, sid]), u.email).toEqual([{ id: draftRun, label: 'Raise Rooikloof' }]);
+			expect((await u.call('GET', `${P()}/scenarios/${sid}`)).body.scenario, u.email).toMatchObject({ runCount: 1, lastRun: { id: draftRun, label: 'Raise Rooikloof' } });
+			expect(await rowsAs(u, 'SELECT id, inputs FROM model_run WHERE id = $1', [draftRun]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE scenario_id = $1', [sid]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT kind FROM run_input_series WHERE run_id = $1', [draftRun]), u.email).toEqual([]);
+			// The published-base channel answers a published run of the model only, never a scenario run.
+			expect(await rowsAs(u, 'SELECT inputs FROM app_published_run_input($1, $2)', [projectId, draftRun]), u.email).toEqual([]);
+			expect(await rowsAs(u, 'SELECT kind FROM app_published_run_series($1, $2)', [projectId, draftRun]), u.email).toEqual([]);
+			// Its series: the application's own node (Rooikloof, whoever reads it)
+			// and the catchment allowlist; no other farm's, whose demand and
+			// storage carry that farm's area and dam.
+			const series = await rowsAs<{ key: string; node_id: string | null }>(u, 'SELECT key, node_id FROM run_series WHERE run_id = $1', [draftRun]);
+			expect(new Set(series.filter((k) => k.node_id !== null).map((k) => k.node_id)), u.email).toEqual(new Set([rooikloof.id]));
+			const catchment = series.filter((k) => k.node_id === null).map((k) => k.key);
+			expect(catchment.length, u.email).toBeGreaterThan(0);
+			expect(catchment.every((k) => ['natural_flow', 'simulated_outflow', 'observed_flow', 'ewr', 'ewr_shortfall'].includes(k)), u.email).toBe(true);
 		}
+		// Positive control: the row, its inputs and every farm's series exist (the schema owner reads them).
+		const [row] = await asOwner('SELECT inputs FROM model_run WHERE id = $1', [draftRun]);
+		expect(JSON.stringify(row.inputs)).toContain('Kliphuis');
+		const allNodes = await asOwner('SELECT DISTINCT node_id FROM run_series WHERE run_id = $1 AND node_id IS NOT NULL', [draftRun]);
+		expect(allNodes.map((r: { node_id: string }) => r.node_id)).toContain(kliphuis.id);
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_input_series WHERE run_id = $1', [draftRun]))[0].n).toBeGreaterThan(0);
 		// The assessors and viewers don't, nor does the other applicant.
 		for (const u of [assessor, viewer, applicantB]) {
 			expect(await rowsAs(u, 'SELECT id FROM model_run WHERE id = $1', [draftRun]), u.email).toEqual([]);
@@ -233,6 +264,11 @@ describe('an application', () => {
 		const res = await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000), damRaise(kliphuis.id, 10)] });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.check.classified).toEqual(['proposal', 'baseline']);
+		// The names kept with the ops (047): only their own farm's, in the answer and in the row itself
+		// (positive control: a team scenario keeps every name its ops need, scenarios.db.test.ts).
+		expect(res.body.scenario.opNames).toEqual([{ id: rooikloof.id, name: 'Rooikloof' }]);
+		const [row] = await asOwner('SELECT op_names FROM scenario WHERE id = $1', [sid]);
+		expect(row.op_names).toEqual([{ id: rooikloof.id, name: 'Rooikloof' }]);
 		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [damRaise(rooikloof.id, 120_000)] })).status).toBe(200);
 		const text = JSON.stringify(seen);
 		for (const name of OTHER_FARMS) expect(text, name).not.toContain(name);
@@ -253,6 +289,9 @@ describe('an application', () => {
 		expect(list.body.applications.map((a: { id: string; owner: string }) => [a.id, a.owner])).toEqual([[sid, 'Applicanta']]);
 		expect((await assessor.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
 		expect(await rowsAs(assessor, 'SELECT id FROM model_run WHERE id = $1', [draftRun])).toHaveLength(1);
+		// …in full, every farm's series too (the applicant still reads neither: control for the test above).
+		expect((await rowsAs<{ node_id: string }>(assessor, 'SELECT DISTINCT node_id FROM run_series WHERE run_id = $1', [draftRun])).map((r) => r.node_id)).toContain(kliphuis.id);
+		expect(await rowsAs(applicantA, 'SELECT id FROM model_run WHERE id = $1', [draftRun])).toEqual([]);
 		// Viewers still don't, until it is decided.
 		expect((await viewer.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
 		expect((await viewer.call('GET', `${P()}/applications`)).status).toBe(403);
@@ -316,6 +355,15 @@ describe('withdraw, reopen and delete', () => {
 		const left = await asOwner('SELECT id FROM model_run WHERE scenario_id = $1 ORDER BY created_at DESC, id DESC', [sid]);
 		expect(left).toHaveLength(5);
 		expect(ids.slice(-1)[0]).toBe(left[0].id);
+		// Nobody but the owner trims (app_trim_application_runs, 046): another
+		// contributor, an assessor and the project owner delete nothing.
+		for (const u of [applicantA, assessor, owner]) {
+			expect(await rowsAs(u, 'SELECT app_trim_application_runs($1, $2, 0)', [projectId, sid]), u.email).toEqual([]);
+		}
+		expect(await asOwner('SELECT id FROM model_run WHERE scenario_id = $1', [sid])).toHaveLength(5);
+		// Positive control: the owner can, down to what they ask to keep.
+		expect(await rowsAs(applicantB, 'SELECT app_trim_application_runs($1, $2, 4)', [projectId, sid])).toHaveLength(1);
+		expect(await asOwner('SELECT id FROM model_run WHERE scenario_id = $1', [sid])).toHaveLength(4);
 	});
 });
 
@@ -370,6 +418,7 @@ const CONTRIBUTOR_ALLOWED = new Set([
 	'POST /projects/:id/scenarios/:sid/submit',
 	'POST /projects/:id/scenarios/:sid/withdraw',
 	'POST /projects/:id/scenarios/:sid/reopen',
+	'GET /projects/:id/scenarios/:sid/share-candidates',
 	'POST /projects/:id/scenarios/:sid/members',
 	'DELETE /projects/:id/scenarios/:sid/members/:userId',
 	// Notes (WP-2.7): min role farmer, and RLS gives a contributor what a farmer

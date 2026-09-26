@@ -26,10 +26,9 @@
 //   - a rise: 'gauge', which new use can't cause (or use that stopped);
 //   - otherwise 'unclear'.
 import { DOUBLE_MASS_MIN_CHANGE, doubleMassSegments, type DoubleMassBreak, type DoubleMassSegment } from '../doublemass';
-import { waterYearOf } from '../network/stats';
 import type { CalibrationFlowKind } from '../project';
-import { waterYearLabel } from '../quality';
 import { isFlow } from './season';
+import { waterYearLabel, waterYearOf } from '../calendar';
 
 const SEC_PER_DAY = 86_400;
 

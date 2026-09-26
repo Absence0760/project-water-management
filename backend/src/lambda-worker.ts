@@ -38,14 +38,19 @@ export function metricLine(r: TickResult, now = Date.now()): string {
 					Metrics: [
 						{ Name: 'OldestDueJobAgeSeconds', Unit: 'Seconds' },
 						{ Name: 'JobsDead', Unit: 'Count' },
-						{ Name: 'JobsFailed', Unit: 'Count' }
+						{ Name: 'JobsFailed', Unit: 'Count' },
+						// Alert mails (alerts/send.ts): infra/jobs.tf alarms on a burst (docs/deployment.md § Runbooks, alert storm).
+						{ Name: 'AlertMailsSent', Unit: 'Count' },
+						{ Name: 'AlertMailsFailed', Unit: 'Count' }
 					]
 				}
 			]
 		},
 		OldestDueJobAgeSeconds: r.stats.oldestDueSeconds,
 		JobsDead: r.dead,
-		JobsFailed: r.failed
+		JobsFailed: r.failed,
+		AlertMailsSent: r.alerts.sent,
+		AlertMailsFailed: r.alerts.failed
 	});
 }
 

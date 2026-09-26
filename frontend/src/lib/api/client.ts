@@ -19,6 +19,12 @@ import type {
 } from '@water-management/engine';
 import type {
 	AddMemberResult,
+	AlertChoiceChange,
+	AlertEvent,
+	AlertRule,
+	AlertRuleChange,
+	ProjectAlerts,
+	Unsubscribed,
 	Allocation,
 	AllocationImportRequest,
 	AllocationInput,
@@ -190,19 +196,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			login: (email: string, password: string) =>
 				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
 			/** `inviteToken` from a `/register?invite=…` link: a live invite for the same address starts the account verified and joined. */
-			register: (email: string, password: string, displayName: string, inviteToken?: string | null) =>
+			register: (email: string, password: string, displayName: string, inviteToken?: string | null, locale?: 'en' | 'af' | null) =>
 				request<{ user: User }>('POST', '/auth/register', {
 					email,
 					password,
 					displayName,
-					...(inviteToken ? { inviteToken } : {})
+					...(inviteToken ? { inviteToken } : {}),
+					...(locale ? { locale } : {})
 				}).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
 			/** Renames the account (1–100 characters, trimmed by the server). */
-			updateMe: (displayName: string) =>
-				request<{ user: User }>('PATCH', '/auth/me', { displayName }).then((r) => r.user),
+			/** Changes only the fields sent. `locale: null` goes back to following the browser. */
+			updateMe: (patch: { displayName?: string; locale?: 'en' | 'af' | null; volumeUnit?: 'm3' | 'ML' }) =>
+				request<{ user: User }>('PATCH', '/auth/me', patch).then((r) => r.user),
 			/**
 			 * Changes the password: every other session is signed out and this
 			 * browser gets a fresh cookie. ApiError 403 = wrong current password,
@@ -282,6 +290,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member
 				),
+			/** Put an applicant in an applying party, or take them out (null); owners only. */
+			setParty: (id: string, userId: string, party: string | null) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -488,6 +499,24 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Revoke a key (owner): the next request with it is refused. */
 			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
 		},
+		/** Alert emails (WP-2.13, docs/api.md § Alerts). */
+		alerts: {
+			/** Your choices, per catchment you can get alerts for. */
+			mine: () => request<{ projects: ProjectAlerts[] }>('GET', '/me/alerts').then((r) => r.projects),
+			/** Change some of your choices for one catchment; answers that catchment's choices. */
+			save: (projectId: string, items: AlertChoiceChange[]) =>
+				request<{ project: ProjectAlerts }>('PUT', `/me/alerts/${enc(projectId)}`, { items }).then((r) => r.project),
+			/** The catchment's rules, every kind and farm (editor). */
+			rules: (id: string) => request<{ rules: AlertRule[] }>('GET', `${p(id)}/alert-rules`).then((r) => r.rules),
+			/** Switch alerts on or off and set thresholds (editor); answers every rule. */
+			saveRules: (id: string, rules: AlertRuleChange[]) =>
+				request<{ rules: AlertRule[] }>('PUT', `${p(id)}/alert-rules`, { rules }).then((r) => r.rules),
+			/** Alerts firing now (or all recent ones), as the caller may see them. */
+			events: (id: string, state: 'firing' | 'all' = 'firing') =>
+				request<{ events: AlertEvent[] }>('GET', `${p(id)}/alert-events?state=${state}`).then((r) => r.events),
+			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
+			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
+		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */
 			view: (token: string) => request<ShareView>('POST', '/share/view', { token }),
@@ -544,9 +573,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The assessor's decision: an editor who didn't make the application. */
 			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
-			/** Share an application with another applicant-or-above member of the project (its owner only). */
-			share: (id: string, sid: string, email: string) =>
-				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { email }).then((r) => r.members),
+			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
+			shareCandidates: (id: string, sid: string) =>
+				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),
+			/** Share an application with one of its shareCandidates (its owner only). */
+			share: (id: string, sid: string, userId: string) =>
+				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { userId }).then((r) => r.members),
 			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
 			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
 			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)

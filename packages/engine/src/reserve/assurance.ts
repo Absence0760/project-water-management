@@ -24,8 +24,7 @@
 // same point (T ≤ N), natural flow meets its own requirement in every month,
 // because the lookup interpolates T and N with the same weights; and R
 // depends only on natural flow, so more abstraction can only lose months.
-import { toEpochDay, waterYearIndex } from '../calendar';
-import { waterYearOf } from '../network/stats';
+import { toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleTable, EwrRuleUnit } from './rules';
 
 const SEC_PER_DAY = 86_400;

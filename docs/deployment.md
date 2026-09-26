@@ -544,8 +544,8 @@ plan-only until the first deploy):
   the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
-  (a metric filter on the worker's `job_dead` log line). Until WP-2.13 emails
-  a project's owners, the dead-job alarm is how anyone hears of one.
+  (a metric filter on the worker's `job_dead` log line). A project with the
+  `job_dead` alert on also emails its owners ([§ Alert emails](#alert-emails)).
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 
@@ -584,7 +584,8 @@ plan-only until the first deploy):
   doubling up to a day).
 - **Alarms:** `fetch-requests-dlq-depth`, `ingest-results-dlq-depth` and
   `fetcher-errors` (a crash or timeout), all > 0, to the alerts topic. A
-  stale or failing feed shows in the app; emailing its owners is WP-2.13.
+  stale or failing feed shows in the app, and emails the owners and editors
+  of a project with the `data_stale` or `feed_failing` alert on.
 - **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
   waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
   separate licence notice: confirm before relying on it commercially (the
@@ -598,6 +599,37 @@ plan-only until the first deploy):
   the free tier, ≈ $0.40. Three alarms ≈ $0.30. The fetcher's own compute is
   cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
   No NAT, no new endpoint.
+
+## Alert emails
+
+The worker sends the alert emails ([architecture.md § Alert emails](./architecture.md#alert-emails),
+[security.md § Alerts](./security.md#alerts)) through the same SES identity
+and configuration set as every other email ([§ Email](#email-amazon-ses)).
+
+- **Worker environment** (`infra/jobs.tf`):
+
+  | Variable | Value |
+  | --- | --- |
+  | `ALERTS_TOKEN_SECRET` | `random_password.alerts_token_secret` (48 characters). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Replacing it (`terraform apply -replace=random_password.alerts_token_secret`) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
+  | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
+  | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 SAST) before the rest wait for the 06:00 digest |
+  | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |
+
+- **Headers.** Every alert email carries `List-Unsubscribe`,
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058: Gmail and
+  Yahoo show their own unsubscribe button and post to it) and
+  `Auto-Submitted: auto-generated`, sent as SESv2 `Simple` content's
+  `Headers` (supported by the pinned `@aws-sdk/client-sesv2` 3.11xx; no raw
+  MIME needed).
+- **Alarms** (to the alerts topic): `alert-storm`, more than
+  `alert_storm_mails_per_5min` (default 200) alert emails in 5 minutes; and
+  `alert-mail-failures`, alert sends failing for 15 minutes. Both read the
+  worker's embedded metrics (`AlertMailsSent`, `AlertMailsFailed` in
+  `water-management/Jobs`).
+- **SES suppression.** Bounced and complaining addresses are on the
+  configuration set's suppression list, so SES drops mail to them; the app
+  doesn't yet turn their alerts off or show a banner
+  ([followups.md § Alerts](./followups.md)).
 
 ## Reports
 
@@ -650,6 +682,81 @@ plan-only until the first deploy):
   (~$0.50), four alarms ($0.40), the image in ECR (~$0.10–0.30); a render is
   ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
   endpoint.
+
+## Runbooks
+
+Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-cost-and-operations)).
+Every step is an ordinary app action by an owner unless it says "operator".
+
+1. **Bad data pushed by a gateway (an API key).**
+   1. Revoke the key (Settings → API keys → Revoke). It stops working on the
+      next request.
+   2. In History, filter by `series` and find the key's `series.merged` /
+      `series.created` events (the actor is `API key “<name>”`; each gives
+      the day range and days changed). A `series.held` event means the
+      data-quality rules already caught it and automatic runs are waiting.
+   3. Re-push the right days (a new key, or the Add data dialog). A key's
+      merges keep no series revision, so there is nothing to restore from;
+      a person's earlier merges can still be restored from the series'
+      revisions (180 days / 5 versions).
+   4. Run the model (this also ends a hold). If the bad days reached a
+      publication, publish the corrected run and say so in the notice.
+2. **A feed failing.** Settings → Data feeds shows the error and the
+   consecutive failures; `feed.failed` is in History. Check the source's
+   status (CHIRPS / DWS sites) and the parser error. Switch the feed off
+   while it's broken (its days so far stay), tell the modeller, and switch
+   it back on once the source recovers: its next fetch catches up.
+3. **Alert storm** (the `alert-storm` alarm, or people reporting a flood of
+   alert emails). Each person gets at most 5 immediate alert emails a day
+   and one digest, so a storm means many people or a loop.
+   1. **Stop it:** set `alerts_enabled = false` in the Terraform variables and
+      apply (only the worker's `ALERTS_ENABLED` changes; locally, set
+      `ALERTS_ENABLED=false` in `backend/.env.development.local` and restart
+      the worker). The next tick sends nothing and drops every delivery
+      waiting to go out (`skipped`, reason "alerts switched off"), so
+      nothing floods out later. Alerts are still evaluated and shown in the
+      app.
+   2. **Find the cause:** as the schema owner,
+      `SELECT project_id, kind, count(*) FROM alert_event WHERE opened_at > now() - interval '1 day' GROUP BY 1, 2 ORDER BY 3 DESC;`
+      and `SELECT status, reason, count(*) FROM alert_delivery WHERE created_at > now() - interval '1 day' GROUP BY 1, 2;`.
+      A rule opening event after event is a threshold at the value's edge
+      (the margin should prevent it: check `alerts/rules.ts`), a data problem
+      moving the figure (History: a key's pushes, `series.held`), or an
+      editor changing thresholds back and forth (History:
+      `alert_rules.changed`, with who). A job loop shows as many
+      `alert_eval` jobs in the project's jobs list.
+   3. **Fix it:** switch the rule off or change its level (Overview → Set up
+      alert emails), fix the data, or remove the editor. To silence one
+      catchment only while the switch is back on, switch its rules off.
+   4. **Turn it back on** (`alerts_enabled = true`). What was dropped isn't
+      re-sent; firing alerts stay firing (no new mail until they clear and
+      cross again). If people were flooded, tell the WUA; each person can
+      turn alerts off in one click from any alert email.
+4. **A farmer sees the wrong farm** (a possible personal-information
+   incident). Unlink them at once (Overview → Farmers: change their farms,
+   or remove them): access ends on their next request. Check History for the
+   `farmer.linked` events (who linked what, when, and whether from an
+   invite). Tell the WUA, which as the responsible party decides whether to
+   notify the Information Regulator and the farmer whose figures were seen
+   (POPIA s22). Record what was visible and for how long.
+5. **A share link leaked.** Overview → Share links → Revoke: the next view
+   answers 404. Make a new link for the people who should have it. A link
+   shows catchment-level figures only, never a farm.
+6. **The worker is stuck.** See [§ Background jobs](#background-jobs): check
+   the worker's logs and the `jobs-dlq`, redrive or purge it; leases expire
+   after 6 minutes and the next tick claims the jobs again.
+7. **A POPIA request to delete a person's account** (operator; there is no
+   self-service deletion yet, [security.md § Personal information](./security.md#personal-information-popia)).
+   Confirm the request with the WUA (the responsible party for its farmers).
+   As the schema owner, in one transaction: `DELETE FROM app_user WHERE id =
+   '…';`. Memberships, farm links, tokens, their pending jobs and the invites
+   they sent go with it; notes, publications, keys and links stay with no
+   author; the audit log is pseudonymised ("Deleted user"). A foreign-key
+   error (`23503`) means they made a project, team, run, scenario, ensemble,
+   import or nomination: that is evidence naming them, and what happens to it
+   is for the operator and the client's information officer to decide first
+   (followups.md § POPIA). Record the request and the outcome in the operator
+   log.
 
 ## Rollback
 

@@ -6,19 +6,20 @@
 -->
 <script lang="ts">
 	import NotesList from '$lib/components/notes/NotesList.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	let { projectId, nodeId, farmName, preview }: { projectId: string; nodeId: string; farmName: string; preview: boolean } = $props();
 </script>
 
 <section class="card" aria-labelledby="farm-notes-h">
-	<h2 id="farm-notes-h">Notes about your farm</h2>
-	<p class="sub">Your notes and the WUA’s on {farmName}. Anything you add here is read by the WUA and anyone else linked to this farm.</p>
+	<h2 id="farm-notes-h">{t('farm.notes.title')}</h2>
+	<p class="sub">{t('farm.notes.intro', { farm: farmName })}</p>
 	<NotesList
 		{projectId}
 		target={{ kind: 'node', nodeId, name: farmName, isFarm: true }}
 		farmer
 		farmOnly={preview}
 		canWrite={!preview}
-		emptyText="No notes about this farm yet."
+		emptyText={t('farm.notes.empty')}
 	/>
 </section>

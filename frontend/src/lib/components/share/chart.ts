@@ -5,8 +5,8 @@
 // The SVG is decorative; the summary sentence and the "Show the numbers"
 // table carry the content, and both come from here.
 import type { ShareSeries } from '$lib/api/types';
-import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, niceMax } from '$lib/components/farm/chart';
-import { fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, NBSP } from '$lib/components/farm/format';
+import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, niceMax } from '$lib/components/farm/chartGeometry';
+import { fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, NBSP } from '$lib/components/farm/numbers';
 
 /** The most recent months drawn. */
 export const FLOW_MONTHS = 24;

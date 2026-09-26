@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { LEGACY_NOT_EVIDENCE_WARNING, runModel } from '../run';
 import { checkEventScale, EVENT_SCALE_EXEMPT, legacyRunner, modelRunner, type EventRunner } from '../testing/runoff';
-import { defaultGr4jParams, gr4j } from './gr4j';
+import { gr4j } from './gr4j';
+import { defaultGr4jParams } from './params';
 import { RUNOFF_MODELS, type RunoffModelId } from './types';
 
 const APAN = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep — GR4J needs evaporation to run

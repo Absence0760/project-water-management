@@ -2,11 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api } from '$lib/api';
+	import { api, ApiError } from '$lib/api';
 	import { safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
 
 	// Dev-only shortcut to the seeded demo account; never in a production build.
 	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
@@ -29,16 +30,18 @@
 			session.user = await api.auth.login(email.trim(), password);
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			// 401 is the one answer worth wording here; a lockout (429) or anything else keeps the server's message.
+			if (err instanceof ApiError && err.status === 401) error = t('login.wrong');
+			else error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Sign in · Water Management</title></svelte:head>
+<svelte:head><title>{t('common.pageTitle', { page: t('common.signIn') })}</title></svelte:head>
 
-<AuthCard title="Sign in" subtitle="Welcome back. Sign in to your catchment projects.">
+<AuthCard title={t('common.signIn')} subtitle={t('login.subtitle')}>
 	{#if DEMO}
 		<div class="demo">
 			<span>Demo: <span class="mono">{DEMO.email}</span> / <span class="mono">{DEMO.password}</span></span>
@@ -55,18 +58,18 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<form onsubmit={submit}>
 		<div class="field">
-			<label for="email">Email</label>
+			<label for="email">{t('common.email')}</label>
 			<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 		</div>
 		<div class="field">
-			<label for="password">Password</label>
+			<label for="password">{t('common.password')}</label>
 			<PasswordInput id="password" autocomplete="current-password" required bind:value={password} />
-			<a class="forgot" href={forgotHref}>Forgot password?</a>
+			<a class="forgot" href={forgotHref}>{t('login.forgot')}</a>
 		</div>
-		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('login.busy') : t('common.signIn')}</button>
 	</form>
 	{#snippet footer()}
-		No account? <a href="{base}/register{page.url.search}">Create one</a>
+		{t('login.noAccount')} <a href="{base}/register{page.url.search}">{t('login.createOne')}</a>
 	{/snippet}
 </AuthCard>
 

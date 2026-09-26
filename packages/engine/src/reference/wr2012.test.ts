@@ -3,23 +3,15 @@ import { daysPerMonth, toEpochDay, type Monthly } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { runModel, runModelWith } from '../run';
 import {
-	defaultWr2012Settings,
 	lowFlowMonthsFrom,
-	m3DayToMm3,
 	monthlyMeansMm3,
 	overlapDays,
-	rainVolumeMm3,
-	resolveWr2012,
-	WR2012_MONTHLY_SUM_TOLERANCE,
-	wr2012FlagIssues,
 	wr2012FlagLevel,
 	wr2012Penalty,
-	wr2012PenaltyIssues,
-	wr2012ReferenceIssues,
-	wr2012Report,
-	type Wr2012Reference,
-	type Wr2012Settings
+	wr2012Report
 } from './wr2012';
+import { defaultWr2012Settings, m3DayToMm3, rainVolumeMm3, WR2012_MONTHLY_SUM_TOLERANCE, wr2012FlagIssues, wr2012PenaltyIssues, wr2012ReferenceIssues, type Wr2012Reference, type Wr2012Settings } from './wr2012Settings';
+import { resolveWr2012 } from './wr2012Resolve';
 
 // Everything here is synthetic: invented quaternary codes and round numbers.
 

@@ -10,16 +10,15 @@
 //   notes, engine version, time). It describes the parameters only while they
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
 import { resolvePe, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
-import { waterYearLabel } from '../quality';
-import { GR4J_PARAMS } from '../runoff/gr4j';
-import { LEGACY_PARAMS } from '../runoff/legacy';
+import { GR4J_PARAMS, LEGACY_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
-import type { CalibrationBounds, CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ParamSet, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
-import type { ObjectiveId } from './objective';
+import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
+import type { CalibrationBounds, ParamSet } from './params';
+import type { ObjectiveId } from './objectives';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
 export type CalibrationExclusion = { waterYear: number; reason: string } | { start: string; end: string; reason: string };

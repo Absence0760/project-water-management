@@ -23,9 +23,8 @@
 // differs by RAIN_SOURCE_WARN_DIFF or more. That difference can also be real
 // climate (a station out of action through a drought), which is why it only
 // warns.
-import { waterYearOf } from '../network/stats';
-import { waterYearLabel } from '../quality';
 import type { EwrAssuranceSite } from '../reserve/assurance';
+import { waterYearLabel, waterYearOf } from '../calendar';
 
 /** A water year is a fallback year when more than this share of its rain, or of its days, is fallback. */
 export const FALLBACK_YEAR_SHARE = 0.5;

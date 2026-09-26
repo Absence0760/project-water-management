@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { api, type Project, type Run, type RunMeta } from '$lib/api';
+	import AlertsPanel from '$lib/components/alerts/AlertsPanel.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { downloads } from '$lib/export';
@@ -206,6 +207,9 @@
 <PublishedBaseline projectId={project.id} {runs} {canEdit} />
 
 <NeedsAttention items={attentionItems} />
+
+<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
+<AlertsPanel projectId={project.id} {canEdit} />
 
 <!-- Each fact links to the tab where it is edited or looked at; the link is
      stretched over the whole tile, so the tile is the click target. -->

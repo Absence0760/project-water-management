@@ -102,6 +102,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.self ? `${who} left the project` : `Removed ${who} (${str(s.role)})`;
 		case 'member.role':
 			return `Changed ${who}’s role from ${str(s.from)} to ${str(s.to)}`;
+		case 'member.party':
+			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
 		case 'farmer.linked':
 			return `Linked ${who} to the farm ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
@@ -131,6 +133,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${s.feedId ? `The ${feedName(s.source)} feed added days to` : 'Merged days into'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed`;
 		case 'series.deleted':
 			return `Deleted ${seriesName(s)}${range(s)}`;
+		case 'series.held': {
+			// An API key pushed days the data-quality rules flag (backend series/hold.ts): automatic runs wait for a person.
+			const parts = [num(s.negative) ? `${plural(num(s.negative)!, 'negative day')}` : '', num(s.outlier) ? `${plural(num(s.outlier)!, 'day')} far above its usual range` : ''].filter(Boolean);
+			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}). Check the data, then run the model`;
+		}
 		case 'series.labelled': {
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;

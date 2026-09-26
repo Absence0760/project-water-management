@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { waterYearOf } from '../network/stats';
+import { monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { flowDoubleMass, flowDoubleMassWarning, hintOf, type FlowDoubleMassInput } from './flowDoubleMass';
 
 const start = toEpochDay('2000-10-01');

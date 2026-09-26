@@ -39,7 +39,7 @@ Tick items off (or move them into an issue) as they are done.
       (details under § Features left half-way).
 
 - [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
-      decision D10).** The disclaimer on every report (engine
+      decision D10; issue #47).** The disclaimer on every report (engine
       `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
       and the five sign-off statements (`liability/signoff.ts`,
       `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
@@ -88,6 +88,9 @@ Tick items off (or move them into an issue) as they are done.
       `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
 
 ## Hydrologist
+
+Every engine decision marked "pending the hydrologist" in model.md is
+collected as a checklist in issue #46; tick it there as they answer.
 
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
@@ -925,25 +928,32 @@ the suggested order (the IDs carry the detail):
       statement in `packages/engine/src`). First loads: farm pages −13 KB,
       share −13, home −9, a catchment −8 (that code now loads with the Data,
       Settings and Runs tabs, +6 each). The total stays 815 KB.
-- [ ] **Stop shipping the engine twice** (issue #9, measured 2026-09-26; the
-      numbers are in the bundle guard's change log). The calibration worker
-      bundles its own engine copy (57 KB gzip), ~130 KB raw of which the pages
-      ship too. Emitting the worker as a chunk of the page build (a Vite
-      plugin: `this.emitFile({ type: 'chunk' })` for `autocal.worker.ts`, the
-      page reading its URL from a virtual module) takes the total 815 → 794 KB,
-      but a chunk holds whole modules, and pages import small things from
-      modules that also hold the fit and run code: `ENGINE_VERSION`,
-      `prepareRun` and `mergeSettings` from `run.ts`; `CALIBRATION_PARAMS`,
-      `CALIBRATION_BOUNDS`, `MAX_STARTS` and `DEFAULT_STARTS` from
-      `calibrate/calibrate.ts`; the param tables from `runoff/gr4j.ts` and
-      `runoff/legacy.ts`; the check helpers in `reference/wr2012.ts`; the labels in
-      `calibrate/objective.ts`. So the Runs tab grows 27 KB and compare 32 KB.
-      **Durable fix:** move those page-side exports to modules of their own
-      (a throwaway split of the first two files alone gave 798 KB with compare
-      −9 KB and Runs −2, but a catchment +4 and Data +6 until the rest move too),
-      then land the worker plugin. **Trigger:** when no engine branch is open
-      (it moves `prepareRun` and `mergeSettings`, which most engine changes
-      edit), and before the next ceiling raise.
+- [x] **Stop shipping the engine twice** (issue #9, done 2026-09-26; numbers
+      in the bundle guard's change log). The calibration worker is an entry
+      of the page build (`frontend/vite.config.ts`, `autocalWorkerChunk`; the
+      page takes its URL from `virtual:autocal-worker-url`), so it imports the
+      engine code it shares with pages from shared chunks instead of carrying
+      a 62 KB copy. First, the small things pages read moved out of the
+      modules that hold the run, fit and ensemble code, since a chunk holds
+      whole modules: `version.ts`, `prepare.ts`, `calibrate/params.ts`,
+      `calibrate/objectives.ts`, `runoff/params.ts`, `runoff/pet.ts`,
+      `reference/wr2012Settings.ts` (+ `wr2012Resolve.ts`),
+      `uncertainty/options.ts`, `network/damCurve.ts`, and `waterYearOf` /
+      `waterYearLabel` into `calendar.ts` (docs/architecture.md § Code
+      splitting; `frontend/src/lib/engineSplit.test.ts` keeps them apart).
+      Measured against main @ e9c88b2, gzip: total 919 → 899 KB; compare
+      114 → 92; a catchment on Runs 256 → 249; report 192 → 187; Settings
+      212 → 211; home, farm, share and the other tabs within ±0.6 KB. The
+      trade-off: the Data tab 195 → 197 and its series preview 210 → 214,
+      where engine code the worker also runs is now several small shared
+      chunks. A fit started from Settings fetches 45 KB of worker code (was
+      62); a cold worker with nothing cached is 74 KB over 23 files. The
+      guard's worker ceiling is now 35 KB (the worker's own code, 33), and it
+      fails if the worker stops importing from `chunks/`. The spreadsheet
+      workers stay separate bundles: the export worker imports only engine
+      types, and the import worker's engine code (date helpers,
+      `zeroRainRuns`, two farm constants) is ≤ 6 KB gzip, where sharing would
+      bring whole engine modules and more requests into a one-off download.
 - [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
       gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
       `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
@@ -1138,25 +1148,68 @@ yet; each lands with the work package named.
 
 - [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
       with WP-2.12 (`farm.forecast` when the published run is a forecast run).
-- [ ] **Afrikaans.** No language switch yet: nothing ships in Afrikaans
-      before the named translator reviews it, and `FarmView` carries one
-      `notice`, not `notice_en` / `notice_af` (design §7). Trigger: the
-      translator is named.
+- [ ] **Afrikaans notice on the farm page**: `FarmView` carries one
+      `notice`, not `notice_en` / `notice_af` (design §7); the /share page
+      already picks between them. Trigger: the translation turnaround in
+      § Afrikaans (WP-2.5).
 - [ ] **"Who can see my farm" by name** (design §10.2): lists the roles and
       says the WUA can name them; needs an endpoint listing the people with
       access to a farm.
 - [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
       `FarmIndex`; the pages say "your WUA".
-- [ ] **"Email me when …"** links (the notice / low-dam alert and "Email me
-      when it's ready"): WP-2.13.
+- [x] **"Email me when …"** links for the notice and a low dam: alert emails
+      (WP-2.13); the farm view's alert card and every alert email link to
+      `/account/alerts`. "Email me when it's ready" (a report) is still open.
 - [ ] **"Not available: the model's data starts on …"** needs the run's
       first date; `lastSeason` is null without it, so the page says the data
       doesn't reach back.
-- [ ] **Account volume unit**: the ML/m³ switch is kept in `localStorage`
-      until `app_user.volume_unit` (WP-2.5).
 - [ ] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` needs the
       farm API and the seeded publication (the backend half of #25); run it
       once both are merged.
+
+## Afrikaans (WP-2.5)
+
+The plumbing is built (catalogues, switch, `app_user.locale` /
+`volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
+No Afrikaans wording ships yet: none is reviewed.
+
+- [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (432
+      strings: site, emails, farmer glossary) goes to the client's named
+      translator (roadmap Step 2, prerequisite 6). When it comes back: copy
+      each line into `frontend/src/lib/i18n/messages/af.ts`,
+      `backend/src/mail/i18n/af.ts` or `frontend/src/lib/help/content.af.ts`
+      (with the `sourceHash` from the sheet), run `pnpm gen:i18n:sheet`, and
+      add an e2e that the farm view, the login page and an invite email are
+      Afrikaans with `<html lang="af">` (the plan's WP-2.5 e2e; today it
+      can only check that the page stays `lang="en"`). Trigger: the
+      translator is named and returns the sheet.
+- [ ] **Afrikaans boards** at 360 px (strings run 20–30 % longer) and an axe
+      pass on every translated page in Afrikaans. Trigger: the first
+      reviewed batch lands.
+- [ ] **Not yet in the catalogue**, still English for everyone: the
+      `/share` page (`share/share.ts`), the notes list inside "Notes about
+      your farm" (`notes/NotesList.svelte`, shared with the workspace), and
+      API error messages shown as-is on the sign-in and account pages (only
+      the login's `401` is worded client-side). Trigger: the translation
+      turnaround above, so the new keys join the same sheet.
+- [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
+      the total (the English catalogue is ~7 KB; each key also appears at its
+      call site). The catalogue now loads only on the translated routes (the
+      workspace and `/share` never download its ~8 KB chunk), but the guard
+      counts lazy chunks too, so the split costs ~2 KB of total: 932 KB
+      before, 934 KB after, against main's 929 KB ceiling (largest chunk
+      43 KB, at its ceiling). Fitting under 929 without a raise needs weight
+      removed, not moved: the durable option is English-as-key messages
+      (gettext style: the English sits at the call site and `af.ts` maps it,
+      so no separate English catalogue ships, ~5–7 KB), which reworks the
+      catalogue, the sheet and the tests; build-time key shortening saves
+      ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
+      raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
+      this branch merges to main.
+- [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
+      `check:i18n` listing of stale entries): today `content.af.test.ts`
+      fails on a stale `sourceHash` and the sheet names the new hash.
+      Trigger: the first translated glossary entry.
 
 ## UI
 
@@ -1265,12 +1318,17 @@ role and not before it.
       nothing. An engine behaviour change, so the engine owner's call and an
       `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
       or a user asking why a forecast run's first forecast day steps.
-- [ ] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off). Forecast runs
-      are made on request only (Runs → Run forecast). Once WP-2.11's re-run
-      job lands, a GEFS ingest that changes days should also queue a forecast
-      run (`executeRun(db, id, label, 'forecast')` then `trimRuns`, which
-      keeps the newest unkept forecast run), deduped per project like the
-      re-run. Trigger: now (WP-2.11 is merged into this branch).
+- [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
+      [architecture.md § Background work](./architecture.md)). A forecast
+      feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with
+      `trigger: 'forecast'` (`series/newData.ts` `queueForecastFor` →
+      `runs/autoRun.ts` `enqueueForecastRun`, dedupe key `forecast`, the
+      re-run's debounce), only while `settings.autoRun.enabled` (the same
+      opt-in as the re-run: a scheduled forecast run is an automatic run).
+      The job runs `executeRun(db, id, forecastRunLabel, 'forecast')` then
+      `trimRuns` (one unkept forecast run kept), is never auto-published, and
+      does nothing when the observed rain has overtaken the issue. Tests:
+      `runs/autoRun.db.test.ts` § scheduled forecast runs.
 - [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
@@ -1398,27 +1456,31 @@ role and not before it.
         **Scenario base** tags (no ✕ on a cited base), e2e
         (`e2e/tests/scenarios.spec.ts`: a 20 % dam raise run and compared)
         and axe in light, dark and on a phone.
-  - [ ] **Override mode for the Network, Crops and Transfers editors**
-        (roadmap WP-3.2 *Frontend*): editing the base run's model in the
-        familiar tables and recording each edit as an op, instead of the
-        one-change-at-a-time "Add a change" form. The form already builds
-        every op the engine has (`scenarios/ops.ts` `buildOp`), so the
-        durable fix is a `ModelEditor` variant loaded from the base run's
-        snapshot whose edits diff into ops (node fields → `node.set`, rows
-        → `cropArea.set`, …) through the same `buildOp` checks. Trigger: a
-        hydrologist building scenarios of more than a handful of changes,
-        or WP-3.3's applicant flow.
-  - [ ] **Names of nodes a rebase dropped are lost on reload**: after a
-        rebase onto a run without a node, a change on that node keeps its
-        name only while the earlier base's snapshot is still in the editor's
-        in-memory `seenNames` (`scenarios/ScenarioEditor.svelte`); after a
-        reload it reads "a node the base run doesn't have". That map also
-        outlives a switch to another scenario (harmless, ids are UUIDs).
-        Durable fix: store the display names an op needs (`{ id, name }`)
-        with the scenario when the op is made, server-side, and drop
-        `seenNames`. Trigger: someone finds a rebased scenario's changes
-        unreadable after coming back to it, or WP-3.3's applicant flow
-        (applicants rebase more often).
+  - [x] **Override mode for the Network, Crops and Transfers editors**
+        (roadmap WP-3.2 *Frontend*, 2026-09-26; [scenarios.md § UI](./scenarios.md#ui),
+        [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)). **Edit in the
+        model tables** opens the three tabs, unchanged, on their own
+        `ModelEditor` loaded with the scenario's model
+        (`scenarios/OverrideEditor.svelte`, its own chunk), under a banner
+        saying it is the scenario, not the catchment. **Record** diffs the
+        edits into ops (`scenarios/overrideDiff.ts` `diffModel`): node fields
+        → `node.set`, crop areas → `cropArea.set`, new and removed nodes,
+        crops, transfers, land cover and boreholes → their ops, each through
+        the form's check (`ops.ts` `checkOp`, split out of `buildOp`), the
+        list re-applied to prove it gives back the edited model. Edits no op
+        can express are named and block recording: they wait on the later
+        ops below (`crop.set`, crop removal, moving a node, `damCurve`).
+        The shared editors weren't changed, so no pinning e2e was needed;
+        e2e covers override mode in `scenarios.spec.ts`.
+  - [x] **Names of nodes a rebase dropped are lost on reload** (2026-09-26,
+        `047_scenario_op_names`, `backend/src/scenarios/names.ts`): the
+        server keeps `op_names`, `{ id, name }` for every node and crop the
+        ops name, from the base run's snapshot on create, on a PATCH of the
+        ops and on a rebase, keeping a name a later base no longer has while
+        an op still names it (047 backfilled existing scenarios from their
+        base). The editor names from `Scenario.opNames`, and the in-memory
+        `seenNames` is gone. Tests: `names.test.ts`, the rebase case in
+        `scenarios.db.test.ts`, and the rebase e2e reloads.
   - [x] **One home for the model's save rules** (2026-09-25): the rules are
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz
@@ -1484,8 +1546,8 @@ role and not before it.
   - [ ] Marking a fed series on the Data tab ("from CHIRPS feed"), and an
         audit event per merge (needs WP-2.4's `audit_event`).
   - [x] A debounced re-run after new data (WP-2.11, built).
-  - [ ] Emailing owners about a stale or failing feed (WP-2.13): today the
-        panel and the CloudWatch alarms are how anyone hears.
+  - [x] Emailing owners about a stale or failing feed: the `data_stale` and
+        `feed_failing` alerts (WP-2.13), once the catchment switches them on.
   - [ ] CHIRPS by bounding box (the roadmap's `{ bbox }`): cells only now.
   - [ ] **Request volume grows with feeds.** Each CHIRPS feed re-reads its
         last 50 days daily (~200 range requests). Trigger: more than ~20
@@ -1705,6 +1767,21 @@ role and not before it.
 - [x] Dependabot's `pip` entry watched the repo root, which has no Python
       manifest; since 2026-09-25 it watches `brand/` and `scripts/wbt-import/`
       (the openpyxl pin the importer CI job installs).
+- [ ] **`help.spec.ts:289` flake under heavy load** ("an old /help#term
+      link goes on to the glossary entry"): seen once at 10 workers on a
+      loaded machine after #41's fixes; the article existed but was scrolled
+      out of view. Likely a client-side scroll race after the redirect (the
+      heading font landing late and shifting layout). Durable fix: scroll
+      only once the target has rendered and fonts are ready
+      (`document.fonts.ready`), or re-scroll on the article's resize, never a
+      longer wait. Trigger: it recurs, in CI or locally.
+- [ ] **`POST /projects/:id/runs` holds a DB connection for the whole engine
+      run** (found by #41): the engine runs inside the request's
+      transaction, so a long run pins a pooled connection and its slot on the
+      one Node thread. Durable fix: load inputs, run the engine outside the
+      transaction, then write results in a second one (session B's
+      `runs/`). Trigger: connection waits in production, or a Lambda serving
+      concurrent requests.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
@@ -1793,8 +1870,8 @@ from the WP:
 - [ ] **Dam filling vs registered storage** (s21b): the comparison counts
       supply from the farm's own dam as abstraction and compares storage with
       the dam capacity only. Pending the hydrologist.
-- [ ] **POPIA**: allocations and holder names in the data-subject export and
-      deletion, with the rest of the POPIA work (security.md § Known gaps).
+- [ ] **POPIA**: allocations and holder names in the data-subject export,
+      with the rest of the POPIA work ([§ POPIA and the Step 2 release](#popia-and-the-step-2-release-wp-216)).
 - [ ] **Evidence pack and chart**: the over/under-use chart and the
       comparison in the licence evidence pack (WP-3.14).
 
@@ -1822,10 +1899,9 @@ from the WP:
       team admins on the team page, passed to `ewrStatus`. Trigger: the
       hydrologist confirms or changes the defaults (plan.md D11), or a second
       team wants different ones.
-- [ ] **Alerts column.** `alertsFiring` is `null` and the page shows no
-      Alerts column; both carry a marked WP-2.13 hook. Trigger: WP-2.13
-      (alert_event) lands: count firing events per project in the portfolio
-      query and render the column.
+- [x] **Alerts column.** `alertsFiring` counts the firing `alert_event`
+      rows per project in the portfolio query, and the page shows it
+      (WP-2.13).
 - [ ] **"Farms short this week" lands at the top of the Runs tab.** The link
       is `?tab=runs&run=…&window=last7#res-curtailment`: the curtailment
       table now opens on the last 7 days (the reporting-window picker, #44),
@@ -1895,25 +1971,47 @@ Applicant view and the Applications tab. Left:
       downstream: supply −4 %"), built from the run and base server-side like
       `applicant.ts`, with the WP-2.1 string scan on its output. Trigger: the
       next WP-3.3 slice, before an applicant uses it for real.
-- [ ] **A contributor can `SELECT` their own application runs' rows**, whose
+- [x] **A contributor can `SELECT` their own application runs' rows**, whose
       `inputs` snapshot holds the whole base (every farm's parameters); the
-      API never returns them (RLS can't hide a column). Durable fix: store
-      the applicant's projection with the run, or read scenario runs for
-      contributors only through a `SECURITY DEFINER` projection and drop
-      `model_run_select`'s contributor branch. Trigger: the results slice
-      above, which needs the same projection.
+      API never returns them (RLS can't hide a column). Done in
+      `046_contributor_runs.sql`: `model_run_select` lost its contributor
+      branch, and what the API reads of their runs goes through `SECURITY
+      DEFINER` `app_scenario_run_meta` (metadata only) and
+      `app_trim_application_runs`. `run_series_select_contributor` no longer
+      hands over other farms' series of their runs (only the application's
+      own nodes and the catchment allowlist under the k rule). Chosen over
+      storing a projection with the run, which would still leave `inputs`
+      on a readable row, or drop the assessors' exact input. The results
+      slice above builds its projection server-side the same way.
 - [ ] **D1, D2, D3 are open decisions** (step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
-- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
-      a contributor-or-above member of the project; renaming their own farm
-      to a neighbour's name gets the duplicate-name problem (the name comes
-      back anonymised, but its existence shows). Durable fix: share by a
-      member picker the owner curates (the assessor adds consultants to an
-      application), and check names against the projected base for
-      contributors. Trigger: before applicants from competing parties share a
-      project.
+- [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
+      `maskedNames`. The project owner puts an applicant and their
+      consultant in an applying party (`project_member.party`); an applicant
+      shares only within it, picked from `…/share-candidates`, so every other
+      id or address gets one answer. An application is checked in its
+      applicant's namespace (hidden farms under their anonymous names, hidden
+      crops under their ids), so a rename to a hidden name applies like a
+      free one and the hidden farm is suffixed in that application's runs,
+      for the assessors to see. Application names are unique per owner, not
+      per project. Tests: `scenarios/oracles.db.test.ts`
+      ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+- [ ] **Hidden ids and counts in an application's messages.** An op that
+      targets or reuses the id of a hidden crop, transfer, land-cover patch
+      or borehole answers differently from a free id (`… not found` against
+      applied, `… already in use`), and an op on a hidden farm reports what
+      it dropped (`dropped 2 crop area(s)`); value rules (flow shares over
+      100 %, no catchment area left) can refuse an op because of hidden
+      values. The ids are random UUIDs from the UI, but an import derives
+      them from the project and element names. Durable fix: extend the mask
+      to ids (hidden items' ids swapped for opaque ones while the ops apply,
+      restored afterwards) and have `applyScenario` in masked mode report
+      no counts for hidden nodes; decide with the client whether a value
+      rule refused because of hidden farms says only "doesn't apply to the
+      catchment as modelled". Trigger: the applicant results slice, or
+      before applicants from competing parties share a project.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.
@@ -2000,3 +2098,132 @@ Left, each with its trigger:
       (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
       years lists only the first ones. Trigger: a catchment that hits it;
       the fix is a full list on the check or in the statement.
+
+## Alerts (WP-2.13)
+
+- [ ] **SES suppression turns a person's alerts off, with a banner.** SES
+      already drops mail to a bounced or complaining address (the
+      configuration set's suppression list), but the app doesn't know: the
+      person's alerts stay on and nothing tells them. Durable fix: an SES
+      event destination (bounce, complaint) to SNS → the jobs queue, a
+      handler that sets the address's `alert_subscription` rows to `off`
+      and a flag on `app_user`, and a banner on the account and alerts
+      pages. Trigger: SES production access (a prerequisite of Step 2), and
+      before the first farmer gets an alert on production.
+- [ ] **End-to-end through Mailpit.** The roadmap's e2e (a fixture forecast
+      drives a dam below 30 % → an Afrikaans mail for the farmer in Mailpit
+      → one-click unsubscribe → no second mail on the next crossing) isn't
+      built: the flow is proven by `backend/src/alerts/alerts.db.test.ts`
+      (memory outbox, real ticks) and the pages by `e2e/tests/alerts.spec.ts`.
+      Durable fix: a spec that runs `runJobsTick` against Mailpit
+      (`pnpm dev:mail:up`, as `server-report.spec.ts` does) and reads the
+      message through Mailpit's API. Trigger: the reviewed Afrikaans alert
+      wording lands (§ Afrikaans), so the mail it checks is the real one.
+- [ ] **Alert wording in Afrikaans.** Every `mail.alert.*` key and the
+      `alerts.*`, `unsubscribe.*` and `farm.alerts.*` page keys are on
+      `docs/i18n/af-translation-sheet.md`; until they come back an Afrikaans
+      reader gets English (marked `lang="en"`). Trigger: § Afrikaans.
+- [ ] **Per-feed staleness levels.** `data_stale` is one rule per catchment,
+      measured past each feed's own usual delay. Durable fix: a
+      `node_id`-like `feed_id` on `alert_rule` for `data_stale`. Trigger: a
+      WUA asks for a different level per feed.
+- [ ] **Open rates and farmer feedback** (the roadmap's recommendation
+      before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
+      click tracking on the configuration set (POPIA: say so in the privacy
+      notice) or a "Was this useful?" link. Trigger: one season of alerts on
+      production.
+- [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
+      is ready; a transport beside `mail/transport.ts` with a log transport
+      locally. Trigger: farmers ask for it after a season of email.
+## POPIA and the Step 2 release (WP-2.16)
+
+The Step 2 release-hardening pass (2026-09-26,
+[step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
+documented what is true today in
+[security.md § Personal information](./security.md#personal-information-popia)
+and fixed what it could in code (048_account_deletion). These need the
+client, its information officer or legal, and none is a code change on its
+own. Loop in the CISO or security analyst before acting on any of them.
+
+- [ ] **Privacy notice for farmers and members.** What is collected (the
+      security.md table), why, who sees a farm's figures (D1, FV-D5), the
+      retention periods, the rights and how to exercise them, and the
+      responsible party's contact. Needs the client's information officer
+      and the Afrikaans translation (WP-2.5). Then a link on sign-up, the
+      invite email and the farm view. Trigger: **blocking** before the first
+      farmer is invited on production.
+- [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
+      security.md: farmers' accounts and farm links (the WUA's function or
+      legitimate interest, not consent), notes and the audit log kept for
+      the life of the project, alerts as service messages the WUA switches
+      on per catchment, each person choosing how often (WP-2.13).
+      Who: the client's information officer. Trigger: with the privacy
+      notice.
+- [ ] **Operator agreement** (POPIA s20–21) between the client as
+      responsible party and the operator: security measures, sub-processors
+      (AWS), breach notification to the client. Who: operator + client
+      legal. Trigger: before production holds client data.
+- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
+      Africa; any other region is a transfer under s72 and needs the client's
+      agreement. Trigger: the region choice in § Blocking releases.
+- [ ] **Data-subject export** ("download my data", plan.md Phase 7). Not
+      built: the operator answers a request by query today. Durable fix: a
+      `GET /auth/me/export` that returns, as JSON, the account, memberships,
+      farm links, notes written, the audit events about or by the person
+      (through a `SECURITY DEFINER` reader, since farmers can't read the log
+      under RLS), pending invites to their address, sign-offs, and the farm
+      projections of their linked farms. Trigger: before the first farmer is
+      invited on production, or the first request, whichever comes first.
+- [ ] **Self-service account deletion, and evidence that names its maker.**
+      Deleting an account is an operator act today (deployment.md §
+      Runbooks, item 7), and it is refused for anyone who created a
+      project, team, run, scenario, ensemble, import or nomination (those
+      keys restrict: `catalogue.db.test.ts` `APP_USER_ON_DELETE`). Decide
+      with the information officer whether that evidence keeps the name (the
+      regulator's record, like a sign-off), is reassigned, or is
+      pseudonymised, then change those keys to match and build the Account
+      page's "delete my account". Trigger: before public registration opens,
+      or the first deletion request from a modeller.
+- [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
+      body for editors for the life of the project (037). Decide a limit (for
+      example a year, then purge the body and keep the event). Who: client.
+      Trigger: with the privacy notice.
+- [ ] **Backups after an erasure.** A deleted account stays in RDS automated
+      backups for up to `db_backup_retention_days` (7–35). The usual
+      answer is that backups age out and are never restored into live use
+      without re-applying erasures; confirm and put it in the notice. Who:
+      operator + information officer. Trigger: with the privacy notice.
+- [ ] **D12 confirmation.** The audit log is pseudonymised on account
+      deletion ("Deleted user", 048) as the roadmap recommends; the
+      information officer confirms it (or asks for full deletion of the
+      events, which would weaken the regulator's trail). Trigger: with the
+      privacy notice.
+- [ ] **Personal-information incident procedure** for the "a farmer sees the
+      wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
+      WUA decides on notifying the Information Regulator and the data
+      subject (s22), and in what time. Who: client. Trigger: before go-live.
+- [ ] **The ingest hold's outlier limit still counts a key's earlier
+      pushes.** Each push is judged against the series without its own days
+      (`series/hold.ts` `limitWithout`), but days the same key pushed before
+      count, so a key that poisons slowly can lift the 99th percentile it is
+      later judged by. Durable fix: record which days each key wrote
+      (a `key_days datemultirange` on `time_series`, like `feed_days` for
+      feeds, 031) and leave them out of the limit, or take the limit from
+      the published run's inputs. Trigger: the first production gateway
+      key, or a hold that should have fired and didn't.
+- [ ] **Deleting an assessor's account is refused (session B, WP-3.3).**
+      `scenario_guard` (045_contributor_scope.sql, the branch that raises
+      "a decision is recorded when the scenario is decided, and never
+      changes") also refuses the foreign key's `ON DELETE SET NULL` on
+      `scenario.decided_by`, so an account that decided an application can't
+      be deleted: the same bug 048 fixed in `note_guard`. Fix (session B's
+      to make, from 045's definition): let an update through untouched when
+      its only change is `decided_by` becoming NULL (water_app can't write
+      `decided_by` outside a decision, which the guard stamps), then add the
+      case to `auth/account-deletion.db.test.ts`. Trigger: before the first
+      application is decided on production.
+- [ ] **Persona verdicts and load checks** (WP-2.16 items not run in this
+      pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
+      with the verdicts recorded in step-2 §9, and the 60-farm load
+      timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
+      since three of the personas judge those.

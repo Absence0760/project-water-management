@@ -4,7 +4,7 @@
 	// rendered width, like the farm view's MonthlyChart and DamChart. The chart
 	// is aria-hidden; a visually hidden sentence sums it up and "Show the
 	// numbers" is a table of every month drawn.
-	import { CHART_FONT_PX, LABEL_Y } from '$lib/components/farm/chart';
+	import { CHART_FONT_PX, LABEL_Y } from '$lib/components/farm/chartGeometry';
 	import { flowCaption, flowChart, flowRows, flowSummary, type FlowMonth } from './chart';
 
 	let { months }: { months: FlowMonth[] } = $props();

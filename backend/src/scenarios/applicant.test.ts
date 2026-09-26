@@ -1,10 +1,10 @@
 // The applicant's view of the published baseline (applicant.ts, WP-3.3, D2's
 // recommended default pending the client): their own farms and the gauges in
 // full, every other node by kind and an anonymous name with its values
-// blanked, and the engine's messages renamed to match.
+// blanked, and the names an application's ops meet (applicationMask).
 import { applyScenario, type ModelInput, type NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applicantRedactor, projectBaseForApplicant } from './applicant.js';
+import { applicationMask, projectBaseForApplicant } from './applicant.js';
 
 const monthly = (v: number) => new Array(12).fill(v);
 const node = (id: string, name: string, kind: NetworkNode['kind'], downstreamNodeId: string | null, sortOrder: number, extra: Partial<NetworkNode> = {}) =>
@@ -119,21 +119,68 @@ describe('projectBaseForApplicant', () => {
 	});
 });
 
-describe('applicantRedactor', () => {
-	const view = projectBaseForApplicant(base, [MINE]);
-	const redact = applicantRedactor(base, view);
+describe('applicationMask', () => {
+	const mask = applicationMask(base, [MINE]);
+	const rename = (value: string) => ({ op: 'node.set' as const, nodeId: MINE, field: 'name' as const, value });
+	const apply = (ops: Parameters<typeof applyScenario>[1]) => applyScenario(base, ops, { maskedNames: mask });
 
-	it('renames anonymised nodes in the engine’s messages, longest name first and ignoring case', () => {
-		expect(redact('"Waterval Estate" drains into itself')).toBe('"Farm 2" drains into itself');
-		expect(redact('the network has a loop through "Waterval"')).toBe('the network has a loop through "Farm 1"');
-		expect(redact('duplicate node name "waterval"')).toBe('duplicate node name "Farm 1"');
-		// Their own farm and the gauge keep their names.
-		expect(redact('"Rooikloof" is fine, "Gauge" too')).toBe('"Rooikloof" is fine, "Gauge" too');
+	it('masks every node and crop the projection hides, under the names the applicant sees', () => {
+		const view = projectBaseForApplicant(base, [MINE]);
+		expect(mask.nodes).toEqual(Object.fromEntries(view.anonymisedNodeIds.map((id) => [id, view.model.nodes.find((n) => n.id === id)!.name])));
+		expect(Object.keys(mask.nodes!).sort()).toEqual([N1, N2, U1].sort());
+		expect(mask.crops).toEqual({ [C2]: `crop ${C2}` });
 	});
 
-	it('covers what applyScenario actually says about another node', () => {
-		const { problems } = applyScenario(base, [{ op: 'node.set', nodeId: MINE, field: 'name', value: 'WATERVAL' }]);
-		expect(problems.join(' ').toLowerCase()).toContain('waterval');
-		for (const p of problems.map(redact)) expect(p.toLowerCase()).not.toContain('waterval');
+	it('answers a rename to a hidden name exactly as a rename to a free one (the oracle closed)', () => {
+		// Positive control: unmasked (an editor's own scenario), the collision is a problem.
+		expect(applyScenario(base, [rename('WATERVAL')]).problems).toEqual(['op 1 (node.set): duplicate node name "waterval"']);
+		const hidden = apply([rename('WATERVAL')]);
+		const free = apply([rename('Somewhere else')]);
+		expect(hidden.problems).toEqual([]);
+		expect(free.problems).toEqual([]);
+		expect(hidden.applied.map((a) => a.notes)).toEqual(free.applied.map((a) => a.notes));
+		// The input keeps both, the neighbour's suffixed for the assessor.
+		expect(hidden.input.model.nodes.find((n) => n.id === MINE)!.name).toBe('WATERVAL');
+		expect(hidden.input.model.nodes.find((n) => n.id === N1)!.name).toBe('Waterval (2)');
+		expect(hidden.renamed).toEqual([{ kind: 'node', id: N1, name: 'Waterval', as: 'Waterval (2)' }]);
+		expect(free.renamed).toEqual([]);
+		// Every other hidden node is itself again.
+		expect(free.input.model.nodes.map((n) => n.name)).toEqual(['Gauge', 'Waterval Estate', 'Somewhere else', 'Waterval', 'Town']);
+	});
+
+	it('collides with the anonymous names the applicant does see, as they would expect', () => {
+		expect(apply([rename('farm 1')]).problems).toEqual(['op 1 (node.set): duplicate node name "farm 1"']);
+		expect(apply([rename('Gauge')]).problems).toEqual(['op 1 (node.set): duplicate node name "gauge"']);
+	});
+
+	it('answers a new crop named like a hidden one as it does a free name', () => {
+		const crop = (name: string) => ({ op: 'crop.add' as const, crop: { id: crypto.randomUUID(), name, cropFactor: monthly(0.5) } });
+		expect(applyScenario(base, [crop('lucerne')]).problems).toHaveLength(1);
+		const hidden = apply([crop('lucerne')]);
+		expect(hidden.problems).toEqual([]);
+		expect(hidden.renamed).toEqual([{ kind: 'crop', id: C2, name: 'Lucerne', as: 'Lucerne (2)' }]);
+		expect(apply([crop('Pecans')]).renamed).toEqual([]);
+		// A crop they see still collides.
+		expect(apply([crop('citrus')]).problems).toHaveLength(1);
+	});
+
+	it('quotes no hidden name in anything it says about another node', () => {
+		const r = apply([
+			{ op: 'cropArea.set', nodeId: U1, cropId: C1, areaM2: 10 },
+			{ op: 'landCover.add', patch: { id: 'p9', nodeId: U1, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null } },
+			rename('Town')
+		]);
+		expect(r.problems).toEqual([
+			'op 1 (cropArea.set): crops grow on farms; "Water user 1" is a user',
+			'op 2 (landCover.add): land cover lies on a farm; "Water user 1" is a user'
+		]);
+		// Their own farm renamed to the hidden user's name: applied, and quoted as theirs.
+		expect(r.applied.map((a) => a.index)).toEqual([2]);
+		expect(r.renamed).toEqual([{ kind: 'node', id: U1, name: 'Town', as: 'Town (2)' }]);
+	});
+
+	it('leaves a hidden node an op renamed under the op’s name', () => {
+		const r = apply([{ op: 'node.set', nodeId: N1, field: 'name', value: 'Renamed by applicant' }]);
+		expect(r.input.model.nodes.find((n) => n.id === N1)!.name).toBe('Renamed by applicant');
 	});
 });

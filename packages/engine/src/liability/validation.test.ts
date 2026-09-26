@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalJson } from '../manifest';
 import { runModel } from '../run';
-import { ENGINE_VERSION } from '../run';
+import { ENGINE_VERSION } from '../version';
 import { randomInput } from '../testing/fuzz';
 import type { RunSummary } from '../project';
 import { DISCLAIMER } from './disclaimer';

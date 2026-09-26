@@ -13,12 +13,12 @@ storage.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
-| PATCH | `/auth/me` | `{ displayName }` | `200 { user }`; `400` blank or over 100 characters (signed in) |
+| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
@@ -62,8 +62,22 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`PATCH /auth/me`** changes only the display name (trimmed, 1–100
-  characters). The email address isn't editable; other keys are ignored.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit }`.
+  `locale` is `'en' | 'af' | null` (`app_user.locale`, 050_user_locale.sql,
+  WP-2.5): the language of the farmer-facing pages and of the emails the
+  account receives; `null` means not chosen (the site follows the browser,
+  emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
+  the farm view shows volumes.
+- **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
+  1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
+  following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one
+  is required. The email address isn't editable; other keys are ignored.
+- **`register`** takes an optional `locale` (the language the sign-up page
+  was in). Without one, an account that accepts an invite takes the invite's
+  `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
+  The verification, reset and farmer-invite emails go out in the account's
+  (or the invite's) language, English where the Afrikaans isn't reviewed yet
+  ([ui.md § Language](./ui.md#language)).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).
@@ -441,9 +455,9 @@ out, and a re-import of an export records itself as a `project-file` import.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role }[] }` | viewer |
+| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
-| PATCH | `/projects/:id/members/:userId` | `{ role }` | `{ member }` | owner |
+| PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
 `409 a project must keep at least one owner` when demoting or removing the
@@ -605,10 +619,100 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     `damsKnown` is false without a publication (then `null` means unknown).
   - `feeds = { total, ok, failing }`: `failing` counts failing **and** stale
     feeds (`feeds/health.ts`); pending and disabled ones count in neither.
-  - `alertsFiring`: always `null` until WP-2.13 (alerts) exists: the hook
-    for its count, not a zero.
+  - `alertsFiring`: the alerts firing now (`alert_event` rows in state
+    `firing`, [§ Alerts](#alerts)); `0` when none, and for a catchment with
+    no alert switched on.
   - `restriction = { level, pct } | null`: the current publication's; `null`
     when nothing is published.
+
+## Alerts
+
+Email alerts (roadmap WP-2.13; `051_alerts.sql`, [security.md § Alerts](./security.md#alerts),
+[data-model.md § Alerts](./data-model.md#alerts-051_alertssql)). A catchment's
+**rules** say which kinds it alerts on and at what level; alerts are
+**opt-in per catchment**: until an editor switches a kind on, nothing is
+evaluated or sent. Each person's **choices** say how they get the kinds
+their role receives. The `alert_eval` job opens and clears **events**
+([architecture.md § Background work](./architecture.md#background-work));
+the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/me/alerts` | – | `{ projects: ProjectAlerts[] }`: every catchment you can open (never an applicant's), by name | signed in |
+| PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
+| GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, then a `dam_below` per farm in network order; one not saved yet is `{ id: null, enabled: false }` at its default threshold | editor |
+| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
+| GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
+| POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
+
+- Kinds, what fires them, and who gets them by default:
+
+  | `kind` | Fires when (hysteresis: re-arms only after recovery) | `threshold` | Default: right away | May opt in |
+  | --- | --- | --- | --- | --- |
+  | `dam_below` (per farm) | the published projection's dam level on its last day of data, or the published forecast's lowest, is below the threshold; re-arms at threshold + 5 points | 0 < t < 1 (0.3) | that farm's farmers, editors, owners | viewers |
+  | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2 | whole days 1–60 (3) | editors, owners | viewers |
+  | `data_stale` | an enabled feed is more than t days past its usual delay (`feeds/health.ts` `staleAfterDays`); re-arms under t | whole days 1–60 (3) | editors, owners | – |
+  | `restriction_published` | the current publication's restriction level, percentage or notice changes (a lift too) | 0 | farmers, viewers and up | – |
+  | `feed_failing` | an enabled feed failed t times in a row; re-arms at 0 | 1–20 (3) | owners | editors |
+  | `job_dead` | t jobs died in the last 24 hours; re-arms at 0 | 1–100 (1) | owners | editors |
+
+  Applicants (contributors) never get alerts. A `threshold` outside its
+  range, or a `dam_below` rule without a farm (or another kind with one),
+  is `400`; a farm of another project `404`.
+- `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
+  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
+  `mode` is what you get now (the database's own rule,
+  `app_alert_my_mode`), `defaultMode` your role's default, `chosen` whether
+  you set it, `ruleOn` whether the catchment has it switched on (off, you
+  get nothing whatever you choose). A farmer has one `dam_below` choice per
+  own farm; everyone else one for every farm. `muted`: every alert email
+  for the catchment is off (a digest's one-click unsubscribe).
+- `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
+  digest), `daily_digest` (in the 06:00 South African time summary), `off`.
+  `kind: 'all'` with `immediate` or `off` is the catchment-wide switch.
+  PUT refuses (`400`) a kind your role never gets, a `nodeId` on anything but
+  a farmer's dam alert, and `daily_digest` for `all`; a farmer naming a farm
+  that isn't theirs gets `404`. Turning a choice back on (from `off`) draws a
+  new unsubscribe token, so a link in an older email no longer works.
+- `AlertRule = { id, kind, nodeId, nodeName, threshold, enabled, firing }`.
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, openedAt, clearedAt, detail }`.
+  `detail` holds the figures the alert was raised on: `dam_below`
+  `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
+  farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
+  madeOn }`; `data_stale` `{ feeds: { label, newest, overdue }[] }`;
+  `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
+  `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
+  While an event fires, its `value` and `detail` follow the figure.
+- **Unsubscribe.** Every alert email links to the site's
+  `/alerts/unsubscribe#t=<token>` (the token in the fragment, so it reaches
+  no server log), and carries `List-Unsubscribe: <API/alerts/unsubscribe?token=…>`
+  and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058): a mail
+  client's one-click button form-posts `List-Unsubscribe=One-Click` to that
+  address, which is why only this route takes a form body and a query
+  token, and why it alone is exempt from the CSRF check (it reads no
+  session). A token turns off only its own subscription (a digest's, the
+  catchment-wide `all`), without signing in; a repeat is harmless. `404`
+  for a malformed or tampered token, one a later re-enable replaced, or one
+  whose person is no longer a member; `400` without a token.
+
+### How alert mail is sent
+
+- One email per event per person, ever (`alert_delivery` primary key), and
+  one per crossing: a firing rule sends nothing more until it clears.
+- At most **5 immediate alert emails per person per day**, the day running
+  from 06:00 to 06:00 South African time (`ALERTS_DAILY_CAP`). The rest, and
+  everything a person chose to get daily, go out in one **digest** per
+  catchment after 06:00. A digest lists at most 20 alerts (the newest), then
+  "…and N more" pointing at the app; those are marked sent with it. At most
+  200 lines a person are taken per digest; older ones are dropped as over
+  the limit, never sent later.
+- The mail is built **as its recipient**, under RLS, when it is sent: their
+  access and choice are checked again then (a member removed since the
+  event, or who turned the alert off, gets nothing), and it can only name
+  what they may read.
+- `ALERTS_ENABLED=false` (the kill switch) stops all sending: events still
+  open and clear in the app, and deliveries waiting to go out are dropped,
+  not sent later ([deployment.md § Runbooks](./deployment.md#runbooks)).
 
 ## Model data
 
@@ -820,8 +924,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   periods. A forecast run is reproduced by `runForecastChecked(loadRunInput(run))`;
   it can't be a scenario's base, nominated as evidence or signed off (each
   `409`: all three are judged on the record), and its uncertainty bands run on
-  its input without the tail. The worker doesn't schedule forecast runs:
-  they are made on request (WP-2.11's re-run job makes ordinary runs).
+  its input without the tail. Made on request, and, when the project has
+  automatic runs on (`settings.autoRun.enabled`), after each forecast feed
+  (CHIRPS-GEFS) ingest that changes days: a `rerun` job with `trigger:
+  'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
+  `Forecast · from <day>`, never published automatically
+  ([architecture.md § Background work](./architecture.md)).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
   `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
@@ -1135,7 +1243,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | `{ scenarios: Scenario[] }`, newest first | viewer |
-| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (names are unique per project, ignoring case) | editor |
+| POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario | editor |
@@ -1143,16 +1251,27 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
 - `Scenario = { id, name, description, baseRunId, baseRun: { id, label,
-  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, ownerUserId, owner,
-  status, createdAt, updatedAt, runCount, lastRun: { id, label, createdAt } |
-  null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785 canonical JSON
-  (engine `canonicalJson`); a run of the scenario records the same hash.
-  `owner` is a display name. `ownedNodeIds` are the proposer's own nodes: ops
-  on them are proposals, everything else a baseline assumption.
+  createdAt }, ops: ScenarioOp[], opsSha256, ownedNodeIds, opNames, ownerUserId,
+  owner, status, createdAt, updatedAt, runCount, lastRun: { id, label,
+  createdAt } | null }`. `opsSha256` is the SHA-256 hex of the ops as RFC 8785
+  canonical JSON (engine `canonicalJson`); a run of the scenario records the
+  same hash. `owner` is a display name. `ownedNodeIds` are the proposer's own
+  nodes: ops on them are proposals, everything else a baseline assumption.
+  `opNames: { id, name }[]` (sorted by id; 044) names every node and crop the
+  ops name, as the base run's snapshot named it when the ops (or the base)
+  were written: the server keeps a name a later base no longer has while an
+  op still names that id, and the current base's name wins. Display only;
+  it isn't part of `opsSha256`, and clients don't send it.
 - `check = { applied: AppliedOp[], problems: string[], classified: ('proposal'
-  | 'baseline')[] }`: the ops applied to the base (engine `applyScenario`,
+  | 'baseline')[], renamed? }`: the ops applied to the base (engine `applyScenario`,
   `classifyScenario`); `classified[i]` is `ops[i]`'s class. `check` is `null`
-  and `checkError` says why only if the base can't be rebuilt.
+  and `checkError` says why only if the base can't be rebuilt. `renamed:
+  { kind: 'node' | 'crop', id, name, as }[]` (viewer and up only, never a
+  contributor; also on a scenario run's response) lists an application's
+  hidden farms and crops given a suffixed name in its runs because the
+  applicant gave one of theirs that name (049, [scenarios.md §
+  Applications](./scenarios.md#applications-wp-33)); always `[]` for a team
+  scenario.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether
@@ -1197,15 +1316,19 @@ below work on it too, for an editor.
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted | editor |
-| POST | `/projects/:id/scenarios/:sid/members` | `{ email }` | `201 { members }` (`200` if already shared). `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike; `409` for a team scenario or yourself | owner of the application |
+| GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
+| POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
 
-- **What a contributor sees of the base** (`…/base`, and the check's
-  messages): the settings, their own farms and the gauges in full, every
+- **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and
-  land cover (D2's recommended default, pending the client). They never
+  land cover (D2's recommended default, pending the client). The check's
+  messages quote only those names, and a name taken only by something hidden
+  collides with nothing (049: the application is checked in its applicant's
+  namespace, [scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+  They never
   receive a run's inputs or summary: `GET …/runs…` and `GET /compare/runs`
   answer them `403`.
 - A contributor linked to a farm also reads its farm view
@@ -1432,7 +1555,7 @@ CORS (gateways aren't browsers), JSON bodies only.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
-| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null }`, `Cache-Control: no-store` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist, only the days sent
@@ -1448,6 +1571,16 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[] }`
+  when days this push carried look wrong by the engine's data-quality rules
+  (a negative rain or flow; a value above the outlier limit of the series
+  it lands in, taken without this push's days, once that series has 100
+  or more non-zero days), else
+  `null`. The days are merged all the same, `series.held` is recorded as
+  the key (with the counts, up to 5 examples and the `source` label), no
+  re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
+  waits, doing nothing, until a person runs the model
+  ([security.md § API keys](./security.md#api-keys)).
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in

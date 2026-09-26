@@ -1,12 +1,15 @@
-// One tick of the queue: purge old jobs and reports, queue the data feeds
-// (feeds/schedule.ts) and report schedules (reports/schedule.ts) that are
-// due, then claim and run due jobs one at a
-// time until none are due or the time budget is spent. Every transport ends
+// One tick of the queue: purge old jobs, reports, alerts and lapsed invites, queue the data feeds
+// (feeds/schedule.ts), report schedules (reports/schedule.ts) and scheduled
+// alert checks (app_alert_schedule) that are due, then claim and run due
+// jobs one at a time until none are due or the time budget is spent, then
+// send the alert mails those jobs queued (alerts/send.ts). Every transport ends
 // here: the local worker loop (worker.ts), `pnpm dev:jobs:tick`, the memory
 // transport (tests), and the production worker Lambda (lambda-worker.ts).
+import { sendAlerts, type SendResult } from '../alerts/send.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
+import { purgeInvites } from '../invites/invites.js';
 import { requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JobError, LeaseLostError } from './errors.js';
@@ -47,8 +50,10 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		if (!failure.expected) console.error(`job ${job.id} (${job.kind}) failed:`, err);
 		const status = await withoutUser((db) => finishJob(db, job, { ok: false, error: failure.message, retry: failure.retry }));
 		if (status === 'dead') {
-			// The alarm hook (infra/jobs.tf metric filter) until WP-2.13 emails the owners.
+			// The alarm hook (infra/jobs.tf metric filter), and the owners' job_dead alert
+			// when the project has it on (a check queued now; never for a dead alert check).
 			console.error(JSON.stringify({ event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts }));
+			if (job.kind !== 'alert_eval') await scheduleAlertCheck(job.projectId);
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
 	}
@@ -67,6 +72,20 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 	} catch (err) {
 		console.warn(JSON.stringify({ event: 'job_progress_failed', jobId: job.id, error: (err as Error).message }));
 		return true;
+	}
+}
+
+/** Scheduled alert checks are spaced this far apart per project (data going stale, feeds failing, dead jobs). */
+export const ALERT_CHECK_GAP = '1 hour';
+/** Alert deliveries (and events cleared this long ago) are kept this long, then the tick deletes them. */
+export const ALERT_RETENTION_DAYS = 180;
+
+/** Queue a job_dead check for one project at once (app_alert_schedule); a failure is logged, never thrown. */
+async function scheduleAlertCheck(projectId: string): Promise<void> {
+	try {
+		await withoutUser((db) => db.query("SELECT app_alert_schedule($1, interval '0', 1)", [projectId]));
+	} catch (err) {
+		console.error(JSON.stringify({ event: 'alert_schedule_failed', projectId, error: (err as Error).message }));
 	}
 }
 
@@ -89,10 +108,14 @@ export interface TickOptions {
 	allFeeds?: boolean;
 	/** Queue due report schedules and purge old reports first (default true; queue-only tests turn it off). */
 	reports?: boolean;
+	/** Queue scheduled alert checks and purge old alerts first (default true; `--no-schedule` turns it off). Alert mails are sent either way. */
+	alerts?: boolean;
 }
 
 export interface TickResult {
 	purged: number;
+	/** Lapsed invites deleted (invites/invites.ts purgeInvites). */
+	invitesPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -104,6 +127,8 @@ export interface TickResult {
 	feeds?: ScheduleResult;
 	/** Scheduled reports queued by this tick (absent when reports were off). */
 	reports?: ReportScheduleResult & { purged: number };
+	/** Alert checks queued, alert rows purged (0 when alerts scheduling was off), and alert mails sent by this tick. */
+	alerts: SendResult & { scheduled: number; purged: number };
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -117,10 +142,29 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const maxJobs = o.maxJobs ?? envInt(process.env.JOB_MAX_PER_TICK, 25);
 	const leaseSeconds = o.leaseSeconds ?? envInt(process.env.JOB_LEASE_SECONDS, DEFAULT_LEASE_SECONDS);
 	const budgetMs = o.budgetMs ?? 4 * 60_000;
-	const result: TickResult = { purged: 0, claimed: 0, done: 0, failed: 0, dead: 0, lost: 0, stats: { due: 0, running: 0, oldestDueSeconds: 0 } };
+	const result: TickResult = {
+		purged: 0,
+		invitesPurged: 0,
+		claimed: 0,
+		done: 0,
+		failed: 0,
+		dead: 0,
+		lost: 0,
+		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
+		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 }
+	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
+	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
 	if (o.reports !== false) result.reports = { purged: await purgeReports(), ...(await scheduleDueReports()) };
+	let alertsScheduled = 0;
+	let alertsPurged = 0;
+	if (o.alerts !== false) {
+		alertsPurged = await withoutUser(async (db) => (await db.query<{ n: number }>('SELECT app_purge_alerts(make_interval(days => $1)) AS n', [ALERT_RETENTION_DAYS])).rows[0]?.n ?? 0);
+		alertsScheduled = await withoutUser(
+			async (db) => (await db.query<{ n: number }>(`SELECT app_alert_schedule(NULL, interval '${ALERT_CHECK_GAP}', 100) AS n`)).rows[0]?.n ?? 0
+		);
+	}
 	// One at a time, so a job's lease starts when it does, not when a batch was claimed.
 	while (result.claimed < maxJobs && Date.now() - started < budgetMs) {
 		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds));
@@ -128,6 +172,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		result.claimed++;
 		result[await runJob(job, o.handlers)]++;
 	}
+	// After the jobs, so every delivery an alert_eval queued is sent once it committed.
+	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };
 	result.stats = await withoutUser(queueStats);
 	return result;
 }

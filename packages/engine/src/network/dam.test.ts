@@ -8,7 +8,8 @@ import { checkInvariants } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
 import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
-import { curveAreaAt, damCurveProblem, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
+import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
+import { damCurveProblem } from './damCurve';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {

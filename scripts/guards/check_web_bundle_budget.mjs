@@ -19,12 +19,20 @@
 //   largestChunkKb  the largest single JS/CSS file a page loads. Catches one
 //                   heavyweight dependency landing in one chunk (a second
 //                   chart library, a spreadsheet parser, a date library).
-//   largestWorkerKb the largest Web Worker bundle (`/workers/`, Vite's
-//                   output for `new Worker(new URL(…))`). A worker carries its
-//                   own copy of the engine and is fetched only when a fit or
-//                   an uncertainty ensemble starts, never on navigation, so it
-//                   has its own ceiling instead of the page chunks'. It still
-//                   counts in totalCodeKb.
+//   largestWorkerKb the largest Web Worker entry under `/workers/` other than
+//                   the spreadsheet workers: the calibration worker
+//                   (lib/calibration/autocal.worker.ts). Since issue #9 it is
+//                   an entry of the page build (frontend/vite.config.ts,
+//                   autocalWorkerChunk), not a bundle of its own: its file
+//                   holds the code only it runs (the run, the fit, the
+//                   ensemble) and imports the engine code it shares with pages
+//                   from chunks/, which count as page chunks. It loads only
+//                   when a fit or an uncertainty ensemble starts, never on
+//                   navigation, so it has its own ceiling instead of the page
+//                   chunks'. It still counts in totalCodeKb. The guard also
+//                   fails if it stops importing from chunks/ (a worker built
+//                   with `new Worker(new URL(…))` would carry a second engine
+//                   copy again).
 //   largestSpreadsheetWorkerKb
 //                   the largest spreadsheet worker: `export.worker.ts` (the
 //                   .xlsx run export, WP-1.28) and `import.worker.ts` (the
@@ -545,6 +553,57 @@
 //             and the assessors' Applications tab, each a lazy chunk, and the
 //             applicant mode of the Scenarios tab. No new dependency. #9's
 //             engine split is the way back for the total.
+// 2026-09-26  total 921 → 929 KB; other ceilings unchanged. Scenario
+//             override mode (#18 follow-up): the Network, Crops and Transfers
+//             tables on a scenario's model, its own lazy chunk (~5.7 KB gzip,
+//             loaded only on "Edit in the model tables"), and the scheduled
+//             forecast run's labels. Merged on main after WP-2.16 and WP-3.3
+//             (915); the merge measured 923 KB. No page's first load grew;
+//             no new dependency. Headroom ~6 KB. #9's engine split is still
+//             the way back down.
+// 2026-09-26  total 921 → 905 KB (measured 899, down from 919), calibration
+//             worker 64 → 35 KB (measured 33; it is now only the worker's own
+//             code); largest chunk stays 43 KB (the help content). Issue #9:
+//             the engine no longer ships twice. The calibration worker is an
+//             entry of the page build (frontend/vite.config.ts,
+//             autocalWorkerChunk: the page takes its URL from
+//             'virtual:autocal-worker-url'), so it imports the engine code it
+//             shares with pages from chunks/ instead of bundling a copy. That
+//             only pays once the small things pages read live apart from the
+//             run, fit and ensemble code, so those moved to modules of their
+//             own: version.ts (ENGINE_VERSION), prepare.ts (prepareRun),
+//             calibrate/params.ts, calibrate/objectives.ts, runoff/params.ts,
+//             runoff/pet.ts, reference/wr2012Settings.ts (+ wr2012Resolve.ts),
+//             uncertainty/options.ts, network/damCurve.ts, and waterYearOf /
+//             waterYearLabel into calendar.ts; frontend/src/lib/
+//             engineSplit.test.ts keeps them apart. First loads, gzip, against
+//             main @ e9c88b2: compare 114 → 92 (−22), a catchment on Runs
+//             256 → 249 (−7), Settings 212 → 211, report 192 → 187; home,
+//             farm, share and a catchment's other tabs within ±0.6; the Data
+//             tab 195 → 197 (+2.7) and its series preview +4.3, where engine
+//             code the worker also runs now sits in shared chunks (more,
+//             smaller files compress worse). Starting a fit from Settings
+//             fetches 45 KB of worker code (was 62); a cold worker with
+//             nothing cached is 74 KB over 23 files. The guard now also fails
+//             if the calibration worker stops importing from chunks/.
+// 2026-09-26  total 929 → 913 KB (measured 907). Merging #9's engine split
+//             (899 on e9c88b2) with main's scenario override mode and the
+//             applicant share picker (+8). Headroom ~6 KB.
+// 2026-09-26  total 929 → 941 KB; other ceilings unchanged. The i18n
+//             foundation (WP-2.5): the farmer-facing message catalogue
+//             (English, ~8 KB gzip; Afrikaans loads lazily and is empty until
+//             translated), the language switchers and locale-aware farm
+//             formatting. The catalogue loads only on the sign-in, farm and
+//             account routes (a dynamic import from the root layout, guarded
+//             by lib/i18n/boundary.test.ts), so the workspace's and /share's
+//             first loads didn't grow; the total counts lazy chunks, so it
+//             rose by the catalogue plus ~2 KB of split overhead. The merge
+//             measured 935 KB. Ways back down, both in docs/followups.md:
+//             English-as-key (drop the English catalogue, ~5–7 KB) and #9's
+//             engine split (~20 KB). No new dependency; the largest page
+//             chunk is at its 43 KB ceiling. Headroom ~6 KB.
+// 2026-09-26  total 941 → 925 KB (measured 919). #9's engine split (−20)
+//             merged with WP-2.5's i18n foundation (+12). Headroom ~6 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -555,15 +614,19 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 921,
+	totalCodeKb: 925,
 	largestChunkKb: 43,
-	largestWorkerKb: 64,
+	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });
 
-/** A Web Worker bundle (Vite emits them under `workers/`). */
+/** A Web Worker bundle (Vite emits them under `workers/`; so does autocalWorkerChunk for the calibration worker). */
 const WORKER = /(^|\/)workers\//;
+/** The calibration worker's entry. */
+const CALIBRATION_WORKER = /(^|\/)workers\/autocal\.worker-[^/]*\.js$/;
+/** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
+const SHARED_CHUNK_IMPORT = /(?:\bfrom|\bimport)\s*["']\.\.\/chunks\//;
 /** A spreadsheet worker: lib/spreadsheet's export.worker.ts / import.worker.ts (Vite names the bundle after the source). */
 const SPREADSHEET_WORKER = /(^|\/)workers\/(export|import)\.worker-[^/]*$/;
 
@@ -645,6 +708,29 @@ export function violations(m, budget = BUDGET) {
 	return out;
 }
 
+/**
+ * The calibration worker must be an entry of the page build (issue #9), so
+ * it shares the engine with the pages instead of carrying its own copy: its
+ * file imports from ../chunks/. A worker built on its own (Vite's
+ * `new Worker(new URL(…))`) imports nothing.
+ * @param {{ path: string, text: string }[]} workers the files under workers/
+ * @returns {string[]}
+ */
+export function calibrationWorkerViolations(workers) {
+	const entry = workers.filter((f) => CALIBRATION_WORKER.test(f.path));
+	if (entry.length !== 1) {
+		return [
+			`Expected one calibration worker (workers/autocal.worker-*.js) in the build, found ${entry.length}. frontend/vite.config.ts (autocalWorkerChunk) emits it; check the plugin still runs and names it.`,
+		];
+	}
+	if (!SHARED_CHUNK_IMPORT.test(entry[0].text)) {
+		return [
+			`The calibration worker ${entry[0].path} imports nothing from the page build's chunks/: it carries its own copy of the engine again. Start it with the URL from 'virtual:autocal-worker-url' (frontend/vite.config.ts, autocalWorkerChunk), not new Worker(new URL(…)).`,
+		];
+	}
+	return [];
+}
+
 /** @param {string} dir */
 function walk(dir) {
 	return readdirSync(dir).flatMap((name) => {
@@ -677,7 +763,8 @@ function main() {
 		const table = ['## Web bundle budget', '', '| Metric | Size | Budget |', '|---|---|---|', ...rows.map((r) => `| ${r.join(' | ')} |`), ''];
 		appendFileSync(process.env.GITHUB_STEP_SUMMARY, table.join('\n') + '\n');
 	}
-	const bad = violations(m);
+	const workers = paths.filter((p) => WORKER.test(relative(buildDir, p))).map((p) => ({ path: relative(buildDir, p), text: readFileSync(p, 'utf8') }));
+	const bad = [...violations(m), ...calibrationWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

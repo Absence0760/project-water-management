@@ -3,12 +3,14 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
-import { gr4j, GR4J_PARAMS, type Gr4jParams } from '../runoff/gr4j';
-import { LEGACY_PARAMS } from '../runoff/legacy';
-import { GR4J_NO_PET, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { gr4j } from '../runoff/gr4j';
+import { GR4J_PARAMS, LEGACY_PARAMS, type Gr4jParams } from '../runoff/params';
+import { GR4J_NO_PET } from '../runoff/pet';
+import { runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { calibrate, MAX_STARTS, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
+import { calibrate, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
+import { MAX_STARTS } from './params';
 import { fitScores } from './objective';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];

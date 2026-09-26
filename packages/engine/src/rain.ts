@@ -29,9 +29,8 @@
 // keep-dry) and on every period the settings list as missing, before rain used
 // is picked. Those days then take corrected CHIRPS, then forecast rain, like
 // any blank day. The stored series is never changed.
-import { monthOfEpochDay, toEpochDay } from './calendar';
+import { monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX, exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
-import { waterYearOf } from './network/stats';
 import {
 	ACCUMULATION_MODES,
 	CHIRPS_FIT_PERIOD_MODES,
@@ -46,7 +45,7 @@ import {
 	type ZeroRainMode,
 	type ZeroRainSettings
 } from './project';
-import { rainVsChirps, usualAnnualRainMm, waterYearLabel, zeroRainRuns } from './quality';
+import { rainVsChirps, usualAnnualRainMm, zeroRainRuns } from './quality';
 
 /** A calendar month's own factor needs this many days where both series have a reading … */
 export const CHIRPS_FACTOR_MIN_DAYS = 90;

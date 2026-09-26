@@ -52,6 +52,9 @@ No env files to write. `backend/.env.development` and
 | `STORAGE` | `local` | Where PDFs go: `local` = MinIO from docker-compose; `s3` in production |
 | `REPORTS_BUCKET` / `S3_ENDPOINT` | `water-reports` / `http://127.0.0.1:9002` | The bucket (created on first use) and MinIO's API |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
+| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
+| `API_PUBLIC_URL` | `http://localhost:3001` | Where a mail client posts an alert's one-click unsubscribe (production: `SITE_URL/api`, the default) |
+| `ALERTS_ENABLED` / `ALERTS_DAILY_CAP` | `true` / `5` | The alert kill switch, and immediate alert emails per person per day |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
 
 To override something on your machine, create a gitignored
@@ -140,11 +143,35 @@ still succeeds. If you'd rather not run it at all, put `MAIL_TRANSPORT=log` in
 to the backend console instead. The DB tests use an in-memory transport and
 the e2e stack uses `log`, so neither needs Mailpit.
 
+## Alerts
+
+Alert emails (WP-2.13, [architecture.md § Alert emails](./architecture.md#alert-emails))
+go to Mailpit like every other email, sent by the worker, so run
+`pnpm dev:full` (or `pnpm dev:run:worker` beside `pnpm dev`) and
+`pnpm dev:mail:up`. To try them:
+
+1. In a catchment with a published run, open Overview → **Set up alert
+   emails**, switch **Farm dams** on for a farm and set the level above its
+   dam (say 99 %), then Save. That evaluates at once: the worker opens the
+   alert and mails the farm's farmers (`seed:examples`' farmer1@ /
+   farmer2@example.com) and the editors and owners.
+2. Mailpit shows the mail with its *Stop these emails* link
+   (`/alerts/unsubscribe#t=…`) and its `List-Unsubscribe` headers; the
+   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`.
+3. Lower the level below the dam (plus 5 points) and save to clear it; raise
+   it again for a second crossing and a second mail.
+4. Each person's choices are at `/account/alerts`. More than 5 immediate
+   alerts in a day go into the next 06:00 (SAST) digest: `pnpm dev:jobs:tick`
+   sends what is due.
+
+`ALERTS_ENABLED=false` in `backend/.env.development.local` is the kill
+switch (restart the worker): nothing is sent, and waiting mails are dropped.
+
 ## Background jobs
 
 Some work runs later, in a worker, instead of inside a request: a queued
 model run (`POST /projects/:id/jobs`), the data feeds (below), automatic
-re-runs after new data, and in step 2 alerts ([architecture.md § Background work](./architecture.md#background-work)).
+re-runs after new data, and alert emails ([architecture.md § Background work](./architecture.md#background-work)).
 Locally the worker is one Node process against the same Postgres, with no AWS
 and no queue emulator (`JOB_TRANSPORT=inprocess`, the default). It is opt-in:
 
@@ -371,7 +398,15 @@ pnpm test                   # unit tests (engine, frontend, backend) with no DB
 pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF when MinIO is up, and skips (saying so) when it isn't
 pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
+pnpm check:i18n             # the Afrikaans translation sheet (docs/i18n/af-translation-sheet.md) is current
+pnpm gen:i18n:sheet         # rewrite it after adding or changing a message, or landing an Afrikaans translation
 ```
+
+**Afrikaans locally.** Pick "Afrikaans" on the sign-in page, the farm view
+or the account page. Until reviewed wording lands in
+`frontend/src/lib/i18n/messages/af.ts`, the words stay English and only the
+farm view's decimal comma changes; the farmer emails in Mailpit likewise
+stay English ([ui.md § Language](./ui.md#language)).
 
 The client catchment regression data comes from the import step above
 (`expected.json`) and from the extractors in `scripts/wbt-import/`, all written

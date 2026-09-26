@@ -8,7 +8,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 ## Authentication
 
 - **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12; 4 under vitest only, `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
+  (`bcryptjs`, cost 12; 4 under vitest and on the e2e API server, which sets `PASSWORD_HASH_COST=4`, an override Lambda refuses at startup; `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
@@ -287,6 +287,35 @@ and nothing else.
   deleted (`created_by` NULL), the re-run is **skipped** (no job,
   `rerunQueuedFor: null`) and the ingest still commits: never a run as
   nobody, never lost data.
+- **A push that looks wrong holds the automatic runs** (WP-2.16, the
+  "leaked or mis-configured gateway key" abuse case; `series/hold.ts`). A
+  key's days that the engine's data-quality rules flag (a negative rain or
+  flow, or a value above its series' outlier limit) are merged, so nothing
+  is lost, but the merge records `series.held` as the key, queues no re-run
+  and answers `rerunHeld`; the re-run handler then does nothing while a
+  `series.held` event is newer than the project's latest run a person made,
+  so neither an already-queued re-run nor a later clean push can carry the
+  bad days into an automatic run, or an automatic publication. The hold
+  ends when a person runs the model. A person's own merge is never held; a
+  data feed's values are checked by its parser. The outlier limit is the
+  engine's (5× the 99th percentile of the series' non-zero days for rain,
+  10× for flow), taken from the series **without** the push (its days before
+  the merge, less the days the push overwrites), so one push can't lift the
+  limit over itself. **Limits** (a partial mitigation):
+  - a plausible wrong value, inside the series' usual range, isn't caught;
+  - the outlier rule needs 100 non-zero days in the series, so a new or
+    short series is checked for negatives only;
+  - days an earlier push of the same key wrote still count towards the
+    limit (a series keeps no per-day author), so a key that poisons slowly,
+    push by push, can shift the 99th percentile it is later judged by
+    (followups.md § POPIA and the Step 2 release tracks excluding them).
+
+  Recovery is the runbook in
+  [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
+  days from the key's events, re-push; a key's merge keeps no series
+  revision). Tests: `ingest/ingest.db.test.ts` (held, not queued, the
+  handler waiting, a person's run ending it, a person's merge not held),
+  `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
@@ -316,6 +345,117 @@ and nothing else.
   `timingSafeEqual` whichever byte differs), `routes.test.ts` (the ingest
   routes key-gated, the owner routes session-gated) and
   `e2e/tests/api-keys.spec.ts`.
+
+## Alerts
+
+Email alerts (roadmap WP-2.13; `051_alerts.sql`, [api.md § Alerts](./api.md#alerts),
+[data-model.md § Alerts](./data-model.md#alerts-051_alertssql)). The risks
+are mail-bombing (a loop, a flapping figure or a hostile editor mailing
+people over and over), an unsubscribe link that can be forged or turned
+against its owner, and a farmer's mail naming a neighbour's farm.
+
+- **Opt-in per catchment.** Nothing is evaluated or sent until an editor
+  switches a kind on (`PUT /projects/:id/alert-rules`, recorded as
+  `alert_rules.changed`). The WUA decides when its members start getting
+  mail, as it decides when a run is published.
+- **Rate limits, in layers.**
+  - *Once per crossing.* A rule has at most one firing event (a partial
+    unique index), and it re-arms only after the value recovers past the
+    threshold **plus a margin** (dam level + 5 points; other kinds in
+    [api.md § Alerts](./api.md#alerts)), so a figure hovering at the line
+    sends one mail, not one a day (`alerts/rules.ts`, `rules.test.ts`).
+    A cleared event never fires again (`alert_event_guard`).
+  - *Once per event per person, ever.* `alert_delivery`'s primary key is
+    `(event_id, user_id)`, and `app_alert_fan_out` refuses an event older
+    than an hour, so an old event can't be mailed out again.
+  - *At most 5 immediate alert emails per person per day*
+    (`ALERTS_DAILY_CAP`), the day running from 06:00 to 06:00 South African
+    time; the rest wait for that person's next 06:00 digest, one email per
+    catchment. A digest is bounded too: at most 20 alerts written out
+    (`DIGEST_MAX_LINES`, the newest), then "…and N more" with a link to the
+    app, all marked sent with it; and at most 200 lines a person are claimed
+    for one digest (`app_alert_claim_digest`), older ones skipped as over the
+    limit, so a flapping rule can't build a huge email or a backlog. The cap is applied when a delivery is claimed, one person at
+    a time under an advisory lock, so two workers can't both send the sixth.
+    This bounds what any source can send a person, a hostile editor
+    flapping thresholds included (their edits are in the audit log).
+  - *Never twice after a crash.* A delivery is marked `sending` before the
+    mail goes and `sent` after; one left `sending` past its lease is marked
+    `failed`, never re-sent. A transport error is retried at most 3 times.
+  - *The kill switch.* `ALERTS_ENABLED=false` on the worker stops every send
+    and drops what was waiting (`app_alert_skip_all`), so turning it back on
+    doesn't release the storm; events still open and clear, so the app
+    stays right ([deployment.md § Runbooks](./deployment.md#runbooks), alert
+    storm; the `alert_storm` CloudWatch alarm).
+- **Recipients, and access at send time.** `app_alert_recipients` (SECURITY
+  DEFINER, search path pinned) lists who gets a kind from each member's
+  **current** role (direct or through the team), their choice and the
+  kind's default; applicants never, farmers only their own farms' dam
+  alerts and the restriction notices, unverified addresses never. It
+  answers an editor of the project (the job's acting user) or the worker's
+  own context, and nobody else. When the mail is built, the worker opens a
+  transaction **as the recipient** (`withUser`) and asks
+  `app_alert_my_mode` again: a member removed after the event, or who
+  turned the alert off, gets nothing (the delivery is `skipped` with why).
+- **A farmer's mail names only their own farm.** The mail is built as the
+  recipient under RLS: the event (`alert_event` RLS: a farmer sees their own
+  farms' events and the notice events), the farm's name (`node` RLS) and the
+  notice (`run_publication`) are read with the farmer's rights, so the mail
+  can't contain a row they may not read. A dam event's `detail` comes from
+  that farm's own publication projection. Tests scan the rendered farmer
+  mail for every other farm's name (`alerts.db.test.ts`, `mail/alerts.test.ts`).
+  The dam figure is the **published** projection's, never an unpublished
+  run's: a farmer is told only what the WUA stands behind.
+- **The unsubscribe token.**
+  - Each subscription has a random 32-byte nonce; its token is
+    HMAC-SHA256(`ALERTS_TOKEN_SECRET`, nonce), base64url (43 characters),
+    and the row stores only the token's SHA-256 (`unsubscribe_hash`,
+    unique). Only the worker holds the secret (it builds the mails, and
+    derives the same token for every mail, so a link in an old mail keeps
+    working); the API checks a token by its hash alone and has no secret to
+    leak. Neither a database leak (nonce and hash) nor the secret alone
+    makes a valid token.
+  - It **only ever turns its own subscription off**
+    (`app_alert_unsubscribe`), without signing in: a leaked link can at
+    worst stop one person's alerts of one kind (a digest's, all of one
+    catchment's), and "Manage your alerts" turns them back on.
+  - *Tampered*: hashes to nothing, `404`. *Replayed after a re-enable*:
+    turning a choice back on draws a new nonce and clears the hash, so the
+    old link is dead. *Expired*: there is no time limit (old mails must keep
+    working), but a token whose person is no longer a member (or, a farmer,
+    no longer linked to the farm) is refused. A repeat of a valid token is
+    harmless (a mail client may post twice).
+  - *Where it travels.* The mail's link is `/alerts/unsubscribe#t=<token>`:
+    in the fragment, like share links, so it never reaches a server log;
+    the page strips it from the address bar and POSTs it as JSON. The RFC
+    8058 `List-Unsubscribe` header must carry it in the URL
+    (`/api/alerts/unsubscribe?token=…`: a mail client's one-click post has a
+    fixed body), so that one address can appear in CloudFront, WAF and API
+    access logs; its worst use is the one above.
+  - *The page asks first.* The landing page shows "Stop these emails" and
+    acts on the click, not on arrival, so a mail scanner that opens (and
+    even renders) links can't silently switch a farmer's dam alerts off.
+    The one-click header is the one-click path.
+  - *CSRF.* `POST /alerts/unsubscribe` is the only route exempt from the
+    `csrf()` check (`app.ts`, exact method and path): a mail client
+    form-posts it from its own servers with no Origin. It reads no session
+    cookie, so a forged cross-site post can do only what the token's holder
+    could do anyway. `routes.test.ts` checks the exemption stays that
+    narrow (the same form post to any other route is refused).
+  - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
+    can't be guessed.
+- **Headers.** `List-Unsubscribe`, `List-Unsubscribe-Post:
+  List-Unsubscribe=One-Click` and `Auto-Submitted: auto-generated` go out on
+  every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
+  `headers`). `sendMail` makes every header value one line and refuses a
+  header name that isn't a token, so no user text can inject a header.
+- **Liability.** Every alert says it is a model estimate from the WUA's
+  published figures, not a measurement or an instruction, and to check with
+  the WUA before acting; a forecast says forecasts change; a restriction
+  notice says it is the WUA's own words.
+- **Not built yet.** SES suppression (a bounce or complaint turning the
+  address's alerts off, with a banner in the app) waits for the SES event
+  destination ([followups.md § Alerts](./followups.md)).
 
 ## Authorization: per-project roles enforced by Postgres RLS
 
@@ -400,7 +540,8 @@ In short:
   note or a run, settings, project or other farm's note. Only the author
   edits a body (`note_guard`); a delete is soft, the body kept for editors'
   audit trail and hidden from everyone else. Bodies are plain text, rendered
-  with Svelte's escaping (no `{@html}`, no markdown). The project export
+  with Svelte's escaping (no `{@html}`, no markdown; the `rawHtml.test.ts`
+  guard, [§ Input handling](#input-handling)). The project export
   (`export.json`, viewers and above) carries the undeleted notes the
   exporter can read and never a deleted body, even to an editor; the import
   ignores them and a copy takes none, so a note is never re-authored under
@@ -587,13 +728,23 @@ In short:
     `SECURITY DEFINER` `app_published_run_input` / `app_published_run_series`
     (only a run a publication names, only to a contributor or above); what
     leaves is the applicant projection (`scenarios/applicant.ts`: their own
-    farms and the gauges in full, every other node anonymised and blanked,
-    engine messages renamed). The DB test scans everything the applicant
-    received for another farm's name. RLS still lets a contributor `SELECT`
-    their own application runs' rows, whose `inputs` snapshot holds the base
-    (every farm), as it does for a farmer's publication note: the API never
-    returns them, and the durable fix, a per-run projection so RLS itself
-    can't hand them over, is tracked in [followups.md § Applicants](./followups.md#applicants-wp-33).
+    farms and the gauges in full, every other node anonymised and blanked).
+    An application is checked in its applicant's namespace (049: the engine
+    meets every hidden node under its anonymous name and every hidden crop
+    under a name made of its id, `applyScenario`'s `maskedNames`), so its
+    messages quote no hidden name without any text redaction. The DB test scans everything the applicant
+    received for another farm's name. RLS gives a contributor no run row
+    at all, their own application's included (046_contributor_runs), since
+    its `inputs` snapshot is the whole base with the ops applied: the run
+    count, last run and a new run's metadata come through the `SECURITY
+    DEFINER` `app_scenario_run_meta` (never `inputs` or `summary`), and the
+    owner's run cap through `app_trim_application_runs`. Of an application
+    run's series they read its own nodes' and the catchment allowlist
+    (under the share links' k), never another farm's. The one deliberate
+    path to a full input in a contributor's transaction is
+    `app_published_run_input` / `app_published_run_series`, which the
+    server needs to run the application and projects before anything
+    leaves.
   - **Drafts are private, even from the assessors.** Who reads an
     application is one function (`app_scenario_visible`), and its runs and
     their series follow it; editors see it once submitted, viewers once
@@ -612,12 +763,24 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
-  - **Known oracles, accepted for now.** Sharing an application by email
-    answers the same `404` for an unknown address and a non-member, but a
-    success tells the applicant that address is a contributor-or-above
-    member. Renaming their own farm to a neighbour's name gets the engine's
-    duplicate-name problem, which says a node of that name exists (the name
-    itself comes back anonymised). Both are in followups.md.
+  - **No existence oracles** (049_applicant_oracles,
+    `scenarios/oracles.db.test.ts`: each probe answered identically for the
+    hidden and the free case, each with a positive control).
+    *Sharing*: an applicant can't name an address; they pick from
+    `…/share-candidates`, the other members of their own applying party as
+    the project owner set it, and every other id (a member or not) gets one
+    `404`, every address one `403`; the insert trigger enforces the same rule
+    (`app_share_allowed`), and moving someone out of a party ends the shares
+    it allowed. *Names*: renaming their own farm to a hidden neighbour's
+    name, or naming a crop like a hidden one, applies exactly as a free name
+    does; the hidden one is renamed with a suffix in that application's runs,
+    and only the assessors are told (`check.renamed`). An application's name
+    is unique among its owner's applications only, so naming a draft after
+    someone else's says nothing either. What remains: the id of a hidden
+    crop, transfer, land-cover patch or borehole can still be probed by an
+    op that targets or reuses it, which needs the id (random UUIDs from the
+    UI; imports derive them from the project and element names) and is
+    tracked in followups.md with the counts an op on a hidden farm reports.
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.
@@ -755,8 +918,16 @@ In short:
     never the answer). A compromised fetcher could at worst send wrong
     numbers for the days feeds asked it for, into the series those feeds
     already target.
-- Svelte escapes output by default. Don't use `{@html}` with user-supplied names
-  (farms, crops, projects).
+- Svelte escapes output by default, and nothing in the frontend renders a
+  string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
+  `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
+  `bind:innerHTML` / `bind:outerHTML` on a contenteditable element.
+  `frontend/src/lib/rawHtml.test.ts` fails on any of them anywhere under
+  `src/` (WP-2.16: notes, the WUA's notice, the share page and every name a
+  person types are text). Help text has its own parser (`lib/help`), not
+  HTML. A real need for markup would need a sanitiser and a reasoned entry in
+  that guard. Mail templates escape every interpolated value
+  (`mail/templates.ts` `escapeHtml`, `templates.test.ts`).
 - **CSV exports defuse spreadsheet formulas.** Farm, run and series names are
   user-controlled and the files are opened in Excel by other project members,
   so any text cell starting with `= + - @`, tab or CR gets a leading `'`
@@ -824,8 +995,85 @@ database:
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does.
-- Still open with the rest of POPIA (Known gaps below): allocations and names
-  in a data-subject export and deletion.
+- Still open with the rest of POPIA ([§ Personal information](#personal-information-popia)):
+  allocations and names in a data-subject export.
+
+## Personal information (POPIA)
+
+What the app keeps about people, why, for how long, and what happens on a
+data-subject request, as built at the end of Step 2 (roadmap WP-2.16). This
+is a record of the system, not legal advice: the lawful bases below are how
+the roadmap reads them, and every one marked *(confirm)* is an open item for
+the client's information officer ([followups.md § POPIA and the Step 2
+release](./followups.md#popia-and-the-step-2-release-wp-216)). Loop in the
+CISO or security analyst before go-live.
+
+**Roles.** The client (the WUA, or the consultancy for a hydrologist-only
+project) is the **responsible party**: it decides whom to invite and why.
+The operator (whoever runs this deployment) is its **operator** under POPIA
+s20–21 and needs a written agreement with it *(confirm)*. Farmers are invited
+by the WUA; nobody is added to a project without an owner acting.
+
+**Lawful basis and consent, today.**
+- Accounts, memberships and farm links: to provide the service the member
+  signed up for, and for farmers the WUA's function of managing its members'
+  water use (legitimate interest or a legal duty under its constitution)
+  *(confirm)*. There is **no consent screen and no privacy notice yet**:
+  both are needed before a farmer is invited on production.
+- Notes, the audit log, publications and sign-offs: the project's record,
+  kept for the regulator's audit trail (roadmap §7).
+- Alerts (WP-2.13): service messages the WUA switches on per catchment,
+  each person choosing right away, daily or off, with a one-click
+  unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
+- Cookies: one session cookie (`wm_session`, strictly necessary). No
+  analytics, no third-party scripts or fonts (the CSP allows none), so no
+  cookie banner.
+- Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
+  in the region chosen at deploy (`af-south-1` recommended; any other region
+  is a cross-border transfer under s72 *(confirm)*). The data-feed hosts
+  (CHIRPS, DWS) receive no personal data ([§ Input handling](#input-handling)).
+
+**What is kept, and what deletion does.** Every foreign key to `app_user` is
+classified (cascade, set null, or restrict) in `catalogue.db.test.ts`
+`APP_USER_ON_DELETE`, and every foreign key to `project` cascades (the same
+file), so a new column can't ship without a decision.
+`auth/account-deletion.db.test.ts` checks the outcome end to end.
+
+| Data | Tables | Retention | Account deleted | Project deleted |
+| --- | --- | --- | --- | --- |
+| Account: email, display name, password hash, session watermark | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
+| Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
+| Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
+| Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
+| A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
+| Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
+| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
+| Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
+| API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
+| Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
+| Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
+| Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
+| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
+| Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination holds the project |
+| Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
+| Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
+| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
+
+**Data-subject requests.**
+- **Access / export: not built.** There is no "download my data" yet
+  (plan.md Phase 7). Until then the operator answers a request by querying
+  the tables above for the person (the WUA confirms who is asking). The
+  project exports (`export.json`, CSV, the farm CSV) are project data, not a
+  data-subject export.
+- **Deletion: an operator act.** There is no self-service deletion. On a
+  request the operator deletes the `app_user` row as the schema owner
+  ([deployment.md § Runbooks](./deployment.md#runbooks), item 7): the table
+  above is what happens. An account that made evidence (the last row but
+  two) can't be deleted until the operator and the client decide what
+  happens to it.
+- **Correction:** a person edits their own name (Account); an owner fixes
+  anything else in the project.
 
 ## Public repo hygiene
 
@@ -993,7 +1241,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- POPIA: privacy notice, data export and account deletion. (Phase 7)
+- POPIA: no privacy notice, no data-subject export and no self-service
+  account deletion yet (Phase 7); what exists today and the open items are in
+  [§ Personal information](#personal-information-popia).
 
 ## Incident playbook
 

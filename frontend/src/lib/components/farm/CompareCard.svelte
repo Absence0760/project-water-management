@@ -2,6 +2,7 @@
 	// "Compared with last season" (design §3 Q1, E4): the same dates a year
 	// earlier, from the same published run.
 	import type { FarmProjection } from '@water-management/engine';
+	import { t } from '$lib/i18n/locale.svelte';
 	import { compareCard } from './cards';
 
 	let { farm }: { farm: FarmProjection } = $props();
@@ -9,7 +10,7 @@
 </script>
 
 <section class="card" aria-labelledby="cmp-h">
-	<h2 id="cmp-h">Compared with last season</h2>
+	<h2 id="cmp-h">{t('farm.compare.title')}</h2>
 	{#if vm.available}
 		<table>
 			<thead>

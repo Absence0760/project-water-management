@@ -43,3 +43,12 @@ export function fromEpochDay(day: number): string {
 export function monthOfEpochDay(day: number): number {
 	return new Date(day * 86_400_000).getUTCMonth() + 1;
 }
+
+/** South African water year (Oct–Sep) of an epoch day, labelled by the year it starts in. */
+export function waterYearOf(epochDay: number): number {
+	const year = new Date(epochDay * 86_400_000).getUTCFullYear();
+	return monthOfEpochDay(epochDay) >= 10 ? year : year - 1;
+}
+
+/** "2016/17" for water year 2016. */
+export const waterYearLabel = (wy: number) => `${wy}/${String((wy + 1) % 100).padStart(2, '0')}`;

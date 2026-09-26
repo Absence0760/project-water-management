@@ -14,6 +14,7 @@
 		isOwner,
 		canDecide,
 		problems,
+		locked = false,
 		onchange,
 		onleft
 	}: {
@@ -25,6 +26,12 @@
 		canDecide: boolean;
 		/** How many of its changes don't apply to its base (a submit is refused until none). */
 		problems: number;
+		/**
+		 * The scenario editor is running it or saving it: the status moves wait,
+		 * or the run's re-read of the scenario could land after a submit and put
+		 * the old status back on screen.
+		 */
+		locked?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
 		/** You stopped reading it (left the share): it leaves your list. */
 		onleft: () => void;
@@ -66,17 +73,39 @@
 	}
 
 	// --- sharing -------------------------------------------------------------------------
-	let email = $state('');
+	// The owner picks from the people the server lists for them (an applicant:
+	// their own party, which the project owner sets), never types an address:
+	// nothing they can send says who else is a member (049).
+	let candidates = $state<Scenario['members'] | null>(null);
+	let pick = $state('');
+	const pickable = $derived((candidates ?? []).filter((c) => !s.members.some((m) => m.userId === c.userId)));
+	// Fetched once per application, not again each time the scenario object is replaced.
+	const scenarioId = $derived(s.id);
+	$effect(() => {
+		if (!isOwner) return;
+		const sid = scenarioId;
+		candidates = null;
+		api.scenarios.shareCandidates(projectId, sid).then(
+			(c) => {
+				if (sid === scenarioId) candidates = c;
+			},
+			(err) => {
+				candidates = [];
+				error = msg(err);
+			}
+		);
+	});
 	async function share(e: SubmitEvent) {
 		e.preventDefault();
-		if (!email.trim()) return;
+		const who = pickable.find((c) => c.userId === pick);
+		if (!who) return;
 		busy = true;
 		error = null;
 		try {
-			const members = await api.scenarios.share(projectId, s.id, email.trim());
+			await api.scenarios.share(projectId, s.id, who.userId);
 			onchange(await api.scenarios.get(projectId, s.id));
-			note = `Shared with ${members.at(-1)?.displayName ?? email.trim()}.`;
-			email = '';
+			note = `Shared with ${who.displayName}.`;
+			pick = '';
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -125,11 +154,11 @@
 	{#if isOwner}
 		<div class="actions">
 			{#if s.status === 'draft'}
-				<button type="button" class="btn btn-primary" disabled={busy || problems > 0} onclick={submit}>Submit to the assessors</button>
+				<button type="button" class="btn btn-primary" disabled={busy || locked || problems > 0} onclick={submit}>Submit to the assessors</button>
 			{:else if s.status === 'submitted'}
-				<button type="button" class="btn" disabled={busy} onclick={withdraw}>Withdraw</button>
+				<button type="button" class="btn" disabled={busy || locked} onclick={withdraw}>Withdraw</button>
 			{:else if s.status === 'withdrawn'}
-				<button type="button" class="btn" disabled={busy} onclick={reopen}>Reopen as a draft</button>
+				<button type="button" class="btn" disabled={busy || locked} onclick={reopen}>Reopen as a draft</button>
 			{/if}
 		</div>
 		{#if s.status === 'draft' && problems > 0}<p class="hint">Remove the changes that don't apply before submitting.</p>{/if}
@@ -148,7 +177,7 @@
 				<label for="decide-note">Reasons and conditions</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons}></textarea>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || !outcome}>Record the decision</button>
+			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome}>Record the decision</button>
 			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
 	{/if}
@@ -172,15 +201,24 @@
 			<p class="muted">Nobody else.</p>
 		{/if}
 		{#if isOwner}
-			<form class="form-row" onsubmit={share}>
-				<div class="field grow">
-					<label for="share-email">Share with (a member of this project, by email)</label>
-					<input id="share-email" type="email" placeholder="consultant@example.com" bind:value={email} />
-				</div>
-				<div class="field">
-					<button type="submit" class="btn" disabled={busy || !email.trim()}>Share</button>
-				</div>
-			</form>
+			{#if candidates && !pickable.length}
+				<p class="hint" data-testid="share-none">
+					{candidates.length ? 'Everyone you can share it with already reads it.' : 'Nobody to share it with yet: the project owner lists who is in your party (your consultant or client).'}
+				</p>
+			{:else if candidates}
+				<form class="form-row" onsubmit={share}>
+					<div class="field grow">
+						<label for="share-who">Share with</label>
+						<select id="share-who" bind:value={pick}>
+							<option value="">Choose someone…</option>
+							{#each pickable as c (c.userId)}<option value={c.userId}>{c.displayName}</option>{/each}
+						</select>
+					</div>
+					<div class="field">
+						<button type="submit" class="btn" disabled={busy || !pick}>Share</button>
+					</div>
+				</form>
+			{/if}
 		{/if}
 	</div>
 

@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { daysPerMonth, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
-import { defaultWr2012Settings, type Wr2012Settings } from '../reference/wr2012';
 import { runModel } from '../run';
 import { calibrate, prepareCalibration } from './calibrate';
+import { defaultWr2012Settings, type Wr2012Settings } from '../reference/wr2012Settings';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({

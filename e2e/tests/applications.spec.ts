@@ -97,6 +97,47 @@ test('the Applications tab says so when nothing is submitted, and a draft stays 
 	await expect(page.getByRole('button', { name: /^A draft/ })).toHaveCount(0);
 });
 
+test('the owner puts an applicant and their consultant in one party, and the applicant shares from that list', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Party applicant');
+	const consultant = await signIn('Party consultant');
+	const rival = await signIn('Rival applicant');
+	const { project, runId } = await seedApplicantProject(page, 'Applications sharing', applicant.user);
+	for (const u of [consultant.user, rival.user]) await addMember(page.request, project.id, u.email, 'contributor');
+	const created = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: NAME, baseRunId: runId } });
+	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	const a = applicant.page;
+
+	// Before any party: nobody to share with, and no address box to probe.
+	await a.goto(`/projects/${project.id}?scenario=${sid}`);
+	await expect(a.getByTestId('share-none')).toContainText('Nobody to share it with yet');
+	await expect(a.getByRole('textbox', { name: /email/i })).toHaveCount(0);
+
+	// The owner groups the applicant and the consultant in the Members panel.
+	await page.goto(`/projects/${project.id}`);
+	const members = page.getByRole('region', { name: 'Members' });
+	for (const u of [applicant.user, consultant.user]) {
+		const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${u.id}`));
+		const party = members.getByLabel(`Applying party for ${u.displayName}`);
+		await party.fill('Upper farm trust');
+		await party.press('Enter');
+		expect((await saved).status()).toBe(200);
+	}
+
+	// The applicant picks the consultant; the rival is never offered.
+	await a.reload();
+	const who = a.getByLabel('Share with');
+	await expect(who.getByRole('option')).toHaveText(['Choose someone…', 'Party consultant']);
+	await who.selectOption({ label: 'Party consultant' });
+	await a.getByRole('button', { name: 'Share', exact: true }).click();
+	await expect(a.getByTestId('application-panel').getByRole('listitem')).toContainText('Party consultant');
+	await expect(a.getByTestId('share-none')).toHaveText('Everyone you can share it with already reads it.');
+
+	// The consultant now reads the draft.
+	await consultant.page.goto(`/projects/${project.id}?scenario=${sid}`);
+	await expect(consultant.page.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
 	test(`the Applicant view and the Applications tab have no violations (${colorScheme})`, async ({ page, owner, signIn }) => {
 		void owner;

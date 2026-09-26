@@ -10,7 +10,7 @@
 import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type Borehole, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
-import { GR4J_PARAMS } from '../runoff/gr4j';
+import { GR4J_PARAMS } from '../runoff/params';
 import { DEFAULT_ASSURANCE_POINTS } from '../reserve/rules';
 import type { RunoffModelId } from '../runoff/types';
 

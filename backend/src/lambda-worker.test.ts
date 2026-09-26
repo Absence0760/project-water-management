@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TickResult } from './jobs/runner.js';
 
-const tick: TickResult = { purged: 1, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 } };
+const tick: TickResult = { purged: 1, invitesPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
+	alerts: { scheduled: 0, purged: 0, sent: 7, skipped: 1, failed: 2, digests: 1 }
+};
 const runTick = vi.fn(async (_o?: unknown) => tick);
 vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
 const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
@@ -22,8 +24,8 @@ describe('metricLine', () => {
 		expect(line._aws.Timestamp).toBe(1_700_000_000_000);
 		expect(line._aws.CloudWatchMetrics[0].Namespace).toBe(METRIC_NAMESPACE);
 		expect(METRIC_NAMESPACE).toBe('water-management/Jobs');
-		expect(line._aws.CloudWatchMetrics[0].Metrics.map((m: { Name: string }) => m.Name)).toEqual(['OldestDueJobAgeSeconds', 'JobsDead', 'JobsFailed']);
-		expect(line).toMatchObject({ OldestDueJobAgeSeconds: 420, JobsDead: 1, JobsFailed: 1 });
+		expect(line._aws.CloudWatchMetrics[0].Metrics.map((m: { Name: string }) => m.Name)).toEqual(['OldestDueJobAgeSeconds', 'JobsDead', 'JobsFailed', 'AlertMailsSent', 'AlertMailsFailed']);
+		expect(line).toMatchObject({ OldestDueJobAgeSeconds: 420, JobsDead: 1, JobsFailed: 1, AlertMailsSent: 7, AlertMailsFailed: 2 });
 	});
 });
 

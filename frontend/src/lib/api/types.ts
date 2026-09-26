@@ -45,6 +45,10 @@ export interface User {
 	displayName: string;
 	/** False until the address is confirmed via the emailed link (VerifyEmailBanner). */
 	emailVerified?: boolean;
+	/** The farmer-facing pages' and emails' language (app_user.locale, WP-2.5); null = not chosen, follow the browser. */
+	locale?: 'en' | 'af' | null;
+	/** How the farm view shows volumes (app_user.volume_unit, WP-2.5). */
+	volumeUnit?: 'm3' | 'ML';
 }
 
 /**
@@ -160,6 +164,8 @@ export interface Member {
 	email: string;
 	displayName: string;
 	role: Role;
+	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
+	party: string | null;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -276,9 +282,88 @@ export interface PortfolioProject {
 	lowestDamPct: { nodeName: string; pct: number } | null;
 	damsKnown: boolean;
 	feeds: { total: number; ok: number; failing: number };
-	/** Firing alerts: always null until WP-2.13 (alerts) is built. */
-	alertsFiring: number | null;
+	/** Alerts firing now (WP-2.13); 0 when none, or when the catchment has no alert switched on. */
+	alertsFiring: number;
 	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
+}
+
+// ---- Alerts (WP-2.13, docs/api.md § Alerts) --------------------------------
+
+export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing';
+export type AlertMode = 'immediate' | 'daily_digest' | 'off';
+
+/** One choice on /account/alerts. */
+export interface AlertChoice {
+	kind: AlertKind;
+	/** A farmer's farm (their dam alerts are per farm); null for a kind-wide choice. */
+	nodeId: string | null;
+	nodeName: string | null;
+	/** What you get now. */
+	mode: AlertMode;
+	/** What your role gets by default. */
+	defaultMode: AlertMode;
+	/** You chose it (rather than the default). */
+	chosen: boolean;
+	/** The catchment has this alert switched on; off, you get nothing whatever you choose. */
+	ruleOn: boolean;
+}
+
+/** GET /me/alerts: one catchment's choices. */
+export interface ProjectAlerts {
+	id: string;
+	name: string;
+	role: 'farmer' | 'viewer' | 'editor' | 'owner';
+	/** Every alert email for the catchment is off (a digest's unsubscribe). */
+	muted: boolean;
+	choices: AlertChoice[];
+}
+
+export interface AlertChoiceChange {
+	kind: AlertKind | 'all';
+	nodeId?: string | null;
+	mode: AlertMode;
+}
+
+/** GET /projects/:id/alert-rules (editor). */
+export interface AlertRule {
+	/** null: not saved yet (a default, off). */
+	id: string | null;
+	kind: AlertKind;
+	nodeId: string | null;
+	nodeName: string | null;
+	/** dam_below: a fraction of capacity (0.3 = 30 %); the others whole days, failures or jobs; restriction_published 0. */
+	threshold: number;
+	enabled: boolean;
+	firing: boolean;
+}
+
+export interface AlertRuleChange {
+	kind: AlertKind;
+	nodeId?: string | null;
+	threshold: number;
+	enabled: boolean;
+}
+
+/** GET /projects/:id/alert-events: what the caller may see (a farmer, their farms' alerts and the notices). */
+export interface AlertEvent {
+	id: string;
+	kind: AlertKind;
+	state: 'firing' | 'cleared';
+	value: number | null;
+	threshold: number;
+	nodeId: string | null;
+	nodeName: string | null;
+	openedAt: string;
+	clearedAt: string | null;
+	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
+	detail: Record<string, unknown>;
+}
+
+/** POST /alerts/unsubscribe (the landing page's JSON form). */
+export interface Unsubscribed {
+	kind: AlertKind | 'all';
+	project: { name: string };
+	farm: string | null;
 }
 
 export interface Portfolio {
@@ -622,6 +707,12 @@ export interface Scenario {
 	opsSha256: string;
 	/** The proposer's own nodes: ops on them are proposals, the rest baseline assumptions. */
 	ownedNodeIds: string[];
+	/**
+	 * Names of the nodes and crops the ops name, kept by the server from the
+	 * base run's snapshot when the ops were written, so an op on a node a
+	 * rebase dropped still reads by name. Sorted by id.
+	 */
+	opNames: { id: string; name: string }[];
 	ownerUserId: string;
 	/** The owner's display name. */
 	owner: string | null;
@@ -677,6 +768,12 @@ export interface ScenarioCheck {
 	applied: AppliedOp[];
 	problems: string[];
 	classified: OpClass[];
+	/**
+	 * An application's farms and crops, hidden from its applicant, renamed in
+	 * its runs because the applicant gave one of their own that name (049).
+	 * Sent to viewers and up only, never to an applicant.
+	 */
+	renamed?: { kind: 'node' | 'crop'; id: string; name: string; as: string }[];
 }
 
 /**

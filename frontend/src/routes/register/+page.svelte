@@ -9,6 +9,8 @@
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import { i18n, readStoredLocale, t, tRich } from '$lib/i18n/locale.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -49,11 +51,11 @@
 		resendMsg = null;
 		try {
 			await emailAuth.resendVerification();
-			resendMsg = 'Sent. Check your inbox (and spam folder) for the confirmation link.';
+			resendMsg = t('register.resent');
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409 && session.user) {
 				session.user = { ...session.user, emailVerified: true };
-				resendMsg = 'Your address is already confirmed.';
+				resendMsg = t('register.alreadyConfirmed');
 			} else resendMsg = err instanceof Error ? err.message : String(err);
 		} finally {
 			resending = false;
@@ -79,9 +81,9 @@
 
 	const target = $derived(
 		invite?.projectName
-			? `the project ${invite.projectName}`
+			? t('register.targetProject', { name: invite.projectName })
 			: invite?.teamName
-				? `the team ${invite.teamName}`
+				? t('register.targetTeam', { name: invite.teamName })
 				: 'Water Management'
 	);
 
@@ -93,7 +95,7 @@
 		e.preventDefault();
 		error = null;
 		if (password.length < 8 || password.length > 200) {
-			error = 'Password must be 8–200 characters.';
+			error = t('register.passwordLength');
 			return;
 		}
 		busy = true;
@@ -102,7 +104,9 @@
 				email.trim(),
 				password,
 				displayName.trim(),
-				inviteState === 'ok' ? inviteToken : null
+				inviteState === 'ok' ? inviteToken : null,
+				// The language this page was in, when chosen: the account and its emails start in it (WP-2.5).
+				readStoredLocale() ?? (i18n.locale !== 'en' ? i18n.locale : null)
 			);
 			registered = true;
 			session.user = user;
@@ -116,94 +120,76 @@
 </script>
 
 <svelte:head>
-	<title>Create account · Water Management</title>
+	<title>{t('common.pageTitle', { page: t('register.pageTitle') })}</title>
 	{#if hasInviteParam}<meta name="referrer" content="no-referrer" />{/if}
 </svelte:head>
 
 {#if signedInAs}
-	<AuthCard title="You’re already signed in">
-		<p>Signed in as <strong class="addr">{signedInAs.email}</strong>.</p>
+	<AuthCard title={t('register.signedInTitle')}>
+		<p><Rich text={tRich('register.signedInAs', { email: signedInAs.email })} /></p>
 		{#if inviteState === 'loading'}
-			<p class="muted" role="status">Checking the invitation…</p>
+			<p class="muted" role="status">{t('register.checkingThis')}</p>
 		{:else if inviteState === 'ok' && invite && forMe}
 			<div class="invite" role="status">
-				<p><strong>{invite.invitedBy}</strong> invited this address to <strong>{target}</strong>.</p>
+				<p><Rich text={tRich('register.invitedThis', { inviter: invite.invitedBy, target })} /></p>
 				{#if signedInAs.emailVerified}
-					<p class="muted">
-						Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask
-						{invite.invitedBy} to add you again.
-					</p>
+					<p class="muted">{t('register.confirmedAlready', { target, inviter: invite.invitedBy })}</p>
 				{:else}
-					<p class="muted">
-						You’ll join as soon as you confirm your email address: use the link we sent to {signedInAs.email}.
-					</p>
+					<p class="muted">{t('register.joinOnConfirm', { email: signedInAs.email })}</p>
 				{/if}
 			</div>
 			{#if !signedInAs.emailVerified}
 				<button type="button" class="btn act" onclick={resendConfirmation} disabled={resending}>
-					{resending ? 'Sending…' : 'Resend confirmation email'}
+					{resending ? t('common.sending') : t('register.resend')}
 				</button>
 				<p class="status" role="status" aria-live="polite">{resendMsg ?? ''}</p>
 			{/if}
-			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+			<a class="btn btn-primary act" href="{base}/">{t('common.goToProjects')}</a>
 		{:else if inviteState === 'ok' && invite}
 			<div class="alert alert-warning" role="alert">
-				This invitation to <strong>{target}</strong> is for <strong class="addr">{invite.email}</strong>, not the
-				account you’re signed in with.
+				<Rich text={tRich('register.otherAddress', { target, email: invite.email })} />
 			</div>
-			<p class="muted">
-				To accept it, sign out and create an account for {invite.email}. To use this account instead, ask
-				{invite.invitedBy} to invite {signedInAs.email}.
-			</p>
+			<p class="muted">{t('register.otherAddressHelp', { email: invite.email, inviter: invite.invitedBy, me: signedInAs.email })}</p>
 			<button type="button" class="btn btn-primary act" onclick={signOutToAccept} disabled={signingOut}>
-				{signingOut ? 'Signing out…' : `Sign out and accept as ${invite.email}`}
+				{signingOut ? t('register.signingOut') : t('register.signOutAccept', { email: invite.email })}
 			</button>
-			<a class="btn act" href="{base}/">Stay signed in and go to your projects</a>
+			<a class="btn act" href="{base}/">{t('register.stay')}</a>
 		{:else if inviteState === 'error'}
-			<div class="alert alert-warning" role="alert">We couldn’t check this invitation right now. Try the link again later.</div>
-			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+			<div class="alert alert-warning" role="alert">{t('register.checkFailedSignedIn')}</div>
+			<a class="btn btn-primary act" href="{base}/">{t('common.goToProjects')}</a>
 		{:else}
-			<div class="alert alert-warning" role="alert">
-				This invitation link is invalid, was revoked, or has expired (they last 7 days). Ask whoever invited you to send a
-				new one.
-			</div>
-			<a class="btn btn-primary act" href="{base}/">Go to your projects</a>
+			<div class="alert alert-warning" role="alert">{t('register.deadLinkSignedIn')}</div>
+			<a class="btn btn-primary act" href="{base}/">{t('common.goToProjects')}</a>
 		{/if}
 		{#snippet footer()}
-			Not you? <button type="button" class="linkish" onclick={signOutToAccept} disabled={signingOut}>Sign out</button>
+			{t('register.notYou')} <button type="button" class="linkish" onclick={signOutToAccept} disabled={signingOut}>{t('common.signOut')}</button>
 		{/snippet}
 	</AuthCard>
 {:else}
 <AuthCard
-	title={inviteState === 'ok' ? 'Accept your invitation' : 'Create an account'}
-	subtitle={inviteState === 'ok' ? undefined : 'Model your own catchments, or join a team’s.'}
+	title={inviteState === 'ok' ? t('register.titleInvite') : t('register.title')}
+	subtitle={inviteState === 'ok' ? undefined : t('register.subtitle')}
 >
 	{#if inviteState === 'loading'}
-		<p class="muted" role="status">Checking your invitation…</p>
+		<p class="muted" role="status">{t('register.checking')}</p>
 	{:else if inviteState === 'ok' && invite}
 		<div class="invite" role="status">
-			<p><strong>{invite.invitedBy}</strong> invited you to <strong>{target}</strong>.</p>
-			<p class="muted">Create your account to join. You’ll have access straight away.</p>
+			<p><Rich text={tRich('register.invitedYou', { inviter: invite.invitedBy, target })} /></p>
+			<p class="muted">{t('register.joinNow')}</p>
 		</div>
 	{:else if inviteState === 'dead'}
-		<div class="alert alert-warning" role="alert">
-			This invitation link is invalid, was revoked, or has expired (they last 7 days). You can still create an
-			account — then ask whoever invited you to add you again.
-		</div>
+		<div class="alert alert-warning" role="alert">{t('register.deadLink')}</div>
 	{:else if inviteState === 'error'}
-		<div class="alert alert-warning" role="alert">
-			We couldn’t check your invitation right now. You can still create an account; you’ll join once your email
-			address is confirmed.
-		</div>
+		<div class="alert alert-warning" role="alert">{t('register.checkFailed')}</div>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<form onsubmit={submit} aria-busy={inviteState === 'loading'}>
 		<div class="field">
-			<label for="name">Display name</label>
+			<label for="name">{t('common.displayName')}</label>
 			<input id="name" autocomplete="name" required maxlength="100" bind:value={displayName} />
 		</div>
 		<div class="field">
-			<label for="email">Email</label>
+			<label for="email">{t('common.email')}</label>
 			<input
 				id="email"
 				type="email"
@@ -216,14 +202,14 @@
 			/>
 			<span class="hint" id="email-hint">
 				{#if inviteState === 'ok'}
-					The invitation was sent to this address. To use another, ask {invite?.invitedBy} to invite that one instead.
+					{t('register.emailHintInvite', { inviter: invite?.invitedBy ?? '' })}
 				{:else}
-					Colleagues add you to teams and projects by this address.
+					{t('register.emailHint')}
 				{/if}
 			</span>
 		</div>
 		<div class="field">
-			<label for="password">Password</label>
+			<label for="password">{t('common.password')}</label>
 			<PasswordInput
 				id="password"
 				autocomplete="new-password"
@@ -233,20 +219,22 @@
 				aria-describedby="pw-hint"
 				bind:value={password}
 			/>
-			<span class="hint" id="pw-hint">At least 8 characters. A short passphrase works well.</span>
+			<span class="hint" id="pw-hint">{t('register.passwordHint')}</span>
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>
-			{busy ? 'Creating…' : inviteState === 'ok' ? 'Create account and join' : 'Create account'}
+			{busy ? t('register.busy') : inviteState === 'ok' ? t('register.submitInvite') : t('register.submit')}
 		</button>
 	</form>
 	{#snippet footer()}
-		Already registered? <a href={loginHref}>Sign in</a>
+		{t('register.already')} <a href={loginHref}>{t('common.signIn')}</a>
 	{/snippet}
 </AuthCard>
 {/if}
 
 <style>
-	.addr {
+	/* Long addresses (bold, from Rich) wrap rather than overflow on a phone. */
+	p :global(strong),
+	.alert :global(strong) {
 		overflow-wrap: anywhere;
 	}
 	/* Full-width actions, stacked, like the sign-up button. */

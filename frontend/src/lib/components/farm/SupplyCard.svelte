@@ -1,39 +1,53 @@
 <script lang="ts">
 	// "Water you received this season" (design §3 Q1), with the volume-unit
-	// switch. The switch's choice is kept on the phone (savedCopy.writeUnit)
-	// until the account preference exists (WP-2.5).
+	// switch. The choice is the account's (app_user.volume_unit, PATCH
+	// /auth/me, WP-2.5) and is also kept on the phone (savedCopy.writeUnit),
+	// for the saved copy and a signed-out moment.
 	import type { FarmProjection } from '@water-management/engine';
-	import { LITTLE_NEED, supplyCard } from './cards';
+	import { api } from '$lib/api';
+	import { session } from '$lib/auth/session.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
+	import { littleNeed, supplyCard } from './cards';
 	import type { VolumeUnit } from './format';
-	import Rich from './Rich.svelte';
 	import { writeUnit } from './savedCopy';
 
 	let { farm, unit = $bindable() }: { farm: FarmProjection; unit: VolumeUnit } = $props();
 	const vm = $derived(supplyCard(farm, unit));
+	let failed = $state(false);
 
-	function choose(u: VolumeUnit) {
+	async function choose(u: VolumeUnit) {
+		if (u === unit) return;
 		unit = u;
 		writeUnit(u);
+		failed = false;
+		if (!session.user) return;
+		try {
+			session.user = await api.auth.updateMe({ volumeUnit: u });
+		} catch {
+			failed = true; // the switch still applies on this phone
+		}
 	}
 </script>
 
 <section class="card" aria-labelledby="supply-h">
-	<h2 id="supply-h">Water you received this season</h2>
+	<h2 id="supply-h">{t('farm.supply.title')}</h2>
 	{#if vm.pct}
-		<p class="big"><span>{vm.pct}</span><span class="sub">of what you needed</span></p>
+		<p class="big"><span>{vm.pct}</span><span class="sub">{t('farm.supply.ofNeeded')}</span></p>
 		<div class="meter" aria-hidden="true"><span style:width="{vm.barPct}%"></span></div>
 	{:else}
-		<p>{LITTLE_NEED}</p>
+		<p>{littleNeed()}</p>
 	{/if}
 	<p>{vm.volumes}</p>
 	<p>{vm.short}</p>
 	<p class="last30"><Rich text={vm.last30} /></p>
 	<p class="fine">{vm.efficiency}</p>
-	<div class="units" role="group" aria-label="Show volumes in">
-		<span>Show in</span>
+	<div class="units" role="group" aria-label={t('farm.supply.showInLabel')}>
+		<span>{t('farm.supply.showIn')}</span>
 		<button type="button" aria-pressed={unit === 'ML'} onclick={() => choose('ML')}>ML</button>
 		<button type="button" aria-pressed={unit === 'm3'} onclick={() => choose('m3')}>m³</button>
 	</div>
+	{#if failed}<p class="fine" role="status">{t('farm.supply.unitFailed')}</p>{/if}
 </section>
 
 <style>

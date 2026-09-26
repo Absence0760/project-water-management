@@ -22,7 +22,9 @@ header closes it too.
 
 **The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
 address and whether it is confirmed, a **Display name** form
-(`PATCH /auth/me`; the header follows at once) and a **Password** form
+(`PATCH /auth/me`; the header follows at once), **Language and units** (the
+language switch and the farm view's m³ / ML, [§ Language](#language)) and a
+**Password** form
 (current, new, repeat; `POST /auth/change-password`). Changing the password
 signs out every other device while this browser stays signed in. Errors show
 in an alert above the form, with the field it's about marked
@@ -170,7 +172,7 @@ shorter than the cap looks as before.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
-the published baseline, a "Needs attention" list, eight headline facts, project details, the import
+the published baseline, a "Needs attention" list, the active alerts ([§ Alerts](#alerts)), eight headline facts, project details, the import
 record (an imported project only), recent notes ([§ Notes](#notes)), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
@@ -249,6 +251,10 @@ record (an imported project only), recent notes ([§ Notes](#notes)), team and m
   team project), so the two panels that refer to each other sit together, then
   **Farmers**. Below 900 px it is one column in the order details, import
   record, team, members, farmers, share links.
+- **Members**: each applicant row has an **Applying party** box for owners
+  (saved on change; blank for none): an applicant shares applications only
+  with the members of their own party, so put an applicant and their
+  consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
@@ -457,8 +463,8 @@ Portfolio](./api.md#portfolio)):
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
   recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
   health.
-- Alerts: no column yet. The table and the cards carry a marked hook for
-  WP-2.13; the API's `alertsFiring` is `null` until alerts exist.
+- **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
+  from `alertsFiring` ([§ Alerts](#alerts)).
 
 Wide screens get a sortable table (column-heading buttons with `aria-sort`);
 under 760 px the same rows become stacked cards with a *Sort by* select.
@@ -1872,6 +1878,29 @@ them scenarios).
   it applies to the base is the server's check, shown once it is saved.
   Every edit is a `PATCH` of the whole op list, answered with the check.
   **Undo** steps back through this visit's edits; each op also has a ✕.
+- **Edit in the model tables** (override mode, drafts only, for whoever may
+  change the scenario: an editor on a team scenario, only its owner on an
+  application; an applicant edits the applicant projection, with a note that
+  other farms' values are blank;
+  `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
+  Transfers tables, switched with a **Network / Crops / Transfers** control,
+  on the scenario's model (its base run with its changes applied), under a
+  banner in the warning colour: "Editing the scenario *X*, not the
+  catchment", saying the catchment's own model isn't touched, with **Close
+  override mode**. Notes, farmer links, the yield panel and "Colour farms
+  by" are left out (they belong to the live model). **Edits to record**
+  (sticky at the foot on wide screens) lists each edit as the change it will
+  be, in the same words as the Changes list; **Record N changes** appends
+  them (one Undo takes them back), **Discard edits** reverts. An edit no
+  change can express (a crop's factors, a node's kind or what it drains
+  into…) is listed there and disables Record until it is undone; the
+  tables' own problems ("Fix before saving") block it too. While there are
+  unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
+  Delete wait, and leaving the page asks first. The status moves (an
+  application's Submit, Withdraw, Reopen and decision included) also wait
+  while a run is in flight: the run re-reads the scenario when it ends, and
+  that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
+  override mode is open.
 - **The proposer's nodes**: a checkbox per node of the base. Changes to them
   (and to nodes the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
@@ -1884,8 +1913,9 @@ them scenarios).
 - **Rebase onto another run** (drafts): pick a newer run of the model,
   **Check** (a dry run listing any change that no longer applies, for
   example a node removed since), then **Rebase onto this run**. A change on
-  a node the new base lacks is still named, from the bases loaded in this
-  visit; otherwise it reads "a node the base run doesn't have".
+  a node the new base lacks is still named, after a reload too: the server
+  keeps the names each change needed with the scenario (`opNames`, 047).
+  Only a node no base ever named reads "a node the base run doesn't have".
 - **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
   the scenario against the base run *that run* was made on (so an older run
   of a rebased scenario is still compared with its own base), through
@@ -1968,7 +1998,15 @@ farm view if they have links, and the Scenarios tab in applicant mode
   the owner's **Submit to the assessors** (confirmed; disabled while a change
   doesn't apply), **Withdraw** and **Reopen as a draft**, the decision once
   made (outcome, by whom, when, the reasons), and **Shared with**: the
-  people who read it, the owner's share-by-email form, and Remove / Leave.
+  people who read it, Remove / Leave, and for the owner a **Share with**
+  picker of the people they may share it with (`…/share-candidates`: an
+  applicant's own applying party; no address box, so it says nothing about
+  who else is a member). With nobody to pick it says why ("Nobody to share
+  it with yet: the project owner lists who is in your party", or "Everyone
+  you can share it with already reads it"). An assessor opening an
+  application whose names displaced a hidden farm's or crop's sees which
+  ("… in this application's runs Kliphuis is called “Kliphuis (2)”",
+  `check.renamed`); the applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`): every submitted, withdrawn or decided application
@@ -2244,15 +2282,16 @@ published.
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
-- **Frame.** The farm pages have their own header ("My farm", Menu: your
-  farms, the words, "Don't keep a copy on this phone", sign out); the app
-  header isn't shown. One 560 px column, a 16 px base, 44 px targets,
+- **Frame.** The farm pages have their own header ("My farm", the EN | AF
+  language switch, Menu: your farms, the words, "Don't keep a copy on this
+  phone", sign out); the app header isn't shown ([§ Language](#language)). One 560 px column, a 16 px base, 44 px targets,
   nothing under 13 px, existing tokens only, light and dark.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA"; water received this season with the ML/m³
-  switch (kept on the phone until the account preference exists); the dam
+  switch (saved to the account, `app_user.volume_unit`, and kept on the
+  phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level
   wording; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
@@ -2272,10 +2311,12 @@ published.
   by the model, not a promise. Only a notice from your WUA is a
   restriction." A forecast made more than 3 days ago says how old it is
   first. The dam page shows the same card under its chart.
-- **Wording.** Every visible string and number rule lives in pure modules
-  under `lib/components/farm/` (`format.ts`, `cards.ts`, `why.ts`,
-  `dam.ts`, `chart.ts`), pinned to the prototype with a Vaalbank fixture
-  (`fixture.ts`); a test keeps the design's "never says" words out.
+- **Wording.** Every visible string comes from the message catalogue
+  ([§ Language](#language)); the number rules and the sentences built from
+  them live in pure modules under `lib/components/farm/` (`format.ts`,
+  `cards.ts`, `why.ts`, `dam.ts`, `chart.ts`, `forecastCard.ts`), pinned to
+  the prototype with a Vaalbank fixture (`fixture.ts`); a test keeps the
+  design's "never says" words out.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
@@ -2290,6 +2331,130 @@ published.
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.
+
+## Language
+
+English and Afrikaans for everything a farmer touches (WP-2.5): the farm
+view (`/farm/**`), the sign-in pages (`/login`, `/register`,
+`/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
+email" banner, the account page and its alert emails page
+(`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), and the
+emails a farmer receives (confirm address, reset password, the farmer
+invite, the alert emails and their digest). The modeller workspace and the
+`/share` page stay English.
+
+- **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
+  name in its own language, the button marked with that `lang`, `aria-pressed`
+  on the current one; "EN | AF" in the phone headers, the full name as the
+  accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
+  pages' header, and under **Language and units** on the account page, which
+  also sets the farm view's volume unit (m³ or ML).
+- **Which language.** The account's `locale` when signed in and chosen, else
+  this device's choice (`localStorage` `wm.locale`, try/catch), else
+  Afrikaans when it is the browser's first language, else English
+  (`resolveLocale`, run by the root layout whenever the session changes).
+  Choosing applies at once, is kept on the device and, signed in, saved with
+  `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
+  sends the page's language as the account's; an account created from an
+  invite takes the invite's (`invite.locale`, 050).
+- **Catalogue.** `lib/i18n/messages/en.ts` is every string, flat keys
+  (`farm.supply.title`), with a section note per key group and per-key notes
+  for the translator. `messages/af.ts` holds only **reviewed** Afrikaans,
+  typed `Partial<Record<MessageKey, string>>` (an unknown key fails
+  `pnpm check`); it is loaded lazily, the first time someone picks
+  Afrikaans. A key without Afrikaans shows in English.
+- **Loading.** Only the translated routes load the catalogue: they import
+  it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
+  dynamic `import()` on the first translated route, then renders the route
+  once the language is set (a readiness flag, with Try again if the chunk
+  fails), so no route shows one language and then another. The workspace
+  and `/share` never download it: the number, date, notice and chart-size
+  rules they share with the farm view live in catalogue-free modules
+  (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
+  `farm/chartGeometry.ts`), `passwordProblem` returns a key, and the
+  "confirm your email" banner is imported only for an unconfirmed address.
+  `lib/i18n/boundary.test.ts` guards it.
+- **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
+  `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
+  `.two` / `.few`) form through `Intl.PluralRules`; `tRich(key, vars)`
+  returns a `Rich` sentence where `**…**` and `{ b }` values are bold
+  (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
+  `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
+  They read runes, so a template that calls them re-renders on a switch.
+  The backend's emails have their own catalogue, `backend/src/mail/i18n/`
+  (`mailT(locale)` → `{ t, lang }`), same pattern; the alert emails'
+  words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
+  them, in the language the words came out in.
+- **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
+  `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
+  a page of mostly English words never claims to be Afrikaans. An email is
+  `lang="af"` only when every word in it came from the Afrikaans catalogue.
+  A glossary entry on `/farm/words` shown in the other language carries its
+  own `lang`.
+- **Numbers and dates** (D8). The farm view writes a decimal comma in
+  Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
+  both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
+  the Afrikaans words are in), so an English sentence never carries Afrikaans
+  month names.
+- **Translation.** Nothing is invented: the wording goes to real farmers.
+  `docs/i18n/af-translation-sheet.md` (generated by `pnpm gen:i18n:sheet`)
+  lists every untranslated string with its English, context and placeholders,
+  and an empty Afrikaans column for the client's translator; the farmer
+  glossary entries are on it too (`lib/help/content.af.ts`, stamped with a
+  `sourceHash` of the English so a later English edit makes the translation
+  stale). `catalogue.test.ts` (frontend and backend) and
+  `content.af.test.ts` fail when an untranslated key is missing from the
+  sheet; `pnpm check:i18n` fails when the sheet is out of date.
+
+## Alerts
+
+Email alerts (WP-2.13; [api.md § Alerts](./api.md#alerts), [security.md §
+Alerts](./security.md#alerts)). The workspace's words are in
+`lib/components/alerts/alerts.ts` (English, no message catalogue: the
+workspace never loads it), the translated pages' in `alerts/words.ts` (from
+the catalogue, [§ Language](#language)); both unit-tested.
+
+- **Overview → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
+  attention): the alerts firing now, each as a sentence ("Farm One: dam
+  about 8 % on 20 Sep 2026 (alert below 30 %)", "EWR at the outlet at risk
+  on 5 of 14 forecast days (alert at 3)", the late or failing feeds), or "No
+  alert is firing". An editor gets **Set up alert emails**, which loads the
+  rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
+  the click): a checkbox per catchment kind (EWR at risk in the forecast,
+  data feed behind, restriction notice, background jobs failed, data feed
+  failing) and per farm dam, each with its level (dam % of capacity, days,
+  failures or jobs; range-checked in the form and by the API), a *Firing*
+  mark, and Save. It says that nothing is sent until a kind is switched on,
+  and that each alert is sent once per crossing.
+- **`/account/alerts`** (linked from the account page's **Alert emails**
+  panel and from every alert email; translated): per catchment you can open,
+  a group per alert you can get, with *Right away* / *Once a day (06:00)* /
+  *Off* radios (44 px rows). A farmer sees a *Dam running low: <farm>* group
+  per own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  also the opt-in kinds (dam alerts for every farm, the EWR forecast);
+  editors and owners the operational kinds. A choice saves when made
+  ("Saved."), and the page says when the catchment hasn't switched that
+  alert on yet. A catchment muted by a digest's unsubscribe says so, with
+  *Turn alert emails back on*. It notes the daily cap (5 right away, the rest
+  in the next morning's summary).
+- **`/alerts/unsubscribe`** (an alert email's *Stop these emails* link;
+  signed in or out, on the sign-in pages' `AuthCard`; translated): reads the
+  token from the fragment (`#t=…`) once, strips it from the address bar,
+  and **asks first**: *Stop getting these alert emails? …* with *Stop these
+  emails*. Only the click posts the token (so a mail scanner that opens the
+  link can't switch a farmer's alerts off). Then "You won't get dam level
+  emails for Rietvlei any more." (or "any alert emails", for a digest's link)
+  with *Manage alerts*. A dead link ("This link doesn't work any more: a
+  newer email may have replaced it, or you may no longer be a member") and a
+  link without its token have their own states. The page sets
+  `no-referrer`, like the reset pages.
+- **Farm view**: while the farm's own dam alert fires, an **Alerts** card
+  under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
+  alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may
+  fall below … around …"), with *Choose your alert emails*. Nothing shows
+  otherwise, or when the alerts can't be loaded.
+- **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
+  (a warning badge), from `alertsFiring`.
 
 ## Share page (`/share`)
 

@@ -3,11 +3,10 @@ import { toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
-import { GR4J_PARAMS } from '../runoff/gr4j';
+import { GR4J_PARAMS } from '../runoff/params';
 import { band, bandHolds, MIN_BAND_MEMBERS, quantileSorted } from './bands';
 import {
 	bandCoverage,
-	diffEnsembleOptions,
 	ensembleContext,
 	ensembleMembers,
 	memberInput,
@@ -17,12 +16,12 @@ import {
 	runEnsemble,
 	shiftPan,
 	summariseEnsemble,
-	type AcceptanceThresholds,
 	type MemberScores
 } from './ensemble';
 import { pairedRefusal, runPairedEnsemble, summarisePaired } from './paired';
 import { latinHypercube } from './sample';
 import { memberMismatches, pickCheckedMembers, sampleMismatches, verifyEnsemble, verifyPaired } from './verify';
+import { diffEnsembleOptions, type AcceptanceThresholds } from './options';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({

@@ -115,8 +115,8 @@ export function checkEnvFile(file, text) {
 			if (/_HOST$/.test(key) && value && !isLocalHost(value)) {
 				out.push({ file, line, rule: `${key} is not a local host; committed dev defaults must point at the local stack` });
 			}
-			if (key === 'AUTH_JWT_SECRET' && !value.startsWith('dev-only-')) {
-				out.push({ file, line, rule: 'AUTH_JWT_SECRET is no longer the dev-only- placeholder; a real signing key here is public. Move it to infra-secrets' });
+			if ((key === 'AUTH_JWT_SECRET' || key === 'ALERTS_TOKEN_SECRET') && !value.startsWith('dev-only-')) {
+				out.push({ file, line, rule: `${key} is no longer the dev-only- placeholder; a real signing key here is public. Move it to infra-secrets` });
 			}
 			if (key === 'CLOUDFRONT_SHARED_SECRET' && value !== '') {
 				out.push({ file, line, rule: 'CLOUDFRONT_SHARED_SECRET must stay empty in a committed dev default (Terraform generates the real one)' });

@@ -10,9 +10,10 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  * Emailed-link pages: reachable either way. Someone who is signed in (maybe as
  * another account, maybe on another device) must still be able to use a reset
  * or confirmation link instead of being bounced to the project list. A
- * share link (/share, WP-2.3) is the same: its token is the credential.
+ * share link (/share, WP-2.3) is the same: its token is the credential, and so
+ * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13).
  */
-export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share'];
+export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe'];
 
 /** Routes reachable without signing in. */
 export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS];

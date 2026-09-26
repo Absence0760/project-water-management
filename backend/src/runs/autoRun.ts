@@ -1,16 +1,19 @@
 // Automatic re-runs after new data (roadmap WP-2.11; docs/architecture.md
 // § Background work, 042_auto_rerun.sql): the project setting, the enqueue
 // behind the new-data hook (series/newData.ts onSeriesDaysChanged, which
-// every source of new days calls), and the auto run's label.
+// every source of new days calls), and the auto run's label; and the
+// scheduled forecast run a forecast feed's new days queue (WP-2.12,
+// enqueueForecastRun), under the same setting.
 //
 // The setting's defaults live here (resolveAutoRun) and, for the enqueue,
 // in app_enqueue_rerun, which reads settings.autoRun itself so that an API
 // key's transaction (no user, no project visible under RLS) can queue too.
 // autoRun.db.test.ts holds the two together.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import type { ModelInput } from '@water-management/engine';
+import { forecastSplit, type ModelInput } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
+import { enqueueJob } from '../jobs/queue.js';
 
 /** What a project's automatic runs do (settings.autoRun). */
 export const AUTO_RUN_PUBLISH = ['never', 'if_no_new_warnings'] as const;
@@ -116,4 +119,40 @@ export function observedDataEnd(series: ModelInput['series']): string | null {
 export function autoRunLabel(input: Pick<ModelInput, 'series'>): string {
 	const end = observedDataEnd(input.series);
 	return end ? `Auto · data to ${end}` : 'Auto';
+}
+
+/**
+ * The scheduled forecast run's dedupe key: one pending per project, apart
+ * from the re-run's ('rerun'), so a forecast run and an auto re-run can both
+ * be queued.
+ */
+export const FORECAST_DEDUPE_KEY = 'forecast';
+
+/**
+ * Queue the project's forecast run after a forecast feed (CHIRPS-GEFS) wrote
+ * new days (WP-2.12 → WP-2.11; series/newData.ts), or nothing when the
+ * project hasn't turned automatic runs on (null): a scheduled forecast run is
+ * an automatic run, under the same opt-in and debounce as the re-run. One
+ * pending per project (FORECAST_DEDUPE_KEY): a second ingest before it runs
+ * joins it, and the run reads the newest issue anyway. As the transaction's
+ * user, an editor (the feed's acting user; RLS on job and project).
+ */
+export async function enqueueForecastRun(db: Db, projectId: string): Promise<QueuedRerun | null> {
+	const { rows } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
+	const auto = resolveAutoRun(rows[0]?.settings);
+	if (!auto.enabled) return null;
+	const { job, created } = await enqueueJob(db, {
+		projectId,
+		kind: 'rerun',
+		payload: { label: '', trigger: 'forecast', cause: 'feed' },
+		dedupeKey: FORECAST_DEDUPE_KEY,
+		delaySeconds: auto.debounceMinutes * 60
+	});
+	return { jobId: job.id, runAfter: new Date(job.runAfter).toISOString(), created };
+}
+
+/** A scheduled forecast run's label: `Forecast · from 2026-09-23` (or `Forecast`). */
+export function forecastRunLabel(input: ModelInput): string {
+	const from = forecastSplit(input).forecastFrom;
+	return from ? `Forecast · from ${from}` : 'Forecast';
 }

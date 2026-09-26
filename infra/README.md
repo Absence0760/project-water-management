@@ -259,7 +259,7 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 24 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog embedded metric, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration), logs, RDS log export | ~2.80 |
+| CloudWatch: 26 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration), logs, RDS log export | ~2.80 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
 
@@ -379,6 +379,12 @@ Claude does not run any of these, and none of them print a secret. Replace
 - **CloudFront shared secret:**
   `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).
+- **Alert unsubscribe-token secret** (WP-2.13, the worker only): only if it
+  leaked, since every unsubscribe link in alert emails already sent stops
+  working ("Manage your alerts" still does):
+  `terraform apply -var-file=… -replace=random_password.alerts_token_secret`.
+  The alert kill switch is `alerts_enabled = false` (docs/deployment.md §
+  Runbooks, alert storm).
 - **RDS master:** RDS rotates it automatically. Nothing reads it except the
   migrate Lambda, which fetches it on every run.
 

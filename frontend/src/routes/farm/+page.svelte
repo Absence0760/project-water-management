@@ -12,7 +12,8 @@
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
 	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
 	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
-	import { farmSummaryLine, FARMS_PRIVACY, LEVEL_WORD } from '$lib/components/farm/cards';
+	import { farmSummaryLine, farmsPrivacy, levelWord } from '$lib/components/farm/cards';
+	import { t } from '$lib/i18n/locale.svelte';
 	import { classify, farmHref } from '$lib/components/farm/load';
 	import { readSaved } from '$lib/components/farm/savedCopy';
 
@@ -84,18 +85,18 @@
 	onMount(load);
 </script>
 
-<svelte:head><title>Your farms · My farm</title></svelte:head>
+<svelte:head><title>{t('farm.pageTitle', { page: t('farm.yourFarms') })}</title></svelte:head>
 
-<FarmShell title="My farms" busy={rows == null && !failed}>
+<FarmShell title={t('farm.myFarms')} busy={rows == null && !failed}>
 	{#if failed}
 		<FarmStatus kind="error" offline={failed.offline} attempts={failed.attempts} retry={load} />
 	{:else if rows == null}
 		<FarmSkeleton />
 	{:else}
-		<h1>Your farms</h1>
+		<h1>{t('farm.yourFarms')}</h1>
 		{#if rows.length === 0}
-			<p>No farm is linked to your account yet. Your WUA links your farm to your account.</p>
-			{#if hasOther}<a class="link" href="{base}/">Your projects</a>{/if}
+			<p>{t('farm.list.none')}</p>
+			{#if hasOther}<a class="link" href="{base}/">{t('farm.list.projects')}</a>{/if}
 		{:else}
 			<ul class="farms">
 				{#each rows as r (r.projectId + '/' + r.nodeId)}
@@ -103,15 +104,15 @@
 						<a href={farmHref(base, r.projectId, r.nodeId, r.several)}>
 							<span class="top">
 								<strong>{r.name}</strong>
-								{#if r.publication}<span class="level {r.publication.restriction.level}">{LEVEL_WORD[r.publication.restriction.level]}</span>{/if}
+								{#if r.publication}<span class="level {r.publication.restriction.level}">{levelWord(r.publication.restriction.level)}</span>{/if}
 							</span>
 							<span class="sub">{r.projectName}</span>
-							<span>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : '') : 'Not published yet'}</span>
+							<span>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : '') : t('farm.list.notPublished')}</span>
 						</a>
 					</li>
 				{/each}
 			</ul>
-			<p class="fine">{FARMS_PRIVACY}</p>
+			<p class="fine">{farmsPrivacy()}</p>
 		{/if}
 	{/if}
 </FarmShell>

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { damPage, lastSpillText, storageChange } from './dam';
 import { vaalbankFixture } from './fixture';
-import { plainText } from './rich';
+import { plainText } from '$lib/i18n/rich';
 
 const sp = (s: string | null | undefined) => s?.replace(/ /g, ' ');
 

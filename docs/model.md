@@ -2517,10 +2517,10 @@ research on issue #1 found exactly this: its gauge column is a neighbouring
 river's gauge (area-scaled for part of the record), and the logger's magnitude
 is verified against independent field gaugings, so the **logger is the
 calibration target**, which is also what the workbook and the imported settings
-already use. This is **pending the hydrologist's sign-off**, now put to them
-as a confirmation with three follow-on questions (rating, area, the short
-record) rather than an open choice between records
-([plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
+already use. **Decided** (issue #1, closed 2026-09-25): the operator assumed
+the hydrologist's agreement, which is not yet in writing; reopen #1 if they
+disagree. Three follow-on questions stay open (rating, area, the short
+record; [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)). Caveats on the
 logger: high flows above the highest field gauging come from an extrapolated
 rating curve, so peak days and wet-season volumes are uncertain, and the record
 is short and mostly dry, so wet-year behaviour is weakly constrained.
@@ -2632,7 +2632,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   phase 6 §"make the logger fit identifiable"): the box the search may
   explore, per parameter.
   - `'wide'` (default): each `ParamSpec`'s min/max (§2.4a for GR4J,
-    `runoff/legacy.ts` `LEGACY_PARAMS` for legacy).
+    `runoff/params.ts` `LEGACY_PARAMS` for legacy).
   - `'typical'`: Perrin et al.'s (2003) 80 % confidence range (`ParamSpec.typical`)
     over 429 catchments — for GR4J, X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9
     days. A short, drought-dominated record often can't pin down X1 and X3, so
@@ -3089,8 +3089,8 @@ On the client catchment the two records roughly agree in the early shared
 years, then several consecutive years fall far below the lower limit and are
 flagged (figures in the private source repo). Here the records are two different rivers, so the
 flag is expected and is not evidence of a fault in either; the logger is the
-calibration target, pending the hydrologist's sign-off (§2.10, issue #1, and the
-first hydrologist question in
+calibration target (decided in issue #1; the hydrologist's agreement is
+assumed, not yet in writing; §2.10 and the first hydrologist question in
 [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
@@ -3326,10 +3326,11 @@ it never changes a run's results.
   `verifyPaired`; [security.md](./security.md#authorization-per-project-roles-enforced-by-postgres-rls)). Storage:
   [data-model.md](./data-model.md) (`run_uncertainty`).
 - **Cost.** Every member is a full model run, `runModelWithoutChecks`:
-  `runModel` less the plausibility checks (§2.10d), which no member result
-  reads, so a member's series and summary are otherwise identical and the
-  checks' code stays out of the calibration worker. 25–55 ms on the example
-  catchments, so 300 members take 8–16 s in the browser's calibration worker.
+  `runModel` less the plausibility checks (§2.10d) and the assurance of
+  supply (§2.11a–b), neither of which any member result reads, so a member's
+  series and summary are otherwise identical and that code stays out of the
+  calibration worker. 25–55 ms on the example catchments, so 300 members take
+  8–16 s in the browser's calibration worker.
 - **For the hydrologist** (plan.md question 18): the default thresholds
   (KGE′ ≥ 0.5, ±50 % low-flow bias, WR2012 up to *query*), the pan
   coefficient's ±0.1, and whether 300 members suffice, are defaults to

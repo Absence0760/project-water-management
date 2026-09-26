@@ -6,10 +6,9 @@
 // same test. Cross-tabulating the two answers settles which runoff model's EWR
 // failures are real (issue #4: legacy and GR4J disagree strongly on how many
 // days the Reserve is not met). See docs/model.md §2.9b.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import type { EwrAgreement, EwrAgreementScores } from '../project';
 import { shortfall } from './simulate';
-import { waterYearOf } from './stats';
 
 const SEC_PER_DAY = 86_400;
 

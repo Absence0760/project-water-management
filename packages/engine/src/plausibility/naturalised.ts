@@ -29,9 +29,8 @@
 // number of days keeps a near-dry year, whose volume is tiny, from failing on
 // a few hundred cubic metres.
 import type { CalibrationFlowKind } from '../project';
-import { waterYearOf } from '../network/stats';
-import { waterYearLabel as wyLabel } from '../quality';
 import { isFlow } from './season';
+import { waterYearLabel as wyLabel, waterYearOf } from '../calendar';
 
 const SEC_PER_DAY = 86_400;
 const M3_PER_MM3 = 1e6;

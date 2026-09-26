@@ -28,10 +28,9 @@
 // (proposeChirpsFitRanges) for the hydrologist to confirm as
 // settings.chirpsFitPeriod (engine ≥ 0.29.0, ./rain.ts); the run warning then
 // names the range whose factors filled each gap.
-import { toEpochDay } from './calendar';
-import { waterYearOf } from './network/stats';
+import { toEpochDay, waterYearLabel, waterYearOf } from './calendar';
 import { defaultZeroRainSettings, type DailySeries, type SeriesKind, type ZeroRainSettings } from './project';
-import { waterYearLabel, type SeriesCheck } from './quality';
+import type { SeriesCheck } from './quality';
 import type { ChirpsFitRange } from './project';
 import { chirpsFitSegmentFor, fitSegmentFillText, fitSegmentName, suspectRainDays, type ChirpsCorrection, type ChirpsFitPeriodInfo } from './rain';
 

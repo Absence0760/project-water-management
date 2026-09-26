@@ -28,6 +28,9 @@ sides share.
   (`playwright-core`, the browser e2e installs) and store the PDF through
   `@aws-sdk/client-s3` (MinIO locally, `STORAGE=local`; a private S3 bucket in
   production, where a container-image renderer Lambda does the printing).
+  Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
+  by the tick, each built as its recipient under RLS (Mailpit locally;
+  `ALERTS_ENABLED=false` is the kill switch).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -251,6 +254,13 @@ Prefer reading these over guessing. Update them when behaviour changes.
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
+- **i18n keys (WP-2.5).** Farmer-facing strings (farm view, sign-in pages,
+  account page) come from `frontend/src/lib/i18n/messages/en.ts` through
+  `t()` / `tn()` / `tRich()`; farmer emails from
+  `backend/src/mail/i18n/en.ts` through `mailT()`. Never hard-code a string
+  there, never write Afrikaans that hasn't been reviewed, and run
+  `pnpm gen:i18n:sheet` after changing a message ([ui.md §
+  Language](./ui.md#language)). The workspace stays English.
 - **`pnpm check` doesn't compile components.** svelte-check type-checks the
   TypeScript in `<script lang="ts">`; the Svelte compiler strips it at build
   time, and a stripping bug fails every `vite build` (production and the e2e

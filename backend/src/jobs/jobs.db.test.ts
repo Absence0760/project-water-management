@@ -11,6 +11,7 @@ import { withoutUser, withUser } from '../db/tx.js';
 import { JobError } from './errors.js';
 import { claimJobs, enqueueJob, finishJob } from './queue.js';
 import { defineHandler, type HandlerRegistry } from './registry.js';
+import { handlers } from './handlers/index.js';
 import { runJob, runTick } from './runner.js';
 import { z } from 'zod';
 
@@ -267,9 +268,10 @@ describe('retries, backoff and dead-lettering', () => {
 	it('a kind with no handler, or a payload its handler rejects, is dead at once', async () => {
 		const u = await signUp('Unhandled');
 		const pid = await project(u);
+		// Every kind has a handler now (WP-2.13 added alert_eval), so leave one out of the registry.
 		const { job: nohandler } = await enqueue(u, { projectId: pid, kind: 'alert_eval' });
 		const { job: badPayload } = await enqueue(u, { projectId: pid, kind: 'rerun', payload: { label: 5 } });
-		await runTick();
+		await runTick({ handlers: { rerun: handlers.rerun } });
 		expect(await jobRow(nohandler.id)).toMatchObject({ status: 'dead', last_error: 'no handler for "alert_eval" jobs' });
 		expect(await jobRow(badPayload.id)).toMatchObject({ status: 'dead', last_error: 'the job’s payload is not valid' });
 	});

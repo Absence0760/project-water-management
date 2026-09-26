@@ -141,21 +141,42 @@ down-levels class fields, which Svelte 5 uses throughout, into helper code (~6 K
 across the bundle). The app already needs newer browsers than ES2022 does
 (HelpTip's popover needs Chrome 114, Safari 17, Firefox 125).
 
-The calibration worker (`lib/calibration/autocal.worker.ts`) bundles its own copy
-of the engine, about 25 KB (50 KB from engine 0.26.0: the uncertainty ensemble
-runs full model runs in it, so it carries the run's whole output side; the
-bundle guard gives workers their own ceiling). It was measured sharing the page's engine chunks
-instead (issue #9): that only works if engine code sits in chunks of its own,
-and then a catchment’s cold open grows by about 23 KB, because a shared
-chunk carries the code of all its importers. A one-off download when a fit
-starts costs less than that on every open. A second try (2026-09-26) emitted
-the worker as an entry of the page build, so Rollup groups engine code by
-exactly who needs it: the total drops 21 KB, but a chunk holds whole modules,
-and the pages' small imports from `run.ts` and `calibrate/calibrate.ts`
-(`prepareRun`, `ENGINE_VERSION`, the calibration constants) then bring the fit
-and run code into the Runs tab (+27 KB) and compare (+32 KB). It becomes a win
-once those exports live in modules of their own ([followups.md](./followups.md),
-"Stop shipping the engine twice").
+The calibration worker (`lib/calibration/autocal.worker.ts`) is part of the
+page build, so the engine ships once (issue #9). Vite builds a
+`new Worker(new URL(…))` as a bundle of its own, which carried its own copy of
+the engine (62 KB gzip), most of which the pages load too. Instead,
+`lib/calibration/runner.ts` takes the worker's URL from a virtual module,
+`virtual:autocal-worker-url`, and `autocalWorkerChunk` in
+`frontend/vite.config.ts` emits the worker as one more entry of the client
+build (`_app/immutable/workers/autocal.worker-<hash>.js`). Rollup then puts the
+engine code the worker shares with pages in shared chunks, which the worker
+imports as ES modules (it is a module worker, same-origin, so the CSP's
+`worker-src 'self'` and `script-src 'self'` cover it). In dev the virtual
+module returns Vite's own worker URL for the source file. The worker's file
+holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
+a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
+the total bundle dropped 919 → 899 KB.
+
+That only pays because a chunk holds whole modules. A module a page and the
+worker both use carries everything either of them calls, with its imports, so
+the small things pages read must not live beside the run, fit or ensemble code.
+They have modules of their own: `version.ts` (`ENGINE_VERSION`), `prepare.ts`
+(`prepareRun`: settings, run window and aligned inputs, for the Data tab's
+series preview), `calibrate/params.ts` (`CALIBRATION_PARAMS`, bounds, starts),
+`calibrate/objectives.ts` (objective ids and labels), `runoff/params.ts` (the
+GR4J and legacy parameter tables), `runoff/pet.ts`
+(`hasPotentialEvaporation`), `reference/wr2012Settings.ts` (the WR2012
+settings, defaults and checks; `wr2012Resolve.ts` is the run's merge),
+`uncertainty/options.ts` (ensemble options, labels and their diff),
+`network/damCurve.ts` (the survey-curve check), and `waterYearOf` /
+`waterYearLabel` in `calendar.ts`. Without the split, sharing grew the Runs tab
+by 27 KB and compare by 32 KB; with it, compare's first load is 22 KB lighter
+and a catchment on Runs 7 KB lighter. `frontend/src/lib/engineSplit.test.ts`
+fails if one of those modules reaches the model code through a value import,
+and the bundle guard fails if the worker stops importing from `chunks/`. The
+cost: the Data tab loads the engine code it shares with the worker as several
+small chunks, which compress worse (+2.7 KB, +4.3 KB with the series preview
+open).
 
 Rollup treats the engine as side-effect free (`treeshake.moduleSideEffects`
 in `frontend/vite.config.ts`). Otherwise every engine module a page reaches
@@ -246,7 +267,15 @@ sliding back into the page chunk.
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).
 5. zod validates the input. The model document is saved in one transaction
    (rows missing from a `PUT` are deleted). Tree validation runs before the
-   write.
+   write. `saveModel` (`model/store.ts`) is set-based: one statement clears the
+   way (deletes and temporary names), then one upsert per table takes the
+   whole row list as a jsonb parameter (`jsonb_populate_recordset` against the
+   table's row type), so a save is at most nine statements whatever the
+   model's size. `loadModel` builds the document in one statement
+   (`json_agg` per table), and the history snapshots load settings and model
+   together. A whole `PUT` is ~18 round trips, down from ~42 for a 3-node model
+   and growing with it, because each round trip waits its turn when the API
+   is busy (issue #41); `model/store.db.test.ts` pins the fixed statement count.
 6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
    and anything unexpected to a generic 500; raw database error text never
    reaches the client ([api.md § Errors](./api.md#errors)).
@@ -319,12 +348,15 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   `app_finish_job` **in the same transaction**, so the work and its "done"
   commit together. There is no principal that bypasses RLS: only claim,
   finish, purge and the queue stats cross projects, as `SECURITY DEFINER`
-  functions that never return a payload.
+  functions that never return a payload. Each tick also purges finished jobs
+  after 30 days, report rows after 8, and invites 90 days past their expiry
+  (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),
-  the job is `dead` and logs `job_dead`, which alarms in production (email to
-  the owners comes with WP-2.13). The stored error is written by us
+  the job is `dead` and logs `job_dead`, which alarms in production, and
+  queues a job_dead alert check for the project (emailing its owners when the
+  project has that alert on, [§ Alert emails](#alert-emails)). The stored error is written by us
   (`jobs/errors.ts`), never database text.
 - **A worker that dies** mid-job leaves it `running` until its lease
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
@@ -406,6 +438,24 @@ Settings → Automatic runs.
   `model_run.trigger = 'auto'`, then `trimRuns`, which caps each trigger
   apart: the newest unkept auto run replaces the older one, and never pushes
   a person's run out ([data-model.md](./data-model.md), **Run output volume**).
+- **Scheduled forecast runs** (WP-2.12, `series/newData.ts`
+  `queueForecastFor` → `runs/autoRun.ts` `enqueueForecastRun`): a forecast
+  feed's (CHIRPS-GEFS) merge that changes days in the forecast series also
+  queues a `rerun` job with `trigger: 'forecast'`, due after the same
+  debounce, under dedupe key `forecast` (one pending per project, apart from
+  the re-run's; a second issue before it runs joins it, and it reads the
+  newest issue when it runs). **Only when automatic runs are on**
+  (`settings.autoRun.enabled`): a scheduled forecast run is an automatic run,
+  so it takes the same opt-in, and a project that turned them off since gets
+  nothing when the job runs. It runs `executeRun(db, id, forecastRunLabel,
+  'forecast')` (`Forecast · from <first forecast day>`), then `trimRuns`,
+  which keeps the newest unkept forecast run, so daily issues never pile up.
+  An issue the observed rain has overtaken (no forecast day after the last
+  observed one) leaves nothing to run: the job ends done, with no run. Never
+  auto-published, whatever `autoRun.publish` says: a forecast is guidance,
+  and publishing one stays a person's act. Only a feed's forecast queues
+  one: a person who uploads a forecast runs it from the Runs tab (Run
+  forecast), and an API key's ingest carries observed data.
 - **Publication stays a person's act** (roadmap D5): the Overview offers
   the editor "New auto run: publish?". A project may opt in to
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
@@ -417,7 +467,63 @@ Settings → Automatic runs.
 - **Waking the worker**: a route wakes it after commit only when the re-run
   is due at once (a debounce of 0, handy in dev); a debounced one is found
   by the next poll (15 s locally) or the production tick (5 minutes) once
-  due. WP-2.13 will queue `alert_eval` after each auto run.
+  due. An auto or forecast run queues `alert_eval` when the project has an
+  alert on ([§ Alert emails](#alert-emails)).
+
+### Alert emails
+
+Roadmap WP-2.13 (`backend/src/alerts/`, `051_alerts.sql`, the `alert_eval`
+job; [api.md § Alerts](./api.md#alerts), [security.md § Alerts](./security.md#alerts)).
+Alerts are opt-in per catchment: nothing below happens for a project with
+no rule switched on.
+
+```mermaid
+flowchart LR
+  AR[auto / forecast run<br/>jobs/handlers/rerun.ts] --> Q
+  PUB[publish or notice change<br/>publish/routes.ts] --> Q
+  RULES[PUT /alert-rules] --> Q
+  TICK[tick: app_alert_schedule<br/>hourly, and on a dead job] --> Q
+  Q[[alert_eval job<br/>dedupe 'alert_eval']] --> EV[evaluate as the editor<br/>alerts/evaluate.ts]
+  EV -- opens / clears --> E[(alert_event)]
+  EV -- app_alert_fan_out --> D[(alert_delivery<br/>pending / digest)]
+  D --> S[tick's send step<br/>alerts/send.ts]
+  S -- as each recipient, RLS --> M[sendMail<br/>SES / Mailpit]
+```
+
+1. **Queue.** `alerts/queue.ts` queues an `alert_eval` (one pending per
+   project) after an auto or forecast run, after a person publishes or
+   changes the restriction notice, and when an editor changes the rules.
+   The tick queues the checks no run causes (a feed going stale or failing,
+   dead jobs) through `app_alert_schedule`: hourly for projects with those
+   rules on, and at once for a job that just died.
+2. **Evaluate** (`alerts/evaluate.ts`, as the job's acting editor under
+   RLS). Values come from the current publication (dam level: the farm's
+   published projection, and its published forecast's lowest), the newest
+   forecast run (EWR days at risk; skipped while an API key's anomalous push
+   is held), the data feeds and the dead jobs. `alerts/rules.ts` decides
+   with hysteresis: open an event on crossing, clear it only after recovery
+   past the margin. A restriction notice is an event per change. Each newly
+   opened event is fanned out (`app_alert_fan_out`) to one delivery per
+   recipient, `pending` or `digest` by their choice. Nothing is mailed here:
+   the job holds no network I/O, and its writes commit with its "done".
+3. **Send** (`alerts/send.ts`, the last step of every tick, so after the
+   job committed). The kill switch first: `ALERTS_ENABLED=false` skips every
+   waiting delivery. Then `app_alert_claim` claims pending deliveries,
+   turning those past the daily cap (5 since the last 06:00 SAST) into
+   digest lines; after 06:00 `app_alert_claim_digest` claims each person's
+   digest lines, one email per catchment. Each mail is built in a
+   transaction **as its recipient** (`withUser`): `app_alert_my_mode`
+   re-checks their access and choice, and RLS limits what the mail can say
+   (a farmer's names only their farm). The unsubscribe token is derived
+   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`).
+   The mail goes out after that transaction, and `app_alert_finish` records
+   `sent`, `skipped` (why) or a retry.
+4. **Purge.** The tick deletes deliveries after 180 days and events 180 days
+   after they cleared (`app_purge_alerts`).
+
+The worker Lambda's metric line carries `AlertMailsSent` and
+`AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on
+failing sends.
 
 ## Data feeds
 
@@ -578,8 +684,9 @@ merges into:
   forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
   (not fetched yet, or not since a new place or series was saved),
   `disabled`. A feed not fetched two days after it was attached or changed is
-  stale ("the background worker may not be running"). Emailing owners about a stale feed
-  is WP-2.13.
+  stale ("the background worker may not be running"). A project with the
+  `data_stale` or `feed_failing` alert on emails its owners and editors
+  ([§ Alert emails](#alert-emails)).
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 

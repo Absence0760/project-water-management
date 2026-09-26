@@ -228,7 +228,8 @@
 		font-size: 0.85rem;
 		margin-bottom: 0.25rem;
 	}
-	/* A 24 px row keeps each radio's target clear of its neighbour's (WCAG 2.5.8). */
+	/* Each row at least 24 px tall, so stacked radios and checkboxes sit 24 px
+	   apart (WCAG 2.2 target size, 2.5.8, spacing exception). */
 	.choice {
 		display: flex;
 		align-items: center;

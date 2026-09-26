@@ -27,7 +27,12 @@ const PUBLIC = new Set([
 	// and allowlisted catchment series, through SECURITY DEFINER functions
 	// (share/share.db.test.ts).
 	'POST /share/view',
-	'POST /share/series'
+	'POST /share/series',
+	// One-click unsubscribe from alert emails (WP-2.13): the token is the
+	// credential, and it can only turn off the one subscription it names,
+	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
+	// route exempt from the CSRF check (app.ts): a mail client form-posts it.
+	'POST /alerts/unsubscribe'
 ]);
 
 const app = createApp();
@@ -214,6 +219,26 @@ describe('route auth inventory', () => {
 	});
 
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
+	// Alerts (WP-2.13): preferences and rules need a session; only the unsubscribe is public.
+	it('inventories the alert routes as auth-gated, and the unsubscribe as public', () => {
+		for (const r of ['GET /me/alerts', 'PUT /me/alerts/:projectId', 'GET /projects/:id/alert-rules', 'PUT /projects/:id/alert-rules', 'GET /projects/:id/alert-events']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('POST /alerts/unsubscribe');
+	});
+
+	it('exempts only POST /alerts/unsubscribe from the CSRF check: a form post with no Origin reaches it, and is refused elsewhere', async () => {
+		const form = { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'List-Unsubscribe=One-Click' };
+		// No token: the route itself answers (400), not the CSRF check (403).
+		expect((await app.request('/alerts/unsubscribe', form)).status).toBe(400);
+		// A malformed token is refused without a database (404: not a live link).
+		expect((await app.request('/alerts/unsubscribe?token=not-a-token', form)).status).toBe(404);
+		// Any other route: the CSRF check refuses the same form post.
+		expect((await app.request('/auth/login', form)).status).toBe(403);
+		expect((await app.request('/share/view', form)).status).toBe(403);
+	});
+
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
 		for (const r of ['GET /projects/:id/share-links', 'POST /projects/:id/share-links', 'DELETE /projects/:id/share-links/:linkId']) {
 			expect(routes).toContain(r);
@@ -271,7 +296,8 @@ describe('route auth inventory', () => {
 		'POST /auth/invite-info',
 		'POST /auth/render-session',
 		'POST /share/view',
-		'POST /share/series'
+		'POST /share/series',
+		'POST /alerts/unsubscribe'
 	])('%s answers anonymous requests (400 on an empty body, not 401)', async (route) => {
 		const path = route.split(' ')[1]!;
 		const res = await app.request(path, {

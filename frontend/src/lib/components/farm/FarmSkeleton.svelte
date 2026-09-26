@@ -4,7 +4,7 @@
 	// status line, and after 3 s "Slow signal?". The page sets aria-busy on
 	// <main> (FarmShell's `busy`).
 	import { onMount } from 'svelte';
-	import { STATES } from './cards';
+	import { stateText } from './cards';
 
 	let slow = $state(false);
 	onMount(() => {
@@ -13,7 +13,7 @@
 	});
 </script>
 
-<p class="visually-hidden" role="status">{STATES.loading}</p>
+<p class="visually-hidden" role="status">{stateText('loading')}</p>
 {#each [180, 150, 260, 200] as h, i (i)}
 	<div class="skeleton" style:height="{h}px" aria-hidden="true">
 		<span style:width="55%"></span>
@@ -21,7 +21,7 @@
 		<span style:width="80%"></span>
 	</div>
 {/each}
-{#if slow}<p class="slow">{STATES.slow}</p>{/if}
+{#if slow}<p class="slow">{stateText('slow')}</p>{/if}
 
 <style>
 	.skeleton {

@@ -3,7 +3,13 @@
 // content. Every interpolated value is HTML-escaped — project and team names
 // and display names are user-controlled and these emails go to addresses the
 // user merely typed in.
+import { LOCALES, mailT, type Locale, type MailTranslator } from './i18n/index.js';
 import type { Mail } from './transport.js';
+
+// The farmer-facing emails (verify, reset, the farmer invite) take their
+// words from the catalogue in ./i18n (WP-2.5). The workspace's own emails
+// (project/team invites, report ready) stay English, as the workspace does.
+export { LOCALES, type Locale };
 
 export const PRODUCT = 'Water Management';
 
@@ -16,9 +22,19 @@ export function siteLink(path: string, token: string, param = 'token'): string {
 	return `${base}${path}?${param}=${encodeURIComponent(token)}`;
 }
 
-type Body = { heading: string; paragraphs: string[]; action: { label: string; url: string }; footer: string[] };
+export type Body = {
+	heading: string;
+	paragraphs: string[];
+	action: { label: string; url: string };
+	footer: string[];
+	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
+	links?: { label: string; url: string }[];
+};
 
-function render(to: string, subject: string, b: Body): Mail {
+/** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
+export function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT('en')): Mail {
+	const links = b.links ?? [];
+	const fallbackLine = tr.t('mail.buttonFallback');
 	const text = [
 		b.heading,
 		'',
@@ -26,20 +42,21 @@ function render(to: string, subject: string, b: Body): Mail {
 		`${b.action.label}: ${b.action.url}`,
 		'',
 		...b.footer.flatMap((p) => [p, '']),
+		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
 	].join('\n');
 	const p = (s: string) => `<p style="margin:0 0 16px">${escapeHtml(s)}</p>`;
 	const url = escapeHtml(b.action.url);
 	const html = `<!doctype html>
-<html lang="en">
+<html lang="${tr.lang}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:24px;background:#ffffff;color:#1a1a1a;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5">
 <main style="max-width:560px">
 <h1 style="font-size:20px;margin:0 0 16px">${escapeHtml(b.heading)}</h1>
 ${b.paragraphs.map(p).join('\n')}
 <p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
-<p style="margin:0 0 16px;font-size:14px">If the button doesn't work, copy this address into your browser:<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
-${b.footer.map(p).join('\n')}
+<p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
+${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
 <p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
 </main>
 </body>
@@ -47,28 +64,36 @@ ${b.footer.map(p).join('\n')}
 	return { to, subject, text, html };
 }
 
-export function verifyEmailMail(to: string, url: string): Mail {
-	return render(to, `Confirm your email address — ${PRODUCT}`, {
-		heading: 'Confirm your email address',
-		paragraphs: [`Please confirm that ${to} is your email address for ${PRODUCT}.`],
-		action: { label: 'Confirm email address', url },
-		footer: ['This link expires in 48 hours.', "If you didn't create an account, you can ignore this email."]
-	});
+export function verifyEmailMail(to: string, url: string, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	return render(
+		to,
+		tr.t('mail.verify.subject', v),
+		{
+			heading: tr.t('mail.verify.heading'),
+			paragraphs: [tr.t('mail.verify.body', v)],
+			action: { label: tr.t('mail.verify.action'), url },
+			footer: [tr.t('mail.verify.expires'), tr.t('mail.verify.ignore')]
+		},
+		tr
+	);
 }
 
-export function resetPasswordMail(to: string, url: string): Mail {
-	return render(to, `Reset your password — ${PRODUCT}`, {
-		heading: 'Reset your password',
-		paragraphs: [
-			`Someone asked to reset the password for the ${PRODUCT} account ${to}.`,
-			'Choosing a new password signs you out on every device.'
-		],
-		action: { label: 'Choose a new password', url },
-		footer: [
-			'This link expires in 1 hour and works once.',
-			"If you didn't ask for this, you can ignore this email — your password stays the same."
-		]
-	});
+export function resetPasswordMail(to: string, url: string, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	return render(
+		to,
+		tr.t('mail.reset.subject', v),
+		{
+			heading: tr.t('mail.reset.heading'),
+			paragraphs: [tr.t('mail.reset.body', v), tr.t('mail.reset.signsOut')],
+			action: { label: tr.t('mail.reset.action'), url },
+			footer: [tr.t('mail.reset.expires'), tr.t('mail.reset.ignore')]
+		},
+		tr
+	);
 }
 
 export type InviteTarget = { kind: 'project' | 'team'; name: string; role: string };
@@ -105,10 +130,6 @@ export function inviteMail(
 	});
 }
 
-/** Languages an invite email can be in (invite.locale, 034). */
-export const LOCALES = ['en', 'af'] as const;
-export type Locale = (typeof LOCALES)[number];
-
 /** "A", "A and B", "A, B and C". */
 export function listText(items: readonly string[], and = 'and'): string {
 	if (items.length <= 1) return items[0] ?? '';
@@ -117,41 +138,10 @@ export function listText(items: readonly string[], and = 'and'): string {
 
 export type FarmerInviteFacts = { catchment: string; farms: string[] };
 
-type FarmerText = (to: string, inviter: string, f: FarmerInviteFacts, confirm: boolean) => { subject: string; body: Omit<Body, 'action'> & { label: string } };
-
-/**
- * The farmer invite's wording per language. Afrikaans follows WP-2.5; until
- * it has a translation here an `af` invite is sent in English.
- */
-const FARMER_TEXT: Partial<Record<Locale, FarmerText>> = {
-	en: (to, inviter, f, confirm) => {
-		const farms = f.farms.length ? listText(f.farms) : 'your farm';
-		return {
-			subject: `${inviter} has given you access to ${farms} in ${f.catchment}`,
-			body: {
-				heading: `Your farm on ${PRODUCT}`,
-				paragraphs: [
-					`${inviter} has given you access to ${farms} in ${f.catchment}.`,
-					"You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.",
-					confirm
-						? `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`
-						: `Create your ${PRODUCT} account with this email address (${to}) to accept.`
-				],
-				label: confirm ? 'Confirm email and accept' : 'Create account and accept',
-				footer: confirm
-					? [
-							'This link expires in 48 hours.',
-							`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
-						]
-					: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
-			}
-		};
-	}
-};
-
 /**
  * A farmer invite (WP-2.2): "{inviter} has given you access to {farm} in
- * {catchment}". Same two modes as `inviteMail`; `locale` picks the wording.
+ * {catchment}". Same two modes as `inviteMail`; `locale` (invite.locale)
+ * picks the wording, English where Afrikaans has none yet.
  */
 export function farmerInviteMail(
 	to: string,
@@ -161,10 +151,27 @@ export function farmerInviteMail(
 	mode: 'sign-up' | 'confirm' = 'sign-up',
 	locale: Locale = 'en'
 ): Mail {
-	const text = FARMER_TEXT[locale] ?? FARMER_TEXT.en!;
-	const { subject, body } = text(to, inviterName, facts, mode === 'confirm');
-	const { label, ...rest } = body;
-	return render(to, subject, { ...rest, action: { label, url } });
+	const tr = mailT(locale);
+	const confirm = mode === 'confirm';
+	const farms = facts.farms.length ? listText(facts.farms, tr.t('mail.farmer.and')) : tr.t('mail.farmer.yourFarm');
+	const v = { inviter: inviterName, farms, catchment: facts.catchment, email: to, product: PRODUCT };
+	return render(
+		to,
+		tr.t('mail.farmer.subject', v),
+		{
+			heading: tr.t('mail.farmer.heading', v),
+			paragraphs: [
+				tr.t('mail.farmer.body', v),
+				tr.t('mail.farmer.privacy'),
+				tr.t(confirm ? 'mail.invite.confirm' : 'mail.invite.signUp', v)
+			],
+			action: { label: tr.t(confirm ? 'mail.invite.confirmAction' : 'mail.invite.signUpAction'), url },
+			footer: confirm
+				? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
+				: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]
+		},
+		tr
+	);
 }
 
 /** Absolute link to a page of the site (no token). */

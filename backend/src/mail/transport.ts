@@ -13,7 +13,18 @@
 // The SDK clients are imported lazily, so the log/memory paths (and the unit
 // tests) never load nodemailer or the AWS SDK.
 
-export type Mail = { to: string; subject: string; text: string; html: string };
+export type Mail = {
+	to: string;
+	subject: string;
+	text: string;
+	html: string;
+	/**
+	 * Extra headers (alert mails: List-Unsubscribe and List-Unsubscribe-Post,
+	 * RFC 8058; Auto-Submitted, RFC 3834). Values are made one line before
+	 * sending, and a name must be a plain header token.
+	 */
+	headers?: Record<string, string>;
+};
 
 type Send = (mail: Mail, from: string) => Promise<void>;
 
@@ -27,6 +38,19 @@ let cached: { key: string; send: Send } | undefined;
 /** Strip CR/LF so user-controlled text (project names) can't inject headers. */
 export const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
 
+const HEADER_NAME = /^[A-Za-z][A-Za-z0-9-]*$/;
+
+/** A mail's extra headers, each value on one line; a name that isn't a header token is refused. */
+export function safeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+	if (!headers) return undefined;
+	const out: Record<string, string> = {};
+	for (const [name, value] of Object.entries(headers)) {
+		if (!HEADER_NAME.test(name)) throw new Error(`not a header name: ${JSON.stringify(name)}`);
+		out[name] = oneLine(value);
+	}
+	return out;
+}
+
 async function createTransport(kind: string): Promise<Send> {
 	switch (kind) {
 		case 'memory':
@@ -39,7 +63,8 @@ async function createTransport(kind: string): Promise<Send> {
 					console.warn(`MAIL_TRANSPORT=log: not sending "${mail.subject}" (set MAIL_TRANSPORT=ses)`);
 					return;
 				}
-				console.info(`\n--- email (MAIL_TRANSPORT=log, not sent) ---\nTo: ${mail.to}\nSubject: ${mail.subject}\n\n${mail.text}\n---\n`);
+				const extra = Object.entries(mail.headers ?? {}).map(([k, v]) => `${k}: ${v}\n`).join('');
+				console.info(`\n--- email (MAIL_TRANSPORT=log, not sent) ---\nTo: ${mail.to}\nSubject: ${mail.subject}\n${extra}\n${mail.text}\n---\n`);
 			};
 		case 'smtp': {
 			const user = process.env.SMTP_USER ?? '';
@@ -55,7 +80,7 @@ async function createTransport(kind: string): Promise<Send> {
 				...(user ? { auth: { user, pass } } : {})
 			});
 			return async (mail, from) => {
-				await transporter.sendMail({ from, to: mail.to, subject: oneLine(mail.subject), text: mail.text, html: mail.html });
+				await transporter.sendMail({ from, to: mail.to, subject: oneLine(mail.subject), text: mail.text, html: mail.html, headers: mail.headers });
 			};
 		}
 		case 'ses': {
@@ -76,7 +101,9 @@ async function createTransport(kind: string): Promise<Send> {
 								Body: {
 									Text: { Data: mail.text, Charset: 'UTF-8' },
 									Html: { Data: mail.html, Charset: 'UTF-8' }
-								}
+								},
+								// SESv2 Simple content takes custom headers (@aws-sdk/client-sesv2 ≥ 3.6xx; MessageHeader).
+								...(mail.headers ? { Headers: Object.entries(mail.headers).map(([Name, Value]) => ({ Name, Value })) } : {})
 							}
 						}
 					})
@@ -93,7 +120,7 @@ export async function sendMail(mail: Mail): Promise<void> {
 	const kind = process.env.MAIL_TRANSPORT || 'log';
 	if (cached?.key !== kind) cached = { key: kind, send: await createTransport(kind) };
 	const from = process.env.MAIL_FROM || 'Water Management <no-reply@localhost>';
-	await cached.send({ ...mail, to: oneLine(mail.to) }, from);
+	await cached.send({ ...mail, to: oneLine(mail.to), headers: safeHeaders(mail.headers) }, from);
 }
 
 /**
