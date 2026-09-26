@@ -38,6 +38,8 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await expect(panel.getByRole('status')).toHaveText('Published. 2 farm views updated.');
 	await expect(panel.getByRole('heading', { name: /Publication/ }).getByText('Published', { exact: true })).toBeVisible();
 	await expect(panel.getByRole('definition').first()).toHaveText('Advisory · 10 %');
+	// The next update is a calendar day, shown as one (never shifted through a timezone).
+	await expect(panel.getByRole('definition').last()).toHaveText('15 Feb 2022');
 	await expect(row('Baseline').getByText('Published', { exact: true })).toBeVisible();
 	await expect(row('Scratch').getByText('Published', { exact: true })).toHaveCount(0);
 	// A published run is kept: no delete button.
