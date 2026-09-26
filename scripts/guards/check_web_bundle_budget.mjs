@@ -631,6 +631,14 @@
 //             CompareView, a chunk shared by the page and the workspace tab
 //             (split overhead), plus the tab's wiring and links. Measured
 //             937 → 940 over main @ d443df7. Headroom ~5 KB.
+// 2026-09-26  total 945 → 948 KB. Issue #45, series import formats: the
+//             per-file delimiter and decimal-separator reader (semicolon and
+//             tab files with decimal commas, quoted fields, thousands
+//             separators) and the DWS export reader, on the engine's DWS row
+//             parser shared with the feed, plus the upload summary's DWS
+//             lines. Measured 945 → 948 (+3.0 KB, 966 406 → 969 461 bytes)
+//             over main @ 7f49dd4, all in the lazy upload-form chunk (+2.9 KB)
+//             and the help guide; largest chunk unchanged. No headroom left.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -641,7 +649,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 945,
+	totalCodeKb: 948,
 	largestChunkKb: 42,
 	largestWorkerKb: 35,
 	largestSpreadsheetWorkerKb: 95,

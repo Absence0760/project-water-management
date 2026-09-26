@@ -168,3 +168,78 @@ describe('sub-daily files', () => {
 		expect(r.values).toEqual([1, null]);
 	});
 });
+
+// Issue #45: delimiter and decimal separator are decided per file, never per
+// row, and an error names the real problem (a number, not "not a date").
+describe('parseSeriesCsv delimiters and decimal separators', () => {
+	const values = (text: string) => parseSeriesCsv(text).values;
+
+	it('reads a semicolon file with decimal commas (the old splitter read 2020-01-05;12 as the date)', () => {
+		expect(values('date;value\n2020-01-05;12,5\n2020-01-06;0,359\n2020-01-07;3\n')).toEqual([12.5, 0.359, 3]);
+		expect(values('Datum;Reën (mm)\n05/01/2020;12,5\n06/01/2020;\n')).toEqual([12.5, null]);
+	});
+
+	it('reads a tab file with decimal commas, and one with decimal points', () => {
+		expect(values('2020-01-05\t12,5\n2020-01-06\t1,25\n')).toEqual([12.5, 1.25]);
+		expect(values('date\tvalue\n2020-01-05\t12.5\n')).toEqual([12.5]);
+	});
+
+	it('reads quoted decimal commas and thousands separators in a comma file', () => {
+		expect(values('date,value\n2020-01-05,"12,5"\n2020-01-06,"0,25"\n')).toEqual([12.5, 0.25]);
+		expect(values('date,value\n2020-01-05,"1,234.5"\n2020-01-06,"1,234,567"\n2020-01-07,2.5\n')).toEqual([1234.5, 1234567, 2.5]);
+		// A quote inside a quoted field, and a quoted header.
+		expect(values('"date","value ""mm"""\n"2020-01-05","3"\n')).toEqual([3]);
+	});
+
+	it('reads thousands separators with a decimal comma: dots and spaces', () => {
+		expect(values('2020-01-05;1.234,5\n2020-01-06;1 234,5\n2020-01-07;1 234\n2020-01-08;0,5\n')).toEqual([1234.5, 1234.5, 1234, 0.5]);
+	});
+
+	it('settles a value that reads either way from the rest of the file', () => {
+		// 0,359 says decimal comma, so 1,897 is 1.897 (a DWS-style flow), not 1897.
+		expect(values('2020-01-05;1,897\n2020-01-06;0,359\n')).toEqual([1.897, 0.359]);
+		// 2.5 says decimal point, so 1.234 is 1.234.
+		expect(values('2020-01-05;1.234\n2020-01-06;2.5\n')).toEqual([1.234, 2.5]);
+		// A comma file's unquoted values can't hold a decimal comma: 1.234 is 1.234, and a quoted 1,234 is a thousand.
+		expect(values('2020-01-05,1.234\n2020-01-06,"1,234"\n')).toEqual([1.234, 1234]);
+	});
+
+	it('refuses a value nothing in the file settles, rather than guessing', () => {
+		expect(() => parseSeriesCsv('2020-01-05;1,234\n2020-01-06;5\n')).toThrow(
+			/^Line 1: "1,234" could be 1234 or 1\.234, and no other value in the file shows whether "," is a decimal or a thousands separator/
+		);
+		expect(() => parseSeriesCsv('date\tvalue\n2020-01-05\t2.500\n')).toThrow(/Line 2: "2\.500" could be 2500 or 2\.500/);
+	});
+
+	it('refuses a file that mixes decimal points and decimal commas, naming a line of each', () => {
+		expect(() => parseSeriesCsv('2020-01-05;12,5\n2020-01-06;3.25\n')).toThrow(
+			'the file mixes decimal points ("3.25", line 2) and decimal commas ("12,5", line 1); use one throughout'
+		);
+	});
+
+	it('says a bad number is a bad number, and a row split another way is that, not a bad date', () => {
+		expect(() => parseSeriesCsv('2020-01-05;12,5\n2020-01-06;1,2,3\n')).toThrow('Line 2: "1,2,3" is not a number');
+		expect(() => parseSeriesCsv('2020-01-05;12,5\n2020-01-06;1.2.3\n')).toThrow('Line 2: "1.2.3" is not a number');
+		expect(() => parseSeriesCsv('date,value\n2020-01-05,1\n2020-01-06,2\n2020-01-07;3\n')).toThrow(
+			'Line 4: this row separates its columns with semicolons, but the file uses commas'
+		);
+		expect(() => parseSeriesCsv('2020-01-05,0x10')).toThrow('"0x10" is not a number');
+	});
+
+	it('reads YYYYMMDD dates in a CSV', () => {
+		expect(parseSeriesCsv('20200105,1\n20200107,2\n')).toMatchObject({ startDate: '2020-01-05', values: [1, null, 2], dateOrder: 'iso' });
+	});
+
+	it('positive control: an ordinary comma CSV parses exactly as before', () => {
+		const text = 'date,value\n2021-10-01,0\n2021-10-02,12.4\n2021-10-03,\n2021-10-04,NA\n2021-10-05,-\n2021-10-06, 7 \n2021-10-07,1e1\n2021-10-08,.5\n';
+		expect(parseSeriesCsv(text)).toEqual({
+			startDate: '2021-10-01',
+			endDate: '2021-10-08',
+			values: [0, 12.4, null, null, null, 7, 10, 0.5],
+			rowCount: 5,
+			missingCount: 3,
+			dateOrder: 'iso',
+			dateOrderAssumed: false
+		});
+	});
+});
