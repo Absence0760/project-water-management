@@ -41,18 +41,39 @@ fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
-Tabs follow the modelling workflow:
+The tabs are grouped into three sections (issue #17, option A · Results
+first): **Outcomes** (Overview, Runs & results, Scenarios, Allocations),
+**Build the model** (Network, Crops & demand, Transfers, Data, Settings &
+calibration) and **Review** (Applications, History). The sections are
+`NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
+whatever tabs a role sees into them (empty sections are dropped; a tab no
+section lists joins *Build the model*). It is layout only: the URLs stay
+`?tab=<id>` and which tabs a role sees is unchanged (below).
+
+- **1680 px and wider:** a sidebar beside the tab's content, with the section
+  labels shown, sticky under the app header. The page grows by the sidebar's
+  width, so the content column keeps its usual 1480 px maximum. Narrower
+  screens don't get the sidebar because the network's node table only just fits
+  1440 px on its own (`model.spec.ts`).
+- **900–1679 px:** one strip across the top, sections side by side with a
+  divider and a small label over each.
+- **Below 900 px (phones):** the same strip scrolling sideways; the section labels are read
+  out (each section is a named group) but not shown.
+
+The arrow keys move through the tabs in the order shown, across sections,
+wrapping at the ends (Right/Down next, Left/Up previous).
 
 | Tab | `?tab=` | Aliases | Code |
 | --- | --- | --- | --- |
 | Overview | (none) | | `lib/components/overview/` |
+| Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
+| Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
+| Allocations | `allocations` | | `lib/components/allocations/` |
 | Network | `network` | | `lib/components/network/` |
 | Crops & demand | `crops` | `demand` | `lib/components/crops/` |
 | Transfers | `transfers` | | `lib/components/transfers/` |
 | Data | `series` | `data`, `timeseries` | `lib/components/series/` |
 | Settings & calibration | `settings` | `calibration` | `lib/components/settings/` |
-| Runs & results | `runs` (`&run=<id>`) | `results` | `lib/components/runs/` |
-| Scenarios | `scenarios` (`&scenario=<id>`) | | `lib/components/scenarios/` |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
 
