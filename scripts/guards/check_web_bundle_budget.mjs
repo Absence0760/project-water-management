@@ -528,6 +528,15 @@
 //             is one module per help category (docs/followups.md §
 //             Housekeeping), and #9's engine split for the total. No new
 //             dependency.
+// 2026-09-26  total 900 → 907 KB (measured 905), calibration worker
+//             61 → 64 KB (measured 62); largest chunk stays 43 KB (measured
+//             42.2, the help content: no headroom left, so the split in
+//             docs/followups.md § Housekeeping is next). WP-3.9's individual
+//             boreholes: the borehole form on a node, the borehole scenario
+//             ops and the groundwater-by-water-year table, and the engine's
+//             network/boreholes.ts supply order and annual use (in every run,
+//             so in the calibration worker too). No new dependency. #9's
+//             engine split is the way back for the total and the worker.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -538,9 +547,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 900,
+	totalCodeKb: 907,
 	largestChunkKb: 43,
-	largestWorkerKb: 61,
+	largestWorkerKb: 64,
 	largestSpreadsheetWorkerKb: 95,
 	largestAssetKb: 100,
 });
