@@ -403,8 +403,8 @@ stores while the ensemble is still `started`, so of two posts only one
 stores). `connection.db.test.ts` pins it with a pool of **one** connection
 and an injected engine: another query succeeds while a run computes.
 
-**Jobs keep the engine inside their transaction.** The `rerun` and `yield`
-handlers run in the job's `withUser` transaction (`executeRun`, one
+**Jobs keep the engine inside their transaction.** The `rerun`, `yield` and
+`sweep` handlers run in the job's `withUser` transaction (`executeRun`, one
 transaction). A job's writes must commit together with its `done` (see
 [Background work](#background-work)), which is what makes a retry after a
 crash or a lost lease store nothing twice. The worker's pool serves one job
@@ -421,7 +421,8 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 [§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield` (below); step 2's alerts plug in as a further kind.
+dam yield's `yield` and the scenario sweep's `sweep` (below); step 2's
+alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
   `run_after` (delay and backoff), the dedupe key, attempts and a sanitised
@@ -492,6 +493,16 @@ dam yield's `yield` (below); step 2's alerts plug in as a further kind.
   its transaction for the whole search (seconds for a firm yield, under a
   minute for a curve, [model.md §2.13](./model.md#213-firm-yield-and-storageyield-engine--0340-roadmap-wp-36)),
   well inside the 360 s lease. At most 2 pending per user.
+- **`sweep`** (issue #53 R2, `jobs/handlers/sweep.ts`, [api.md § Sweeps](./api.md#sweeps),
+  [scenarios.md § Sweeps](./scenarios.md#sweeps)): a base run × up to 12
+  named op sets, as the editor who asked. The base run's stored input is
+  rebuilt once; each member's ops are applied (`checkScenario`) and the
+  engine runs, and the member stores its run summary, or its problems when
+  its ops don't apply (the sweep carries on). `progress` after each member;
+  no cancel (at most 12 runs, each well under a second on an example
+  catchment). The sweep row and its members are written by the request in
+  the same transaction as the job, and completed by the job. At most 2
+  pending per user.
 - **Dedupe**: at most one *pending* (queued, or failed and waiting to retry)
   job per `(project, dedupe_key)`, and a pending job isn't claimed while one
   with its key is running. That departs from the roadmap's index over

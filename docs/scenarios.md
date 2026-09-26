@@ -44,6 +44,9 @@ are empty and nothing below changes.
     duplicate node or crop name (compare matches copies by name), a crop
     area on a non-farm, a transfer to itself or touching an other water
     user, land cover on a non-farm, a drought borehole rule without a dam,
+    a supply rule or river pump that doesn't fit the node (on a gauge or
+    user, `trigger` without a dam, `runOfRiver` with one, a stop level
+    below the trigger; WP-3.8),
     a catchment with no land left (`runModel` refuses 0 km²), or a
     simulation, reporting or calibration window that ends before it starts.
     These are the model's save rules (`modelRuleIssues`,
@@ -66,7 +69,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | Op | Fields | What it does |
 | --- | --- | --- |
 | `node.set` | `nodeId, field, value` | Sets one whitelisted field (below). Typed per field. |
-| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; changing them on an existing node (`node.set`) is still to do (WP-3.8). |
+| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. The outflow node can't be removed. |
 | `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
 | `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
@@ -93,11 +96,19 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct` (a
   `node.add` may also carry a `damCurve`; there is no `node.set` for it
   yet); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
-  `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`.
-  A new farm's `node.add` may also carry its supply rule and river pump
-  (WP-3.8: `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`,
-  `supplyStopPct`, under the same model rules as a save); there is no
-  `node.set` for them yet.
+  `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`;
+  supply rule and river pump (WP-3.8, [model.md §2.7e](./model.md))
+  `supplyRule` (`damFirst` | `riverFirst` | `trigger` | `runOfRiver`),
+  `pumpCapacityM3Day` (≥ 0, null = no limit), `supplyTriggerPct`,
+  `supplyStopPct` (0–1). How they fit together is a save rule, checked
+  when the op applies: only a farm has them, `trigger` needs a dam,
+  `runOfRiver` has none (`damCapacityM3` 0), and the stop level is at least
+  the trigger level under `trigger`. Each op is checked on its own, so
+  order matters: to put a farm on `trigger` with raised levels, set the
+  stop level before the trigger level; to take a `trigger` farm to run of
+  river, go through `riverFirst` (rule, then dam capacity 0, then
+  `runOfRiver`). "What if this farm pumps from the river at 1,200 m³/day"
+  is two ops: `supplyRule` → `riverFirst` and `pumpCapacityM3Day` → 1200.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name` only (a gauge only measures).
@@ -177,7 +188,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale` | never | baseline (settings, calibration, EWR, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`) | baseline: other parties' nodes, and the catchment's partition of runoff |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`); so the own farm's supply rule and river pump are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, and the catchment's partition of runoff |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
@@ -362,7 +373,69 @@ the types in `frontend/src/lib/api/types.ts` (`Scenario`, `ScenarioCheck`,
 
 Backend tests: `backend/src/scenarios/scenarios.db.test.ts` (the API end to
 end, RLS with positive controls, cited bases, status, a dropped node's name
-kept through a rebase and a re-read), `schema.test.ts` and `names.test.ts`.
+kept through a rebase and a re-read; a `demand.scale` on one farm in one
+month classed baseline, then proposal once the farm is owned, stored with its
+`demandFactor` and run, the stored daily demand the base's × the factor on
+exactly those days and the other farm's untouched; one with no `nodeIds`
+baseline even with every farm owned, the same scale naming them a
+proposal), `schema.test.ts` and `names.test.ts`.
+
+## Sweeps
+
+A **sweep** (issue #53 R2, [planning-outputs.md §3.2](./design/planning-outputs.md#32-r2-scenario-sweeps-as-a-background-job-m))
+is one saved base run × a list of named **members**, each an op set, run
+as one background job. The main use is demand levels: `demand.scale` at
+1.0, 0.85 and 0.7, three members of one op each, which R4's outcome matrix
+and R5's seasonal outlook read. Built as backend and API only
+(`backend/src/sweeps/`, the `sweep` job in `backend/src/jobs/handlers/sweep.ts`,
+migration 062); the UI waits for R4's matrix view, the first screen that
+needs one.
+
+- **Not a scenario.** A member has no row in `scenario` and makes no
+  `model_run`: it stores its **run summary** (the `RunSummary` a run
+  stores in `model_run.summary`) and the catchment-level daily series R4's
+  outcome matrix and R5's outlook read (`natural_flow`,
+  `simulated_outflow`, `ewr`, `ewr_shortfall`; `SWEEP_SERIES_KEYS`), never
+  every node's series, so a sweep never counts against the 20-run cap and
+  never shows in the run list. A member's `{ startDate, series, summary }`
+  is what `outcomeMatrix`'s `OutcomeLevelInput.run` takes (map `null`
+  values back to `NaN`). The storage follows the
+  uncertainty ensemble's pattern ([model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)):
+  the row with everything its result depends on is written first, the
+  result is stored once by whoever asked, and never changed after
+  ([data-model.md § Scenario sweeps](./data-model.md#scenario-sweeps-062_scenario_sweepssql)).
+- **Validation.** Each member's ops are checked as a scenario's are
+  (`scenarios/schema.ts` `checkOps`: the engine's `validateScenarioOps`,
+  ids as UUIDs) when the sweep is asked for. Whether they *apply* to the
+  base run is checked per member by the job, with `checkScenario` as a team
+  scenario with no owned nodes: a member whose ops don't apply stores its
+  problems (`status: problems`, the same lines a scenario's check gives), a
+  member the engine refuses stores the engine's message (`failed`), and the
+  other members still run. A sweep never fails for one member.
+- **The job** (`sweep`, [architecture.md § Background work](./architecture.md#background-work))
+  runs as the editor who asked, under RLS, and fails closed if they lost the
+  role. It rebuilds the base run's stored input once (`loadBaseInput`),
+  applies each member's ops and runs the engine inside the job's
+  transaction, so every member's outcome commits with the job's `done`; it
+  reports progress after each member. A base run that can't be rebuilt any
+  more fails the job, and the sweep stays `pending` with the job's error.
+  Works locally with `JOB_TRANSPORT=inprocess` (`pnpm dev:full`) or
+  `pnpm dev:jobs:tick`.
+- **Limits.** At most **12 members** (`SWEEP_MEMBERS_MAX`, a CHECK on
+  `position`): R4 and R5 use 3–5 demand levels, 12 leaves room for a
+  monthly plan while keeping every member of the largest catchment in one
+  job transaction well inside the job's lease. At most 2 sweep jobs queued
+  or running per user; the project keeps its newest 20 sweeps; a sweep goes
+  with its base run.
+- **Base run.** An ordinary run of the model only, as for a scenario: not a
+  scenario run, not a forecast run (a sweep is judged on history).
+  R5's outlook will need a sweep from a run's state on a decision date;
+  that is R5's to add.
+
+API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
+([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`
+(the body) and `sweeps.db.test.ts` (the job end to end, problems per member,
+RLS with a positive control, write-once outcomes, limits, cascade).
 
 ## UI
 
@@ -414,7 +487,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   model is never loaded or saved there. **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.add`, `node.remove` (re-linking as the editor does),
-  `node.set` per changed field the engine lets a scenario set, `node.add`
+  `node.set` per changed field the engine lets a scenario set (a node's
+  fields in an order that applies: each step takes the first op that adds
+  no save-rule issue to the node, so a `trigger` farm moved to river first
+  with its dam emptied records the rule before the dam; an edit no order
+  fits, such as `trigger` straight to run of river, is reported), `node.add`
   (each after the node it drains into), `cropArea.set` with the farm's new
   total of a crop, `transfer.remove` / `.add` / `.set` per field,
   `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
@@ -448,7 +525,13 @@ rebase reporting a change that no longer applies and the `422`; a viewer
 read only; override mode recording one edit in each table as changes,
 refusing a kind change, leaving the live model untouched, undone as one
 edit, with axe; submit, withdraw, delete releasing the base; axe in light,
-dark and on a phone).
+dark and on a phone) and `e2e/tests/scenario-demand-scale.spec.ts` (Scale
+demand through the form: one farm at 50 % in December and January, the
+200 % limit refused, classed baseline then proposal once the farm is the
+proposer's, kept over a reload, run; the scenario run's daily demand is the
+base's × 0.5 on exactly those days and the base's on the rest, and the
+compare section's farm table shows that farm's demand down to the run's mean
+and the other farm's unchanged).
 
 ## Applications (WP-3.3)
 
@@ -493,7 +576,8 @@ scenario is `'team'`, and behaves exactly as above).
     (removing a hidden farm reports no crop areas, transfers, patches or
     boreholes; the EWR tables sited there are settings, which they see);
   - a rule the op breaks because of hidden data (a rule about a hidden
-    item, a hidden farm's drought borehole rule, and, while any farm is
+    item, a hidden farm's drought borehole rule or supply rule (both read
+    its hidden dam or levels), and, while any farm is
     hidden, flow shares over 100 % or no catchment area left, which an op's
     own range-checked value can't break alone) reads only `op N (…):
     doesn't apply to the catchment as modelled` (`MASKED_RULE`). The

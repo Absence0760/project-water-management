@@ -733,6 +733,12 @@
 // 2026-09-26  total 985 → 895 KB (measured 890). The two entries above
 //             were written in parallel; merged, #9's reductions and #17's
 //             Network map measure 890. Headroom ~5 KB.
+// 2026-09-26  ceilings unchanged (issue #53 follow-up, measured @ 73311b3,
+//             before #9's cuts). A Lazy share-the-pain board raises the total
+//             ~1.3 KB (its own chunk compresses worse than it saves) and the
+//             Runs tab always renders it, so it stays eager. The Scale demand
+//             form is ~40 template lines in the already-lazy Scenarios chunk:
+//             not worth a chunk.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

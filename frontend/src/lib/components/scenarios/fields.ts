@@ -13,6 +13,7 @@ import {
 	NODE_SET_FIELDS,
 	RUNOFF_MODELS,
 	SETTINGS_PATHS,
+	SUPPLY_RULES,
 	TRANSFER_SET_FIELDS,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
@@ -111,7 +112,15 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	streamDepletionLagDays: { label: 'Stream depletion lag', spec: num('days') },
 	userDemandM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	userReturnPct: { label: 'Share returned', spec: pct() },
-	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES) } }
+	userPriority: { label: 'Priority', spec: { t: 'enum', options: plain(USER_PRIORITIES) } },
+	// Supply rule and river pump (WP-3.8, docs/model.md §2.7e): the rule's words are run comparison's (engine compare.ts).
+	supplyRule: {
+		label: 'Supply rule',
+		spec: { t: 'enum', options: plain(SUPPLY_RULES, { damFirst: 'dam only', riverFirst: 'river first', trigger: 'dam, river when low', runOfRiver: 'run of river' }) }
+	},
+	pumpCapacityM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	supplyTriggerPct: { label: 'Supply switch-to-river level', spec: pct() },
+	supplyStopPct: { label: 'Supply switch-back level', spec: pct() }
 };
 
 /** The fields node.set may change on a node of this kind, in the engine's order. */

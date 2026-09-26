@@ -126,6 +126,59 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'node.set', nodeId: 'A', field: 'boreholeRule', value: 'drought' }, b).problems).toEqual([]);
 	});
 
+	it('node.set changes a farm\'s supply rule and river pump (WP-3.8): river first at 1,200 m³/day', () => {
+		const r = applyScenario(base(), [
+			{ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'riverFirst' },
+			{ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: 1200 }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')).toMatchObject({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 });
+		// The run pumps from the river at A (it irrigates lucerne), never more than the pump's capacity; the base never does.
+		expect(runModel(base()).series.some((x) => x.key === 'river_abstraction')).toBe(false);
+		const out = runModel(r.input);
+		const pumped = out.series.find((x) => x.nodeId === 'A' && x.key === 'river_abstraction')!.values;
+		expect(Math.max(...pumped)).toBeGreaterThan(0);
+		expect(Math.max(...pumped)).toBeLessThanOrEqual(1200 + 1e-9);
+		// null lifts the limit; the trigger rule's levels are fractions with stop ≥ trigger.
+		const a = applyScenario(base(), [
+			{ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: null },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'trigger' },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyStopPct', value: 0.8 },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 0.5 }
+		]);
+		expect(a.problems).toEqual([]);
+		expect(nodeOf(a.input, 'A')).toMatchObject({ supplyRule: 'trigger', pumpCapacityM3Day: null, supplyTriggerPct: 0.5, supplyStopPct: 0.8 });
+	});
+
+	it('node.set refuses a supply rule or pump that doesn\'t fit the node (the save rules, modelRules.ts)', () => {
+		const b = base();
+		const err = (op: ScenarioOp, x = b) => one(op, x).problems;
+		// Only a farm has them: the kind rule names the field.
+		expect(err({ op: 'node.set', nodeId: 'G', field: 'supplyRule', value: 'riverFirst' })[0]).toMatch(/"supplyRule" can't be set on a gauge/);
+		const withUser = base();
+		withUser.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'B', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 4 }));
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)[0]).toMatch(/"pumpCapacityM3Day" can't be set on a user/);
+		// Values: a known rule, a pump ≥ 0 or null, levels 0–1.
+		expect(err({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'always' } as unknown as ScenarioOp)[0]).toMatch(/supplyRule must be one of damFirst, riverFirst, trigger, runOfRiver/);
+		expect(err({ op: 'node.set', nodeId: 'B', field: 'pumpCapacityM3Day', value: -1 })[0]).toMatch(/pumpCapacityM3Day must be at least 0/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 1.2 })[0]).toMatch(/supplyTriggerPct must be at most 1/);
+		// Trigger switches on a dam: B has none; A has one (positive control).
+		expect(err({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'trigger' })[0]).toMatch(/"Farm B": the trigger supply rule needs a farm dam/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'trigger' })).toEqual([]);
+		// Run of river has no dam: A has one; B hasn't (positive control).
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'runOfRiver' })[0]).toMatch(/"Farm A": run of river has no dam/);
+		expect(err({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'runOfRiver' })).toEqual([]);
+		// Stop ≥ trigger under the trigger rule (defaults 40 % / 60 %).
+		const trig = applyScenario(base(), [{ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'trigger' }]).input;
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 0.7 }, trig)[0]).toMatch(/stop level must be at least its trigger level/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyStopPct', value: 0.3 }, trig)[0]).toMatch(/stop level must be at least its trigger level/);
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 0.6 }, trig)).toEqual([]);
+		// And the dam rules the other way round: a trigger or run-of-river farm can't lose or gain its dam.
+		expect(err({ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 0 }, trig)[0]).toMatch(/trigger supply rule needs a farm dam/);
+		const ror = applyScenario(base(), [{ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'runOfRiver' }]).input;
+		expect(err({ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 5000 }, ror)[0]).toMatch(/run of river has no dam/);
+	});
+
 	it('node.add adds a leaf with the engine defaults for fields it leaves out', () => {
 		const add = node('N', { name: 'New dam', downstreamNodeId: 'B', damCapacityM3: 30_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
 		const r = one({ op: 'node.add', node: add });
@@ -503,6 +556,11 @@ describe('classifyOp', () => {
 		expect(cls({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 })).toBe('proposal');
 		expect(cls({ op: 'crop.add', crop: { id: 'x', name: 'x', cropFactor: new Array(12).fill(1) } })).toBe('proposal');
 		expect(cls({ op: 'landCover.add', patch: { id: 'p', nodeId: 'A', coverClass: 'pine', areaKm2: 1, densityPct: 1, factors: null } })).toBe('proposal');
+		// How the own farm takes water (WP-3.8) is the licence ask itself, like a new pump.
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'riverFirst' })).toBe('proposal');
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: 1200 })).toBe('proposal');
+		expect(cls({ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 0.3 })).toBe('proposal');
+		expect(cls({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'riverFirst' })).toBe('baseline');
 		expect(classifyOp({ op: 'transfer.remove', transferId: 't1' }, ['A', 'C'], b)).toBe('proposal');
 	});
 
@@ -584,6 +642,25 @@ describe('validateScenarioOps', () => {
 		// Optional fields stay out when not given, so the stored op (and its hash) is what was sent.
 		expect(ops[12]).toEqual({ op: 'demand.scale', factor: 0.85 });
 		expect(ops[13]).toEqual({ op: 'demand.scale', factor: 0.7, nodeIds: ['A', 'B'], months: [12, 1], category: 'farm' });
+	});
+
+	it('takes node.set of the supply rule and river pump (WP-3.8), each value checked', () => {
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'riverFirst' },
+			{ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: 1200 },
+			{ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: null },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyTriggerPct', value: 0.3 },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyStopPct', value: 0.7 },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyRule', value: 'pumpAlways' },
+			{ op: 'node.set', nodeId: 'A', field: 'pumpCapacityM3Day', value: -5 },
+			{ op: 'node.set', nodeId: 'A', field: 'supplyStopPct', value: 2 }
+		]);
+		expect(ops).toHaveLength(5);
+		expect(errors).toEqual([
+			'ops[5].value: must be one of damFirst, riverFirst, trigger, runOfRiver',
+			'ops[6].value: must be at least 0',
+			'ops[7].value: must be at most 1'
+		]);
 	});
 
 	it('checks demand.scale: the factor 0–2, a non-empty list of distinct nodes and months, the category', () => {
@@ -828,6 +905,15 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(plain).toHaveLength(1);
 		expect(plain[0]).toContain('Secret hole');
 		expect(plain[0]).toContain('drought borehole rule');
+	});
+
+	it('masks a supply rule that trips on a hidden node\'s dam, and names it unmasked (WP-3.8)', () => {
+		// C (hidden) has a dam: run of river doesn't fit it, which only its dam says.
+		const op: ScenarioOp = { op: 'node.set', nodeId: 'C', field: 'supplyRule', value: 'runOfRiver' };
+		expect(apply([op]).problems).toEqual([`op 1 (node.set): ${MASKED_RULE}`]);
+		expect(applyScenario(baseM(), [op]).problems[0]).toMatch(/run of river has no dam/);
+		// Their own farm A keeps the rule's words.
+		expect(apply([{ ...op, nodeId: 'A' }]).problems[0]).toMatch(/"Farm A": run of river has no dam/);
 	});
 
 	it('says only that for the catchment-wide value rules too, while any node is hidden', () => {

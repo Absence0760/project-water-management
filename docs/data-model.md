@@ -39,6 +39,8 @@ erDiagram
   scenario |o--o{ model_run : "ran as (nullable)"
   project  ||--o{ job : "background jobs"
   project  ||--o{ yield_result : "dam yields (040)"
+  model_run ||--o{ scenario_sweep : "swept (062)"
+  scenario_sweep ||--o{ scenario_sweep_member : "members"
   project  ||--o{ project_import : "import reports"
   app_user ||--o{ project_import : "imported"
   app_user ||--o{ job : "acts as"
@@ -70,6 +72,8 @@ erDiagram
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`; see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
+| `scenario_sweep` | A scenario sweep (062, issue #53 R2): a base run × named op sets, run as one `sweep` job; `base_run_id`, `job_id`, `name`, `status` (`pending` / `complete`), `engine_version`; see [Scenario sweeps](#scenario-sweeps-062_scenario_sweepssql) | none (the workbook is copied by hand for each what-if) |
+| `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
@@ -556,8 +560,10 @@ the result change?", and put back any earlier version.
   today, with reasons in the table: project delete, `POST /jobs`, feed
   run-now, evidence nomination (its own append-only history), uncertainty
   ensembles, `POST /reports`, the allocation import preview (writes
-  nothing), notes (each is its own record), and queuing or cancelling a
-  yield job (the `yield_result` row keeps who asked).
+  nothing), notes (each is its own record), queuing or cancelling a
+  yield job (the `yield_result` row keeps who asked), and starting a sweep
+  (the `scenario_sweep` row keeps who asked, its base run and its members'
+  ops).
 
 ### Stored run inputs (021_series_blob.sql)
 
@@ -1413,7 +1419,7 @@ records nothing (nothing it holds changed).
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040; `scenario_sweep` and `scenario_sweep_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 062). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -1636,6 +1642,65 @@ No job table of its own: `job` holds status, progress and errors.
   `job_id`, `created_by`.
 - **Not yet**: the roadmap's "a contributor reads and inserts for their own
   scenario" waits for WP-3.3's `contributor` role ([followups.md](./followups.md)).
+
+### Scenario sweeps (062_scenario_sweeps.sql)
+
+A base run × named op sets, run as one `sweep` job (issue #53 R2,
+[scenarios.md § Sweeps](./scenarios.md#sweeps), [api.md § Sweeps](./api.md#sweeps)).
+The uncertainty ensemble's pattern (014): the row is written at the start
+with everything the result depends on, then completed once by whoever
+started it and never changed after. Unlike an ensemble a sweep is not
+evidence, so an editor may delete one; the API keeps the newest 20 per
+project. `job` holds status, progress and errors.
+
+`scenario_sweep`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `base_run_id` | The saved run the members' ops apply to (its stored input). `ON DELETE CASCADE`: a sweep goes with its base run. Never a scenario run or a forecast run (the guard) |
+| `job_id` | The `sweep` job computing it (`ON DELETE SET NULL` when the 30-day purge deletes the job) |
+| `name` | 1–200 characters |
+| `status` | `pending` (written; the job hasn't finished it) or `complete` |
+| `engine_version`, `completed_at` | Set on completion (CHECK: both exactly when `complete`) |
+| `created_by`, `created_at` | Stamped by the insert trigger. `created_by` is `ON DELETE SET NULL`: a sweep is derived from its base run, which is the evidence |
+
+`scenario_sweep_member`:
+
+| Column | Holds |
+| --- | --- |
+| `sweep_id`, `project_id` | Its sweep (`ON DELETE CASCADE`) and project |
+| `position` | 0–11: at most 12 members (`SWEEP_MEMBERS_MAX`). `UNIQUE (sweep_id, position)` |
+| `name` | 1–100 characters, unique within the sweep ignoring case (`UNIQUE (sweep_id, lower(name))`) |
+| `ops`, `ops_sha256` | The op set as the API validated it (≤ 256 KB) and its RFC 8785 SHA-256, as `scenario.ops` / `ops_sha256` |
+| `status` | `pending`, `done`, `problems` (its ops don't apply to the base run) or `failed` (the engine refused the input) |
+| `problems` | A JSON list of lines (≤ 64 KB), non-empty for `problems` and `failed`, `[]` otherwise |
+| `summary` | The engine's `RunSummary`, the shape `model_run.summary` stores; exactly when `done` |
+| `series` | The catchment-level daily `RunSeries[]` (`nodeId` null) for `natural_flow`, `simulated_outflow`, `ewr`, `ewr_shortfall` (`SWEEP_SERIES_KEYS`, what R4 and R5 read), a missing value as null; exactly when `done` (with `summary`) |
+| `start_date`, `end_date`, `finished_at` | The run's window (when `done`), and when its outcome was stored |
+
+- **RLS**: SELECT for viewers on both (farmers and contributors read
+  nothing, as for `model_run`), INSERT and DELETE for editors, UPDATE for
+  editors on `pending` rows only. `water_app` may UPDATE only the outcome
+  columns (`status`, `engine_version`, `completed_at`; and `status`,
+  `problems`, `summary`, `series`, `start_date`, `end_date`, `finished_at`): the base
+  run, job, name and members' ops are fixed at insert (the catalogue
+  guard's `COLUMN_ONLY_UPDATE`).
+- **`scenario_sweep_guard`** (INSERT, `SECURITY DEFINER`): the base run is
+  the row's project's and an ordinary run (not a scenario's, not a
+  forecast), the job is a `sweep` job of the project; stamps the author and
+  time, forces `pending`.
+- **`scenario_sweep_complete`** (UPDATE): only a `pending` sweep, only to
+  `complete`, only by its author, and only once no member is `pending`;
+  stamps `completed_at`.
+- **`scenario_sweep_member_guard`** (INSERT, `SECURITY DEFINER`): its sweep
+  is the row's project's and still `pending`; forces `pending` with no
+  outcome. **`scenario_sweep_member_outcome`** (UPDATE, `SECURITY DEFINER`):
+  a `pending` member gets one outcome, written by the sweep's author (the
+  job runs as them); stamps `finished_at`.
+- **Indexes**: `(project_id, created_at DESC)` (the list, and the project
+  key), `base_run_id`, `job_id`, `created_by`; on members the unique
+  `(sweep_id, position)` and `(sweep_id, lower(name))`, and `project_id`.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 

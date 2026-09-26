@@ -1812,7 +1812,7 @@ A job runs later, in the worker, as the editor who queued it.
 
 - `JobMeta = { id, kind, status, attempts, maxAttempts, runAfter, createdAt, startedAt, finishedAt, error, createdBy, progress }`.
   Never the payload, and nothing about the worker's lease. `progress`
-  (040_yield) is 0–100 while a job that reports it runs (a `yield` job),
+  (040_yield) is 0–100 while a job that reports it runs (a `yield` or `sweep` job),
   null otherwise; it resets when the job is claimed again, and a finished
   job keeps its last value.
 - `status`: `queued` (due at `runAfter`) → `running` → `done`; or `failed`
@@ -1835,7 +1835,8 @@ A job runs later, in the worker, as the editor who queued it.
 - `GET /jobs` also lists the data feeds' `feed_fetch` / `feed_ingest` jobs
   ([§ Data feeds](#data-feeds)); they are queued by the server, never through
   `POST /jobs`. It lists `yield` jobs too, queued through `POST /yield`
-  ([§ Yield](#yield)).
+  ([§ Yield](#yield)), and `sweep` jobs, queued through `POST /sweeps`
+  ([§ Sweeps](#sweeps)).
 
 ## Yield
 
@@ -1881,6 +1882,60 @@ scenario (its ops on its base run's inputs), never the live model.
   `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
   newest 5 results per run or scenario and dam.
 - Every number is **historical** (it replays the one record); the UI says so.
+
+## Sweeps
+
+A scenario sweep (issue #53 R2, [scenarios.md § Sweeps](./scenarios.md#sweeps)):
+one saved base run × a list of named members, each an op set (typically
+`demand.scale` at 1.0, 0.85 and 0.7), run by one background `sweep` job on
+the base run's stored inputs, never the live model. Each member stores its
+run summary (the `RunSummary` a run stores) and its catchment-level
+outcome series, or the problems that kept it from running.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/sweeps` | `{ name, baseRunId, members: [{ name, ops }] }` | `202 { sweep: Sweep, jobId, job: JobMeta }`: the sweep is written `pending` with its members and its job queued | editor |
+| GET | `/projects/:id/sweeps?baseRunId=` | – | `{ sweeps: Sweep[] }`, newest first, optionally of one base run; members **without** `summary` | viewer |
+| GET | `/projects/:id/sweeps/:sweepId?series=true` | – | `{ sweep: Sweep }`, each member with its `summary`, and with `series=true` its `series` too (`400` for another value). `404` for a sweep that isn't this project's | viewer |
+
+- Body (strict): `name` 1–200 characters (trimmed); `baseRunId` a saved run
+  of this project; `members` **1–12** (`SWEEP_MEMBERS_MAX`), each `{ name,
+  ops }` with a `name` of 1–100 characters, unique within the sweep
+  whatever the case, and `ops` checked as a scenario's are
+  ([§ Scenarios](#scenarios): the engine's op validation, ids as UUIDs,
+  at most 500 ops). `ops: []` is the base run as it is.
+- Checked before anything is queued: the base run is this project's and
+  visible (`404 base run not found`), not a scenario run or a forecast run,
+  and rebuildable from its stored inputs (`409`, as for a scenario's base).
+  Whether each member's ops *apply* to the base is the job's to find out,
+  member by member.
+- **At most 2 sweep jobs queued or running per user** (`429`). A job gets 2
+  attempts. A project keeps its newest **20** sweeps: creating one deletes
+  older ones. A sweep goes with its base run (deleting the run, or the
+  20-run cap trimming it, deletes its sweeps).
+- `Sweep = { id, name, baseRunId, baseRun: { id, label, createdAt }, status,
+  engineVersion, job, createdBy, createdAt, completedAt, members:
+  SweepMember[] }`. `status` is `pending` until the job has given every
+  member an outcome, then `complete` (with `engineVersion` and
+  `completedAt`). `job` is `{ id, status, error, progress }` of the job
+  computing it (`JobMeta`'s fields, [§ Jobs](#jobs)), or `null` once the
+  30-day purge removed it: a sweep that stays `pending` behind a `dead` job
+  says why in `job.error` (e.g. the base run can no longer be rebuilt, or
+  the user who asked lost the editor role).
+- `SweepMember = { id, position, name, ops, opsSha256, status, problems,
+  startDate, endDate, finishedAt, summary?, series? }`. `status`: `pending`, `done`
+  (`summary` is its `RunSummary`, `startDate`/`endDate` the run's), `problems`
+  (its ops don't apply to the base run: `problems` lists one line per op,
+  `op 1 (demand.scale): node … not found`, as a scenario's check does) or
+  `failed` (the engine refused the input: `problems` is
+  `["model run failed: …"]`). A member that can't run never fails the sweep.
+- `series` (a `done` member, `?series=true`): the catchment-level daily
+  `RunSeries` (`{ nodeId: null, key, label, unit, values }`) for the keys
+  `natural_flow`, `simulated_outflow`, `ewr` and `ewr_shortfall`
+  (`SWEEP_SERIES_KEYS`, what R4's outcome matrix and R5's outlook read), a
+  missing value as `null`. Not every node's series: a sweep is not a run.
+- Progress: the job reports 0–100 after each member (`job.progress`, and
+  `GET /jobs`). A sweep can't be cancelled; it is at most 12 runs.
 
 ## Data feeds
 
