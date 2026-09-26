@@ -230,6 +230,25 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 	}
 }
 
+/** The series events whose change kept the values it replaced (a series revision): a replace, a person's merge, a delete. */
+const SERIES_KEPT = new Set(['series.replaced', 'series.merged', 'series.deleted']);
+
+/**
+ * What "Restore the earlier values" puts back for an item: the values a
+ * series change replaced, and a restore of them can be undone the same way.
+ * Null for a change that kept none (a new series, a feed's or an API key's
+ * merge). The server keeps a series' newest 5 for up to 180 days, so an old
+ * one may be gone (404).
+ */
+export function seriesRestore(i: HistoryItem): { seriesId: string; revisionId: string; what: string } | null {
+	if (i.type !== 'event') return null;
+	const s = i.subject;
+	if (!SERIES_KEPT.has(i.kind) && !(i.kind === 'restore' && s.target === 'series')) return null;
+	const seriesId = str(s.seriesId);
+	const revisionId = str(s.revisionId);
+	return seriesId && revisionId ? { seriesId, revisionId, what: seriesName(s) } : null;
+}
+
 /** The lines an item shows: a revision's changes, or an event's sentence. */
 export const itemLines = (i: HistoryItem): string[] => (i.type === 'revision' ? revisionLines(i) : [eventLine(i)]);
 

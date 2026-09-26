@@ -2255,6 +2255,15 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   this change", kept with the revision.
 - **Runs**: a collapsible "Changes since this run" and **Restore these
   inputs** (not for a scenario run).
+- **Series values** aren't part of a version. A series change that kept
+  the values it replaced (a replace, a person's merge, a delete, or a restore
+  of them; `timeline.ts` `seriesRestore`) shows **Restore the earlier
+  values** to editors, behind a confirm (`POST …/series/:id/revisions/:rev/restore`).
+  The values it replaces are kept in turn, so it can be undone the same way.
+  A feed's or an API key's merge keeps none, so it has no button. A series
+  keeps its newest 5 earlier versions for up to 180 days; an older one
+  answers "Those values are no longer kept". Afterwards the page reloads the
+  series list. e2e: `e2e/tests/history.spec.ts`.
 - A small "history" affordance on individual fields is not built
   (followups.md).
 

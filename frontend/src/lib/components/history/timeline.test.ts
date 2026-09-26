@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { HistoryEvent, HistoryRevision } from '$lib/api/types';
-import { eventLine, filterEntries, groupByChangeSet, groupByDay, itemLines, localTime, revisionLines, revisionTitle } from './timeline';
+import { eventLine, filterEntries, groupByChangeSet, groupByDay, itemLines, localTime, revisionLines, revisionTitle, seriesRestore } from './timeline';
 
 const rev = (over: Partial<HistoryRevision> = {}): HistoryRevision => ({
 	type: 'revision',
@@ -197,5 +197,24 @@ describe('the parameter filter', () => {
 		expect(out[0]!.revision?.changes).toHaveLength(2);
 		expect(filterEntries(entries, 'keeper')).toHaveLength(1);
 		expect(filterEntries(entries, '')).toHaveLength(2);
+	});
+});
+
+describe('seriesRestore', () => {
+	const kept = { seriesId: 's1', revisionId: '42', kind: 'rain_catchment_mm', name: '' };
+
+	it('offers the values a replace, a merge or a delete kept, and a restore can be undone', () => {
+		for (const kind of ['series.replaced', 'series.merged', 'series.deleted'])
+			expect(seriesRestore(ev(kind, kept)), kind).toEqual({ seriesId: 's1', revisionId: '42', what: 'the Rainfall — catchment series' });
+		expect(seriesRestore(ev('restore', { ...kept, target: 'series' }))?.revisionId).toBe('42');
+	});
+
+	it('offers nothing for a change that kept no values, or that is not a series', () => {
+		const { revisionId: _, ...none } = kept;
+		void _;
+		expect(seriesRestore(ev('series.merged', none))).toBeNull(); // an API key's merge
+		expect(seriesRestore(ev('series.created', kept))).toBeNull();
+		expect(seriesRestore(ev('restore', { target: 'model', revisionId: '42' }))).toBeNull();
+		expect(seriesRestore(rev())).toBeNull();
 	});
 });
