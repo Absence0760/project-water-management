@@ -145,6 +145,7 @@ const MONTH_MM: ValueSpec = { t: 'monthly', unit: 'mm', scale: 1, nullable: fals
 export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	februaryDays: { label: 'Days in February', spec: num('days', { int: true }) },
 	effectiveRainFraction: { label: 'Effective rain fraction', spec: pct() },
+	effectiveRainFractionMonthly: { label: 'Monthly effective rain fractions', spec: { t: 'monthly', unit: '', scale: 1, nullable: true } },
 	effectiveRainStoreMm: { label: 'Soil-water store (effective rain carry-over)', spec: num('mm') },
 	lakeEvapFactor: { label: 'Dam evaporation factor (× A-pan)', spec: num('') },
 	lakeEvapFactorMonthly: { label: 'Monthly dam evaporation factors (× A-pan)', spec: { t: 'monthly', unit: '', scale: 1, nullable: true } },

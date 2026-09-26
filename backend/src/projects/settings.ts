@@ -444,6 +444,9 @@ export const SettingsPatch = z
 	.object({
 		februaryDays: z.number().min(28).max(29),
 		effectiveRainFraction: z.number().min(0).max(1),
+		// Monthly effective-rain fractions (engine ≥ 0.43.0, issue #54), water-year
+		// months, each 0–1; null = effectiveRainFraction every month.
+		effectiveRainFractionMonthly: z.array(z.number().finite().min(0).max(1)).length(12).nullable(),
 		// Soil-water store, mm over the cropped area (engine N3). 500 mm is well
 		// past the readily available water of deep roots in a heavy soil.
 		effectiveRainStoreMm: z.number().finite().min(0).max(500),

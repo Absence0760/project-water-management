@@ -28,8 +28,9 @@ const MODEL_JSON = `json_build_object(
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
 			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct"
 		FROM node WHERE project_id = $1) r), '[]'),
-	'crops', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name) FROM (
-		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor" FROM crop WHERE project_id = $1) r), '[]'),
+	'crops', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."sortOrder", r.name) FROM (
+		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor", irrigation_efficiency AS "irrigationEfficiency"
+		FROM crop WHERE project_id = $1) r), '[]'),
 	'cropAreas', coalesce((SELECT json_agg(r) FROM (
 		SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2" FROM crop_area WHERE project_id = $1) r), '[]'),
 	'transfers', coalesce((SELECT json_agg(r ORDER BY r.priority, r.id) FROM (
@@ -197,13 +198,20 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		);
 	}
 	await upsertAll(
-		`INSERT INTO crop (id, project_id, name, sort_order, crop_factor)
-		 SELECT id, $1, name, sort_order, crop_factor FROM jsonb_populate_recordset(NULL::crop, $2::jsonb)
+		`INSERT INTO crop (id, project_id, name, sort_order, crop_factor, irrigation_efficiency)
+		 SELECT id, $1, name, sort_order, crop_factor, irrigation_efficiency FROM jsonb_populate_recordset(NULL::crop, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order,
-			crop_factor = EXCLUDED.crop_factor
+			crop_factor = EXCLUDED.crop_factor, irrigation_efficiency = EXCLUDED.irrigation_efficiency
 		 WHERE crop.project_id = EXCLUDED.project_id`,
-		// Without an explicit order, the document's order is the display order.
-		m.crops.map((c, i) => ({ id: c.id, name: c.name, sort_order: c.sortOrder ?? i, crop_factor: c.cropFactor })),
+		// Without an explicit order, the document's order is the display order. No own
+		// irrigation efficiency (null) = the farm's, and the crop reads back without the key.
+		m.crops.map((c, i) => ({
+			id: c.id,
+			name: c.name,
+			sort_order: c.sortOrder ?? i,
+			crop_factor: c.cropFactor,
+			irrigation_efficiency: c.irrigationEfficiency ?? null
+		})),
 		'crop'
 	);
 	const areas = m.cropAreas.filter((a) => a.areaM2 > 0);

@@ -136,21 +136,15 @@ describe('applyScenario: each op', () => {
 		expect(() => buildTopology(r.input.model.nodes)).not.toThrow();
 	});
 
-	it('node.add takes a farm with its supply rule and river pump (WP-3.8), under the same rules as a save', () => {
-		const supply = { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400, supplyTriggerPct: 0.3, supplyStopPct: 0.7 } as const;
-		const r = one({ op: 'node.add', node: node('N', { name: 'Pump farm', downstreamNodeId: 'B', ...supply }) });
+	it('node.add takes a supply rule and river pump, and checks them (WP-3.8)', () => {
+		const add = (over: Record<string, unknown>) =>
+			one({ op: 'node.add', node: node('N', { name: 'Pump scheme', downstreamNodeId: 'B', damCapacityM3: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, ...over }) });
+		const r = add({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, supplyTriggerPct: 0.4, supplyStopPct: 0.6 });
 		expect(r.problems).toEqual([]);
-		expect(nodeOf(r.input, 'N')).toMatchObject(supply);
-		// Left out, they take the engine's defaults: the dam only, no pump.
-		expect(nodeOf(one({ op: 'node.add', node: node('N', { name: 'Plain farm', downstreamNodeId: 'B' }) }).input, 'N')).toMatchObject({ supplyRule: 'damFirst', pumpCapacityM3Day: null });
-		// A value out of range, and a rule the model rules refuse (trigger needs a dam).
-		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyRule: 'pumpFirst' as never }) }).problems[0]).toMatch(/supplyRule must be one of/);
-		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyStopPct: 1.5 }) }).problems[0]).toMatch(/supplyStopPct/);
-		expect(one({ op: 'node.add', node: node('N', { name: 'X', downstreamNodeId: 'B', supplyRule: 'trigger' }) }).problems[0]).toMatch(/trigger supply rule needs a farm dam/);
-		// validateScenarioOps keeps them.
-		const v = validateScenarioOps([{ op: 'node.add', node: node('N', { downstreamNodeId: 'A', ...supply }) }]);
-		expect(v.errors).toEqual([]);
-		expect((v.ops[0] as { node: NetworkNode }).node).toMatchObject(supply);
+		expect(nodeOf(r.input, 'N')).toMatchObject({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200 });
+		expect(add({ supplyRule: 'always' }).problems[0]).toMatch(/supplyRule must be one of damFirst, riverFirst, trigger, runOfRiver/);
+		expect(add({ pumpCapacityM3Day: -1 }).problems[0]).toMatch(/pumpCapacityM3Day/);
+		expect(add({ supplyStopPct: 1.5 }).problems[0]).toMatch(/supplyStopPct/);
 	});
 
 	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
@@ -619,6 +613,27 @@ describe('validateScenarioOps', () => {
 			'ops[9].category: must be one of farm, user'
 		]);
 		expect(ops).toEqual([{ op: 'demand.scale', factor: 0, nodeIds: ['A'], months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], category: 'user' }]);
+	});
+
+	it('takes a crop’s own irrigation efficiency and the monthly effective-rain fraction (engine 0.43.0)', () => {
+		const crop = { id: 'c2', name: 'Citrus', cropFactor: new Array(12).fill(0.5) };
+		const f = new Array(12).fill(0.6);
+		const good = validateScenarioOps([
+			{ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0.9 } },
+			{ op: 'crop.add', crop: { ...crop, id: 'c3', name: 'Olives', irrigationEfficiency: null } },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: f },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: null }
+		]);
+		expect(good.errors).toEqual([]);
+		expect((good.ops[0] as { crop: { irrigationEfficiency?: number } }).crop.irrigationEfficiency).toBe(0.9);
+		const bad = validateScenarioOps([
+			{ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0 } },
+			{ op: 'settings.set', path: 'effectiveRainFractionMonthly', value: [...f.slice(0, 11), 1.5] }
+		]);
+		expect(bad.ops).toEqual([]);
+		expect(bad.errors).toHaveLength(2);
+		// Applied, the scenario runs the crop on its own efficiency.
+		expect(one({ op: 'crop.add', crop: { ...crop, irrigationEfficiency: 0.9 } }).input.model.crops.find((c) => c.id === 'c2')?.irrigationEfficiency).toBe(0.9);
 	});
 
 	it('names every error by path and drops the bad entries', () => {

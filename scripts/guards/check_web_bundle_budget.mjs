@@ -716,6 +716,17 @@
 //             page-side engine modules (−2 KB total, farm +6, home +2).
 //             Headroom ~5 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
+// 2026-09-26  total 973 → 978 KB (measured 975). Issue #54 adds ~6 KB: the
+//             upload's overwrite confirm, History's "Restore the earlier
+//             values", the scenario and compare support and help entries for
+//             the supply rules (engine 0.42.0) and the crop demand options
+//             (0.43.0). The i18n trim above has landed; headroom ~3 KB.
+// 2026-09-26  total 978 → 893 KB, calibration worker 35 → 32 KB (both down).
+//             Issue #9's reductions (the run export's own xlsx writer, one
+//             Svelte runtime chunk, worker treeshaking; the English-as-key
+//             messages) merged with issue #54's +6 KB: measured 888 KB, the
+//             calibration worker 27 KB. Headroom ~5 KB on each.
+// Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
 
@@ -725,9 +736,9 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 892,
+	totalCodeKb: 893,
 	largestChunkKb: 42,
-	largestWorkerKb: 35,
+	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 });

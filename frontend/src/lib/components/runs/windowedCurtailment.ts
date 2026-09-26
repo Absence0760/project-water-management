@@ -10,6 +10,8 @@
 import {
 	curtailmentSeriesKeys as engineSeriesKeys,
 	prepareCurtailment,
+	type CropArea,
+	type CropDef,
 	type CurtailmentSummary,
 	type NetworkNode,
 	type PreparedCurtailment,
@@ -29,6 +31,14 @@ export type Stored = ArrayLike<number | null>;
 export interface RunNetwork {
 	nodes: readonly NetworkNode[];
 	transfers: readonly Transfer[];
+	/**
+	 * The snapshot's crops and crop areas and the run's monthly A-pan: a farm
+	 * whose crops carry their own irrigation efficiency (engine ≥ 0.43.0) is
+	 * curtailed on the combined one runModel used. Absent = each farm's own.
+	 */
+	crops?: readonly CropDef[];
+	cropAreas?: readonly CropArea[];
+	apanMm?: readonly number[];
 }
 
 /**
@@ -55,5 +65,12 @@ export function missingSeries(keys: SeriesKey[], refs: readonly SeriesKey[]): Se
  * cover the run.
  */
 export function prepareWindowed(run: { startDate: string; endDate: string }, network: RunNetwork, get: (nodeId: string | null, key: string) => Stored | undefined): PreparedCurtailment {
-	return prepareCurtailment({ startDate: run.startDate, endDate: run.endDate, nodes: network.nodes, transfers: network.transfers, series: get });
+	return prepareCurtailment({
+		startDate: run.startDate,
+		endDate: run.endDate,
+		nodes: network.nodes,
+		transfers: network.transfers,
+		...(network.crops && network.cropAreas ? { crops: network.crops, cropAreas: network.cropAreas, apanMm: network.apanMm ?? [] } : {}),
+		series: get
+	});
 }

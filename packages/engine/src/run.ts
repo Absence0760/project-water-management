@@ -22,7 +22,7 @@ import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain'
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks } from './plausibility';
 import { daysPerMonth, fromEpochDay, toEpochDay, waterYearIndex } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, farmDailyDemand, grossFarmDemandM3PerDay, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -854,7 +854,7 @@ export function buildNetworkPlan(
 				damCapacityM3: cap,
 				initialStorageM3: n.damInitialPct * cap,
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
-				...irrigation(n, warnings),
+				...irrigation(n, warnings, demand[i]!.efficiency),
 				...damLosses(n, warnings),
 				...damStorage(n, warnings),
 				demand: u?.demand ?? demand[i]!.net,
@@ -1104,14 +1104,17 @@ function damStorage(n: NetworkNode, warnings: string[]): { damCurve?: DamCurve; 
  * A farm's irrigation efficiency and loss return (audit N1). Validation keeps
  * 0 < e ≤ 1 and 0 ≤ β ≤ 1; a value outside that (a hand-edited document)
  * runs as e = 1 and β clamped, with a warning, rather than dividing by 0.
+ * `fromCrops` combines the farm's value with its crops' own efficiencies
+ * (engine ≥ 0.43.0, ./demand.ts farmIrrigationEfficiency).
  */
-function irrigation(n: NetworkNode, warnings: string[]): { irrigationEfficiency: number; lossReturnFraction: number } {
+function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficiency: number) => number): { irrigationEfficiency: number; lossReturnFraction: number } {
 	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
 	let e = n.irrigationEfficiency;
 	if (!(e > 0 && e <= 1)) {
 		warnings.push(`farm "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
 		e = 1;
 	}
+	e = fromCrops(e);
 	const b = n.lossReturnFraction;
 	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
 	if (beta !== b) warnings.push(`farm "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
@@ -1402,13 +1405,19 @@ function buildDemand(
 	month: Uint8Array,
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[]
-): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array }[] {
+): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
-	const crops: Crop[] = cropDefs.map((c) => ({
-		id: c.id,
-		name: c.name,
-		cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings)
-	}));
+	const crops: Crop[] = cropDefs.map((c) => {
+		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
+		const e = ownCropEfficiency(c.irrigationEfficiency);
+		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the farm's`);
+		return {
+			id: c.id,
+			name: c.name,
+			cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings),
+			...(e !== undefined ? { irrigationEfficiency: e } : {})
+		};
+	});
 	const cropIds = new Set(crops.map((c) => c.id));
 	// Crops and crop areas are summed in id order (crop id, then area), not
 	// list order, so a farm's demand is the same to the last bit however the
@@ -1435,9 +1444,18 @@ function buildDemand(
 	// Daily A-pan (engine ≥ 0.38.0, issue #45): on the days it covers, gross demand is that day's A-pan × the crop factors.
 	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
 
+	// Effective-rain fraction: one for the year, or the month's (engine ≥ 0.43.0, issue #54).
+	const erMonthly = settings.effectiveRainFractionMonthly;
+	let erFraction: number | Float64Array = settings.effectiveRainFraction;
+	if (erMonthly) {
+		erFraction = new Float64Array(days);
+		for (let t = 0; t < days; t++) erFraction[t] = erMonthly[wy[t]!]!;
+	}
+
+	const farmOnly = (e: number) => e;
 	let anyArea = false;
 	const out = nodes.map((node) => {
-		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days) };
+		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days), efficiency: farmOnly };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
 		let cropped = 0;
@@ -1461,12 +1479,14 @@ function buildDemand(
 			}
 		} else for (let t = 0; t < days; t++) d.gross[t] = gross[wy[t]!]!;
 		// Effective rain carries over through the soil-water store (N3, engine ≥ 0.14.0).
-		const f = farmDailyDemand(d.gross, cropped, rain, settings.effectiveRainFraction, settings.effectiveRainStoreMm);
+		const f = farmDailyDemand(d.gross, cropped, rain, erFraction, settings.effectiveRainStoreMm);
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales the crop water
 		// requirement F after the store, so the rain used, the store and the gross demand stay as they were.
 		const factor = demandFactorOf(node, warnings);
 		if (factor) for (let t = 0; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
-		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm };
+		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
+		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
+		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.
 	if (anyArea && !apanDay && settings.apanMm.every((v) => v === 0)) {

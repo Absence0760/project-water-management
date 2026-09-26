@@ -219,6 +219,15 @@ export interface ProjectSettings {
 	/** Fraction of rainfall on cropped land that offsets irrigation demand. */
 	effectiveRainFraction: number;
 	/**
+	 * Effective-rain fractions per water-year month (Oct–Sep), each 0–1
+	 * (engine ≥ 0.43.0, issue #54). null / absent = the one
+	 * `effectiveRainFraction` in every month. When set it replaces that
+	 * fraction month by month; the soil-water store still carries the
+	 * effective rain over (./demand.ts farmDailyDemand). Never defaulted to 0:
+	 * a row of zeros means rain never offsets demand, and the run warns.
+	 */
+	effectiveRainFractionMonthly?: Monthly | null;
+	/**
 	 * Size of each farm's soil-water store, mm over the cropped area (engine ≥
 	 * 0.14.0, docs/engine-audit.md N3): effective rain the crop can't use on
 	 * the day it falls is kept for the following days, up to this depth
@@ -403,6 +412,7 @@ export function defaultProjectSettings(): ProjectSettings {
 	return {
 		februaryDays: 28.25,
 		effectiveRainFraction: 0.65,
+		effectiveRainFractionMonthly: null,
 		effectiveRainStoreMm: 25,
 		lakeEvapFactor: 0.75,
 		assuranceAnnualThreshold: 0.9,
@@ -934,6 +944,14 @@ export interface CropDef {
 	sortOrder?: number;
 	/** Crop factor per water-year month (Oct–Sep), 12 values. */
 	cropFactor: number[];
+	/**
+	 * This crop's irrigation application efficiency, 0 < e ≤ 1 (engine ≥
+	 * 0.43.0, issue #54): the irrigation system it is under. null / absent =
+	 * the farm's own `irrigationEfficiency`. A farm's efficiency is then its
+	 * crops' efficiencies combined, weighted by each crop's annual water
+	 * requirement (./demand.ts farmIrrigationEfficiency, docs/model.md §2.3).
+	 */
+	irrigationEfficiency?: number | null;
 }
 
 export interface CropArea {

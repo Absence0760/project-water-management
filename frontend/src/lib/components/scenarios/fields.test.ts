@@ -40,7 +40,8 @@ describe('field specs cover the engine’s op catalogue', () => {
 				case 'enum':
 					return spec.options[0]!.value;
 				case 'monthly':
-					return [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2, 0.5, 1, 1.5, 0.25];
+					// Within 0–1, so a row of fractions (monthly effective rain) is valid too.
+					return [0.5, 1, 0.75, 0.2, 0.5, 1, 0.75, 0.2, 0.5, 1, 0.75, 0.25];
 				case 'months':
 					return [1, 11, 12];
 				case 'bool':
