@@ -67,7 +67,7 @@ describe('POST /farmers for an address with no verified account', () => {
 		const email = newEmail('af');
 		const res = await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmC.id], locale: 'af' });
 		expect(res.body.invite.locale).toBe('af');
-		// English until WP-2.5 brings the Afrikaans wording.
+		// English until the reviewed Afrikaans lands in mail/i18n/af.ts (WP-2.5; auth/locale.db.test.ts covers the switch).
 		expect(lastMailTo(email)!.subject).toBe('Iowner has given you access to Hoek in Invite <Kloof>');
 		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmC.id], locale: 'fr' })).status).toBe(400);
 	});
