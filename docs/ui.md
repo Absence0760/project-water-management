@@ -384,6 +384,44 @@ New project dialog and the Overview's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
+### Portfolio (`/teams/:id/portfolio`)
+
+The WUA's one screen for all of a team's catchments (roadmap WP-2.14,
+`routes/teams/[id]/portfolio/`, wording and sorting in
+`lib/components/portfolio/portfolio.ts`). Linked from the team page and
+from each team group's heading on the project list. One row per catchment
+the user can see, from `GET /teams/:id/portfolio` ([api.md §
+Portfolio](./api.md#portfolio)):
+
+- **Catchment**: the name (opens the project's Overview) and where the
+  figures come from: *Published run*, *Published run (a newer run is not
+  published)*, *Latest run, not published* or *Not run yet*, with a hint
+  for editors to run or publish.
+- **EWR, last 30 days**: the status as words **and** colour, never colour
+  alone: "Red: EWR not met 9 of 30 days", "Green: EWR met all 30 days", or
+  "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
+  run it again" (dashed outline). Under it, how old the figures are
+  ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
+- **Farms short**: "2 of 12 farms short this week" (a link to the Runs tab's
+  Curtailment section of that run) and the count over 30 days; "Unknown
+  until a run is published" without a publication.
+- **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
+  recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
+  health.
+- Alerts: no column yet. The table and the cards carry a marked hook for
+  WP-2.13; the API's `alertsFiring` is `null` until alerts exist.
+
+Wide screens get a sortable table (column-heading buttons with `aria-sort`);
+under 760 px the same rows become stacked cards with a *Sort by* select.
+Sorts: EWR status worst first (red, amber, unknown, green; more days not met
+first within a colour; the default), name, figures age, farms short, lowest
+dam; unknown values sort last either way. The sort lives in the URL
+(`?sort=`, `?dir=desc`). States: loading, error with retry, an empty team
+("No catchments in this team yet", with *New project in this team* for
+members and admins), and not-found for a team you aren't in. A farmer who
+opens the address is sent to their farm view (`/farm`), as the project list
+does. The intro states the thresholds the API returns.
+
 ## Network
 
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the

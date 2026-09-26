@@ -532,12 +532,61 @@ move or copy into it). `role` in the member and invite bodies is one of
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
+| GET | `/teams/:id/portfolio` | – | `Portfolio` (see [Portfolio](#portfolio) below) | viewer |
 
 - `Team = { id, name, role, createdAt, memberCount, projectCount }` — `role` is
   **your** role in the team.
 - `TeamMember = { userId, email, displayName, role }`
 - `409 a team must keep at least one admin` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
+
+### Portfolio
+
+`GET /teams/:id/portfolio` (roadmap WP-2.14, `backend/src/portfolio/`): every
+catchment of the team you can see, with its latest figures, for the WUA's
+dashboard. Any team member; a team you aren't in is `404`, and so is every
+farmer (a farmer has no team membership). The rows come from **one query**
+run as you under RLS, whatever the number of projects (guarded by a query
+count in `portfolio.db.test.ts`); a project where your role is `farmer` is
+left out, so nobody gets a catchment roll-up of their neighbours.
+
+- `Portfolio = { team: { id, name, role }, today, thresholds: { amber, red }, projects: PortfolioProject[] }`;
+  `today` is the server's UTC date the ages count to; `thresholds` are the
+  traffic-light fractions (below).
+- `PortfolioProject = { id, name, role, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
+  - `source`: where the figures come from. `published`: the current
+    publication. `run`: nothing is published, so the newest baseline run
+    (not a scenario run). `null`: no run. `sourceRunId` is that run.
+  - `figuresUntil` / `figuresAgeDays`: the last day the figures cover (the
+    source run's last day of observed rain) and its age; `stale` when older
+    than 7 days (the farm page's rule). `behindData`: the project holds
+    recorded rain after `figuresUntil`. `dataUntil` is that newest day of
+    recorded rain (the project list's rule). `newerRun`: a baseline run
+    newer than the published one exists.
+  - `ewr = { status: 'green' | 'amber' | 'red' | 'unknown', daysNotMet30, days30, fraction30, reason? }`:
+    the outlet EWR over the 30 days to `figuresUntil` (the publication's
+    `catchmentView`, or, for `source: 'run'`, counted in SQL from that run's
+    one outlet series; the DB test checks the two agree). Thresholds (D11):
+    **green** below 5 % of the days not met, **amber** below 20 %, **red**
+    otherwise; they are defaults for the hydrologist to confirm, not yet a
+    team setting (followups.md). `unknown` carries `reason`: `no-figures` (no
+    run), `no-ewr` (the source run had no EWR set, every month 0, so "never
+    short" would be a false green) or `no-series` (the run has no outlet EWR
+    record).
+  - `farmsShort7` / `farmsShort30`: farms short at least one day in the 7 /
+    30 days to `figuresUntil`, stored with the publication
+    (`catchmentView.recent`); `null` without a publication, or for one made
+    before the counts existed. `farmCount`: the publication's, or the live
+    network's without one.
+  - `lowestDamPct = { nodeName, pct }`: the farm dam lowest on
+    `figuresUntil` (0–1), from the farm projections; `null` with no dams.
+    `damsKnown` is false without a publication (then `null` means unknown).
+  - `feeds = { total, ok, failing }`: `failing` counts failing **and** stale
+    feeds (`feeds/health.ts`); pending and disabled ones count in neither.
+  - `alertsFiring`: always `null` until WP-2.13 (alerts) exists: the hook
+    for its count, not a zero.
+  - `restriction = { level, pct } | null`: the current publication's; `null`
+    when nothing is published.
 
 ## Model data
 
@@ -1027,6 +1076,11 @@ received (they come as their own block with WP-2.12).
   §10.3; the roadmap's "mean natural and simulated flow" and "totals at ≥ k"
   are left out on purpose, since `run_publication` is readable by farmers).
   `sites` are the EWR sites, the outlet first, then the gauges.
+  Viewers and above also get `recent = { to, from7, from30, farmsShort7, farmsShort30 }`
+  (publications made since WP-2.14): farms short at least one day in the 7
+  and 30 days to `dataUntil`, for the [portfolio](#portfolio). A farmer's
+  response leaves it out, since with few farms a count says which neighbour
+  went short, and the share link's allowlist never copies it.
 - A project keeps its newest **12** publications; an older one is deleted
   with its farm projections, and its run becomes trimmable again.
 - Nothing here is audited yet beyond the `updatedAt` / `updatedBy` stamp:
