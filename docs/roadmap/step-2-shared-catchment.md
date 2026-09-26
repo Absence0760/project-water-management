@@ -1763,8 +1763,8 @@ the forecast kinds.
 > farmer's publication response; `alertsFiring` is always `null`, a marked
 > hook for WP-2.13; the D11 thresholds are fixed defaults, not yet a team
 > setting (followups.md); "farms short this week" links to the Runs tab's
-> Curtailment section of the run, which covers the run's report window, not
-> a 7-day filter; `seed:examples` still puts two of its three catchments in
+> Curtailment section of the run over the last 7 days (`window=last7`, #44;
+> it doesn't scroll there yet, followups.md); `seed:examples` still puts two of its three catchments in
 > the demo team (Sandspruit stays the analyst's own, which the e2e uses as
 > the negative control). Measured locally: 10 published catchments × 60
 > farms (10-year runs) answer in a median 51 ms of API time (7 calls), well

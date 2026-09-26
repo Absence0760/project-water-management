@@ -1754,14 +1754,13 @@ from the WP:
       (alert_event) lands: count firing events per project in the portfolio
       query and render the column.
 - [ ] **"Farms short this week" lands at the top of the Runs tab.** The link
-      is `?tab=runs&run=…#res-curtailment`, but the Runs tab renders its
-      results after loading, so the browser can't scroll to the fragment,
-      and the curtailment table covers the run's report window rather than
-      the last 7 days. Durable fix: RunsTab scrolls to a `#res-*` fragment
-      once its results render (a Runs-tab change, so coordinate with whoever
-      owns `components/runs/`), and a 7-day window option on the curtailment
-      table. Trigger: the WUA persona or a user reports it, or the next
-      Runs-tab round.
+      is `?tab=runs&run=…&window=last7#res-curtailment`: the curtailment
+      table now opens on the last 7 days (the reporting-window picker, #44),
+      but the Runs tab renders its results after loading, so the browser
+      can't scroll to the fragment. Durable fix: RunsTab scrolls to a
+      `#res-*` fragment once its results render (a Runs-tab change, so
+      coordinate with whoever owns `components/runs/`). Trigger: the WUA
+      persona or a user reports it, or the next Runs-tab round.
 - [ ] **No perf guard on the portfolio query.** Measured once at a median
       51 ms for 10 × 60-farm catchments (roadmap WP-2.14 status); the
       backend `perf` vitest project has no database, so it can't hold a
