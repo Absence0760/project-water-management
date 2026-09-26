@@ -294,7 +294,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			modelInput: (id: string) => request<{ input: ModelInput }>('GET', `${p(id)}/model-input`).then((r) => r.input)
 		},
 		uncertainty: {
-			/** A run's own input (its settings and model snapshot with the project's series); 409 when the data changed since. */
+			/** A run's own input: its stored series (runs since migration 020), or for an older run its snapshot with the project's series, 409 when the data changed since. */
 			runInput: (id: string, runId: string) => request<{ input: ModelInput }>('GET', `${p(id)}/runs/${enc(runId)}/model-input`).then((r) => r.input),
 			/** Every ensemble started for a run, newest first, without their members. */
 			list: (id: string, runId: string) => request<{ ensembles: Ensemble[] }>('GET', `${p(id)}/runs/${enc(runId)}/uncertainty`).then((r) => r.ensembles),

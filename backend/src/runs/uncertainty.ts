@@ -37,15 +37,17 @@ import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { loadModelInput, seriesHash } from './execute.js';
+import { loadModelInput, loadRunInput, RunInputError, seriesHash } from './execute.js';
 
 /** Random members the server re-runs besides member 0 (docs/security.md § Authorization). */
 export const CHECKED_MEMBERS = 3;
 
 /**
- * The exact input a run used: its settings and model snapshot, with the
- * project's series, which must still hash to the snapshot's. 409 when a
- * series changed since the run (its values aren't stored with the run).
+ * The exact input a run used. A run saved since 020_series_blob stored its
+ * input series, so it is rebuilt from them (loadRunInput) whatever has
+ * happened to the project's data since. An older run kept only hashes: its
+ * settings and model snapshot are used with the project's series, which must
+ * still hash to the snapshot's, else 409.
  */
 export async function runModelInput(db: Db, projectId: string, runId: string): Promise<ModelInput> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
@@ -55,6 +57,11 @@ export async function runModelInput(db: Db, projectId: string, runId: string): P
 	);
 	const snap = rows[0]?.inputs;
 	if (!snap) throw new ApiError(404, 'not found');
+	try {
+		return await loadRunInput(db, runId);
+	} catch (err) {
+		if (!(err instanceof RunInputError) || err.problem !== 'not_reproducible') throw err;
+	}
 	const current = await loadModelInput(db, projectId);
 	const kinds = new Set([...Object.keys(snap.series ?? {}), ...Object.keys(current.series)]);
 	const changed = [...kinds].filter((k) => {
