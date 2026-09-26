@@ -6,7 +6,8 @@
 // docs/architecture.md § Data feeds): classic little-endian TIFF, one float32
 // band (SampleFormat 3), LZW (Compression 5) with no predictor, one row per
 // strip, the IFD at the END of the file, a 0.05° WGS 84 grid whose tiepoint
-// is (-180, 60), and -9999 over the sea. Anything else (BigTIFF, tiles, a
+// is (-180, 60), and -9999 over the sea. A big-endian file or several rows
+// per strip are legal TIFF and read as such. Anything else (BigTIFF, tiles, a
 // predictor, several bands) is refused with a FeedFormatError rather than
 // guessed at: a format change must fail loudly, never write garbage.
 //
@@ -52,6 +53,8 @@ export interface GridInfo {
 	height: number;
 	rowsPerStrip: number;
 	compression: 1 | 5;
+	/** The file's byte order, which its samples follow too (TIFF 6.0 § 2). */
+	littleEndian: boolean;
 	/** Longitude / latitude of the top-left corner of pixel (0, 0). */
 	originLon: number;
 	originLat: number;
@@ -194,6 +197,7 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 		height,
 		rowsPerStrip,
 		compression: compression as 1 | 5,
+		littleEndian: le,
 		originLon: tx! - ti! * scaleLon!,
 		originLat: ty! + tj! * scaleLat!,
 		scaleLon: scaleLon!,
@@ -245,7 +249,7 @@ export async function readPoints(read: RangeRead, grid: GridInfo, points: readon
 	}
 	return where.map(({ row, col }) => {
 		const s = Math.floor(row / grid.rowsPerStrip);
-		const v = decoded.get(s)!.getFloat32(((row - s * grid.rowsPerStrip) * grid.width + col) * 4, true);
+		const v = decoded.get(s)!.getFloat32(((row - s * grid.rowsPerStrip) * grid.width + col) * 4, grid.littleEndian);
 		if (Number.isNaN(v) || v <= NODATA_FLOOR || (grid.nodata !== null && v === grid.nodata)) return null;
 		return v;
 	});

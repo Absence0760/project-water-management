@@ -114,6 +114,31 @@ describe('openGrid + readPoints', () => {
 		expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([23.5]);
 	});
 
+	it('reads a big-endian ("MM") grid in its own byte order, samples included', async () => {
+		for (const compression of [1, 5] as const) {
+			const r = reader(writeGrid(spec({ bigEndian: true, compression })));
+			const grid = (await openGrid(r.read))!;
+			expect(grid).toMatchObject({ width: 8, height: 6, originLon: 25, originLat: -20, littleEndian: false });
+			expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }, { lat: -20.29, lon: 25.39 }])).toEqual([23.5, 57.5]);
+		}
+	});
+
+	it('reads several rows per strip, including a shorter last strip', async () => {
+		// 6 rows in strips of 4: rows 0–3, then 4–5.
+		const r = reader(writeGrid(spec({ rowsPerStrip: 4 })));
+		const grid = (await openGrid(r.read))!;
+		expect(grid.rowsPerStrip).toBe(4);
+		const reads = r.reads;
+		const v = await readPoints(r.read, grid, [
+			{ lat: -20.01, lon: 25.01 }, // row 0, col 0
+			{ lat: -20.17, lon: 25.37 }, // row 3, col 7: the end of strip 0
+			{ lat: -20.21, lon: 25.01 }, // row 4, col 0: the start of strip 1
+			{ lat: -20.29, lon: 25.39 } // row 5, col 7: the last pixel
+		]);
+		expect(v).toEqual([0.5, 37.5, 40.5, 57.5]);
+		expect(r.reads - reads).toBe(2); // one read per strip, not per row
+	});
+
 	it('returns null for a file that is not published (404)', async () => {
 		expect(await openGrid(reader(null).read)).toBeNull();
 	});
