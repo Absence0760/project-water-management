@@ -285,7 +285,8 @@ writing, or gives a ranked change list.
   from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
   advisories), in a Web Worker. The import needs no Python. Since then it
   reads workbooks with its own streaming reader instead of SheetJS (peak
-  memory on the largest workbooks, [followups.md](./followups.md)).
+  memory on the largest workbooks, measured in Chrome, Safari and phone
+  simulators, [followups.md](./followups.md)).
 - 🚧 An audit log per project: who changed what, and which run used which
   inputs. Done: each run snapshots its inputs with a content hash per input
   series. Not built: the change log (roadmap WP-2.4).

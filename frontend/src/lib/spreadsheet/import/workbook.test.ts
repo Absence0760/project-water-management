@@ -117,7 +117,7 @@ describe('readWorkbook', () => {
 		const big = syntheticB023();
 		for (let r = 1; r <= 2000; r++) big.row('Farm A', `A${r}`, Array.from({ length: 20 }, (_, i) => r * 100 + i));
 		const file = new Uint8Array(big.toFile());
-		const zip = ZipArchive.open(file);
+		const zip = await ZipArchive.open(file);
 		const sizes = zip.names.map((n) => zip.info(n)!.size);
 		const all = sizes.reduce((a, b) => a + b, 0);
 		const largest = Math.max(...sizes);

@@ -261,6 +261,9 @@ In short:
     declared, so a zip bomb is a clear "too large" error, not a crashed tab.
     Encrypted entries, ZIP64, split archives and compression methods other
     than stored and deflate are refused, and every part's CRC-32 is checked;
+  - the picked file is read from disk a slice at a time (`Blob.slice`), never
+    loaded whole, and every slice's offsets are checked against the file's
+    size first;
   - only the parts the import reads are ever unpacked (content types,
     relationships, the workbook, shared strings, styles, the b023 config
     sheets). The VBA project, the per-farm result sheets, drawings and

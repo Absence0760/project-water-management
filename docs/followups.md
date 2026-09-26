@@ -1206,12 +1206,42 @@ role and not before it.
         through `GET /projects/:id/import-report` and on the Overview's
         Import record, both lists collapsed at first; not dismissible, since
         it is the audit trail. Not in `export.json` (api.md § Import report).
-  - [ ] **Measured in a real browser** (issue #23). The memory figures above are Node;
-        no one has profiled the client workbook's import in Chrome or Safari,
-        or on a phone (the e2e tests run the streaming reader in Chromium on
-        the synthetic workbook only). Trigger: a user reports the import
-        failing on a phone or low-memory machine, or a workbook with a longer
-        record than the client's.
+  - [x] **Measured in a real browser** (issue #23, 2026-09-26). The client
+        workbook (~87 MB `.xlsm`) imported through the real worker code in
+        desktop Chrome 154, Safari 26.6, iOS Safari (iPhone 17e simulator,
+        iOS 26.4) and Android Chrome 145 (Pixel 10 Pro emulator, 3 GB). A
+        throwaway harness (not committed) timed `parse()` from File to result
+        and sampled the tab's process memory (macOS RSS; Android RSS + swap,
+        since the emulator swaps to zram) from just before the pick to the
+        result; median of 3, growth over the tab's baseline:
+
+        | Browser | Before: growth / peak | After: growth / peak | Time before → after |
+        | --- | --- | --- | --- |
+        | Chrome (desktop) | ~180 / ~310 MB | ~100 / ~230 MB | 0.68 → 0.68 s |
+        | Safari (desktop) | ~605 / ~670 MB | ~140 / ~200 MB | 0.68 → 0.70 s |
+        | iOS Safari (simulator) | ~450 / ~630 MB | ~125 / ~310 MB | 0.73 → 0.76 s |
+        | Android Chrome (emulator) | ~170 / ~385 MB | ~70 / ~285 MB | 0.99 → 0.82 s |
+
+        Two causes, both fixed at the source in `zip.ts`. (1) WebKit's
+        `DecompressionStream` inflates each input chunk into one output
+        chunk, so the 6 MB compressed [Flow data] handed over whole came out
+        as a single 38 MB chunk; compressed bytes now go in 64 KB slices,
+        pulled on demand. (2) The worker loaded the whole File as an
+        `ArrayBuffer` (~87 MB) for the whole read; the zip reader now reads
+        the File itself with `Blob.slice`: the end record and directory,
+        then each needed entry 64 KB at a time. Safari's drop is larger than
+        the ~125 MB of buffers removed; why WebKit held the rest isn't pinned
+        down (it also shrank with the big buffers gone). Guarded by
+        `zip.test.ts` (a spy Blob: reading one part of a 3 MB archive reads
+        < 100 KB of it, and the inflater never gets a slice over 64 KB).
+        Pick to review screen in the real app (Playwright, disk-backed file,
+        after): Chromium ~0.83 s, WebKit ~1.34 s. The result sent back to the
+        page is ~0.4 MB as JSON, so the copy between worker and page doesn't
+        matter. **Not done: a real phone.** None was connected; simulators
+        and emulators don't enforce a phone's per-tab memory limit. At a
+        ~125 MB peak growth the import should fit comfortably, but the first
+        client import from a phone, or any report of a failing import, is
+        the trigger to confirm on a device (the harness notes in issue #23).
 
 ## Pipelines
 
