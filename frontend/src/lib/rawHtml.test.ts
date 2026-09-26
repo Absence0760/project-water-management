@@ -3,7 +3,8 @@
 // (notes, the WUA's notice, farm, series and project names, a share link's
 // label) is rendered through Svelte's escaping, which is the XSS defence: a
 // `{@html …}` block, or an `innerHTML`-style DOM write, would put that text
-// back into the page as markup. Help and guide text uses its own parser
+// back into the page as markup, and so would `bind:innerHTML` /
+// `bind:outerHTML` on a contenteditable element. Help and guide text uses its own parser
 // (lib/help), never HTML. If a real need for raw markup ever comes up, it
 // needs a sanitiser and an entry here with its reason, not a quiet exception.
 import { readdirSync, readFileSync } from 'node:fs';
@@ -15,6 +16,8 @@ import { describe, expect, it } from 'vitest';
 const HTML_BLOCK = /\{@html\s+[^}\s]/g;
 /** DOM writes that parse a string as markup. */
 const DOM_HTML = /\.(innerHTML|outerHTML)\s*\+?=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(ln)?\s*\(|\bcreateContextualFragment\s*\(/g;
+/** Svelte's two-way binding of a contenteditable element's markup: whatever lands in it is read back and re-rendered as HTML. */
+const BIND_HTML = /\bbind:(innerHTML|outerHTML)\b/g;
 
 function sourceFiles(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -25,7 +28,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe('raw HTML', () => {
-	it('the patterns find the block and the DOM writes, and pass a comment and a comparison', () => {
+	it('the patterns find the block, the DOM writes and the HTML bindings, and pass a comment, a comparison and a text binding', () => {
 		expect('{@html note.body}'.match(HTML_BLOCK)).toHaveLength(1);
 		expect('// never {@html}'.match(HTML_BLOCK)).toBeNull();
 		expect('el.innerHTML = body'.match(DOM_HTML)).toHaveLength(1);
@@ -35,6 +38,9 @@ describe('raw HTML', () => {
 		expect('range.createContextualFragment(body)'.match(DOM_HTML)).toHaveLength(1);
 		expect('if (el.innerHTML === "") {}'.match(DOM_HTML)).toBeNull();
 		expect('el.textContent = body'.match(DOM_HTML)).toBeNull();
+		expect('<div contenteditable bind:innerHTML={body}></div>'.match(BIND_HTML)).toHaveLength(1);
+		expect('<div contenteditable="true" bind:outerHTML={body}></div>'.match(BIND_HTML)).toHaveLength(1);
+		expect('<div contenteditable bind:textContent={body}></div>'.match(BIND_HTML)).toBeNull();
 	});
 
 	it('no component or module renders a string as HTML', () => {
@@ -46,7 +52,7 @@ describe('raw HTML', () => {
 		expect(files.some((f) => f.endsWith('farm/NoticeCard.svelte'))).toBe(true);
 		const offenders = files.flatMap((f) => {
 			const text = readFileSync(f, 'utf8');
-			return [...(text.match(HTML_BLOCK) ?? []), ...(text.match(DOM_HTML) ?? [])].map((m) => `${f.slice(src.length)}: ${m}`);
+			return [...(text.match(HTML_BLOCK) ?? []), ...(text.match(DOM_HTML) ?? []), ...(text.match(BIND_HTML) ?? [])].map((m) => `${f.slice(src.length)}: ${m}`);
 		});
 		expect(offenders).toEqual([]);
 	});
