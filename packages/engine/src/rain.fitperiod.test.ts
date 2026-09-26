@@ -343,6 +343,10 @@ describe('resolveChirpsFitPeriod', () => {
 		expect(w).toHaveLength(4);
 		expect(w[0]).toMatch(/overlaps 1990\/91–2000\/01; ignored/);
 		expect(w[2]).toMatch(/has no reason/);
+		// Unknown fields and over-long reasons are dropped as the API refuses them (backend settings.test.ts holds the two together).
+		const w3: string[] = [];
+		expect(resolveChirpsFitPeriod([{ ...range(1990, 2000, 'a'), note: 'x' }, range(2001, 2002, 'y'.repeat(501)), range(2003, 2004, 'ok')], w3)).toEqual([range(2003, 2004, 'ok')]);
+		expect(w3).toEqual(['CHIRPS fit range with unknown field note; ignored', 'CHIRPS fit range 2001/02–2002/03 has a reason longer than 500 characters; ignored']);
 		const w2: string[] = [];
 		expect(resolveChirpsFitPeriod([], w2)).toBe('all');
 		expect(w2).toEqual(['the CHIRPS fit period lists no usable water-year range; using the whole record']);

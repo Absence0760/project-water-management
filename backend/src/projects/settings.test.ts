@@ -1,4 +1,4 @@
-import { defaultProjectSettings } from '@water-management/engine';
+import { defaultProjectSettings, resolveChirpsFitPeriod } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 
@@ -94,6 +94,48 @@ describe('SettingsPatch.chirpsFitPeriod (engine ≥ 0.29.0)', () => {
 	it('defaults to the whole record for settings stored before it existed', () => {
 		expect(mergeSettings({}).chirpsFitPeriod).toBe('all');
 		expect(mergeSettings({ chirpsFitPeriod: [r(1990, 2004)] }).chirpsFitPeriod).toEqual([r(1990, 2004)]);
+	});
+
+	// The API schema and the engine's resolver must agree on what a valid fit period is, so a value the
+	// API stores is never silently changed by a run, and one the engine would drop is refused up front.
+	it('agrees with the engine’s resolveChirpsFitPeriod on a table of valid and invalid values', () => {
+		const table: [string, unknown][] = [
+			['whole record', 'all'],
+			['one range', [r(1990, 2004)]],
+			['two ranges, unsorted', [r(2005, 2019), r(1990, 2004)]],
+			['a one-year range', [r(2005, 2005)]],
+			['the year bounds', [r(1800, 1800), r(2200, 2200)]],
+			['a reason padded with spaces', [r(1990, 2004, '  network  ')]],
+			['a reason of 500 characters', [r(1990, 2004, 'x'.repeat(500))]],
+			['100 ranges', Array.from({ length: 100 }, (_, i) => r(1800 + i, 1800 + i))],
+			['segments (not a mode)', 'segments'],
+			['an unknown mode', 'latest'],
+			['an empty string', ''],
+			['a number', 1990],
+			['an object', { fromWaterYear: 1990, toWaterYear: 2004, reason: 'x' }],
+			['an empty list', []],
+			['a range ending before it starts', [r(2005, 2004)]],
+			['a blank reason', [r(1990, 2004, '   ')]],
+			['a missing reason', [{ fromWaterYear: 1990, toWaterYear: 2004 }]],
+			['a reason of 501 characters', [r(1990, 2004, 'x'.repeat(501))]],
+			['a fractional year', [r(1990.5, 2004)]],
+			['a year as a string', [{ fromWaterYear: '1990', toWaterYear: 2004, reason: 'x' }]],
+			['a year before 1800', [r(1799, 1800)]],
+			['a year after 2200', [r(2200, 2201)]],
+			['an extra field', [{ ...r(1990, 2004), note: 'x' }]],
+			['a null entry', [null]],
+			['overlapping ranges', [r(1990, 2004), r(2004, 2010)]],
+			['one range inside another', [r(1990, 2010), r(1995, 2000)]],
+			['101 ranges', Array.from({ length: 101 }, (_, i) => r(1800 + i, 1800 + i))]
+		];
+		for (const [name, value] of table) {
+			const warnings: string[] = [];
+			const resolved = resolveChirpsFitPeriod(value, warnings);
+			// The engine keeps a value as it is (up to order and trimming) exactly when it has nothing to warn about.
+			const engineOk = warnings.length === 0;
+			if (engineOk && Array.isArray(value)) expect((resolved as unknown[]).length, name).toBe(value.length);
+			expect(SettingsPatch.safeParse({ chirpsFitPeriod: value }).success, name).toBe(engineOk);
+		}
 	});
 });
 

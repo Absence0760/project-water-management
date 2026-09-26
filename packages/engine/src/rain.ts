@@ -30,7 +30,7 @@
 // is picked. Those days then take corrected CHIRPS, then forecast rain, like
 // any blank day. The stored series is never changed.
 import { monthOfEpochDay, toEpochDay } from './calendar';
-import { exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
+import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX, exclusionRanges, sanitizeExclusions, type ExclusionRange } from './calibrate/provenance';
 import { waterYearOf } from './network/stats';
 import {
 	ACCUMULATION_MODES,
@@ -548,7 +548,15 @@ export function chirpsFactorSets(corr: ChirpsCorrection | null): ChirpsFactorSet
 	return segs.map((s) => ({ label: `${fitSegmentName(s)}, filling ${fitSegmentFillText(s)}`, fittedOn: fitWindowText(s.fitWindow), factors: s.months.map((m) => m.factor) }));
 }
 
-/** settings.chirpsFitPeriod as the engine uses it: an unknown value, or a list with no valid range, falls back to 'all' with a warning; invalid or overlapping ranges are dropped with one. */
+/**
+ * settings.chirpsFitPeriod as the engine uses it: an unknown value, or a list
+ * with no valid range, falls back to 'all' with a warning; invalid or
+ * overlapping ranges are dropped with one. "Valid" is exactly what the API's
+ * schema accepts (backend/src/projects/settings.ts; a table test holds the
+ * two together): integer years 1800–2200, first ≤ last, a trimmed reason of
+ * 1–EXCLUSION_REASON_MAX characters, no other keys, at most EXCLUSIONS_MAX
+ * ranges.
+ */
 export function resolveChirpsFitPeriod(raw: unknown, warnings: string[]): ChirpsFitPeriod {
 	if (raw == null) return 'all';
 	if ((CHIRPS_FIT_PERIOD_MODES as readonly unknown[]).includes(raw)) return raw as ChirpsFitPeriod;
@@ -558,8 +566,14 @@ export function resolveChirpsFitPeriod(raw: unknown, warnings: string[]): Chirps
 	}
 	const year = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1800 && v <= 2200;
 	const out: ChirpsFitRange[] = [];
-	for (const r of raw as unknown[]) {
-		const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
+	if (raw.length > EXCLUSIONS_MAX) warnings.push(`the CHIRPS fit period lists ${raw.length} ranges; only the first ${EXCLUSIONS_MAX} are used`);
+	for (const r of (raw as unknown[]).slice(0, EXCLUSIONS_MAX)) {
+		const o = (r && typeof r === 'object' && !Array.isArray(r) ? r : {}) as Record<string, unknown>;
+		const extra = Object.keys(o).filter((k) => k !== 'fromWaterYear' && k !== 'toWaterYear' && k !== 'reason');
+		if (extra.length) {
+			warnings.push(`CHIRPS fit range with unknown field${extra.length === 1 ? '' : 's'} ${extra.join(', ')}; ignored`);
+			continue;
+		}
 		const from = o.fromWaterYear;
 		const to = o.toWaterYear;
 		const reason = typeof o.reason === 'string' ? o.reason.trim() : '';
@@ -569,6 +583,10 @@ export function resolveChirpsFitPeriod(raw: unknown, warnings: string[]): Chirps
 		}
 		if (!reason) {
 			warnings.push(`CHIRPS fit range ${yearSpan(from, to)} has no reason; ignored`);
+			continue;
+		}
+		if (reason.length > EXCLUSION_REASON_MAX) {
+			warnings.push(`CHIRPS fit range ${yearSpan(from, to)} has a reason longer than ${EXCLUSION_REASON_MAX} characters; ignored`);
 			continue;
 		}
 		const clash = out.find((x) => from <= x.toWaterYear && to >= x.fromWaterYear);
