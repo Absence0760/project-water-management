@@ -1,7 +1,7 @@
-import { PAN_COEFFICIENT_PRESETS, panCoefficientOutOfRange } from '@water-management/engine';
+import { defaultProjectSettings, PAN_COEFFICIENT_PRESETS, panCoefficientOutOfRange, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { defaultCases, loadModelInput, meanAnnualMm3, quantile, runCase, toMarkdown, type CaseResult } from './pan-sensitivity';
+import { defaultCases, loadModelInput, meanAnnualMm3, panSensitivityRefusal, quantile, runCase, toMarkdown, type CaseResult } from './pan-sensitivity';
 
 describe('quantile', () => {
 	it('is the ascending value at the given fraction, clamped to the array', () => {
@@ -47,6 +47,20 @@ describe('defaultCases', () => {
 		expect(cases[3]!.panCoefficient).toEqual(winter.values);
 		// flat 0.70 matches the engine default: refitting at it should show the smallest movement, a useful baseline.
 		expect(cases[1]!.panCoefficient.every((v) => v === 0.7)).toBe(true);
+	});
+});
+
+describe('panSensitivityRefusal (settings.pe, issue #39)', () => {
+	it('runs on pan PE, and on a project saved before settings.pe existed', () => {
+		expect(panSensitivityRefusal({})).toBeNull();
+		expect(panSensitivityRefusal({ pe: { kind: 'pan' } })).toBeNull();
+	});
+
+	it('refuses a monthly PE row, saying why, and runCase refuses it before running anything', () => {
+		const settings = { ...defaultProjectSettings(), pe: { kind: 'monthly' as const, mm: new Array(12).fill(100) as unknown as ProjectSettings['apanMm'], source: 'ET₀' } };
+		expect(panSensitivityRefusal(settings)).toMatch(/monthly PE row.*pan coefficient doesn't reach GR4J/);
+		const base = { settings, model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: {} } as unknown as ModelInput;
+		expect(() => runCase(base, defaultCases()[0]!, { seed: 1, starts: 1, budget: 10 })).toThrow(/monthly PE row/);
 	});
 });
 
