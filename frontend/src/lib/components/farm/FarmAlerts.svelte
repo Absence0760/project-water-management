@@ -6,7 +6,7 @@
 	// dam card says the same figures).
 	import { base } from '$app/paths';
 	import { api, type AlertEvent } from '$lib/api';
-	import { farmAlertText } from '$lib/components/alerts/alerts';
+	import { farmAlertText } from '$lib/components/alerts/words';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { fmtDay, fmtPct } from './format';
 

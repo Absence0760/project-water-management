@@ -17,8 +17,13 @@ overrides section; § UI below).
 ## Engine: `applyScenario`
 
 ```ts
-applyScenario(base: ModelInput, ops: ScenarioOp[]): { input: ModelInput; applied: AppliedOp[]; problems: string[] }
+applyScenario(base: ModelInput, ops: ScenarioOp[], options?: { maskedNames?: MaskedNames }):
+  { input: ModelInput; applied: AppliedOp[]; problems: string[]; renamed: MaskedRename[] }
 ```
+
+`maskedNames` (node or crop id → the name the ops meet it by) is how an
+application is judged in its applicant's namespace
+([§ Applications](#applications-wp-33)); without it `renamed` is empty.
 
 - **Pure.** It never mutates `base`: settings and the model document are
   deep-copied, and a series is copied only when an op scales it (the other
@@ -249,9 +254,10 @@ Migration `024_scenarios.sql`
 
 - `scenario (id, project_id, name, description, base_run_id → model_run,
   ops jsonb, ops_sha256, owned_node_ids uuid[], owner_user_id, status,
-  created_at, updated_at, op_names jsonb)`: names unique per project
-  (ignoring case), at most 500 ops. `op_names` (047) is the ops' display
-  names above.
+  created_at, updated_at, op_names jsonb)`: a team scenario's name unique
+  among the project's team scenarios, an application's among its owner's
+  applications (ignoring case; 049, so naming a draft never says a hidden one
+  exists), at most 500 ops. `op_names` (047) is the ops' display names above.
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only.
 - Triggers: the base is a run of the same project and not a scenario run; a
@@ -398,10 +404,21 @@ scenario is `'team'`, and behaves exactly as above).
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked; crops, crop areas, transfers and land cover on their
-  own farms only. The engine's messages about ops (notes, problems) come back
-  with the anonymised names. This is D2's recommended default
+  own farms only. This is D2's recommended default
   ([step-3 § 11](./roadmap/step-3-licensing.md#11-open-decisions)),
   **pending the client**.
+- **The applicant's namespace** (049, `applicationMask` in `applicant.ts`,
+  the engine's `applyScenario(…, { maskedNames })`). An application's ops
+  meet every node the projection anonymises under its anonymous name, and
+  every crop it leaves out under a name made of its id, whoever checks or
+  runs it. So the engine's notes and problems quote only names the applicant
+  sees (no text redaction), and a rename of their own farm to a hidden
+  neighbour's name (or a new crop named like a hidden one) applies exactly
+  as a free name does; a name they can see ("Farm 1", the gauge, their own
+  crops) still collides. Afterwards each hidden node and crop gets its real
+  name back, suffixed where an op took it (`Kliphuis` → `Kliphuis (2)` in
+  that application's runs), and the check's `renamed` lists those for the
+  assessors; a contributor never receives it.
 - **Own nodes** are the owner's farm links (`app_farm_nodes`), set at create
   and each time the ops change while a draft. A contributor can't claim
   others' (`403`), so a dam raise on their own farm is a proposal and the
@@ -416,12 +433,23 @@ scenario is `'team'`, and behaves exactly as above).
   `decided_by` are stamped by the trigger. The roadmap's "under review" is
   not a status of its own: a submitted application is the assessors' queue.
 - **Who reads it.** Its owner and whoever they share it with
-  (`POST|DELETE …/members`, `scenario_member`: another contributor-or-above
-  member of the project, by email); the editors once it is submitted (drafts
+  (`POST|DELETE …/members`, `scenario_member`); the editors once it is submitted (drafts
   stay the applicant's alone, from the assessors too); viewers once it is
   decided. Its runs follow: an application's draft runs are hidden from the
   editors' run lists and series as well (`model_run_select`, and
   `run_series_select` excluding `app_hidden_scenario_runs()`).
+- **Sharing** (049). The project owner puts each applicant and their
+  consultant or client in an **applying party** (`project_member.party`,
+  set in the Members panel, `PATCH /projects/:id/members/:userId { party }`).
+  An applicant shares only with the other contributor-or-above members of
+  their own party, picked from `GET …/share-candidates` (names only) and
+  sent by id; every other id, and every address, gets one refusal, so no
+  answer says who else is a member. A member without a party shares with no
+  one. An owner who has since become a viewer or above (who reads the member
+  list anyway) shares with any contributor-or-above member, by id or email.
+  Moving someone out of a party (or changing a role) ends the shares the
+  rule no longer allows (`project_member_prune_shares`); the rule lives in
+  `app_share_allowed`, which the insert trigger checks too.
 - **Runs.** The owner and the people it is shared with run it, and so may an
   assessor. A contributor's run answers with the run's metadata only (its
   summary names every farm); each application keeps its newest 5 runs
@@ -456,7 +484,11 @@ Tests: `backend/src/scenarios/applications.db.test.ts` (RLS with positive
 controls: drafts hidden from the other applicant, the editors and viewers;
 the published run's row unreadable, its catchment series readable; submit,
 freeze, decide; sharing; the per-application run cap; the contributor route
-inventory), `applicant.test.ts` (the projection and the renaming),
+inventory), `oracles.db.test.ts` (049: identical answers for member and
+non-member ids and addresses, hidden and free farm, crop and application
+names, each with its positive control; the party prune), `applicant.test.ts`
+(the projection and the mask),
 `history/write-routes.db.test.ts` (each new route records its event), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's
-decision, axe in both themes).
+decision, the owner's party and the applicant's share picker, axe in both
+themes).

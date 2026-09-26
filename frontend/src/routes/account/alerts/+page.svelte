@@ -7,7 +7,7 @@
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '$lib/api';
-	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel } from '$lib/components/alerts/alerts';
+	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel } from '$lib/components/alerts/words';
 	import { t } from '$lib/i18n/locale.svelte';
 
 	let projects = $state<ProjectAlerts[] | null>(null);

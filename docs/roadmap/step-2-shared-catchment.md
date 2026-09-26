@@ -387,7 +387,7 @@ the aggregate rule), api.md.
 > - **`invite.locale`** takes `en` or `af`; an `af` invite goes out through
 >   the email catalogue (WP-2.5), in English until the reviewed Afrikaans
 >   lands. A new account takes its `app_user.locale` from the invite
->   (049_user_locale.sql).
+>   (050_user_locale.sql).
 > - The e2e plants the invite token instead of reading Mailpit, like the
 >   other invite specs (e2e mails go to the server log).
 
@@ -783,7 +783,7 @@ audit log of model changes yet" from Known gaps).
 
 ### WP-2.5 Internationalisation foundation and Afrikaans
 
-> **Status: plumbing built, translation pending** (`049_user_locale.sql`,
+> **Status: plumbing built, translation pending** (`050_user_locale.sql`,
 > `frontend/src/lib/i18n/`, `backend/src/mail/i18n/`;
 > [ui.md § Language](../ui.md#language), [api.md § Auth](../api.md#auth)).
 > Where the build departs from the plan below, and why:
@@ -797,7 +797,7 @@ audit log of model changes yet" from Known gaps).
 >   `en`.
 > - **The switch** is on the sign-in pages, the farm header and the account
 >   page, not the workspace header (the workspace isn't translated).
-> - **`invite.locale`** already existed (034); 049 adds `app_user.locale`
+> - **`invite.locale`** already existed (034); 050 adds `app_user.locale`
 >   (NULL = not chosen) and `volume_unit`, and `app_accept_invites` gives a
 >   new account its invite's locale. Sign-up takes the page's `locale`.
 > - **Help:** `content.af.ts` with `sourceHash` and its test are built; the

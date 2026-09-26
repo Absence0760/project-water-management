@@ -29,7 +29,8 @@
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		error = passwordProblem(password, confirm);
+		const problem = passwordProblem(password, confirm);
+		error = problem ? t(problem) : null;
 		if (error || !token) return;
 		busy = true;
 		try {

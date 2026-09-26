@@ -55,7 +55,7 @@ erDiagram
 
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
-| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 049_user_locale.sql (WP-2.5) | none (the workbook has no users) |
+| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5) | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
@@ -650,8 +650,12 @@ list of overrides (engine `ScenarioOp`) on a **base run**, applied to that
 run's stored input (above), never the live model.
 
 - **`scenario`**: `id`, `project_id` (→ `project`, cascade), `name` (1–200
-  characters, unique per project ignoring case and surrounding spaces:
-  `scenario_name_idx`, which also covers the project foreign key),
+  characters, unique ignoring case and surrounding spaces: a team scenario's
+  among the project's team scenarios (`scenario_team_name_idx`), an
+  application's among its owner's applications
+  (`scenario_application_name_idx`), since 049, so that naming a draft never
+  says a hidden one exists; `scenario_project_idx` covers the project foreign
+  key),
   `description` (≤ 4 000), `base_run_id` (→ `model_run`, `NO ACTION`), `ops
   jsonb` (an array of at most 500 ops and 1 MiB of JSON text, `CHECK`),
   `ops_sha256` (hex, the SHA-256 of the ops as RFC 8785 canonical JSON,
@@ -945,7 +949,9 @@ contributor < viewer < editor < owner`. `044_contributor_role.sql` adds the
 enum value alone (it can't be used in the transaction that adds it);
 `045_contributor_scope.sql` adds everything else, and
 `046_contributor_runs.sql` takes every run row (and other farms' run series)
-away from a contributor.
+away from a contributor. `049_applicant_oracles.sql` closes what they could
+learn by probing: who is a member (sharing), and whether a hidden
+application has a name.
 
 - **Below viewer, like a farmer.** Every existing policy and every
   `requireRole(…, 'viewer')` refuses a contributor untouched (fail closed);
@@ -996,10 +1002,21 @@ away from a contributor.
   added_at)`**: the people an applicant shares an application with.
   `(project_id, user_id)` references `project_member` `ON DELETE CASCADE`
   (leaving the project ends the share), with covering indexes. A trigger
-  admits only an application of the same project, a contributor-or-above
-  member, never its owner. RLS: read by whoever reads the application; only
-  its owner adds; the owner removes anyone and anyone listed may leave; no
-  update.
+  admits only an application of the same project, a member
+  `app_share_allowed(project, owner, member)` allows (049), never its owner.
+  RLS: read by whoever reads the application; only its owner adds; the owner
+  removes anyone and anyone listed may leave; no update.
+- **`project_member.party`** (049, text ≤ 80, trimmed, null for none): the
+  **applying party** the project owner puts a member in (the applicant, their
+  consultant, their client). `app_share_allowed`: a contributor-or-above
+  member who isn't the owner and, while the owner is a contributor, is in
+  the owner's party (compared ignoring case); an owner who is a viewer or
+  above may share with any contributor-or-above member.
+  `app_share_candidates(project)` lists, for the current user, whom they may
+  share with (id and display name, never an email): the only way an
+  applicant names someone, so no answer says who else is a member.
+  `project_member_prune_shares` (after a change of party or role) deletes
+  the shares the rule no longer allows.
 - **Who reads a scenario** is one function, `app_scenario_visible(project,
   id, origin, status, owner)` (taking columns so the insert's `RETURNING`
   passes it); `app_scenario_readable(id)` looks the row up and calls it. A
@@ -1410,7 +1427,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `farmer`: someone already on the project with another role keeps it and
   gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
-  sent invite it accepts (049_user_locale.sql, WP-2.5; a chosen locale is
+  sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
   never overwritten), and deletes those invites. Invites cascade away with their project or team,
   and with the account that sent them (`invited_by` cascade). An invite that
   lapsed unaccepted is listed as expired for 90 days past `expires_at`, then

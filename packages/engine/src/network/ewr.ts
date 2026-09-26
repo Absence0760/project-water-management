@@ -1,9 +1,8 @@
 // EWR compliance as a water-year × month grid: the app's version of the
 // workbook's [EWR shortfalls Pivot Data] (VBA sProEp_CollateData) feeding the
 // [EWR analysis] pivot.
-import { toEpochDay, waterYearIndex, monthOfEpochDay } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import type { EwrCompliance, EwrComplianceGrid } from '../project';
-import { waterYearOf } from './stats';
 
 /** One site to grid: its daily shortfall in the workbook's sign (≤ 0 = short). */
 export interface EwrSite {

@@ -4,10 +4,11 @@
 // through the same save path as any other (runAndStore), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, type AppliedOp, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
+import { applicationMask } from './applicant.js';
 import { loadPublishedRunInput, loadRunInput, lockProjectRuns, RunInputError, runAndStore } from '../runs/execute.js';
 import type { OpName } from './names.js';
 import type { ScenarioOutcome, ScenarioStatus } from './schema.js';
@@ -84,6 +85,8 @@ export interface ScenarioCheck {
 	problems: string[];
 	/** classifyScenario, one per op: `proposal` or `baseline`. */
 	classified: OpClass[];
+	/** An application's hidden nodes and crops renamed because an op took their name (applyScenario's `renamed`). Never shown to a contributor. */
+	renamed: MaskedRename[];
 }
 
 /**
@@ -125,10 +128,18 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
 	}
 }
 
-/** Apply `ops` to the base run's input and classify them. Pure given the base. */
-export function checkScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: readonly string[]): ScenarioCheck {
-	const { input, applied, problems } = applyScenario(base, ops);
-	return { input, base, applied, problems, classified: classifyScenario(base, ops, ownedNodeIds) };
+/**
+ * Apply a scenario's ops to the base run's input and classify them. Pure
+ * given the base. An application's ops meet every node and crop its
+ * applicant can't see under the anonymous name they see it by
+ * (applicationMask, WP-3.3), whoever checks it: the application is judged
+ * in its applicant's namespace, so no message quotes a hidden name and no
+ * rename collides with one (docs/scenarios.md § Applications).
+ */
+export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>): ScenarioCheck {
+	const options = s.origin === 'applicant' ? { maskedNames: applicationMask(base, s.ownedNodeIds) } : {};
+	const { input, applied, problems, renamed } = applyScenario(base, s.ops, options);
+	return { input, base, applied, problems, renamed, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /**
@@ -155,7 +166,7 @@ export async function executeScenarioRun(
 	await lockProjectRuns(db, projectId);
 	const scenario = await loadScenario(db, projectId, scenarioId);
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
-	const check = checkScenario(base, scenario.ops, scenario.ownedNodeIds);
+	const check = checkScenario(base, scenario);
 	if (check.problems.length)
 		throw new ApiError(422, check.problems.length === 1 ? "an op of this scenario doesn't apply to its base run" : `${check.problems.length} ops of this scenario don't apply to its base run`, {
 			problems: check.problems

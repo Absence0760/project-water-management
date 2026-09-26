@@ -14,13 +14,12 @@ import {
 	resolveDataQuality,
 	seriesChecks,
 	seriesRowFlags,
-	waterYearLabel,
 	ZERO_RUN_MIN_WET_DAYS,
 	ZERO_RUN_PLAIN_DAYS,
 	zeroRainCheck,
 	zeroRainRuns
 } from './quality';
-import { fromEpochDay, monthOfEpochDay, toEpochDay } from './calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel } from './calendar';
 import { defaultProjectSettings, type NetworkNode } from './project';
 
 // 1 m³/s for one day = 0.0864 Mm³.

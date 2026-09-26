@@ -230,6 +230,10 @@ record (an imported project only), recent notes ([§ Notes](#notes)), team and m
   team project), so the two panels that refer to each other sit together, then
   **Farmers**. Below 900 px it is one column in the order details, import
   record, team, members, farmers, share links.
+- **Members**: each applicant row has an **Applying party** box for owners
+  (saved on change; blank for none): an applicant shares applications only
+  with the members of their own party, so put an applicant and their
+  consultant or client in the same one. Others see the party as text.
 - **Farmers** (WP-2.1, `overview/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `overview/InviteFarmersDialog.svelte`)
@@ -1973,7 +1977,15 @@ farm view if they have links, and the Scenarios tab in applicant mode
   the owner's **Submit to the assessors** (confirmed; disabled while a change
   doesn't apply), **Withdraw** and **Reopen as a draft**, the decision once
   made (outcome, by whom, when, the reasons), and **Shared with**: the
-  people who read it, the owner's share-by-email form, and Remove / Leave.
+  people who read it, Remove / Leave, and for the owner a **Share with**
+  picker of the people they may share it with (`…/share-candidates`: an
+  applicant's own applying party; no address box, so it says nothing about
+  who else is a member). With nobody to pick it says why ("Nobody to share
+  it with yet: the project owner lists who is in your party", or "Everyone
+  you can share it with already reads it"). An assessor opening an
+  application whose names displaced a hidden farm's or crop's sees which
+  ("… in this application's runs Kliphuis is called “Kliphuis (2)”",
+  `check.renamed`); the applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`): every submitted, withdrawn or decided application
@@ -2323,13 +2335,24 @@ invite, the alert emails and their digest). The modeller workspace and the
   Choosing applies at once, is kept on the device and, signed in, saved with
   `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
   sends the page's language as the account's; an account created from an
-  invite takes the invite's (`invite.locale`, 049).
+  invite takes the invite's (`invite.locale`, 050).
 - **Catalogue.** `lib/i18n/messages/en.ts` is every string, flat keys
   (`farm.supply.title`), with a section note per key group and per-key notes
   for the translator. `messages/af.ts` holds only **reviewed** Afrikaans,
   typed `Partial<Record<MessageKey, string>>` (an unknown key fails
   `pnpm check`); it is loaded lazily, the first time someone picks
   Afrikaans. A key without Afrikaans shows in English.
+- **Loading.** Only the translated routes load the catalogue: they import
+  it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
+  dynamic `import()` on the first translated route, then renders the route
+  once the language is set (a readiness flag, with Try again if the chunk
+  fails), so no route shows one language and then another. The workspace
+  and `/share` never download it: the number, date, notice and chart-size
+  rules they share with the farm view live in catalogue-free modules
+  (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
+  `farm/chartGeometry.ts`), `passwordProblem` returns a key, and the
+  "confirm your email" banner is imported only for an unconfirmed address.
+  `lib/i18n/boundary.test.ts` guards it.
 - **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
   `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
   `.two` / `.few`) form through `Intl.PluralRules`; `tRich(key, vars)`

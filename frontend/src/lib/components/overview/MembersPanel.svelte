@@ -99,6 +99,23 @@
 		}
 	}
 
+	// An applicant's party (049): the people they may share an application with.
+	async function setParty(m: Member, next: string) {
+		const party = next.trim() || null;
+		if (party === m.party) return;
+		busy = m.userId;
+		error = null;
+		try {
+			const updated = await api.members.setParty(projectId, m.userId, party);
+			members = members.map((x) => (x.userId === m.userId ? updated : x));
+		} catch (err) {
+			error = msg(err);
+			await load();
+		} finally {
+			busy = null;
+		}
+	}
+
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
 		const q = self
@@ -173,6 +190,21 @@
 								{:else}
 									<span class="badge" class:badge-owner={m.role === 'owner'}>{ROLE_LABEL[m.role] ?? m.role}</span>
 								{/if}
+								{#if m.role === 'contributor'}
+									{#if isOwner}
+										<input
+											class="party"
+											aria-label="Applying party for {m.displayName}"
+											placeholder="Applying party"
+											maxlength="80"
+											value={m.party ?? ''}
+											disabled={busy === m.userId}
+											onchange={(e) => setParty(m, e.currentTarget.value)}
+										/>
+									{:else if m.party}
+										<span class="muted small party">{m.party}</span>
+									{/if}
+								{/if}
 							</td>
 							<td class="act">
 								{#if isOwner || m.userId === currentUserId}
@@ -214,7 +246,8 @@
 		<p class="muted small add-hint">
 			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
 			run it; owners also manage members. An applicant sees only the published baseline, their own farms and their own
-			applications (a licence applicant or their consultant).
+			applications (a licence applicant or their consultant). Put an applicant and their consultant in the same applying
+			party: they can share applications only with each other.
 		</p>
 		<PendingInvites
 			bind:invites
@@ -252,6 +285,11 @@
 	select {
 		text-transform: capitalize;
 		min-width: 6.5rem;
+	}
+	.party {
+		display: block;
+		margin-top: 0.25rem;
+		max-width: 12rem;
 	}
 	.skeleton td {
 		height: 37px;

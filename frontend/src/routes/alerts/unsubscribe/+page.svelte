@@ -11,7 +11,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, type Unsubscribed } from '$lib/api';
-	import { fragmentToken, unsubscribedText } from '$lib/components/alerts/alerts';
+	import { fragmentToken, unsubscribedText } from '$lib/components/alerts/words';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 

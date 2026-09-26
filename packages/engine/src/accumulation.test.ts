@@ -11,8 +11,9 @@ import {
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { defaultZeroRainSettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
 import { zeroRainRuns } from './quality';
-import { prepareRun, runModel } from './run';
+import { runModel } from './run';
 import { checkInvariants } from './testing/invariants';
+import { prepareRun } from './prepare';
 
 type Series = Partial<Record<SeriesKind, DailySeries>>;
 const S = '2001-06-01';

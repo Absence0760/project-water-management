@@ -14,6 +14,7 @@ import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type Model
 import { STALE_DAYS } from '$lib/components/series/freshness';
 import { t, tRich, type MessageKey } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
+import { splitNotice, type NoticeVm } from './notice';
 import {
 	count,
 	daysBetween,
@@ -56,34 +57,7 @@ export function datesLine(view: FarmView, today: string): DatesLine {
 /** The restriction level in words: "No restriction", "Advisory", "Restriction". */
 export const levelWord = (level: RestrictionLevel) => t(`farm.level.${level}`);
 
-export interface NoticeVm {
-	level: RestrictionLevel;
-	/** "Notice from the WUA · Advisory", above the heading; null when it is the heading. */
-	label: string | null;
-	heading: string;
-	body: string | null;
-	/** The published percentage, only when the WUA gave no text to carry it. */
-	pctLine: string | null;
-	/** "Example WUA, 12 Jan 2024". */
-	byline: string;
-	/** The notice's first line (its title), for the "Why?" page and the offline view. */
-	title: string | null;
-}
-
-/**
- * The WUA writes the notice; the app never writes restriction wording of its
- * own. A notice's first line is its title when more follows (or when it's
- * short enough to be one), the rest its text.
- */
-export function splitNotice(notice: string | null): { title: string | null; body: string | null } {
-	const lines = (notice ?? '')
-		.split(/\r?\n/)
-		.map((l) => l.trim())
-		.filter(Boolean);
-	if (!lines.length) return { title: null, body: null };
-	if (lines.length === 1) return lines[0]!.length <= 80 ? { title: lines[0]!, body: null } : { title: null, body: lines[0]! };
-	return { title: lines[0]!, body: lines.slice(1).join('\n') };
-}
+export { splitNotice, type NoticeVm } from './notice';
 
 /** null for level `none` (the page shows "No restriction from the WUA"). */
 export function noticeCard(view: FarmView): NoticeVm | null {

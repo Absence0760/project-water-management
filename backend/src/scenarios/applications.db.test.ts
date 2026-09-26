@@ -92,6 +92,11 @@ beforeAll(async () => {
 	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
 	expect(linked.status, JSON.stringify(linked.body)).toBe(200);
 	expect(linked.body.farmer).toMatchObject({ role: 'contributor', nodeIds: [rooikloof.id] });
+	// A and their consultant are one applying party (049): whom A may share with.
+	for (const u of [applicantA, consultant]) {
+		const res = await owner.call('PATCH', `${P()}/members/${u.id}`, { party: 'Rooikloof Trust' });
+		expect(res.body.member, u.email).toMatchObject({ role: 'contributor', party: 'Rooikloof Trust' });
+	}
 });
 
 describe('an application', () => {
@@ -135,22 +140,26 @@ describe('an application', () => {
 	});
 
 	it("is shared with the applicant's consultant, who then reads it (and leaves)", async () => {
-		const res = await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email });
+		// Whom A may share with: their party, as the owner set it (049), and nobody else.
+		expect((await asA('GET', `${P()}/scenarios/${sid}/share-candidates`)).body).toEqual({ candidates: [{ userId: consultant.id, displayName: 'Consultant' }] });
+		const res = await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: consultant.id });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		expect(res.body.members).toEqual([{ userId: consultant.id, displayName: 'Consultant' }]);
 		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(200);
 		// Still hidden from the other applicant (control above: the consultant sees it).
 		expect((await applicantB.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
-		// Not a member of the project, or only a farmer: the same refusal as no such address.
-		for (const email of [stranger.email, farmer.email, 'nobody@example.com']) {
-			expect(await asA('POST', `${P()}/scenarios/${sid}/members`, { email }), email).toEqual({ status: 404, body: { error: 'no contributor or above on this project has that address' } });
+		// Anyone else (members outside the party, a farmer, a stranger, no one):
+		// one refusal. oracles.db.test.ts has the full set.
+		for (const u of [applicantB.id, farmer.id, stranger.id, ZERO]) {
+			expect(await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: u }), u).toEqual({ status: 404, body: { error: 'not someone you can share this application with' } });
 		}
-		// Only the owner shares.
-		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/members`, { email: applicantB.email })).status).toBe(403);
+		// Only the owner shares, and lists candidates.
+		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/members`, { userId: applicantB.id })).status).toBe(403);
+		expect((await consultant.call('GET', `${P()}/scenarios/${sid}/share-candidates`)).status).toBe(403);
 		// The consultant leaves, then is added back.
 		expect((await consultant.call('DELETE', `${P()}/scenarios/${sid}/members/${consultant.id}`)).status).toBe(204);
 		expect((await consultant.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
-		expect((await asA('POST', `${P()}/scenarios/${sid}/members`, { email: consultant.email })).status).toBe(201);
+		expect((await asA('POST', `${P()}/scenarios/${sid}/members`, { userId: consultant.id })).status).toBe(201);
 	});
 
 	it('shows the applicant the base with every other farm anonymised', async () => {
@@ -409,6 +418,7 @@ const CONTRIBUTOR_ALLOWED = new Set([
 	'POST /projects/:id/scenarios/:sid/submit',
 	'POST /projects/:id/scenarios/:sid/withdraw',
 	'POST /projects/:id/scenarios/:sid/reopen',
+	'GET /projects/:id/scenarios/:sid/share-candidates',
 	'POST /projects/:id/scenarios/:sid/members',
 	'DELETE /projects/:id/scenarios/:sid/members/:userId',
 	// Notes (WP-2.7): min role farmer, and RLS gives a contributor what a farmer

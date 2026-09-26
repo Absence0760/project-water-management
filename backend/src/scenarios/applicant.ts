@@ -14,7 +14,7 @@
 //    farm's area, dam, crops, demand or boreholes leave the server;
 //  - crops, crop areas, transfers and land cover: only those on their own
 //    nodes (a transfer's other end is an anonymised node).
-import type { CropDef, ModelInput, NetworkNode, NodeKind, ProjectModel } from '@water-management/engine';
+import type { CropDef, MaskedNames, ModelInput, NetworkNode, NodeKind, ProjectModel } from '@water-management/engine';
 
 export interface ApplicantBase {
 	settings: ModelInput['settings'];
@@ -77,28 +77,22 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 	};
 }
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 /**
- * The engine's messages about ops (applyScenario's notes and problems,
- * which quote node names, some lower-cased) with every anonymised node's
- * real name swapped for its anonymous one, ignoring case, longest names
- * first so "Farm A2" isn't read as "Farm A". Ids are left alone: the
- * applicant already has them.
- *
- * What it can't hide: that a message exists. An applicant who renames their
- * own farm to a neighbour's name gets the duplicate-name problem, which says
- * a node of that name exists (docs/followups.md).
+ * The names an application's ops must not meet (applyScenario's
+ * `maskedNames`): every node the projection anonymises, under the anonymous
+ * name the applicant sees ("Farm 3"), and every crop it leaves out, under a
+ * name made of its id (a crop the applicant never sees has no name for
+ * them; its id is as unknowable to them as its name). With these the
+ * engine's messages quote only names the applicant sees, and renaming their
+ * own farm to a neighbour's name collides with nothing
+ * (docs/followups.md § Applicants "Oracles").
  */
-export function applicantRedactor(base: ModelInput, projected: ApplicantBase): (text: string) => string {
-	const anon = new Set(projected.anonymisedNodeIds);
-	const shownName = new Map(projected.model.nodes.map((n) => [n.id, n.name]));
-	const pairs = base.model.nodes
-		.filter((n) => anon.has(n.id) && n.name.trim() !== '')
-		.map((n) => [n.name.toLowerCase(), shownName.get(n.id)!] as const)
-		.sort((a, b) => b[0].length - a[0].length);
-	if (!pairs.length) return (t) => t;
-	const re = new RegExp(pairs.map(([real]) => escape(real)).join('|'), 'gi');
-	const to = new Map(pairs);
-	return (text) => text.replace(re, (m) => to.get(m.toLowerCase()) ?? m);
+export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>): MaskedNames {
+	const projected = projectBaseForApplicant(input, ownNodeIds);
+	const hidden = new Set(projected.anonymisedNodeIds);
+	const shownCrops = new Set(projected.model.crops.map((c) => c.id));
+	return {
+		nodes: Object.fromEntries(projected.model.nodes.filter((n) => hidden.has(n.id)).map((n) => [n.id, n.name])),
+		crops: Object.fromEntries(input.model.crops.filter((c) => !shownCrops.has(c.id)).map((c) => [c.id, `crop ${c.id}`]))
+	};
 }

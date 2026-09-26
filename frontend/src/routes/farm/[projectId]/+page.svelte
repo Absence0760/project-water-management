@@ -21,7 +21,7 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
 	import { readUnit } from '$lib/components/farm/savedCopy';
@@ -75,7 +75,7 @@
 			</section>
 			<p class="sub">{stateText('needsConnection')}</p>
 		{:else}
-			<NoticeCard {notice} />
+			<NoticeCard {notice} noneText={noRestriction()} />
 			<!-- The farm's own dam alert, while it is firing (WP-2.13). -->
 			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
 			<SupplyCard farm={view.farm} bind:unit />

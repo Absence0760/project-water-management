@@ -19,16 +19,7 @@
 //   volume (top 2 %), of the mid-segment slope (20–70 % exceedance) and of the
 //   low-flow volume (bottom 30 %, in log space). Reported, not optimised.
 
-export const OBJECTIVES = ['kgePrime', 'kgeYearly', 'kgeNp', 'nseSqrt', 'nseLog'] as const;
-export type ObjectiveId = (typeof OBJECTIVES)[number];
-
-export const OBJECTIVE_LABELS: Record<ObjectiveId, string> = {
-	kgePrime: 'KGE′ (Kling–Gupta, 2012)',
-	kgeYearly: 'Year-balanced KGE′ (mean over water years)',
-	kgeNp: 'Non-parametric KGE',
-	nseSqrt: 'NSE on √Q (medium flows)',
-	nseLog: 'NSE on log Q (low flows)'
-};
+import type { ObjectiveId } from './objectives';
 
 /** Every score for one comparison. null when it can't be computed (too few days, no variance, zero mean). */
 export interface FitScores {

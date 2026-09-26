@@ -10,8 +10,8 @@
 // signed-in farmer surfaces; docs/followups.md § Afrikaans), so its words are
 // English here rather than borrowed from the farm view's catalogue keys.
 import type { PublicationRestriction, SharedCatchmentView, ShareView } from '$lib/api/types';
-import { splitNotice, type NoticeVm } from '$lib/components/farm/cards';
-import { fmtDay, fmtPct, fmtStampDay, NBSP } from '$lib/components/farm/format';
+import { splitNotice, type NoticeVm } from '$lib/components/farm/notice';
+import { fmtDay, fmtPct, fmtStampDay, NBSP } from '$lib/components/farm/numbers';
 
 const LEVEL_WORD: Record<PublicationRestriction['level'], string> = { none: 'No restriction', advisory: 'Advisory', restricted: 'Restriction' };
 

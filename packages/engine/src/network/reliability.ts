@@ -17,9 +17,8 @@
 // - The water account per water year and over the run: what came into the
 //   river network, what left it and how, the change in storage, and a closure
 //   residual that is float noise; EWR required vs met at each EWR site.
-import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import { cmpStr } from '../order';
-import { waterYearOf } from './stats';
 
 /** Default of settings.assuranceAnnualThreshold: a project choice, not a standard. */
 export const DEFAULT_ANNUAL_THRESHOLD = 0.9;

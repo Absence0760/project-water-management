@@ -1,4 +1,4 @@
--- 049_user_locale — a person's language and volume unit (roadmap WP-2.5;
+-- 050_user_locale — a person's language and volume unit (roadmap WP-2.5;
 -- docs/data-model.md § Users, docs/ui.md § Language).
 --
 -- Expand-only:
@@ -29,9 +29,9 @@ ALTER TABLE app_user
 	ADD COLUMN volume_unit text NOT NULL DEFAULT 'm3' CHECK (volume_unit IN ('m3', 'ML'));
 
 COMMENT ON COLUMN app_user.locale IS
-	'Language of the farmer-facing pages and emails: en or af; NULL = not chosen (the site follows the browser, emails are English). 049, WP-2.5.';
+	'Language of the farmer-facing pages and emails: en or af; NULL = not chosen (the site follows the browser, emails are English). 050, WP-2.5.';
 COMMENT ON COLUMN app_user.volume_unit IS
-	'How the farm view shows volumes: m3 (default) or ML. 049, WP-2.5.';
+	'How the farm view shows volumes: m3 (default) or ML. 050, WP-2.5.';
 
 CREATE OR REPLACE FUNCTION app_accept_invites(p_user uuid) RETURNS integer
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -80,7 +80,7 @@ CREATE OR REPLACE FUNCTION app_accept_invites(p_user uuid) RETURNS integer
 			WHERE email = v_email AND team_id IS NOT NULL AND expires_at > now()
 			ON CONFLICT (team_id, user_id) DO NOTHING;
 		GET DIAGNOSTICS n_team = ROW_COUNT;
-		-- 049: an account with no language yet takes its invite's.
+		-- 050: an account with no language yet takes its invite's.
 		UPDATE app_user SET locale = (
 			SELECT i.locale FROM invite i
 			WHERE i.email = v_email AND i.expires_at > now()

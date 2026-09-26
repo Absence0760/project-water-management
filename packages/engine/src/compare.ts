@@ -8,11 +8,9 @@
 // (across copies). See docs/run-comparison.md.
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { fromEpochDay, toEpochDay } from './calendar';
-import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
-import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
 import { provenanceLabel, sameProvenance, type SeriesProvenance } from './seriesProvenance';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
@@ -31,6 +29,8 @@ import {
 	type RunSummary,
 	type Transfer
 } from './project';
+import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
+import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
 
 // ---------------------------------------------------------------------------
 // Types

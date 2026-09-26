@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
-import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, prepareRun, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
+import { DEFAULT_GAUGE_PICK_WARNING, LEGACY_NOT_EVIDENCE_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
 import { defaultProjectSettings } from './project';
 
 const defaultCal = () => defaultProjectSettings().calibration;
@@ -16,6 +16,7 @@ import { checkTransferLimits } from './verify/checks';
 import { netDailyDemandM3 } from './demand';
 import { computeCurtailment, type ReportWindow } from './network/curtailment';
 import { loadClientCatchmentFixture, type Expected } from './testing/client-catchment-fixture';
+import { prepareRun } from './prepare';
 
 // ---------------------------------------------------------------------------
 // Fixtures

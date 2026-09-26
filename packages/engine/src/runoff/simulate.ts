@@ -3,7 +3,9 @@
 import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import { gr4jPeMonthlyMm, type PeInput, type ProjectSettings } from '../project';
 import { requireCatchmentAreaKm2 } from './area';
-import { gr4j, GR4J_PARAMS, type Gr4jParams } from './gr4j';
+import { gr4j } from './gr4j';
+import { GR4J_PARAMS, type Gr4jParams } from './params';
+import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 import type { DayFluxes, NaturalFlowGenerator, ParamSpec, RunContext, RunoffModel } from './types';
 
 /** Daily model drivers (mm/day). */
@@ -125,14 +127,6 @@ export function resolveWarmupDays(v: unknown, warnings: string[]): number {
 	warnings.push(`warm-up ${JSON.stringify(v)} days is not a whole number of days 0–3650; using 365`);
 	return 365;
 }
-
-/** Some month has potential evaporation (`gr4jPeMonthlyMm` > 0): what GR4J needs to run. */
-export const hasPotentialEvaporation = (s: { apanMm: readonly number[]; panCoefficient: readonly number[]; pe?: PeInput | null }): boolean =>
-	gr4jPeMonthlyMm(s).some((v) => v > 0);
-
-/** Why a GR4J run is refused when potential evaporation is 0 in every month. */
-export const GR4J_NO_PET =
-	'GR4J needs potential evaporation: it is 0 in every month (A-pan × pan coefficient, or the monthly PE row), so the catchment would never dry out. Enter A-pan evaporation (Settings → Demand) or a monthly PE row (Settings → Flow calibration), or choose the legacy runoff model.';
 
 const MM_KM2_TO_M3 = 1000; // 1 mm over 1 km² = 1 000 m³
 

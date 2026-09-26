@@ -73,17 +73,39 @@
 	}
 
 	// --- sharing -------------------------------------------------------------------------
-	let email = $state('');
+	// The owner picks from the people the server lists for them (an applicant:
+	// their own party, which the project owner sets), never types an address:
+	// nothing they can send says who else is a member (049).
+	let candidates = $state<Scenario['members'] | null>(null);
+	let pick = $state('');
+	const pickable = $derived((candidates ?? []).filter((c) => !s.members.some((m) => m.userId === c.userId)));
+	// Fetched once per application, not again each time the scenario object is replaced.
+	const scenarioId = $derived(s.id);
+	$effect(() => {
+		if (!isOwner) return;
+		const sid = scenarioId;
+		candidates = null;
+		api.scenarios.shareCandidates(projectId, sid).then(
+			(c) => {
+				if (sid === scenarioId) candidates = c;
+			},
+			(err) => {
+				candidates = [];
+				error = msg(err);
+			}
+		);
+	});
 	async function share(e: SubmitEvent) {
 		e.preventDefault();
-		if (!email.trim()) return;
+		const who = pickable.find((c) => c.userId === pick);
+		if (!who) return;
 		busy = true;
 		error = null;
 		try {
-			const members = await api.scenarios.share(projectId, s.id, email.trim());
+			await api.scenarios.share(projectId, s.id, who.userId);
 			onchange(await api.scenarios.get(projectId, s.id));
-			note = `Shared with ${members.at(-1)?.displayName ?? email.trim()}.`;
-			email = '';
+			note = `Shared with ${who.displayName}.`;
+			pick = '';
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -179,15 +201,24 @@
 			<p class="muted">Nobody else.</p>
 		{/if}
 		{#if isOwner}
-			<form class="form-row" onsubmit={share}>
-				<div class="field grow">
-					<label for="share-email">Share with (a member of this project, by email)</label>
-					<input id="share-email" type="email" placeholder="consultant@example.com" bind:value={email} />
-				</div>
-				<div class="field">
-					<button type="submit" class="btn" disabled={busy || !email.trim()}>Share</button>
-				</div>
-			</form>
+			{#if candidates && !pickable.length}
+				<p class="hint" data-testid="share-none">
+					{candidates.length ? 'Everyone you can share it with already reads it.' : 'Nobody to share it with yet: the project owner lists who is in your party (your consultant or client).'}
+				</p>
+			{:else if candidates}
+				<form class="form-row" onsubmit={share}>
+					<div class="field grow">
+						<label for="share-who">Share with</label>
+						<select id="share-who" bind:value={pick}>
+							<option value="">Choose someone…</option>
+							{#each pickable as c (c.userId)}<option value={c.userId}>{c.displayName}</option>{/each}
+						</select>
+					</div>
+					<div class="field">
+						<button type="submit" class="btn" disabled={busy || !pick}>Share</button>
+					</div>
+				</form>
+			{/if}
 		{/if}
 	</div>
 

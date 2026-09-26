@@ -507,3 +507,49 @@ describe('validateScenarioOps', () => {
 		expect(validateScenarioOps(new Array(501).fill({ op: 'node.remove', nodeId: 'A' })).errors[0]).toMatch(/at most 500/);
 	});
 });
+
+describe('maskedNames (an application judged in its applicant’s namespace, WP-3.3)', () => {
+	// The applicant owns A; B and C are hidden, shown to them as "Farm 1" and "Farm 2".
+	const masked = { nodes: { B: 'Farm 1', C: 'Farm 2' }, crops: { c1: 'crop c1' } };
+	const rename = (nodeId: string, value: string): ScenarioOp => ({ op: 'node.set', nodeId, field: 'name', value });
+
+	it('never mutates the base, and restores every hidden name when nothing took it', () => {
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 250_000 }], { maskedNames: masked });
+		expect(r.problems).toEqual([]);
+		expect(r.renamed).toEqual([]);
+		expect(r.input.model.nodes.map((n) => n.name)).toEqual(b.model.nodes.map((n) => n.name));
+		expect(r.input.model.crops.map((c) => c.name)).toEqual(['Lucerne']);
+	});
+
+	it('lets an op take a hidden name, and suffixes the hidden one past every name in use', () => {
+		const added: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm B (2)', downstreamNodeId: 'G' } };
+		const r = applyScenario(base(), [added, rename('A', 'farm b')], { maskedNames: masked });
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')!.name).toBe('farm b');
+		expect(nodeOf(r.input, 'B')!.name).toBe('Farm B (3)');
+		expect(r.renamed).toEqual([{ kind: 'node', id: 'B', name: 'Farm B', as: 'Farm B (3)' }]);
+		// Unmasked, the same rename is refused.
+		expect(applyScenario(base(), [rename('A', 'farm b')]).problems).toEqual(['op 1 (node.set): duplicate node name "farm b"']);
+	});
+
+	it('quotes the mask name, never the real one, in what it says about a hidden node', () => {
+		const r = applyScenario(base(), [{ op: 'node.remove', nodeId: 'A' }], { maskedNames: masked });
+		expect(r.applied[0]!.notes[0]).toBe('"Farm 2" now drains into G');
+		expect(JSON.stringify([r.applied, r.problems])).not.toContain('Farm C');
+	});
+
+	it('classifies as applyScenario applies: a node added under a hidden name is still the applicant’s', () => {
+		const add: ScenarioOp = { op: 'node.add', node: { ...nodeOf(base(), 'B')!, id: 'N', name: 'Farm C', downstreamNodeId: 'A', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 } };
+		const set: ScenarioOp = { op: 'node.set', nodeId: 'N', field: 'damCapacityM3', value: 10 };
+		expect(classifyScenario(base(), [add, set], ['A'], { maskedNames: masked })).toEqual(['proposal', 'proposal']);
+		// Unmasked the add collides, so N never exists and the set on it is the baseline's.
+		expect(classifyScenario(base(), [add, set], ['A'])).toEqual(['proposal', 'baseline']);
+	});
+
+	it('leaves a hidden node an op renamed under the op’s name', () => {
+		const r = applyScenario(base(), [rename('B', 'Something else')], { maskedNames: masked });
+		expect(nodeOf(r.input, 'B')!.name).toBe('Something else');
+		expect(r.renamed).toEqual([]);
+	});
+});

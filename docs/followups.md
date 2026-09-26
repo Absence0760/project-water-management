@@ -928,25 +928,32 @@ the suggested order (the IDs carry the detail):
       statement in `packages/engine/src`). First loads: farm pages −13 KB,
       share −13, home −9, a catchment −8 (that code now loads with the Data,
       Settings and Runs tabs, +6 each). The total stays 815 KB.
-- [ ] **Stop shipping the engine twice** (issue #9, measured 2026-09-26; the
-      numbers are in the bundle guard's change log). The calibration worker
-      bundles its own engine copy (57 KB gzip), ~130 KB raw of which the pages
-      ship too. Emitting the worker as a chunk of the page build (a Vite
-      plugin: `this.emitFile({ type: 'chunk' })` for `autocal.worker.ts`, the
-      page reading its URL from a virtual module) takes the total 815 → 794 KB,
-      but a chunk holds whole modules, and pages import small things from
-      modules that also hold the fit and run code: `ENGINE_VERSION`,
-      `prepareRun` and `mergeSettings` from `run.ts`; `CALIBRATION_PARAMS`,
-      `CALIBRATION_BOUNDS`, `MAX_STARTS` and `DEFAULT_STARTS` from
-      `calibrate/calibrate.ts`; the param tables from `runoff/gr4j.ts` and
-      `runoff/legacy.ts`; the check helpers in `reference/wr2012.ts`; the labels in
-      `calibrate/objective.ts`. So the Runs tab grows 27 KB and compare 32 KB.
-      **Durable fix:** move those page-side exports to modules of their own
-      (a throwaway split of the first two files alone gave 798 KB with compare
-      −9 KB and Runs −2, but a catchment +4 and Data +6 until the rest move too),
-      then land the worker plugin. **Trigger:** when no engine branch is open
-      (it moves `prepareRun` and `mergeSettings`, which most engine changes
-      edit), and before the next ceiling raise.
+- [x] **Stop shipping the engine twice** (issue #9, done 2026-09-26; numbers
+      in the bundle guard's change log). The calibration worker is an entry
+      of the page build (`frontend/vite.config.ts`, `autocalWorkerChunk`; the
+      page takes its URL from `virtual:autocal-worker-url`), so it imports the
+      engine code it shares with pages from shared chunks instead of carrying
+      a 62 KB copy. First, the small things pages read moved out of the
+      modules that hold the run, fit and ensemble code, since a chunk holds
+      whole modules: `version.ts`, `prepare.ts`, `calibrate/params.ts`,
+      `calibrate/objectives.ts`, `runoff/params.ts`, `runoff/pet.ts`,
+      `reference/wr2012Settings.ts` (+ `wr2012Resolve.ts`),
+      `uncertainty/options.ts`, `network/damCurve.ts`, and `waterYearOf` /
+      `waterYearLabel` into `calendar.ts` (docs/architecture.md § Code
+      splitting; `frontend/src/lib/engineSplit.test.ts` keeps them apart).
+      Measured against main @ e9c88b2, gzip: total 919 → 899 KB; compare
+      114 → 92; a catchment on Runs 256 → 249; report 192 → 187; Settings
+      212 → 211; home, farm, share and the other tabs within ±0.6 KB. The
+      trade-off: the Data tab 195 → 197 and its series preview 210 → 214,
+      where engine code the worker also runs is now several small shared
+      chunks. A fit started from Settings fetches 45 KB of worker code (was
+      62); a cold worker with nothing cached is 74 KB over 23 files. The
+      guard's worker ceiling is now 35 KB (the worker's own code, 33), and it
+      fails if the worker stops importing from `chunks/`. The spreadsheet
+      workers stay separate bundles: the export worker imports only engine
+      types, and the import worker's engine code (date helpers,
+      `zeroRainRuns`, two farm constants) is ≤ 6 KB gzip, where sharing would
+      bring whole engine modules and more requests into a one-off download.
 - [x] **The Runs tab no longer carries the whole help text** (it was 26 KB
       gzip on top of the page, through `WaterStoryPanel` → `PictureTour` →
       `lib/help/guides.ts` → `lib/help/content.ts`). Fixed by removing the
@@ -1187,12 +1194,18 @@ No Afrikaans wording ships yet: none is reviewed.
       turnaround above, so the new keys join the same sheet.
 - [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
       the total (the English catalogue is ~7 KB; each key also appears at its
-      call site). After merging main on 2026-09-26 `pnpm check:bundle`
-      measured 925 KB against the 921 KB ceiling (largest chunk 43 KB, at its
-      ceiling). WP-2.5's brief was not to move the ceiling: the operator
-      either raises `BUDGET.totalCodeKb` with a change-log entry or asks for
-      a trim (shorter keys, or splitting the catalogue per surface so the
-      workspace never loads it). Trigger: before this branch merges to main.
+      call site). The catalogue now loads only on the translated routes (the
+      workspace and `/share` never download its ~8 KB chunk), but the guard
+      counts lazy chunks too, so the split costs ~2 KB of total: 932 KB
+      before, 934 KB after, against main's 929 KB ceiling (largest chunk
+      43 KB, at its ceiling). Fitting under 929 without a raise needs weight
+      removed, not moved: the durable option is English-as-key messages
+      (gettext style: the English sits at the call site and `af.ts` maps it,
+      so no separate English catalogue ships, ~5–7 KB), which reworks the
+      catalogue, the sheet and the tests; build-time key shortening saves
+      ~3–4 KB at the cost of a custom Vite plugin. Otherwise the operator
+      raises `BUDGET.totalCodeKb` with a change-log entry. Trigger: before
+      this branch merges to main.
 - [ ] **Help drift tooling** from the plan (`pnpm gen:i18n:stamp <id>`, a
       `check:i18n` listing of stale entries): today `content.af.test.ts`
       fails on a stale `sourceHash` and the sheet names the new hash.
@@ -1974,14 +1987,31 @@ Applicant view and the Applications tab. Left:
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
-- [ ] **Oracles.** Sharing by email tells an applicant whether an address is
-      a contributor-or-above member of the project; renaming their own farm
-      to a neighbour's name gets the duplicate-name problem (the name comes
-      back anonymised, but its existence shows). Durable fix: share by a
-      member picker the owner curates (the assessor adds consultants to an
-      application), and check names against the projected base for
-      contributors. Trigger: before applicants from competing parties share a
-      project.
+- [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
+      `maskedNames`. The project owner puts an applicant and their
+      consultant in an applying party (`project_member.party`); an applicant
+      shares only within it, picked from `…/share-candidates`, so every other
+      id or address gets one answer. An application is checked in its
+      applicant's namespace (hidden farms under their anonymous names, hidden
+      crops under their ids), so a rename to a hidden name applies like a
+      free one and the hidden farm is suffixed in that application's runs,
+      for the assessors to see. Application names are unique per owner, not
+      per project. Tests: `scenarios/oracles.db.test.ts`
+      ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+- [ ] **Hidden ids and counts in an application's messages.** An op that
+      targets or reuses the id of a hidden crop, transfer, land-cover patch
+      or borehole answers differently from a free id (`… not found` against
+      applied, `… already in use`), and an op on a hidden farm reports what
+      it dropped (`dropped 2 crop area(s)`); value rules (flow shares over
+      100 %, no catchment area left) can refuse an op because of hidden
+      values. The ids are random UUIDs from the UI, but an import derives
+      them from the project and element names. Durable fix: extend the mask
+      to ids (hidden items' ids swapped for opaque ones while the ops apply,
+      restored afterwards) and have `applyScenario` in masked mode report
+      no counts for hidden nodes; decide with the client whether a value
+      rule refused because of hidden farms says only "doesn't apply to the
+      catchment as modelled". Trigger: the applicant results slice, or
+      before applicants from competing parties share a project.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.

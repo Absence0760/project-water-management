@@ -5,6 +5,9 @@
 import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult } from '@water-management/engine';
 import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
+// The worker is a chunk of the page build, so it shares the page's engine
+// chunks instead of carrying its own copy (frontend/vite.config.ts, issue #9).
+import autocalWorkerUrl from 'virtual:autocal-worker-url';
 
 export interface FitHandle {
 	result: Promise<CalibrationReport>;
@@ -19,7 +22,7 @@ export class FitCancelled extends Error {
 
 /** One job in a fresh worker: its messages go to `onMessage`, which settles the result through `done`. */
 function startWorker<T, M extends { type: string }>(req: unknown, onMessage: (m: M, done: (v: T) => void) => void): { result: Promise<T>; cancel(): void } {
-	const worker = new Worker(new URL('./autocal.worker.ts', import.meta.url), { type: 'module' });
+	const worker = new Worker(autocalWorkerUrl, { type: 'module' });
 	let settle: { reject(e: Error): void } | null = null;
 	const result = new Promise<T>((resolve, reject) => {
 		settle = { reject };

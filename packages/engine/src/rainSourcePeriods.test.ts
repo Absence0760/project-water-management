@@ -17,7 +17,8 @@ import {
 	resolveRainSource
 } from './rainSourcePeriods';
 import { rainVsChirps } from './quality';
-import { prepareRun, runModel } from './run';
+import { runModel } from './run';
+import { prepareRun } from './prepare';
 
 type Series = Partial<Record<SeriesKind, DailySeries>>;
 

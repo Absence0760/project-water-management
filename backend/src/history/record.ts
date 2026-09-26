@@ -165,6 +165,7 @@ export type AuditKind =
 	| 'member.added'
 	| 'member.removed'
 	| 'member.role'
+	| 'member.party'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'

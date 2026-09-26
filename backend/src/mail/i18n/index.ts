@@ -15,7 +15,7 @@ import { en, type MailKey } from './en.js';
 
 export type { MailKey } from './en.js';
 
-/** Languages a person or an invite can have (app_user.locale 049, invite.locale 034). */
+/** Languages a person or an invite can have (app_user.locale 050, invite.locale 034). */
 export const LOCALES = ['en', 'af'] as const;
 export type Locale = (typeof LOCALES)[number];
 
