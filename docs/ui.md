@@ -2993,7 +2993,7 @@ exists, says so with a link to Runs & results.
   the charts redraw synchronously, so the canvas is light before the page is
   laid out; `afterprint` puts the previous theme back.
 - **Generate PDF / Email me the PDF** (WP-2.15 Phase B, issue #26;
-  `lib/components/report/ServerPdf.svelte`, a lazy chunk loaded with the bar)
+  `lib/components/report/ServerPdf.svelte`, in the report's chunk)
   sit beside Download PDF for any viewer. They queue a server-side render of
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same

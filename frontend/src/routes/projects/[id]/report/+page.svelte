@@ -17,7 +17,6 @@
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
@@ -41,8 +40,9 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 
-	// The server-side PDF (Generate / Email me): its own chunk, loaded with the bar.
-	const loadServerPdf = () => import('$lib/components/report/ServerPdf.svelte');
+	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
+	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
+	import ServerPdf from '$lib/components/report/ServerPdf.svelte';
 
 	const projectId = $derived(page.params.id ?? '');
 	const runParam = $derived(page.url.searchParams.get('run'));
@@ -208,9 +208,7 @@
 			<a href="{base}/projects/{projectId}?tab=runs{run ? `&run=${run.id}` : ''}">← Back to the run</a>
 			<button type="button" class="btn btn-primary" disabled={!ready} onclick={() => window.print()}>Download PDF</button>
 			{#if run}
-				<Lazy load={loadServerPdf}>
-					{#snippet children(ServerPdf)}<ServerPdf {projectId} runId={run!.id} />{/snippet}
-				</Lazy>
+				<ServerPdf {projectId} runId={run!.id} />
 			{/if}
 			<p class="muted small" role="status">
 				{#if ready}
