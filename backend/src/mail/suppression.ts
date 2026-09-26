@@ -1,4 +1,4 @@
-// Mail suppression (WP-2.13 follow-up; 054_alert_followups.sql,
+// Mail suppression (WP-2.13 follow-up; 056_alert_followups.sql,
 // docs/security.md § Alerts, docs/deployment.md § Email).
 //
 // SES already stops mailing an address that hard-bounced or complained (the

@@ -1,4 +1,4 @@
--- 054_alert_followups — the WP-2.13 alert follow-ups (docs/followups.md
+-- 056_alert_followups — the WP-2.13 alert follow-ups (docs/followups.md
 -- § Alerts; docs/data-model.md § Alerts, docs/security.md § Alerts): mail
 -- suppression (below) and per-feed staleness levels (at the end).
 --
@@ -29,7 +29,7 @@ ALTER TABLE app_user
 	ADD CONSTRAINT app_user_mail_suppressed_pair CHECK ((mail_suppressed_at IS NULL) = (mail_suppressed_reason IS NULL));
 
 COMMENT ON COLUMN app_user.mail_suppressed_at IS
-	'SES reported a permanent bounce or a complaint for this address (054): alert emails pause until the person turns mail back on (POST /me/alerts/resume).';
+	'SES reported a permanent bounce or a complaint for this address (056): alert emails pause until the person turns mail back on (POST /me/alerts/resume).';
 
 -- The worker's context only (no user, no API key): the SES bounce/complaint
 -- handler. Flags the person with that address (case-insensitive, citext),
@@ -101,7 +101,7 @@ CREATE OR REPLACE FUNCTION app_alert_recipients(p_project uuid, p_kind text, p_n
 ALTER TABLE alert_rule ADD COLUMN feed_id uuid REFERENCES data_feed(id) ON DELETE CASCADE;
 CREATE INDEX alert_rule_feed_idx ON alert_rule (feed_id);
 COMMENT ON COLUMN alert_rule.feed_id IS
-	'The data feed a data_stale rule watches (054); NULL for every other kind.';
+	'The data feed a data_stale rule watches (056); NULL for every other kind.';
 
 -- One rule per kind, farm and feed per project; also covers project_id.
 DROP INDEX alert_rule_key_idx;

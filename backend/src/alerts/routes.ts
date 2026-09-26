@@ -215,7 +215,7 @@ export interface AlertRuleView {
 	kind: AlertKind;
 	nodeId: string | null;
 	nodeName: string | null;
-	/** The data feed a data_stale rule watches (one rule per feed, 054); null for every other kind. */
+	/** The data feed a data_stale rule watches (one rule per feed, 056); null for every other kind. */
 	feedId: string | null;
 	/** That feed as the feeds page names it ("CHIRPS daily rainfall (Upper)"), and whether it is enabled. */
 	feedName: string | null;

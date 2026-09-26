@@ -1807,7 +1807,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 
 | Table | Holds |
 | --- | --- |
-| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (054: the data feed, `data_stale` only, required for it; `ON DELETE CASCADE`), `threshold` (a per-kind CHECK: a dam fraction 0–1, whole days, failures or jobs, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`). 054 turned 051's catchment-wide `data_stale` rules into one per feed at the same level |
+| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (056: the data feed, `data_stale` only, required for it; `ON DELETE CASCADE`), `threshold` (a per-kind CHECK: a dam fraction 0–1, whole days, failures or jobs, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`). 056 turned 051's catchment-wide `data_stale` rules into one per feed at the same level |
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
@@ -1815,7 +1815,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
     and the `restriction_published` rule; INSERT / UPDATE / DELETE for
-    editors. The `alert_rule_check` trigger (054, from 051's) requires a farm
+    editors. The `alert_rule_check` trigger (056, from 051's) requires a farm
     node and a feed of the same project, stamps the creator, and never lets a
     rule's kind, farm or feed change.
   - `alert_event`: SELECT for viewers; a farmer the events on their own farms
@@ -1872,11 +1872,11 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     `feed_failing` or `job_dead` rule and none queued or made in the last
     `gap`, as the first of: a rule's creator, a feed's acting user, the
     longest-standing owner, who is an editor or owner now.
-  - `app_mail_suppress(email, reason, sent_at)` (054): SES reported a
+  - `app_mail_suppress(email, reason, sent_at)` (056): SES reported a
     permanent bounce or a complaint for the address. Sets the person's
     `app_user.mail_suppressed_at` / `mail_suppressed_reason` (unless already
     set, or the event is about a mail sent before their `mail_resumed_at`:
-    stale) and skips their waiting deliveries. `app_alert_recipients` (054,
+    stale) and skips their waiting deliveries. `app_alert_recipients` (056,
     from its 051 definition) leaves a suppressed address out, and the worker
     skips a delivery already made for one. A person clears their own flag
     (`POST /me/alerts/resume`, which stamps `mail_resumed_at`); `app_user`

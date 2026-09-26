@@ -1,4 +1,4 @@
-// SES mail suppression (054_alert_followups.sql, mail/suppression.ts): a
+// SES mail suppression (056_alert_followups.sql, mail/suppression.ts): a
 // permanent bounce or a complaint flags the address, its alert emails pause
 // (no deliveries made, waiting ones skipped, one already claimed skipped at
 // send time), /auth/me says so for the banner, and the person turns mail back

@@ -633,7 +633,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   delivers them raw to the SQS queue `mail-events` (SSE, a DLQ after 5
   receives, the `mail-events-dlq-depth` alarm), which triggers the worker.
   The worker (`mail/suppression.ts`) flags the person with that address
-  (`app_user.mail_suppressed_at`, 054) and pauses their alert emails; the
+  (`app_user.mail_suppressed_at`, 056) and pauses their alert emails; the
   account and alert pages show a banner, and **Turn alert emails back on**
   (`POST /me/alerts/resume`) takes the address off the suppression list
   (`ses:DeleteSuppressedDestination`, the API role only; once a day per

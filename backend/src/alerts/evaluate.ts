@@ -17,7 +17,7 @@
 //                          its forecast days haven't all passed. Not while an
 //                          API key's anomalous push is held (series/hold.ts):
 //                          that forecast may rest on the held days.
-//   data_stale             one rule per data feed (054 feed_id): days that
+//   data_stale             one rule per data feed (056 feed_id): days that
 //                          feed is past its usual delay (feeds/health.ts
 //                          staleAfterDays); a disabled feed, or one with no
 //                          data yet, has no value (a firing rule clears).
