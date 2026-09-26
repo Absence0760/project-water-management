@@ -1,4 +1,6 @@
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { FeedHttp } from './feeds/http.js';
 
 const sent: { url: string | undefined; message: unknown }[] = [];
 const sendToQueue = vi.fn(async (url: string | undefined, _name: string, message: unknown) => {
@@ -6,11 +8,19 @@ const sendToQueue = vi.fn(async (url: string | undefined, _name: string, message
 });
 vi.mock('./jobs/transport.js', async (orig) => ({ ...(await orig<typeof import('./jobs/transport.js')>()), sendToQueue: (u: string, n: string, m: unknown) => sendToQueue(u, n, m) }));
 
-const { handler } = await import('./lambda-fetcher.js');
+// The real client (FEED_SOURCE=fixtures) unless a test swaps in its own.
+const httpOverride: { next?: FeedHttp } = {};
+vi.mock('./feeds/http.js', async (orig) => {
+	const real = await orig<typeof import('./feeds/http.js')>();
+	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
+});
+
+const { FETCH_SEND_MARGIN_MS, handler, withDeadline } = await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
 	sendToQueue.mockClear();
+	delete httpOverride.next;
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
@@ -33,12 +43,51 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(sent[1]).toMatchObject({ message: { type: 'ingest', result: { ok: false, error: expect.stringMatching(/no data at -20.27, 25.37/) } } });
 	});
 
-	it('drops a request it cannot parse (a retry can’t fix it), and logs only ids', async () => {
+	it('drops a message it cannot parse at all (a retry can’t fix it), and logs only ids', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const res = await handler({ Records: [record('m1', 'garbage'), record('m2', { v: 1, type: 'fetch', ...ids, request: { source: 'x' } })] } as never);
+		const res = await handler({ Records: [record('m1', 'garbage'), record('m2', { v: 1, type: 'fetch', fetchJobId: 'nope', request: {} })] } as never);
 		expect(res).toEqual({ batchItemFailures: [] });
 		expect(sent).toHaveLength(0);
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'fetch_request_ignored', messageId: 'm1' }));
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'fetch_request_ignored', messageId: 'm2' }));
+	});
+
+	it('answers a request it can route but not run (e.g. a source it doesn’t know yet) with a failure, so the feed shows failing', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const res = await handler({ Records: [record('m1', { v: 1, type: 'fetch', ...ids, request: { source: 'x' } })] } as never);
+		expect(res).toEqual({ batchItemFailures: [] });
+		expect(sent).toEqual([
+			{ url: 'https://sqs.example/ingest-results', message: { v: 1, type: 'ingest', ...ids, result: { ok: false, error: 'the fetch request was not valid, so nothing was fetched' } } }
+		]);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'fetch_request_invalid', messageId: 'm1', feedId: ids.feedId }));
+	});
+
+	it('answers a fetch that outruns the Lambda’s time with a failure, instead of timing out into retries and the DLQ', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		let calls = 0;
+		// An upstream that never answers.
+		const hung: FeedHttp = { range: () => (calls++, new Promise(() => {})), text: () => (calls++, new Promise(() => {})) };
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
+		const started = Date.now();
+		httpOverride.next = hung;
+		const res = await handler({ Records: [record('m1', req)] } as never, { getRemainingTimeInMillis: () => FETCH_SEND_MARGIN_MS + 50 });
+		expect(Date.now() - started).toBeLessThan(2_000);
+		expect(res).toEqual({ batchItemFailures: [] });
+		expect(calls).toBe(1);
+		expect(sent).toEqual([
+			{ url: 'https://sqs.example/ingest-results', message: { v: 1, type: 'ingest', ...ids, result: { ok: false, error: 'the source is unreachable: it did not answer in time' } } }
+		]);
+	});
+
+	it('refuses further requests once the deadline has passed (the abandoned fetch stops)', async () => {
+		const inner: FeedHttp = { range: async () => new Uint8Array(1), text: async () => 'page' };
+		const d = withDeadline(inner, Date.now() - 1);
+		await expect(d.text('https://x')).rejects.toMatchObject({ name: 'FeedUnavailableError' });
+		await expect(d.range('https://x', 0, 1)).rejects.toMatchObject({ name: 'FeedUnavailableError' });
+		const live = withDeadline(inner, Date.now() + 60_000);
+		expect(await live.text('https://x')).toBe('page');
 	});
 
 	it('reports a failed send as a batch item failure, so SQS retries just that message', async () => {
@@ -48,5 +97,23 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
 		const res = await handler({ Records: [record('m1', req), record('m2', req)] } as never);
 		expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm1' }] });
+	});
+});
+
+describe('the fetcher bundle', () => {
+	it('never reaches dotenv (docs/STACK.md § Two backend entry points; infra/scripts/package-lambdas.sh checks the built zip too)', async () => {
+		const { build } = await import('esbuild');
+		const out = await build({
+			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
+			bundle: true,
+			platform: 'node',
+			format: 'esm',
+			write: false,
+			metafile: true,
+			logLevel: 'silent'
+		});
+		const inputs = Object.keys(out.metafile.inputs);
+		expect(inputs.some((f) => f.endsWith('src/lambda-fetcher.ts'))).toBe(true);
+		expect(inputs.filter((f) => /(^|\/)dotenv(\/|$)/.test(f))).toEqual([]);
 	});
 });
