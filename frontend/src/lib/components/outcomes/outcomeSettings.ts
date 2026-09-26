@@ -11,7 +11,13 @@ export const OUTCOME_DEFAULTS: Readonly<OutcomeSettings> = Object.freeze({
 	riskCutoffs: Object.freeze({ reserveMonthsMet: null, daysBelowEwr: null })
 });
 
-/** settings.outcomes over the defaults (an older API sends none). A fresh object: the form edits it. */
+/**
+ * settings.outcomes over the defaults (an older API sends none). A fresh
+ * object: the form edits it. Without the Reserve site (siteNodeId): the
+ * Settings form doesn't edit it, so it doesn't send it and a save there keeps
+ * the stored site (the patch merges one level deep); the Outcome matrix panel
+ * reads and saves it itself.
+ */
 export function resolveOutcomes(settings: { outcomes?: Partial<OutcomeSettings> } | null | undefined): OutcomeSettings {
 	const o = settings?.outcomes;
 	return {

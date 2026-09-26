@@ -71,7 +71,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		canRun,
 		modelDirty,
 		onRunsChange,
-		onInputsRestored
+		onInputsRestored,
+		onProjectChange
 	}: {
 		projectId: string;
 		project: Project;
@@ -85,6 +86,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		onRunsChange?: (runs: RunMeta[]) => void;
 		/** "Restore these inputs" changed the saved settings and model: the page reloads them. */
 		onInputsRestored?: () => Promise<void>;
+		/** A panel saved a project setting (the outcome matrix's Reserve site): the page takes the new project. */
+		onProjectChange?: (p: Project) => void;
 	} = $props();
 
 	let runs = $state<RunMeta[]>(untrack(() => initialRuns ?? []));
@@ -630,6 +633,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										run={shownRun}
 										hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
 										outcomes={project.settings.outcomes}
+										nodes={editor.model.nodes}
+										ewrRules={project.settings.ewrRules}
+										{onProjectChange}
 										canEdit={canRun}
 									/>
 								{/key}
