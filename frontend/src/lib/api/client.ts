@@ -170,7 +170,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				}).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
-			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere')
+			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
+			/** Renames the account (1–100 characters, trimmed by the server). */
+			updateMe: (displayName: string) =>
+				request<{ user: User }>('PATCH', '/auth/me', { displayName }).then((r) => r.user),
+			/**
+			 * Changes the password: every other session is signed out and this
+			 * browser gets a fresh cookie. ApiError 403 = wrong current password,
+			 * 429 = the address is locked (the sign-in lockout), 400 = invalid new password.
+			 */
+			changePassword: (currentPassword: string, newPassword: string) =>
+				request<{ user: User }>('POST', '/auth/change-password', { currentPassword, newPassword }).then(
+					(r) => r.user
+				)
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),

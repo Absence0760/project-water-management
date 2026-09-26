@@ -561,6 +561,17 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.9 Account menu and `/account` page
 
+- **Status:** built (issue #5). `PATCH /auth/me` and
+  `POST /auth/change-password` (through the sign-in lockout; a wrong current
+  password is `403`; success moves `sessions_revoked_at`, deletes any
+  outstanding reset link and re-issues this device's cookie), the
+  `/account` page (display name, email and its confirmation status, change
+  password) and an **Account** link at the top of the header's account menu.
+  DB tests in `backend/src/auth/auth.db.test.ts`, e2e and axe (both themes,
+  desktop and phone width) in `e2e/tests/account.spec.ts`. The account menu
+  stays a dropdown on a phone rather than becoming a sheet: it already fits
+  a 360 px screen and passes axe there, so the sheet was not built.
+
 - **Goal:** "Sign out everywhere" and password change in the UI. Also a home
   for preferences (WP-1.26) and the privacy actions (WP-1.13).
 - **Changes:**

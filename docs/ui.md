@@ -6,8 +6,9 @@ Every signed-in page (`lib/components/layout/AppHeader.svelte`) shows a sticky
 header with the brand, the Projects / Teams / Help nav, and an account control
 on the right: an avatar, display name and email that open a menu (same
 disclosure pattern as the Data/Runs tabs' download menu — a button plus a
-hidden list, not an ARIA `menu`/`menuitem` widget) with two actions:
+hidden list, not an ARIA `menu`/`menuitem` widget) with three entries:
 
+- **Account** — a link to `/account` (marked `aria-current` while there).
 - **Sign out** — ends this device's session only, same as before.
 - **Sign out everywhere** — asks for confirmation, then calls
   `POST /auth/logout-everywhere` ([api.md § Auth](./api.md#auth)), which
@@ -18,6 +19,17 @@ hidden list, not an ARIA `menu`/`menuitem` widget) with two actions:
 The menu is keyboard-operable: Escape closes it and returns focus to the
 account button, as does a click outside; a tab or click that leaves the
 header closes it too.
+
+**The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
+address and whether it is confirmed, a **Display name** form
+(`PATCH /auth/me`; the header follows at once) and a **Password** form
+(current, new, repeat; `POST /auth/change-password`). Changing the password
+signs out every other device while this browser stays signed in. Errors show
+in an alert above the form, with the field it's about marked
+`aria-invalid`: *Your current password is wrong.* (the server's `403`, which
+also counts towards the sign-in lockout, whose `429` message is shown as
+is), and the new-password rules checked before any request (*Use at least 8
+characters.*, the two not matching).
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab

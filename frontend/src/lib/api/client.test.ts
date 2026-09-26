@@ -32,6 +32,32 @@ describe('createApi', () => {
 		expect(init.method).toBe('POST');
 	});
 
+	it('PATCHes /auth/me with the display name and returns the user', async () => {
+		const user = { id: '1', email: 'a@b.c', displayName: 'New name', emailVerified: true };
+		const f = mockFetch(200, { user });
+		await expect(createApi('http://x', f).auth.updateMe('New name')).resolves.toEqual(user);
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/me');
+		expect(init.method).toBe('PATCH');
+		expect(JSON.parse(init.body as string)).toEqual({ displayName: 'New name' });
+	});
+
+	it('posts both passwords to /auth/change-password and surfaces a wrong current password as ApiError 403', async () => {
+		const user = { id: '1', email: 'a@b.c', displayName: 'A', emailVerified: true };
+		const f = mockFetch(200, { user });
+		await expect(createApi('http://x', f).auth.changePassword('old pw', 'new password')).resolves.toEqual(user);
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/change-password');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body as string)).toEqual({ currentPassword: 'old pw', newPassword: 'new password' });
+
+		const wrong = createApi('', mockFetch(403, { error: 'your current password is wrong' }));
+		await expect(wrong.auth.changePassword('x', 'new password')).rejects.toMatchObject({
+			status: 403,
+			message: 'your current password is wrong'
+		});
+	});
+
 	it('returns the new run with the ids of runs the server trimmed (none from an older server)', async () => {
 		const run = { id: 'r21', label: 'x' };
 		const trimmed = createApi('', mockFetch(201, { run, removedRunIds: ['r1'] }));

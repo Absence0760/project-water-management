@@ -1074,9 +1074,11 @@ yet; each lands with the work package named.
 - [ ] **Thousands separator style:** the app uses commas (300,000). The
       original ask was spaces (300 000). Pick one app-wide.
 - [x] **"Sign out everywhere" button** (2026-09-24): the header's account
-      menu has *Sign out* and *Sign out everywhere*. The rest of WP-1.9
-      (`/account` page, password change, `PATCH /auth/me`) is still open in
-      the step-1 roadmap.
+      menu has *Sign out* and *Sign out everywhere*.
+- [x] **Account page and password change while signed in** (WP-1.9, issue
+      #5): the menu's *Account* link opens `/account` (display name, email
+      and confirmation status, change password); `PATCH /auth/me` and
+      `POST /auth/change-password` (docs/api.md § Auth).
 - [ ] **Exports carry unrounded values** now that the engine doesn't round.
       Decide on export number formatting.
 - [x] **FarmDay help diagram is behind the engine** (fixed 2026-09-25):
