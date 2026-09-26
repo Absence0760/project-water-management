@@ -12,7 +12,7 @@
 	import type { RunMeta } from '$lib/api';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GRID_TAB, GRIDS, type GridId } from '$lib/workspace/overlays';
+	import { GRIDS, type GridId } from '$lib/workspace/overlays';
 	import IssueList from './IssueList.svelte';
 	import ModelSaveRow from './ModelSaveRow.svelte';
 
@@ -42,7 +42,7 @@
 	} = $props();
 
 	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas', demand: 'demand' } as const;
-	const area = $derived(grid === 'nodes' ? 'network' : (GRID_TAB[grid] as 'crops' | 'transfers'));
+	const area = $derived(grid === 'nodes' ? 'network' : grid === 'transfers' ? 'transfers' : 'crops');
 </script>
 
 <Dialog bind:open title={GRIDS[grid]} full keepInputs>

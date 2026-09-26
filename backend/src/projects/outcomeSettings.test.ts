@@ -15,6 +15,9 @@ describe('SettingsPatch.outcomes', () => {
 		expect(ok({ riskCutoffs: { reserveMonthsMet: { lower: 1, increasing: 0 }, daysBelowEwr: { lower: 0, increasing: 1 } } })).toBe(true);
 		// Equal cut-offs: no "increasing" band, but not out of order.
 		expect(ok({ riskCutoffs: { reserveMonthsMet: { lower: 0.8, increasing: 0.8 }, daysBelowEwr: null } })).toBe(true);
+		// The Reserve site: the outlet (null) or a node id (the route checks it is an eligible gauge).
+		expect(ok({ siteNodeId: null })).toBe(true);
+		expect(ok({ siteNodeId: '11111111-1111-4111-8111-111111111111' })).toBe(true);
 	});
 
 	it("rejects an unknown method, cut-offs out of order or outside 0–1 (the engine's validateOutcomeCutoffs), a half-sent pair and unknown keys", () => {
@@ -33,6 +36,8 @@ describe('SettingsPatch.outcomes', () => {
 			{ riskCutoffs: { reserveMonthsMet: { lower: 0.9 }, daysBelowEwr: null } },
 			{ riskCutoffs: { ...custom, extra: null } },
 			{ method: 'auto' },
+			{ siteNodeId: 'gauge-1' },
+			{ siteNodeId: 3 },
 			null,
 			'auto'
 		]) {
@@ -49,16 +54,19 @@ describe('SettingsPatch.outcomes', () => {
 
 describe('resolveOutcomes', () => {
 	it('fills the defaults when nothing is stored: auto, and the engine cut-offs (null) pending the hydrologist', () => {
-		expect(resolveOutcomes({})).toEqual({ yearClassMethod: 'auto', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null } });
+		expect(resolveOutcomes({})).toEqual({ yearClassMethod: 'auto', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null });
 		expect(resolveOutcomes(null)).toEqual(OUTCOME_DEFAULTS);
 		expect(resolveOutcomes({ outcomes: 'x' })).toEqual(OUTCOME_DEFAULTS);
 	});
 
 	it('keeps what is stored, and falls back field by field (metric by metric) when a stored value is not valid', () => {
-		expect(resolveOutcomes({ outcomes: { yearClassMethod: 'quintiles', riskCutoffs: custom } })).toEqual({ yearClassMethod: 'quintiles', riskCutoffs: custom });
+		const g = '22222222-2222-4222-8222-222222222222';
+		expect(resolveOutcomes({ outcomes: { yearClassMethod: 'quintiles', riskCutoffs: custom, siteNodeId: g } })).toEqual({ yearClassMethod: 'quintiles', riskCutoffs: custom, siteNodeId: g });
 		expect(
-			resolveOutcomes({ outcomes: { yearClassMethod: 'deciles', riskCutoffs: { reserveMonthsMet: { lower: 0.5, increasing: 0.9 }, daysBelowEwr: custom.daysBelowEwr } } })
-		).toEqual({ yearClassMethod: 'auto', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: custom.daysBelowEwr } });
+			resolveOutcomes({
+				outcomes: { yearClassMethod: 'deciles', riskCutoffs: { reserveMonthsMet: { lower: 0.5, increasing: 0.9 }, daysBelowEwr: custom.daysBelowEwr }, siteNodeId: 'not-a-uuid' }
+			})
+		).toEqual({ yearClassMethod: 'auto', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: custom.daysBelowEwr }, siteNodeId: null });
 	});
 });
 
@@ -79,6 +87,9 @@ describe('patchSettings with outcomes', () => {
 			yearClassMethod: 'quintiles',
 			riskCutoffs: custom
 		});
+		// The site alone keeps the rest.
+		const g = '22222222-2222-4222-8222-222222222222';
+		expect((patchSettings(stored, { outcomes: { siteNodeId: g } }) as unknown as { outcomes: unknown }).outcomes).toEqual({ ...stored.outcomes, siteNodeId: g });
 		const reset = patchSettings(stored, { outcomes: { riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null } } }) as unknown as { outcomes: unknown };
 		expect(reset.outcomes).toEqual({ yearClassMethod: 'terciles', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null } });
 	});

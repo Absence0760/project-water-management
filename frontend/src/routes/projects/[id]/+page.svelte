@@ -571,7 +571,7 @@
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
 					<Lazy load={LOAD.crops}>
-						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} />{/snippet}
+						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} />{/snippet}
 					</Lazy>
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
@@ -611,6 +611,7 @@
 								modelDirty={editor.dirty}
 								onRunsChange={(l) => (runs = l)}
 								onInputsRestored={reloadInputs}
+								{onProjectChange}
 							/>
 						{/snippet}
 					</Lazy>
@@ -620,8 +621,9 @@
 							<CompareView
 								a={page.url.searchParams.get('a')}
 								b={page.url.searchParams.get('b')}
+								c={page.url.searchParams.get('c')}
 								project={projectId}
-								hrefFor={(a, b) => `${page.url.pathname}${compareTabHref(a, b)}`}
+								hrefFor={(a, b, c) => `${page.url.pathname}${compareTabHref(a, b, c)}`}
 							/>
 						{/snippet}
 					</Lazy>

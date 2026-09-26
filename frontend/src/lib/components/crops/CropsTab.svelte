@@ -1,495 +1,492 @@
 <script lang="ts">
+	// Crops & demand (issue #17, option A · A3): a page of pictures over the
+	// crop grids. A card per crop (area, peak-need month, a sparkline of its
+	// 12 factors; Edit opens its name and factors in a side sheet,
+	// `crop=<cropId>`), the catchment's demand by month (its table behind
+	// Show table), and planted area per farm as stacked bars (a farm opens the
+	// farm drawer; Edit areas opens the planted-areas grid). The full grids
+	// open from the Grids menu in the grid modal (`grid=<id>`,
+	// lib/workspace/overlays.ts), which shows them through `sections`
+	// (CropGrids); scenario override mode shows all three inline the same way.
+	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
-	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import MoveControls from '$lib/components/model/MoveControls.svelte';
-	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
-	import { moveTo, reorderSubset } from '$lib/model/order';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
+	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
-	import { catchmentDemand, cropStacks, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
+	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { CROP_PALETTE, cropCards, cropColours, cropsSummary, farmBarLabel, farmBars, SPARK_H, SPARK_W } from './cards';
+	import CropGrids from './CropGrids.svelte';
+	import CropSheet from './CropSheet.svelte';
+	import { catchmentDemand, cropStacks, farmDemands, noPlantedAreaNote } from './demand';
+	import DemandTable from './DemandTable.svelte';
 
 	let {
 		editor,
 		settings,
 		readonly,
-		sections
+		sections,
+		onsave,
+		reason = $bindable('')
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
 		readonly: boolean;
-		/** Only these sections (the grid modal shows one, lib/workspace/overlays.ts); all when absent. */
+		/** Only these grids, as full tables (the grid modal shows one; override mode all three); absent: the page. */
 		sections?: readonly ('factors' | 'areas' | 'demand')[];
+		/** The page's model save, for the crop sheet's save row (the sheet hides the save bar). */
+		onsave?: () => void;
+		/** The save bar's reason, shared with the sheet's save row. */
+		reason?: string;
 	} = $props();
-	const show = (s: 'factors' | 'areas' | 'demand') => !sections || sections.includes(s);
 
 	const crops = $derived(editor.model.crops);
-	// Farms, plus any other node that already carries crop areas.
+	// Farms, plus any other node that already carries crop areas (the grids' rows).
 	const farms = $derived(
 		editor.model.nodes.filter((n) => n.kind === 'farm' || editor.model.cropAreas.some((a) => a.nodeId === n.id))
 	);
+	const farmIds = $derived(farms.map((f) => f.id));
+	const ha = (m2: number) => fmtNum(m2 / 10_000, 1, true);
 
-	const rowTotal = (nodeId: string) =>
-		editor.model.cropAreas.filter((a) => a.nodeId === nodeId).reduce((s, a) => s + a.areaM2, 0);
-	const colTotal = (cropId: string) =>
-		editor.model.cropAreas
-			.filter((a) => a.cropId === cropId && farms.some((f) => f.id === a.nodeId))
-			.reduce((s, a) => s + a.areaM2, 0);
-	const grandTotal = $derived(crops.reduce((s, c) => s + colTotal(c.id), 0));
-	// Factors multiply A-pan, not ET₀: above 1.0 is worth a second look (a hint, never blocking).
-	const highFactors = $derived(highCropFactors(crops, WATER_YEAR_MONTHS));
+	const cards = $derived(cropCards(crops, editor.model.cropAreas, farmIds, settings.apanMm, WATER_YEAR_MONTHS));
+	const bars = $derived(farmBars(farms, crops, editor.model.cropAreas));
+	const totalM2 = $derived(bars.reduce((s, b) => s + b.totalM2, 0));
+	const summary = $derived(cropsSummary(crops.length, totalM2, bars.length, ha));
+	const unplantedNote = $derived(noPlantedAreaNote(farms.filter((f) => !bars.some((b) => b.id === f.id)).map((f) => f.name || '(unnamed)')));
 
-	// Demand preview: saved A-pan × current (possibly unsaved) crops and areas.
+	// Demand: saved A-pan × the crops and areas as edited (demand.ts, the engine's own helper).
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
-	const demand = $derived(
-		farmDemands(
-			editor.model,
-			settings.apanMm,
-			settings.februaryDays,
-			farms.map((f) => f.id)
-		)
-	);
+	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, farmIds));
 	const demandTotal = $derived(catchmentDemand(demand));
-	// Farms with nothing planted (unsaved edits included): their demand is zero.
-	const unplantedNote = $derived(noPlantedAreaNote(farms.filter((f) => rowTotal(f.id) === 0).map((f) => f.name || '(unnamed)')));
-
-	// Stacked chart above the demand table: the same numbers, split by crop.
-	// Colours come from theme tokens (light and dark); past six crops the
-	// smallest are grouped as "Other" in a neutral grey.
-	const PALETTE = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--brand-node)', 'var(--warning)', 'var(--accent)'];
-	const stacks = $derived(
-		cropStacks(demand, crops, PALETTE.length).map((s, i) => ({
-			...s,
-			color: s.id === 'other' ? 'var(--text-muted)' : PALETTE[i]!
-		}))
-	);
+	const stackParts = $derived(cropStacks(demand, crops, CROP_PALETTE.length));
+	const colours = $derived(cropColours(crops, stackParts));
+	const colourOf = (id: string) => colours.get(id) ?? 'var(--text-muted)';
+	const stacks = $derived(stackParts.map((s) => ({ ...s, color: colourOf(s.id) })));
 	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));
 	const chartLabel = $derived(
 		`Catchment irrigation demand by month, stacked by crop (${stacks.map((s) => s.name).join(', ')}). ` +
-			`Peak in ${WATER_YEAR_MONTHS[peakMonth]} at ${fmtNum(demandTotal.monthly[peakMonth])} m³/day. The table below holds the values.`
+			`Peak in ${WATER_YEAR_MONTHS[peakMonth]} at ${fmtNum(demandTotal.monthly[peakMonth])} m³/day. Show table holds the values.`
 	);
-	const peak = $derived(Math.max(1e-9, ...demand.flatMap((d) => d.monthlyM3Day)));
-	const shade = (v: number) => `--i: ${Math.round((v / peak) * 100)}%`;
+	let chartW = $state(0);
+	let chartH = $state(0);
+	// The legend under the bars: one line when wide, room for two when narrow.
+	const barsH = $derived(Math.max(140, chartH - (chartW < 520 ? 46 : 26)));
+	// From 1100 px the lower row (chart beside the farm bars) reaches the window's bottom, less what the
+	// page keeps below it (its padding, room for the save bar), as the Network's map does; measured, not assumed.
+	let lowerEl: HTMLDivElement | undefined = $state();
+	let lowerTop = $state(0);
+	let lowerBelow = $state(0);
+	$effect(() => {
+		if (!lowerEl) return;
+		const measure = () => {
+			if (!lowerEl) return;
+			const r = lowerEl.getBoundingClientRect();
+			lowerTop = r.top + window.scrollY;
+			lowerBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
+	let tableOpen = $state(false);
+	// The crops planted somewhere, for the bars' legend.
+	const plantedCrops = $derived(crops.filter((c) => bars.some((b) => b.parts.some((p) => p.cropId === c.id))));
 
+	// --- the crop sheet: one crop's name and factors, while the URL names it (`crop=<id>`) ---
+	const cropParam = $derived(sections ? null : page.url.searchParams.get('crop'));
+	const sheetCrop = $derived(cropParam && crops.some((c) => c.id === cropParam) ? cropParam : null);
+	let sheetOpen = $state(false);
+	$effect(() => {
+		sheetOpen = !!sheetCrop;
+	});
+	$effect(() => {
+		// Closed (Done, Esc, the ✕, the crop removed): drop `crop` in place, so Back goes to where it was opened from.
+		if (!sheetOpen && untrack(() => cropParam)) void goto(withoutParam(page.url, 'crop'), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+	const openCrop = (id: string) => goto(withParam(page.url, 'crop', id), { noScroll: true, keepFocus: true });
 	function add() {
 		const c = editor.addCrop();
-		queueMicrotask(() => document.getElementById(`crop-name-${c.id}`)?.focus());
+		void openCrop(c.id);
 	}
 
-	function remove(id: string, name: string) {
-		const used = editor.model.cropAreas.some((a) => a.cropId === id);
-		if (used && !confirm(`Remove crop "${name}" and its planted areas on every farm?`)) return;
-		editor.removeCrop(id);
+	// --- the Grids menu (as the Network's): each full grid in the grid modal ---
+	const GRID_LINKS: [GridId, string][] = [
+		['crop-factors', 'Crop factors'],
+		['planted-areas', 'Planted areas'],
+		['demand', 'Irrigation demand']
+	];
+	let gridsOpen = $state(false);
+	let gridsEl: HTMLDetailsElement | undefined = $state();
+	// Close through the element: the toggle event that updates `gridsOpen` is async (issue #17 playbook).
+	function closeGrids() {
+		if (gridsEl) gridsEl.open = false;
 	}
-
-	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);
-
-	// --- display order: crops have their own; farm rows share the node order ---
-	let announce = $state('');
-	function moveCrop(from: number, to: number, focus: 'up' | 'down' | null = null) {
-		const c = crops[from];
-		if (!c || to < 0 || to >= crops.length) return;
-		editor.model.crops = moveTo(editor.model.crops, from, to);
-		announce = `${c.name || 'Crop'} moved to position ${to + 1} of ${crops.length}.`;
-		if (focus) void refocusMover('mvc', c.id, focus);
+	function gridsKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || !gridsEl?.open) return;
+		e.preventDefault();
+		closeGrids();
+		gridsEl.querySelector('summary')?.focus();
 	}
-	function moveFarm(from: number, to: number, focus: 'up' | 'down' | null = null) {
-		const f = farms[from];
-		if (!f || to < 0 || to >= farms.length) return;
-		editor.model.nodes = reorderSubset(editor.model.nodes, farms.map((x) => x.id), from, to);
-		announce = `${f.name || 'Farm'} moved to row ${to + 1} of ${farms.length} (network order).`;
-		if (focus) void refocusMover('mvf', f.id, focus);
-	}
-	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
-	const farmReorder = new RowReorder(() => farms.map((f) => f.id), (from, to) => moveFarm(from, to));
+	$effect(() => {
+		if (!gridsOpen) return;
+		const onDoc = (e: PointerEvent) => {
+			if (gridsEl && !gridsEl.contains(e.target as Node)) closeGrids();
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
 </script>
 
-<p class="visually-hidden" aria-live="polite">{announce}</p>
-
-{#if show('factors')}
-<section class="panel" aria-labelledby="crops-h">
-	<div class="panel-head">
-		<h2 id="crops-h">Crop factors <HelpTip key="crop.cropFactor" /></h2>
-		<span class="muted small">Water year, October → September</span>
+{#if sections}
+	<CropGrids {editor} {settings} {readonly} {sections} />
+{:else}
+	<div class="crops-head">
+		<div>
+			<h2>Crops &amp; demand</h2>
+			<p class="muted" data-testid="crops-summary">{summary}</p>
+		</div>
+		<div class="head-actions">
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
+				<summary class="btn btn-sm">Grids <span aria-hidden="true">▾</span></summary>
+				<div class="grids-pop" role="group" aria-label="Open as a grid">
+					{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+				</div>
+			</details>
+			{#if !readonly}<button type="button" class="btn btn-sm btn-primary" onclick={add}>+ Add crop</button>{/if}
+		</div>
 	</div>
-	<p class="muted small intro">
-		A crop factor scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
-		factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply reference ET₀, about 0.7–0.85 × pan, so
-		multiply a published Kc by the pan coefficient before entering it. Use 0 for months the crop isn't irrigated.
-	</p>
+
 	{#if crops.length === 0}
-		<div class="empty">
-			<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
-			{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
-		</div>
+		<section class="panel" aria-label="No crops yet">
+			<div class="empty">
+				<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
+				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
+			</div>
+		</section>
 	{:else}
-		<div class="table-wrap">
-			<table class="data compact factors" class:editable={!readonly}>
-				<thead>
-					<tr>
-						<th scope="col" class="sticky">Crop</th>
-						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-						<th scope="col" class="num">Mean</th>
-						{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
-					</tr>
-				</thead>
-				<tbody bind:this={cropReorder.body}>
-					{#each crops as crop, ci (crop.id)}
-						{@const label = crop.name || 'unnamed crop'}
-						{@const rs = cropReorder.rowState(crop.id, ci, crops.length)}
-						<tr data-idx={ci} class:dragging={rs.dragging} class:drop-before={rs.before} class:drop-after={rs.after}>
-							<th scope="row" class="sticky">
-								<span class="namecell">
-									{#if !readonly}
-										<MoveControls id={crop.id} {label} index={ci} count={crops.length} reorder={cropReorder} idPrefix="mvc" onmove={(d) => moveCrop(ci, ci + d, d < 0 ? 'up' : 'down')} />
-									{/if}
-									<input id="crop-name-{crop.id}" aria-label="Crop name" maxlength="100" readonly={readonly} bind:value={crop.name} />
-								</span>
-							</th>
-							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td>
-									<span class="cell-label" aria-hidden="true">{m}</span>
-									<NumberInput
-										label="{label} crop factor, {m}"
-										min={0}
-										step={0.01}
-										disabled={readonly}
-										bind:value={crop.cropFactor[i]}
-									/>
-								</td>
-							{/each}
-							<td class="num muted mean"><span class="cell-label">Mean{' '}</span>{fmtNum(crop.cropFactor.reduce((s, f) => s + (f || 0), 0) / 12, 2)}</td>
-							{#if !readonly}
-								<td class="rm"><button type="button" class="btn btn-icon" aria-label="Remove {label}" title="Remove crop" onclick={() => remove(crop.id, label)}>✕</button></td>
+		<section class="cards" aria-label="Crops">
+			{#each cards as c (c.id)}
+				<article class="panel card" aria-labelledby="crop-card-{c.id}" data-testid="crop-card">
+					<div class="card-head">
+						<h3 id="crop-card-{c.id}"><span class="key" style:background={colourOf(c.id)} aria-hidden="true"></span>{c.name}</h3>
+						<button type="button" class="btn btn-sm" aria-label="{readonly ? 'View' : 'Edit'} {c.name}" onclick={() => openCrop(c.id)}>{readonly ? 'View' : 'Edit'}</button>
+					</div>
+					<p class="muted small facts">
+						{ha(c.areaM2)} ha · {c.peak >= 0 ? `peak need in ${WATER_YEAR_MONTHS[c.peak]}` : 'no crop factors yet'}
+					</p>
+					<svg viewBox="0 0 {SPARK_W} {SPARK_H}" preserveAspectRatio="none" class="spark" role="img" aria-label={c.label}>
+						<line x1="0" x2={SPARK_W} y1={SPARK_H - 4} y2={SPARK_H - 4} class="spark-base" />
+						<path d={c.fill} class="spark-fill" />
+						<polyline points={c.line} class="spark-line" />
+					</svg>
+					<div class="spark-months" aria-hidden="true"><span>Oct</span><span>Jan</span><span>Apr</span><span>Jul</span><span>Sep</span></div>
+					{#if c.high.length}
+						<p class="warn small">Factor above 1.0 in {c.high.join(', ')}: check it isn't an FAO Kc entered as it is.</p>
+					{/if}
+				</article>
+			{/each}
+		</section>
+	{/if}
+
+	<div class="lower" bind:this={lowerEl} style:--lower-top="{lowerTop}px" style:--lower-below="{lowerBelow}px">
+		<section class="panel dem-card" aria-labelledby="crop-dem-h">
+			<div class="panel-head">
+				<h3 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h3>
+				<span class="muted small">Gross demand, whole catchment, m³/day</span>
+			</div>
+			{#if !apanSet}
+				<div class="alert alert-info">
+					A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+					(Settings & calibration, Demand).
+				</div>
+			{/if}
+			{#if farms.length === 0}
+				<p class="muted">No farms yet. Add farms on the <a href="?tab=network">Network</a>.</p>
+			{:else}
+				{#if stacks.length && demandTotal.annual > 0}
+					<figure class="demand-chart" bind:clientWidth={chartW} bind:clientHeight={chartH}>
+						<div class="chart-in">
+							{#if chartW > 0 && chartH > 0}
+								<MonthlyBars {stacks} unit="m³/day" label="Irrigation demand" ariaLabel={chartLabel} width={chartW} height={barsH} />
 							{/if}
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-		{#if highFactors.length}
-			<p class="alert alert-warning small" role="status">
-				A crop factor above 1.0 means the crop uses more water than an open A-pan loses. That can happen, but check it isn't an
-				FAO Kc entered as it is:
-				{#each highFactors as h, i (h.id)}{i ? '; ' : ' '}<strong>{h.name || 'unnamed crop'}</strong> ({h.months.join(', ')}){/each}.
-			</p>
-		{/if}
-		{#if !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add crop</button></div>{/if}
-	{/if}
-</section>
-{/if}
+						</div>
+					</figure>
+					<p class="small" data-testid="crops-demand-summary">
+						{fmtQty(demandTotal.annual, 3)} million m³ a year ({fmtQty((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average),
+						highest in {WATER_YEAR_MONTHS[peakMonth]} at {fmtNum(demandTotal.monthly[peakMonth])} m³/day. Before effective rain and irrigation efficiency.
+					</p>
+				{:else if apanSet}
+					<p class="muted">No demand yet: add crops with their factors and each farm's planted area.</p>
+				{/if}
+				<details class="show-table" bind:open={tableOpen}>
+					<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
+					<div class="table-body">
+						<DemandTable {farms} {demand} {settings} total={demandTotal} areaM2={totalM2} />
+					</div>
+				</details>
+			{/if}
+		</section>
 
-{#if show('areas')}
-<section class="panel" aria-labelledby="areas-h">
-	<div class="panel-head">
-		<h2 id="areas-h">Planted areas</h2>
-		<span class="muted small">Irrigated area per farm and crop, hectares · rows follow the network order</span>
-	</div>
-	{#if farms.length === 0 || crops.length === 0}
-		<p class="muted">
-			Add at least one farm (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
-		</p>
-	{:else}
-		<div class="table-wrap">
-			<table class="data compact areas">
-				<thead>
-					<tr>
-						<th scope="col" class="sticky">Farm</th>
-						{#each crops as c (c.id)}<th scope="col" class="num">{c.name || '(unnamed)'}<br /><span class="u">ha</span></th>{/each}
-						<th scope="col" class="num">Total<br /><span class="u">ha</span></th>
-					</tr>
-				</thead>
-				<tbody bind:this={farmReorder.body}>
-					{#each farms as f, fi (f.id)}
-						{@const rs = farmReorder.rowState(f.id, fi, farms.length)}
-						<tr data-idx={fi} class:dragging={rs.dragging} class:drop-before={rs.before} class:drop-after={rs.after}>
-							<th scope="row" class="sticky">
-								<span class="namecell">
-									{#if !readonly}
-										<MoveControls id={f.id} label={f.name || 'farm'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
-									{/if}
-									<span>{f.name || '(unnamed)'}</span>
+		<section class="panel area-card" aria-labelledby="crop-area-h">
+			<div class="panel-head">
+				<h3 id="crop-area-h">Planted area by farm</h3>
+				<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
+			</div>
+			{#if farms.length === 0 || crops.length === 0}
+				<p class="muted">Add at least one farm (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
+			{:else}
+				{#if bars.length}
+					<ul class="bars" aria-label="Planted area by farm">
+						{#each bars as b (b.id)}
+							<li>
+								<a class="farm" href={withParam(page.url, 'farm', b.id)} aria-label="{b.name}: planted areas">{b.name}</a>
+								<span class="track" role="img" aria-label={farmBarLabel(b, ha)}>
+									{#each b.parts as p (p.cropId)}<span class="seg" style:width="{p.pct}%" style:background={colourOf(p.cropId)} title="{p.name}: {ha(p.areaM2)} ha"></span>{/each}
 								</span>
-							</th>
-							{#each crops as c (c.id)}
-								<td>
-									<span class="cell-label" aria-hidden="true">{c.name || '(unnamed)'} <span class="u">ha</span></span>
-									<NumberInput
-										label="{c.name || 'crop'} on {f.name || 'farm'}, ha"
-										min={0}
-										step={0.1}
-										scale={1 / 10_000}
-										disabled={readonly}
-										value={editor.cropArea(f.id, c.id)}
-										onchange={(n) => editor.setCropArea(f.id, c.id, n ?? 0)}
-									/>
-								</td>
-							{/each}
-							<td class="num total"><span class="cell-label">Total{' '}</span>{ha(rowTotal(f.id))}<span class="cell-label">{' '}ha</span></td>
-						</tr>
-					{/each}
-				</tbody>
-				<tfoot>
-					<tr>
-						<th scope="row" class="sticky">Total</th>
-						{#each crops as c (c.id)}
-							<td class="num"><span class="cell-label">{c.name || '(unnamed)'}{' '}</span>{ha(colTotal(c.id))} ha</td>
+								<span class="total">{ha(b.totalM2)} ha</span>
+							</li>
 						{/each}
-						<td class="num"><span class="cell-label">All crops{' '}</span>{ha(grandTotal)} ha</td>
-					</tr>
-				</tfoot>
-			</table>
-		</div>
-		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
-	{/if}
-</section>
-{/if}
-
-{#if show('demand')}
-<section class="panel" aria-labelledby="dem-h">
-	<div class="panel-head">
-		<h2 id="dem-h">Irrigation demand preview <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
-		<span class="muted small">Gross demand, m³/day per month</span>
+					</ul>
+					<ul class="legend" aria-hidden="true">
+						{#each plantedCrops as c (c.id)}<li><span class="key" style:background={colourOf(c.id)}></span>{c.name || '(unnamed)'}</li>{/each}
+					</ul>
+				{/if}
+				{#if unplantedNote}<p class="muted small note">{unplantedNote}</p>{/if}
+			{/if}
+		</section>
 	</div>
-	<p class="muted small intro">
-		Gross demand = Σ area × A-pan × crop factor, spread over the days in each month (February {fmtNum(settings.februaryDays, 2)}
-		days). On each simulated day the model then subtracts effective rainfall ({fmtPct(settings.effectiveRainFraction, 0)} of rain on the
-		cropped area{#if settings.effectiveRainStoreMm > 0}, with what the crop can't use that day carried over in a
-			{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the farm abstracts that ÷ its irrigation efficiency. Uses saved A-pan values and the crops and areas above,
-		including unsaved edits.
-	</p>
-	{#if !apanSet}
-		<div class="alert alert-info">
-			A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
-			(Settings & calibration, Demand).
-		</div>
+
+	{#if sheetCrop && onsave}
+		<CropSheet bind:open={sheetOpen} {editor} cropId={sheetCrop} {farms} {readonly} {onsave} bind:reason />
 	{/if}
-	{#if farms.length === 0}
-		<p class="muted">No farms yet.</p>
-	{:else}
-		{#if stacks.length && demandTotal.annual > 0}
-			<figure class="demand-chart">
-				<MonthlyBars {stacks} unit="m³/day" label="Irrigation demand" ariaLabel={chartLabel} />
-			</figure>
-		{/if}
-		<div class="table-wrap">
-			<table class="data compact demand">
-				<thead>
-					<tr>
-						<th scope="col" class="sticky">Farm</th>
-						<th scope="col" class="num">Area<br /><span class="u">ha</span></th>
-						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">m³/day</span></th>{/each}
-						<th scope="col" class="num">Mean<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each farms as f, i (f.id)}
-						{@const d = demand[i]}
-						{#if d}
-							<tr>
-								<th scope="row" class="sticky">{f.name || '(unnamed)'}</th>
-								<td class="num">{fmtNum(d.areaHa, 1)}</td>
-								{#each d.monthlyM3Day as v, m (m)}<td class="num heat" style={shade(v)}>{fmtNum(v)}</td>{/each}
-								<td class="num">{fmtNum(d.meanM3Day)}</td>
-								<td class="num strong">{fmtQty(d.annualMm3, 3)}</td>
-							</tr>
-						{/if}
-					{/each}
-				</tbody>
-				<tfoot>
-					<tr>
-						<th scope="row" class="sticky">Catchment</th>
-						<td class="num">{ha(grandTotal)}</td>
-						{#each demandTotal.monthly as v, m (m)}<td class="num">{fmtNum(v)}</td>{/each}
-						<td class="num">{fmtNum(demandTotal.mean)}</td>
-						<td class="num">{fmtQty(demandTotal.annual, 3)}</td>
-					</tr>
-				</tfoot>
-			</table>
-		</div>
-		<p class="muted small after">
-			1 Mm³ = 1 million m³. Darker cells are months of higher demand. Annual catchment demand is
-			{fmtQty(demandTotal.annual, 3)} Mm³/a ({fmtQty((demandTotal.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average).
-		</p>
-	{/if}
-</section>
 {/if}
 
 <style>
-	.intro {
-		margin: -0.25rem 0 0.75rem;
-		max-width: 75ch;
+	.crops-head {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.5rem;
+		margin: 0 0 1rem;
 	}
-	th.sticky {
-		position: sticky;
-		left: 0;
-		z-index: 2;
-		background: var(--surface);
+	.crops-head h2 {
+		margin: 0;
+		font-size: 1.6rem;
 	}
-	thead th.sticky,
-	tfoot th.sticky {
-		background: var(--surface-2);
-		z-index: 3;
+	.crops-head p {
+		margin: 0.2rem 0 0;
+		font-size: 0.9rem;
 	}
-	.factors th[scope='row'] {
-		min-width: 150px;
-	}
-	.factors td {
-		min-width: 64px;
-	}
-	.factors td :global(input[type='number']) {
-		min-width: 3.8rem;
-	}
-	.areas td {
-		min-width: 100px;
-	}
-	.areas th[scope='row'],
-	.demand th[scope='row'] {
-		min-width: 130px;
-		white-space: nowrap;
-	}
-	.total {
-		font-weight: 600;
-	}
-	.namecell {
+	.head-actions {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
-	.namecell input {
-		flex: 1;
-		min-width: 110px;
+	.grids-menu {
+		position: relative;
 	}
-	tr.dragging {
-		opacity: 0.5;
+	.grids-menu summary {
+		list-style: none;
+		cursor: pointer;
 	}
-	tr.drop-before > * {
-		box-shadow: inset 0 2px 0 var(--accent);
-	}
-	tr.drop-after > * {
-		box-shadow: inset 0 -2px 0 var(--accent);
-	}
-	.demand td {
-		min-width: 64px;
-	}
-	.heat {
-		background: color-mix(in srgb, color-mix(in srgb, var(--brand-outlet) 45%, transparent) var(--i), transparent);
-	}
-	.strong {
-		font-weight: 600;
-	}
-	.demand-chart {
-		margin: 0 0 1rem;
-		max-width: 420px;
-	}
-	.after {
-		margin: 0.75rem 0 0;
-	}
-	/* Phones: each row of the crop-factor and planted-area tables becomes a card
-	   with visible field labels, instead of a sideways-scrolling table whose
-	   sticky name column leaves room for one month. */
-	.cell-label {
+	.grids-menu summary::-webkit-details-marker {
 		display: none;
 	}
-	@media (max-width: 640px) {
-		.factors thead,
-		.areas thead {
-			display: none;
-		}
-		.factors,
-		.factors tbody,
-		.areas,
-		.areas tbody,
-		.areas tfoot {
-			display: block;
-		}
-		.factors tr,
-		.areas tr {
-			display: grid;
-			gap: 0.5rem;
-			padding: 0.75rem;
-			border-bottom: 1px solid var(--border);
-		}
-		.factors tr:last-child,
-		.areas tbody tr:last-child {
-			border-bottom: none;
-		}
-		.factors tr > *,
-		.areas tr > * {
-			min-width: 0;
-			padding: 0;
-			border: 0;
-			text-align: left;
-		}
-		th.sticky {
-			position: static;
-			background: none;
-		}
-		.namecell input {
-			min-width: 0;
-		}
-		.factors td :global(input[type='number']),
-		.areas td :global(input[type='number']) {
-			min-width: 0;
-		}
-		.cell-label {
-			display: block;
-			font-size: 0.75rem;
-			font-weight: 600;
-			color: var(--text-2);
-			margin-bottom: 0.15rem;
-		}
-		/* Crop factors: name (and remove) on top, the months four to a row. */
-		.factors tr {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
-		}
-		.factors th[scope='row'],
-		.factors .mean {
-			grid-column: 1 / -1;
-		}
-		.factors.editable th[scope='row'] {
-			grid-column: 1 / 4;
-			grid-row: 1;
-		}
-		.factors .rm {
-			grid-column: 4;
-			grid-row: 1;
-			justify-self: end;
-		}
-		/* Planted areas: farm name on top, crops two to a row, total last. */
-		.areas tr {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-		.areas th[scope='row'],
-		.areas .total {
-			grid-column: 1 / -1;
-		}
-		.areas tfoot tr {
-			background: var(--surface-2);
-			border-top: 2px solid var(--border-strong);
-		}
-		.areas tfoot tr > * {
-			background: none;
-		}
-		.factors .mean .cell-label,
-		.areas .total .cell-label,
-		.areas tfoot .cell-label {
-			display: inline;
-			margin: 0;
-		}
-		tr.drop-before > *,
-		tr.drop-after > * {
-			box-shadow: none;
-		}
-		tr.drop-before {
-			box-shadow: inset 0 2px 0 var(--accent);
-		}
-		tr.drop-after {
-			box-shadow: inset 0 -2px 0 var(--accent);
-		}
+	.grids-pop {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 4px);
+		z-index: 20;
+		display: grid;
+		min-width: 12rem;
+		padding: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	.grids-pop a {
+		display: block;
+		min-height: 36px;
+		padding: 0.45rem 0.6rem;
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		font-size: 0.9rem;
+		text-decoration: none;
+	}
+	.grids-pop a:hover {
+		background: var(--surface-2);
+	}
+	.cards {
+		display: grid;
+		/* Four to a row where they fit (A3), fewer as the width shrinks; a lone crop keeps a card's width. */
+		grid-template-columns: repeat(auto-fill, minmax(max(15rem, calc(25% - 0.75rem)), 1fr));
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+	.card {
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		min-width: 0;
+	}
+	.card-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.card h3 {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin: 0;
+		font-size: 1.05rem;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.key {
+		flex: none;
+		width: 0.7rem;
+		height: 0.7rem;
+		border-radius: 2px;
+	}
+	.facts {
+		margin: 0;
+	}
+	.spark {
+		display: block;
+		width: 100%;
+		height: 64px;
+	}
+	.spark-base {
+		stroke: var(--border);
+		vector-effect: non-scaling-stroke;
+	}
+	.spark-fill {
+		fill: var(--accent);
+		opacity: 0.14;
+	}
+	.spark-line {
+		fill: none;
+		stroke: var(--accent);
+		stroke-width: 2;
+		stroke-linejoin: round;
+		vector-effect: non-scaling-stroke;
+	}
+	.spark-months {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.warn {
+		margin: 0.2rem 0 0;
+		color: var(--warning);
+	}
+	.small {
+		font-size: 0.85rem;
+	}
+	.lower {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		align-items: start;
+	}
+	.lower > .panel {
+		margin: 0;
+		min-width: 0;
+	}
+	.panel-head h3 {
+		font-size: 1.05rem;
+	}
+	/* The chart takes its box's measured size (no zoomed text); the box's height comes from the layout. */
+	.demand-chart {
+		position: relative;
+		height: 260px;
+		margin: 0 0 0.5rem;
+	}
+	.chart-in {
+		position: absolute;
+		inset: 0;
+	}
+	.dem-card > p {
+		margin: 0 0 0.6rem;
+	}
+	.show-table summary {
+		list-style: none;
+		cursor: pointer;
+	}
+	.show-table summary::-webkit-details-marker {
+		display: none;
+	}
+	.table-body {
+		margin-top: 0.75rem;
+	}
+	.bars {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.bars li {
+		display: grid;
+		grid-template-columns: minmax(5rem, 9rem) minmax(0, 1fr) 4.5rem;
+		align-items: center;
+		gap: 0.6rem;
+		font-size: 0.9rem;
+	}
+	.farm {
+		display: inline-flex;
+		align-items: center;
+		min-height: 32px;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.track {
+		display: flex;
+		height: 14px;
+		border-radius: 4px;
+		overflow: hidden;
+		background: var(--surface-2);
+	}
+	.seg {
+		display: block;
+		height: 100%;
+	}
+	.seg + .seg {
+		box-shadow: inset 1px 0 0 var(--surface);
+	}
+	.total {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.9rem;
+		margin: 0.7rem 0 0;
+		padding: 0;
+		list-style: none;
+		font-size: 0.75rem;
+		color: var(--text-2);
+	}
+	.legend li {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.note {
+		margin: 0.6rem 0 0;
 	}
 	.empty {
 		padding: 1.5rem;
@@ -497,5 +494,39 @@
 		color: var(--text-muted);
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
+	}
+	/* Demand chart beside the farm bars once there's room for both (A3's lower row). */
+	@media (min-width: 1100px) {
+		.lower {
+			grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem);
+			min-height: max(380px, calc(100vh - var(--lower-top, 0px) - var(--lower-below, 0px)));
+			align-items: stretch;
+		}
+		.dem-card {
+			display: flex;
+			flex-direction: column;
+		}
+		.demand-chart {
+			flex: 1;
+			height: auto;
+			min-height: 240px;
+			max-height: 480px;
+		}
+	}
+	@media (max-width: 640px) {
+		.demand-chart {
+			height: 230px;
+		}
+		.bars li {
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 0.2rem 0.6rem;
+		}
+		.track {
+			grid-column: 1 / -1;
+			grid-row: 2;
+		}
+		.farm {
+			min-height: 44px;
+		}
 	}
 </style>

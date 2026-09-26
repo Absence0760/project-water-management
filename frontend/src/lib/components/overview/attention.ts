@@ -5,6 +5,7 @@
 import type { ProjectModel, RunSummary, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
+import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { describeAge } from '$lib/components/series/coverage';
 import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
@@ -12,10 +13,16 @@ import { fmtDay, fmtNum, fmtPct } from '$lib/format/number';
 
 export type AttentionId = 'short-farms' | 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
 
+/** How much it matters: the card's colour (never alone: the title says what's wrong). */
+export type AttentionTone = 'danger' | 'warning' | 'info';
+
 export interface AttentionItem {
 	id: AttentionId;
-	/** One sentence: what is wrong. */
+	/** A few words: the card's title. */
+	title: string;
+	/** One sentence under it: the detail. */
 	text: string;
+	tone: AttentionTone;
 	/** The link's words: what to do about it. */
 	action: string;
 	/** `?tab=…` (and `&run=…` for a run), or `?farm=…` for the farm drawer. */
@@ -61,6 +68,9 @@ export function attention(input: AttentionInput): AttentionItem[] {
 			const inModel = model.nodes.some((n) => n.id === worst.nodeId && n.kind === 'farm');
 			out.push({
 				id: 'short-farms',
+				title: `${fmtNum(short.length)} of ${plural(farms.length, 'farm')} below ${target}`,
+				// Red when the worst is in the lowest supply band (network/supplyColour.ts), amber otherwise.
+				tone: worst.fractionSupplied < LOW_SUPPLY ? 'danger' : 'warning',
 				text:
 					short.length === 1
 						? `${worstText}, below the ${target} target.`
@@ -71,13 +81,18 @@ export function attention(input: AttentionInput): AttentionItem[] {
 			});
 		}
 		const warnings = summary.warnings?.length ?? 0;
-		if (warnings)
+		if (warnings) {
+			const first = summary.warnings[0]!;
 			out.push({
 				id: 'run-warnings',
-				text: `The latest run has ${plural(warnings, 'warning')}.`,
+				title: `The latest run has ${plural(warnings, 'warning')}`,
+				tone: 'warning',
+				// The first one, so the card says what it is about.
+				text: `${first.charAt(0).toUpperCase()}${first.slice(1)}${warnings > 1 ? ` (and ${fmtNum(warnings - 1)} more)` : ''}`,
 				action: warnings === 1 ? 'Read it' : 'Read them',
 				href: runHref(latest.id)
 			});
+		}
 	}
 
 	if (series) {
@@ -85,6 +100,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (behind.length)
 			out.push({
 				id: 'new-data',
+				title: 'New rainfall the run hasn’t used',
+				tone: 'info',
 				text: `${plural(behind.length, 'rainfall series', 'rainfall series')} ${behind.length === 1 ? 'has' : 'have'} data the latest run hasn’t used.`,
 				action: 'Run the model again',
 				href: '?tab=runs'
@@ -93,6 +110,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (fresh?.stale)
 			out.push({
 				id: 'stale-data',
+				title: fresh.latest !== null && fresh.age !== null ? `Recorded rain ends ${describeAge(fresh.age)}` : 'No recorded rain yet',
+				tone: 'warning',
 				text:
 					fresh.latest !== null && fresh.age !== null
 						? `The newest recorded rain ends ${fmtDay(fresh.latest)} (${describeAge(fresh.age)}), more than ${plural(STALE_DAYS, 'day')} ago.`
@@ -111,6 +130,8 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (bare.length)
 			out.push({
 				id: 'unplanted',
+				title: `${plural(bare.length, 'farm')} with no planted area`,
+				tone: 'info',
 				text: `${nameList(bare.map((n) => n.name || 'Unnamed farm'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
 				action: bare.length === 1 ? 'Set its planted areas' : 'Set crop areas',
 				href: bare.length === 1 ? farmDrawerHref(null, bare[0]!.id) : '?tab=crops'

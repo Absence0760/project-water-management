@@ -1,7 +1,8 @@
 // The outcome matrix's project settings (issue #53 R4; docs/api.md
 // § Projects, docs/data-model.md § Projects, docs/ui.md § Outcome matrix):
-// how water years are split into classes, and the risk cut-offs each cell's
-// colour comes from. Stored in project.settings.outcomes. Like autoRun
+// how water years are split into classes, the risk cut-offs each cell's
+// colour comes from, and the Reserve site the matrix reads (the outlet, or a
+// gauge with a Reserve rule table). Stored in project.settings.outcomes. Like autoRun
 // (runs/autoRun.ts) it is **no model input**: it says how a run's results are
 // read, not how the model runs, so runs don't record it (runs/execute.ts)
 // and saving it alone leaves updated_at alone (projects/routes.ts).
@@ -14,6 +15,8 @@
 // (O2).
 import { DEFAULT_OUTCOME_RISK_CUTOFFS, validateOutcomeCutoffs, type OutcomeRiskCutoffs, type YearClassMethod } from '@water-management/engine';
 import { z } from 'zod';
+import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
 
 export const YEAR_CLASS_METHODS = ['auto', 'terciles', 'quintiles'] as const satisfies readonly YearClassMethod[];
 
@@ -23,11 +26,20 @@ export type CutoffPair = { lower: number; increasing: number };
 export interface OutcomeSettings {
 	yearClassMethod: YearClassMethod;
 	riskCutoffs: { reserveMonthsMet: CutoffPair | null; daysBelowEwr: CutoffPair | null };
+	/**
+	 * The Reserve site whose rule table the matrix reads (the engine's
+	 * outcomeMatrix siteNodeId): null = the outlet, else a gauge that had a
+	 * rule table when it was chosen (checkOutcomeSite). Days below the
+	 * pragmatic EWR are always at the outlet, so a gauge is only ever read
+	 * for Reserve months met.
+	 */
+	siteNodeId: string | null;
 }
 
 export const OUTCOME_DEFAULTS: Readonly<OutcomeSettings> = Object.freeze({
 	yearClassMethod: 'auto',
-	riskCutoffs: Object.freeze({ reserveMonthsMet: null, daysBelowEwr: null })
+	riskCutoffs: Object.freeze({ reserveMonthsMet: null, daysBelowEwr: null }),
+	siteNodeId: null
 });
 
 /** Each metric's cut-offs with the defaults filled in, the shape the engine's outcomeMatrix takes. */
@@ -52,9 +64,11 @@ const share = z.number().finite().min(0).max(1);
 const Pair = z.object({ lower: share, increasing: share }).strict();
 
 /**
- * The settings patch's shape for `outcomes` (projects/settings.ts): either
+ * The settings patch's shape for `outcomes` (projects/settings.ts): any
  * field; `riskCutoffs` is replaced whole (both metrics, each a pair or null),
- * and checked by the engine's own validateOutcomeCutoffs.
+ * and checked by the engine's own validateOutcomeCutoffs. `siteNodeId` is a
+ * UUID or null here; that it names an eligible gauge needs the project, so
+ * the PATCH route checks it (checkOutcomeSite).
  */
 export const OutcomesPatch = z
 	.object({
@@ -65,7 +79,8 @@ export const OutcomesPatch = z
 			.superRefine((c, ctx) => {
 				const e = cutoffsError(c);
 				if (e) ctx.addIssue({ code: 'custom', message: e });
-			})
+			}),
+		siteNodeId: z.string().uuid().nullable()
 	})
 	.partial()
 	.strict();
@@ -83,5 +98,31 @@ export function resolveOutcomes(settings: unknown): OutcomeSettings {
 		if (!p.success) return null;
 		return cutoffsError({ ...OUTCOME_DEFAULTS.riskCutoffs, [metric]: p.data }) ? null : p.data;
 	};
-	return { yearClassMethod: method, riskCutoffs: { reserveMonthsMet: pair('reserveMonthsMet'), daysBelowEwr: pair('daysBelowEwr') } };
+	const site = z.string().uuid().safeParse(raw.siteNodeId);
+	return {
+		yearClassMethod: method,
+		riskCutoffs: { reserveMonthsMet: pair('reserveMonthsMet'), daysBelowEwr: pair('daysBelowEwr') },
+		siteNodeId: site.success ? site.data : null
+	};
+}
+
+/**
+ * A new outcomes.siteNodeId (not null) must name a gauge of the project's
+ * network that isn't the outlet (the outlet is null) and that has a Reserve
+ * rule table in the settings as they'd be saved (`ewrRules`): the only
+ * sites the engine's outcomeMatrix reads a rule table at (run.ts
+ * assessEwrRules). 400 otherwise. Checked only when the patch changes the
+ * site, so a stored site whose table or gauge later goes doesn't block
+ * saving anything else; the Runs tab falls back to the outlet and says so.
+ */
+export async function checkOutcomeSite(db: Db, projectId: string, siteNodeId: string, ewrRules: unknown): Promise<void> {
+	const { rows } = await db.query<{ kind: string; downstream_node_id: string | null }>(
+		'SELECT kind, downstream_node_id FROM node WHERE project_id = $1 AND id = $2',
+		[projectId, siteNodeId]
+	);
+	const n = rows[0];
+	if (!n) throw new ApiError(400, 'outcomes.siteNodeId: no such node in this project');
+	if (n.kind !== 'gauge' || n.downstream_node_id === null) throw new ApiError(400, 'outcomes.siteNodeId: the site is the outlet (null) or a gauge above it');
+	const tables = Array.isArray(ewrRules) ? (ewrRules as unknown[]) : [];
+	if (!tables.some((t) => isObj(t) && t.siteNodeId === siteNodeId)) throw new ApiError(400, 'outcomes.siteNodeId: that gauge has no Reserve rule table');
 }

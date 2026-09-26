@@ -109,6 +109,8 @@ export type OutcomeCutoffPair = { lower: number; increasing: number };
 export interface OutcomeSettings {
 	yearClassMethod: YearClassMethod;
 	riskCutoffs: { reserveMonthsMet: OutcomeCutoffPair | null; daysBelowEwr: OutcomeCutoffPair | null };
+	/** The Reserve site the matrix reads: null = the outlet, else a gauge with a rule table. Absent from an older API. */
+	siteNodeId?: string | null;
 }
 
 export interface Project extends ProjectSummary {

@@ -1,14 +1,17 @@
 <script lang="ts">
-	// Overview → the newest run's headline figures, each with its change from
-	// the run before (overview/latestRun.ts has the rules). Only this section
-	// waits for the run's summary; the rest of the tab renders at once.
+	// Summary → the newest run's KPI row (issue #17 A1): the Reserve, irrigation
+	// supplied, Dams today and the calibration NSE, each with its change from
+	// the run before (Dams: over the run's last 30 days); overview/latestRun.ts
+	// has the rules. The mean simulated outflow is the line under the cards.
+	// Only this section waits for the run's summary; the rest of the tab
+	// renders at once.
 	import type { Run, RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtDay } from '$lib/format/number';
 	import { runHref } from './attention';
-	import { headlines, ranAgo, runDays } from './latestRun';
+	import { damsHeadline, headlines, ranAgo, runDays, type DamsState } from './latestRun';
 
 	let {
 		meta,
@@ -19,7 +22,8 @@
 		loading,
 		error,
 		previousError,
-		retry
+		retry,
+		dams
 	}: {
 		/** The run shown (from the page's list, so the context line is there on the first frame). */
 		meta: RunMeta;
@@ -35,9 +39,14 @@
 		/** The previous run couldn't be loaded: the cards show without changes. */
 		previousError: string | null;
 		retry: () => void;
+		/** All dams at the end of the run (their series load after the summary). */
+		dams: DamsState;
 	} = $props();
 
-	const cards = $derived(run ? headlines(run.summary, runDays(run), previous?.summary ?? null) : []);
+	const all = $derived(run ? headlines(run.summary, runDays(run), previous?.summary ?? null) : []);
+	// Reserve · Irrigation supplied · Dams today · NSE; the outflow goes under them.
+	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams), ...all.filter((h) => h.id === 'nse')] : []);
+	const outflow = $derived(all.find((h) => h.id === 'outflow') ?? null);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
 	const LEGACY_TITLE =
 		'Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
@@ -74,28 +83,33 @@
 			{#each cards as h (h.id)}
 				<div class="stat" class:flagged={h.flagged} data-headline={h.id}>
 					<dt>{h.term}{#if h.help} <HelpTip key={h.help} />{/if}</dt>
-					<dd class:none={h.value === '–'}>{h.value}{#if h.unit}<small>{h.unit}</small>{/if}</dd>
+					<dd class="value" class:none={h.value === '–' || h.value === '…'}>{h.value}{#if h.unit}<small>{h.unit}</small>{/if}</dd>
 					{#each h.sub as line, i (i)}<dd class="sub">{line}</dd>{/each}
-					{#if h.delta}<dd class="sub change"><Delta m={h.delta} spec={h.spec} /> vs previous run</dd>{/if}
+					{#if h.delta}<dd class="sub change"><Delta m={h.delta} spec={h.spec} /> {h.deltaLabel ?? 'vs previous run'}</dd>{/if}
 				</div>
 			{/each}
 		</dl>
-		{#if previousMeta}
-			<p class="muted small after">
+		<p class="muted small after">
+			{#if outflow}
+				<span data-headline="outflow"
+					>Mean simulated outflow <strong class="v">{outflow.value} {outflow.unit}</strong>{#if outflow.sub.length}{' '}({outflow.sub.join(', ')}){/if}{#if outflow.delta}, <Delta m={outflow.delta} spec={outflow.spec} /> vs previous run{/if}.</span
+				>
+			{/if}
+			{#if previousMeta}
 				{#if previousError}
 					The previous run couldn’t be loaded ({previousError}), so no changes are shown.
 				{:else}
 					Changes are against the previous run, <a href={runHref(previousMeta.id)}>{name(previousMeta)}</a>{#if previousMeta.legacy}
 						(workbook comparison){/if}.
 				{/if}
-			</p>
-		{/if}
+			{/if}
+		</p>
 	</LoadState>
 </section>
 
 <style>
 	.latest {
-		margin: 0 0 1rem;
+		margin: 0;
 	}
 	.head {
 		display: flex;
@@ -134,6 +148,14 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
+	.stat {
+		padding: 0.75rem 0.95rem;
+	}
+	.stat dd.value {
+		font-size: 1.6rem;
+		line-height: 1.2;
+		margin: 0.1rem 0;
+	}
 	.stat dd.sub {
 		font-size: 0.75rem;
 		font-weight: 400;
@@ -149,5 +171,10 @@
 	}
 	.after {
 		margin: 0;
+	}
+	.after .v {
+		color: var(--text);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

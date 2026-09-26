@@ -2,36 +2,47 @@
 
 A hydrologist runs a baseline, changes something (raises a dam, changes crops,
 adds a transfer), runs again, and wants to know what changed, both in the
-inputs and in the results. The compare page answers that for any two runs you
-can see. They can come from the same project or from two projects, such as
-project D copied from C and then modified.
+inputs and in the results. The compare page answers that for a **baseline and
+up to two what-ifs** you can see (issue #17, board A4). They can come from the
+same project or from other projects, such as project D copied from C and then
+modified.
 
 ## Using it
 
 Inside a project, open the **Compare runs** tab (under *Outcomes* in the
 workspace, `?tab=compare`; also the **Compare runs** link on the Runs tab's
-runs list). Its pair lives in the workspace URL
-(`?tab=compare&a=<projectId>:<runId>&b=<projectId>:<runId>`, `compareTabHref`
-in `compare/picker.ts`), and a side can still be a run of another project.
+runs list). Its runs live in the workspace URL
+(`?tab=compare&a=<projectId>:<runId>&b=<projectId>:<runId>[&c=…]`,
+`compareTabHref` in `compare/picker.ts`): `a` is the **baseline** (run A),
+`b` **what-if 1** (run B) and the optional `c` **what-if 2**. Any of them can
+be a run of another project. A two-run link (no `c`) opens exactly as it
+always did.
 The same view is the standalone page `/compare?project=<id>`, which links
 **Back to runs**; its URL keeps working for bookmarks and cross-project links,
 and an applicant (no workspace tabs) gets it from their application. Either
 way the view starts on that
-project's **latest run (B — changed)** against its **published baseline
-(A — baseline)**, the run stakeholders see (WP-2.3), when there is one and
+project's **latest run (what-if 1)** against its **published run
+(baseline)**, the run stakeholders see (WP-2.3), when there is one and
 it isn't the latest; otherwise against the **previous run**
 (`defaultPair` in `compare/picker.ts`).
 
+**A second what-if.** **+ Add a second what-if** puts the newest run of the
+baseline's project that is neither the baseline nor what-if 1 in `c`
+(`defaultWhatIf`); when every run is taken, its card waits for a pick.
+**Remove** drops `c`. The backend compares two runs, so the page calls
+`GET /compare/runs?a=<baseline>&b=<what-if>` once per what-if, in parallel;
+there is no three-way endpoint.
+
 **Compare with published.** Whenever the pair is chosen and B's project has
 a published run that is neither B nor already A, a **Compare with
-published** button under the pickers sets A to it and keeps B
+published** button under the run cards sets the baseline (A) to it and keeps the what-ifs
 (`publishedBaseline`), so "what does this change do against what
 stakeholders were shown?" is one click. The Runs tab's results header has
 the same link for any run other than the published one
 (`/compare?a=<published>&b=<that run>`). An explicit `?a=`/`?b=` is never
 replaced: the published run is only pre-selected when the page opens with
 `?project=` alone, and otherwise offered.
-Each side has its own project and run picker, so either side can point at
+Each run card has its own project and run picker, so any run can point at
 another project. Each run option reads like a Runs list row, as text
 (`runOptionLabel` in `compare/picker.ts`): label · when it ran · the years it
 covers, then the tags that apply (latest, published, evidence or former
@@ -43,9 +54,58 @@ bookmarked or shared with anyone who can see both projects.
 
 If a project has fewer than two runs, the page explains what to do: run the
 model, change something, and run it again, or pick a run from another project
-as B.
+as what-if 1.
 
-The page has these sections, top to bottom:
+### The summary (board A4)
+
+Above the detail, for the baseline and every what-if at once
+(`compare/summary.ts`, pure and unit-tested):
+
+- **Run cards.** Each run's label; for the baseline its years, when it ran
+  and its tags (published, evidence); for a what-if the one change that best
+  says what it is (`leadChange`: the first change of the network, else crops,
+  transfers, settings, then series, since a data extension says less about
+  a what-if than an edit to the model) and a link to **all N changes**,
+  which switches the full comparison to that what-if and scrolls to *What
+  changed*. A what-if with no input changes says so (or names its scenario).
+- **What changes** (`outcomeRows`): reserve met (1 − the share of days the
+  EWR wasn't met), days below the reserve in an average year (that share ×
+  365.25, so runs of different lengths compare), irrigation supplied (share
+  of demand), farms below 95 % supplied, a row for each of the (at most two)
+  farms whose supply moves by at least 1 point in some what-if (matched on
+  the baseline's node, so a farm missing from one what-if's comparison is
+  "–" there, not 0), mean outflow and, when either run has it, calibration
+  NSE. Each what-if cell has its value and its change from the baseline
+  through the same `Delta` / `formatDelta` as the detail tables (sign, ▲/▼,
+  and "better"/"worse" in words).
+- **Takeaways** (`takeaways`), what-if by what-if, only for material
+  changes (`MATERIAL`: a whole day a year below the reserve, a point of the
+  demand supplied, a farm crossing 95 %, 5 points of one farm's supply, 5 %
+  of the mean outflow): "What-if 1 costs the reserve 13 more days a year",
+  "What-if 2 gives the reserve back 2 days a year", "What-if 1 leaves 1 more
+  farm below 95% supplied", "Under What-if 1, Farm 4 gets −12 pp of its
+  demand", "What-if 1 lowers the mean outflow by 10%". A what-if with none
+  "makes no material change to these outcomes". When both what-ifs cost the
+  reserve, one line says which costs less and by how much. A what-if over
+  other dates, or on another engine version, gets a line saying part of its
+  change comes from that.
+- **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a lazy
+  chunk): grouped bars per water year (Oct–Sep) for every run, from each
+  run's stored `ewr_shortfall` series (through the Runs tab's series cache)
+  by the engine's `reserveDaysByWaterYear` (`views/reserveYears.ts`). That
+  is the test behind `summary.catchment.ewrDaysNotMet` (a day whose
+  shortfall is below zero), so the years add up to it; counting outflow <
+  EWR from the two flow series would miss the engine's noise tolerance. Part
+  years at either end are drawn faded and marked in the table; a run that
+  stored no shortfall series is named under the chart.
+
+### The full comparison
+
+Below the summary, **Full comparison** is today's two-run page for the
+baseline (run A) against one what-if (run B): what-if 1, or what-if 2 when
+it's picked in the **Baseline vs What-if 1 / 2** switch. Every panel and
+note is as it was, and every change is B − A. It has these sections, top to
+bottom:
 
 1. **Runs compared.** Label, project, period and time of each run, and
    under each its **run notes** when it has any: the modeller's written

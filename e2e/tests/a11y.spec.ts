@@ -23,7 +23,7 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	// (The Email column folds into the name cell on a phone, so wait on a member row.)
 	{ id: 'overview', ready: (p) => expect(p.getByRole('region', { name: 'Members' }).getByRole('rowheader').first()).toBeVisible() },
 	{ id: 'network', ready: (p) => expect(p.getByRole('list', { name: 'Drainage tree' })).toBeVisible() },
-	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted areas' })).toBeVisible() },
+	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by farm' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('Source of transfer 1')).toBeVisible() },
 	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
 	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },

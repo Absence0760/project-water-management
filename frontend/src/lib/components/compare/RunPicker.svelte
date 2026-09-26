@@ -1,5 +1,8 @@
 <script lang="ts">
-	// One side of the comparison: project → run.
+	// One run of the comparison: project → run. As a run card (issue #17 A4)
+	// it also shows `summary` (the run's name and what changed) under the
+	// legend, `actions` beside it, and a coloured top edge (`colour`).
+	import type { Snippet } from 'svelte';
 	import type { ProjectSummary, RunMeta } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
 	import { runOptionLabel } from './picker';
@@ -14,7 +17,10 @@
 		runsLoading = false,
 		runsError = null,
 		onProject,
-		onRun
+		onRun,
+		summary,
+		actions,
+		colour = null
 	}: {
 		/** Unique prefix for input ids ("a" / "b"). */
 		id: string;
@@ -28,13 +34,19 @@
 		runsError?: string | null;
 		onProject: (projectId: string) => void;
 		onRun: (runId: string) => void;
+		summary?: Snippet;
+		actions?: Snippet;
+		/** The run's colour in the charts: a card's top edge. null: a plain box. */
+		colour?: string | null;
 	} = $props();
 
 	const runSelected = $derived(!!runs?.some((r) => r.id === runId));
 </script>
 
-<fieldset class="picker">
+<fieldset class="picker" class:card={colour !== null} style:--run-colour={colour}>
 	<legend>{legend}</legend>
+	{#if actions}<div class="actions">{@render actions()}</div>{/if}
+	{#if summary}<div class="summary">{@render summary()}</div>{/if}
 	<div class="field">
 		<label for="{id}-project">Project</label>
 		<select id="{id}-project" value={projectId ?? ''} onchange={(e) => onProject(e.currentTarget.value)}>
@@ -78,6 +90,54 @@
 	legend {
 		font-weight: 600;
 		padding: 0 0.3rem;
+	}
+	.card {
+		position: relative;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-top: 4px solid var(--run-colour);
+		box-shadow: var(--shadow);
+		padding: 0.75rem 0.9rem 0.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	/* The legend as the card's kicker: a fieldset legend can't sit inside the padding, so float it. */
+	.card legend {
+		float: left;
+		width: 100%;
+		padding: 0;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-2);
+		padding-right: 5rem;
+	}
+	.actions {
+		position: absolute;
+		top: 0.45rem;
+		right: 0.5rem;
+	}
+	.summary {
+		clear: both;
+		min-height: 2.6rem;
+		margin-bottom: 0.3rem;
+	}
+	/* On a card, each label sits beside its select, so the card stays short. */
+	.card .field {
+		display: grid;
+		grid-template-columns: 3.4rem minmax(0, 1fr);
+		align-items: center;
+		column-gap: 0.4rem;
+		margin-bottom: 0.35rem;
+	}
+	.card label {
+		font-size: 0.8rem;
+		margin: 0;
+	}
+	.card .err {
+		grid-column: 2;
 	}
 	select {
 		width: 100%;

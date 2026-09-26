@@ -43,6 +43,12 @@ export interface PlanNode {
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
 	/**
+	 * The storage this dam starts plan.storageResetDay with, instead of the
+	 * day before's (settings.damStorageReset, engine ≥ 0.46.0, issue #53 R6);
+	 * absent = no reset. Used clamped to 0 … capacity.
+	 */
+	storageResetM3?: number;
+	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
 	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
@@ -158,6 +164,8 @@ export interface NetworkPlan {
 	lakeEvapMmDay?: Float64Array;
 	/** Rain falling on a dam's surface per day (mm): the day's rain before any threshold (audit N2). Absent = none. */
 	damRainMm?: Float64Array;
+	/** The run day the dams with a storageResetM3 start from it (engine ≥ 0.46.0); absent = none. */
+	storageResetDay?: number;
 }
 
 /** Per-node daily results. Gauges fill inflowUpstream/outflow/ewrCumulative/ewrShortfall only. */
@@ -194,6 +202,12 @@ export interface NodeResult {
 	boreholePumped?: Float64Array[];
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
+	/**
+	 * The storage reset's step (engine ≥ 0.46.0): on the reset day, the
+	 * storage set − the storage the day before left (m³, + added / − taken);
+	 * 0 on every other day. Absent on a dam without a reset.
+	 */
+	storageSet?: Float64Array;
 	/** Stream depletion taken from the node's outflow (WP-1.34), after the clamp. */
 	depletion: Float64Array;
 	/** Depletion due that the river could not give (no flow left): drawn from aquifer storage instead, reported. */
@@ -374,8 +388,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 		const r = allocNode(days);
 		if (n.borehole) r.boreholePumped = n.borehole.units.map(() => new Float64Array(days));
 		if (n.supply) r.riverAbstraction = new Float64Array(days);
+		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
 		return r;
 	});
+	// The storage reset (engine ≥ 0.46.0, settings.damStorageReset): the day, −1 = none.
+	const resetDay = plan.storageResetDay ?? -1;
+	/** Node i's storage at the start of day t: the day before's, or on the reset day the storage set. */
+	const startStorage = (i: number, t: number): number => {
+		const n = nodes[i]!;
+		if (t === resetDay && n.storageResetM3 !== undefined) return Math.min(Math.max(n.storageResetM3, 0), n.damCapacityM3);
+		return t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!;
+	};
 	// Whether each farm under the trigger rule (WP-3.8) pumped from the river yesterday.
 	const onRiver = new Uint8Array(nodes.length);
 	// Each pumping unit's volume so far this water year (WP-3.9 annual caps).
@@ -397,6 +420,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 	const qLow = nodes.some((n) => n.landCover) ? lowFlowThreshold(naturalFlow.subarray(0, days)) : 0;
 
 	for (let t = 0; t < days; t++) {
+		if (t === resetDay) {
+			for (let i = 0; i < nodes.length; i++) {
+				const r = res[i]!;
+				if (r.storageSet) r.storageSet[t] = startStorage(i, t) - (t === 0 ? nodes[i]!.initialStorageM3 : r.storage[t - 1]!);
+			}
+		}
 		// [Transfers] "Draw from dam": uses the storage at the end of the
 		// previous day (Q, row N-1), so all transfers are settled before any farm
 		// irrigates, the source's own irrigation included (quirk Q3: the source
@@ -418,7 +447,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 		jToday.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
-		const prevQ = (n: number) => (t === 0 ? nodes[n]!.initialStorageM3 : res[n]!.storage[t - 1]!);
+		const prevQ = (n: number) => startStorage(n, t);
 		for (const level of levels) {
 			// 1. Each active rule's own limit: its daily cap and its source's free water.
 			for (const k of level) {
@@ -594,7 +623,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean } 
 					}
 				}
 			}
-			const qPrev = t === 0 ? node.initialStorageM3 : r.storage[t - 1]!;
+			const qPrev = startStorage(i, t);
 			// Dam losses and gains before irrigation (audit N2). The surface area
 			// follows yesterday's storage, A = A_full × (Q[t−1] / cap)^b; rain on
 			// that surface is a gain, open-water evaporation and seepage losses.

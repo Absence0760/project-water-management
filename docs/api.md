@@ -243,13 +243,22 @@ alongside teams, e.g. to give an outside client `viewer` access.
   riskCutoffs: { reserveMonthsMet, daysBelowEwr } }` (issue #53 R4,
   `projects/outcomeSettings.ts`, [ui.md § Outcome matrix](./ui.md#outcome-matrix))
   is always present too, defaults `{ yearClassMethod: 'auto', riskCutoffs:
-  { reserveMonthsMet: null, daysBelowEwr: null } }` (null = the engine's
-  `DEFAULT_OUTCOME_RISK_CUTOFFS`, placeholders pending the hydrologist,
-  plan.md O1). `PATCH` takes either field: `yearClassMethod` `auto` |
-  `terciles` | `quintiles`; `riskCutoffs` whole, both metrics, each null or
-  `{ lower, increasing }` shares 0–1 in the metric's own order (months met:
-  `lower ≥ increasing`; days below the EWR: `lower ≤ increasing`), checked
-  by the engine's `validateOutcomeCutoffs` (`400` with its message). Like
+  { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null }` (null
+  cut-offs = the engine's `DEFAULT_OUTCOME_RISK_CUTOFFS`, placeholders
+  pending the hydrologist, plan.md O1). `PATCH` takes any field:
+  `yearClassMethod` `auto` | `terciles` | `quintiles`; `riskCutoffs` whole,
+  both metrics, each null or `{ lower, increasing }` shares 0–1 in the
+  metric's own order (months met: `lower ≥ increasing`; days below the EWR:
+  `lower ≤ increasing`), checked by the engine's `validateOutcomeCutoffs`
+  (`400` with its message); `siteNodeId`, the matrix's Reserve site, null
+  (the outlet) or a UUID. A new site must be a gauge of the project's
+  network above the outlet with a Reserve rule table in the settings as
+  they'd be saved (`400 outcomes.siteNodeId: no such node in this project`
+  / `the site is the outlet (null) or a gauge above it` / `that gauge has no
+  Reserve rule table`); the check runs only when the site changes, so a
+  stored site whose table or gauge has gone doesn't block other saves (the
+  Runs tab falls back to the outlet and says so). A copy or an imported
+  project document moves the site to the copy's gauge. Like
   `autoRun` it is no model input: runs don't record it, and a `PATCH` that
   changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
   `rerunQueuedFor` is when the project's

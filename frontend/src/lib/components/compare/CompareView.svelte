@@ -1,29 +1,40 @@
 <script lang="ts">
-	// Compare two runs — same project or two projects you can see. Shown by
-	// the /compare page and by the workspace's Compare runs tab (issue #17),
-	// each owning its URL: the pair arrives as `a`/`b` refs
-	// ("<projectId>:<runId>"), and `hrefFor` builds the URL for a new pair.
+	// Compare runs (issue #17, board A4): a baseline and up to two what-ifs,
+	// same project or projects you can see. Shown by the /compare page and by
+	// the workspace's Compare runs tab, each owning its URL: the runs arrive as
+	// `a` (baseline), `b` (what-if 1) and the optional `c` (what-if 2) refs
+	// ("<projectId>:<runId>"), and `hrefFor` builds the URL for a new choice.
 	// With `project` and no pair, it opens on that project's latest run
 	// against its published baseline (or, with none, the previous run).
-	import { onMount, untrack } from 'svelte';
+	//
+	// The backend compares two runs, so each what-if is its own
+	// GET /compare/runs against the baseline (in parallel). The summary (run
+	// cards, outcomes table, takeaways, days below the reserve each year) sits
+	// on top; the full two-run comparison, for the baseline against the
+	// what-if picked, stays below it with nothing left out.
+	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
+	import Delta from '$lib/components/compare/Delta.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
+	import { fmtMetric } from '$lib/components/compare/delta';
 	import { rainSourceNote } from '$lib/components/compare/rainSource';
 	import { asFitRecord } from '$lib/components/compare/fit';
+	import { leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
 	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
-	import { defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
+	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
+	import { runYears } from '$lib/components/runs/runList';
 	import { fmtDate } from '$lib/format/number';
 
 	// Uncertainty bands and the paired band on B − A (issue #4 phase 9): their own chunk.
@@ -32,32 +43,50 @@
 	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
 	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
 	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
+	// Days below the reserve per water year (issue #17 A4): its own chunk (it fetches series).
+	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
 
-	type Side = 'a' | 'b';
+	type Side = 'a' | 'b' | 'c';
+	type WhatIf = 'b' | 'c';
+	const WHAT_IFS: readonly WhatIf[] = ['b', 'c'];
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+	/** Names and colours of the runs, the same in the cards, the table and the chart. */
+	const NAME: Record<Side, string> = { a: 'Baseline', b: 'What-if 1', c: 'What-if 2' };
+	const COLOUR: Record<Side, string> = { a: 'var(--text-muted)', b: 'var(--series-2)', c: 'var(--series-1)' };
 
 	let {
 		a: aParam,
 		b: bParam,
+		c: cParam = null,
 		project: projectParam,
 		hrefFor,
+		level = 2,
+		actions,
 		projectA: shownProjectA = $bindable(null)
 	}: {
-		/** Run A's ref from the URL (null when not chosen). */
+		/** The baseline's ref from the URL (null when not chosen). */
 		a: string | null;
-		/** Run B's ref from the URL. */
+		/** What-if 1's ref from the URL. */
 		b: string | null;
+		/** What-if 2's ref from the URL (optional). */
+		c?: string | null;
 		/** The project to open on when no pair is given (null: none). */
 		project: string | null;
-		/** The URL for a pair (either side may be null). */
-		hrefFor: (a: RunRef | null, b: RunRef | null) => string;
+		/** The URL for a choice of runs (any may be null). */
+		hrefFor: (a: RunRef | null, b: RunRef | null, c: RunRef | null) => string;
+		/** Heading level of the view's title: 1 on the standalone page, 2 inside the workspace. */
+		level?: 1 | 2;
+		/** Links beside the title (the standalone page's Back to runs). */
+		actions?: Snippet;
 		/** Out: the project on side A, for the page's own links. */
 		projectA?: string | null;
 	} = $props();
 
 	const refA = $derived(parseRef(aParam));
 	const refB = $derived(parseRef(bParam));
+	const refC = $derived(parseRef(cParam));
+	const refOf = (side: Side) => (side === 'a' ? refA : side === 'b' ? refB : refC);
 
 	// --- projects -------------------------------------------------------------
 	let projects = $state<ProjectSummary[]>([]);
@@ -105,21 +134,28 @@
 		}
 	}
 
-	// A project picked on a side before a run is chosen for it.
-	let picked = $state<Record<Side, string | null>>({ a: null, b: null });
-	const projectFor = (side: Side) => picked[side] ?? (side === 'a' ? refA : refB)?.projectId ?? projectParam ?? null;
+	// A project picked for a run before a run is chosen for it.
+	let picked = $state<Record<Side, string | null>>({ a: null, b: null, c: null });
+	const projectFor = (side: Side) => picked[side] ?? refOf(side)?.projectId ?? (side === 'c' ? refA?.projectId : null) ?? projectParam ?? null;
 	const projectA = $derived(projectFor('a'));
 	const projectB = $derived(projectFor('b'));
+	const projectC = $derived(projectFor('c'));
+	// What-if 2's card shows once it is in the URL, or while its run is being picked.
+	const showC = $derived(!!refC || picked.c !== null);
 
 	$effect(() => {
-		for (const p of [projectA, projectB]) if (p) untrack(() => ensureRuns(p));
+		for (const p of [projectA, projectB, showC ? projectC : null]) if (p) untrack(() => ensureRuns(p));
 	});
 	$effect(() => {
 		shownProjectA = projectA;
 	});
 
-	function navigate(a: RunRef | null, b: RunRef | null, replace = false) {
-		goto(hrefFor(a, b), { replaceState: replace, keepFocus: true, noScroll: true });
+	function navigate(a: RunRef | null, b: RunRef | null, c: RunRef | null, replace = false) {
+		return goto(hrefFor(a, b, c), { replaceState: replace, keepFocus: true, noScroll: true });
+	}
+	/** The current runs with one replaced. */
+	function withRun(side: Side, ref: RunRef | null): [RunRef | null, RunRef | null, RunRef | null] {
+		return [side === 'a' ? ref : refA, side === 'b' ? ref : refB, side === 'c' ? ref : refC];
 	}
 
 	// Opened with ?project= only: latest run vs the published baseline, or the previous run (picker.ts defaultPair).
@@ -132,118 +168,241 @@
 			const list = await ensureRuns(p);
 			resolving = false;
 			const pair = list && defaultPair(p, list);
-			if (pair && projectParam === p && !aParam) navigate(pair.a, pair.b, true);
+			if (pair && projectParam === p && !aParam) navigate(pair.a, pair.b, refC, true);
 		});
 	});
+
+	function defaultFor(side: Side, list: RunMeta[], projectId: string): string | null {
+		if (side === 'c') return defaultWhatIf(list, [refA, refB], projectId) ?? list[0]?.id ?? null;
+		return defaultRunFor(list, side === 'a' ? refB : refA, projectId);
+	}
 
 	async function onProject(side: Side, projectId: string) {
 		picked[side] = projectId;
 		const list = await ensureRuns(projectId);
 		if (!list || picked[side] !== projectId) return;
-		const other = side === 'a' ? refB : refA;
-		const runId = defaultRunFor(list, other, projectId);
+		const runId = defaultFor(side, list, projectId);
 		if (!runId) return; // no runs: the picker says so
-		const ref = { projectId, runId };
 		picked[side] = null;
-		navigate(side === 'a' ? ref : refA, side === 'b' ? ref : refB);
+		navigate(...withRun(side, { projectId, runId }));
 	}
 
 	function onRun(side: Side, runId: string) {
 		const projectId = projectFor(side);
 		if (!projectId || !runId) return;
-		const ref = { projectId, runId };
 		picked[side] = null;
-		navigate(side === 'a' ? ref : refA, side === 'b' ? ref : refB);
+		navigate(...withRun(side, { projectId, runId }));
 	}
 
-	// "Compare with published": A becomes B's project's published baseline, offered only when that changes the pair.
+	// Add a second what-if: the newest run that is neither the baseline nor what-if 1; the card waits for a choice when there is none.
+	async function addWhatIf() {
+		const projectId = projectA ?? projectParam;
+		if (!projectId) return;
+		picked.c = projectId;
+		const list = await ensureRuns(projectId);
+		const runId = list && picked.c === projectId ? defaultWhatIf(list, [refA, refB], projectId) : null;
+		if (runId) {
+			await navigate(...withRun('c', { projectId, runId }));
+			picked.c = null;
+		}
+		await tick();
+		document.getElementById('c-run')?.focus();
+	}
+	async function removeWhatIf() {
+		picked.c = null;
+		if (fullSide === 'c') fullSide = 'b';
+		if (refC) await navigate(refA, refB, null);
+		await tick();
+		document.getElementById('add-what-if')?.focus();
+	}
+
+	// "Compare with published": the baseline becomes what-if 1's project's published run, offered only when that changes the pair.
 	const withPublished = $derived(publishedBaseline(refB ? runs[refB.projectId] : undefined, refA, refB));
 
-	// --- the comparison ----------------------------------------------------------
-	let data = $state<RunCompareResponse | null>(null);
-	let loading = $state(false);
-	let error = $state<string | null>(null);
-	let wantKey = '';
-	async function loadCompare(a: RunRef, b: RunRef) {
-		const key = `${formatRef(a)}|${formatRef(b)}`;
-		wantKey = key;
-		loading = true;
-		error = null;
+	// --- the comparisons: baseline against each what-if ----------------------------
+	interface Cmp {
+		data: RunCompareResponse | null;
+		loading: boolean;
+		error: string | null;
+	}
+	let cmp = $state<Record<WhatIf, Cmp>>({ b: { data: null, loading: false, error: null }, c: { data: null, loading: false, error: null } });
+	const wantKey: Record<WhatIf, string> = { b: '', c: '' };
+	async function loadCompare(slot: WhatIf, a: RunRef, x: RunRef) {
+		const key = `${formatRef(a)}|${formatRef(x)}`;
+		wantKey[slot] = key;
+		cmp[slot].loading = true;
+		cmp[slot].error = null;
 		try {
-			const d = await api.compare.runs(formatRef(a), formatRef(b));
-			if (wantKey === key) data = d;
+			const d = await api.compare.runs(formatRef(a), formatRef(x));
+			if (wantKey[slot] === key) cmp[slot].data = d;
 		} catch (e) {
-			if (wantKey !== key) return;
-			data = null;
-			error =
-				e instanceof ApiError && e.status === 404
-					? "One of these runs doesn't exist any more, or its project isn't shared with you."
-					: msg(e);
+			if (wantKey[slot] !== key) return;
+			cmp[slot].data = null;
+			cmp[slot].error =
+				e instanceof ApiError && e.status === 404 ? "One of these runs doesn't exist any more, or its project isn't shared with you." : msg(e);
 		} finally {
-			if (wantKey === key) loading = false;
+			if (wantKey[slot] === key) cmp[slot].loading = false;
 		}
+	}
+	function clear(slot: WhatIf) {
+		wantKey[slot] = '';
+		cmp[slot] = { data: null, loading: false, error: null };
 	}
 	$effect(() => {
 		const a = refA;
 		const b = refB;
-		untrack(() => {
-			if (a && b) loadCompare(a, b);
-			else {
-				wantKey = '';
-				data = null;
-				error = null;
-				loading = false;
-			}
-		});
+		untrack(() => (a && b ? loadCompare('b', a, b) : clear('b')));
 	});
+	$effect(() => {
+		const a = refA;
+		const c = refC;
+		untrack(() => (a && c ? loadCompare('c', a, c) : clear('c')));
+	});
+
+	// The what-ifs in the summary: what-if 1, and what-if 2 once its comparison is in.
+	const whatIfs = $derived(WHAT_IFS.filter((s) => cmp[s].data && refOf(s)));
+	const loaded = $derived(whatIfs.map((s) => cmp[s].data!));
+	const rows = $derived(outcomeRows(loaded.map((d) => d.comparison)));
+	const notes = $derived(
+		takeaways(
+			rows,
+			whatIfs.map((s) => NAME[s]),
+			{ samePeriod: loaded.map((d) => d.comparison.samePeriod), engineChanged: loaded.map((d) => d.comparison.engineVersionChanged) }
+		)
+	);
+	const lead = $derived(notes.find((t) => t.tone === 'worse') ?? notes.find((t) => t.tone === 'better') ?? notes[0] ?? null);
+
+	// The full comparison: the baseline against the what-if picked (what-if 1 unless what-if 2 is picked and loaded).
+	let fullSide = $state<WhatIf>('b');
+	const shownSide = $derived<WhatIf>(fullSide === 'c' && refC ? 'c' : 'b');
+	const data = $derived(cmp[shownSide].data);
+	const loading = $derived(cmp[shownSide].loading);
+	const error = $derived(cmp[shownSide].error);
+	const refX = $derived(shownSide === 'c' ? refC : refB);
+
+	function showAllChanges(side: WhatIf) {
+		fullSide = side;
+		tick().then(() => document.getElementById('changes-h')?.scrollIntoView({ block: 'start' }));
+	}
 
 	// Only-one-run / no-runs empty state for the project the page was opened on.
 	const soloProject = $derived(!refA && !refB && projectParam ? projectParam : null);
 	const soloRuns = $derived(soloProject ? runs[soloProject] : undefined);
 	const soloName = $derived(projects.find((p) => p.id === soloProject)?.name ?? 'This project');
 
-	const sameRun = $derived(!!refA && !!refB && formatRef(refA) === formatRef(refB));
+	const sameRun = $derived(!!refA && !!refX && formatRef(refA) === formatRef(refX));
 	const describe = (s: RunCompareResponse['a']) =>
 		`${s.run.label || 'Untitled run'} · ${s.project.name} · ${s.run.startDate} → ${s.run.endDate} · run ${fmtDate(s.run.createdAt, true)}`;
+
+	// --- the header's context line and the cards ---------------------------------
+	const runMeta = (side: Side) => {
+		const r = refOf(side);
+		return r ? (runs[r.projectId]?.find((x) => x.id === r.runId) ?? null) : null;
+	};
+	const baseSide = $derived(cmp.b.data?.a ?? cmp.c.data?.a ?? null);
+	const context = $derived.by(() => {
+		if (!baseSide || !loaded.length) return 'Pick a baseline and up to two what-ifs, from this project or a copy of it. Every change is shown against the baseline.';
+		const sides = [baseSide, ...loaded.map((d) => d.b)];
+		const same = loaded.every((d) => d.comparison.samePeriod);
+		const engines = [...new Set(sides.map((s) => s.run.engineVersion))];
+		const n = loaded.length;
+		return [
+			`Baseline “${baseSide.run.label || 'Untitled run'}” against ${n === 1 ? 'one what-if' : `${n} what-ifs`}`,
+			same ? `same period, ${runYears(baseSide.run.startDate, baseSide.run.endDate)}` : 'the periods differ',
+			engines.length === 1 ? `engine ${engines[0]}` : `engines ${engines.join(', ')}`
+		].join(' · ');
+	});
+	const baseLine = $derived.by(() => {
+		const m = runMeta('a');
+		if (!m) return '';
+		const tags = [runYears(m.startDate, m.endDate), `ran ${fmtDate(m.createdAt, true)}`];
+		if (m.published) tags.push('published');
+		if (m.evidence === 'current') tags.push('evidence');
+		if (refA && projectA && refA.projectId !== (refB?.projectId ?? refA.projectId)) tags.push(projects.find((p) => p.id === refA.projectId)?.name ?? '');
+		return tags.filter(Boolean).join(' · ');
+	});
+	const chartRuns = $derived(
+		refA
+			? [
+					{ name: NAME.a, projectId: refA.projectId, runId: refA.runId, colour: COLOUR.a },
+					...whatIfs.map((s) => ({ name: NAME[s], projectId: refOf(s)!.projectId, runId: refOf(s)!.runId, colour: COLOUR[s] }))
+				]
+			: []
+	);
+	const H = $derived(`h${level}`);
 </script>
 
-<p class="muted intro">
-	Pick a baseline (A) and a changed run (B) — from the same project, or from a copy of it. Every change is shown as B − A.
-</p>
+<header class="cmp-head">
+	<div class="cmp-title">
+		<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
+		<p class="muted" data-testid="compare-context">{context}</p>
+	</div>
+	{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
+</header>
+
+{#snippet card(side: Side)}
+	{@const pid = side === 'a' ? projectA : side === 'b' ? projectB : projectC}
+	{@const ref = refOf(side)}
+	{@const meta = runMeta(side)}
+	<RunPicker
+		id={side}
+		legend={NAME[side]}
+		colour={COLOUR[side]}
+		{projects}
+		projectId={pid}
+		runId={ref?.runId ?? null}
+		runs={pid ? (runs[pid] ?? null) : null}
+		runsLoading={!!(pid && runsLoading[pid])}
+		runsError={pid ? (runsError[pid] ?? null) : null}
+		onProject={(p) => onProject(side, p)}
+		onRun={(r) => onRun(side, r)}
+	>
+		{#snippet actions()}
+			{#if side === 'c'}<button type="button" class="btn btn-ghost btn-sm" onclick={removeWhatIf}>Remove<span class="visually-hidden"> what-if 2</span></button>{/if}
+		{/snippet}
+		{#snippet summary()}
+			<p class="run-name">{meta ? meta.label || 'Untitled run' : ref ? '…' : 'No run chosen'}</p>
+			{#if side === 'a'}
+				<p class="run-line muted">{baseLine}</p>
+			{:else}
+				{@const d = cmp[side].data}
+				{#if d && ref}
+					{@const first = leadChange(d.changes)}
+					<p class="run-line muted" data-testid="what-if-change">
+						{#if first}{first.text}{:else if d.b.scenario}Scenario “{d.b.scenario.name}”{:else}No input changes from the baseline{/if}
+						{#if d.changes.length > 1}
+							· <button type="button" class="link-btn" onclick={() => showAllChanges(side)}>all {d.changes.length} changes</button>
+						{/if}
+					</p>
+				{:else if cmp[side].error}
+					<p class="run-line err" role="alert">{cmp[side].error}</p>
+				{:else if cmp[side].loading}
+					<p class="run-line muted">Comparing with the baseline…</p>
+				{/if}
+			{/if}
+		{/snippet}
+	</RunPicker>
+{/snippet}
 
 <LoadState loading={projectsLoading} error={projectsError} retry={loadProjects} empty={projects.length === 0} emptyText="You don't have any projects yet.">
-	<section class="panel pickers" aria-label="Runs to compare">
-		<RunPicker
-			id="a"
-			legend="Run A — baseline"
-			{projects}
-			projectId={projectA}
-			runId={refA?.runId ?? null}
-			runs={projectA ? (runs[projectA] ?? null) : null}
-			runsLoading={!!(projectA && runsLoading[projectA])}
-			runsError={projectA ? (runsError[projectA] ?? null) : null}
-			onProject={(p) => onProject('a', p)}
-			onRun={(r) => onRun('a', r)}
-		/>
-		<RunPicker
-			id="b"
-			legend="Run B — changed"
-			{projects}
-			projectId={projectB}
-			runId={refB?.runId ?? null}
-			runs={projectB ? (runs[projectB] ?? null) : null}
-			runsLoading={!!(projectB && runsLoading[projectB])}
-			runsError={projectB ? (runsError[projectB] ?? null) : null}
-			onProject={(p) => onProject('b', p)}
-			onRun={(r) => onRun('b', r)}
-		/>
-		{#if withPublished}
-			<p class="with-published">
-				<button type="button" class="btn btn-sm" onclick={() => navigate(withPublished, refB)}>Compare with published</button>
-				<span class="muted small">Sets A to the published baseline, the run stakeholders see.</span>
-			</p>
+	<section class="cards" aria-label="Runs being compared">
+		{@render card('a')}
+		{@render card('b')}
+		{#if showC}
+			{@render card('c')}
+		{:else}
+			<div class="add-card">
+				<button type="button" class="btn" id="add-what-if" disabled={!refA || !refB} onclick={addWhatIf}>+ Add a second what-if</button>
+				<p class="muted small">Compare two changes against the same baseline, side by side.</p>
+			</div>
 		{/if}
 	</section>
+	{#if withPublished}
+		<p class="with-published">
+			<button type="button" class="btn btn-sm" onclick={() => navigate(withPublished, refB, refC)}>Compare with published</button>
+			<span class="muted small">Sets the baseline to the published run, the one stakeholders see.</span>
+		</p>
+	{/if}
 
 	{#if soloProject && soloRuns && soloRuns.length < 2}
 		<div class="panel empty" role="status">
@@ -254,17 +413,90 @@
 				<h2>Only one run so far</h2>
 				<p>
 					{soloName} has a single run. Change something in the model and run it again to compare — or pick a run from
-					another project (for example a copy of this one) as run B above.
+					another project (for example a copy of this one) as what-if 1 above.
 				</p>
 			{/if}
 			<a class="btn" href="{base}/projects/{soloProject}?tab=runs">Go to the project's runs</a>
 		</div>
 	{:else if !refA || !refB}
 		{#if !resolving}
-			<div class="panel empty muted" role="status">Choose a run on each side to see what changed.</div>
+			<div class="panel empty muted" role="status">Choose a baseline and a what-if to see what changed.</div>
 		{/if}
 	{:else}
-		<LoadState loading={loading && !data} {error} retry={() => refA && refB && loadCompare(refA, refB)}>
+		{#if loaded.length}
+			<div class="summary-grid">
+				<section class="panel outcomes" aria-labelledby="outcomes-h" aria-busy={cmp.b.loading || cmp.c.loading}>
+					<h2 id="outcomes-h">What changes</h2>
+					<div class="table-wrap">
+						<table class="data outcomes-table">
+							<caption class="visually-hidden">Headline outcomes of the baseline and each what-if, with each what-if's change from the baseline</caption>
+							<thead>
+								<tr>
+									<th scope="col">Outcome</th>
+									<th scope="col" class="num"><span class="key" style:background={COLOUR.a} aria-hidden="true"></span>{NAME.a}</th>
+									{#each whatIfs as s (s)}<th scope="col" class="num"><span class="key" style:background={COLOUR[s]} aria-hidden="true"></span>{NAME[s]}</th>{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each rows as r (r.id)}
+									<tr>
+										<th scope="row">{r.label}{#if r.unit}<span class="visually-hidden">, </span><span class="u">{r.unit}</span>{/if}</th>
+										<td class="num val">{fmtMetric(r.base, r.spec)}</td>
+										{#each r.whatIfs as m, i (i)}
+											<td class="num">
+												<span class="val">{fmtMetric(m.b, r.spec)}</span>
+												<span class="d"><Delta {m} spec={r.spec} /></span>
+											</td>
+										{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if cmp.c.error && refC}
+						<div class="alert alert-error" role="alert">What-if 2 couldn't be compared: {cmp.c.error}</div>
+					{/if}
+					{#if lead}
+						<div class="takeaways tone-{lead.tone}" data-testid="takeaways">
+							<h3 class="visually-hidden">Takeaways</h3>
+							<p class="lead">{lead.text}.</p>
+							{#if notes.length > 1}
+								<ul>
+									{#each notes.filter((t) => t !== lead) as t, i (i)}<li>{t.text}.</li>{/each}
+								</ul>
+							{/if}
+						</div>
+					{/if}
+				</section>
+				<section class="panel years" aria-labelledby="years-h">
+					<h2 id="years-h">Days below the reserve, each year</h2>
+					<Lazy load={loadReserveYears}>
+						{#snippet children(ReserveYearsChart)}<ReserveYearsChart runs={chartRuns} />{/snippet}
+					</Lazy>
+				</section>
+			</div>
+		{/if}
+
+		<div class="full-head">
+			<div>
+				<h2 id="full-h">Full comparison</h2>
+				<p class="muted small">
+					Baseline (run A) against {NAME[shownSide]} (run B): every figure below is B − A.
+				</p>
+			</div>
+			{#if refC}
+				<div class="seg" role="radiogroup" aria-labelledby="full-h">
+					{#each WHAT_IFS as s (s)}
+						<label class:on={shownSide === s}>
+							<input type="radio" name="full-side" value={s} checked={shownSide === s} onchange={() => (fullSide = s)} />
+							Baseline vs {NAME[s]}
+						</label>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
+		<LoadState loading={loading && !data} {error} retry={() => refA && refX && loadCompare(shownSide, refA, refX)}>
 			{#if data}
 				<section class="panel" aria-labelledby="sides-h" aria-busy={loading}>
 					<h2 id="sides-h" class="visually-hidden">Runs compared</h2>
@@ -272,6 +504,7 @@
 						<div>
 							<dt>A</dt>
 							<dd>
+								<span class="side-name">Baseline:</span>
 								{describe(data.a)}
 								<!-- The modeller's written explanation of the run (007_run_notes). -->
 								{#if data.a.run.notes}<span class="run-notes"><span class="lbl">Run notes:</span> {data.a.run.notes}</span>{/if}
@@ -280,6 +513,7 @@
 						<div>
 							<dt>B</dt>
 							<dd>
+								<span class="side-name">{NAME[shownSide]}:</span>
 								{describe(data.b)}
 								<!-- The modeller's written explanation of the run (007_run_notes). -->
 								{#if data.b.run.notes}<span class="run-notes"><span class="lbl">Run notes:</span> {data.b.run.notes}</span>{/if}
@@ -287,7 +521,7 @@
 						</div>
 					</dl>
 					{#if sameRun}
-						<div class="alert alert-info" role="status">Both sides are the same run, so nothing has changed. Pick a different run for A or B.</div>
+						<div class="alert alert-info" role="status">Both sides are the same run, so nothing has changed. Pick a different run for the baseline or the what-if.</div>
 					{/if}
 					{#if !data.comparison.samePeriod}
 						<div class="alert alert-warning" role="status">
@@ -403,21 +637,194 @@
 </LoadState>
 
 <style>
-	.intro {
-		max-width: 70ch;
-	}
-	.pickers {
+	.cmp-head {
 		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
 		flex-wrap: wrap;
+		gap: 0.5rem 1.5rem;
+		margin: 0 0 1rem;
+	}
+	.cmp-title :global(h1),
+	.cmp-title :global(h2) {
+		margin: 0;
+		font-size: 1.6rem;
+	}
+	.cmp-title p {
+		margin: 0.2rem 0 0;
+		overflow-wrap: anywhere;
+	}
+	.cards {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+	@media (max-width: 900px) {
+		.cards {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	.run-name {
+		margin: 0.1rem 0 0;
+		font-size: 1.02rem;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.run-line {
+		margin: 0.1rem 0 0;
+		font-size: 0.85rem;
+		overflow-wrap: anywhere;
+	}
+	.run-line.err {
+		color: var(--danger);
+	}
+	.link-btn {
+		background: none;
+		border: 0;
+		padding: 0;
+		min-height: 24px;
+		color: var(--accent);
+		text-decoration: underline;
+		font: inherit;
+		cursor: pointer;
+	}
+	.add-card {
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 1rem;
+		text-align: center;
+	}
+	.add-card p {
+		margin: 0;
+		max-width: 28ch;
 	}
 	.with-published {
-		flex-basis: 100%;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
+		margin: -0.25rem 0 1rem;
+	}
+	.summary-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+		gap: 1rem;
+		align-items: stretch;
+		margin-bottom: 1rem;
+	}
+	.summary-grid .panel {
 		margin: 0;
+	}
+	@media (max-width: 1100px) {
+		.summary-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	.outcomes {
+		display: flex;
+		flex-direction: column;
+	}
+	.outcomes-table th[scope='row'] {
+		font-weight: 500;
+	}
+	.outcomes-table td {
+		vertical-align: top;
+	}
+	.outcomes-table .val {
+		font-family: var(--font-mono);
+		font-size: 0.95rem;
+	}
+	.outcomes-table .d {
+		display: block;
+		font-size: 0.8rem;
+	}
+	.key {
+		display: inline-block;
+		width: 10px;
+		height: 10px;
+		border-radius: 2px;
+		margin-right: 0.35rem;
+	}
+	/* The unit on its own line under the outcome's name. */
+	.u {
+		display: block;
+		color: var(--text-muted);
+		font-weight: 400;
+		font-size: 0.8em;
+	}
+	.takeaways {
+		margin-top: auto;
+		padding: 0.7rem 0.85rem;
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		border-left: 4px solid var(--border-strong);
+	}
+	.takeaways.tone-worse {
+		background: var(--danger-soft);
+		border-left-color: var(--danger);
+	}
+	.takeaways.tone-better {
+		background: var(--success-soft);
+		border-left-color: var(--success);
+	}
+	.takeaways .lead {
+		margin: 0;
+		font-weight: 600;
+	}
+	.takeaways ul {
+		margin: 0.3rem 0 0;
+		padding-left: 1.1rem;
+		font-size: 0.88rem;
+		color: var(--text-2);
+	}
+	.years {
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.full-head {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+		margin: 1.5rem 0 0.75rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
+	}
+	.full-head h2 {
+		margin: 0;
+	}
+	.full-head p {
+		margin: 0.2rem 0 0;
+	}
+	.seg {
+		display: inline-flex;
+		border: 1px solid var(--border-input);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.seg label {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0.75rem;
+		min-height: 36px;
+		cursor: pointer;
+		font-size: 0.88rem;
+	}
+	.seg label + label {
+		border-left: 1px solid var(--border-input);
+	}
+	.seg label.on {
+		background: var(--accent-soft);
+		font-weight: 600;
 	}
 	.empty {
 		text-align: center;
@@ -444,6 +851,9 @@
 	.sides dd {
 		margin: 0;
 		overflow-wrap: anywhere;
+	}
+	.side-name {
+		font-weight: 600;
 	}
 	.run-notes {
 		display: block;

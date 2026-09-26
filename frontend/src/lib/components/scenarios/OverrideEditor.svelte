@@ -146,7 +146,7 @@
 		</Lazy>
 	{:else if area === 'crops'}
 		<Lazy load={LOAD.crops}>
-			{#snippet children(CropsTab)}<CropsTab {editor} settings={input.settings as ProjectSettings} readonly={false} />{/snippet}
+			{#snippet children(CropsTab)}<CropsTab {editor} settings={input.settings as ProjectSettings} readonly={false} sections={['factors', 'areas', 'demand']} />{/snippet}
 		</Lazy>
 	{:else}
 		<Lazy load={LOAD.transfers}>

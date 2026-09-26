@@ -5,14 +5,19 @@ import type { OutcomeSettings, Sweep, SweepMember } from '$lib/api/types';
 import {
 	boundsText,
 	buildMatrixView,
+	chooseSite,
 	demandLevelOf,
 	demandSweepRequest,
 	isDemandSweep,
 	latestDemandSweep,
+	matrixSites,
 	memberRun,
+	metricLabel,
+	OUTLET_SITE,
 	parseDemandLevels,
 	sweepState,
 	toNaN,
+	type MatrixSite,
 	type MatrixView
 } from './matrix';
 import { OUTCOME_DEFAULTS, outcomesError, resolveOutcomes } from './outcomeSettings';
@@ -60,8 +65,8 @@ function member(position: number, name: string, over: Partial<SweepMember> = {},
 }
 
 const settings = (o: Partial<OutcomeSettings> = {}): OutcomeSettings => ({ ...resolveOutcomes({}), ...o });
-const view = (members: SweepMember[], s: OutcomeSettings = settings(), baseNatural: (number | null)[] = natural): MatrixView =>
-	buildMatrixView({ baseStartDate: START, baseNatural, members, settings: s });
+const view = (members: SweepMember[], s: OutcomeSettings = settings(), baseNatural: (number | null)[] = natural, site?: MatrixSite): MatrixView =>
+	buildMatrixView({ baseStartDate: START, baseNatural, members, settings: s, site });
 const cellsOf = (v: MatrixView, i: number) => {
 	const r = v.rows[i]!;
 	if (r.kind !== 'cells') throw new Error(`row ${i} has no cells`);
@@ -187,6 +192,92 @@ describe('buildMatrixView', () => {
 		const v = view([member(0, '100 %', {}, () => 0.1), member(1, '85 %'), member(2, '70 %', { status: 'problems', problems: ['p'], summary: null, series: null })]);
 		const words = JSON.stringify(v);
 		expect(words).not.toMatch(/recommend|likely|should|best|optimal/i);
+	});
+});
+
+describe('the Reserve site', () => {
+	// Outlet ← upper gauge ← farm, and a lower gauge; invented names.
+	const nodes = [
+		{ id: 'out', name: 'Outflow gauge', kind: 'gauge', downstreamNodeId: null, sortOrder: 1 },
+		{ id: 'lower', name: 'Lower gauge', kind: 'gauge', downstreamNodeId: 'out', sortOrder: 5 },
+		{ id: 'upper', name: 'Upper gauge', kind: 'gauge', downstreamNodeId: 'out', sortOrder: 3 },
+		{ id: 'farm', name: 'Farm', kind: 'farm', downstreamNodeId: 'upper', sortOrder: 2 }
+	] as const;
+	const upperSite: MatrixSite = { id: 'upper', label: 'Gauge: Upper gauge', where: 'gauge Upper gauge' };
+	/** One month per water year at each site: the outlet met every year, the upper gauge only in the wet years. */
+	const assurance = (sites: ('outlet' | 'upper')[]) =>
+		sites.map((k) => ({
+			nodeId: k === 'outlet' ? null : 'upper',
+			isOutlet: k === 'outlet',
+			months: Array.from({ length: YEARS }, (_, y) => ({ waterYear: 2010 + y, met: k === 'outlet' || y >= 6 }))
+		}));
+	const at = (sites: ('outlet' | 'upper')[]) => ({ summary: summary({ ewrAssurance: assurance(sites) }) });
+
+	it('offers the outlet, then each gauge above it with a rule table, in network order; never a farm or a gauge without a table', () => {
+		const tables = [{ siteNodeId: null }, { siteNodeId: 'lower' }, { siteNodeId: 'upper' }, { siteNodeId: 'farm' }];
+		expect(matrixSites(nodes, tables)).toEqual([
+			{ id: null, label: 'Outlet (Outflow gauge)', where: 'the outlet' },
+			upperSite,
+			{ id: 'lower', label: 'Gauge: Lower gauge', where: 'gauge Lower gauge' }
+		]);
+		expect(matrixSites(nodes, [{ siteNodeId: 'upper' }]).map((x) => x.id)).toEqual([null, 'upper']);
+		// A table keyed by the outlet node is the outlet's (the engine's rule), not a second site.
+		expect(matrixSites(nodes, [{ siteNodeId: 'out' }]).map((x) => x.id)).toEqual([null]);
+		expect(matrixSites(nodes, undefined).map((x) => x.id)).toEqual([null]);
+		expect(matrixSites([], [])).toEqual([{ ...OUTLET_SITE, label: 'Outlet' }]);
+	});
+
+	it('keeps an eligible stored site, and falls back to the outlet, saying so, for one that is not eligible any more', () => {
+		const sites = matrixSites(nodes, [{ siteNodeId: 'upper' }]);
+		expect(chooseSite(null, sites)).toEqual({ site: sites[0], notice: null });
+		expect(chooseSite(undefined, sites)).toEqual({ site: sites[0], notice: null });
+		expect(chooseSite('upper', sites)).toEqual({ site: upperSite, notice: null });
+		const gone = chooseSite('lower', sites);
+		expect(gone.site.id).toBeNull();
+		expect(gone.notice).toBe('The Reserve site chosen for this matrix no longer has a rule table (or is no longer in the network), so the matrix reads the outlet.');
+	});
+
+	it('at a gauge, reads that gauge’s Reserve months, not the outlet’s, and names the gauge in the measure', () => {
+		const members = [member(0, '100 %', at(['outlet', 'upper'])), member(1, '85 %', at(['outlet', 'upper']))];
+		const outlet = view(members);
+		expect(outlet.metric).toBe('reserveMonthsMet');
+		expect(outlet.metricLabel).toBe('Reserve months met (the rule table at the outlet)');
+		expect(cellsOf(outlet, 0).map((c) => c.risk)).toEqual(['lower', 'lower', 'lower']);
+		const gauge = view(members, settings(), natural, upperSite);
+		expect(gauge.site).toEqual(upperSite);
+		expect(gauge.siteMissing).toBeNull();
+		expect(gauge.metric).toBe('reserveMonthsMet');
+		expect(gauge.metricLabel).toBe('Reserve months met (the rule table at gauge Upper gauge)');
+		expect(cellsOf(gauge, 0).map((c) => c.risk)).toEqual(['high', 'high', 'lower']);
+		expect(cellsOf(gauge, 1)[0]!.text).toBe('Reserve met in every month in 0 of 3 dry years (0 % of months met).');
+	});
+
+	it('switches metric with the site: the outlet without a table falls back to days below the EWR; a gauge never does', () => {
+		// Only the gauge has a table, and days below the EWR are all over the dry years.
+		const members = [member(0, '100 %', at(['upper']), (y) => (y < 3 ? 0.5 : 0))];
+		const outlet = view(members);
+		expect(outlet.metric).toBe('daysBelowEwr');
+		expect(outlet.metricLabel).toBe(metricLabel('daysBelowEwr'));
+		expect(cellsOf(outlet, 0)[0]!.risk).toBe('high');
+		const gauge = view(members, settings(), natural, upperSite);
+		expect(gauge.metric).toBe('reserveMonthsMet');
+		expect(cellsOf(gauge, 0).map((c) => c.risk)).toEqual(['high', 'high', 'lower']);
+		expect(metricLabel('daysBelowEwr', upperSite)).toBe('Days below the pragmatic EWR at the outlet');
+	});
+
+	it('a sweep without the gauge’s results says to run a new one, with no rows and no metric, never the outlet’s numbers', () => {
+		const v = view([member(0, '100 %', at(['outlet'])), member(1, '85 %', at(['outlet']))], settings(), natural, upperSite);
+		expect(v.siteMissing).toBe(
+			'This sweep has no Reserve results at gauge Upper gauge: its base run was made before that gauge had a rule table. Run the model again, then run a new demand sweep of the new run.'
+		);
+		expect(v.rows).toEqual([]);
+		expect(v.metric).toBeNull();
+		expect(v.metricLabel).toBeNull();
+		expect(v.cutoffsPending).toBe(false);
+		// Only some members with it: still missing (rows would not compare).
+		const partial = view([member(0, '100 %', at(['upper'])), member(1, '85 %', at(['outlet']))], settings(), natural, upperSite);
+		expect(partial.siteMissing).not.toBeNull();
+		expect(partial.rows).toEqual([]);
 	});
 });
 

@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: the newest run’s headline figures, each with its change from the run before, a **Needs attention** list (farms short of water, run warnings, new or old data and farms with nothing planted, each with a link to where it is fixed) and the outflow against the reserve over the last year. The checklist moves below them.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and farms with nothing planted, each a link to where it is fixed); and **Supply by farm**, where a farm’s name opens its planted areas. The checklist, dam levels and the project’s details follow below them.'
 					}
 				]
 			},
@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or use the link beside a farm in the Summary’s **Needs attention**. It opens beside the page and saves with the rest of the model.'
+						text: 'To change one farm’s planted areas without leaving the page you are on, open its **Planted areas**: select the farm on the Network (the link appears under the drawing), or pick the farm’s name in the Summary’s **Supply by farm** (or the link on a farm in its **Needs attention**). It opens beside the page and saves with the rest of the model.'
 					}
 				]
 			},
@@ -330,9 +330,9 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Crops & demand**, press **Add crop** and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep).',
-							'Under **Planted areas**, enter the hectares of each crop on each farm. Leave a crop blank on farms that don’t grow it.',
-							'Check the **Irrigation demand preview**: a bar chart of the catchment’s gross demand per month, stacked by crop, then a table of m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. A note under Planted areas names any farm with nothing planted, whose demand is zero.',
+							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a card with its area, the month it needs most water and a small chart of its factors; **Edit** on the card opens the sheet again.',
+							'Under **Planted area by farm**, press **Edit areas** and enter the hectares of each crop on each farm in the grid. Leave a crop blank on farms that don’t grow it. Each farm then gets a bar split by crop; a note under the bars names any farm with nothing planted, whose demand is zero.',
+							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per farm and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each farm’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
@@ -341,7 +341,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change just one farm, select it on the **Network** and open **Planted areas** under the drawing: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Grids** at the top of the page (Crop factors, Planted areas, Irrigation demand): they open over the page, and Done brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one farm, click its name beside its bar, or select it on the **Network** and open its irrigated area on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
@@ -708,7 +708,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'compare-runs',
 		title: 'Compare runs and try what-ifs',
-		summary: 'See exactly which inputs changed between two runs and what that did to the results.',
+		summary: 'Set up to two what-ifs against a baseline: which inputs changed, what that did to the results, and every figure in full.',
 		kind: 'howto',
 		tab: 'compare',
 		sections: [
@@ -719,19 +719,21 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Run a baseline.',
-							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again.',
-							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (B) against the published baseline (A), or against the run before it when nothing is published; either side can pick any run from any project you can see.',
-							'Read **What changed** (every input difference) before **Headline results** (A, B and the change).'
+							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if.',
+							'Open **Compare runs** (under **Outcomes**, or the link above the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
+							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
+							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value, and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
+							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'Results are daily averages over each run’s own period. When the two runs cover different periods the page warns you: part of the change then comes from the dates, not from your edit.'
+						text: 'Results are daily averages over each run’s own period. When runs cover different periods the page warns you, and so do the takeaways: part of the change then comes from the dates, not from your edit. A takeaway appears only for a material change (a day a year below the reserve, a point of the demand supplied, a farm crossing 95 %); the table shows everything.'
 					},
 					{
 						type: 'p',
-						text: 'Each side shows its run notes, and the page says when either run is, or was, the project’s evidence run. The comparison’s address holds both runs, so a comparison can be bookmarked or shared with anyone who can see both projects.'
+						text: 'Each run shows its run notes in the full comparison, and the page says when either run is, or was, the project’s evidence run. The page’s address holds every run on it, so a comparison can be bookmarked or shared with anyone who can see the projects.'
 					}
 				]
 			}

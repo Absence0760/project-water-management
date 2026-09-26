@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, FarmSummary, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { headlines, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
+import { LOW_PCT } from './damLevels';
+import { damsHeadline, headlines, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
 
 const meta = (id: string, createdAt: string, over: Partial<RunMeta> = {}): RunMeta => ({
 	id,
@@ -200,5 +201,27 @@ describe('headlines', () => {
 		expect(hs.some((h) => h.flagged)).toBe(false);
 		expect(card(hs, 'supply').sub).toEqual(['all farms ≥ 95%']);
 		expect(card(hs, 'outflow').sub).toEqual([]);
+	});
+});
+
+describe('damsHeadline', () => {
+	const today = (pct: number, change: number | null, dams = 2) => ({ state: 'ready' as const, today: { pct, change, dams, endDate: '2022-01-28' } });
+
+	it('shows all dams’ fill at the end of the run and its change over the last 30 days', () => {
+		const h = damsHeadline(today(64, -11));
+		expect(h).toMatchObject({ id: 'dams', term: 'Dams today', value: '64%', unit: 'full', sub: ['2 dams on 28 Jan 2022'], flagged: false, deltaLabel: 'in 30 days' });
+		expect(h.delta?.delta).toBeCloseTo(-0.11);
+		expect(h.spec).toMatchObject({ format: 'fraction', better: 'higher' });
+	});
+
+	it('flags dams below the low line, and has no change when the run is too short', () => {
+		const h = damsHeadline(today(LOW_PCT - 5, null, 1));
+		expect(h).toMatchObject({ flagged: true, sub: [`1 dam on 28 Jan 2022, below ${LOW_PCT}%`], delta: null });
+	});
+
+	it('says so while loading, on an error, and without dams', () => {
+		expect(damsHeadline({ state: 'loading' })).toMatchObject({ value: '…', sub: ['loading dam levels'], delta: null });
+		expect(damsHeadline({ state: 'error' })).toMatchObject({ value: '–', sub: ['dam levels couldn’t be loaded'] });
+		expect(damsHeadline({ state: 'none' })).toMatchObject({ value: '–', sub: ['no dams in the run'], flagged: false });
 	});
 });

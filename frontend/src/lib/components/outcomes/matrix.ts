@@ -6,6 +6,14 @@
 // outcomeMatrix, describeOutcomeCell); this module adapts the stored sweep to
 // them and words the result. It reports what past years did at each demand
 // level; it never picks a level.
+//
+// The Reserve site (settings.outcomes.siteNodeId): the outlet, or a gauge
+// with a Reserve rule table (matrixSites). At the outlet the engine picks
+// the metric (months met when every level has the table there, else days
+// below the pragmatic EWR, which the sweep stores only at the outlet). At a
+// gauge only months met can be read, from each member's stored
+// summary.ewrAssurance; a sweep without that gauge's results says so
+// (siteMissing) instead of falling back to the outlet's numbers.
 import {
 	classifyWaterYears,
 	DEMAND_SCALE_MAX,
@@ -18,6 +26,8 @@ import {
 	type OutcomeMetric,
 	type OutcomeRisk,
 	type OutcomeRiskCutoffs,
+	type EwrRuleTable,
+	type NetworkNode,
 	type RunSeries,
 	type WaterYearClasses,
 	type YearClassBand
@@ -106,10 +116,52 @@ export function sweepState(s: Pick<Sweep, 'status' | 'job'>): SweepState {
 	return { kind: 'pending', text: 'Queued: waiting for the background worker.', progress: null };
 }
 
-export const METRIC_LABEL: Readonly<Record<OutcomeMetric, string>> = Object.freeze({
-	reserveMonthsMet: 'Reserve months met (the rule table at the outlet)',
-	daysBelowEwr: 'Days below the pragmatic EWR at the outlet'
-});
+/** A site the matrix can read: the outlet (id null) or a gauge with a Reserve rule table. */
+export interface MatrixSite {
+	id: string | null;
+	/** For the picker: "Outlet (Outflow gauge)", "Gauge: Upper gauge". */
+	label: string;
+	/** In a sentence: "the outlet", "gauge Upper gauge". */
+	where: string;
+}
+
+export const OUTLET_SITE: Readonly<MatrixSite> = Object.freeze({ id: null, label: 'Outlet', where: 'the outlet' });
+
+/**
+ * The sites the matrix can read, the outlet first, then every gauge above it
+ * with a Reserve rule table in the project's settings, in network order: the
+ * sites the engine assesses a rule table at (and the API accepts for
+ * outcomes.siteNodeId).
+ */
+export function matrixSites(
+	nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId' | 'sortOrder'>[],
+	ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[] | null | undefined
+): MatrixSite[] {
+	const outlet = nodes.find((n) => n.downstreamNodeId === null);
+	const out: MatrixSite[] = [{ ...OUTLET_SITE, label: outlet ? `Outlet (${outlet.name})` : 'Outlet' }];
+	const withTable = new Set((ewrRules ?? []).map((t) => t.siteNodeId));
+	const gauges = nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null && withTable.has(n.id)).sort((a, b) => a.sortOrder - b.sortOrder);
+	for (const g of gauges) out.push({ id: g.id, label: `Gauge: ${g.name}`, where: `gauge ${g.name}` });
+	return out;
+}
+
+/**
+ * The stored site among `sites`. One that is no longer eligible (its gauge
+ * or its rule table has gone since it was chosen) falls back to the outlet,
+ * with a notice saying so.
+ */
+export function chooseSite(stored: string | null | undefined, sites: readonly MatrixSite[]): { site: MatrixSite; notice: string | null } {
+	const outlet = sites.find((x) => x.id === null) ?? OUTLET_SITE;
+	if (stored == null) return { site: outlet, notice: null };
+	const found = sites.find((x) => x.id === stored);
+	if (found) return { site: found, notice: null };
+	return { site: outlet, notice: 'The Reserve site chosen for this matrix no longer has a rule table (or is no longer in the network), so the matrix reads the outlet.' };
+}
+
+/** The measure in words, at the site it is read at (days below the pragmatic EWR are always at the outlet). */
+export function metricLabel(metric: OutcomeMetric, site: Pick<MatrixSite, 'where'> = OUTLET_SITE): string {
+	return metric === 'reserveMonthsMet' ? `Reserve months met (the rule table at ${site.where})` : 'Days below the pragmatic EWR at the outlet';
+}
 
 const pct = (v: number) => `${fmtNum(v * 100, 1, true)} %`;
 
@@ -155,6 +207,10 @@ export type MatrixRow =
 export interface MatrixView {
 	metric: OutcomeMetric | null;
 	metricLabel: string | null;
+	/** The site read (the outlet unless a gauge was chosen). */
+	site: MatrixSite;
+	/** The sweep has no Reserve results at the chosen gauge: why, and what to do. No rows then, never the outlet's numbers. */
+	siteMissing: string | null;
 	method: WaterYearClasses['method'];
 	/** Complete water years classed. */
 	nYears: number;
@@ -174,6 +230,8 @@ export interface MatrixInput {
 	baseNatural: readonly (number | null)[];
 	members: readonly SweepMember[];
 	settings: OutcomeSettings;
+	/** The Reserve site (chooseSite); the outlet by default. */
+	site?: MatrixSite;
 }
 
 /**
@@ -188,11 +246,23 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 	const members = [...input.members].sort((a, b) => a.position - b.position);
 	const done = members.filter((m) => m.status === 'done');
 	const cutoffs = effectiveCutoffs(input.settings.riskCutoffs);
-	const matrix = done.length && classes.years.length ? outcomeMatrix(done.map((m) => ({ id: m.id, label: m.name, run: memberRun(m) })), classes, { cutoffs }) : null;
+	const site = input.site ?? OUTLET_SITE;
+	let siteMissing: string | null = null;
+	let matrix: ReturnType<typeof outcomeMatrix> | null = null;
+	if (done.length && classes.years.length) {
+		const levels = done.map((m) => ({ id: m.id, label: m.name, run: memberRun(m) }));
+		if (site.id !== null && !levels.every((l) => l.run.summary.ewrAssurance?.some((a) => a.nodeId === site.id))) {
+			// The members are the base run's inputs at other demand levels: without the gauge's table in the base run, no new sweep of it has one either.
+			siteMissing = `This sweep has no Reserve results at ${site.where}: its base run was made before that gauge had a rule table. Run the model again, then run a new demand sweep of the new run.`;
+		} else {
+			// At a gauge only months met can be read (days below the EWR are stored at the outlet only), so the metric is forced.
+			matrix = outcomeMatrix(levels, classes, { cutoffs, siteNodeId: site.id, metric: site.id === null ? 'auto' : 'reserveMonthsMet' });
+		}
+	}
 	const cellsOf = new Map(matrix?.levels.map((l, i) => [l.id, matrix.cells[i]!] as const) ?? []);
 	const labelOf = new Map(columns.map((c) => [c.id, c.label] as const));
 
-	const rows: MatrixRow[] = members.map((m) => {
+	const rows: MatrixRow[] = siteMissing ? [] : members.map((m) => {
 		const cells = cellsOf.get(m.id);
 		if (m.status !== 'done' || !cells || !matrix) {
 			const status = m.status === 'done' ? 'failed' : m.status;
@@ -220,7 +290,9 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 	}
 	return {
 		metric,
-		metricLabel: metric ? METRIC_LABEL[metric] : null,
+		metricLabel: metric ? metricLabel(metric, site) : null,
+		site,
+		siteMissing,
 		method: classes.method,
 		nYears: classes.years.length,
 		excluded: classes.excluded,

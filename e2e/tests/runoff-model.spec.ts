@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { whatChanged } from '../support/compare.ts';
 
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Result sections' });
 
@@ -117,7 +118,8 @@ test('run comparison shows an old legacy run against a GR4J run', async ({ page,
 
 	await page.goto(`/compare?a=${project.id}:${legacyRun}&b=${project.id}:${gr4jRun}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
-	await expect(page.getByText('Runoff model: legacy (b023 recession) → GR4J')).toBeVisible();
+	await expect(whatChanged(page).getByText('Runoff model: legacy (b023 recession) → GR4J')).toBeVisible();
+	await expect(whatChanged(page).getByText('GR4J production store X1: 350 mm → 300 mm')).toBeVisible();
 	await expect(page.getByRole('status').filter({ hasText: /^Run A uses the legacy runoff model \(b023 workbook, removed in engine 1\.0\.0\)/ })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Runoff coefficient (flow ÷ rain)' })).toBeVisible();
 	await expect(page.getByRole('rowheader', { name: 'Kling–Gupta (KGE)' })).toBeVisible();

@@ -90,46 +90,51 @@
 	{:else if !projects.length}
 		<p>{t('None of your catchments can send you alerts yet.')}</p>
 	{:else}
-		{#each projects as p (p.id)}
-			{@const s = status[p.id] ?? {}}
-			<section class="panel" aria-labelledby="p-{p.id}">
-				<h2 id="p-{p.id}">{p.name}</h2>
-				{#if p.muted}
-					<div class="alert alert-info">
-						{t('All alert emails for this catchment are off.')}
-						<button type="button" class="btn btn-sm" onclick={() => choose(p, [{ kind: 'all', mode: 'immediate' }])}>{t('Turn alert emails back on')}</button>
-					</div>
-				{/if}
-				{#each p.choices as c (slot(p, c))}
-					<fieldset class="choice" data-choice="{c.kind}{c.nodeId ? `/${c.nodeId}` : ''}" disabled={s.saving}>
-						<legend>{choiceLabel(c)}</legend>
-						<div class="modes">
-							{#each ALERT_MODES as m (m)}
-								<label class="radio">
-									<input
-										type="radio"
-										name={slot(p, c)}
-										value={m}
-										checked={c.mode === m}
-										onchange={() => choose(p, [{ kind: c.kind, nodeId: c.nodeId, mode: m }])}
-									/>
-									{modeLabel(m)}
-								</label>
-							{/each}
+		<div class="cards">
+			{#each projects as p (p.id)}
+				{@const s = status[p.id] ?? {}}
+				<section class="panel" aria-labelledby="p-{p.id}">
+					<h2 id="p-{p.id}">{p.name}</h2>
+					{#if p.muted}
+						<div class="alert alert-info">
+							{t('All alert emails for this catchment are off.')}
+							<button type="button" class="btn btn-sm" onclick={() => choose(p, [{ kind: 'all', mode: 'immediate' }])}>{t('Turn alert emails back on')}</button>
 						</div>
-						{#if !c.ruleOn}<p class="hint">{t('Not switched on for this catchment yet: you get nothing until the WUA turns it on.')}</p>{/if}
-					</fieldset>
-				{/each}
-				<p class="status" role="status" aria-live="polite">{s.saving ? t('Saving…') : s.saved ? t('Saved.') : ''}</p>
-				{#if s.error}<div class="alert alert-error" role="alert">{s.error}</div>{/if}
-			</section>
-		{/each}
+					{/if}
+					{#each p.choices as c (slot(p, c))}
+						<fieldset class="choice" data-choice="{c.kind}{c.nodeId ? `/${c.nodeId}` : ''}" disabled={s.saving}>
+							<legend>{choiceLabel(c)}</legend>
+							<div class="modes">
+								{#each ALERT_MODES as m (m)}
+									<label class="radio">
+										<input
+											type="radio"
+											name={slot(p, c)}
+											value={m}
+											checked={c.mode === m}
+											onchange={() => choose(p, [{ kind: c.kind, nodeId: c.nodeId, mode: m }])}
+										/>
+										{modeLabel(m)}
+									</label>
+								{/each}
+							</div>
+							{#if !c.ruleOn}<p class="hint">{t('Not switched on for this catchment yet: you get nothing until the WUA turns it on.')}</p>{/if}
+						</fieldset>
+					{/each}
+					<p class="status" role="status" aria-live="polite">{s.saving ? t('Saving…') : s.saved ? t('Saved.') : ''}</p>
+					{#if s.error}<div class="alert alert-error" role="alert">{s.error}</div>{/if}
+				</section>
+			{/each}
+		</div>
 	{/if}
 </main>
 
 <style>
+	/* Same frame as the account page: capped at 92rem from the sidebar's
+	   edge, one card per catchment, as many across as fit the page's own
+	   width (the app sidebar takes 240 px). */
 	.alerts-page {
-		max-width: 40rem;
+		max-width: 92rem;
 	}
 	.crumbs {
 		margin: 0 0 0.5rem;
@@ -140,11 +145,18 @@
 	}
 	.intro {
 		margin: 0 0 0.75rem;
-		max-width: 60ch;
+		max-width: 75ch;
+	}
+	.cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr));
+		gap: 1rem;
+		align-items: start;
+		margin-top: 1.25rem;
 	}
 	.panel {
 		padding: 1rem 1.1rem 0.5rem;
-		margin-bottom: 1rem;
+		margin: 0;
 	}
 	h2 {
 		margin: 0 0 0.75rem;
@@ -153,8 +165,9 @@
 	}
 	.choice {
 		border: 0;
-		margin: 0 0 0.9rem;
+		margin: 0 0 0.75rem;
 		padding: 0;
+		min-width: 0;
 	}
 	.choice legend {
 		font-weight: 500;
@@ -167,12 +180,18 @@
 		flex-wrap: wrap;
 		gap: 0 1.25rem;
 	}
-	/* 44 px rows: comfortable tap targets on a phone (WCAG 2.5.8 asks 24). */
+	/* 32 px rows with a mouse (WCAG 2.5.8 asks 24); 44 px on touch and
+	   phones, as on the account page. */
 	.radio {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		min-height: 2.75rem;
+		min-height: 2rem;
+	}
+	@media (pointer: coarse), (max-width: 640px) {
+		.radio {
+			min-height: var(--tap);
+		}
 	}
 	.hint {
 		margin: 0;

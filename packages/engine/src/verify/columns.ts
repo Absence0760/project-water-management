@@ -98,6 +98,12 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 			'the river pump, while the supply rule pumps from the river (river first, run of river; trigger from Q[t−1] < trigger × capacity until Q[t−1] ≥ stop × capacity): MIN(pump capacity, MAX(0, S − MAX(Zs, pass-inflow release target)), D − primary GW), before the dam (after it under run of river, where K = M = O = 0); part of G; U = R + S − Gr + T + returned seepage + release − Dep (WP-3.8)',
 		optional: true
 	},
+	{
+		key: 'dam_storage_set',
+		letter: null,
+		formula: 'the storage reset (settings.damStorageReset, the review triggers, engine ≥ 0.46.0): on its day, the storage set (clamped to 0 … capacity) − Q[t−1], and that day starts from Q[t−1] + this; 0 on every other day',
+		optional: true
+	},
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due; due = (1 − e^(−1/lag)) × (Sd[t−1] + Σ d × pumped), all of it when lag = 0; each borehole its own d', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
 	{ key: 'depletion_unmet', letter: null, formula: 'due − Dep: depletion the river could not give (no flow left)', optional: true },

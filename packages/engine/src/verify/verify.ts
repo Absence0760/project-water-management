@@ -138,6 +138,9 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	const [fSeepLost, fRelease] = ['dam_seepage_lost', 'dam_release'].map(totals) as Float64Array[];
 	// Land cover (WP-1.35): natural flow removed before it reached the farms.
 	const coverRed = cat('landcover_reduction');
+	// The storage reset's steps (engine ≥ 0.46.0, settings.damStorageReset), over the farms that have one; null without.
+	const setNodes = farms.filter((n) => series.has(`${n.id}|dam_storage_set`));
+	const fSet = setNodes.length ? totals('dam_storage_set') : null;
 	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
 
@@ -145,7 +148,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 		let rainMm = 0;
 		let rainDays = 0;
 		let modelRainMm = 0;
-		const r = { natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0 };
+		const r = { set: 0, natural: 0, runoff: 0, demand: 0, supplied: 0, ret: 0, transfer: 0, spill: 0, outflow: 0, aet: 0, ex: 0, rainOnDams: 0, evap: 0, otherUse: 0, gw: 0, dep: 0, cover: 0, seepLost: 0, release: 0 };
 		for (let t = from; t <= to; t++) {
 			if (rain && Number.isFinite(rain[t]!)) {
 				rainMm += rain[t]!;
@@ -167,6 +170,7 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			r.cover += coverRed?.[t] ?? 0;
 			r.seepLost += fSeepLost![t]!;
 			r.release += fRelease![t]!;
+			if (fSet) r.set += fSet[t]!;
 			if (hasStores) {
 				modelRainMm += rainUsed?.[t] ?? 0;
 				r.aet += aet![t]!;
@@ -201,13 +205,14 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 			...(hasDamLosses ? { rainOnDamsM3: r.rainOnDams, damEvaporationM3: r.evap } : {}),
 			...(users.length ? { otherUseM3: r.otherUse } : {}),
 			...(gwNodes.length ? { groundwaterM3: r.gw, streamDepletionM3: r.dep } : {}),
+			...(fSet ? { storageSetM3: r.set } : {}),
 			...(coverRed ? { landCoverReductionM3: r.cover } : {}),
 			...(seepLostNodes.length ? { damSeepageLostM3: r.seepLost } : {}),
 			...(releaseNodes.length ? { damReleaseM3: r.release } : {}),
 			spillM3: r.spill,
 			outflowM3: r.outflow,
 			closingStorageM3: closing,
-			residualM3: opening + r.runoff + r.transfer + r.rainOnDams + r.gw - consumptive - r.evap - r.otherUse - r.dep - r.seepLost - r.outflow - closing
+			residualM3: (fSet ? opening + r.runoff + r.transfer + r.rainOnDams + r.gw + r.set : opening + r.runoff + r.transfer + r.rainOnDams + r.gw) - consumptive - r.evap - r.otherUse - r.dep - r.seepLost - r.outflow - closing
 		};
 	};
 

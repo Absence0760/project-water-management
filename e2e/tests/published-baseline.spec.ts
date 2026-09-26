@@ -91,8 +91,8 @@ test('compare starts from the published run, offers it against an explicit pair,
 
 	// Opened on the project: A is the published run (not the previous one), B the newest.
 	await page.goto(`/compare?project=${project.id}`);
-	const runA = page.getByRole('group', { name: 'Run A — baseline' }).getByRole('combobox', { name: 'Run' });
-	const runB = page.getByRole('group', { name: 'Run B — changed' }).getByRole('combobox', { name: 'Run' });
+	const runA = page.getByRole('group', { name: 'Baseline', exact: true }).getByRole('combobox', { name: 'Run' });
+	const runB = page.getByRole('group', { name: 'What-if 1', exact: true }).getByRole('combobox', { name: 'Run' });
 	await expect(runA).toHaveValue(baseline);
 	await expect(runB).toHaveValue(newest);
 	await expect(runA.locator('option', { hasText: /^Baseline · .+ · published$/ })).toHaveCount(1);

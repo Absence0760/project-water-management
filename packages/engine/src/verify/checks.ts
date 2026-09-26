@@ -111,7 +111,13 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const GW = get.get(`${n.id}|groundwater_used`);
 		const GD = get.get(`${n.id}|groundwater_to_dam`);
 		const DEP = get.get(`${n.id}|baseflow_depletion`);
+		// The storage reset (engine ≥ 0.46.0): its step starts the day, an input to the balance.
+		const SET = get.get(`${n.id}|dam_storage_set`);
 		for (let t = 0; t < out.days; t++) {
+			if (SET) {
+				qPrev += SET[t]!;
+				totIn += SET[t]!;
+			}
 			const T = G![t]! * returnPerSupplied;
 			const pd = Pd?.[t] ?? 0;
 			const ev = Ev?.[t] ?? 0;
@@ -308,9 +314,11 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
 	const storage = (id: string, t: number) => {
-		if (t > 0) return get.get(`${id}|dam_storage`)![t - 1]!;
+		// The storage reset's step (engine ≥ 0.46.0) starts its day.
+		const set = get.get(`${id}|dam_storage_set`)?.[t] ?? 0;
+		if (t > 0) return get.get(`${id}|dam_storage`)![t - 1]! + set;
 		const n = byId.get(id)!;
-		return n.damInitialPct * n.damCapacityM3;
+		return n.damInitialPct * n.damCapacityM3 + set;
 	};
 	// Per calendar month, the active rules and each farm's incoming and outgoing
 	// ones, worked out once rather than every day.
@@ -761,7 +769,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const dead = n.damMinPct * cap;
 		let qPrev = n.damInitialPct * cap;
 		const near = (a: number, b: number, scale: number) => Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b), scale));
+		// The storage reset (engine ≥ 0.46.0): its step starts the day.
+		const SET = g('dam_storage_set');
 		for (let t = 0; t < out.days; t++) {
+			if (SET) qPrev += SET[t]!;
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;

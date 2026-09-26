@@ -349,6 +349,18 @@ export interface ProjectSettings {
 	 */
 	demandFactorFrom?: string | null;
 	/**
+	 * Set farm dam storage at the start of one day (engine ≥ 0.46.0, issue
+	 * #53 R6, docs/model.md §2.15a): on `date` each listed farm dam starts
+	 * the day holding `storageM3[nodeId]` (clamped to 0 … its capacity)
+	 * instead of what the day before left, and the run publishes the step as
+	 * `dam_storage_set` (m³, + added / − taken) so every balance still
+	 * closes. Everything else carries on (soil water, GR4J's stores, stream
+	 * depletion, the supply switch). null / absent = none. Set only by the
+	 * review triggers' members (./outlook/triggers.ts); not a project
+	 * setting: no form or save carries it.
+	 */
+	damStorageReset?: { date: string; storageM3: Record<string, number> } | null;
+	/**
 	 * Reporting window (ISO dates, inclusive) for the curtailment report, the
 	 * b023 [Shortfalls] "Set reporting period" cells. null = the run's start /
 	 * end. Clipped to the simulation period.
@@ -1799,6 +1811,8 @@ export interface WaterBalanceRow {
 	groundwaterM3?: number;
 	/** Stream depletion taken from the river (WP-1.34); absent without boreholes. */
 	streamDepletionM3?: number;
+	/** Storage set into (+) or out of (−) the dams by settings.damStorageReset (engine ≥ 0.46.0, the review triggers), a gain; absent without it. */
+	storageSetM3?: number;
 	/** Runoff removed by land cover before it reached the farms (engine ≥ 0.24.0, WP-1.35); absent without land cover. */
 	landCoverReductionM3?: number;
 	/** Dam seepage lost from the catchment rather than returned below the dam (engine ≥ 0.35.0, WP-3.5); absent when all seepage returns. */
@@ -1808,7 +1822,7 @@ export interface WaterBalanceRow {
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater − consumptive use − dam evaporation − other use − stream depletion − seepage lost − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − other use − stream depletion − seepage lost − outflow − closing. */
 	residualM3: number;
 }
 
