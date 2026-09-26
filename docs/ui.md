@@ -634,6 +634,10 @@ The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen without
 sideways scrolling: each month cell is at least 78px, room for a six-digit
 value such as 250000.
+At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
+selects and period lists shrink to the screen, and only the section menu and
+the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
+which checks every catchment tab).
 
 
 - **Demand**: A-pan (Oct–Sep), effective rainfall %, the **soil-water store**

@@ -112,6 +112,9 @@
 <style>
 	.zero-rain {
 		display: grid;
+		/* One column that may shrink below its content's min-content width, so a
+		   long select option never widens the page at 320 px (WCAG 1.4.10, #38). */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem;
 		margin: 0.25rem 0 0.75rem;
 		padding-top: 0.75rem;
@@ -125,6 +128,7 @@
 		max-width: 75ch;
 	}
 	.mode select {
+		width: 100%;
 		max-width: 320px;
 	}
 	.lbl {
