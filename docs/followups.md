@@ -832,11 +832,10 @@ the suggested order (the IDs carry the detail):
       fit is used as evidence; add that to [plan.md](./plan.md) with the
       other hydrologist questions. Trigger: once the sweep and CR-18 have
       landed.
-- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q against the imported
-      table), then CR-14 mass-conserving store once the hydrologist decides
-      (question 1 below).
-- [ ] **Hydrologist questions** from the review: recession fix vs GR4J (CR-14),
-      the EWR form the CMA expects (CR-30), the logger's highest gauging and
+- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
+      to overlay went with the legacy model in engine 1.0.0). CR-14 is
+      dropped: engine 1.0.0 removed the legacy model (issue #16).
+- [ ] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which of the two MAR estimates to trust (CR-7). Add them to
       [plan.md](./plan.md) when the review session is booked.
