@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
+	forecastSplit,
 	resolveFitRecord,
+	runForecastChecked,
 	runModelChecked,
 	seriesDigest,
 	type DailySeries,
@@ -10,9 +12,11 @@ import {
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesKind,
-	type SeriesProvenance
+	type SeriesProvenance,
+	withoutForecastTail
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { mergeSettings } from '../projects/settings.js';
@@ -166,16 +170,35 @@ export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE 
  */
 export async function trimRuns(db: Db, projectId: string, keep = runsKeptPerProject()): Promise<string[]> {
 	await lockProjectRuns(db, projectId);
+	// Forecast runs (038_run_trigger, WP-2.12) have their own limit, trimForecastRuns: they neither count nor go here.
 	const { rows } = await db.query<{ id: string }>(
 		`DELETE FROM model_run WHERE id IN (
 			SELECT r.id FROM model_run r
-			WHERE r.project_id = $1 AND NOT ${RUN_KEPT_SQL}
+			WHERE r.project_id = $1 AND r."trigger" <> 'forecast' AND NOT ${RUN_KEPT_SQL}
 			ORDER BY r.created_at DESC, r.id DESC OFFSET $2
 		) RETURNING id`,
 		[projectId, keep]
 	);
 	// The storage cap's removals are in the project's history too (030_history.sql).
 	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'trimmed' });
+	return rows.map((r) => r.id);
+}
+
+/**
+ * Keep one forecast run per project (WP-2.12): delete the project's forecast
+ * runs other than `keepId` that nothing keeps (RUN_KEPT_SQL: a pinned,
+ * nominated or cited forecast run, a published one included, stays). A
+ * forecast is out of date the day the next one is made, so older ones would
+ * only use storage. Like trimRuns: as the signed-in editor, under the
+ * project's run lock, recorded in the history. Returns the ids removed.
+ */
+export async function trimForecastRuns(db: Db, projectId: string, keepId: string): Promise<string[]> {
+	await lockProjectRuns(db, projectId);
+	const { rows } = await db.query<{ id: string }>(
+		`DELETE FROM model_run r WHERE r.project_id = $1 AND r."trigger" = 'forecast' AND r.id <> $2 AND NOT ${RUN_KEPT_SQL} RETURNING id`,
+		[projectId, keepId]
+	);
+	if (rows.length) await recordAudit(db, projectId, 'run.deleted', { runIds: rows.map((r) => r.id), reason: 'superseded forecast' });
 	return rows.map((r) => r.id);
 }
 
@@ -217,9 +240,24 @@ export interface RunScenarioSnapshot {
  * and start date the run used, so loadRunInput can rebuild the exact input
  * later, whatever happens to the live series.
  */
-export async function executeRun(db: Db, projectId: string, label: string): Promise<{ id: string; output: ModelOutput }> {
-	return runAndStore(db, projectId, label, await loadModelInput(db, projectId));
+export async function executeRun(db: Db, projectId: string, label: string, opts: { forecast?: boolean } = {}): Promise<{ id: string; output: ModelOutput }> {
+	const input = await loadModelInput(db, projectId);
+	// Forecast mode (WP-2.12): the history as an ordinary run, the forecast days
+	// after it, summary.forecast over them. An ordinary run leaves the forecast
+	// tail out entirely (withoutForecastTail), so forecast rain never reaches
+	// the figures farmers and regulators rely on; it stores the input it ran on,
+	// so runModel(loadRunInput(run)) still reproduces it.
+	if (opts.forecast) {
+		if (!forecastSplit(input).forecastFrom) {
+			throw new ApiError(409, 'there is no forecast rain after the last observed rain day to run: upload a forecast series or add a CHIRPS-GEFS feed');
+		}
+		return runAndStore(db, projectId, label, input, undefined, 'forecast');
+	}
+	return runAndStore(db, projectId, label, withoutForecastTail(input));
 }
+
+/** What made a run (model_run.trigger, 038_run_trigger). 'auto' is WP-2.11's. */
+export type RunTrigger = 'manual' | 'auto' | 'forecast';
 
 /**
  * Run the engine on `input` and persist the run, its outputs and its stored
@@ -232,10 +270,12 @@ export async function runAndStore(
 	projectId: string,
 	label: string,
 	input: ModelInput,
-	scenario?: RunScenarioSnapshot
+	scenario?: RunScenarioSnapshot,
+	trigger: RunTrigger = 'manual'
 ): Promise<{ id: string; output: ModelOutput }> {
 	// The engine's self-checks and water balance are stored with the run (engine ≥ 0.12.0).
-	const output = runModelChecked(input);
+	// A forecast run is reproduced by runForecastChecked(loadRunInput(run)), an ordinary one by runModelChecked.
+	const output = trigger === 'forecast' ? runForecastChecked(input) : runModelChecked(input);
 	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
@@ -260,9 +300,9 @@ export async function runAndStore(
 		...(scenario ? { scenario } : {})
 	};
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id)
-		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null]
+		`INSERT INTO model_run (project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, "trigger")
+		 VALUES ($1, app_current_user_id(), $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+		[projectId, label, output.engineVersion, output.startDate, output.endDate, JSON.stringify(snapshot), JSON.stringify(output.summary), scenario?.id ?? null, trigger]
 	);
 	const runId = rows[0]!.id;
 	// Batch the per-series inserts to keep round-trips low (~150 series per run).
@@ -285,7 +325,8 @@ export async function runAndStore(
 		engineVersion: output.engineVersion,
 		startDate: output.startDate,
 		endDate: output.endDate,
-		...(scenario ? { scenarioId: scenario.id } : {})
+		...(scenario ? { scenarioId: scenario.id } : {}),
+		...(trigger !== 'manual' ? { trigger } : {})
 	});
 	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };

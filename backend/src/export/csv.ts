@@ -65,6 +65,19 @@ export function seriesHeader(label: string, unit: string | null | undefined): st
 export interface DailyColumn {
 	header: string;
 	values: readonly (number | null)[];
+	/** A text column instead (the forecast flag): the cell of day `index`; `values` is then ignored. */
+	text?: (index: number) => string;
+}
+
+/**
+ * The daily exports' forecast flag (WP-2.12): `F` on a forecast run's days
+ * from summary.forecast.from (the workbook's "F" rows), empty before. null
+ * for an ordinary run, which has no forecast days.
+ */
+export function forecastColumn(startDate: string, forecast: { from: string } | undefined): DailyColumn | null {
+	if (!forecast) return null;
+	const cut = toEpochDay(forecast.from) - toEpochDay(startDate);
+	return { header: 'forecast (F = modelled on forecast rain)', values: [], text: (i) => (i >= cut ? 'F' : '') };
 }
 
 /**
@@ -82,7 +95,7 @@ export function* dailyCsvLines(
 	const day0 = toEpochDay(startDate);
 	for (let r = 0; r < range.days; r++) {
 		const i = range.offset + r;
-		yield [fromEpochDay(day0 + i), ...columns.map((c) => numCell(c.values[i]))].join(',');
+		yield [fromEpochDay(day0 + i), ...columns.map((c) => (c.text ? textCell(c.text(i)) : numCell(c.values[i])))].join(',');
 	}
 }
 

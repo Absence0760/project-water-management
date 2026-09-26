@@ -590,6 +590,31 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
  * the WR2012 check, the column guide, warnings. The run details carry the run notes.
  * Fields the engine adds to the summary later still appear (under their key).
  */
+/**
+ * A forecast run's forecast days (WP-2.12, summary.forecast): kept out of
+ * every other block of the sheet, which covers the days before them.
+ */
+export function* forecastLines(f: NonNullable<RunSummary['forecast']>): Generator<string> {
+	yield csvRow(['Forecast days (modelled on forecast rain, not recorded rain; every other figure in this sheet covers the days before them)']);
+	yield csvRow(['First forecast day', f.from]);
+	yield csvRow(['Last forecast day', f.to]);
+	yield csvRow(['Days', f.days]);
+	yield csvRow(['Last observed rain', f.lastObserved]);
+	yield csvRow(['Forecast rain (mm)', f.rainMm]);
+	yield csvRow(['Outlet EWR days at risk', f.outletEwrDaysAtRisk]);
+	yield csvRow(['Farm', 'Lowest dam level (%)', 'Days short', 'Demand (m³)', 'Supplied (m³)', 'Supplied (% of demand)']);
+	for (const p of f.perFarm) {
+		yield csvRow([
+			p.name,
+			p.minDamPct === null ? null : p.minDamPct * 100,
+			p.deficitDays,
+			p.demandM3,
+			p.suppliedM3,
+			p.suppliedFraction === null ? null : p.suppliedFraction * 100
+		]);
+	}
+}
+
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
 	yield csvRow(['Project', meta.projectName]);
 	yield csvRow(['Run', meta.runLabel]);
@@ -625,6 +650,11 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield csvRow(['Catchment']);
 	for (const row of labelledRows(summary.catchment as unknown as Record<string, unknown>, CATCHMENT_ROWS)) yield csvRow(row);
 	yield '';
+
+	if (summary.forecast) {
+		yield* forecastLines(summary.forecast);
+		yield '';
+	}
 
 	yield* curtailmentLines(summary.curtailment);
 	if (summary.landCover) {

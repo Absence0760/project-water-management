@@ -6,7 +6,7 @@
 // are readable only through a run the user can see (with positive controls),
 // trimmed runs' blobs are garbage-collected while kept runs' stay, a run from
 // before stored inputs says so. (Cited runs: scenarios/scenarios.db.test.ts.)
-import { canonicalJson, runModelChecked, type SeriesKind } from '@water-management/engine';
+import { canonicalJson, runModelChecked, withoutForecastTail, type SeriesKind } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
 import { importProjectData } from '../../scripts/import-project.js';
@@ -53,8 +53,9 @@ describe('runModel(loadRunInput(run)) reproduces the stored run', () => {
 				)
 			).rows
 		}));
-		// The rebuilt input's series are the example's, value for value.
-		const original = inputOf(ex);
+		// The rebuilt input's series are the example's, value for value, less any
+		// forecast tail: an ordinary run leaves it out (WP-2.12; Sandspruit has one).
+		const original = withoutForecastTail(inputOf(ex));
 		expect(Object.keys(input.series).sort()).toEqual(Object.keys(original.series).sort());
 		// Each carries the product/version the run recorded (032; the examples record none).
 		for (const [kind, s] of Object.entries(original.series)) expect(input.series[kind as SeriesKind]).toEqual({ ...s, provenance: null });
