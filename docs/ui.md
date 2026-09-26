@@ -2388,9 +2388,10 @@ invite, the alert emails and their digest). The modeller workspace and the
 ## Alerts
 
 Email alerts (WP-2.13; [api.md § Alerts](./api.md#alerts), [security.md §
-Alerts](./security.md#alerts)). Words and parsing in
-`lib/components/alerts/alerts.ts` (unit-tested); the farmer-facing pages'
-words come from the message catalogue ([§ Language](#language)).
+Alerts](./security.md#alerts)). The workspace's words are in
+`lib/components/alerts/alerts.ts` (English, no message catalogue: the
+workspace never loads it), the translated pages' in `alerts/words.ts` (from
+the catalogue, [§ Language](#language)); both unit-tested.
 
 - **Overview → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
   attention): the alerts firing now, each as a sentence ("Farm One: dam
@@ -2424,7 +2425,7 @@ words come from the message catalogue ([§ Language](#language)).
   emails for Rietvlei any more." (or "any alert emails", for a digest's link)
   with *Manage alerts*. A dead link ("This link doesn't work any more: a
   newer email may have replaced it, or you may no longer be a member") and a
-  link without its token have their own states. `noindex`-free but
+  link without its token have their own states. The page sets
   `no-referrer`, like the reset pages.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
