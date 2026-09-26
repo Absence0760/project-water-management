@@ -20,7 +20,10 @@ export default defineWorkspace([
 			environment: 'node',
 			include: ['src/**/*.perf.test.ts'],
 			// Timing runs share the machine's CPU; don't let them race each other.
-			fileParallelism: false
+			// fileParallelism alone doesn't serialise a workspace project (see the
+			// backend db project); singleFork does.
+			fileParallelism: false,
+			poolOptions: { forks: { singleFork: true } }
 		}
 	}
 ]);
