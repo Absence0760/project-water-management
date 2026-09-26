@@ -13,6 +13,8 @@
 //     the day), the soil-water store (m³ over the cropped area), the
 //     stream-depletion lag store, whether the river pump was on and each
 //     pumping unit's volume so far this water year;
+//   - per Reserve rule table, the month in progress (its natural and
+//     impacted flow so far), and the columns the capture run carried;
 //   - the record-wide quantities, pinned from the run it was captured from
 //     (the decision in model.md §2.16): the land-cover low-flow threshold,
 //     each Reserve rule table's natural duration curves (in 'run' mode), the
@@ -32,7 +34,7 @@ export const MODEL_STATE_KIND = 'water-management/model-state';
 export const MODEL_STATE_FORMAT = 1;
 
 /** One node's state at the start of the snapshot's day. */
-export interface NodeState {
+export interface ModelNodeState {
 	id: string;
 	/** Dam storage at the end of the day before (m³); 0 without a dam. */
 	storageM3: number;
@@ -65,7 +67,7 @@ export interface PinnedStatistics {
 /** The decoded state (plain numbers). */
 export interface ModelState {
 	runoff: { model: 'gr4j' | 'legacy'; state: number[] };
-	nodes: NodeState[];
+	nodes: ModelNodeState[];
 	pinned: PinnedStatistics;
 	/**
 	 * Per Reserve rule table (keyed as reserveNatural): the natural and
@@ -76,7 +78,8 @@ export interface ModelState {
 	reserveMonths: { site: string; carry: { days: number; natural: number; impacted: number } | null }[];
 	/**
 	 * Columns the capture run carried because some of its days needed them
-	 * (a zero-run or accumulation mask, a storage reset's step), with the
+	 * (a zero-run or accumulation mask, a storage reset's step, the senior
+	 * users' requirement), with the
 	 * column before each, so a resumed run has the same columns.
 	 */
 	columns: { nodeId: string | null; key: string; label: string; unit: string; after: { nodeId: string | null; key: string } | null }[];
