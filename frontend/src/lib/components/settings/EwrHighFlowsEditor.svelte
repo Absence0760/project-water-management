@@ -145,7 +145,7 @@
 			</div>
 		</div>
 	{/if}
-	<p id="{uid}-status" class="small" class:err={note && !note.ok} role="status">{note?.text ?? ''}</p>
+	<p id="{uid}-status" class="small" class:err={note && !note.ok} role="status" aria-label="High-flow paste result">{note?.text ?? ''}</p>
 </fieldset>
 
 <style>

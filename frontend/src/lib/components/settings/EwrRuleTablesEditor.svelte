@@ -281,7 +281,7 @@
 			</div>
 		{/if}
 		<EwrHighFlowsEditor bind:value={() => t.highFlows ?? [], (v) => (t.highFlows = v)} {readonly} siteLabel={siteLabel(t.siteNodeId)} />
-		<p id="{uid}-{i}-status" class="small" class:err={pasteNote[i] && !pasteNote[i].ok} role="status">{pasteNote[i]?.text ?? ''}</p>
+		<p id="{uid}-{i}-status" class="small" class:err={pasteNote[i] && !pasteNote[i].ok} role="status" aria-label="Paste result">{pasteNote[i]?.text ?? ''}</p>
 		{#if notes.length}
 			<ul class="notes small" aria-label="Checks on this table">
 				{#each notes as n (n)}<li>Check: {n}.</li>{/each}
