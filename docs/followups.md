@@ -1044,6 +1044,46 @@ role and not before it.
 
 ## Features left half-way
 
+- **Reproducible inputs and cited runs** (roadmap WP-3.1, prerequisite of
+  scenarios #18, 2026-09-25; [data-model.md § Stored run inputs](./data-model.md#stored-run-inputs-021_series_blobsql)).
+  Built: engine `canonicalJson` / `seriesDigest`, `021_series_blob.sql`
+  (`series_blob`, `run_input_series`, the GC trigger, `model_run_cited`),
+  `executeRun` storing inputs, `loadRunInput` (byte-identical round trip on
+  the three examples), the run-input route for uncertainty bands using it.
+  Left open:
+  - [ ] **Scenarios add the first "cited" clause** (WP-3.2): its migration
+        `CREATE OR REPLACE`s `model_run_cited` with `EXISTS (SELECT 1 FROM
+        scenario s WHERE s.base_run_id = p_run)` (021's header has it
+        verbatim), with a `RESTRICT` foreign key. In the same WP: the unpin
+        route answers `409 run is cited by …` on a cited run, and cited runs
+        stop counting against `PINNED_RUNS_PER_PROJECT_MAX` (today the pin
+        trigger counts every pinned run). Trigger: WP-3.2.
+  - [ ] **`GET …/runs/:runId/reproduce`** (`{ identical, engineVersionThen,
+        engineVersionNow, differences }`), `RunMeta.reproducible` and
+        `citedBy`, and the Runs tab's "Reproducible" badge, "Cited" lock and
+        "Check reproduction" action. `loadRunInput` + `runModelChecked` +
+        canonical JSON is the whole server side; the route and UI are what
+        remain. Trigger: WP-3.2's compare view, or an assessor asking.
+  - [ ] **WP-2.3's publication-history trim skips cited runs' publications.**
+        Trigger: WP-2.3 landing (no publications exist yet).
+
+- **Scenarios** (issue #18, WP-3.2, 2026-09-25;
+  [scenarios.md](./scenarios.md)). Built: the engine part,
+  `packages/engine/src/scenario/` (`applyScenario`, `classifyOp`,
+  `classifyScenario`, `validateScenarioOps`), with the invariant and
+  no-silent-change fuzz. Left open:
+  - [ ] **Backend, data model, API and the Scenarios tab** (the rest of
+        WP-3.2). WP-3.1's stored run inputs (above) are built, so the base can be loaded with `loadRunInput`.
+  - [ ] **One home for the model's save rules.** `scenario/structure.ts`
+        repeats `backend/src/model/validate.ts` `modelProblems`, so a rule
+        added to one can miss the other. Move the rules into the engine and
+        have `modelProblems` call them. Trigger: the backend scenario routes,
+        which must accept exactly what `applyScenario` produces.
+  - [ ] **Later ops**: `ewrSite.set`, `allocation.set`, moving a node or
+        inserting one mid-river, `crop.set`, `landCover.set`
+        ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
+        Trigger: the scenario editor needing them.
+
 - **Printable catchment report** (issue #19, WP-2.15 Phase A, 2026-09-25;
   [ui.md § Report](./ui.md#report)). Built: the print route
   `/projects/:id/report?run=`, the Runs tab's **Report** button, A4 print

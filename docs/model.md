@@ -863,7 +863,8 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
   the threshold reads the whole run's natural flow, a calibration with land
   cover simulates the whole run instead of stopping at the last scored day.
 - **Scenarios**: clearing a class is a copy of the project without its
-  patches, compared with the baseline (run comparison lists land cover added,
+  patches, or a scenario's `landCover.remove` ops ([scenarios.md](./scenarios.md)),
+  compared with the baseline (run comparison lists land cover added,
   changed and removed per farm and class). Clearing every patch gives the
   unreduced run back exactly (tested).
 - **Order**: a unit's patches are added up in patch-id order, not list
@@ -2717,6 +2718,13 @@ fixed and the hydrologist trusts the module ([plan.md phase 5](./plan.md)).
    fast enough to run in the browser as you type and in Lambda on request.
 5. **Every run records `engine_version`** and a snapshot of its inputs, so an
    old result can always be explained after the model or the project changes.
+6. **Scenarios transform the input, not the model**
+   ([scenarios.md](./scenarios.md), roadmap WP-3.2). `applyScenario`
+   (`packages/engine/src/scenario/`) applies a list of overrides (a dam
+   raised, a farm removed, rain scaled) to a base run's input and `runModel`
+   runs the result unchanged, so a scenario never needs an `ENGINE_VERSION`
+   bump. Every engine invariant is checked on random scenarios, and every op
+   that changes the input shows up in the run comparison's input diff.
 
 ### Verification
 
