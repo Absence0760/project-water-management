@@ -83,7 +83,9 @@ function canonical(out: ModelOutput) {
 		}
 	};
 }
-const sortNameLists = (w: string) => w.replace(/\(([^()]*;[^()]*)\)/g, (_, inner: string) => `(${inner.split('; ').sort().join('; ')})`);
+// A name may carry its own parentheses ("Farm (upper)"), one level deep.
+const sortNameLists = (w: string) =>
+	w.replace(/\(((?:[^()]|\([^()]*\))*;(?:[^()]|\([^()]*\))*)\)/g, (_, inner: string) => `(${inner.split('; ').sort().join('; ')})`);
 
 /**
  * Display order must not matter: the node array and every sortOrder, the crop
