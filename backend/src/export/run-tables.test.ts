@@ -78,9 +78,10 @@ describe('summary sheet', () => {
 		expect(lines).toContain('Days EWR not met at the outflow gauge (%),1');
 		expect(lines.at(-1)).toBe('flow shares sum to 0.99');
 		// blocks are separated by empty records (run, self-checks, farms, catchment, curtailment,
-		// EWR sites, Reserve compliance, water balance, CHIRPS factors, rain treated as missing, rain-source periods, multi-day accumulations,
+		// EWR sites, Reserve compliance, water balance, assurance of supply, stress classes, water account,
+		// CHIRPS factors, rain treated as missing, rain-source periods, multi-day accumulations,
 		// double-mass check, plausibility checks, calibration, WR2012 check, column guide, warnings)
-		expect(lines.filter((l) => l === '').length).toBe(17);
+		expect(lines.filter((l) => l === '').length).toBe(20);
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day),Days charged for the EWR');
 	});
 

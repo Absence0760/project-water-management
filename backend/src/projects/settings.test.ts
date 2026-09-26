@@ -736,6 +736,18 @@ describe('SettingsPatch.lakeEvapFactor (engine N2)', () => {
 	});
 });
 
+describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', () => {
+	const ok = (assuranceAnnualThreshold: unknown) => SettingsPatch.safeParse({ assuranceAnnualThreshold }).success;
+
+	it('accepts a fraction in (0, 1]', () => {
+		for (const v of [0.01, 0.5, 0.9, 1]) expect(ok(v), String(v)).toBe(true);
+	});
+
+	it('rejects 0, above 1, a percentage or a non-number', () => {
+		for (const v of [0, -0.1, 1.01, 90, Infinity, '0.9', null]) expect(ok(v), String(v)).toBe(false);
+	});
+});
+
 describe('SettingsPatch.ewrRules (engine ≥ 0.21.0)', () => {
 	const issues = (ewrRules: unknown) => {
 		const r = SettingsPatch.safeParse({ ewrRules });

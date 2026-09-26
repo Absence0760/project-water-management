@@ -24,6 +24,7 @@ import {
 } from '@water-management/engine';
 import type { RunEvidence } from '../runs/evidence.js';
 import { csvRow } from './csv.js';
+import { supplyAssuranceLines } from './supply-assurance.js';
 
 /**
  * Column order for daily exports: the order the engine emits series in
@@ -644,6 +645,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield '';
 
 	yield* waterBalanceLines(summary.waterBalance);
+	yield '';
+
+	yield* supplyAssuranceLines(summary.supplyAssurance);
 	yield '';
 
 	yield* chirpsFactorLines(summary.chirpsCorrection);
