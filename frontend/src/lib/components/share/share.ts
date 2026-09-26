@@ -11,9 +11,9 @@
 // card, the level words, counted nouns). Call these where they render, so a
 // language switch re-words them.
 import type { SharedCatchmentView, ShareView } from '$lib/api/types';
-import { count, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
-import { pickNotice, splitNotice, type NoticeVm } from '$lib/components/farm/notice';
-import { i18n, t, type MessageKey } from '$lib/i18n/locale.svelte';
+import { count, DAYS, FARMS, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
+import { LEVEL_WORDS, pickNotice, splitNotice, type NoticeVm } from '$lib/components/farm/notice';
+import { i18n, t } from '$lib/i18n/locale.svelte';
 
 /** A share token as we issue it: 32 bytes, base64url (backend auth/tokens.ts). */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -35,26 +35,28 @@ export function shareNotice(view: ShareView): NoticeVm | null {
 	if (r.level === 'none') return null;
 	const picked = pickNotice(r, i18n.locale);
 	const { title, body } = splitNotice(picked?.text ?? null);
-	const label = t('farm.notice.label', { level: t(`farm.level.${r.level}` as MessageKey) });
+	// i18n-section: farm.notice
+	const label = t('Notice from the WUA · {level}', { level: t(LEVEL_WORDS[r.level]) });
 	return {
 		level: r.level,
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
 		// As the farm view: the percentage alone only when the WUA gave no text to carry it.
-		pctLine: !title && !body && r.pct != null ? t('farm.notice.pct', { pct: fmtPct(r.pct / 100) }) : null,
-		byline: `${publishedBy ?? t('share.formerMemberByline')}, ${fmtStampDay(publishedAt)}`,
+		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: {pct} of registered use.', { pct: fmtPct(r.pct / 100) }) : null,
+		byline: `${publishedBy ?? t('A former member')}, ${fmtStampDay(publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,
-		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'farm.notice.onlyEn' : 'farm.notice.onlyAf') : null
+		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'The WUA wrote this notice in English only.' : 'The WUA wrote this notice in Afrikaans only.') : null
 	};
 }
 
 /** "Published by Thandi Mokoena on 12 Jan 2024. Data up to 10 Jan 2024. Next update expected around 1 Feb 2024." */
 export function publishedLine(view: ShareView): string {
 	const p = view.publication;
-	const text = t('share.published', { name: p.publishedBy ?? t('share.formerMember'), date: fmtStampDay(p.publishedAt), until: fmtDay(p.catchmentView.dataUntil) });
-	return p.nextExpectedOn ? `${text} ${t('share.next', { date: fmtDay(p.nextExpectedOn) })}` : text;
+	// i18n-section: share
+	const text = t('Published by {name} on {date}. Data up to {until}.', { name: p.publishedBy ?? t('a former member'), date: fmtStampDay(p.publishedAt), until: fmtDay(p.catchmentView.dataUntil) });
+	return p.nextExpectedOn ? `${text} ${t('Next update expected around {date}.', { date: fmtDay(p.nextExpectedOn) })}` : text;
 }
 
 export type ReserveState = 'met' | 'partly' | 'missed';
@@ -74,15 +76,17 @@ export function reserveRows(cv: SharedCatchmentView): ReserveRow[] {
 	return cv.sites.map((s) => {
 		const n = s.daysNotMet.last30;
 		const of = cv.last30.days;
-		const days = count('farm.n.day', of);
+		const days = count(DAYS, of);
 		return {
-			place: s.isOutlet || !s.name ? t('share.outlet') : t('share.at', { place: s.name }),
+			place: s.isOutlet || !s.name ? t('At the catchment outlet') : t('At {place}', { place: s.name }),
 			state: n <= 0 ? 'met' : n >= of ? 'missed' : 'partly',
-			last30: n <= 0 ? t('share.last30.kept', { days }) : n >= of ? t('share.last30.missedAll', { days }) : t('share.last30.missed', { n, days }),
-			season: t('share.season', { n: s.daysNotMet.season, days: count('farm.n.day', cv.season.days), date: fmtDay(cv.season.from) })
+			// i18n-section: share.last30
+			last30: n <= 0 ? t('Kept its reserve on every one of the last {days}.', { days }) : n >= of ? t('Below its reserve on all of the last {days}.', { days }) : t('Below its reserve on {n} of the last {days}.', { n, days }),
+			// i18n-section: share
+			season: t('{n} of {days} below it this season (since {date}).', { n: s.daysNotMet.season, days: count(DAYS, cv.season.days), date: fmtDay(cv.season.from) })
 		};
 	});
 }
 
 /** "6 farms in the catchment." A count only, never which. */
-export const farmsLine = (cv: SharedCatchmentView) => t('share.farms', { farms: count('farm.n.farm', cv.farmCount) });
+export const farmsLine = (cv: SharedCatchmentView) => t('{farms} in the catchment.', { farms: count(FARMS, cv.farmCount) });

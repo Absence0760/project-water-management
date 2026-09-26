@@ -588,28 +588,39 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
 `noteHref`, opens the map with its node picked).
 
 - **Map** (issue #17, option A's simplicity with nothing lost; the A2
-  board): the schematic beside a side column (one column below 900 px, the
-  schematic first). Above them, **Open as a grid** (a named group):
-  *Crop factors*, *Planted areas* and *Transfers* open in the
-  [grid modal](#grid-modal), and *Node table* switches to the Table layout;
-  editors also get **+ Add node**, which opens the new node on its form.
-  The side column holds:
-  - the **picked node's card** (`network/NodeCard.svelte`): kind ("Selected
-    · farm", "outflow gauge", "other water user") and name, its notes
-    (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
-    which opens the One node layout on it. A farm adds two tiles, *Supplied*
-    in the latest run (the newest run's summary, fetched through the Runs
-    tab's `detailCache` whenever this layout is showing; the tile tints for
-    the short and low bands, and "no demand" / "not in this run" are
-    written) and its *Flow share* in use. Then drains into, catchment area
-    (a user: what it takes, `describeUser`), a farm's dam capacity and its
-    irrigated area, a link ("20.00 ha, 1 crop") to the farm drawer. With
-    nothing picked: "Select a node on the map or in the list to see it
-    here."
-  - **All nodes**: a button per node, in the model's order, with a dot for
-    its kind (in its supply band's colour while *Colour farms by* is on), its
-    name and "→ downstream" (or "outlet"). Pressing one picks it (and marks
-    it on the schematic); picking on the schematic marks it here.
+  board), a page of its own:
+  - **Header:** "Network" and one line on what it is ("2 farms · 2 dams · 1
+    gauge · draining to Outflow gauge · 32.0 km²"); on the right the
+    **Layout** switch, a **Grids** menu (a disclosure named "Open as a grid":
+    *Crop factors*, *Planted areas* and *Transfers* open in the
+    [grid modal](#grid-modal), *Node table* switches to the Table layout;
+    Escape or a click outside closes it) and, for editors, **+ Add node**
+    (which opens the new node on its form).
+  - **Catchment map** card: *Colour farms by* in its header and the
+    schematic filling the card (`NetworkSchematic`'s `fill`: a small drawing
+    scales up to the card's width, at most 1.35× and no taller than the
+    460 px box; a big one keeps its size and scrolls, as elsewhere), then the
+    legend. Colouring by supply is **on by default** once the project has a
+    run.
+  - Beside it (one column below 900 px, the map first), two cards:
+    - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
+      farm", "outflow gauge", "other water user") and name, its notes
+      (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
+      which opens the One node layout on it. A farm has two tiles:
+      *Supplied* in the latest run (the newest run's summary, fetched through
+      the Runs tab's `detailCache` whenever this layout shows; the tile
+      tints for the short and low bands, and "no demand" / "not in this run"
+      are written) and **Dam now**, its storage at the end of that run as a %
+      of capacity (its `dam_storage` series, through `cachedSeries`, reduced
+      by `overview/damLevels.ts`; "No dam" without one). Then drains into,
+      catchment area (a user: what it takes, `describeUser`), and for a farm
+      its flow share in use, dam capacity and irrigated area, a link ("20.00
+      ha, 1 crop") to the farm drawer. With nothing picked: "Select a node on
+      the map or in the list to see it here."
+    - **All nodes**: a button per node, in the model's order, with a dot for
+      its kind (in its supply band's colour while colouring is on), its name
+      and "→ downstream" (or "outlet"). Pressing one picks it (and marks it
+      on the schematic); picking on the schematic marks it here.
 
   The Table's and One node's fields aren't on the map: every one is a click
   away (Edit, Node table, the grids), so nothing was removed.
@@ -626,8 +637,9 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   into" select is the keyboard route. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing.
 - **Colour farms by** (above the schematic, offered once the project has a
-  run and a farm): **Nothing** (the default, the plain drawing) or **Supply,
-  latest run**. The choice is component state, not kept in the URL. On, it
+  run and a farm): **Supply, latest run** (the default once there is a run,
+  since issue #17) or **Nothing** (the plain drawing). The choice is
+  component state, not kept in the URL. On, it
   fetches the newest run's summary (`api.runs.get`, sharing the Runs tab's
   `detailCache`; a quiet status line covers loading, and a failure offers
   Retry without touching editing) and fills each farm by `fractionSupplied`
@@ -637,8 +649,10 @@ parameter), **Table** (`view=table`) and **One node** (`view=node`).
   value falls in the higher band. A farm with no irrigation demand in the
   run (the engine reports it as 100 %) is "no demand", dashed and unfilled;
   a farm in the model but not in the run (added since, or a gauge then) is
-  "not in this run", hatched with a dashed outline. The share is also on the
-  node's label line, its tooltip and the drainage-tree text, so nothing is
+  "not in this run", hatched with a dashed outline. The share is the node's
+  second label line on its own while colouring is on (the area and dam
+  volume move to its tooltip, so a long line can't run into the next
+  column's label), and also on its tooltip and the drainage-tree text, so nothing is
   colour-only. A second legend row lists the bands present and names the
   run ("… in run “label”, ran 2 days ago", by the viewer's calendar); with
   unsaved model edits it adds that the colours show the run, not the edits.
@@ -2711,12 +2725,42 @@ digest). The modeller workspace stays English.
   `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
   sends the page's language as the account's; an account created from an
   invite takes the invite's (`invite.locale`, 050).
-- **Catalogue.** `lib/i18n/messages/en.ts` is every string, flat keys
-  (`farm.supply.title`), with a section note per key group and per-key notes
-  for the translator. `messages/af.ts` holds only **reviewed** Afrikaans,
-  typed `Partial<Record<MessageKey, string>>` (an unknown key fails
-  `pnpm check`); it is loaded lazily, the first time someone picks
-  Afrikaans. A key without Afrikaans shows in English.
+- **Messages are their English** (gettext style, issue #9). The English is
+  written where it is used, `t('Your dam')`, and is the message: no English
+  catalogue ships. A message kept in a table or a variable is marked with
+  `msg('…')` (`lib/i18n/msg.ts`, which imports nothing, so catalogue-free
+  modules such as `emailAuth.ts` and `farm/notice.ts` can use it), and a
+  counted word is `plural({ one: 'day', other: 'days' })` (the farm view's
+  `DAYS`, `WEEKS`, `POINTS`, `FARMS` in `farm/format.ts`, `ORDINAL` in
+  `farm/chart.ts`). `t()` takes a string literal or a `msg()`, never an
+  arbitrary string (a type error), so the sheet's extractor can read every
+  message. When the same English means two different things, the call gives
+  a context, `t('Create account', {}, 'page title')`, and the two translate
+  separately. A message's **id** is an 8-hex FNV-1a hash of its English (and
+  context; `messageId` / `pluralId`), computed only when a translation is
+  looked up (English pages never hash). `messages/af.ts` holds only
+  **reviewed** Afrikaans, by id, with the English in a comment; it is loaded
+  lazily, the first time someone picks Afrikaans. A message without
+  Afrikaans shows in English. Hash ids rather than the English as the key:
+  af.ts ships only translated entries, and 8 characters an entry is a
+  fraction of the English (~40 on average); both are equally robust to an
+  English edit, which changes the id, so the old translation is **stale**,
+  never shown for the new words (below).
+- **Which messages exist.** `scripts/guards/i18n_extract.mjs` reads them
+  from the frontend's source: every `t()` / `tRich()` / `msg()` / `plural()`
+  / `tn({…})` call in a file that imports the message code, each branch of a
+  `?:` chain, the script and the `{…}` expressions of a component (not its
+  text or comments). Each message sits in a sheet **section** set by a marker
+  comment before it (`// i18n-section: farm.dam`, `<!-- i18n-section: account
+  -->` in a component's markup), which holds until the next; one used in two
+  sections goes to `common`. The sections' descriptions and per-message notes
+  for the translator (keyed by English) are in `lib/i18n/sheet.ts`, never
+  shipped. `pnpm gen:i18n:sheet` also writes every id to
+  `messages/ids.generated.ts`; the build keeps only their count (a catalogue
+  is complete when it has as many entries, since the tests keep af.ts free
+  of stale ids), while dev and the tests use the list: under vitest a
+  message that isn't on the sheet throws (a table without `msg()`, say), in
+  the dev server it warns.
 - **Loading.** Only the translated routes load the catalogue: they import
   it themselves, and the root layout imports `lib/i18n/locale.svelte` with a
   dynamic `import()` on the first translated route, then renders the route
@@ -2725,7 +2769,7 @@ digest). The modeller workspace stays English.
   never downloads it: the number, date, notice and chart-size
   rules it shares with the farm view live in catalogue-free modules
   (`lib/i18n/state.svelte.ts`, `farm/numbers.ts`, `farm/notice.ts`,
-  `farm/chartGeometry.ts`), `passwordProblem` returns a key, the notes list
+  `farm/chartGeometry.ts`), `passwordProblem` returns a `msg()`, the notes list
   takes the farm card's words as a prop (`notes/words.ts`: `NOTES_EN` for
   the workspace, `farm/notesWords.ts` from the catalogue), and the
   "confirm your email" banner is imported only for an unconfirmed address.
@@ -2736,22 +2780,26 @@ digest). The modeller workspace stays English.
   `error` text. The API sends a stable `code` with every error a farmer can
   meet (and `params`, e.g. the lockout's seconds; [api.md §
   Errors](./api.md#errors)); `lib/i18n/apiError.ts` `errorText` words it
-  from the catalogue's `error.<code>`, or by status when there is no code
+  from its `CODES` table (a `msg()` per code; `apiError.test.ts` fails on a
+  code of `ERROR_CODES` without one), or by status when there is no code
   (no signal, a server problem, a refusal). Stable codes rather than the
   server localising by `app_user.locale` / `Accept-Language`: every word a
   farmer reads stays in one catalogue and on the translation sheet, a
   signed-out page needs no language sent to the server, and the API keeps
   one language for integrators and logs.
   `lib/i18n/boundary.test.ts` guards it.
-- **API** (`lib/i18n/locale.svelte.ts`): `t(key, vars)` fills `{name}`;
-  `tn(stem, n, vars, ordinal?)` picks the `.one` / `.other` (or ordinal
-  `.two` / `.few`) form through `Intl.PluralRules`; `tRich(key, vars)`
+- **API** (`lib/i18n/locale.svelte.ts`): `t(english, vars, context?)` fills
+  `{name}`; `tn(forms, n, vars, ordinal?)` picks the `one` / `other` (or
+  ordinal `two` / `few`) form through `Intl.PluralRules`, a translated form
+  missing falling back to `other`; `tRich(english, vars, context?)`
   returns a `Rich` sentence where `**…**` and `{ b }` values are bold
   (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
   `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
   They read runes, so a template that calls them re-renders on a switch.
-  The backend's emails have their own catalogue, `backend/src/mail/i18n/`
-  (`mailT(locale)` → `{ t, lang }`), same pattern; the alert emails'
+  The backend's emails keep a keyed catalogue, `backend/src/mail/i18n/`
+  (`mailT(locale)` → `{ t, lang }`): the server ships no bundle, so its keys
+  cost nothing, and the sheet lists its rows by key beside the site's ids;
+  the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
   them, in the language the words came out in.
 - **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
@@ -2771,11 +2819,19 @@ digest). The modeller workspace stays English.
   and an empty Afrikaans column for the client's translator; the farmer
   glossary entries (`lib/help/farmer.ts`) are on it too (`lib/help/content.af.ts`, stamped with a
   `sourceHash` of the English so a later English edit makes the translation
-  stale). `catalogue.test.ts` (frontend and backend) and
-  `content.af.test.ts` fail when an untranslated key is missing from the
-  sheet; `pnpm check:i18n` prints what has no Afrikaans yet and lists any
-  stale glossary translation, and fails when the sheet is out of date or a
-  translation is stale. When the English of a translated glossary entry
+  stale). The sheet lists every English string once, by id (a counted word
+  one row per form, `<id>.one` / `<id>.other`), in section order;
+  the translator's return is applied by id. `catalogue.test.ts` (frontend
+  and backend) and `content.af.test.ts` fail when an untranslated message is
+  missing from the sheet; the frontend's also fails on an af.ts id that is
+  no current message's (a **stale** translation: its English changed, and is
+  back on the sheet under the new id, or it is gone), on a translation that
+  drops a placeholder or a bold marker, and on a note or section nothing
+  uses. `pnpm check:i18n` prints what has no Afrikaans yet and lists any
+  stale translation, and fails when the sheet or the id list is out of date,
+  a message can't be read, or a translation is stale. A stale site
+  translation is moved to the new id once the translator has checked it
+  against the new English, or deleted. When the English of a translated glossary entry
   changes, the entry goes back on the sheet (marked "the English changed");
   once the translator has re-checked it (and any fix is in
   `content.af.ts`), `pnpm gen:i18n:stamp <id>`

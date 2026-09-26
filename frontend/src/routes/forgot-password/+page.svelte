@@ -1,3 +1,4 @@
+<!-- i18n-section: forgot -->
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -31,28 +32,28 @@
 	}
 </script>
 
-<svelte:head><title>{t('common.pageTitle', { page: t('forgot.title') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · Water Management', { page: t('Reset your password') })}</title></svelte:head>
 
-<AuthCard title={sentTo ? t('forgot.titleSent') : t('forgot.title')} subtitle={sentTo ? undefined : t('forgot.subtitle')}>
+<AuthCard title={sentTo ? t('Check your email') : t('Reset your password')} subtitle={sentTo ? undefined : t('Enter the email address you signed up with and we’ll send you a link to choose a new password.')}>
 	{#if sentTo}
 		<!-- Same message whether or not the address has an account (no enumeration). -->
 		<div class="alert alert-info" role="status">
-			<p><Rich text={tRich('forgot.sentTo', { email: sentTo })} /></p>
-			<p>{t('forgot.sentHelp')}</p>
+			<p><Rich text={tRich('If there is an account for **{email}**, we’ve emailed it a link to choose a new password.', { email: sentTo })} /></p>
+			<p>{t('The link works once and expires in 1 hour. Check your spam folder if it doesn’t arrive in a few minutes.')}</p>
 		</div>
-		<button type="button" class="btn" onclick={() => (sentTo = null)}>{t('forgot.otherAddress')}</button>
+		<button type="button" class="btn" onclick={() => (sentTo = null)}>{t('Use a different address')}</button>
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
-				<label for="email">{t('common.email')}</label>
+				<label for="email">{t('Email')}</label>
 				<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 			</div>
-			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('common.sending') : t('forgot.submit')}</button>
+			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Sending…') : t('Send reset link')}</button>
 		</form>
 	{/if}
 	{#snippet footer()}
-		{t('forgot.remembered')} <a href="{base}/login">{t('common.signIn')}</a>
+		{t('Remembered it?')} <a href="{base}/login">{t('Sign in')}</a>
 	{/snippet}
 </AuthCard>
 

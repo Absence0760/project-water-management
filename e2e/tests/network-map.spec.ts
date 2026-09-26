@@ -12,7 +12,12 @@ const layout = (page: Page, name: 'Map' | 'Table' | 'One node') =>
 	page.getByRole('group', { name: 'Layout' }).getByRole('button', { name, exact: true });
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
-const gridLink = (page: Page, name: string) => page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name, exact: true });
+/** Opens the header's Grids menu (a disclosure) and returns one of its links. */
+async function gridLink(page: Page, name: string) {
+	const menu = page.locator('details.grids-menu');
+	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
+	return page.getByRole('group', { name: 'Open as a grid' }).getByRole('link', { name, exact: true });
+}
 
 async function savedCropArea(page: Page, projectId: string, farm: string): Promise<number> {
 	const res = await page.request.get(`${API_URL}/projects/${projectId}/model`);
@@ -28,6 +33,14 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await page.goto(`/projects/${project.id}?tab=network`);
 
 	await expect(layout(page, 'Map')).toHaveAttribute('aria-pressed', 'true');
+	// A page of its own: a title, one line on what the network is, and its actions.
+	await expect(page.getByRole('heading', { level: 2, name: 'Network' })).toBeVisible();
+	await expect(page.getByTestId('network-summary')).toHaveText('2 farms · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²');
+	// With a run, farms are coloured by supply from the start, and a farm's label says its share (nothing else, so labels don't collide).
+	await expect(page.getByLabel('Colour farms by').locator('option:checked')).toHaveText('Supply, latest run');
+	const upperNode = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
+	await expect(upperNode).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
+	await expect(upperNode.locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
 	await expect(page.getByText('Select a node on the map or in the list to see it here.')).toBeVisible();
 	// The table isn't on the page in this layout.
 	await expect(page.locator('table.net')).toHaveCount(0);
@@ -41,6 +54,8 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c).toContainText('Selected · farm');
 	await expect(c.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await expect(c).toContainText(/Supplied, Baseline\s*\d+%/);
+	// The dam at the end of the run (its storage series, fetched for the picked farm).
+	await expect(c).toContainText(/Dam now\s*\d+%/);
 	await expect(c).toContainText(/Flow share\s*\d+(\.\d)?%/);
 	await expect(c).toContainText('Drains intoOutflow gauge');
 	await expect(c).toContainText('Dam150,000 m³');
@@ -81,7 +96,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	const project = await seedRunnableProject(page.request, 'Grid modal');
 	await page.goto(`/projects/${project.id}?tab=network`);
 
-	await gridLink(page, 'Planted areas').click();
+	await (await gridLink(page, 'Planted areas')).click();
 	await expect(page).toHaveURL(/\?tab=network&grid=planted-areas$/);
 	const grid = page.getByRole('dialog', { name: 'Planted areas' });
 	// The Crops tab's own grid, unchanged: same labels, same total row.
@@ -101,7 +116,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeVisible();
 
 	// Another grid shows the same unsaved model, and saves it with a reason.
-	await gridLink(page, 'Crop factors').click();
+	await (await gridLink(page, 'Crop factors')).click();
 	const factors = page.getByRole('dialog', { name: 'Crop factors' });
 	await expect(factors.getByLabel('Orchard crop factor, Oct')).toHaveValue('0.6');
 	await factors.getByRole('textbox', { name: 'Reason for this change (optional)' }).fill('Block replanted');
@@ -112,8 +127,16 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await expect(factors).toHaveCount(0);
 	await expect(page).toHaveURL(/\?tab=network$/);
 
+	// The menu closes on Escape.
+	const menu = page.locator('details.grids-menu');
+	await menu.locator('summary').click();
+	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
+	await expect(menu.locator('summary')).toBeFocused();
+
 	// Transfers too; Back closes a grid as well.
-	await gridLink(page, 'Transfers').click();
+	await (await gridLink(page, 'Transfers')).click();
 	await expect(page.getByRole('dialog', { name: 'Transfers' }).getByLabel('transfer 1 enabled')).toBeChecked();
 	await page.goBack();
 	await expect(page.getByRole('dialog', { name: 'Transfers' })).toHaveCount(0);
@@ -154,7 +177,7 @@ test.describe('phone', () => {
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 		await expectNoViolations(page);
 
-		await gridLink(page, 'Planted areas').click();
+		await (await gridLink(page, 'Planted areas')).click();
 		const grid = page.getByRole('dialog', { name: 'Planted areas' });
 		await expect(grid.getByLabel('Orchard on Upper farm, ha')).toBeVisible();
 		// Edge to edge (the page's scrollbar gutter aside).

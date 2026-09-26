@@ -20,7 +20,8 @@
 		onselect,
 		editable = false,
 		onreparent,
-		supply = null
+		supply = null,
+		fill = false
 	}: {
 		nodes: NetworkNode[];
 		transfers?: Transfer[];
@@ -31,7 +32,18 @@
 		onreparent?: (id: string, drainsInto: string) => void;
 		/** Colour farms by how much of their demand a run supplied (null = the plain drawing). */
 		supply?: SchematicSupply | null;
+		/**
+		 * Fill the box it sits in (the Network's Map layout, issue #17): a small
+		 * drawing scales up to the box's width, at most FILL_MAX_SCALE and no
+		 * taller than the box; a big one keeps its size and scrolls, as usual.
+		 */
+		fill?: boolean;
 	} = $props();
+
+	const FILL_MAX_SCALE = 1.35;
+	/** The fill box's height (px): the drawing never scales taller. */
+	const FILL_BOX_H = 460;
+	let boxW = $state(0);
 
 	const supplyOf = (id: string) => supply?.byNode.get(id);
 	const bands = $derived(supply ? bandsPresent(supply.byNode) : []);
@@ -111,6 +123,8 @@
 	);
 	const width = $derived(PAD_X * 2 + 12 + (layout.cols - 1) * COL_W + 126);
 	const height = $derived(PAD_Y * 2 + Math.max(layout.rows - 1, 0) * ROW_H + 30);
+	// Only upwards: a drawing wider than the box keeps its size and scrolls.
+	const scale = $derived(fill && boxW > 0 ? Math.max(1, Math.min(FILL_MAX_SCALE, (boxW - 2) / width, (FILL_BOX_H - 24) / height)) : 1);
 	const maxArea = $derived(Math.max(1e-9, ...layout.nodes.map((n) => n.cumulativeAreaKm2)));
 	const areaOf = $derived(new Map(layout.nodes.map((n) => [n.node.id, n.cumulativeAreaKm2])));
 
@@ -127,7 +141,10 @@
 
 	const metaText = (ln: SchematicNode) => {
 		const s = supplyOf(ln.node.id);
-		return `${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}${s ? ` · ${s.text}` : ''}`;
+		// Coloured, a farm's second line is its supply alone ("82% supplied"): with the area and dam
+		// as well it ran into the next column's label. Both stay in the node's tooltip.
+		if (s) return s.text;
+		return `${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}`;
 	};
 
 	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
@@ -149,12 +166,12 @@
 {#if nodes.length === 0}
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
-	<div class="scroller" data-scroll-region data-scroll-label="Schematic drawing">
+	<div class="scroller" class:fill data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW}>
 		<svg
 			bind:this={svgEl}
 			viewBox="0 0 {width} {height}"
-			width={width}
-			height={height}
+			width={width * scale}
+			height={height * scale}
 			aria-hidden="true"
 			class="schematic"
 			class:dragging={drag?.moved}
@@ -326,6 +343,20 @@
 		display: block;
 		margin: 0 auto;
 		font-family: var(--font-sans);
+	}
+	.scroller.fill {
+		display: flex;
+		align-items: center;
+		min-height: 460px;
+	}
+	/* A flex item would otherwise shrink below its size instead of scrolling. */
+	.scroller.fill .schematic {
+		flex: none;
+	}
+	@media (max-width: 899px) {
+		.scroller.fill {
+			min-height: 0;
+		}
 	}
 	.river {
 		fill: none;

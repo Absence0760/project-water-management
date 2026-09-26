@@ -1,3 +1,4 @@
+<!-- i18n-section: share.chart -->
 <script lang="ts">
 	// The river's monthly mean flow at the outlet against its ecological
 	// reserve, on the /share page (WP-2.3 phase 2). Inline SVG at the card's
@@ -14,11 +15,11 @@
 </script>
 
 <section class="card" aria-labelledby="flow-h">
-	<h2 id="flow-h">{t('share.chart.title')}</h2>
+	<h2 id="flow-h">{t('River flow each month, in m³ a day')}</h2>
 	<p class="visually-hidden">{flowSummary(months)}</p>
 	<div class="legend" aria-hidden="true">
-		<span><span class="key flow"></span>{t('share.chart.flow')}</span>
-		<span><span class="key ewr"></span>{t('share.chart.reserve')}</span>
+		<span><span class="key flow"></span>{t('Flow at the outlet')}</span>
+		<span><span class="key ewr"></span>{t('Ecological reserve')}</span>
 	</div>
 	<div class="plot" bind:clientWidth={width}>
 		{#if chart}
@@ -37,10 +38,10 @@
 	</div>
 	<p class="fine">{flowCaption(months)}</p>
 	<details>
-		<summary>{t('farm.chart.showNumbers')}</summary>
+		<summary>{t('Show the numbers')}</summary>
 		<table class="numbers">
-			<caption class="visually-hidden">{t('share.chart.caption')}</caption>
-			<thead><tr><th scope="col">{t('share.chart.month')}</th><th scope="col">{t('share.chart.flowCol')}</th><th scope="col">{t('share.chart.reserveCol')}</th></tr></thead>
+			<caption class="visually-hidden">{t('Mean flow at the outlet and the ecological reserve each month, in m³ a day')}</caption>
+			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Flow')}</th><th scope="col">{t('Reserve')}</th></tr></thead>
 			<tbody>
 				{#each flowRows(months) as r (r.label)}
 					<tr><th scope="row">{r.label}</th><td>{r.flow}</td><td>{r.ewr}</td></tr>

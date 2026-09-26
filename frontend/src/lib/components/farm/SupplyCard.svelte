@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.supply -->
 <script lang="ts">
 	// "Water you received this season" (design §3 Q1), with the volume-unit
 	// switch. The choice is the account's (app_user.volume_unit, PATCH
@@ -31,9 +32,9 @@
 </script>
 
 <section class="card" aria-labelledby="supply-h">
-	<h2 id="supply-h">{t('farm.supply.title')}</h2>
+	<h2 id="supply-h">{t('Water you received this season')}</h2>
 	{#if vm.pct}
-		<p class="big"><span>{vm.pct}</span><span class="sub">{t('farm.supply.ofNeeded')}</span></p>
+		<p class="big"><span>{vm.pct}</span><span class="sub">{t('of what you needed')}</span></p>
 		<div class="meter" aria-hidden="true"><span style:width="{vm.barPct}%"></span></div>
 	{:else}
 		<p>{littleNeed()}</p>
@@ -42,12 +43,12 @@
 	<p>{vm.short}</p>
 	<p class="last30"><Rich text={vm.last30} /></p>
 	<p class="fine">{vm.efficiency}</p>
-	<div class="units" role="group" aria-label={t('farm.supply.showInLabel')}>
-		<span>{t('farm.supply.showIn')}</span>
+	<div class="units" role="group" aria-label={t('Show volumes in')}>
+		<span>{t('Show in')}</span>
 		<button type="button" aria-pressed={unit === 'ML'} onclick={() => choose('ML')}>ML</button>
 		<button type="button" aria-pressed={unit === 'm3'} onclick={() => choose('m3')}>m³</button>
 	</div>
-	{#if failed}<p class="fine" role="status">{t('farm.supply.unitFailed')}</p>{/if}
+	{#if failed}<p class="fine" role="status">{t('Couldn’t save your choice to your account. It applies on this phone.')}</p>{/if}
 </section>
 
 <style>

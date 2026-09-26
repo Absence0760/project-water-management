@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import { DownloadError } from '$lib/export/download';
 import { errorText } from './apiError';
-import { en } from './messages/en';
 
 const backendCodes = () => {
 	const src = readFileSync(new URL('../../../../backend/src/http/errors.ts', import.meta.url), 'utf8');
@@ -15,10 +14,34 @@ const backendCodes = () => {
 };
 
 describe('errorText', () => {
-	it('has a message for every code the API sends', () => {
+	// Every code's words (a wait shows as 1 minute), so the lookup can't lose one.
+	const WORDS: Record<string, string> = {
+		not_signed_in: 'You’re not signed in. Sign in and try again.',
+		account_exists: 'An account with that email address already exists. Sign in, or reset your password.',
+		wrong_credentials: 'Wrong email or password.',
+		signin_locked: 'Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.',
+		wrong_current_password: 'Your current password is wrong.',
+		password_changed_elsewhere: 'Your password was changed somewhere else a moment ago. Sign in again.',
+		link_invalid: 'This link is invalid or has expired. Ask for a new one.',
+		already_verified: 'Your email address is already confirmed.',
+		verification_sent_recently: 'A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.',
+		invite_invalid: 'This invitation is invalid or has expired.',
+		note_farmer_own_farm: 'You can add notes only to your own farm.',
+		note_farm_visibility: 'Only a note on a farm can be shown to its farmers.',
+		note_author_only: 'Only the person who wrote a note can change it.',
+		note_delete_denied: 'Only the person who wrote a note, or the WUA, can delete it.',
+		unsubscribe_link_gone: 'This link doesn’t work any more.',
+		export_throttled: 'You downloaded your data a moment ago. Try again in 1 minute.',
+		alerts_resume_throttled:
+			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'
+	};
+
+	it('has its own words for every code the API sends', () => {
 		const codes = backendCodes();
 		expect(codes.length).toBeGreaterThan(10);
-		expect(codes.filter((c) => !(`error.${c}` in en))).toEqual([]);
+		expect(codes.filter((c) => !(c in WORDS))).toEqual([]);
+		// A 418 has no status wording of its own, so only a code's own message can come back.
+		for (const code of codes) expect(errorText(new ApiError(418, 'x', undefined, code)), code).toBe(WORDS[code]);
 	});
 
 	it('words a coded error from the catalogue, not the server’s English', () => {

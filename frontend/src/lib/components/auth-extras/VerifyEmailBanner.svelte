@@ -1,3 +1,4 @@
+<!-- i18n-section: banner -->
 <script lang="ts">
 	// "Confirm your email" nudge for signed-in users whose address isn't
 	// verified yet (GET /auth/me → emailVerified: false). Pending project/team
@@ -23,7 +24,7 @@
 		message = null;
 		try {
 			await emailAuth.resendVerification();
-			message = t('banner.sent');
+			message = t('Sent — check your inbox (and spam folder).');
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409 && session.user) {
 				// Verified in another tab meanwhile.
@@ -38,15 +39,15 @@
 </script>
 
 {#if show && session.user}
-	<section class="verify-banner" aria-label={t('banner.label')}>
+	<section class="verify-banner" aria-label={t('Email confirmation')}>
 		<p>
-			{t('banner.text')} <strong><EmailText email={session.user.email} /></strong>.
+			{t('Please confirm your email address. We sent a link to')} <strong><EmailText email={session.user.email} /></strong>.
 		</p>
 		<div class="actions">
 			<button type="button" class="btn btn-sm" onclick={resend} disabled={busy}>
-				{busy ? t('common.sending') : t('banner.resend')}
+				{busy ? t('Sending…') : t('Resend email')}
 			</button>
-			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (dismissed = true)}>{t('banner.dismiss')}</button>
+			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (dismissed = true)}>{t('Dismiss')}</button>
 		</div>
 		<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	</section>

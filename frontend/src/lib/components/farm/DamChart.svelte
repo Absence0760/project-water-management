@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.chart -->
 <script lang="ts">
 	// The dam's month-end level over 12 months with the stop level dashed
 	// (design §6.3, board 3). aria-hidden, with a summary sentence and a table
@@ -12,7 +13,7 @@
 </script>
 
 <section class="card" aria-labelledby="yr-h">
-	<h2 id="yr-h">{t('farm.chart.damTitle')}</h2>
+	<h2 id="yr-h">{t('Last 12 months')}</h2>
 	<p class="visually-hidden">{damSummary(farm.monthly, farm.dataUntil)}</p>
 	<div class="plot" bind:clientWidth={width}>
 		{#if chart}
@@ -33,10 +34,10 @@
 	</div>
 	<p class="fine">{caption}</p>
 	<details>
-		<summary>{t('farm.chart.showNumbers')}</summary>
+		<summary>{t('Show the numbers')}</summary>
 		<table class="numbers">
-			<caption class="visually-hidden">{t('farm.chart.damCaption')}</caption>
-			<thead><tr><th scope="col">{t('farm.chart.month')}</th><th scope="col">{t('farm.chart.damFull')}</th></tr></thead>
+			<caption class="visually-hidden">{t('Dam level at the end of each month')}</caption>
+			<thead><tr><th scope="col">{t('Month')}</th><th scope="col">{t('Dam full')}</th></tr></thead>
 			<tbody>
 				{#each damRows(farm.monthly, farm.dataUntil) as r (r.label)}
 					<tr><th scope="row">{r.label}</th><td>{r.pct}</td></tr>

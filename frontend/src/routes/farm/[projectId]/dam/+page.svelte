@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.damPage -->
 <script lang="ts">
 	// The dam page (docs/design/farmer-view.md §3 Q3, §6.3, board 3). A farm
 	// with no dam has no dam page: it says so and links back.
@@ -28,22 +29,22 @@
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>{t('farm.pageTitle', { page: t('farm.dam.title') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My farm', { page: t('Your dam') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('farm.myFarm') }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My farm') }}>
 	{#snippet children(view)}
 		{@const d = damPage(view.farm, unit)}
 		<div>
-			<h1>{t('farm.dam.title')}</h1>
+			<h1>{t('Your dam')}</h1>
 			<p class="sub">{view.farm.name}</p>
 			<DatesLine line={datesLine(view, today)} />
 		</div>
 		{#if !d}
-			<p>{t('farm.damPage.noDam', { farm: view.farm.name })}</p>
-			<a class="link" href={main}>{t('farm.damPage.back')}</a>
+			<p>{t('{farm} has no dam in the model.', { farm: view.farm.name })}</p>
+			<a class="link" href={main}>{t('Back to my farm')}</a>
 		{:else}
 			<section class="card" aria-labelledby="now-h">
-				<h2 id="now-h" class="visually-hidden">{t('farm.damPage.howFull')}</h2>
+				<h2 id="now-h" class="visually-hidden">{t('How full it is')}</h2>
 				<p class="big"><span>{d.pct}</span><span class="sub">{d.asOf}</span></p>
 				<div class="gauge" class:with-stop={d.stopPct != null} aria-hidden="true">
 					<div class="track"><span style:width="{d.barPct}%"></span></div>
@@ -69,9 +70,9 @@
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
 
 			<section class="card" aria-labelledby="about-h">
-				<h2 id="about-h">{t('farm.damPage.sourceTitle')}</h2>
+				<h2 id="about-h">{t('Where these figures come from')}</h2>
 				{#each damSource() as p (p)}<p>{p}</p>{/each}
-				<a class="link" href="{base}/farm/words#farm-modelled">{t('farm.damPage.whatModelled')}</a>
+				<a class="link" href="{base}/farm/words#farm-modelled">{t('What is “modelled”?')}</a>
 			</section>
 		{/if}
 	{/snippet}

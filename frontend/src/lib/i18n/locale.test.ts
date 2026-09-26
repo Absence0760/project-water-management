@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { DAYS } from '$lib/components/farm/format';
+import { ORDINAL } from '$lib/components/farm/chart';
+import { markedCatalogue } from './fixtureCatalogue';
+import { messageId, pluralId } from './msg';
 import { plainText } from './rich';
 import {
 	fill,
 	i18n,
 	isComplete,
 	joinAnd,
+	msg,
 	readStoredLocale,
 	resolveLocale,
 	setLocale,
@@ -13,78 +18,104 @@ import {
 	tn,
 	tRich,
 	wordsLang,
-	type Catalogue,
-	type MessageKey
+	type Catalogue
 } from './locale.svelte';
-import { en } from './messages/en';
 
-/** Every key, in a made-up "language" that shows which catalogue a word came from. Test data only, never shipped wording. */
-const marked = (): Catalogue => Object.fromEntries(Object.entries(en).map(([k, v]) => [k, `[af] ${v}`]));
+/** Every message, in a made-up "language" that shows which catalogue a word came from. Test data only, never shipped wording. */
+let marked: Catalogue;
+beforeAll(async () => {
+	marked = await markedCatalogue();
+});
 
 afterEach(() => setLocale('en'));
 
 describe('t', () => {
 	it('fills {name} placeholders and leaves an unknown one showing', () => {
-		expect(t('farm.preview', { farm: 'Vaalbank' })).toBe('You’re previewing Vaalbank as its farmer sees it');
+		expect(t('You’re previewing {farm} as its farmer sees it', { farm: 'Vaalbank' })).toBe('You’re previewing Vaalbank as its farmer sees it');
 		expect(fill('{a} and {b}', { a: 1 })).toBe('1 and {b}');
 	});
 
-	it('throws on a key the catalogue lacks (dev), rather than showing nothing', () => {
-		expect(() => t('no.such.key' as MessageKey)).toThrow(/no message "no\.such\.key"/);
+	it('throws (under test) on English the translation sheet doesn’t list, rather than never translating it', () => {
+		expect(() => t('No such message')).toThrow(/"No such message" isn't on the translation sheet/);
+		// A table without msg() would reach t() the same way.
+		const table = { a: 'Not marked' } as const;
+		expect(() => t(table.a)).toThrow(/isn't on the translation sheet/);
 	});
 
-	it('uses the chosen language’s words, falling back to English key by key', async () => {
-		await setLocale('af', { 'farm.dam.title': '[af] dam' });
-		expect(t('farm.dam.title')).toBe('[af] dam');
-		expect(t('farm.menu')).toBe('Menu');
+	it('takes a literal or a msg(), never an arbitrary string', () => {
+		const loose: string = 'Your dam';
+		// @ts-expect-error: a plain string could be anything; the sheet can only list what it can read.
+		expect(t(loose)).toBe('Your dam');
+		expect(t(msg('Your dam'))).toBe('Your dam');
+	});
+
+	it('uses the chosen language’s words, by the message’s id, falling back to English message by message', async () => {
+		await setLocale('af', { [messageId('Your dam')]: '[af] dam' });
+		expect(t('Your dam')).toBe('[af] dam');
+		expect(t('Menu')).toBe('Menu');
+	});
+
+	it('gives English with a context its own translation', async () => {
+		await setLocale('af', { [messageId('Create account')]: '[af] button', [messageId('Create account', 'page title')]: '[af] title' });
+		expect(t('Create account')).toBe('[af] button');
+		expect(t('Create account', {}, 'page title')).toBe('[af] title');
+		expect(messageId('Create account', 'page title')).not.toBe(messageId('Create account'));
+	});
+
+	it('never shows a translation made from other English: an edited message has a new id', async () => {
+		await setLocale('af', { [messageId('Your old dam')]: '[af] old dam' });
+		expect(t('Your dam')).toBe('Your dam');
 	});
 
 	it('goes back to English', async () => {
-		await setLocale('af', marked());
+		await setLocale('af', marked);
+		expect(t('Menu')).toBe('[af] Menu');
 		await setLocale('en');
-		expect(t('farm.menu')).toBe('Menu');
+		expect(t('Menu')).toBe('Menu');
 		expect(i18n.locale).toBe('en');
 	});
 
 	it('lets the latest switch win over a slower earlier one', async () => {
-		const slow = setLocale('af', marked());
+		const slow = setLocale('af', marked);
 		await setLocale('en');
 		await slow;
 		expect(i18n.locale).toBe('en');
-		expect(t('farm.menu')).toBe('Menu');
+		expect(t('Menu')).toBe('Menu');
 	});
 
 	it('loads the real Afrikaans catalogue lazily', async () => {
 		await setLocale('af');
 		expect(i18n.locale).toBe('af');
-		// Whatever is translated so far, every key still says something.
-		expect(t('farm.dam.title')).toBeTruthy();
+		// Whatever is translated so far, every message still says something.
+		expect(t('Your dam')).toBeTruthy();
 	});
 });
 
 describe('wordsLang: the language the words are in', () => {
 	it('stays English while the chosen catalogue is incomplete, so a mostly-English page never claims to be Afrikaans', async () => {
-		await setLocale('af', { 'farm.dam.title': '[af] dam' });
+		await setLocale('af', { [messageId('Your dam')]: '[af] dam' });
 		expect(i18n.locale).toBe('af');
 		expect(wordsLang()).toBe('en');
 	});
 
-	it('is the chosen language once every key is translated', async () => {
-		expect(isComplete(marked())).toBe(true);
-		await setLocale('af', marked());
+	it('is the chosen language once every message is translated', async () => {
+		expect(isComplete(marked)).toBe(true);
+		const [first, ...rest] = Object.keys(marked);
+		expect(isComplete(Object.fromEntries(rest.map((k) => [k, marked[k]!]))), `without ${first}`).toBe(false);
+		await setLocale('af', marked);
 		expect(wordsLang()).toBe('af');
 	});
 });
 
 describe('tn: plural forms through Intl.PluralRules', () => {
 	it('picks .one and .other', () => {
-		expect(tn('farm.n.day', 1)).toBe('day');
-		expect(tn('farm.n.day', 0)).toBe('days');
-		expect(tn('farm.n.day', 2)).toBe('days');
+		expect(tn(DAYS, 1)).toBe('day');
+		expect(tn(DAYS, 0)).toBe('days');
+		expect(tn(DAYS, 2)).toBe('days');
 	});
 
 	it('picks ordinal forms, with {n} filled in', () => {
-		expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23].map((n) => tn('farm.ordinal', n, {}, true))).toEqual([
+		expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23].map((n) => tn(ORDINAL, n, {}, true))).toEqual([
 			'1st',
 			'2nd',
 			'3rd',
@@ -99,20 +130,26 @@ describe('tn: plural forms through Intl.PluralRules', () => {
 	});
 
 	it('uses Afrikaans rules once the words are Afrikaans (af has only "other" ordinals)', async () => {
-		await setLocale('af', marked());
-		expect(tn('farm.ordinal', 1, {}, true)).toBe('[af] 1th');
-		expect(tn('farm.n.day', 1)).toBe('[af] day');
+		await setLocale('af', marked);
+		expect(tn(ORDINAL, 1, {}, true)).toBe('[af] 1th');
+		expect(tn(DAYS, 1)).toBe('[af] day');
+	});
+
+	it('takes a counted word’s translated forms by its id, falling back to its "other" form', async () => {
+		await setLocale('af', { [pluralId(DAYS)]: { one: '[af] day', other: '[af] days' }, [pluralId(ORDINAL)]: { other: '[af] {n}th' } });
+		expect([tn(DAYS, 1), tn(DAYS, 2)]).toEqual(['[af] day', '[af] days']);
+		expect(tn(ORDINAL, 2, {}, true)).toBe('[af] 2th');
 	});
 });
 
 describe('tRich', () => {
 	it('makes **…** and { b } values bold, merging the plain text between', () => {
-		expect(tRich('farm.back.pumpLess', { pct: '86 %' })).toEqual([
+		expect(tRich('If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed.', { pct: '86 %' })).toEqual([
 			'If you had pumped less on the days the river needed it, you would have had about ',
 			{ b: '86 %' },
 			' of the water you needed.'
 		]);
-		expect(tRich('farm.river.outletSome', { name: 'Outlet', n: 12, days: '30 days' })).toEqual([
+		expect(tRich('River at {name}: below its reserve on **{n} of the last {days}**.', { name: 'Outlet', n: 12, days: '30 days' })).toEqual([
 			'River at Outlet: below its reserve on ',
 			{ b: '12 of the last 30 days' },
 			'.'
@@ -120,9 +157,15 @@ describe('tRich', () => {
 	});
 
 	it('splices a Rich value in as it is', () => {
-		const r = tRich('farm.why.belowReserve', { sites: ['at A on ', { b: '3 days' }] });
+		const r = tRich('The river was below its reserve {sites}.', { sites: ['at A on ', { b: '3 days' }] });
 		expect(r).toEqual(['The river was below its reserve at A on ', { b: '3 days' }, '.']);
 		expect(plainText(r)).toBe('The river was below its reserve at A on 3 days.');
+	});
+
+	it('bolds the translation’s own markers', async () => {
+		const english = 'River at {name}: below its reserve on **{n} of the last {days}**.';
+		await setLocale('af', { [messageId(english)]: '[af] {name}: **{n} / {days}** [af]' });
+		expect(tRich(english, { name: 'A', n: 3, days: '30' })).toEqual(['[af] A: ', { b: '3 / 30' }, ' [af]']);
 	});
 });
 

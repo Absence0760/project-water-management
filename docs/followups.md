@@ -1216,7 +1216,9 @@ No Afrikaans wording ships yet: none is reviewed.
 - [ ] **Translation turnaround.** `docs/i18n/af-translation-sheet.md` (604
       strings: site, emails, farmer glossary) goes to the client's named
       translator (roadmap Step 2, prerequisite 6). When it comes back: copy
-      each line into `frontend/src/lib/i18n/messages/af.ts`,
+      each line, by its Id (a site string's id is a hash of its English; a
+      counted word's `.one` / `.other` rows go in one entry), into
+      `frontend/src/lib/i18n/messages/af.ts`,
       `backend/src/mail/i18n/af.ts` or `frontend/src/lib/help/content.af.ts`
       (with the `sourceHash` from the sheet), run `pnpm gen:i18n:sheet`, and
       add an e2e that the farm view, the login page and an invite email are
@@ -1237,7 +1239,7 @@ No Afrikaans wording ships yet: none is reviewed.
       the server doesn't localise ([ui.md § Language](./ui.md#language)).
       The new keys are on the sheet. The bundle measured 927 KB (926.5)
       against the 925 KB ceiling after this: see the next item.
-- [ ] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
+- [x] **Bundle ceiling.** The catalogue and switch add about 10 KB gzip to
       the total (the English catalogue is ~7 KB; each key also appears at its
       call site). The catalogue now loads only on the translated routes (the
       workspace never downloads its ~8 KB chunk; `/share` does, now it is
@@ -1256,6 +1258,19 @@ No Afrikaans wording ships yet: none is reviewed.
       farm notes list and the server errors (~86 keys, the error-code
       helper) cost about 2 KB; merged with main (ceiling 940 KB) the total
       measures 938 KB, largest chunk 42 KB (at its ceiling).
+      **2026-09-26 (issue #9): English-as-key landed.** Each message is its
+      English at the call (`t('Your dam')`), `af.ts` is keyed by an 8-hex hash
+      of it (and a context where the same English means two things), and no
+      English catalogue ships; the sheet reads the messages from the source
+      (`scripts/guards/i18n_extract.mjs`; [ui.md § Language](./ui.md#language)).
+      Measured on main @ 1ded742 (gzip): total 969.8 → 968.4 KB (−1.4, not the
+      5–7 estimated: the keys are gone, but the English now compresses in
+      many small chunks instead of one 11 KB catalogue chunk); first loads
+      farm page 97.9 → 91.8, farm list 79.4 → 71.5, sign-in 71.5 → 63.0,
+      account 71.6 → 63.8, `/share` 74.3 → 65.7, sign-up 74.3 → 66.3 KB. The
+      catalogue chunk is gone; the message code is a 1.3 KB chunk. Build-time
+      key shortening is moot: there are no keys left to shorten (the ids ship
+      only as af.ts keys, one per reviewed translation).
 - [x] **Help drift tooling** from the plan: `pnpm gen:i18n:stamp <id>`
       (`scripts/guards/i18n_stamp.mjs`) re-stamps a glossary translation's
       `sourceHash` from the current English and rewrites the sheet;

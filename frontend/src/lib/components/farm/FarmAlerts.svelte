@@ -1,3 +1,4 @@
+<!-- i18n-section: farm.alerts -->
 <script lang="ts">
 	// The farm's own alert (WP-2.13): shown while its dam is below the WUA's
 	// alert level, in the words of the alert email. The API returns a farmer
@@ -29,9 +30,9 @@
 
 {#if text}
 	<section class="card farm-alert" aria-labelledby="farm-alert-h" data-testid="farm-alert">
-		<h2 id="farm-alert-h">{t('farm.alerts.title')}</h2>
+		<h2 id="farm-alert-h">{t('Alerts')}</h2>
 		<p>{text}</p>
-		<p class="fine"><a href="{base}/account/alerts">{t('farm.alerts.manage')}</a></p>
+		<p class="fine"><a href="{base}/account/alerts">{t('Choose your alert emails')}</a></p>
 	</section>
 {/if}
 
