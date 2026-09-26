@@ -88,14 +88,15 @@ The page has these sections, top to bottom:
    `rainSource` setting itself is also a settings line ("Rain-source periods:
    none (the catchment series throughout) → 2012-10-01 to 2019-09-30: …"); a
    run saved before 0.30.0 compares as none. And there is a
-   warning when **either run used the legacy runoff model** (audit H1): it
-   doesn't conserve water at the event scale, so the comparison is a workbook
-   comparison only, not evidence.
+   warning when **either run used the legacy runoff model** (a stored run
+   from before engine 1.0.0, which removed it; audit H1): it doesn't conserve
+   water at the event scale, so the comparison is a workbook comparison
+   only, not evidence.
 2. **What changed.** Every difference in the inputs, grouped by network, crops,
    transfers, settings and time series. Examples:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,
    *"Crop "Apples" added to Bergwater (40 ha)"*,
-   *"Calibration peak flow coefficient a: 0.09 → 0.12"*,
+   *"Calibration rain threshold: 2 mm → 3 mm"*,
    *"Rainfall (catchment) series extended to 2025-04-12 (was 2024-09-30)"*,
    *"Calibration exclusion WY 2015/16 added: “rain gauge moved”"*,
    *"Multi-day rain accumulations: spread over the days they cover (CHIRPS pattern) → run as recorded (one day)"*,
@@ -131,11 +132,13 @@ The page has these sections, top to bottom:
    (pan coefficient, A-pan evaporation, PE input, CHIRPS bias correction,
    zero-rain runs and multi-day accumulations) has changed since its fit ("no" when the fit predates recorded
    forcing — nothing to compare). A run whose parameters
-   didn't come from Fit automatically reads "none". To judge the runoff models against each other, copy
-   the project, set the copy to GR4J (Settings → Flow calibration), run both
-   and compare them. The input diff then reads *"Runoff model: legacy (b023
-   recession) → GR4J"*, followed by any GR4J parameter or pan-coefficient
-   changes.
+   didn't come from Fit automatically reads "none". A stored legacy run
+   compared with a GR4J run (every run since engine 1.0.0) reads *"Runoff
+   model: legacy (b023 recession) → GR4J"* in the input diff, followed by any
+   GR4J parameter or pan-coefficient changes. The legacy model's own
+   calibration settings (`a`, `b`, the season factors, summer months, the
+   initial base flow, the recession tables) changed a run only if it ran
+   that model, so they are compared only between two legacy runs.
 
    When either run has a **WR2012 check** (model.md §2.10c), another table,
    *WR2012 check · simulated natural ÷ scaled WR2012*, gives the MAR ratio over
@@ -168,8 +171,8 @@ The page has these sections, top to bottom:
    low-flow grid or component makes the tables "different", and *What
    changed* says "low-flow values added / removed / changed in Feb" and
    "high-flow components Freshet → Freshet (values changed)".
-4. **EWR test against observed flow** (issue #4). The two runoff models can
-   disagree strongly on how many days the EWR is not met; the observed record
+4. **EWR test against observed flow** (issue #4). Two runoff models (a
+   stored legacy run against a GR4J one) can disagree strongly on how many days the EWR is not met; the observed record
    settles it, because a gauge or logger measures the same outflow the EWR
    test uses ([model.md §2.9b](./model.md)). A table gives both runs' overall
    frequency bias (closer to 1 is better), hit rate (higher is better),
@@ -378,7 +381,7 @@ soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
 mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which
 is what that run used; the same rule reads a snapshot without a runoff model
-as legacy, and one without a dam evaporation factor (engine < 0.16.0) as 0,
+as legacy (a run from before the setting, so it did run the legacy model), and one without a dam evaporation factor (engine < 0.16.0) as 0,
 no dam evaporation. A dam's area when full, area exponent and seepage have
 their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
 (capacity ÷ 3 m)"*). Month
