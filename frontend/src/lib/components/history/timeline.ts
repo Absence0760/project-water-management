@@ -2,7 +2,7 @@
 // item says, grouping one request's items (a change set) into one entry, and
 // entries into the viewer's calendar days. No DOM, no fetch.
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
-import { fmtDay, localIsoDate } from '$lib/format/number';
+import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
@@ -73,6 +73,13 @@ function range(s: Record<string, unknown>): string {
 function versionChange(s: Record<string, unknown>): string {
 	const p = s.provenance as Record<string, unknown> | undefined;
 	return p && typeof p === 'object' ? `; now ${str(p.to)}, was ${str(p.from)}` : '';
+}
+
+/** "green under 5 %, amber under 20 % (the defaults)": a team_thresholds.changed side. */
+function trafficLights(v: unknown): string {
+	const t = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+	const pct = (x: unknown) => `${fmtNum(num(x) ?? 0, 2, true)} %`;
+	return `green under ${pct(t.green)}, amber under ${pct(t.amber)}${t.source === 'default' ? ' (the defaults)' : ''}`;
 }
 
 const UNLINK_CAUSES: Record<string, string> = {
@@ -214,6 +221,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Created an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'api_key.revoked':
 			return `Revoked an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
+		// A team admin changed the portfolio's traffic lights (D11, 055): recorded on each team project.
+		case 'team_thresholds.changed':
+			return `Changed the portfolio traffic lights of the team “${str(s.team)}” from ${trafficLights(s.from)} to ${trafficLights(s.to)}`;
 		default:
 			return e.kind;
 	}

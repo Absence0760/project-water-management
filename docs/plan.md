@@ -619,6 +619,13 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     Latin-hypercube members enough, and should the ensemble sample the typical
     or the wide bounds when the fit used wide ones? What coverage of the
     held-out half would the CMA accept (the app warns below 70 %)?
+19. **Portfolio traffic lights (roadmap step 2, D11).** *Built as a team
+    setting (055_team_settings), defaults to confirm.* A catchment shows green
+    when its outlet EWR was not met on under 5 % of the last 30 days, amber
+    under 20 %, red otherwise. Are 5 % and 20 % the right defaults for a WUA,
+    and is "days not met over 30 days" the right measure (or months met
+    against the Reserve rule table, see 17)? A team admin can already set
+    other cut-offs on the team page; only the defaults' sign-off is open.
 
 ### Product
 

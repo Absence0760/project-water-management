@@ -9,6 +9,8 @@ import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES } from './access.js';
 import { readJson } from '../http/body.js';
+import { recordTeamAudit } from '../history/record.js';
+import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatch } from './settings.js';
 
 const RoleEnum = z.enum(TEAM_ROLES);
 const Name = z.string().trim().min(1).max(200);
@@ -25,19 +27,51 @@ async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 
 const TEAM_SUMMARY = `t.id, t.name, app_team_role(t.id) AS role, t.created_at AS "createdAt",
 	(SELECT count(*)::int FROM team_member m WHERE m.team_id = t.id) AS "memberCount",
-	(SELECT count(*)::int FROM project p WHERE p.team_id = t.id) AS "projectCount"`;
+	(SELECT count(*)::int FROM project p WHERE p.team_id = t.id) AS "projectCount",
+	t.settings`;
+
+/** A team as the API returns it: the stored settings, and the portfolio thresholds they come to (the team's or the defaults). */
+const toTeam = <T extends { settings: unknown }>(row: T) => ({ ...row, portfolioThresholds: appliedThresholds(row.settings) });
 
 async function getTeam(db: Db, id: string) {
-	const { rows } = await db.query(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
+	const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
-	return rows[0];
+	return toTeam(rows[0]);
+}
+
+const TeamPatch = z
+	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional() })
+	.strict()
+	.refine((b) => b.name !== undefined || b.settings !== undefined, { message: 'nothing to change: send name or settings' });
+
+/**
+ * Change the team's settings (admin; the caller checked). Records
+ * `team_thresholds.changed` on each of the team's projects when the
+ * thresholds that apply changed; a save that changes nothing records nothing.
+ */
+async function patchSettings(db: Db, id: string, patch: TeamSettingsPatch) {
+	// The row lock makes `before` the state this change replaces, even with two admins saving at once.
+	const { rows } = await db.query<{ name: string; settings: unknown }>('SELECT name, settings FROM team WHERE id = $1 FOR UPDATE', [id]);
+	if (!rows[0]) throw new ApiError(404, 'not found');
+	const next = applySettingsPatch(rows[0].settings, patch);
+	const before = teamThresholds(rows[0].settings);
+	const after = teamThresholds(next);
+	if (JSON.stringify(before) === JSON.stringify(after)) return;
+	await db.query('UPDATE team SET settings = $2 WHERE id = $1', [id, JSON.stringify(next)]);
+	// null = the defaults: the log says which numbers applied before and after.
+	await recordTeamAudit(db, id, 'team_thresholds.changed', {
+		teamId: id,
+		team: rows[0].name,
+		from: appliedThresholds(rows[0].settings),
+		to: appliedThresholds(next)
+	});
 }
 
 export const teamRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
 		withUser(c.get('userId'), async (db) => {
-			const { rows } = await db.query(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
-			return c.json({ teams: rows });
+			const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
+			return c.json({ teams: rows.map(toTeam) });
 		})
 	)
 	.post('/', async (c) => {
@@ -64,11 +98,12 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.patch('/:id', async (c) => {
-		const body = z.object({ name: Name }).parse(await readJson(c));
+		const body = TeamPatch.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
-			await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]);
+			if (body.name !== undefined) await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]);
+			if (body.settings) await patchSettings(db, id, body.settings);
 			return c.json({ team: await getTeam(db, id) });
 		});
 	})

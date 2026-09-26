@@ -463,6 +463,18 @@ New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
+**Portfolio traffic lights** (a panel beside the projects, decision D11):
+every member reads the rule the portfolio judges by, "green when it was not
+met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
+*These are the team's own thresholds* or *These are the default thresholds,
+still to be confirmed by the hydrologist*. Admins get two number inputs,
+*Green below (%)* and *Amber below (%)*, checked as the API checks them (both
+0–100, green below amber; the message sits under the inputs, which carry
+`aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
+once the team has its own, *Use the defaults*. Anyone else sees "Only admins
+can change them." A change shows in each team project's History tab
+(`team_thresholds.changed`).
+
 ### Portfolio (`/teams/:id/portfolio`)
 
 The WUA's one screen for all of a team's catchments (roadmap WP-2.14,
@@ -499,7 +511,10 @@ dam; unknown values sort last either way. The sort lives in the URL
 ("No catchments in this team yet", with *New project in this team* for
 members and admins), and not-found for a team you aren't in. A farmer who
 opens the address is sent to their farm view (`/farm`), as the project list
-does. The intro states the thresholds the API returns.
+does. The intro states the thresholds the statuses were judged by (the API's
+`thresholds`, the team's or the defaults) and whose they are; an admin gets
+a link to change them on the team page (§ Teams), anyone else is told a team
+admin can.
 
 ## Network
 
