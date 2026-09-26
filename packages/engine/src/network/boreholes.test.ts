@@ -187,6 +187,17 @@ describe('boreholes (WP-1.34)', () => {
 		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n24's supply fraction/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});
+
+	it('an annual borehole cap can legitimately raise a downstream farm’s time reliability when demand grows (seed 2909), so the law is checked without caps', () => {
+		// More demand uses n2's capped borehole up earlier, so its lagged stream depletion falls earlier and misses the
+		// days n1's dam (minimum level 100 %) needs the river to refill.
+		const input = randomInput(2909);
+		expect(input.model.boreholes!.some((b) => b.nodeId === 'n2' && b.annualCapM3 !== null && b.depletionFactor > 0)).toBe(true);
+		const rules = droughtBoreholesAsSupplemental(input);
+		for (const b of rules.model.boreholes ?? []) b.annualCapM3 = input.model.boreholes!.find((x) => x.id === b.id)!.annualCapM3;
+		expect(checkDoubledCropAreas(rules)).toMatch(/doubling crop areas raised n1's timeReliability/);
+		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
+	});
 });
 
 describe('individual boreholes (WP-3.9)', () => {
