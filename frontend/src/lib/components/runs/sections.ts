@@ -20,23 +20,19 @@ type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssuran
 export function resultGroups(summary: SectionInput): ResultGroup[] {
 	return [
 		{
+			// The run header says whether the run is the evidence and previews its notes (links to Record).
 			label: null,
-			sections: [
-				{ id: 'res-summary', label: 'Summary' },
-				// The run's written explanation and whether it is the project's evidence run: every run.
-				{ id: 'res-notes', label: 'Notes & evidence' },
-				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
-				{ id: 'res-publication', label: 'Publication' }
-			]
+			sections: [{ id: 'res-summary', label: 'Summary' }]
 		},
 		{
 			label: 'River & Reserve',
 			sections: [
 				// Reserve compliance by month: only when the project has a rule table (engine ≥ 0.21.0).
 				...(summary.ewrAssurance?.length ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
-				// EWR vs outflow and the flow-duration curve share a row (res-fdc sits beside res-ewr): one entry.
-				{ id: 'res-ewr', label: 'EWR & flow duration' },
-				{ id: 'res-ewr-grid', label: 'EWR by month' }
+				{ id: 'res-ewr', label: 'EWR vs outflow' },
+				{ id: 'res-ewr-grid', label: 'EWR by month' },
+				// The 5–95 % range on the EWR and Reserve findings (issue #4 phase 9): every run, beside the findings it qualifies.
+				{ id: 'res-uncertainty', label: 'Uncertainty bands' }
 			]
 		},
 		{
@@ -50,9 +46,11 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 		{
 			label: 'Model quality',
 			sections: [
+				// The hydrograph and the flow-duration curve, compared on every calibration iteration: together.
 				{ id: 'res-hydrograph', label: 'Hydrograph' },
-				// The calibration statistics, the fit record and the uncertainty bands (issue #4 phase 9): one panel.
-				{ id: 'res-calibration', label: 'Calibration & uncertainty' },
+				{ id: 'res-fdc', label: 'Flow duration' },
+				// The calibration statistics and the fit record.
+				{ id: 'res-calibration', label: 'Calibration' },
 				// Runoff model balance: conceptual models (GR4J) only.
 				...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 				// WR2012 check: only when the project has a reference.
@@ -60,6 +58,15 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-ewr-agreement', label: 'EWR vs observed' },
 				// Hydrologist plausibility checks: runs made by engine ≥ 0.25.0.
 				...(summary.plausibility ? [{ id: 'res-plausibility', label: 'Plausibility checks' }] : [])
+			]
+		},
+		{
+			// The run's written explanation, its evidence nomination and its publication: sign-off, after the results.
+			label: 'Record',
+			sections: [
+				{ id: 'res-notes', label: 'Notes & evidence' },
+				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
+				{ id: 'res-publication', label: 'Publication' }
 			]
 		},
 		{

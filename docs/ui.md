@@ -1057,22 +1057,35 @@ run's report to chosen members every week or month.
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
   together sit together:
-  1. **Summary**, then **Notes & evidence** (`#res-notes`) and
-     **Publication** (`#res-publication`).
+  1. **Summary**. The run header carries the evidence line and a one-line
+     preview of the run's notes (`notesPreview`), each a link to the Record
+     group. The summary opens with the run's warnings in two parts
+     (`runs/credibility.ts` `warningGroups`): **things to check before relying
+     on this run** (a warning box; any warning not known to be a data note
+     lands here, so a new engine warning is never hidden), then, collapsed,
+     **notes on how the input data were handled** (CHIRPS bias correction,
+     rain treated as missing, accumulations spread, zero-rain runs, flat
+     stretches). Then one line of **model checks** (`credibility`): the
+     self-checks, the plausibility findings, the WR2012 flag and the in-sample
+     fit, each in words with a coloured edge and a link to its panel.
   2. **River & Reserve**: Reserve compliance by month (with a rule table),
-     EWR vs outflow beside the flow-duration curve (one menu entry, **EWR &
-     flow duration**, since they share a row), EWR by month.
+     EWR vs outflow, EWR by month, and the **Uncertainty bands** (their own
+     panel and menu entry, beside the findings they qualify).
   3. **Farms & users**: curtailment (with the other water users and the EWR
      sites tables), farm detail.
-  4. **Model quality**: hydrograph, calibration & uncertainty (with where the
-     parameters came from), runoff model, WR2012 check, EWR vs observed,
-     plausibility checks.
-  5. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
+  4. **Model quality**: the hydrograph with the flow-duration curve under it
+     (compared together on every calibration iteration), calibration (with
+     where the parameters came from), runoff model, WR2012 check, EWR vs
+     observed, plausibility checks.
+  5. **Record**: notes & evidence (with the run's inputs), publication:
+     sign-off, after the results.
+  6. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
-  Failed self-checks, plausibility findings and a WR2012 query or "not
-  usable" flag are also run warnings (engine), so they show at the top of the
-  summary however far down their panel is. The bullets below describe each
-  panel; the order above is the page's.
+  The rail's menu names its groups visibly (its "On this page" heading is for
+  screen readers only) and keeps every link 24 px tall; at 768 px tall it fits
+  beside a full runs list, whose panel shrinks first and clips rather than
+  spilling under the menu. The bullets below describe each panel; the order
+  above is the page's.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
   rainfall series, and while the farms' flow shares add up to more than 100 %

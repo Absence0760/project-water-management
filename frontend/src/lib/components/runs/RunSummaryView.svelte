@@ -14,6 +14,7 @@
 	import { m3DayToM3s, m3DayToMm3a, sortFarms, SUPPLY_TARGET, supplyBarFraction, type FarmSortKey } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
+	import { credibility, warningGroups } from './credibility';
 
 	let {
 		summary,
@@ -66,14 +67,28 @@
 		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day', title: 'Mean share of the shortfall at the EWR sites below this farm that is charged to it, pro rata to its net impact (engine 0.17.0; older runs: the reach shortfall it adds).' },
 		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this farm was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
 	];
+	const groups = $derived(warningGroups(summary.warnings));
+	const checkItems = $derived(credibility(summary));
 </script>
 
-{#if summary.warnings?.length}
-	<div class="alert alert-warning" role="status">
-		<strong>{summary.warnings.length} warning{summary.warnings.length === 1 ? '' : 's'} from this run</strong>
-		<ul>{#each summary.warnings as w, i (i)}<li>{w}</li>{/each}</ul>
+<!-- What to check before relying on the run, then how its data were handled (runs/credibility.ts). -->
+{#if groups.check.length}
+	<div class="alert alert-warning" role="status" data-testid="warnings-check">
+		<strong>{groups.check.length === 1 ? '1 thing' : `${groups.check.length} things`} to check before relying on this run</strong>
+		<ul>{#each groups.check as w, i (i)}<li>{w}</li>{/each}</ul>
 	</div>
 {/if}
+{#if groups.data.length}
+	<details class="data-notes" data-testid="warnings-data">
+		<summary>{groups.data.length === 1 ? '1 note' : `${groups.data.length} notes`} on how the input data were handled</summary>
+		<ul>{#each groups.data as w, i (i)}<li>{w}</li>{/each}</ul>
+	</details>
+{/if}
+<ul class="cred" aria-label="Model checks" data-testid="credibility">
+	{#each checkItems as c (c.label)}
+		<li class="tone-{c.tone}"><a href={c.href}><strong>{c.label}</strong> {c.text}</a></li>
+	{/each}
+</ul>
 
 <p class="lede">{lede}</p>
 
@@ -221,6 +236,52 @@
 {/if}
 
 <style>
+	.data-notes {
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.data-notes summary {
+		cursor: pointer;
+	}
+	.data-notes ul {
+		margin: 0.35rem 0 0;
+	}
+	.cred {
+		list-style: none;
+		margin: 0 0 0.75rem;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem 1rem;
+		font-size: 0.85rem;
+	}
+	/* The tone is in the words too (passed, failed, found something); the edge only repeats it. */
+	.cred li {
+		border-left: 3px solid var(--border);
+		padding-left: 0.4rem;
+	}
+	/* ≥ 24px tall: a touch target (WCAG 2.2), and the lines wrap on a phone. */
+	.cred a {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 24px;
+		color: var(--text-2);
+		text-decoration: none;
+	}
+	.cred a:hover {
+		text-decoration: underline;
+	}
+	.cred .tone-ok {
+		border-left-color: var(--success);
+	}
+	.cred .tone-warn {
+		border-left-color: var(--warning);
+	}
+	.cred .tone-bad {
+		border-left-color: var(--danger);
+	}
 	.lede {
 		margin: 0 0 0.9rem;
 		max-width: 72ch;

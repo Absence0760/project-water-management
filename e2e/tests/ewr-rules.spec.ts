@@ -129,7 +129,7 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expect(each.getByRole('row', { name: /^Jan 2020 .* not met$/ })).toBeVisible();
 	await expectNoViolations(page);
 	// The run's warnings say the same about the short record.
-	await expect(page.getByRole('status').filter({ hasText: /warnings? from this run/ })).toContainText('EWR rule table at the outlet (Outflow gauge)');
+	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('EWR rule table at the outlet (Outflow gauge)');
 });
 
 test('run comparison compares Reserve compliance and lists the rule-table change', async ({ page, owner }) => {

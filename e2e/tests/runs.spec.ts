@@ -214,25 +214,31 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
 	await expect(menu.getByRole('link')).toHaveText([
 		'Summary',
-		'Notes & evidence',
-		'Publication',
-		'EWR & flow duration',
+		'EWR vs outflow',
 		'EWR by month',
+		'Uncertainty bands',
 		'Curtailment',
 		'Farm detail',
 		'Hydrograph',
-		'Calibration & uncertainty',
+		'Flow duration',
+		'Calibration',
 		'Runoff model',
 		'EWR vs observed',
 		'Plausibility checks',
+		'Notes & evidence',
+		'Publication',
 		'Self-checks',
 		'Explore outputs'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
-	const groups = ['River & Reserve', 'Farms & users', 'Model quality', 'Dig deeper'];
-	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Farms & users|Model quality|Dig deeper)$/ })).toHaveText(groups);
-	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR & flow duration', 'EWR by month']);
+	const groups = ['River & Reserve', 'Farms & users', 'Model quality', 'Record', 'Dig deeper'];
+	await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(River & Reserve|Farms & users|Model quality|Record|Dig deeper)$/ })).toHaveText(groups);
+	await expect(menu.getByRole('list', { name: 'River & Reserve' }).getByRole('link')).toHaveText(['EWR vs outflow', 'EWR by month', 'Uncertainty bands']);
+	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
 	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
+	// The summary opens with the model checks, each linking to its panel.
+	const checks = page.getByRole('list', { name: 'Model checks' });
+	await expect(checks.getByRole('link', { name: /^Self-checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
 
 	// The menu sits in the rail beside the results and stays in view as the page scrolls,
 	// marking the section being read.
