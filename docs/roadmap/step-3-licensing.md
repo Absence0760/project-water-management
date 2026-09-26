@@ -1040,7 +1040,12 @@ must build WP-2.15 Phase B.
       capacity, then from the dam;
     - `trigger`: switch to the river when storage < trigger %, back at
       stop %;
-    - `runOfRiver`: no dam.
+    - `runOfRiver`: no dam. b023 fakes this with a "dummy dam" (a pool
+      taking all the upstream inflow, or a dam sized as a day of river
+      flow). Both importers already flag those farms with a `WARNING:`
+      "probable run-of-river, for the modeller to confirm" (issue #54, 2d;
+      `scripts/wbt-import/README.md`), so they are the candidates to switch
+      to `runOfRiver` once this lands.
   - **Pump capacity** m³/day (pumps × m³/h × 24).
   - **Hands-off flow**: river abstraction only above a threshold at the
     node (a fixed m³/day by month, or its EWR share).

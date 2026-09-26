@@ -142,3 +142,39 @@ export function farmOperatingRules(name: string, spec: Partial<FarmSpec>, report
 	const r = num(spec.returnFlowPct ?? null);
 	return { damMinPct: 0, ...irrigationFromReturnFlow(r), damAreaFullM2: null, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
 }
+
+// A probable run-of-river unit (issue #54, 2d): extract_project.py
+// run_of_river_note, whose comment has the full reasoning. b023 has no river
+// abstraction, so a unit that pumps straight from the river is entered as a
+// "dummy dam" that takes 100 % of the upstream inflow and either is a pool
+// (under 1 % of a day of its diversion capacity, or under 1 m³: the diversion
+// refills it within 15 minutes, so it stores nothing across a daily step,
+// where a real farm dam holds days to months of its diversion) or holds
+// exactly a whole number of m³/s for one day and takes none of the farm's own
+// runoff (a real on-channel dam catches that runoff too, which rules out a
+// surveyed capacity that happens to be a multiple of 86,400 m³). The importer
+// only warns: the modeller confirms, and run-of-river supply waits for pump
+// capacity (#54, 2c).
+const RUN_OF_RIVER_PCT_UPSTREAM = 0.9999; // 100 %, allowing for float rounding
+const RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION = 0.01;
+const RUN_OF_RIVER_POOL_MAX_M3 = 1;
+const SECONDS_PER_DAY = 86400;
+
+/** run_of_river_note(): a WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river. */
+export function runOfRiverNote(name: string, pctUpstream: number, capacity: number, divert: number, pctRunoff: number): string | null {
+	if (pctUpstream < RUN_OF_RIVER_PCT_UPSTREAM || capacity <= 0) return null;
+	let why: string;
+	if (capacity < RUN_OF_RIVER_POOL_MAX_M3 || capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert) {
+		why = `is a pool of ${pyFormatG(capacity)} m³`;
+		if (divert > 0) why += ` against a diversion capacity of ${Math.floor(divert + 0.5)} m³/day`;
+	} else {
+		const rate = Math.floor(capacity / SECONDS_PER_DAY + 0.5);
+		if (rate < 1 || Math.abs(capacity - rate * SECONDS_PER_DAY) > 1 || pctRunoff !== 0) return null;
+		why = `holds exactly ${rate} m³/s for one day (${Math.floor(capacity + 0.5)} m³) and takes none of the farm's own runoff`;
+	}
+	return (
+		`WARNING: farm ${name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream ` +
+		`inflow and ${why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
+		'the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)'
+	);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { farmOperatingRules, readFarmSpec } from './farms';
+import { farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -89,5 +89,52 @@ describe('readFarmSpec', () => {
 		expect(report.unmapped).toEqual([
 			expect.objectContaining({ code: 'non-numeric-value', cell: 'P31', element: 'Farm B', text: 'about 5000', message: "[Farm spec] Dam capacity for Farm B (P31) holds 'about 5000', not a number; imported as 0" })
 		]);
+	});
+});
+
+// Ported from scripts/wbt-import/test_run_of_river.py (issue #54, 2d): the same cases and text.
+describe('runOfRiverNote (run_of_river_note)', () => {
+	const TAIL =
+		'. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; the app imports it ' +
+		'as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)';
+
+	it('flags a pool with a large diversion', () => {
+		expect(runOfRiverNote('Pump unit', 1, 0.4, 12960, 0.25)).toBe(
+			'WARNING: farm Pump unit: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the ' +
+				'upstream inflow and is a pool of 0.4 m³ against a diversion capacity of 12960 m³/day' +
+				TAIL
+		);
+	});
+
+	it('flags a placeholder under 1 m³ without a diversion', () => {
+		expect(runOfRiverNote('Pump unit', 1, 0.5, 0, 0)).toContain('and is a pool of 0.5 m³. b023');
+	});
+
+	it('flags a dam that holds a whole number of m³/s for one day', () => {
+		expect(runOfRiverNote('River pool', 1, 691200, 0, 0)).toBe(
+			'WARNING: farm River pool: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the ' +
+				"upstream inflow and holds exactly 8 m³/s for one day (691200 m³) and takes none of the farm's own runoff" +
+				TAIL
+		);
+		expect(runOfRiverNote('One cumec', 1, 86400.4, 0, 0)).not.toBeNull();
+	});
+
+	it('leaves a real on-channel dam with all the upstream inflow alone', () => {
+		// Negative controls: 100 % upstream inflow, but real storage.
+		expect(runOfRiverNote('Farm dam', 1, 310000, 0, 0.35)).toBeNull();
+		expect(runOfRiverNote('Farm dam', 1, 240000, 12960, 0)).toBeNull(); // not a whole day of m³/s
+		expect(runOfRiverNote('Small dam', 1, 4000, 12960, 0.15)).toBeNull(); // 31 % of a day's diversion
+		expect(runOfRiverNote('Rounded dam', 1, 432000, 12960, 0.2)).toBeNull(); // 5 m³/s x 1 day, but catches its runoff
+	});
+
+	it('leaves a pool just over 1 % of the diversion alone', () => {
+		expect(runOfRiverNote('Pool', 1, 129.5, 12960, 0.25)).not.toBeNull();
+		expect(runOfRiverNote('Pond', 1, 129.7, 12960, 0.25)).toBeNull();
+	});
+
+	it('leaves less than 100 % upstream inflow, or no dam, alone', () => {
+		expect(runOfRiverNote('Off-channel', 0.99, 0.4, 12960, 0.25)).toBeNull();
+		expect(runOfRiverNote('Off-channel', 0, 691200, 0, 0)).toBeNull();
+		expect(runOfRiverNote('No dam', 1, 0, 12960, 0)).toBeNull();
 	});
 });
