@@ -96,6 +96,10 @@ describe('openGrid + readPoints', () => {
 		expect(pixelOf(grid, -20.1, 25.41)).toBeNull();
 		expect(pixelOf(grid, -20.31, 25.1)).toBeNull();
 		await expect(readPoints(r.read, grid, [{ lat: -21, lon: 25.1 }])).rejects.toThrow(/outside the grid/);
+		// Not a number is nowhere, not pixel (NaN, NaN).
+		expect(pixelOf(grid, Number.NaN, 25.1)).toBeNull();
+		expect(pixelOf(grid, -20.1, Number.NaN)).toBeNull();
+		await expect(readPoints(r.read, grid, [{ lat: Number.NaN, lon: 25.1 }])).rejects.toThrow(/outside the grid/);
 	});
 
 	it('puts a point on the grid’s own east or south edge in the edge pixel, as there is none beyond it', async () => {
@@ -202,6 +206,15 @@ describe('openGrid + readPoints', () => {
 			expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([23.5]);
 		});
 
+		it('a tiepoint at another raster position than (0, 0) still places pixel (0, 0)', async () => {
+			// Raster (2, 1) is at 25.10 E, 20.05 S, so the grid's corner is at 25.00 E, 20.00 S.
+			const r = reader(writeGrid(spec({ override: { 33922: [12, [2, 1, 0, 25.1, -20.05, 0]] } })));
+			const grid = (await openGrid(r.read))!;
+			expect(grid.originLon).toBeCloseTo(25, 12);
+			expect(grid.originLat).toBeCloseTo(-20, 12);
+			expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([23.5]);
+		});
+
 		it('PixelIsArea, or no raster type (the GeoTIFF default), reads the tiepoint as the corner', async () => {
 			for (const keys of [CHC, { 1024: 2, 2048: 4326 }]) {
 				const grid = (await openGrid(reader(writeGrid(spec({ override: { 34735: [3, geoKeys(keys)] } }))).read))!;
@@ -220,6 +233,26 @@ describe('openGrid + readPoints', () => {
 		it.each(refused)('refuses %s', async (_, override, message) => {
 			await expect(openGrid(reader(writeGrid(spec({ override }))).read)).rejects.toThrow(message);
 		});
+	});
+
+	it('reads a strip table that lies past the first 64 KB image-directory read, with reads of its own', async () => {
+		// 20 000 one-pixel rows: the 80 KB offsets array runs past the IFD block, the byte counts wholly after it.
+		const height = 20_000;
+		const bytes = writeGrid({ width: 1, height, originLon: 25, originLat: -20, scale: 0.05, values: Array.from({ length: height }, (_, i) => i % 1000) });
+		const r = reader(bytes);
+		const grid = (await openGrid(r.read))!;
+		expect(grid.height).toBe(height);
+		const at = (row: number) => ({ lat: -20 - (row + 0.5) * 0.05, lon: 25.025 });
+		expect(await readPoints(r.read, grid, [at(0), at(12_345), at(height - 1)])).toEqual([0, 345, 999]);
+		// A byte-count read that comes back short is refused, not read as a zero-length strip.
+		const dv = new DataView(bytes.buffer, bytes.byteOffset);
+		const ifd = dv.getUint32(4, true);
+		const entry = Array.from({ length: dv.getUint16(ifd, true) }, (_, i) => ifd + 2 + i * 12).find((p) => dv.getUint16(p, true) === 279)!;
+		const countsAt = dv.getUint32(entry + 8, true);
+		expect(countsAt).toBeGreaterThan(ifd + 64 * 1024);
+		const short: RangeRead = async (start, end) => bytes.subarray(start, start >= countsAt && start < countsAt + height * 4 ? start + 1 : end + 1);
+		const g2 = (await openGrid(short))!;
+		await expect(readPoints(short, g2, [at(height - 1)])).rejects.toThrow(/ends inside its image directory/);
 	});
 
 	it('returns null for a file that is not published (404)', async () => {

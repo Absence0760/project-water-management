@@ -270,7 +270,8 @@ export function pixelOf(g: Pick<GridInfo, 'width' | 'height' | 'originLon' | 'or
 	};
 	const col = index((lon - g.originLon) / g.scaleLon, g.width);
 	const row = index((g.originLat - lat) / g.scaleLat, g.height);
-	if (row < 0 || col < 0 || row >= g.height || col >= g.width) return null;
+	// Written so NaN (a non-number coordinate) fails too.
+	if (!(row >= 0 && col >= 0 && row < g.height && col < g.width)) return null;
 	return { row, col };
 }
 
