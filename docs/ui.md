@@ -2691,7 +2691,7 @@ the assessor's decision, the empty list, axe in light and dark).
 
 WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
 settings revisions and audit events, grouped by the viewer's day, with a
-request's change set folded into one entry; filters by farm, event kind and
+request's change set folded into one entry; filters by unit ("All units"), event kind and
 parameter. Each revision shows its change lines, and for editors a
 **Restore this version** button behind a confirm that previews the diff;
 restore buttons are disabled while there are unsaved model edits, and a

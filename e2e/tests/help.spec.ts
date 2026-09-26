@@ -64,7 +64,7 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await tip.click();
 	await bubble.getByRole('link', { name: 'More in the glossary' }).click();
 	await expect(page).toHaveURL(/\/help\/glossary#element-farm$/);
-	await expect(page.getByRole('article', { name: 'Unit' })).toBeInViewport();
+	await expect(page.getByRole('article', { name: 'Unit', exact: true })).toBeInViewport();
 });
 
 test('a help tip works from the keyboard alone and is announced to screen readers', async ({ page, owner }) => {

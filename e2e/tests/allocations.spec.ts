@@ -38,7 +38,7 @@ test('an editor imports registered volumes and compares them with modelled use',
 	const previewRows = page.getByTestId('allocation-preview').locator('tbody tr');
 	await expect(previewRows.nth(0)).toContainText('unknown water source “lake”');
 	await expect(previewRows.nth(1)).toContainText('Somewhere else');
-	await page.getByLabel('Farm for line 3').selectOption({ label: 'Lower farm' });
+	await page.getByLabel('Unit for line 3').selectOption({ label: 'Lower farm' });
 	await expect(summary).toContainText('2 matched to a unit, 0 not matched');
 	await expectNoViolations(page);
 	await page.getByRole('button', { name: 'Import 2 rows' }).click();
