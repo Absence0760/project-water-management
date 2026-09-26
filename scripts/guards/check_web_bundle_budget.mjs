@@ -659,6 +659,15 @@
 //             fixes (fmtQty for small values, the FDC percentile table from
 //             the engine, the project time-zone field: ~1 KB) merged with the
 //             #45 import, A-pan and label work. Headroom ~5 KB.
+// 2026-09-26  total 957 → 958 KB. Issue #45, fit provenance of the daily
+//             A-pan series: the fit record's fingerprint (SHA-256 of the
+//             series' values via crypto.subtle), its row and caveat in the
+//             fit record view, Settings' fetch-and-hash of the live series,
+//             and the run comparison's "another daily A-pan series". main
+//             measured 957 at its own ceiling; this measured 958 (+<1 KB,
+//             rounding up). Largest chunk unchanged. No headroom left.
+// 2026-09-26  total stays 963 KB (measured 959): the daily A-pan fit
+//             fingerprint (+1 KB) merged over the entry above. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

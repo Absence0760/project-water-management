@@ -17,8 +17,11 @@
 		type FlowShareMethod,
 		type PeInput,
 		type ProjectSettings,
-		type SeriesProvenance
+		type SeriesProvenance,
+		type ApanDailyFingerprint,
+		type SeriesMeta
 	} from '@water-management/engine';
+	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
@@ -72,6 +75,7 @@
 		editor,
 		seriesKinds = null,
 		chirpsSource,
+		apanSeries,
 		readonly,
 		onProjectChange
 	}: {
@@ -81,6 +85,8 @@
 		seriesKinds?: string[] | null;
 		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
+		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
+		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
 	} = $props();
@@ -269,6 +275,30 @@
 	// The engine refuses a GR4J run without it (runoff/simulate.ts).
 	// A daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
+	// The daily A-pan series now, as the fit record fingerprints it (issue #45): fetched and hashed only
+	// when the record tracked one, so "forcing changed since fit" can say whether it was replaced.
+	let apanNow = $state<ApanDailyFingerprint | null | undefined>(undefined);
+	const apanTracked = $derived(s.fitRecord?.forcing?.apanDaily !== undefined);
+	$effect(() => {
+		const meta = apanSeries;
+		const tracked = apanTracked;
+		apanNow = meta === null ? null : undefined;
+		if (!meta || !tracked) return;
+		let live = true;
+		api.series
+			.get(project.id, meta.id)
+			.then(apanDailyOfValues)
+			.then((f) => {
+				if (live) apanNow = f;
+			})
+			.catch(() => {
+				// Unknown, not "changed": the caveat then waits for a value it can compare.
+				if (live) apanNow = undefined;
+			});
+		return () => {
+			live = false;
+		};
+	});
 	const petMissing = $derived(
 		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
 	);
@@ -778,7 +808,7 @@
 			onApply={applyFit}
 		/>
 		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} />
+			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} apanDaily={apanNow} />
 		{/if}
 	</div>
 

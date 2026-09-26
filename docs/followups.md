@@ -397,19 +397,15 @@ collected as a checklist in issue #46; tick it there as they answer.
       `summary.apanDaily` and a run warning. No series, byte-identical
       results. Settings → Demand says which source A-pan comes from
       ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
-- [ ] **Fit provenance of the daily A-pan series.** A fit record's `forcing`
-      holds the monthly A-pan and the pan coefficient, not the daily A-pan
-      series (§2.3a), so uploading, replacing or deleting the daily record
-      after a GR4J fit (under `pe.kind: 'pan'`) doesn't mark the fit stale,
-      though it changes the PE the fit trades X1/X3 against. Durable fix:
-      record a fingerprint of the series in `forcing` (start, length and a
-      hash of the values the run window used, or the run's
-      `run_input_series` SHA-256) and pass today's through
-      `fitRecordStatus(settings, record, now)` as `chirpsSource` is, with a
-      "daily A-pan changed since the fit" caveat. Trigger: the first project
-      that fits GR4J with a daily A-pan record, or the hydrologist asking
-      for it; until then the run comparison's input diff lists the series
-      change (`A-pan evaporation (daily) values changed on …`).
+- [x] **Fit provenance of the daily A-pan series (done, engine 0.40.0).**
+      The fit record's `forcing.apanDaily` keeps the start, length and
+      SHA-256 of the daily A-pan series the fit ran on (null = none);
+      `fitRecordStatus(settings, record, { apanDaily })` sets
+      `apanDailyChanged` (and `forcingChanged`) when it was added, replaced
+      or removed since a GR4J fit under pan coefficient × A-pan, with its own
+      caveat. Settings hashes the project's series, the Runs page, report and
+      run comparison read each run's snapshot `valuesSha256`
+      ([model.md §2.10b](./model.md)).
 - [ ] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*).** A rain-source
       period scales the alternative gauge by a monthly factor, which keeps

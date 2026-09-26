@@ -101,6 +101,14 @@ describe('fitValidationRows', () => {
 			b: 'no'
 		});
 		expect(row(fitValidationRows(onV2, null, settings, null, { a: undefined }), 'Forcing changed since fit').a).toBe('no');
+		// Issue #45: a run on another daily A-pan series than its fit says so; the same series (positive control) doesn't.
+		const pan = { startDate: '2020-10-01', length: 30, valuesSha256: 'c'.repeat(64) };
+		const onPan = record({ ...withForcing, forcing: { ...withForcing.forcing!, apanDaily: pan } });
+		expect(row(fitValidationRows(onPan, onPan, settings, settings, {}, { a: { ...pan, valuesSha256: 'd'.repeat(64) }, b: { ...pan } }), 'Forcing changed since fit')).toMatchObject({
+			a: 'yes (another daily A-pan series)',
+			b: 'no'
+		});
+		expect(row(fitValidationRows(onPan, null, settings, null, {}, { a: undefined }), 'Forcing changed since fit').a).toBe('no');
 	});
 });
 

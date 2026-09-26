@@ -5,6 +5,8 @@ import {
 	CHIRPS_PROVENANCES,
 	provenanceKey,
 	provenanceLabel,
+	seriesDigest,
+	type ApanDailyFingerprint,
 	type DailySeries,
 	type RunSeriesSnapshot,
 	type SeriesMeta,
@@ -63,6 +65,31 @@ export function chirpsSourceOfInput(series: Partial<Record<string, Pick<RunSerie
 	const c = series.rain_chirps_mm;
 	if (!c) return null;
 	return c.provenance === undefined ? undefined : c.provenance;
+}
+
+/**
+ * The daily A-pan series a run recorded (issue #45), from its input snapshot:
+ * start, length and the values' SHA-256, as the fit record keeps them. null
+ * with no daily A-pan series, undefined when the snapshot isn't known or is
+ * older than the hash (nothing to compare). For "forcing changed since fit".
+ */
+export function apanDailyOfInput(series: Partial<Record<string, Pick<RunSeriesSnapshot, 'startDate' | 'length' | 'valuesSha256'>>> | null | undefined): ApanDailyFingerprint | null | undefined {
+	if (!series) return undefined;
+	const a = series.evap_apan_mm;
+	if (!a) return null;
+	return a.valuesSha256 ? { startDate: a.startDate, length: a.length, valuesSha256: a.valuesSha256 } : undefined;
+}
+
+/**
+ * The same from the values themselves (a model input, or a series the page
+ * fetched): SHA-256 hex of `seriesDigest(values)`, the hash the backend
+ * stores in a run's snapshot (runs/execute.ts seriesHash). null without one.
+ */
+export async function apanDailyOfValues(s: Pick<DailySeries, 'startDate' | 'values'> | null | undefined): Promise<ApanDailyFingerprint | null> {
+	if (!s) return null;
+	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seriesDigest(s.values)));
+	const valuesSha256 = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+	return { startDate: s.startDate, length: s.values.length, valuesSha256 };
 }
 
 /**

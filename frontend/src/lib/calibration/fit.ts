@@ -19,7 +19,8 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type RunoffModelId,
-	type SeriesProvenance
+	type SeriesProvenance,
+	type ApanDailyFingerprint
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 
@@ -212,7 +213,7 @@ export function seedError(seed: number | null): string | null {
 export function fitRecordFor(
 	r: CalibrationReport,
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> & Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource'>>,
-	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null }
+	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null }
 ): FitRecord {
 	return fitRecordFromReport(r, {
 		settings,
@@ -221,7 +222,9 @@ export function fitRecordFor(
 		engineVersion: ENGINE_VERSION,
 		fittedAt: (opts.now ?? new Date()).toISOString(),
 		// The CHIRPS series' product and version the fit ran on (issue #40c), when known.
-		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {})
+		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {}),
+		// The daily A-pan series it ran on (issue #45), when known.
+		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {})
 	});
 }
 

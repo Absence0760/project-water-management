@@ -249,10 +249,15 @@ days it covers.
 the series doesn't cover, so a scenario that raises evaporation on a project
 with a daily record scales the series as well.
 
-**Not yet tracked.** A calibration's fit record (§2.10b) records the monthly
-A-pan and the pan coefficient it ran under, not the daily series, so
-replacing the daily record doesn't mark a fit stale
-([followups.md](./followups.md), "Fit provenance of the daily A-pan series").
+**Fit provenance.** A calibration's fit record (§2.10b) records the daily
+series it ran on as `forcing.apanDaily`: its start, length and the SHA-256 of
+its values (the hash a run's input snapshot keeps as `valuesSha256`), or null
+when the project had none. Adding, replacing or removing the series after a
+GR4J fit made under pan coefficient × A-pan marks the fit stale
+(`apanDailyChanged`, and with it `forcingChanged`), with its own caveat (engine
+≥ 0.40.0, which bumped the version for the new fit-record field; see §2.10b).
+The run's `fitStatus` (in-sample or not, §2.10) is unaffected: the scored days
+are still the fitted ones.
 
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
@@ -2600,8 +2605,13 @@ and the same flow record as the one scored; `notFitted` when there is no
 such record (parameters set by hand, imported or defaults); `edited` when a
 fitted parameter was changed by hand; `otherPeriod` when the fit used another
 window, other exclusions or the other record. A forcing change since the fit
-(PE, CHIRPS, rain-source settings) doesn't change it: the days are still the
-ones fitted, though the fit record flags the forcing. Hand-tuned parameters
+(PE, CHIRPS, rain-source settings, and from engine 0.40.0 a daily A-pan series
+added, replaced or removed, §2.3a) doesn't change it: the question here is
+whether the scored days are the fitted ones, and they still are. That the fit
+may no longer hold under the new forcing is a separate flag, the fit record's
+`forcingChanged` (and `apanDailyChanged`), shown with the fit record and as
+"Forcing changed since fit" (§2.10b); `calibrationFitStatus` deliberately
+doesn't read it, so `fitted` never turns into a staleness verdict. Hand-tuned parameters
 flatter the model as much as a fit does, which the `notFitted` note says. The
 field never changes a result; a run from before 0.39.0 has none, and the UI
 then says only "calibration period".
@@ -2889,6 +2899,21 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   gap-filled day's rain changed. A record made before it, or a caller that
   doesn't know the label, compares nothing. The record never
   changes a result.
+  **The daily A-pan series (engine ≥ 0.40.0, issue #45, §2.3a).** The forcing
+  also records `apanDaily`: the start, length and SHA-256 of the values
+  (`seriesDigest`, the same hash as a run snapshot's `valuesSha256`) of the
+  daily A-pan series the fit ran on, or null for none. As with the CHIRPS
+  label the caller passes the series now (`fitRecordStatus(settings, record,
+  { apanDaily })`: Settings fetches and hashes the project's first daily A-pan
+  series, and only when the record tracked one; the Runs page, the report and
+  the run comparison read each run's snapshot). Any difference (another
+  hash, start or length, a series added or removed) sets `apanDailyChanged`
+  and `forcingChanged`, with the caveat "The daily A-pan evaporation series
+  has been added, replaced or removed since the fit …". It counts only for a
+  GR4J fit made under `pe.kind: 'pan'` with the settings still on `'pan'`:
+  under a monthly PE the series doesn't reach GR4J, and a legacy fit never
+  reads evaporation. A record made before 0.38.0, or a caller that doesn't
+  know the series (a run stored before `valuesSha256`), compares nothing.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) take on the order of a minute in Node on
   a multi-decade catchment. `onProgress` reports every run and returns true to cancel, which

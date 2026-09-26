@@ -11,7 +11,7 @@
 	import { page } from '$app/state';
 	import { fdcPercentileTable, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
-	import { chirpsSourceOfInput } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -282,7 +282,7 @@
 							requestedStart={settings.calibrationStart ?? null}
 							requestedEnd={settings.calibrationEnd ?? null}
 						/>
-						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} />{/if}
+						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} />{/if}
 						<LineChart
 							print
 							bind:ready={hydroDrawn}

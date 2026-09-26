@@ -544,6 +544,7 @@
 								{editor}
 								seriesKinds={series?.map((x) => x.kind) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
+								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
 								readonly={!canEdit}
 								{onProjectChange}
 							/>
