@@ -2,7 +2,7 @@
 // inputs, series revisions, audit events, restore, and who may read them.
 // Every "cannot see" has its positive control. Synthetic data only.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { SERIES_REVISIONS_KEPT } from './record.js';
 
@@ -232,6 +232,32 @@ describe('the timeline', () => {
 		).rejects.toMatchObject({ code: '42501' });
 		// Positive control: as themselves, they can.
 		expect(await rowsAs(editor, `INSERT INTO audit_event (project_id, actor_user_id, actor_label, kind) VALUES ($1, $2, 'x', 'member.added') RETURNING 1`, [projectId, editor.id])).toHaveLength(1);
+	});
+});
+
+describe('members in the log', () => {
+	it('records an accepted invite as the member joining, and the invite with a masked address', async () => {
+		const email = `joiner-${crypto.randomUUID()}@example.com`;
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email, role: 'viewer' })).body.invited).toBe(true);
+		expect((await events(projectId, 'invite.sent')).at(-1)).toMatchObject({ subject: { email: `j•••@example.com`, role: 'viewer' }, actor_user_id: owner.id });
+		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Joiner', inviteToken: tokenIn(lastMailTo(email)) });
+		expect(reg.status).toBe(201);
+		expect((await events(projectId, 'member.added')).at(-1)).toMatchObject({
+			subject: { userId: reg.body.user.id, displayName: 'Joiner', role: 'viewer', via: 'invite' },
+			actor_user_id: reg.body.user.id,
+			actor_label: 'Joiner'
+		});
+	});
+
+	it('records a farmer leaving, and the farm links that went with them, as the farmer', async () => {
+		const leaver = await signUp('Hleaver');
+		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: leaver.email, nodeIds: [other.id] })).status).toBe(201);
+		expect((await leaver.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBe(204);
+		const mine = (await events(projectId)).filter((e) => e.actor_user_id === leaver.id);
+		expect(mine.map((e) => e.kind)).toEqual(['farmer.unlinked', 'member.removed']);
+		expect(mine[0]).toMatchObject({ subject: { nodeId: other.id, cause: 'member_removed' } });
+		expect(mine[1]).toMatchObject({ subject: { role: 'farmer', self: true } });
+		expect(mine[0].change_set).toBe(mine[1].change_set);
 	});
 });
 

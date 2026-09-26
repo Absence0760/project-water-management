@@ -265,13 +265,14 @@ export async function runAndStore(
 		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
 	}
 	await storeRunInputs(db, projectId, runId, input.series, hashes);
-	// Every way a run is made (POST /runs, the rerun job, an import's run) comes through here.
+	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {
 		runId,
 		label,
 		engineVersion: output.engineVersion,
 		startDate: output.startDate,
-		endDate: output.endDate
+		endDate: output.endDate,
+		...(scenario ? { scenarioId: scenario.id } : {})
 	});
 	logSelfCheckFailure(projectId, runId, output);
 	return { id: runId, output };

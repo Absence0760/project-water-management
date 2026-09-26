@@ -110,6 +110,23 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// The change history (WP-2.4): auth-gated like every project route.
+	it('inventories the history routes as auth-gated', () => {
+		const history = [
+			'GET /projects/:id/history',
+			'GET /projects/:id/history/revisions/:revId',
+			'POST /projects/:id/history/revisions/:revId/restore',
+			'GET /projects/:id/runs/:runId/changes-since',
+			'POST /projects/:id/runs/:runId/restore-inputs',
+			'GET /projects/:id/series/:seriesId/revisions',
+			'POST /projects/:id/series/:seriesId/revisions/:revId/restore'
+		];
+		for (const r of history) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');

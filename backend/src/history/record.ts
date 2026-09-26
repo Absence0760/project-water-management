@@ -190,6 +190,9 @@ export type AuditKind =
 	| 'feed.configured'
 	| 'feed.failed'
 	| 'report_schedule.configured'
+	| 'scenario.created'
+	| 'scenario.changed'
+	| 'scenario.deleted'
 	| 'restore';
 
 /**
