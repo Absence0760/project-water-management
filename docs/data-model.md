@@ -540,7 +540,7 @@ the result change?", and put back any earlier version.
 ### Stored run inputs (021_series_blob.sql)
 
 Roadmap WP-3.1: a run can be recomputed exactly years later, whatever
-happens to the live project. `executeRun` writes each input series' values
+happens to the live project. `storeRun` writes each input series' values
 to a content-addressed store and `loadRunInput(db, runId)`
 (`backend/src/runs/execute.ts`) rebuilds the run's exact `ModelInput`: the
 snapshot's settings and model plus the stored series. The DB test
@@ -561,7 +561,7 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   the end of the statement, so deleting a whole project still cascades, but
   no statement can leave a run pointing at a missing blob). Index
   `(project_id, sha256)` covers both foreign keys and the lookups below.
-- **Writes.** `executeRun` stores the inputs last, after the outputs, under
+- **Writes.** `storeRun` stores the inputs last, after the outputs, under
   the project's run lock (`lockProjectRuns`, the advisory lock `trimRuns`
   already took): it asks which of the run's hashes the project already holds,
   inserts only the new values (`ON CONFLICT DO NOTHING`), then the run's

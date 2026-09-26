@@ -1775,13 +1775,23 @@ role and not before it.
       only once the target has rendered and fonts are ready
       (`document.fonts.ready`), or re-scroll on the article's resize, never a
       longer wait. Trigger: it recurs, in CI or locally.
-- [ ] **`POST /projects/:id/runs` holds a DB connection for the whole engine
-      run** (found by #41): the engine runs inside the request's
-      transaction, so a long run pins a pooled connection and its slot on the
-      one Node thread. Durable fix: load inputs, run the engine outside the
-      transaction, then write results in a second one (session B's
-      `runs/`). Trigger: connection waits in production, or a Lambda serving
-      concurrent requests.
+- [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
+      run** (found by #41): the engine ran inside the request's
+      transaction, so a long run pinned a pooled connection. Fixed: the
+      inputs are read in a READ ONLY REPEATABLE READ transaction, the engine
+      runs with none open, and the run is stored in a second transaction that
+      checks the caller's role again (`runOutsideTransaction`,
+      `runs/execute.ts`). The run stores the inputs it was computed from, so
+      it always reproduces; a scenario run refuses (`409`) if the scenario's
+      ops or base changed meanwhile. The same split covers scenario runs, an
+      import's run, "Check reproduction" and storing an uncertainty ensemble.
+      Jobs (`rerun`, `yield`) keep the engine in their transaction on purpose
+      (their writes commit with `done`; the worker serves no request).
+      The engine still occupies the Node thread while it runs; moving it to a
+      worker thread is a separate change, only worth it if the API serves
+      concurrent requests per process (it doesn't on Lambda).
+      [architecture.md § A model run](./architecture.md#a-model-run),
+      `runs/connection.db.test.ts`.
 - [ ] Optional:
       - a read-only Terraform plan role, for a real `terraform plan` in CI;
       - a CodeQL Python leg for `scripts/wbt-import`.
