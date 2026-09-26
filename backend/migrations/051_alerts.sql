@@ -24,7 +24,7 @@
 --
 -- Who can do what (RLS):
 --   * alert_rule: viewers and above read every rule, a farmer the rules on
---     their own farms; editors write.
+--     their own farms and the restriction-notice rule; editors write.
 --   * alert_event: viewers and above read every event; a farmer reads the
 --     events on their own farms and the restriction-notice events (they read
 --     the publication those come from already). Editors write (the alert_eval
