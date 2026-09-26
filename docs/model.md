@@ -730,6 +730,27 @@ curtailment and the EWR sites cover forecast days*. Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
+**One CHIRPS product and version per series** (issue #40 part c). The
+factors are fitted on whatever the CHIRPS series holds, so they are only as
+good as its homogeneity. CHIRPS v2.0 and v3.0 differ by an era-dependent
+factor, and v3.0's two daily products, `sat` (from 1998) and `rnl` (from
+1981), share their pentad totals but not their daily timing. A series that
+splices one onto another has a break the double-mass check (§2.10a) then
+blames on the catchment, and one set of factors fitted across it. So each
+series records its product and version
+([data-model.md § Series provenance](./data-model.md#series-provenance-032_series_provenancesql)):
+a b023 import asks which version the workbook's CHIRPS column is (v2.0 by
+default, what the workbooks were built on), an upload can say, and the feed
+labels what it writes. The feed refuses to write into a series holding
+another product or version unless an owner confirms replacing it whole
+([architecture.md § Data feeds](./architecture.md#data-feeds)), and reads one
+product end to end: a record that must reach before 1998 uses `rnl`
+throughout, never `rnl` before 1998 and `sat` after. A version change changes
+the factors and so the rain on every gap-filled day: the fit record flags
+"forcing changed since fit" (§2.10b) and the run comparison says the version
+changed. The model itself never reads the label, so this needs no
+`ENGINE_VERSION` bump.
+
 ### 2.4c Zero-rain runs treated as missing
 
 Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
@@ -2104,7 +2125,16 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   because it trades off against X1/X3, and CHIRPS bias correction changes the
   rain GR4J sees on the days CHIRPS fills a gap (§2.4b), so a fit is only
   valid for the forcing it was fitted under and a later change to any of them
-  marks the record stale, with a caveat naming the trade-off. The record never
+  marks the record stale, with a caveat naming the trade-off. The forcing
+  also records the CHIRPS series' product and version the fit ran on
+  (`forcing.chirpsSource`, issue #40 part c; null = not recorded). The series'
+  label isn't a setting, so the caller passes the current one
+  (`fitRecordStatus(settings, record, { chirpsSource })`: Settings from the
+  live model input, the run comparison from each run's input snapshot); a
+  different one sets `chirpsSourceChanged`, and with it `forcingChanged`,
+  with its own caveat: refit, since the monthly CHIRPS factors and every
+  gap-filled day's rain changed. A record made before it, or a caller that
+  doesn't know the label, compares nothing. The record never
   changes a result.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) take on the order of a minute in Node on

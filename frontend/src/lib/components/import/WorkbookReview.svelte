@@ -4,14 +4,16 @@
 	// (ImportReportLists, shared with the Overview's import record).
 	// Everything here comes from the file (farm names, formula text), so it is
 	// rendered as text only: plain interpolation, never {@html}.
+	import { CHIRPS_CHOICES } from '$lib/series/provenance';
 	import ImportReportLists from './ImportReportLists.svelte';
-	import type { WorkbookReport } from './workbookFile';
+	import { DEFAULT_CHIRPS_KEY, type WorkbookReport } from './workbookFile';
 
 	let {
 		report,
 		gaugeAsReference = $bindable(false),
 		scalingFrom = $bindable(''),
 		scaleFactor = $bindable(''),
+		chirpsKey = $bindable(DEFAULT_CHIRPS_KEY),
 		optionsError = null,
 		updating = false,
 		disabled = false,
@@ -21,6 +23,8 @@
 		gaugeAsReference?: boolean;
 		scalingFrom?: string;
 		scaleFactor?: string;
+		/** The CHIRPS column's product and version, as a provenance key ('' = not known). */
+		chirpsKey?: string;
 		/** Why the gauge options don't go together, or the importer refused them. */
 		optionsError?: string | null;
 		/** Re-extracting with new options. */
@@ -69,9 +73,26 @@
 	</fieldset>
 {/if}
 
+{#if report.hasChirps}
+	<div class="field chirps">
+		<label for="wb-chirps">CHIRPS column</label>
+		<select id="wb-chirps" bind:value={chirpsKey} {disabled} aria-describedby="wb-chirps-hint">
+			{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}{c.value === DEFAULT_CHIRPS_KEY ? ' (usual for b023)' : ''}</option>{/each}
+			<option value="">Not known</option>
+		</select>
+		<p class="hint muted" id="wb-chirps-hint">
+			Which CHIRPS the workbook holds. b023 workbooks were built on v2.0; the CHIRPS data feed writes v3.0, and the two differ by an amount
+			that changes over the years, so the feed won’t add to this series without asking.
+		</p>
+	</div>
+{/if}
+
 <ImportReportLists notes={report.notes} unmapped={report.unmapped} />
 
 <style>
+	.chirps {
+		margin: 0.75rem 0;
+	}
 	.gauge {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);

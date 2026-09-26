@@ -517,13 +517,27 @@ naming `startDate`, not a server error).
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
-| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
+| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion? }` | `SeriesMeta` (upsert on kind+name) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion? }` | `SeriesMeta` (merge by date; creates the series if missing) | editor |
+| PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear) | `SeriesMeta`: says what an existing series holds; the values and `updatedAt` are untouched. Logged as `series.labelled` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, rebuilding }` —
+`rebuilding` is true while a data feed backfills a confirmed replacement of the
+series (its values stay as they are until the swap);
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
+
+**Product and version** (issue #40 part c, [data-model.md § Series
+provenance](./data-model.md#series-provenance-032_series_provenancesql)):
+what the values are, e.g. `CHIRPS` `2.0`, `CHIRPS sat` `3.0`, `CHIRPS rnl`
+`3.0`; `null` = not recorded. Sent together or not at all (`400` otherwise);
+the product is 1–40 letters, digits, spaces, dots, dashes or underscores, the
+version 1–20 without spaces. A PUT without them stores the new values as not
+recorded. A merge without them keeps the series' label; a merge with them
+labels a new or empty series, and is `409 { error: "the series holds CHIRPS
+v2.0 and these days are CHIRPS sat v3.0: merging them would splice two
+versions into one record. …" }` into a series holding values of another.
 
 **Units.** A series is stored in its kind's canonical unit, the one the model
 reads: m³/s for `flow_*`, mm for `rain_*`. `unit` on PUT, merge, the data
@@ -1029,13 +1043,13 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/feeds` | – | `{ feeds: FeedMeta[], sources, schedules, mode, canEdit, canRun }`. `sources`: `{ source, label, kinds, unit }[]` (what the form offers); `mode`: `fixtures` or `live` (whether this server reads synthetic files); `canEdit` (owner), `canRun` (editor) | viewer |
-| POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds | owner |
-| PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health | owner |
+| GET | `/projects/:id/feeds` | – | `{ feeds: FeedMeta[], sources, chirpsProducts, schedules, mode, canEdit, canRun }`. `sources`: `{ source, label, kinds, unit }[]` (what the form offers); `chirpsProducts`: `["sat", "rnl"]`; `mode`: `fixtures` or `live` (whether this server reads synthetic files); `canEdit` (owner), `canRun` (editor) | viewer |
+| POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
+| PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
-| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`. `409` for a switched-off feed | editor |
+| POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. `409` for a switched-off feed | editor |
 
-- `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled? }`,
+- `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
   - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
@@ -1043,22 +1057,48 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
     `{ station }`, a river gauge's code like `A2H012` (letter, digit, `H`,
     three digits; upper-cased; a reservoir `R`, weather `E` or other station
     is refused, see architecture.md § Data feeds). Both take optional `startDate` (the first fetch's first day,
-    and a floor no later fetch reads before; for `chirps`, not before
-    `1981-01-01`, where CHIRPS begins) and `staleAfterDays` (overrides the source's staleness threshold);
+    and a floor no later fetch reads before; for `chirps`, not before the
+    product's first day: `1998-01-01` for `sat`, `1981-01-01` for `rnl`) and `staleAfterDays` (overrides the source's staleness threshold).
+    `chirps` also takes `product`: `sat` (the default) or `rnl`, CHIRPS v3's
+    two daily products, read end to end, never one spliced onto the other;
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the
     first; `targetName` ≤ 100 (default `""`); `schedule` `daily` (default) or
-    `hourly`; `enabled` (default true).
+    `hourly`; `enabled` (default true);
+  - `replaceSeries` (default false): the owner confirms the feed may replace
+    its target series, which holds values of another product or version, or
+    an unrecorded one. Without it, attaching (or re-targeting, or switching
+    the product) onto such a series is `409 { error, details: { code:
+    "series_version", holds, writes } }` (`holds` null = unrecorded). With it,
+    the feed backfills the new record in a stage (the live series unchanged
+    meanwhile) and swaps it in whole once caught up, keeping the old values
+    as a restorable series revision. On PATCH, `replaceSeries: false`
+    withdraws a pending replacement and discards its stage. A replacement is a
+    full backfill: without a `startDate` the feed gets the series' first day
+    with a value; a later one, or the `sat` product for a series reaching
+    before 1998, is `409 { error, details: { code: "series_backfill", firstDay } }`
+    ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 - `FeedMeta = { id, source, config, targetKind, targetName, enabled, schedule,
   createdAt, updatedAt, actingUser, lastAttemptAt, lastSuccessAt,
-  lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health }`.
+  lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health,
+  writes, series, versionConflict, replaceFrom, rebuilding }`. `rebuilding`:
+  a confirmed replacement being backfilled, `{ startDate, through, updatedAt }`
+  (the new record so far and when it last grew), or null. `writes`: the product and
+  version the feed writes (`{ product: "CHIRPS sat", version: "3.0" }`; null
+  for the forecast and DWS); `series`: the target now, `{ filled, provenance }`
+  or null when it doesn't exist; `versionConflict`: the target holds values
+  of another product or version, so every fetch is refused until an owner
+  confirms (or the replacement is confirmed and waiting: `replaceFrom`, what
+  it will replace, `CHIRPS/2.0` or `''` for unrecorded).
   `actingUser` is the display name fetches run as (null once that account is
   deleted: save the feed again). `lastDataDate` is a calendar day
   (`YYYY-MM-DD`, UTC). `lastMeta` is what the source said about the last
-  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts), plus ours:
-  `merged` (the days it wrote), `kept` (the days it left alone because the
-  series held a value the feed didn't write: an upload or import, #30) and
+  fetch (`days`, `prelimDays`, `issued`, DWS quality-code counts, CHIRPS's
+  `product`), plus ours: `merged` (the days it wrote), `kept` (the days it
+  left alone because the series held a value the feed didn't write: an
+  upload or import, #30), `staged` / `replaced` (a confirmed replacement's
+  days staged so far, or the label of what it replaced once swapped in) and
   `through` (the last day the fetch asked for).
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`
@@ -1071,7 +1111,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `{ code: "no-data" }` (fetches succeed but have found nothing yet),
   - `{ code: "not-fetched", since, after }` (not fetched since it was `attached` / `changed` on `since`: is the worker running?),
   - `{ code: "waiting" }` (waiting for its first fetch),
-  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day).
+  - `{ code: "ok", newest, checked }` (`checked` is the last successful fetch's day),
+  - `{ code: "rebuilding", from, through }` (state `pending`: a confirmed replacement is backfilling; the live series is unchanged until it completes),
+  - `{ code: "rebuild-stalled", from, through, since }` (state `stale`: the same, but it hasn't grown since `since`).
 
   A client should fall back to the `state` for a code it doesn't know.
   `lastError` is written by the server, never an upstream body or database

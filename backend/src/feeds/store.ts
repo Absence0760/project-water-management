@@ -1,9 +1,9 @@
 // The data_feed table's API (018_feeds.sql): list / create / update / delete
 // as the signed-in user under RLS, the health update as the feed's acting
 // user, and the scheduler's cross-project claim.
-import type { SeriesKind } from '@water-management/engine';
+import { provenanceKey, sameProvenance, type SeriesKind, type SeriesProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
-import type { FeedConfig, FeedInput, FeedSchedule, FeedSource } from './config.js';
+import { feedProvenance, type FeedConfig, type FeedInput, type FeedSchedule, type FeedSource } from './config.js';
 import type { FetchWindow } from './fetch.js';
 import { type FeedHealth, feedHealth } from './health.js';
 
@@ -29,6 +29,25 @@ export interface FeedMeta {
 	lastError: string | null;
 	lastMeta: Record<string, string | number> | null;
 	health: FeedHealth;
+	/** The product and version the feed writes (CHIRPS sat v3.0 …); null for a source whose series carry none. */
+	writes: SeriesProvenance | null;
+	/** The target series now: null when it doesn't exist. `filled`: it holds a value on some day. */
+	series: { filled: boolean; provenance: SeriesProvenance | null } | null;
+	/**
+	 * The target holds values of another product or version (or an unrecorded
+	 * one) than the feed writes: each fetch is refused until an owner confirms
+	 * replacing it (replaceSeries) or the feed is pointed at another series.
+	 */
+	versionConflict: boolean;
+	/** An owner confirmed the feed may replace the target while it holds this (`CHIRPS/2.0`, '' = unrecorded); the next fetch does it. */
+	replaceFrom: string | null;
+	/**
+	 * A confirmed replacement being backfilled (feed_stage, 032): the new
+	 * record's first and last day so far and when it last grew. The live
+	 * series keeps its old values until the backfill is caught up. Null when
+	 * none is staged.
+	 */
+	rebuilding: { startDate: string; through: string; updatedAt: string } | null;
 }
 
 /** The row the handlers work from. */
@@ -45,42 +64,109 @@ export interface FeedRow {
 	readThrough: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
+	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
+	replaceFrom: string | null;
 }
 
 const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_name AS "targetName", f.enabled, f.schedule,
 	f.created_at AS "createdAt", f.updated_at AS "updatedAt", u.display_name AS "actingUser",
 	f.last_attempt_at AS "lastAttemptAt", f.last_success_at AS "lastSuccessAt", to_char(f.last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
-	f.last_value AS "lastValue", f.consecutive_failures AS "consecutiveFailures", f.last_error AS "lastError", f.last_meta AS "lastMeta"`;
-const FROM = 'data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id';
+	f.last_value AS "lastValue", f.consecutive_failures AS "consecutiveFailures", f.last_error AS "lastError", f.last_meta AS "lastMeta",
+	f.replace_series_from AS "replaceFrom", t.id IS NOT NULL AS "seriesExists", t.product AS "seriesProduct", t.product_version AS "seriesProductVersion",
+	COALESCE(cardinality(array_remove(t."values", NULL)) > 0, false) AS "seriesFilled",
+	CASE WHEN st.feed_id IS NULL THEN NULL ELSE jsonb_build_object(
+		'startDate', to_char(st.start_date, 'YYYY-MM-DD'),
+		'through', to_char(st.start_date + cardinality(st."values") - 1, 'YYYY-MM-DD'),
+		'updatedAt', st.updated_at) END AS rebuilding`;
+const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
+	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
+	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
 
-const withHealth = (row: Omit<FeedMeta, 'health'>, today: string): FeedMeta => ({ ...row, health: feedHealth(row, today) });
+type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict'> & {
+	seriesExists: boolean;
+	seriesProduct: string | null;
+	seriesProductVersion: string | null;
+	seriesFilled: boolean;
+};
+
+/** Whether a feed writing `writes` may merge into `series` without a confirmation: same version, or nothing there yet. */
+export const seriesAccepts = (writes: SeriesProvenance | null, series: { filled: boolean; provenance: SeriesProvenance | null } | null): boolean =>
+	!writes || !series || !series.filled || sameProvenance(series.provenance, writes);
+
+function toMeta(r: FeedSelect, today: string): FeedMeta {
+	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, ...row } = r;
+	const writes = feedProvenance(row.source, row.config);
+	const provenance = seriesProduct !== null && seriesProductVersion !== null ? { product: seriesProduct, version: seriesProductVersion } : null;
+	const series = seriesExists ? { filled: seriesFilled, provenance } : null;
+	return { ...row, health: feedHealth(row, today), writes, series, versionConflict: !seriesAccepts(writes, series) };
+}
 
 export async function listFeeds(db: Db, projectId: string, today: string): Promise<FeedMeta[]> {
-	const { rows } = await db.query<Omit<FeedMeta, 'health'>>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 ORDER BY f.created_at, f.id`, [projectId]);
-	return rows.map((r) => withHealth(r, today));
+	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 ORDER BY f.created_at, f.id`, [projectId]);
+	return rows.map((r) => toMeta(r, today));
 }
 
 export async function getFeed(db: Db, projectId: string, feedId: string, today: string): Promise<FeedMeta | null> {
-	const { rows } = await db.query<Omit<FeedMeta, 'health'>>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 AND f.id = $2`, [projectId, feedId]);
-	return rows[0] ? withHealth(rows[0], today) : null;
+	const { rows } = await db.query<FeedSelect>(`SELECT ${COLS} FROM ${FROM} WHERE f.project_id = $1 AND f.id = $2`, [projectId, feedId]);
+	return rows[0] ? toMeta(rows[0], today) : null;
 }
 
-/** Insert as the signed-in owner (RLS), who becomes the acting user. */
-export async function createFeed(db: Db, projectId: string, input: FeedInput): Promise<string> {
+/**
+ * A series' fill, provenance and first day with a value, for a feed's
+ * version check (null when it doesn't exist; firstDay null when it holds no value).
+ */
+export async function targetSeries(
+	db: Db,
+	projectId: string,
+	kind: string,
+	name: string
+): Promise<{ filled: boolean; provenance: SeriesProvenance | null; firstDay: string | null } | null> {
+	const { rows } = await db.query<{ product: string | null; productVersion: string | null; firstDay: string | null }>(
+		`SELECT product, product_version AS "productVersion",
+			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay"
+		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`,
+		[projectId, kind, name]
+	);
+	const r = rows[0];
+	if (!r) return null;
+	return {
+		filled: r.firstDay !== null,
+		provenance: r.product !== null && r.productVersion !== null ? { product: r.product, version: r.productVersion } : null,
+		firstDay: r.firstDay
+	};
+}
+
+/** One pending fetch per feed (the jobs' dedupe key): Run now, the scheduler and a backfill's next window share it. */
+export const feedFetchDedupeKey = (feedId: string) => `feed_fetch:${feedId}`;
+
+/** The replace_series_from value that confirms replacing `series` (its key), for the routes. */
+export const replaceKey = (series: { provenance: SeriesProvenance | null }): string => provenanceKey(series.provenance);
+
+/**
+ * Insert as the signed-in owner (RLS), who becomes the acting user.
+ * `replaceFrom`: the owner confirmed replacing the target, which holds this (032).
+ */
+export async function createFeed(db: Db, projectId: string, input: FeedInput, replaceFrom: string | null = null): Promise<string> {
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, schedule)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-		[projectId, input.source, JSON.stringify(input.config), input.targetKind, input.targetName, input.enabled, input.schedule]
+		`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, schedule, replace_series_from)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+		[projectId, input.source, JSON.stringify(input.config), input.targetKind, input.targetName, input.enabled, input.schedule, replaceFrom]
 	);
 	return rows[0]!.id;
 }
 
-/** Replace a feed's settings as the signed-in owner, who becomes the acting user. False when not found. */
-export async function updateFeed(db: Db, projectId: string, feedId: string, input: FeedInput): Promise<boolean> {
+/**
+ * Replace a feed's settings as the signed-in owner, who becomes the acting
+ * user. False when not found. `replaceFrom`: a new confirmation (a string),
+ * null to withdraw one, or undefined to keep the feed's own (the trigger
+ * drops it on a re-target, and discards a staged replacement on any change).
+ */
+export async function updateFeed(db: Db, projectId: string, feedId: string, input: FeedInput, replaceFrom?: string | null): Promise<boolean> {
 	const { rowCount } = await db.query(
-		`UPDATE data_feed SET source = $3, config = $4, target_kind = $5, target_name = $6, enabled = $7, schedule = $8
+		`UPDATE data_feed SET source = $3, config = $4, target_kind = $5, target_name = $6, enabled = $7, schedule = $8,
+			replace_series_from = CASE WHEN $9::boolean THEN $10 ELSE replace_series_from END
 		 WHERE project_id = $1 AND id = $2`,
-		[projectId, feedId, input.source, JSON.stringify(input.config), input.targetKind, input.targetName, input.enabled, input.schedule]
+		[projectId, feedId, input.source, JSON.stringify(input.config), input.targetKind, input.targetName, input.enabled, input.schedule, replaceFrom !== undefined, replaceFrom ?? null]
 	);
 	return (rowCount ?? 0) > 0;
 }
@@ -96,7 +182,7 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 		`SELECT id, project_id AS "projectId", source, config, target_kind AS "targetKind", target_name AS "targetName", enabled,
 			to_char(last_data_date, 'YYYY-MM-DD') AS "lastDataDate",
 			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
-			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version
+			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]
 	);
@@ -182,6 +268,11 @@ export async function listDueFeeds(db: Db, limit: number, all = false): Promise<
 export async function claimFeed(db: Db, feedId: string, all = false): Promise<boolean> {
 	const { rows } = await db.query<{ claimed: boolean }>('SELECT app_claim_feed($1, $2) AS claimed', [feedId, all]);
 	return rows[0]?.claimed === true;
+}
+
+/** The confirmed replacement is made: clear it (app_feed_replace_done, 032), as the acting user. */
+export async function feedReplaceDone(db: Db, feedId: string): Promise<void> {
+	await db.query('SELECT app_feed_replace_done($1)', [feedId]);
 }
 
 export async function markScheduleFailed(db: Db, feedId: string): Promise<void> {

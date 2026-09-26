@@ -11,8 +11,14 @@
 //   GEFS forecast:  CHIRPS-GEFS/v3/daily/global/YYYY/MM/DD/c3g_YYYY.MM.DD.tif
 //                   (the directory is the issue date, ~08:30 UTC; 16 files,
 //                   one per forecast day from the issue date)
+//   CHIRPS rnl:     CHIRPS/v3.0/daily/final/rnl/YYYY/chirps-v3.0.rnl.YYYY.MM.DD.tif
+//                   (from 1981; final only)
 // "sat" is CHIRPS v3 disaggregated to days with IMERG, the only daily
-// preliminary product (the ERA5 "rnl" one lags 5–6 days and has no prelim).
+// preliminary product, and it starts in 1998. "rnl" is the same pentads
+// disaggregated with ERA5: it starts in 1981, lags 5–6 days and has no
+// prelim. Their daily timing differs, so a feed reads one of them end to end
+// (feeds/config.ts CHIRPS_DAILY_PRODUCTS), never rnl before 1998 and sat
+// after: that splice would be a break of its own (issue #40 part c).
 // Units are mm/day; the sea is -9999.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
@@ -24,6 +30,7 @@ export const CHC_BASE = 'https://data.chc.ucsb.edu/products';
 const dotted = (iso: string) => iso.replaceAll('-', '.');
 
 export const chirpsFinalUrl = (iso: string) => `${CHC_BASE}/CHIRPS/v3.0/daily/final/sat/${iso.slice(0, 4)}/chirps-v3.0.sat.${dotted(iso)}.tif`;
+export const chirpsRnlUrl = (iso: string) => `${CHC_BASE}/CHIRPS/v3.0/daily/final/rnl/${iso.slice(0, 4)}/chirps-v3.0.rnl.${dotted(iso)}.tif`;
 export const chirpsPrelimUrl = (iso: string) => `${CHC_BASE}/CHIRPS/v3.0/daily/prelim/sat/${iso.slice(0, 4)}/chirps-v3.0.prelim.${dotted(iso)}.tif`;
 export const gefsUrl = (issued: string, day: string) =>
 	`${CHC_BASE}/CHIRPS-GEFS/v3/daily/global/${issued.slice(0, 4)}/${issued.slice(5, 7)}/${issued.slice(8, 10)}/c3g_${dotted(day)}.tif`;
@@ -82,14 +89,24 @@ export interface GridDays {
 }
 
 /**
- * CHIRPS for each day of [start, end]: the final value where it is out, else
- * the preliminary one, else null. Trailing days with neither are dropped (not
- * published yet); a day missing between published ones stays null.
+ * CHIRPS for each day of [start, end] from one daily product: for `sat`, the
+ * final value where it is out, else the preliminary one; for `rnl`, the final
+ * value (it has no preliminary product); else null. Trailing days with
+ * neither are dropped (not published yet); a day missing between published
+ * ones stays null.
  */
-export async function fetchChirps(http: FeedHttp, cells: readonly Cell[], start: string, end: string, concurrency = 6): Promise<GridDays> {
+export async function fetchChirps(
+	http: FeedHttp,
+	cells: readonly Cell[],
+	start: string,
+	end: string,
+	product: 'sat' | 'rnl' = 'sat',
+	concurrency = 6
+): Promise<GridDays> {
 	const s = toEpochDay(start);
 	const days = Array.from({ length: Math.max(0, toEpochDay(end) - s + 1) }, (_, i) => fromEpochDay(s + i));
 	const got = await mapLimit(days, concurrency, async (day) => {
+		if (product === 'rnl') return { v: await gridMean(http, chirpsRnlUrl(day), cells), prelim: false };
 		const final = await gridMean(http, chirpsFinalUrl(day), cells);
 		if (final !== null) return { v: final, prelim: false };
 		const prelim = await gridMean(http, chirpsPrelimUrl(day), cells);

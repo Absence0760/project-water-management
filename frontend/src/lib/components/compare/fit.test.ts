@@ -93,6 +93,14 @@ describe('fitValidationRows', () => {
 		// The CHIRPS bias correction mode alone can move it too.
 		const chirpsMoved = fitValidationRows(withForcing, null, { ...settings, chirpsBiasCorrection: 'none' } as unknown as Partial<ProjectSettings>, null);
 		expect(row(chirpsMoved, 'Forcing changed since fit').a).toBe('yes');
+		// Issue #40c: a run on another CHIRPS product or version than its fit says so; a run that didn't record one can't compare.
+		const onV2 = record({ ...withForcing, forcing: { ...withForcing.forcing!, chirpsSource: { product: 'CHIRPS', version: '2.0' } } });
+		const v3 = { product: 'CHIRPS sat', version: '3.0' };
+		expect(row(fitValidationRows(onV2, onV2, settings, settings, { a: v3, b: { product: 'CHIRPS', version: '2.0' } }), 'Forcing changed since fit')).toMatchObject({
+			a: 'yes (another CHIRPS product or version)',
+			b: 'no'
+		});
+		expect(row(fitValidationRows(onV2, null, settings, null, { a: undefined }), 'Forcing changed since fit').a).toBe('no');
 	});
 });
 

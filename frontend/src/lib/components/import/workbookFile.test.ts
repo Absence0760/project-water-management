@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportResult } from '$lib/spreadsheet/import/extract';
-import { describeFailure, fromResult, gaugeOptions, isWorkbookFile, location, progressText } from './workbookFile';
+import type { ProjectFile } from '$lib/api';
+import { DEFAULT_CHIRPS_KEY, describeFailure, fromResult, gaugeOptions, isWorkbookFile, location, progressText, withChirpsProvenance } from './workbookFile';
+
+describe('the CHIRPS column’s product and version (issue #40c)', () => {
+	const file = (kinds: string[]) =>
+		({ name: 'W', model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: kinds.map((kind) => ({ kind, unit: 'mm', startDate: '2001-01-01', values: [1] })) }) as ProjectFile;
+	it('is v2.0 unless the review says otherwise, what b023 workbooks were built on', () => {
+		expect(DEFAULT_CHIRPS_KEY).toBe('CHIRPS/2.0');
+	});
+	it('labels the CHIRPS series only, with the answer or as not recorded', () => {
+		const out = withChirpsProvenance(file(['rain_catchment_mm', 'rain_chirps_mm']), 'CHIRPS sat/3.0');
+		expect(out.series).toEqual([
+			{ kind: 'rain_catchment_mm', unit: 'mm', startDate: '2001-01-01', values: [1] },
+			{ kind: 'rain_chirps_mm', unit: 'mm', startDate: '2001-01-01', values: [1], product: 'CHIRPS sat', productVersion: '3.0' }
+		]);
+		expect(withChirpsProvenance(file(['rain_chirps_mm']), '').series![0]).toMatchObject({ product: null, productVersion: null });
+		const none = file(['rain_catchment_mm']);
+		expect(withChirpsProvenance(none, DEFAULT_CHIRPS_KEY)).toBe(none);
+	});
+});
 
 describe('isWorkbookFile', () => {
 	it('knows .xlsx and .xlsm by name or type, and nothing else', () => {
@@ -59,6 +78,9 @@ describe('fromResult and progress', () => {
 		expect(fromResult(result(['rain_catchment_mm', 'flow_observed_m3s'])).report.hasGauge).toBe(true);
 		expect(fromResult(result(['flow_reference_m3s'])).report.hasGauge).toBe(true);
 		expect(fromResult(result(['rain_catchment_mm', 'flow_logger_m3s'])).report.hasGauge).toBe(false);
+		// … and asks the CHIRPS column's version only when there is one.
+		expect(fromResult(result(['rain_chirps_mm'])).report.hasChirps).toBe(true);
+		expect(fromResult(result(['rain_catchment_mm'])).report.hasChirps).toBe(false);
 		// The notes are shown by the review with their severity, not as the preview's plain notes.
 		expect(fromResult(result([])).parsed.notes).toEqual([]);
 		expect(fromResult(result([])).report.notes).toHaveLength(1);

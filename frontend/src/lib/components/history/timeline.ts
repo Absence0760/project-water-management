@@ -69,6 +69,12 @@ function range(s: Record<string, unknown>): string {
 	return from && to ? ` (${fmtDay(from)} to ${fmtDay(to)})` : '';
 }
 
+/** "; now CHIRPS sat v3.0, was CHIRPS v2.0" when a replace changed the series' product or version (032), else ''. */
+function versionChange(s: Record<string, unknown>): string {
+	const p = s.provenance as Record<string, unknown> | undefined;
+	return p && typeof p === 'object' ? `; now ${str(p.to)}, was ${str(p.from)}` : '';
+}
+
 const UNLINK_CAUSES: Record<string, string> = {
 	model_saved: ' (the farm was removed, or is no longer a farm)',
 	member_removed: ' (they left, or were removed from the project)',
@@ -120,11 +126,15 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'series.created':
 			return `Added ${seriesName(s)}${range(s)}${s.feedId ? ` from the ${feedName(s.source)} feed` : ''}`;
 		case 'series.replaced':
-			return `Replaced ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed${range(s)}`;
+			return `${s.feedId ? `The ${feedName(s.source)} feed replaced` : 'Replaced'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed${range(s)}${versionChange(s)}`;
 		case 'series.merged':
 			return `${s.feedId ? `The ${feedName(s.source)} feed added days to` : 'Merged days into'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed`;
 		case 'series.deleted':
 			return `Deleted ${seriesName(s)}${range(s)}`;
+		case 'series.labelled': {
+			const p = (s.provenance ?? {}) as Record<string, unknown>;
+			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;
+		}
 		case 'restore':
 			return s.target === 'series' ? `Restored earlier values of ${seriesName(s)}${range(s)}` : 'Restored an earlier version';
 		case 'run.created':
@@ -141,6 +151,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const feed = `the ${feedName(s.source)} feed`;
 			if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })}`;
 			if (s.action === 'removed') return `Removed ${feed}`;
+			// A confirmation to replace its series (issue #40c) is its own sentence: it is why the series will change.
+			if (typeof s.replaceSeries === 'string') return `Confirmed that ${feed} replaces ${seriesName({ kind: s.targetKind, name: s.targetName })} at its next fetch`;
 			return `Changed ${feed}${s.enabled === false ? ' (switched off)' : ''}`;
 		}
 		case 'feed.failed':

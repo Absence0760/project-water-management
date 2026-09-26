@@ -328,15 +328,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ series: SeriesMeta[] }>('GET', `${p(id)}/series`).then((r) => r.series),
 			get: (id: string, seriesId: string) =>
 				request<SeriesMeta & { values: (number | null)[] }>('GET', `${p(id)}/series/${enc(seriesId)}`),
+			/** `product` + `productVersion`: what the values are (CHIRPS 2.0 …); a replace without them stores them as not recorded. */
 			put: (
 				id: string,
-				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[] }
+				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null }
 			) => request<SeriesMeta>('PUT', `${p(id)}/series`, body),
-			/** Merge days into a series by date (incoming wins on overlap); creates it if missing. */
+			/** Merge days into a series by date (incoming wins on overlap); creates it if missing. Days of another version than the series' are a 409. */
 			merge: (
 				id: string,
-				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[] }
+				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null }
 			) => request<SeriesMeta>('POST', `${p(id)}/series/merge`, body),
+			/** Say which product and version a series holds (both null: not recorded); its values are untouched. */
+			label: (id: string, seriesId: string, product: string | null, productVersion: string | null) =>
+				request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { product, productVersion }),
 			remove: (id: string, seriesId: string) =>
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},

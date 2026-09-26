@@ -10,7 +10,8 @@
 //             staleAfterDays): the source stopped publishing, or the fetch
 //             keeps finding nothing new
 //   pending   not fetched yet, or not since a new place or series was saved
-//             (018_feeds.sql clears the data, success and failures then)
+//             (018_feeds.sql clears the data, success and failures then), or
+//             a confirmed replacement still backfilling (feed_stage, 032)
 //   ok        otherwise
 //
 // `stale` is also reported on its own, so a failing feed that is out of date
@@ -33,6 +34,11 @@ export type FeedState = (typeof FEED_STATES)[number];
  *   not-fetched   not fetched since it was attached / changed on `since`
  *   waiting       waiting for its first fetch
  *   ok            `newest` (or null), last checked on `checked`
+ *   rebuilding    a confirmed replacement backfilling: the new record runs
+ *                 `from` … `through` so far; the live series is unchanged
+ *                 until it is caught up
+ *   rebuild-stalled  the same, but it hasn't grown since `since` (over a
+ *                 day): the stage waits, the live series is unchanged
  */
 export type HealthReason =
 	| { code: 'off'; newest: string | null }
@@ -42,7 +48,9 @@ export type HealthReason =
 	| { code: 'no-data' }
 	| { code: 'not-fetched'; since: string; after: 'attached' | 'changed' }
 	| { code: 'waiting' }
-	| { code: 'ok'; newest: string | null; checked: string };
+	| { code: 'ok'; newest: string | null; checked: string }
+	| { code: 'rebuilding'; from: string; through: string }
+	| { code: 'rebuild-stalled'; from: string; through: string; since: string };
 
 export interface FeedHealth {
 	state: FeedState;
@@ -63,7 +71,12 @@ export interface HealthInput {
 	lastDataDate: string | null;
 	consecutiveFailures: number;
 	lastError: string | null;
+	/** A staged replacement (FeedMeta.rebuilding), or null/absent. */
+	rebuilding?: { startDate: string; through: string; updatedAt: Date | string } | null;
 }
+
+/** A staged replacement that hasn't grown for this long is stalled (its next window runs a minute after the last). */
+export const REBUILD_STALL_DAYS = 1;
 
 /** A feed with no data counts as stale this long after it was attached or last saved. */
 const FIRST_DATA_GRACE_DAYS = 2;
@@ -83,6 +96,13 @@ export function feedHealth(f: HealthInput, today: string): FeedHealth {
 	const out = (state: FeedState, reason: HealthReason): FeedHealth => ({ state, stale, staleAfterDays, reason });
 	if (!f.enabled) return out('disabled', { code: 'off', newest });
 	if (f.consecutiveFailures > 0) return out('failing', { code: 'failing', failures: f.consecutiveFailures, error: f.lastError, newest });
+	// A backfilling replacement reads old days, so "old data" says nothing: say how far it has got, or that it stopped.
+	if (f.rebuilding) {
+		const r = f.rebuilding;
+		const since = iso(r.updatedAt);
+		if (t - toEpochDay(since) > REBUILD_STALL_DAYS) return { state: 'stale', stale: true, staleAfterDays, reason: { code: 'rebuild-stalled', from: r.startDate, through: r.through, since } };
+		return { state: 'pending', stale: false, staleAfterDays, reason: { code: 'rebuilding', from: r.startDate, through: r.through } };
+	}
 	if (stale) {
 		if (newest) return out('stale', staleAfterDays < 0 ? { code: 'old-forecast', newest } : { code: 'old-data', newest });
 		if (!unfetched) return out('stale', { code: 'no-data' });

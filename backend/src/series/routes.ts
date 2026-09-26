@@ -5,7 +5,18 @@ import { withUser } from '../db/tx.js';
 import { lockSeries, recordAudit, recordSeriesRevision, seriesSubject, valuesSha256, type SeriesRow } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { mergeSeries, SERIES_META as META, SeriesBody as PutBody, type SeriesMetaRow } from './merge.js';
+import { provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
+import { z } from 'zod';
+import {
+	bodyProvenance,
+	checkProvenance,
+	mergeSeries,
+	ProvenanceFields,
+	rowProvenance,
+	SERIES_META as META,
+	SeriesBody as PutBody,
+	type SeriesMetaRow
+} from './merge.js';
 import { readJson } from '../http/body.js';
 
 // Moved to merge.ts beside mergeSeries (shared with the data feeds);
@@ -15,39 +26,68 @@ export { MAX_SERIES_VALUES, SeriesStartDate } from './merge.js';
 const sameValues = (a: SeriesRow, unit: string, startDate: string, values: readonly (number | null)[]) =>
 	a.unit === unit && a.startDate === startDate && valuesSha256(a.values) === valuesSha256(values);
 
+/** A version change as the audit subject records it: `{ provenance: { from, to } }` labels, or nothing. */
+const provenanceChange = (before: SeriesProvenance | null, after: SeriesProvenance | null) =>
+	sameProvenance(before, after) ? {} : { provenance: { from: provenanceLabel(before), to: provenanceLabel(after) } };
+
 /**
  * Replace a series whole, keeping its previous values as a series revision
  * first (the history's restore point), so a replace, and a restore too, can
- * be undone. Unchanged values record nothing. `restoredFrom`: this puts a
- * series revision back (POST …/revisions/:revId/restore), logged as `restore`.
+ * be undone. Unchanged values and label record nothing. `restoredFrom`: this
+ * puts a series revision back (POST …/revisions/:revId/restore), logged as
+ * `restore`. `provenance` is what the new values are (032_series_provenance;
+ * null or absent = not recorded: a replace says what it holds or clears it).
+ * `revisionReason` / `audit`: a data feed's confirmed replacement
+ * (feeds/ingest.ts) keeps the old values as `feed_replace` and adds its feed.
  */
 export async function replaceSeries(
 	db: Db,
 	projectId: string,
-	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[] },
-	opts: { restoredFrom?: string } = {}
+	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null },
+	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
 ): Promise<SeriesMetaRow> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
+	const provenance = body.provenance ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
-		// The whole series is now the user's: a data feed writing it keeps every
-		// day from here on (feed_id NULL clears feed_days, 031_feed_days).
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		// A person's replace (or restore) makes the whole series the user's: a
+		// data feed writing it keeps every day from here on (feed_id NULL clears
+		// feed_days, 031_feed_days). A data feed's confirmed replacement
+		// (opts.feedId, feeds/ingest.ts) makes it the feed's: every day of the
+		// new record is one it wrote, so its later re-reads still revise them.
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid,
+			CASE WHEN $9::uuid IS NULL THEN NULL ELSE datemultirange(daterange($5::date, $5::date + cardinality($6::float8[]))) END)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
-			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(), feed_id = NULL
+			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
+			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days
 		 RETURNING ${META}`,
-		[projectId, body.kind, body.name, body.unit, body.startDate, body.values]
+		[projectId, body.kind, body.name, body.unit, body.startDate, body.values, provenance?.product ?? null, provenance?.version ?? null, opts.feedId ?? null]
 	);
 	const meta = rows[0]!;
 	const restore = opts.restoredFrom ? { target: 'series', restoredFrom: opts.restoredFrom } : null;
 	if (!existing) {
-		await recordAudit(db, projectId, restore ? 'restore' : 'series.created', seriesSubject(meta, null, body, restore ?? {}));
-	} else if (!sameValues(existing, body.unit, body.startDate, body.values)) {
-		const revisionId = await recordSeriesRevision(db, projectId, existing, 'replace');
-		await recordAudit(db, projectId, restore ? 'restore' : 'series.replaced', seriesSubject(meta, existing, body, { revisionId, ...restore }));
+		await recordAudit(db, projectId, restore ? 'restore' : 'series.created', seriesSubject(meta, null, body, { ...restore, ...opts.audit }));
+		return meta;
+	}
+	const held = rowProvenance({ product: existing.product ?? null, productVersion: existing.productVersion ?? null });
+	if (!sameValues(existing, body.unit, body.startDate, body.values) || !sameProvenance(held, provenance)) {
+		const revisionId = await recordSeriesRevision(db, projectId, existing, opts.revisionReason ?? 'replace');
+		await recordAudit(
+			db,
+			projectId,
+			restore ? 'restore' : 'series.replaced',
+			seriesSubject(meta, existing, body, { revisionId, ...restore, ...provenanceChange(held, provenance), ...opts.audit })
+		);
 	}
 	return meta;
 }
+
+/** PATCH …/series/:seriesId: say what an existing series holds, without touching its values. */
+const LabelBody = z
+	.object({ ...ProvenanceFields })
+	.strict()
+	.superRefine(checkProvenance)
+	.refine((b) => b.product !== undefined, 'give product and productVersion (both null: not recorded)');
 
 export const seriesRoutes = new Hono<AuthEnv>()
 	.get('/:id/series', async (c) =>
@@ -77,7 +117,37 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			return c.json(await replaceSeries(db, id, body));
+			return c.json(await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null }));
+		});
+	})
+	// Say which product and version a series holds (a CHIRPS column imported
+	// before the version was asked, or one whose version was only found out
+	// later). The values are untouched; the label is logged as series.labelled.
+	// A data feed then writes into the series only if it is the same version,
+	// so this is also how an owner vouches that an unrecorded series is what
+	// the feed writes (docs/api.md § Series).
+	.patch('/:id/series/:seriesId', async (c) => {
+		const { id, seriesId } = c.req.param();
+		const body = LabelBody.parse(await readJson(c));
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
+			const { rows: cur } = await db.query<{ product: string | null; productVersion: string | null }>(
+				`SELECT product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+				[id, seriesId]
+			);
+			if (!cur[0]) throw new ApiError(404, 'not found');
+			const next = bodyProvenance(body) ?? null;
+			const { rows } = await db.query<SeriesMetaRow>(
+				`UPDATE time_series SET product = $3, product_version = $4 WHERE project_id = $1 AND id = $2 RETURNING ${META}`,
+				[id, seriesId, next?.product ?? null, next?.version ?? null]
+			);
+			const meta = rows[0]!;
+			const change = provenanceChange(rowProvenance(cur[0]), next);
+			if ('provenance' in change) {
+				await recordAudit(db, id, 'series.labelled', { seriesId: meta.id, kind: meta.kind, name: meta.name, ...change });
+			}
+			return c.json(meta);
 		});
 	})
 	// Append / merge new days into a series (daily or batch updates). Creates the
@@ -89,7 +159,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const r = await mergeSeries(db, id, body);
+			const r = await mergeSeries(db, id, body, { provenance: bodyProvenance(body) });
 			const subject = seriesSubject(r.meta, r.before, r.after);
 			if (!r.before) await recordAudit(db, id, 'series.created', subject);
 			else if (subject.daysChanged || r.before.unit !== r.meta.unit) {
@@ -105,7 +175,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<SeriesRow>(
-				`SELECT id, kind, name, unit, start_date AS "startDate", "values" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+				`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion"
+				 FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]
 			);
 			const existing = rows[0];

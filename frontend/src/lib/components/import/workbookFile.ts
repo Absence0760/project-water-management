@@ -4,7 +4,9 @@
 // dialog's view logic around it: which files are workbooks, what each
 // failure says, the gauge option, and the review's notes and unmapped
 // report. Type-only imports from the parser, so no SheetJS here.
+import { B023_CHIRPS_DEFAULT, provenanceKey } from '@water-management/engine';
 import type { ProjectFile } from '$lib/api';
+import { provenanceFields } from '$lib/series/provenance';
 import type { ImportResult } from '$lib/spreadsheet/import/extract';
 import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 import type { WorkbookImportFailure, WorkbookImportOptions, WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
@@ -27,6 +29,26 @@ export interface WorkbookReport {
 	unmapped: UnmappedItem[];
 	/** The workbook has a gauge column (so the gauge-as-reference option applies). */
 	hasGauge: boolean;
+	/** The workbook has a CHIRPS column (so the review asks which product and version it is). */
+	hasChirps: boolean;
+}
+
+/**
+ * What the review preselects for the workbook's CHIRPS column: v2.0, what
+ * the b023 workbooks were built on (issue #40 part c). The feed writes v3.0,
+ * so the label is what later stops the feed splicing one onto the other.
+ */
+export const DEFAULT_CHIRPS_KEY = provenanceKey(B023_CHIRPS_DEFAULT);
+
+/**
+ * The document with the review's answer on its CHIRPS series: `key` is a
+ * provenance key ('CHIRPS/2.0'), '' for "not known" (stored as not recorded).
+ * Other series are left as they are.
+ */
+export function withChirpsProvenance(file: ProjectFile, key: string): ProjectFile {
+	if (!file.series?.some((s) => s.kind === 'rain_chirps_mm')) return file;
+	const f = provenanceFields(key);
+	return { ...file, series: file.series.map((s) => (s.kind === 'rain_chirps_mm' ? { ...s, ...f } : s)) };
 }
 
 const GAUGE_KINDS = new Set(['flow_observed_m3s', 'flow_reference_m3s']);
@@ -36,7 +58,12 @@ export function fromResult(r: ImportResult): { parsed: ParsedImport; report: Wor
 	return {
 		// The preview lists the importer's notes itself, with their severity, so none go in `notes` here.
 		parsed: { file: r.project as unknown as ProjectFile, notes: [] },
-		report: { notes: r.notes, unmapped: r.unmapped, hasGauge: r.project.series.some((s) => GAUGE_KINDS.has(s.kind)) }
+		report: {
+			notes: r.notes,
+			unmapped: r.unmapped,
+			hasGauge: r.project.series.some((s) => GAUGE_KINDS.has(s.kind)),
+			hasChirps: r.project.series.some((s) => s.kind === 'rain_chirps_mm')
+		}
 	};
 }
 

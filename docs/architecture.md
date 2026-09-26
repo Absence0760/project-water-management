@@ -330,7 +330,7 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells | `rain_chirps_mm` (or `rain_catchment_mm`), mm | A GeoTIFF per day on data.chc.ucsb.edu: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
@@ -396,6 +396,70 @@ merges into:
   a forecast's 16th day, UTC) is refused whole and recorded as a failure: it
   would otherwise pin the feed's newest date, which only moves forward, in
   the future.
+- **One product and version per series** (issue #40 part c,
+  `032_series_provenance.sql`). A series records which product and version
+  it holds (`time_series.product` / `product_version`, [data-model.md §
+  Series provenance](./data-model.md#series-provenance)). CHIRPS v2.0 and
+  v3.0 differ by an era-dependent factor, and v3.0's `sat` and `rnl` daily
+  products share the pentad totals but not the daily timing, so splicing any
+  two of them puts a break in the record that the double-mass check (model.md
+  §2.10a) blames on the catchment, and the monthly CHIRPS factors (§2.4b)
+  are fitted across it. So a CHIRPS feed reads **one product end to end**
+  (never `rnl` before 1998 and `sat` after: a record that must start before
+  1998 uses `rnl` throughout; a `sat` feed's `startDate` can't be before
+  1998-01-01), labels a series it creates with what it writes, and **never
+  merges into a series that holds values of another product or version, or of
+  an unrecorded one**:
+  - attaching, re-targeting or switching the product of a feed onto such a
+    series answers **409** (`details.code: series_version`, what the series
+    holds and what the feed writes) unless the owner sends
+    `replaceSeries: true`. The Settings panel asks first;
+  - a fetch into such a series (one uploaded or relabelled after the feed was
+    set up) is a **failed fetch** that writes nothing and says why, until an
+    owner confirms;
+  - the confirmation (`data_feed.replace_series_from`) names what the series
+    held when the owner confirmed (`CHIRPS/2.0`, `''` for unrecorded), and
+    restarts the feed's history like a re-target, so it fetches from its
+    start date. **A replacement is a full backfill**, never a shorter record
+    or a partial overwrite: the feed starts at the series' first day with a
+    value (filled in when the owner gave no start date; a later one is a
+    409), and a series reaching before 1998 can only be replaced by `rnl`
+    (409 for `sat`).
+  - **The replacement is staged** (`feed_stage`, 032). The backfill's windows
+    build the new record in the feed's stage while the live series keeps its
+    old values and label, so a run in the meantime (hours: a window a
+    minute, 70 new days each) uses the whole old record, never a partial new
+    one. The feed shows `rebuilding` (how far it has got; health `pending`,
+    reason `rebuilding`, or `stale` / `rebuild-stalled` after a day without
+    growing), the series list marks the series `rebuilding`, and the Runs tab
+    says runs use the current series until it completes. When a window
+    reaches the newest day the source can have, the ingest **swaps the stage
+    in whole**, in one transaction: the series becomes the new record in the
+    feed's version, the old values and label are kept as a `feed_replace`
+    series revision (restorable from the History tab), `series.replaced` is
+    logged with the version change, the confirmation is used up
+    (`app_feed_replace_done`) and the stage deleted. While the series holds
+    anything else (it was relabelled since), the fetch is refused again and
+    the stage waits. Withdrawing the confirmation (`replaceSeries: false`),
+    a new one, re-targeting or a new config discards the stage
+    (`data_feed_stamp`); removing the feed takes it with it.
+  - The replacement changes the forcing: the next run's CHIRPS factors are
+    fitted on the new values, the fit record flags "forcing changed since
+    fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and
+    the run comparison says the version changed ([run-comparison.md](./run-comparison.md)).
+    Refit before relying on the parameters.
+
+  A series whose version was never recorded can be labelled without touching
+  its values (`PATCH /projects/:id/series/:seriesId`), which is how an owner
+  vouches that it already is what the feed writes.
+- **Backfill continues at once.** A fetch whose window stopped short of the
+  newest day the source can have (CHIRPS and DWS windows are capped: 120
+  days for CHIRPS) queues the feed's next fetch a minute later
+  (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts) instead of waiting for the
+  schedule, so a long backfill (a replacement, or an early start date) goes a
+  window at a time rather than a window a day. Each CHIRPS window re-reads
+  the last 50 days, so it moves on 70. "Run now" while that fetch waits makes
+  it due now (`app_feed_fetch_now`, 032).
 - **Schedule.** Every tick lists the due feeds (`app_due_feeds`,
   `SECURITY DEFINER`): enabled ones not scheduled within a day (or an hour).
   A daily CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
@@ -424,7 +488,9 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 - `inline` (the default: local, CI, e2e): the `feed_fetch` job fetches and
   merges in one transaction. `FEED_SOURCE=fixtures` (the default) answers the
   sources' URLs from `backend/fixtures/feeds/`: an invented grid re-dated to
-  today and encoded as real LZW GeoTIFFs in the CHC layout, and a synthetic
+  today and encoded as real LZW GeoTIFFs in the CHC layout (`sat` from 1998,
+  `rnl` from 1981 with the pattern a day later, as its daily timing
+  differs), and a synthetic
   DWS page replayed over the requested window. No network.
   `FEED_SOURCE=live` in a gitignored `.env.development.local` tries the real
   sources.

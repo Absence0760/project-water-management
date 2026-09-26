@@ -8,6 +8,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./calendar": "./src/calendar.ts",
+		"./provenance": "./src/seriesProvenance.ts",
 		"./testing": "./src/testing/index.ts"
 	},
 	"scripts": {

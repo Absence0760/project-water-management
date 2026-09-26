@@ -34,6 +34,23 @@ describe('feedHealth', () => {
 		});
 	});
 
+	// Issue #40c: a staged replacement reads old days, so "old data" would mislead.
+	it.each(['UTC', 'Pacific/Kiritimati'])('rebuilding: a staged replacement says how far it has got, and stalls after a day without growing (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		const backfilling = { ...base, lastDataDate: '2001-04-30', rebuilding: { startDate: '2001-01-01', through: '2001-04-30', updatedAt: '2026-09-25T00:10:00Z' } };
+		expect(feedHealth(backfilling, today)).toEqual({ state: 'pending', stale: false, staleAfterDays: 12, reason: { code: 'rebuilding', from: '2001-01-01', through: '2001-04-30' } });
+		expect(feedHealth({ ...backfilling, rebuilding: { ...backfilling.rebuilding, updatedAt: new Date('2026-09-24T00:00:00Z') } }, today).reason.code).toBe('rebuilding');
+		expect(feedHealth({ ...backfilling, rebuilding: { ...backfilling.rebuilding, updatedAt: '2026-09-23T23:00:00Z' } }, today)).toEqual({
+			state: 'stale',
+			stale: true,
+			staleAfterDays: 12,
+			reason: { code: 'rebuild-stalled', from: '2001-01-01', through: '2001-04-30', since: '2026-09-23' }
+		});
+		// A failing fetch, or a switched-off feed, says that first.
+		expect(feedHealth({ ...backfilling, consecutiveFailures: 1, lastError: 'x' }, today).state).toBe('failing');
+		expect(feedHealth({ ...backfilling, enabled: false }, today).state).toBe('disabled');
+	});
+
 	it('never sends a sentence: only the state, the threshold and the reason', () => {
 		expect(Object.keys(feedHealth(base, today)).sort()).toEqual(['reason', 'stale', 'staleAfterDays', 'state']);
 	});

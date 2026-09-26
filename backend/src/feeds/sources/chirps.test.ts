@@ -3,7 +3,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
-import { chirpsFinalUrl, chirpsPrelimUrl, fetchChirps, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
+import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
 import { writeGrid } from './tiff-write.js';
 
 /** An http that serves given grids by URL, 404 otherwise. */
@@ -29,6 +29,7 @@ describe('URLs (the CHC layout, checked 2026-09)', () => {
 	it('CHIRPS v3 final and preliminary daily files, and the GEFS issue directory', () => {
 		expect(chirpsFinalUrl('2026-08-31')).toBe('https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/sat/2026/chirps-v3.0.sat.2026.08.31.tif');
 		expect(chirpsPrelimUrl('2026-09-20')).toBe('https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/prelim/sat/2026/chirps-v3.0.prelim.2026.09.20.tif');
+		expect(chirpsRnlUrl('1985-01-02')).toBe('https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/rnl/1985/chirps-v3.0.rnl.1985.01.02.tif');
 		expect(gefsUrl('2026-09-25', '2026-10-01')).toBe('https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/2026/09/25/c3g_2026.10.01.tif');
 	});
 });
@@ -72,9 +73,34 @@ describe('fetchChirps', () => {
 			[chirpsPrelimUrl('2026-02-01')]: g(3),
 			[chirpsPrelimUrl('2026-02-03')]: g(5) // 02-02 missing between published days
 		});
-		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 2);
+		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-30', '2026-02-06', 'sat', 2);
 		expect(r).toEqual({ startDate: '2026-01-30', values: [1, 2, 3, null, 5], prelimDays: 2 });
 		expect(http.urls).not.toContain(chirpsPrelimUrl('2026-01-30'));
+	});
+
+	it('reads the rnl product end to end: its final files only, never sat or a preliminary one (issue #40 part c)', async () => {
+		const http = served({
+			[chirpsRnlUrl('1997-12-31')]: g(1),
+			[chirpsRnlUrl('1998-01-01')]: g(2),
+			[chirpsFinalUrl('1998-01-01')]: g(99), // the sat product: never mixed in
+			[chirpsPrelimUrl('1998-01-02')]: g(98)
+		});
+		const r = await fetchChirps(http, [cell(0, 0)], '1997-12-31', '1998-01-03', 'rnl');
+		expect(r).toEqual({ startDate: '1997-12-31', values: [1, 2], prelimDays: 0 });
+		expect(http.urls.every((u) => u.includes('/final/rnl/'))).toBe(true);
+	});
+
+	it('on the fixtures: rnl from 1981, sat only from 1998, each with its own daily timing', async () => {
+		const http = fixtureHttp(() => '2026-03-10');
+		const at = [{ lat: -20.12, lon: 25.17, weight: 1 }];
+		expect((await fetchChirps(http, at, '1985-06-01', '1985-06-03', 'rnl')).values).toHaveLength(3);
+		expect((await fetchChirps(http, at, '1985-06-01', '1985-06-03', 'sat')).values).toEqual([]);
+		// rnl is the pattern a day later than sat: the same pentads, other daily timing.
+		const sat = await fetchChirps(http, at, '2025-06-01', '2025-06-20', 'sat');
+		const rnl = await fetchChirps(http, at, '2025-06-02', '2025-06-21', 'rnl');
+		expect(rnl.values).toEqual(sat.values);
+		// rnl has no preliminary product: nothing within its 6-day lag.
+		expect((await fetchChirps(http, at, '2026-03-05', '2026-03-09', 'rnl')).values).toEqual([]);
 	});
 
 	describe('the day → file mapping, under a skewed TZ (the calendar is UTC, never local)', () => {
@@ -112,7 +138,7 @@ describe('fetchChirps', () => {
 
 		it('asks for every day of a 31-, 30- and 28-day month exactly once, in order', async () => {
 			const http = served({});
-			await fetchChirps(http, [cell(0, 0)], '2025-01-01', '2025-04-30', 1);
+			await fetchChirps(http, [cell(0, 0)], '2025-01-01', '2025-04-30', 'sat', 1);
 			const finals = http.urls.filter((u) => u.includes('/final/')).map((u) => u.match(/(\d{4})\.(\d{2})\.(\d{2})\.tif$/)!.slice(1).join('-'));
 			expect(finals).toHaveLength(31 + 28 + 31 + 30);
 			expect(new Set(finals).size).toBe(finals.length);

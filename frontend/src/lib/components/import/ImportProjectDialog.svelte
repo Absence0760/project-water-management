@@ -33,6 +33,8 @@
 		gaugeOptions,
 		isWorkbookFile,
 		progressText,
+		withChirpsProvenance,
+		DEFAULT_CHIRPS_KEY,
 		type FailureView,
 		type WorkbookReport
 	} from './workbookFile';
@@ -77,6 +79,8 @@
 	let gaugeAsReference = $state(false);
 	let scalingFrom = $state('');
 	let scaleFactor = $state('');
+	/** The workbook's CHIRPS column: product and version (issue #40 part c), v2.0 unless the review says otherwise. */
+	let chirpsKey = $state(DEFAULT_CHIRPS_KEY);
 	let optionsError = $state<string | null>(null);
 	let updating = $state(false);
 
@@ -113,6 +117,7 @@
 		gaugeAsReference = false;
 		scalingFrom = '';
 		scaleFactor = '';
+		chirpsKey = DEFAULT_CHIRPS_KEY;
 		optionsError = null;
 		updating = false;
 	}
@@ -210,7 +215,8 @@
 			notes: report ? report.notes : projectFileNotes(parsed.notes),
 			unmapped: report ? report.unmapped : []
 		});
-		const body = importBody(parsed.file, name, importReport);
+		// A workbook's CHIRPS column goes in labelled with the review's answer; a project file carries its own labels.
+		const body = importBody(report ? withChirpsProvenance(parsed.file, chirpsKey) : parsed.file, name, importReport);
 		const tooLarge = importTooLarge(body.bytes);
 		if (tooLarge) {
 			failure = { message: tooLarge, created: 'no' };
@@ -306,6 +312,7 @@
 							bind:gaugeAsReference
 							bind:scalingFrom
 							bind:scaleFactor
+							bind:chirpsKey
 							{optionsError}
 							{updating}
 							disabled={step === 'importing'}
