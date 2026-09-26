@@ -23,6 +23,7 @@
 		errorText,
 		feedsApi,
 		healthMessage,
+		keptNote,
 		needsAttention,
 		separateName,
 		STATE_LABELS,
@@ -112,7 +113,7 @@
 		formError = formField = takeover = null;
 	}
 
-	/** Submit the form; `confirmed` once the owner chose to take over the existing series. */
+	/** Submit the form; `confirmed` once the owner chose to write into the existing series. */
 	async function add(e: SubmitEvent | null, confirmed = false) {
 		e?.preventDefault();
 		if (busy) return;
@@ -127,7 +128,7 @@
 		busy = 'add';
 		formError = formField = message = error = null;
 		if (!confirmed && data) {
-			// Ask before a feed takes over a series that already holds data.
+			// Ask before a feed writes into a series that already holds data (the two records would mix).
 			let series;
 			try {
 				series = await api.series.list(projectId);
@@ -234,7 +235,7 @@
 						</div>
 						<p class="where muted small">{describePlace(f)} · {f.schedule}{describeRunsAs(f)}</p>
 						<p class="health">{healthMessage(f.health)}</p>
-						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}</p>
+						<p class="muted small">{describeTimes(f)}{#if f.lastMeta?.prelimDays}{' '}· {f.lastMeta.prelimDays} preliminary days{/if}{#if keptNote(f.lastMeta)}{' '}· {keptNote(f.lastMeta)}{/if}</p>
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
@@ -346,13 +347,13 @@
 					>
 						<p id="{uid}-to-h"><strong>“{describeTarget({ targetKind: q.kind, targetName: q.name })}” already has data ({fmtNum(q.days)} days).</strong></p>
 						<p id="{uid}-to-d">
-							The feed will replace its values on every day it fetches, including values you uploaded or imported (a day the source has no
-							value for keeps what is there). To keep this record as it is, send the feed to a separate series, such as “{q.suggestion}”, and
-							compare the two.
+							The values already there stay, including ones you uploaded or imported: the feed fills only the days without one, so the
+							series would mix this record with the feed’s. To compare the two side by side, send the feed to a separate series, such as
+							“{q.suggestion}”.
 						</p>
 						<div class="row">
 							<button type="button" class="btn btn-sm btn-primary" bind:this={separateButton} onclick={() => answerTakeover(q.suggestion)}>Use a separate series: {q.suggestion}</button>
-							<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Replace its values</button>
+							<button type="button" class="btn btn-sm" aria-disabled={busy === 'add'} onclick={() => add(null, true)}>Fill its empty days</button>
 						</div>
 					</div>
 				{/if}
