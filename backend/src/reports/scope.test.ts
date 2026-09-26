@@ -44,6 +44,8 @@ describe('scopeAllows', () => {
 		'/teams',
 		`/compare/${P}`,
 		'/auth/me/',
+		// The data-subject export: a render session never downloads the person's data.
+		'/auth/me/export',
 		''
 	])('refuses GET %s', (path) => {
 		expect(scopeAllows(scope, 'GET', path)).toBe(false);

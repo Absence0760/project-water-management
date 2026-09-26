@@ -2,7 +2,9 @@
 // by probing (049_applicant_oracles; docs/security.md § Applicants,
 // docs/followups.md § Applicants "Oracles"): whether an address or a user is
 // a member of the project, whether a hidden farm or crop has a given name,
-// and whether a hidden application has a given name. Each probe is answered
+// whether a hidden application has a given name, and whether a hidden
+// transfer, land-cover patch, borehole or crop has a given id, or what a
+// hidden farm carries. Each probe is answered
 // identically for the hidden case and the free one; each has its positive
 // control (an owner or editor, who may know, still gets the real answer).
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -30,6 +32,11 @@ const bergvliet = node('Bergvliet', outlet.id);
 const citrus = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: monthly(0.7) };
 const lucerne = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
 
+// Hidden from applicantA (on neighbours' farms): a transfer, a land-cover patch and a borehole.
+const T_HIDDEN = crypto.randomUUID();
+const LC_HIDDEN = crypto.randomUUID();
+const BH_HIDDEN = crypto.randomUUID();
+
 const P = () => `/projects/${projectId}`;
 const rename = (value: string) => ({ op: 'node.set', nodeId: rooikloof.id, field: 'name', value });
 const NEW_CROP = crypto.randomUUID();
@@ -53,9 +60,12 @@ beforeAll(async () => {
 			{ nodeId: rooikloof.id, cropId: citrus.id, areaM2: 50_000 },
 			{ nodeId: kliphuis.id, cropId: lucerne.id, areaM2: 30_000 }
 		],
-		transfers: []
+		transfers: [{ id: T_HIDDEN, fromNodeId: kliphuis.id, toNodeId: bergvliet.id, months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }],
+		landCover: [{ id: LC_HIDDEN, nodeId: kliphuis.id, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null }],
+		boreholes: [{ id: BH_HIDDEN, nodeId: bergvliet.id, name: 'Bergvliet BH', capacityM3Day: 100, annualCapM3: null }]
 	};
-	expect((await owner.call('PUT', `${P()}/model`, model)).status).toBe(200);
+	const put = await owner.call('PUT', `${P()}/model`, model);
+	expect(put.status, JSON.stringify(put.body)).toBe(200);
 	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const rain = Array.from({ length: 60 }, (_, i) => (i % 7 === 0 ? 20 : 0));
 	expect((await owner.call('PUT', `${P()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
@@ -219,5 +229,67 @@ describe('naming an application', () => {
 			status: 409,
 			body: { error: 'this project already has a scenario with that name' }
 		});
+	});
+});
+
+describe('ids and counts of what the applicant can’t see', () => {
+	const FREE = crypto.randomUUID();
+	/** The check as the applicant gets it, the probed id written as ID. */
+	const told = (body: unknown, id: string) => JSON.stringify(body).replaceAll(id, 'ID');
+	let n = 0;
+	const probe = (ops: unknown[]) => application(applicantA, `Id probe ${++n}`, ops);
+
+	const targeting: [string, (id: string) => unknown][] = [
+		[T_HIDDEN, (id) => ({ op: 'transfer.remove', transferId: id })],
+		[LC_HIDDEN, (id) => ({ op: 'landCover.remove', patchId: id })],
+		[BH_HIDDEN, (id) => ({ op: 'borehole.remove', boreholeId: id })],
+		[lucerne.id, (id) => ({ op: 'cropArea.set', nodeId: rooikloof.id, cropId: id, areaM2: 10 })]
+	];
+
+	it('answers an op on a hidden item’s id exactly as on a free one, in the check and when run', async () => {
+		for (const [hidden, op] of targeting) {
+			const h = await probe([op(hidden)]);
+			const f = await probe([op(FREE)]);
+			expect(h.check.problems).toEqual([expect.stringMatching(/not found$/)]);
+			expect(told(h.check, hidden)).toBe(told(f.check, FREE));
+			const runs = await Promise.all([h, f].map((s) => applicantA.call('POST', `${P()}/scenarios/${s.scenario.id}/runs`, {})));
+			expect(runs[0]!.status).toBe(422);
+			expect(told(runs[0], hidden)).toBe(told(runs[1], FREE));
+		}
+	});
+
+	it('applies an item added under a hidden id exactly as under a free one, and moves it to a fresh id the assessor sees', async () => {
+		const add = (id: string) => ({ op: 'transfer.add', transfer: { id, fromNodeId: rooikloof.id, toNodeId: kliphuis.id, months: [2], maxRateM3s: 0.02, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 1 } });
+		const h = await probe([add(T_HIDDEN)]);
+		const f = await probe([add(FREE)]);
+		expect(h.check.problems).toEqual([]);
+		expect(told(h.check, T_HIDDEN)).toBe(told(f.check, FREE));
+		expect(h.check).not.toHaveProperty('reIds');
+		const runs = await Promise.all([h, f].map((s) => applicantA.call('POST', `${P()}/scenarios/${s.scenario.id}/runs`, {})));
+		for (const r of runs) {
+			expect(r.status, JSON.stringify(r.body)).toBe(201);
+			expect(r.body).not.toHaveProperty('reIds');
+		}
+		expect(told({ ...runs[0]!.body, run: undefined, removedRunIds: undefined }, T_HIDDEN)).toBe(told({ ...runs[1]!.body, run: undefined, removedRunIds: undefined }, FREE));
+		// The assessor, once it is submitted, sees the move.
+		expect((await applicantA.call('POST', `${P()}/scenarios/${h.scenario.id}/submit`)).status).toBe(200);
+		const seen = await assessor.call('GET', `${P()}/scenarios/${h.scenario.id}`);
+		expect(seen.body.check.reIds).toEqual([{ kind: 'transfer', id: T_HIDDEN, as: `${T_HIDDEN}-2` }]);
+		// Positive control: a team scenario meets the hidden transfer.
+		const team = await owner.call('POST', `${P()}/scenarios`, { name: 'Team id probe', baseRunId: published, ops: [add(T_HIDDEN), targeting[0]![1](T_HIDDEN)] });
+		expect(team.body.check.problems).toEqual([`op 1 (transfer.add): transfer id ${T_HIDDEN} is already in use`]);
+		expect(team.body.check.applied.map((a: { index: number }) => a.index)).toEqual([1]);
+		expect(team.body.check.reIds).toEqual([]);
+	});
+
+	it('counts nothing a hidden farm carries when an application removes it', async () => {
+		// Kliphuis carries a crop area, a transfer and land cover; Bergvliet the transfer's other end and a borehole.
+		const k = await probe([{ op: 'node.remove', nodeId: kliphuis.id }]);
+		const b = await probe([{ op: 'node.remove', nodeId: bergvliet.id }]);
+		expect(k.check.applied).toEqual([{ index: 0, op: { op: 'node.remove', nodeId: kliphuis.id }, notes: [] }]);
+		expect(b.check.applied).toEqual([{ index: 0, op: { op: 'node.remove', nodeId: bergvliet.id }, notes: [] }]);
+		// Positive control: the team's scenario counts what it drops.
+		const team = await owner.call('POST', `${P()}/scenarios`, { name: 'Team remove probe', baseRunId: published, ops: [{ op: 'node.remove', nodeId: kliphuis.id }] });
+		expect(team.body.check.applied[0].notes).toEqual(['dropped 1 crop area(s)', 'dropped 1 transfer(s)', 'dropped 1 land-cover patch(es)']);
 	});
 });

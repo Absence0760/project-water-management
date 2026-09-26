@@ -23,7 +23,11 @@ header closes it too.
 **The account page** (`routes/account/+page.svelte`, WP-1.9) shows the email
 address and whether it is confirmed, a **Display name** form
 (`PATCH /auth/me`; the header follows at once), **Language and units** (the
-language switch and the farm view's m³ / ML, [§ Language](#language)) and a
+language switch and the farm view's m³ / ML, [§ Language](#language)), a
+**Your data** panel whose **Download my data** button saves the
+data-subject export (`GET /auth/me/export`, a JSON file; the download
+helpers load on click, and a second click within the minute shows the
+server's `429` message in an alert) and a
 **Password** form
 (current, new, repeat; `POST /auth/change-password`). Changing the password
 signs out every other device while this browser stays signed in. Errors show
@@ -2014,7 +2018,9 @@ farm view if they have links, and the Scenarios tab in applicant mode
   you can share it with already reads it"). An assessor opening an
   application whose names displaced a hidden farm's or crop's sees which
   ("… in this application's runs Kliphuis is called “Kliphuis (2)”",
-  `check.renamed`); the applicant never does.
+  `check.renamed`), and likewise a new item given the id of one the
+  applicant can't see (`check.reIds`, "their transfer … is …-2"); the
+  applicant never does.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`): every submitted, withdrawn or decided application

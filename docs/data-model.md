@@ -55,7 +55,7 @@ erDiagram
 
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
-| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5) | none (the workbook has no users) |
+| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql) | none (the workbook has no users) |
 | `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
@@ -502,6 +502,18 @@ the result change?", and put back any earlier version.
   classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
   null, or restrict for evidence that names its maker);
   `auth/account-deletion.db.test.ts` checks the outcome.
+- **Data-subject export (052).** `app_subject_export()` (`SECURITY
+  DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
+  arguments) returns, as one jsonb document, the rows keyed to
+  `app_current_user_id()` that RLS hides from their subject: the audit
+  events they made or that name them (`actor_user_id`, `subject.userId`,
+  `note.deleted`'s `subject.authorId`, the keys 048 pseudonymises), invites
+  to their verified address, the notes they wrote, their sign-offs, and their
+  alert and report-schedule choices. `GET /auth/me/export` reads the rest
+  under RLS. Every foreign key to `app_user` is listed as exported or left
+  out (with why) in `auth/export.ts` `USER_FK_COVERAGE`, and every
+  `app_user` column in `APP_USER_EXPORTED` / `APP_USER_EXCLUDED`;
+  `auth/export.db.test.ts` fails when a new one isn't.
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -540,7 +552,7 @@ the result change?", and put back any earlier version.
 ### Stored run inputs (021_series_blob.sql)
 
 Roadmap WP-3.1: a run can be recomputed exactly years later, whatever
-happens to the live project. `executeRun` writes each input series' values
+happens to the live project. `storeRun` writes each input series' values
 to a content-addressed store and `loadRunInput(db, runId)`
 (`backend/src/runs/execute.ts`) rebuilds the run's exact `ModelInput`: the
 snapshot's settings and model plus the stored series. The DB test
@@ -561,7 +573,7 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   the end of the statement, so deleting a whole project still cascades, but
   no statement can leave a run pointing at a missing blob). Index
   `(project_id, sha256)` covers both foreign keys and the lookups below.
-- **Writes.** `executeRun` stores the inputs last, after the outputs, under
+- **Writes.** `storeRun` stores the inputs last, after the outputs, under
   the project's run lock (`lockProjectRuns`, the advisory lock `trimRuns`
   already took): it asks which of the run's hashes the project already holds,
   inserts only the new values (`ON CONFLICT DO NOTHING`), then the run's
