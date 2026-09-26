@@ -2135,11 +2135,6 @@ Left, each with its trigger:
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.
-- [ ] **Bundle ceiling.** The alert pages bring the frontend's gzipped total
-      to 942 KB against the 929 KB ceiling (932 KB at this merge before
-      them). The ceiling was left alone for the integrator to decide
-      (`scripts/guards/check_web_bundle_budget.mjs`). Trigger: the merge.
-
 ## POPIA and the Step 2 release (WP-2.16)
 
 The Step 2 release-hardening pass (2026-09-26,
