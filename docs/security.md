@@ -334,11 +334,27 @@ In short:
   - The history shows everywhere a reader weighs results: the Runs tab, the
     run header, compare, the summary CSV; a later run of another runoff model
     raises a warning.
-  - Limits: the project owner can still delete the **whole project**, history
-    included; an issued, hashed evidence pack that survives that is roadmap
-    WP-3.14. The schema owner (`water`, migrations only) is not bound by the
-    grants. A nomination proves what the project said and when, not that the
-    run is right: that is the assessor's review.
+  - The **project is kept too** (issue #43, 040_project_evidence_guard): a
+    project with any nomination, current or since replaced, can't be deleted.
+    The `project_evidence_guard` BEFORE DELETE trigger (`SECURITY DEFINER`,
+    `search_path` pinned) refuses it for every role, the schema owner
+    included, and on every path: the route (which answers `409` first,
+    naming the run), a direct `DELETE` as `water_app`, and any cascade into
+    `project` (there is none today: deleting a team sets `project.team_id` to
+    `NULL`, and there is no account deletion; an `app_user` row that created a
+    project or a nomination can't be deleted anyway). The history can't be
+    withdrawn, so once a project nominates it is kept for good; a copy starts
+    afresh without its runs.
+  - The operator can still remove such a project out of band (a court order,
+    a test project that nominated by mistake), deliberately and visibly: as
+    the schema owner, in one transaction, `ALTER TABLE project DISABLE
+    TRIGGER project_evidence_guard; DELETE FROM project WHERE id = '…';
+    ALTER TABLE project ENABLE TRIGGER project_evidence_guard;`. Record why
+    in the operator log; the app has no path to it.
+  - Limits: an issued, hashed evidence pack that survives outside the
+    database is roadmap WP-3.14. The schema owner (`water`, migrations only)
+    is not bound by the grants. A nomination proves what the project said and
+    when, not that the run is right: that is the assessor's review.
 - **Uncertainty bands can't be cherry-picked or forged** (014_run_uncertainty,
   [model.md §2.10e](./model.md#210e-uncertainty-bands-engine--0260-issue-4-phase-9)).
   An applicant could otherwise run an ensemble again and again, with other
