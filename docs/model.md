@@ -133,6 +133,10 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    demand by roughly a quarter. The Crops tab says so and points out any factor
    above 1.0 (a hint, not an error).
 
+   Demand always reads `apanMm`. GR4J's own PE input (`settings.pe`, §2.4a,
+   engine ≥ 0.31.0) never reaches it, so a monthly PE for GR4J leaves demand
+   unchanged.
+
 4. **Soil-water carry-over (engine ≥ 0.14.0, [audit N3](./engine-audit.md)).**
    The workbook's rule above lets rain offset only the day it falls on: a 60 mm
    day cancels one day of demand and the rest is lost. The engine carries
@@ -297,16 +301,37 @@ predates the setting, so run comparison reads it as legacy.
   forecast, as for legacy, but with **no rain threshold** (that was part of
   the legacy model). A day with no
   value is dry, and the run counts those days (W2). Negative values count as 0.
-- **Potential evaporation E** = `panCoefficient[month] × apanMm[month] / days
-  in that calendar month`, so each month's PET totals exactly coefficient ×
-  A-pan. `settings.panCoefficient` is 0.7 in every month by default and is
+- **Potential evaporation E** (engine ≥ 0.31.0, issue #39) is the month's PE
+  from `settings.pe` (`gr4jPeMonthlyMm`), spread evenly over the days of that
+  calendar month, so each month's PET totals exactly that month's PE:
+  - `{ kind: 'pan' }`, the default: PE = `panCoefficient[month] ×
+    apanMm[month]`. This is what every run did before 0.31.0, and a project
+    saved without `pe` runs it; its results are byte-identical.
+  - `{ kind: 'monthly', mm, source }`: PE is `mm[month]` directly, 12
+    water-year values in mm (for example a station FAO-56 ET₀ × a stated
+    factor), spread over the month's days the same way. `source` says where
+    the values came from (required, at most 600 characters). The pan
+    coefficient is not used.
+
+  Irrigation demand (§2.3) and dam evaporation (§2.7a) always read `apanMm`,
+  whichever kind is chosen, so a monthly PE moves only the runoff model.
+
+  **Why a separate input.** Before 0.31.0 one A-pan row drove three things:
+  crop demand, dam evaporation and GR4J's PE. South African practice keeps
+  them apart: Pitman/WRSM2000 runs on S-pan, reservoir evaporation is S-pan ×
+  lake factors, ACRU uses an A-pan-equivalent reference, and SAPWAT uses
+  ET₀ × Kc. A monthly PE lets GR4J run on its own evaporation (a station
+  ET₀, say) without moving the demand or the dams.
+
+  `settings.panCoefficient` is 0.7 in every month by default and is
   edited per month (question 4 for the hydrologist). It doesn't touch
   irrigation demand. **It is held fixed, never calibrated**: it trades off
   against X1/X3 (a higher coefficient and a smaller store fit the same
   record), so automatic calibration (§2.10b) never searches it, and each fit
-  records the coefficient (and, from the same forcing snapshot, the A-pan and
-  CHIRPS bias correction mode) it ran under — a later change to any of them
-  is fit provenance's `forcingChanged` (§2.10b).
+  records the coefficient (and, from the same forcing snapshot, the A-pan,
+  the PE input and the CHIRPS bias correction mode) it ran under — a later
+  change to any of them is fit provenance's `forcingChanged` (§2.10b). A
+  monthly PE row is held fixed in the same way, for the same reason.
   - **Presets** (`PAN_COEFFICIENT_PRESETS`, `packages/engine/src/project.ts`;
     a simulated hydrologist recommendation, pending the real one). Three
     water-year (Oct–Sep) starting points a Settings picker can fill the row
@@ -334,7 +359,9 @@ predates the setting, so run comparison reads it as legacy.
       winter (light wind, RH above 70 %). A seasonal step of 0.10–0.25 is
       not by itself a sign of an inconsistent preset. (An earlier reading,
       for moderate wind only, concluded the step should be about 0.05; that
-      was wrong, and the preset change it proposed, issue #39, is on hold.)
+      was wrong. The preset change it proposed was not made, and issue #39
+      became the separate PE input above and the Table 5 helper below.
+      There is no rule on the seasonal step.)
     - **Dry, bare surroundings pull Kp down.** FAO-56 says to reduce Kp by
       5–10 % in moderate conditions and by up to 20 % where the surroundings
       are arid, windy and bare. A summer Kp of 0.55–0.60 is plausible for an
@@ -343,7 +370,8 @@ predates the setting, so run comparison reads it as legacy.
       range of **0.55–0.80 in the dry season and 0.60–0.85 in the wet
       season** covers the sitings above (the 0.55 end sits just under the
       plausibility band below, so the run will warn). Treat Kp and the A-pan level
-      together: it is PE (Kp × A-pan) that the model sees.
+      together: it is PE (Kp × A-pan, under `pe.kind: 'pan'`) that the model
+      sees.
     - **Cross-check against ET₀, but check the ET₀ first.** FAO-56
       Penman–Monteith ET₀ should come out at about Kp × A-pan. Gridded
       reanalysis ET₀ can read far too high: in one semi-arid Western Cape
@@ -356,6 +384,40 @@ predates the setting, so run comparison reads it as legacy.
       disagree. A station ET₀ record is often the most useful single piece
       of evidence on the PE level.
 
+    **FAO-56 Table 5 helper (engine 0.31.0, issue #39).**
+    `packages/engine/src/evaporation/fao56Table5.ts` (`fao56Kp`,
+    `fao56KpMonthly`) looks up the Class A pan coefficient in FAO-56
+    chapter 4, Table 5 (Allen et al. 1998, itself from FAO-24;
+    https://www.fao.org/4/x0490e/x0490e08.htm), transcribed cell for cell.
+    Settings uses it to suggest a monthly row from each month's mean RH and
+    wind at 2 m, the pan's siting and its fetch.
+
+    - **Siting.** Case A: pan in a short green crop, fetch = the upwind
+      distance of green crop. Case B: pan in a dry fallow area, fetch = the
+      upwind distance of dry fallow.
+    - **RH classes** follow the table's wording: low < 40 %, medium 40–70 %
+      (both 40 and 70 are medium), high > 70 %.
+    - **Wind classes** (m/s at 2 m): light < 2, moderate 2–5, strong 5–8,
+      very strong > 8. 2 is moderate. The table's ranges share the
+      endpoints 5 and 8; this is a stated reading that puts each in the
+      lower class (5 is moderate, 8 is strong), as "> 8" leaves 8 itself to
+      strong.
+    - **Fetch** is one of the table's four distances, 1, 10, 100 or
+      1000 m. There is no interpolation: every suggested value is a cell of
+      the published table. FAO-56 Table 7's regression equations in
+      ln(fetch) are a fitted approximation of the table, so they are
+      deliberately not used.
+    - **Reduction.** FAO-56 says Kp may need reducing by up to 20 % in
+      arid, windy areas with extensive bare soils (Case B, large fetch), and
+      by 5–10 % in moderate conditions. The helper takes an optional stated
+      reduction of 0–20 %, never applied by default, and its note says when
+      one was.
+
+    The helper only fills the pan-coefficient row; the values stay editable
+    and nothing is stored about the lookup. It doesn't make the presets
+    more than indicative, and it sets no rule on how far Kp may step
+    between seasons (Table 5 itself moves with the season's wind and RH).
+
     **Check the A-pan row before choosing a coefficient** (issue #13). A
     workbook's A-pan row isn't necessarily raw A-pan.
 
@@ -365,17 +427,15 @@ predates the setting, so run comparison reads it as legacy.
       against that row. Ask whoever built the row what it was converted to
       and why before "correcting" it: the conversion may have been
       deliberate, for the crop demand.
-    - **The same row drives three things.** Crop demand is crop factor ×
-      A-pan (§2.3). Dam evaporation is lake factor × A-pan (§2.7a). GR4J PE
-      is Kp × A-pan. Changing the row to change PE also changes the
-      irrigation demand and the dam evaporation. To test PE alone, keep the
-      row and move `panCoefficient` (the value may then sit outside the
+    - **Under `pe.kind: 'pan'` the same row drives three things.** Crop
+      demand is crop factor × A-pan (§2.3). Dam evaporation is lake factor ×
+      A-pan (§2.7a). GR4J PE is Kp × A-pan. Changing the row to change PE
+      also changes the irrigation demand and the dam evaporation. To test PE
+      alone, enter a monthly PE (`pe.kind: 'monthly'`, engine ≥ 0.31.0),
+      which leaves the row to demand and the dams. Moving `panCoefficient`
+      also works under `pan`, but the value may then sit outside the
       0.6–0.85 plausibility band; that is an artefact of the shared row, and
-      the run notes should say so). South African practice keeps these
-      inputs apart (Pitman/WRSM2000 on S-pan; reservoir evaporation as
-      S-pan × lake factors; ACRU on an A-pan-equivalent reference; SAPWAT as
-      ET₀ × Kc). A separate PE/ET₀ input for GR4J is the durable fix
-      (issue #39, repurposed).
+      the run notes should say so.
     - **Checks on the row:**
       1. Compare the row with the WR90/WR2012 **S-pan** MAE for the
          quaternary. An A-pan reads *higher* than a Symons S-pan beside it,
@@ -417,7 +477,9 @@ predates the setting, so run comparison reads it as legacy.
     FAO-56's usual range for a Class A pan. This is a soundness check, not a
     bound: the API keeps the wider 0–2 it always has, so a stored project with
     a coefficient further out still loads, saves and runs — the warning just
-    says so. All three presets sit inside 0.6–0.85.
+    says so. All three presets sit inside 0.6–0.85. From engine 0.31.0 the
+    run warns only under `pe.kind: 'pan'`: with a monthly PE, GR4J doesn't
+    use the coefficient.
   - **Testing the effect of a choice.** There is no automated sensitivity
     harness yet (that is CR-21, [calibration-research.md](./calibration-research.md));
     until it exists, `pnpm pan-sensitivity <project.json>`
@@ -428,10 +490,14 @@ predates the setting, so run comparison reads it as legacy.
     against the logger record. The script takes any project.json and carries
     no client data; a report run against the client catchment
     (`data/client-catchment/`, gitignored) stays local, never committed, per
-    the public-repo rule.
-- **No evaporation, no run** (engine ≥ 0.11.1). When A-pan × pan
-  coefficient is 0 in every month, GR4J is refused (`GR4J_NO_PET`), as a run
-  with no rainfall is. Without evaporation the production store only fills,
+    the public-repo rule. It refuses a project whose `pe.kind` is
+    `'monthly'`: the pan coefficient doesn't reach GR4J there, so every case
+    would give the same numbers. Set `settings.pe` to `{ kind: 'pan' }` in a
+    copy of the project.json to see the pan-coefficient sensitivity.
+- **No evaporation, no run** (engine ≥ 0.11.1). When GR4J's PE is 0 in
+  every month (A-pan × pan coefficient under `pan`, or the monthly PE row
+  under `monthly`, engine ≥ 0.31.0), GR4J is refused (`GR4J_NO_PET`), as a
+  run with no rainfall is. Without evaporation the production store only fills,
   so nearly all rain becomes flow; before 0.11.1 this was only a warning,
   which a new project (A-pan defaults to 0) met on its first run once GR4J
   became the default. Settings shows the same check (`hasPotentialEvaporation`)
@@ -1396,6 +1462,9 @@ binds, the transfer brings enough that neither MIN bites.
   factor (open water is about 0.7–0.8 × Class-A pan, Linsley et al. 1982).
   The WR90 / WR2012 lake factors are ratios to **S-pan** evaporation and must
   not be applied to A-pan directly. 0 turns dam evaporation off.
+- `Apan` is always `settings.apanMm`. GR4J's own PE input (`settings.pe`,
+  §2.4a, engine ≥ 0.31.0) never reaches the dams, so a monthly PE for GR4J
+  leaves dam evaporation unchanged.
 - `seepage` is `node.damSeepagePerDay` (fraction of storage per day, default
   0). Seepage reaches the river below the wall and **joins the farm's outflow
   U the same day**, so it stays in the catchment.
@@ -2260,9 +2329,10 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   (the in-sample fit, the split-sample and dry → wet tests, the independent
   record), the forcing it ran under (`forcing`: `panCoefficient` and `apanMm`,
   water-year months, `chirpsBiasCorrection`, and `zeroRainRuns` (§2.4c), because
-  it decides which zero-rain days CHIRPS fills. `forcing` is absent on records made
-  before it was tracked, and each of the last two is absent on a `forcing`
-  made before it was added), the WR2012 MAR penalty when it was on
+  it decides which zero-rain days CHIRPS fills, and from engine 0.31.0 `pe`,
+  GR4J's PE input (§2.4a). `forcing` is absent on records made
+  before it was tracked, and each of the last three is absent on a `forcing`
+  made before it was added; a `forcing` without `pe` ran `{ kind: 'pan' }`), the WR2012 MAR penalty when it was on
   (§2.10c: its weight, the MAR band when one was used, the simulated MAR ratio
   and the fit without it) and the notes.
   The same engine version, inputs and seed reproduce the fit exactly.
@@ -2273,12 +2343,24 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   the mark. Each run snapshots the record in effect in `model_run.inputs`.
   `fitRecordStatus` also says when the runoff model, window, exclusions or
   flow record have changed since the fit — and, from `forcing`, when the pan
-  coefficient, A-pan evaporation or CHIRPS bias correction has
+  coefficient, A-pan evaporation, PE input or CHIRPS bias correction has
   (`forcingChanged`): the pan coefficient is fixed, never calibrated (§2.4a),
   because it trades off against X1/X3, and CHIRPS bias correction changes the
   rain GR4J sees on the days CHIRPS fills a gap (§2.4b), so a fit is only
   valid for the forcing it was fitted under and a later change to any of them
-  marks the record stale, with a caveat naming the trade-off. The forcing
+  marks the record stale, with a caveat naming the trade-off.
+  **The PE input (engine ≥ 0.31.0).** `forcing.pe` is always recorded. The
+  forcing has changed when the kind changes, or when a monthly row changes
+  (the same tolerance as the other rows). An edit to the `source` text alone
+  is not a change: rewording where the numbers came from doesn't change what
+  GR4J ran on. Under `monthly`, a change to `apanMm` or `panCoefficient`
+  alone is not a GR4J forcing change (they still move demand and dam
+  evaporation, which the run records). An old record without `pe` against
+  monthly settings is flagged, since it ran on pan coefficient × A-pan. The
+  caveat reads "The potential evaporation GR4J runs on (the PE input, or the
+  pan coefficient or A-pan evaporation it is taken from), CHIRPS bias
+  correction, CHIRPS fit period, rain-source periods or zero-rain run
+  handling has changed since the fit. …". The forcing
   also records the CHIRPS series' product and version the fit ran on
   (`forcing.chirpsSource`, issue #40 part c; null = not recorded). The series'
   label isn't a setting, so the caller passes the current one
@@ -2749,6 +2831,12 @@ it never changes a run's results.
     Class A range 0.35–0.85 (or at the project's own value when that is
     outside it). §2.4a shows the pan coefficient moves MAR and EWR days
     even after refitting, so it belongs in the band, not in the fit.
+    With GR4J on a monthly PE row (`pe.kind: 'monthly'`, engine ≥ 0.31.0)
+    the coefficient doesn't reach GR4J, so the dimension is dropped
+    (`panOffset` 0) with the note "The pan coefficient is not varied:
+    GR4J’s potential evaporation comes from the monthly PE row (Settings),
+    which does not use it. The ensemble does not vary potential
+    evaporation."
   - **Rain source**, when the project has both station rain and CHIRPS
     covering ≥ 99 % of the run: half the members use the rain as a run does
     (station rain, bias-corrected CHIRPS where it is blank, §2.4b), half use
@@ -2807,7 +2895,10 @@ it never changes a run's results.
   catchment-response uncertainty both runs share, so the band is the change's
   own impact (a licence application's extra impact, [run-comparison.md](./run-comparison.md)).
   Members are judged once, on the baseline: an application changes the
-  network, not the observed history. The same inputs give exactly zero.
+  network, not the observed history. The same inputs give exactly zero. A
+  paired band is refused when the baseline's ensemble varied the pan
+  coefficient and the other run is GR4J on a monthly PE row, which doesn't
+  use it: the pairs would not be the same members.
 - **Reproducible and checked.** The same input and options give an identical
   ensemble (tested); metrics are rounded to 6 significant figures. The server
   assigns the seed and stores the resolved options before the browser runs
@@ -3265,6 +3356,7 @@ step when a definition changes.
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the A-pan, MAP and naturalised flow data per quaternary catchment. |
 | **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
+| **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (65% here). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |
 | **MAP** | Mean Annual Precipitation (mm/yr). "Hi/Lo MAP" splits a catchment into high- and low-rainfall parts. |

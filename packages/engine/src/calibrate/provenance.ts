@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay } from '../calendar';
-import type { CalibrationFlowKind, ChirpsBiasMode, ChirpsFitPeriod, ProjectSettings, RainSourcePeriod, ZeroRainSettings } from '../project';
+import { resolvePe, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
@@ -196,6 +196,12 @@ export interface FitRecord {
 	 * so a different version changes the rain on every gap-filled day.
 	 * `settings.rainSource` (engine ≥ 0.30.0) replaces the rain over its
 	 * periods, so it is recorded too; a `forcing` without it ran with none.
+	 * `settings.pe` (engine ≥ 0.31.0, issue #39) is where GR4J's potential
+	 * evaporation came from: a `forcing` without it ran `{ kind: 'pan' }`
+	 * (pan coefficient × A-pan). Under `kind: 'monthly'` the pan coefficient
+	 * and A-pan don't reach GR4J, so a change to them alone is no GR4J
+	 * forcing change (it still changes demand and dam evaporation, which the
+	 * run records).
 	 */
 	forcing?: {
 		panCoefficient: number[];
@@ -206,6 +212,7 @@ export interface FitRecord {
 		chirpsFactors?: ChirpsFactorSet[] | null;
 		chirpsSource?: SeriesProvenance | null;
 		rainSource?: RainSourcePeriod[];
+		pe?: PeInput;
 	};
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
@@ -232,6 +239,8 @@ export interface FitContext {
 		zeroRainRuns?: ZeroRainSettings;
 		chirpsFitPeriod?: ChirpsFitPeriod;
 		rainSource?: RainSourcePeriod[];
+		/** GR4J's PE input (engine ≥ 0.31.0); absent = `{ kind: 'pan' }`. */
+		pe?: PeInput | null;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -275,7 +284,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			chirpsFitPeriod: structuredClone(ctx.settings.chirpsFitPeriod ?? 'all'),
 			...(r.chirpsFactors !== undefined ? { chirpsFactors: structuredClone(r.chirpsFactors) } : {}),
 			...(ctx.chirpsSource !== undefined ? { chirpsSource: ctx.chirpsSource ? { ...ctx.chirpsSource } : null } : {}),
-			rainSource: structuredClone(ctx.settings.rainSource ?? [])
+			rainSource: structuredClone(ctx.settings.rainSource ?? []),
+			pe: structuredClone(resolvePe(ctx.settings.pe, []))
 		},
 		splitSample: r.splitSample,
 		differential: r.differential,
@@ -329,9 +339,12 @@ export interface FitRecordStatus {
 	exclusionsChanged: boolean;
 	flowKindChanged: boolean;
 	/**
-	 * The pan coefficient, A-pan evaporation, CHIRPS bias correction or
-	 * zero-rain run settings (the forcing GR4J runs under) have changed since
-	 * the fit. False for records made before `forcing` was recorded, and a
+	 * The potential-evaporation input (`settings.pe`: its kind, or its
+	 * monthly row; not its source note), the pan coefficient and A-pan
+	 * evaporation (only while `pe` is `{ kind: 'pan' }`, the only time GR4J
+	 * reads them), CHIRPS bias correction, CHIRPS fit period, rain-source
+	 * periods or zero-rain run settings (the forcing GR4J runs under) have
+	 * changed since the fit. False for records made before `forcing` was recorded, and a
 	 * field added to `forcing` later (`chirpsBiasCorrection`, `zeroRainRuns`)
 	 * never flags a record made before it: there is nothing to compare
 	 * against. Also true when `chirpsSourceChanged`.
@@ -368,15 +381,35 @@ const accumulationOf = (z: Partial<ZeroRainSettings> | undefined) => ({
 	addAccumulations: z?.addAccumulations ?? []
 });
 
-/** Which of a fit's recorded forcing fields differ from the settings, or null when there is nothing recorded to compare. */
+/**
+ * Whether two PE inputs give GR4J different potential evaporation: another
+ * kind, or another `monthly` row. The `source` note is left out on purpose:
+ * rewording where the numbers came from doesn't change what GR4J ran on, so
+ * it must not ask for a refit (the fit record still keeps the note).
+ */
+const peChanged = (a: PeInput, b: PeInput): boolean =>
+	a.kind !== b.kind || (a.kind === 'monthly' && b.kind === 'monthly' && !closeArray(a.mm, b.mm));
+
+/**
+ * Which of a fit's recorded forcing fields differ from the settings, or null
+ * when there is nothing recorded to compare. `panCoefficient` and `apanMm`
+ * count only while the settings' `pe` is `{ kind: 'pan' }`: under
+ * `kind: 'monthly'` GR4J never reads them (they still drive demand and dam
+ * evaporation, which aren't part of a fit's forcing). `pe` is the PE input
+ * itself (engine ≥ 0.31.0; either side without one is `{ kind: 'pan' }`).
+ */
 function forcingDiff(
 	settings: Partial<ProjectSettings>,
 	record: FitRecord
-): { panCoefficient: boolean; apanMm: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean; rainSource: boolean } | null {
+): { panCoefficient: boolean; apanMm: boolean; pe: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean; rainSource: boolean } | null {
 	if (!record.forcing) return null;
+	const pe = resolvePe(settings.pe, []);
+	const panReachesGr4j = pe.kind === 'pan';
 	return {
-		panCoefficient: !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
-		apanMm: !closeArray(settings.apanMm, record.forcing.apanMm),
+		panCoefficient: panReachesGr4j && !closeArray(settings.panCoefficient, record.forcing.panCoefficient),
+		apanMm: panReachesGr4j && !closeArray(settings.apanMm, record.forcing.apanMm),
+		// Engine ≥ 0.31.0. A forcing without it ran pan coefficient × A-pan, so a monthly PE now is a change.
+		pe: peChanged(pe, resolvePe(record.forcing.pe, [])),
 		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
 		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection,
 		zeroRainRuns:
@@ -411,7 +444,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		forcingChanged:
 			chirpsSourceChanged ||
-			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
+			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
 		chirpsSourceChanged
 	};
 }
@@ -433,7 +466,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged) {
 		out.push(
-			'The pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
+			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);
 	}
 	return out;

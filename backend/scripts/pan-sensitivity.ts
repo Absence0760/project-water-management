@@ -11,6 +11,9 @@
 //
 //   pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
 //
+// Refuses a project whose GR4J PE is a monthly row (settings.pe.kind
+// 'monthly', issue #39): the pan coefficient doesn't reach GR4J there.
+//
 // Pure engine, no DB and no server: reads the file, runs runModel/calibrate
 // in-process, writes the table. On a large catchment record (decades of daily
 // series) this can take several minutes and hold a few hundred MB; on a
@@ -111,6 +114,19 @@ function metricsOf(out: ModelOutput): CaseMetrics {
 	};
 }
 
+/**
+ * Why this report can't run on a project, or null. Under `pe.kind: 'monthly'`
+ * (engine ≥ 0.31.0, issue #39) GR4J's PE is the monthly row and the pan
+ * coefficient is unused, so every case would give the same numbers. The
+ * report refuses rather than quietly switching the project back to pan PE,
+ * which would describe a model the project doesn't run.
+ */
+export function panSensitivityRefusal(settings: { pe?: { kind: string } | null }): string | null {
+	if (settings.pe?.kind === 'monthly')
+		return "this project's GR4J potential evaporation is a monthly PE row (settings.pe.kind 'monthly'), not pan coefficient × A-pan, so the pan coefficient doesn't reach GR4J and every case would be identical; set settings.pe to { kind: 'pan' } in a copy of the project.json to see the pan-coefficient sensitivity";
+	return null;
+}
+
 export interface CalibrateSettings {
 	seed: number;
 	starts: number;
@@ -125,6 +141,8 @@ export interface CalibrateSettings {
  * reference regardless of the project's own default.
  */
 export function runCase(base: ModelInput, c: SensitivityCase, cal: CalibrateSettings): CaseResult {
+	const refusal = panSensitivityRefusal(base.settings);
+	if (refusal) throw new Error(refusal);
 	const gr4j = { ...defaultProjectSettings().gr4j, ...(base.settings.gr4j as Partial<ModelInput['settings']['gr4j']> | undefined) };
 	const settings = {
 		...base.settings,
@@ -204,6 +222,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 	loadModelInput(file)
 		.then(async (base) => {
+			const refusal = panSensitivityRefusal(base.settings);
+			if (refusal) throw new Error(`pan-sensitivity: ${refusal}`);
 			const results: CaseResult[] = [];
 			for (const c of defaultCases()) {
 				console.error(`running ${c.label}…`);

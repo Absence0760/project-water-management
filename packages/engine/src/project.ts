@@ -256,6 +256,16 @@ export interface ProjectSettings {
 	 */
 	panCoefficient: Monthly;
 	/**
+	 * Where GR4J's potential evaporation comes from (engine ≥ 0.31.0, issue
+	 * #39). `{ kind: 'pan' }` (the default, and what every earlier run did):
+	 * PE = `panCoefficient` × `apanMm`. `{ kind: 'monthly' }`: PE is `mm` per
+	 * water-year month directly (e.g. a station FAO-56 ET₀), with `source`
+	 * saying where it came from; `panCoefficient` is then unused. Either way
+	 * irrigation demand and dam evaporation read `apanMm` only, so a
+	 * `monthly` PE changes the runoff model and nothing else.
+	 */
+	pe: PeInput;
+	/**
 	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
@@ -364,6 +374,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		runoffModel: 'gr4j',
 		gr4j: { x1: 350, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 },
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
+		pe: { kind: 'pan' },
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
 		rainSource: [],
@@ -440,6 +451,55 @@ export function panCoefficientOutOfRange(values: readonly number[]): number[] {
 		if (v < PAN_COEFFICIENT_TYPICAL_MIN || v > PAN_COEFFICIENT_TYPICAL_MAX) out.push(i);
 	}
 	return out;
+}
+
+/** GR4J's potential-evaporation input (`ProjectSettings.pe`, issue #39). */
+export type PeInput = { kind: 'pan' } | { kind: 'monthly'; mm: Monthly; source: string };
+
+export const PE_KINDS = ['pan', 'monthly'] as const;
+export type PeKind = (typeof PE_KINDS)[number];
+
+/** Longest `source` note a `monthly` PE input keeps (the API's limit too). */
+export const PE_SOURCE_MAX = 600;
+
+/**
+ * GR4J's potential evaporation per water-year month (mm): pan coefficient ×
+ * A-pan under `kind: 'pan'` (or no `pe`, a project saved before it), else the
+ * `monthly` row. Irrigation demand and dam evaporation never read this.
+ */
+export function gr4jPeMonthlyMm(s: {
+	apanMm: readonly number[];
+	panCoefficient: readonly number[];
+	pe?: PeInput | null;
+}): number[] {
+	const pe = s.pe;
+	if (pe?.kind === 'monthly') return Array.from({ length: 12 }, (_, m) => pe.mm[m] ?? 0);
+	return Array.from({ length: 12 }, (_, m) => (s.panCoefficient[m] ?? 0) * (s.apanMm[m] ?? 0));
+}
+
+/**
+ * A stored `pe` as the engine runs it: absent (a project saved before engine
+ * 0.31.0) is `{ kind: 'pan' }`, what those runs did; anything unreadable
+ * warns and falls back to it too. A `monthly` row's non-finite or negative
+ * months count as 0, with a warning.
+ */
+export function resolvePe(raw: unknown, warnings: string[]): PeInput {
+	if (raw == null) return { kind: 'pan' };
+	const r = raw as { kind?: unknown; mm?: unknown; source?: unknown };
+	if (r.kind === 'pan') return { kind: 'pan' };
+	if (r.kind !== 'monthly' || !Array.isArray(r.mm)) {
+		warnings.push(`unknown potential-evaporation input ${JSON.stringify(raw).slice(0, 80)}; using pan coefficient × A-pan`);
+		return { kind: 'pan' };
+	}
+	if (r.mm.length !== 12) warnings.push(`monthly PE should have 12 values, has ${r.mm.length}; missing months are 0`);
+	const bad: number[] = [];
+	const mm = Array.from({ length: 12 }, (_, i) => {
+		const x = Number(r.mm && (r.mm as unknown[])[i]);
+		if (i < (r.mm as unknown[]).length && !(Number.isFinite(x) && x >= 0)) bad.push(i);
+		return Number.isFinite(x) && x >= 0 ? x : 0;
+	}) as unknown as Monthly;
+	if (bad.length) warnings.push(`monthly PE is not a number ≥ 0 in month(s) ${bad.map((i) => i + 1).join(', ')} of the water year; using 0`);
+	return { kind: 'monthly', mm, source: typeof r.source === 'string' ? r.source.slice(0, PE_SOURCE_MAX) : '' };
 }
 
 /** A named set of monthly pan-coefficient values (water-year order, Oct–Sep). */

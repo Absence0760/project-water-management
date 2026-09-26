@@ -7,6 +7,7 @@ import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/met
 import { describeMonths } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
+import { peText } from '$lib/components/settings/peInput';
 
 type RawSettings = Partial<ProjectSettings> & Record<string, unknown>;
 
@@ -29,6 +30,8 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 	if (s.runoffModel === 'gr4j') {
 		const g = s.gr4j;
 		rows.push(['GR4J parameters', `X1 ${fmtNum(g.x1, 1, true)} mm · X2 ${fmtNum(g.x2, 2, true)} mm/day · X3 ${fmtNum(g.x3, 1, true)} mm · X4 ${fmtNum(g.x4, 2, true)} days · warm-up ${fmtNum(g.warmupDays)} days`]);
+		// Engine ≥ 0.31.0 (issue #39); a snapshot without it ran on pan coefficient × A-pan.
+		rows.push(['GR4J potential evaporation', peText(s.pe)]);
 	}
 	rows.push(
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
@@ -46,9 +49,11 @@ export function settingsRows(s: ProjectSettings, run: { startDate: string; endDa
 /** Monthly settings in water-year order (Oct … Sep). */
 export function monthlyRows(s: ProjectSettings): { label: string; values: string[] }[] {
 	const row = (label: string, v: readonly number[], digits: number) => ({ label, values: Array.from({ length: 12 }, (_, i) => fmtNum(v[i], digits, true)) });
+	const monthlyPe = s.runoffModel === 'gr4j' && s.pe?.kind === 'monthly' ? s.pe : null;
 	return [
 		row('A-pan evaporation (mm)', s.apanMm, 1),
-		row('Pan coefficient', s.panCoefficient, 2),
+		// Under a monthly PE (issue #39) GR4J runs on its own row and the pan coefficient is unused.
+		...(monthlyPe ? [row('GR4J monthly PE (mm)', monthlyPe.mm, 1)] : [row('Pan coefficient', s.panCoefficient, 2)]),
 		row('Pragmatic EWR (m³/day)', s.ewrPragmaticM3PerDay, 0)
 	];
 }

@@ -720,16 +720,51 @@ which checks every catchment tab).
     input refuses values outside those bounds. The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
-    unticking it sets X2 back to 0. Above the monthly **pan coefficient**
-    row, a **preset** picker (Generic (flat 0.70), Winter rainfall (e.g.
-    Western Cape), Summer rainfall — indicative, from FAO-56 Table 5 climate
-    classes, Allen et al. 1998; model.md §2.4a) fills the row with a starting
-    point; the row stays editable after, and nothing is stored about which
-    preset (or whether one) was picked. A warning appears under the row when
-    a month sits outside FAO-56's usual 0.6–0.85 range for a Class A pan — a
-    plausibility check, not a hard limit, so a value further out still saves.
-    A separate notice appears when A-pan × pan coefficient is 0 in every
-    month: the engine then refuses GR4J runs and fits.
+    unticking it sets X2 back to 0.
+    After the GR4J parameters and the groundwater exchange (X2) block comes
+    the **GR4J potential evaporation** group (`settings.pe`, engine ≥
+    0.31.0, issue #39, `settings/peInput.ts`;
+    [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).
+    Two radios choose where GR4J's PE comes from: **Pan coefficient ×
+    A-pan** (the default) and **Monthly PE, entered directly**. Under them a
+    line gives the annual total GR4J runs on: "Annual GR4J PE: N mm (pan
+    coefficient × A-pan; A-pan M mm a year)", or "… (the monthly PE row
+    below)". The note under it depends on the choice. Under pan: the A-pan
+    row (Demand) also drives irrigation demand and dam evaporation, so
+    changing it moves all three. Under monthly: demand and dam evaporation
+    still use the A-pan row, and GR4J doesn't use the pan coefficient.
+    - **Under pan coefficient × A-pan**: a **preset** picker (Generic (flat
+      0.70), Winter rainfall (e.g. Western Cape), Summer rainfall —
+      indicative, from FAO-56 Table 5 climate classes, Allen et al. 1998;
+      model.md §2.4a) fills the pan-coefficient row with a starting point;
+      the row stays editable after, and nothing is stored about which preset
+      (or whether one) was picked. Below it, a collapsed **Suggest from
+      FAO-56 Table 5 (humidity, wind, siting)** helper
+      (`settings/PanCoefficientHelper.svelte`, loaded as its own chunk and
+      hidden on a read-only view): the pan siting (Case A, green crop, or
+      Case B, dry fallow) as radios, the windward fetch as a select (1, 10,
+      100 or 1000 m), an optional reduction for bare surroundings (0–20 %),
+      the mean RH (%) and wind at 2 m (m/s) for each of the 12 months, and a
+      required "Where the RH and wind came from" note. **Fill the
+      pan-coefficient row** replaces the 12 values in the form only: nothing
+      is saved until Save, and the values stay editable. The button stays
+      disabled, with the reason beside it, until every month has a valid RH
+      and wind and the note is written. Then the monthly **pan coefficient**
+      row. A warning appears under the row when a month sits outside
+      FAO-56's usual 0.6–0.85 range for a Class A pan — a plausibility
+      check, not a hard limit, so a value further out still saves.
+    - **Under monthly PE**: the preset, the helper, the pan-coefficient row
+      and its warning are hidden. A 12-month **Monthly PE (mm)** row, with a
+      Year total, and a required **Source** field take their place.
+      Switching to monthly starts the row from the current pan coefficient ×
+      A-pan, rounded to 0.1 mm, so the annual total doesn't jump, with the
+      source blank. Switching back to pan and then to monthly again restores
+      the row switched away from, until the settings are saved. Save is
+      blocked while the source is blank or over 600 characters, or a month
+      is outside 0–10 000 mm. A row of zeros saves.
+    A separate notice appears when GR4J's PE is 0 in every month (A-pan ×
+    pan coefficient, or the monthly PE row): the engine then refuses GR4J
+    runs and fits.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to both models and to
@@ -845,7 +880,7 @@ which checks every catchment tab).
     fitted parameter by hand shows a **Parameters edited since fit** badge and
     names the parameters at once; the server records the same on save. A
     change of runoff model, window, exclusions or flow series since the fit
-    is called out too, and a change to the pan coefficient, A-pan, CHIRPS
+    is called out too, and a change to the pan coefficient, A-pan, PE input, CHIRPS
     bias correction or zero-rain runs since the fit shows a **Forcing changed since fit** badge
     and a caveat explaining why (evaporation trades off against X1/X3, and
     CHIRPS bias correction changes the rain GR4J sees on fallback days, so the
@@ -856,7 +891,14 @@ which checks every catchment tab).
     on, and the series' current one when it differs. Its **Rain source
     periods** row lists the periods the fit ran under (engine ≥ 0.30.0; a
     fit made before them ran with none), and a change of periods also shows
-    **Forcing changed since fit**.
+    **Forcing changed since fit**. Its **GR4J potential evaporation** row
+    (engine ≥ 0.31.0) gives the PE input the fit ran under: "pan coefficient
+    × A-pan", or the monthly total and source with the 12 values (a fit made
+    before it ran on pan coefficient × A-pan). Under a monthly PE the pan
+    coefficient row adds "(not used by GR4J under a monthly PE)". A change
+    of kind or of the monthly row shows **Forcing changed since fit**; a
+    reworded source doesn't, and under a monthly PE neither does a change to
+    the pan coefficient or A-pan alone.
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.
@@ -1262,7 +1304,7 @@ run's report to chosen members every week or month.
   Settings, with the in-sample score beside its validation scores, the
   "Parameters edited since fit" badge when they were edited, and a
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
-  CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
+  PE input, CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
   CHIRPS series held another product or version, from the run's `inputSeries`), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
@@ -1308,7 +1350,9 @@ run's report to chosen members every week or month.
   line counts the starts never stored. Editors get **Run an ensemble**: sets
   (30–1 000, default 300), bounds (the fit's, typical or wide), lowest skill
   kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
-  coefficient shift; **Run ensemble** asks the server to fix the rule and
+  coefficient shift (on a GR4J run with a monthly PE row, engine ≥ 0.31.0,
+  the shift is 0 and the ensemble's notes say the pan coefficient is not
+  varied); **Run ensemble** asks the server to fix the rule and
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
@@ -1445,7 +1489,11 @@ exists, says so with a link to Runs & results.
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
-  each input series' dates and days inside the run; `report/inputs.ts`),
+  each input series' dates and days inside the run; `report/inputs.ts`.
+  A GR4J run adds a **GR4J potential evaporation** row, "pan coefficient ×
+  A-pan" or the monthly total and source, engine ≥ 0.31.0; under a monthly
+  PE the monthly table shows **GR4J monthly PE (mm)** in place of the pan
+  coefficient),
   **Calibration** (the calibration panel with the annual water balance, where
   the parameters came from, the hydrograph over the whole run),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve

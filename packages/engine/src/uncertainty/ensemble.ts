@@ -313,6 +313,14 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 		notes.push('The pan coefficient is not varied: the legacy model does not use potential evaporation.');
 		panOffset = 0;
 	}
+	// Under a monthly PE (settings.pe, engine ≥ 0.31.0) GR4J never reads the pan coefficient, so shifting it would be a
+	// dimension that changes nothing: drop it and say so, as for the legacy model.
+	if (model === 'gr4j' && settings.pe.kind === 'monthly' && panOffset > 0) {
+		notes.push(
+			'The pan coefficient is not varied: GR4J’s potential evaporation comes from the monthly PE row (Settings), which does not use it. The ensemble does not vary potential evaporation.'
+		);
+		panOffset = 0;
+	}
 
 	const chirps = chirpsOnly(input, run);
 	const availableRain: RainSource[] = chirps.input ? ['recorded', 'chirps'] : ['recorded'];
