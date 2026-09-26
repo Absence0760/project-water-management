@@ -74,6 +74,59 @@ describe('diffModel', () => {
 		]);
 	});
 
+	it('turns a supply rule and river pump edit into node.set (WP-3.8): river first at 1,200 m³/day', () => {
+		const b = base();
+		const e = editing(b);
+		node(e, LO).supplyRule = 'riverFirst';
+		node(e, LO).pumpCapacityM3Day = 1200;
+		expect(roundTrips(b, e.snapshot())).toEqual([
+			{ op: 'node.set', nodeId: LO, field: 'supplyRule', value: 'riverFirst' },
+			{ op: 'node.set', nodeId: LO, field: 'pumpCapacityM3Day', value: 1200 }
+		]);
+	});
+
+	it('orders a node\'s edits so each one applies: the supply rule before an emptied dam, the stop level before a raised trigger', () => {
+		// Upper farm on the trigger rule (it has a dam): moving it to river first and emptying the dam applies only rule first.
+		const trig = applyScenario(base(), [{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'trigger' }]).input;
+		let e = editing(trig);
+		node(e, UP).damCapacityM3 = 0;
+		node(e, UP).supplyRule = 'riverFirst';
+		expect(roundTrips(trig, e.snapshot()).map((o) => o.op === 'node.set' && o.field)).toEqual(['supplyRule', 'damCapacityM3']);
+		// Raising both levels past the stop level (60 %) applies only stop first.
+		e = editing(trig);
+		node(e, UP).supplyTriggerPct = 0.7;
+		node(e, UP).supplyStopPct = 0.9;
+		expect(roundTrips(trig, e.snapshot()).map((o) => o.op === 'node.set' && o.field)).toEqual(['supplyStopPct', 'supplyTriggerPct']);
+		// Positive control: a dam-less farm given a dam and the trigger rule takes the dam first, the natural order.
+		const ror = applyScenario(base(), [{ op: 'node.set', nodeId: LO, field: 'damCapacityM3', value: 0 }]).input;
+		e = editing(ror);
+		node(e, LO).damCapacityM3 = 20_000;
+		node(e, LO).supplyRule = 'trigger';
+		expect(roundTrips(ror, e.snapshot()).map((o) => o.op === 'node.set' && o.field)).toEqual(['damCapacityM3', 'supplyRule']);
+	});
+
+	it('reports a supply edit no order makes fit, one op at a time', () => {
+		// The trigger rule on a farm left without a dam never fits.
+		const b = base();
+		let e = editing(b);
+		node(e, LO).damCapacityM3 = 0;
+		node(e, LO).supplyRule = 'trigger';
+		expect(diffModel(b, e.snapshot()).problems).toEqual([expect.stringMatching(/the trigger supply rule needs a farm dam/)]);
+		// Trigger straight to run of river with the dam emptied: each step alone breaks a rule (trigger needs the dam,
+		// run of river has none), so it is reported; recorded through river first, it applies.
+		const trig = applyScenario(base(), [{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'trigger' }]).input;
+		e = editing(trig);
+		node(e, UP).damCapacityM3 = 0;
+		node(e, UP).supplyRule = 'runOfRiver';
+		expect(diffModel(trig, e.snapshot()).problems.length).toBeGreaterThan(0);
+		const via = applyScenario(trig, [
+			{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'riverFirst' },
+			{ op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 0 },
+			{ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'runOfRiver' }
+		]);
+		expect(via.problems).toEqual([]);
+	});
+
 	it('turns a new node and a removed one into node.add and node.remove, re-linking as the editor does', () => {
 		const b = base();
 		const e = editing(b);

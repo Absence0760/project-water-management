@@ -44,6 +44,9 @@ are empty and nothing below changes.
     duplicate node or crop name (compare matches copies by name), a crop
     area on a non-farm, a transfer to itself or touching an other water
     user, land cover on a non-farm, a drought borehole rule without a dam,
+    a supply rule or river pump that doesn't fit the node (on a gauge or
+    user, `trigger` without a dam, `runOfRiver` with one, a stop level
+    below the trigger; WP-3.8),
     a catchment with no land left (`runModel` refuses 0 km²), or a
     simulation, reporting or calibration window that ends before it starts.
     These are the model's save rules (`modelRuleIssues`,
@@ -66,7 +69,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | Op | Fields | What it does |
 | --- | --- | --- |
 | `node.set` | `nodeId, field, value` | Sets one whitelisted field (below). Typed per field. |
-| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; changing them on an existing node (`node.set`) is still to do (WP-3.8). |
+| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. The outflow node can't be removed. |
 | `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
 | `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
@@ -93,11 +96,19 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct` (a
   `node.add` may also carry a `damCurve`; there is no `node.set` for it
   yet); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
-  `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`.
-  A new farm's `node.add` may also carry its supply rule and river pump
-  (WP-3.8: `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`,
-  `supplyStopPct`, under the same model rules as a save); there is no
-  `node.set` for them yet.
+  `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`;
+  supply rule and river pump (WP-3.8, [model.md §2.7e](./model.md))
+  `supplyRule` (`damFirst` | `riverFirst` | `trigger` | `runOfRiver`),
+  `pumpCapacityM3Day` (≥ 0, null = no limit), `supplyTriggerPct`,
+  `supplyStopPct` (0–1). How they fit together is a save rule, checked
+  when the op applies: only a farm has them, `trigger` needs a dam,
+  `runOfRiver` has none (`damCapacityM3` 0), and the stop level is at least
+  the trigger level under `trigger`. Each op is checked on its own, so
+  order matters: to put a farm on `trigger` with raised levels, set the
+  stop level before the trigger level; to take a `trigger` farm to run of
+  river, go through `riverFirst` (rule, then dam capacity 0, then
+  `runOfRiver`). "What if this farm pumps from the river at 1,200 m³/day"
+  is two ops: `supplyRule` → `riverFirst` and `pumpCapacityM3Day` → 1200.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name` only (a gauge only measures).
@@ -177,7 +188,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale` | never | baseline (settings, calibration, EWR, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`) | baseline: other parties' nodes, and the catchment's partition of runoff |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`); so the own farm's supply rule and river pump are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, and the catchment's partition of runoff |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
@@ -419,7 +430,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   model is never loaded or saved there. **Record** diffs the edited model
   against the one it was loaded with (`diffModel`) into ops, in an order
   that applies: `crop.add`, `node.remove` (re-linking as the editor does),
-  `node.set` per changed field the engine lets a scenario set, `node.add`
+  `node.set` per changed field the engine lets a scenario set (a node's
+  fields in an order that applies: each step takes the first op that adds
+  no save-rule issue to the node, so a `trigger` farm moved to river first
+  with its dam emptied records the rule before the dam; an edit no order
+  fits, such as `trigger` straight to run of river, is reported), `node.add`
   (each after the node it drains into), `cropArea.set` with the farm's new
   total of a crop, `transfer.remove` / `.add` / `.set` per field,
   `landCover.remove` / `.add` and `borehole.remove` / `.add` (a patch or
@@ -504,7 +519,8 @@ scenario is `'team'`, and behaves exactly as above).
     (removing a hidden farm reports no crop areas, transfers, patches or
     boreholes; the EWR tables sited there are settings, which they see);
   - a rule the op breaks because of hidden data (a rule about a hidden
-    item, a hidden farm's drought borehole rule, and, while any farm is
+    item, a hidden farm's drought borehole rule or supply rule (both read
+    its hidden dam or levels), and, while any farm is
     hidden, flow shares over 100 % or no catchment area left, which an op's
     own range-checked value can't break alone) reads only `op N (…):
     doesn't apply to the catchment as modelled` (`MASKED_RULE`). The

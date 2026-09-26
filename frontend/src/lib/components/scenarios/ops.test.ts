@@ -83,6 +83,17 @@ describe('describeOp', () => {
 		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a node the base run doesn’t have: 50 % of what they'd take (× 0.5)");
 	});
 
+	it('describes a supply rule and river pump change in run comparison\'s words (WP-3.8)', () => {
+		expect(d({ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'riverFirst' })).toBe('Upper farm: Supply rule dam only → river first');
+		expect(d({ op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'trigger' })).toBe('Upper farm: Supply rule dam only → dam, river when low');
+		expect(d({ op: 'node.set', nodeId: LO, field: 'supplyRule', value: 'runOfRiver' })).toBe('Lower farm: Supply rule dam only → run of river');
+		expect(d({ op: 'node.set', nodeId: UP, field: 'pumpCapacityM3Day', value: 1200 })).toBe('Upper farm: River pump capacity no limit → 1,200 m³/day');
+		expect(d({ op: 'node.set', nodeId: UP, field: 'supplyTriggerPct', value: 0.3 })).toBe('Upper farm: Supply switch-to-river level 40 % → 30 %');
+		expect(d({ op: 'node.set', nodeId: UP, field: 'supplyStopPct', value: 0.75 })).toBe('Upper farm: Supply switch-back level 60 % → 75 %');
+		// A pump change on the applicant's own farm is the proposal (the engine's classifyOp).
+		expect(classifyOp({ op: 'node.set', nodeId: UP, field: 'pumpCapacityM3Day', value: 1200 }, [UP], b)).toBe('proposal');
+	});
+
 	it('describes additions from the op itself', () => {
 		const node = { ...newNode(4, LO), id: 'n9', name: 'Pump scheme', damCapacityM3: 50_000 };
 		expect(d({ op: 'node.add', node })).toBe('Add the farm “Pump scheme”, draining into Lower farm, dam 50,000 m³');
@@ -142,6 +153,18 @@ describe('buildOp', () => {
 		});
 		expect(draftSpec({ kind: 'node.set', field: 'damMinPct' })).toMatchObject({ t: 'number', unit: '%' });
 		expect(draftSpec({ kind: 'crop.add', field: 'x' })).toBeNull();
+	});
+
+	it('builds a farm\'s supply rule and river pump (WP-3.8): a rule from the list, a pump in m³/day, blank for no limit, levels in %', () => {
+		const ok = (field: string, value: string) => buildOp(draft({ kind: 'node.set', nodeId: UP, field, value }), m);
+		expect(ok('supplyRule', 'riverFirst')).toEqual({ ok: true, op: { op: 'node.set', nodeId: UP, field: 'supplyRule', value: 'riverFirst' } });
+		expect(ok('pumpCapacityM3Day', '1 200')).toEqual({ ok: true, op: { op: 'node.set', nodeId: UP, field: 'pumpCapacityM3Day', value: 1200 } });
+		expect(ok('pumpCapacityM3Day', '')).toEqual({ ok: true, op: { op: 'node.set', nodeId: UP, field: 'pumpCapacityM3Day', value: null } });
+		expect(ok('supplyTriggerPct', '30')).toEqual({ ok: true, op: { op: 'node.set', nodeId: UP, field: 'supplyTriggerPct', value: 0.3 } });
+		expect(ok('supplyStopPct', '120')).toEqual({ ok: false, error: 'Must be at most 100 %' });
+		expect(ok('pumpCapacityM3Day', '-1')).toEqual({ ok: false, error: 'Must be at least 0' });
+		expect(ok('supplyRule', '')).toEqual({ ok: false, error: 'Supply rule: pick one' });
+		expect(draftSpec({ kind: 'node.set', field: 'supplyRule' })).toMatchObject({ t: 'enum' });
 	});
 
 	it('says what is wrong with a PE input before anything is saved', () => {

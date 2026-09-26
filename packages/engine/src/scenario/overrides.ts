@@ -241,7 +241,7 @@ function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRe
 /**
  * Does a rule issue (structureIssues' key) turn on data the applicant can't
  * see? A hidden item (its opaque id is in the key), a hidden node's hidden
- * borehole rule, or the catchment-wide value rules while any node is hidden
+ * borehole rule or supply rule (both read its hidden dam), or the catchment-wide value rules while any node is hidden
  * (flow shares over 100 %, no area left: the op's own values are
  * range-checked, so these trip only with other nodes' values in play). The
  * network's shape (outflows, loops, what drains where) and names are the
@@ -249,7 +249,8 @@ function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRe
  */
 function hiddenRule(key: string, masked: Masked): boolean {
 	if (key === 'area' || key === 'shares') return masked.nodes.size > 0;
-	if (key.startsWith('bhDrought:')) return masked.nodes.has(key.slice('bhDrought:'.length));
+	// A hidden node's dam, and its supply rule's levels, are hidden values: the rules that read them say nothing of them.
+	for (const p of ['bhDrought:', 'supplyTrigger:', 'supplyRor:', 'supplyStop:']) if (key.startsWith(p)) return masked.nodes.has(key.slice(p.length));
 	for (const t of masked.tokens) if (key.includes(t)) return true;
 	return false;
 }
@@ -559,6 +560,10 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'series.scale':
 			return 'baseline';
 		case 'node.set':
+			// Any other field of the applicant's own node is theirs to propose: its dam, irrigation,
+			// boreholes, and how it takes water (the supply rule and river pump, WP-3.8), which is
+			// what a licence to abstract from the river asks for, like a new pump. Land and flow
+			// share split the catchment's natural runoff, so they stay baseline.
 			return ok(mine(op.nodeId) && !BASELINE_NODE_FIELDS.includes(op.field));
 		case 'node.add':
 			// A new gauge moves an EWR site; a new node with land or a manual flow share re-partitions the catchment's runoff.

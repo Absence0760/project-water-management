@@ -1038,10 +1038,20 @@ must build WP-2.15 Phase B.
 > Default output is byte-identical (tests on random networks and an example;
 > the examples and the client catchment regression suite unchanged).
 > **Still to do:** hands-off flow, drought restrictions (`restricted_demand`),
-> the Supply section in the node form (pumps × m³/h × 24 calculator), scenario
-> ops for the supply fields, a pump capacity on other water users (issue #54
+> the Supply section in the node form (pumps × m³/h × 24 calculator), a pump
+> capacity on other water users (issue #54
 > item 2b), and moving the client catchment's run-of-river units (issue #54
 > item 2d) once the hydrologist confirms.
+>
+> **Scenario ops for the supply fields built 2026-09-26.** `node.set` takes
+> `supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct` and `supplyStopPct`
+> on a farm, checked against the same save rules as a model save (an op
+> that breaks one is a scenario problem), classified as the proposal on the
+> applicant's own farm; the Scenarios form's "Change a node's value" offers
+> them (the rule in run comparison's words, the pump in m³/day with blank
+> for no limit, the levels in %), and override mode records them
+> ([scenarios.md](../scenarios.md)). So "what if this farm pumps from the
+> river at 1,200 m³/day" is a scenario.
 
 - **Goal.** Model how water is actually taken. These rules are often
   licence conditions: hands-off flows, pump capacity, restrictions.

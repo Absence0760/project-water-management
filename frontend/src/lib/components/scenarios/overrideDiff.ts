@@ -12,6 +12,7 @@ import {
 	NODE_SET_FIELDS,
 	TRANSFER_SET_FIELDS,
 	applyScenario,
+	modelRuleIssues,
 	type CropArea,
 	type ModelInput,
 	type NetworkNode,
@@ -97,15 +98,17 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			unsupported.push(`Moving ${label(n)} (what it drains into): a scenario can't move a node yet. Remove it and add a new one where it should drain.`);
 		const settable = new Set<string>(NODE_SET_FIELDS[n.kind]);
 		const keys = new Set([...Object.keys(was), ...Object.keys(n)]);
+		const sets: NodeSet[] = [];
 		for (const k of keys) {
 			if (IGNORED_NODE_KEYS.has(k) || k === 'kind' || k === 'downstreamNodeId') continue;
 			const before = (was as unknown as Record<string, unknown>)[k];
 			const now = (n as unknown as Record<string, unknown>)[k];
 			if (same(before, now)) continue;
-			if (settable.has(k)) ops.push({ op: 'node.set', nodeId: n.id, field: k, value: plain(now ?? null) } as ScenarioOp);
+			if (settable.has(k)) sets.push({ op: 'node.set', nodeId: n.id, field: k, value: plain(now ?? null) } as NodeSet);
 			else if (k === 'damCurve') unsupported.push(`The dam survey curve of ${label(n)}: a scenario can't change a survey curve yet.`);
 			else unsupported.push(`${NODE_FIELD_SPECS[k as NodeSetField]?.label ?? k} on ${label(n)}: a scenario can't set that on a ${n.kind}.`);
 		}
+		ops.push(...applicableOrder(was, sets));
 	}
 
 	// --- nodes added: node.add, each after the node it drains into
@@ -187,6 +190,41 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 			problems.push("These edits don't come out the same when recorded as changes, so they can't be recorded. Discard them and make them one at a time.");
 	}
 	return { ops, unsupported, problems };
+}
+
+type NodeSet = Extract<ScenarioOp, { op: 'node.set' }>;
+
+/**
+ * One node's node.set ops in an order that applies. Each op must keep the
+ * node within the model's save rules on its own (applyScenario refuses an op
+ * that breaks one), and some rules tie fields together: a trigger supply rule
+ * needs a dam, run of river none, the stop level ≥ the trigger level, a
+ * drought borehole rule a dam (modelRules.ts). An edit that moves a farm from
+ * trigger to run of river and empties its dam applies only rule first; one
+ * that raises both levels only stop first. So: the fields in the node's own
+ * order, except that each step takes the first op that adds no rule issue to
+ * the node as it stands (the rules read one node, so the node alone is
+ * checked). When no order works, the natural one is kept, and the whole
+ * list's check reports the rule.
+ */
+function applicableOrder(was: NetworkNode, sets: readonly NodeSet[]): NodeSet[] {
+	if (sets.length < 2) return [...sets];
+	// Alone and as the outflow, so only the node's own rules can trip.
+	const issues = (n: NetworkNode) => new Set(modelRuleIssues({ nodes: [{ ...n, downstreamNodeId: null }], crops: [], cropAreas: [], transfers: [] }).keys());
+	const withOp = (n: NetworkNode, op: NodeSet) => ({ ...n, [op.field]: op.value }) as NetworkNode;
+	let cur = was;
+	let have = issues(cur);
+	const rest = [...sets];
+	const out: NodeSet[] = [];
+	while (rest.length) {
+		const i = rest.findIndex((op) => [...issues(withOp(cur, op))].every((k) => have.has(k)));
+		if (i < 0) return [...sets];
+		const [op] = rest.splice(i, 1);
+		out.push(op!);
+		cur = withOp(cur, op!);
+		have = issues(cur);
+	}
+	return out;
 }
 
 /** A plain deep copy (JSON: what the API stores anyway). */
