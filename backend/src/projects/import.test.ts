@@ -1,3 +1,4 @@
+import { canonicalUnit } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { MAX_EXPORT_BYTES } from '../export/csv.js';
 import { ProjectFile } from './document.js';
@@ -66,7 +67,7 @@ describe('projectFileProblems', () => {
 		ProjectFile.parse({
 			name: 'P',
 			model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
-			series: series.map((s) => ({ unit: 'mm', startDate: '2020-01-01', values: [1], ...s }))
+			series: series.map((s) => ({ unit: canonicalUnit(s.kind), startDate: '2020-01-01', values: [1], ...s }))
 		});
 
 	it('refuses two series of one kind and name (the database keeps one), not two names of one kind', () => {
