@@ -774,8 +774,16 @@ method is chosen in `[Farm spec]`:
 | **Hi/Lo** | `hiArea/ΣhiArea × hiSplit + loArea/ΣloArea × loSplit` (Pitman split, default 0.81 / 0.19) |
 | **Specific** | A value entered by hand ("external fragmentation") |
 
-The shares should sum to 1 within `0.0002` (fragmentation tolerance). The run
-also warns, once, about any farm whose area differs from its hi + lo areas by
+The shares should sum to 1 within `0.0002` (fragmentation tolerance). Below
+that the run warns that natural flow and EWR are not fully allocated to farms.
+**Above it the run is refused** (engine ≥ 0.27.1, `overAllocationError`): the
+farms would generate more runoff than the catchment's natural flow, water from
+nowhere that lifts the outflow and hides EWR failures while every self-check
+still closes (each checks the balance it is given). Manual shares and a
+high/low MAP split whose two parts add up to more than 1 both trip it; the Run
+button says so before a run is tried, a scenario op that would cause it is
+refused, and an older run made with such shares can't be nominated as
+evidence. The run also warns, once, about any farm whose area differs from its hi + lo areas by
 more than 1 %: the hi/lo shares use hi + lo, the area share and the rain volume
 use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 §2.10a). Then:

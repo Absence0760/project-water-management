@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -272,6 +272,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		if (series && !series.some((x) => x.kind.startsWith('rain_'))) out.push('a rainfall series');
 		return out;
 	});
+	// Flow shares over 100 % make water from nowhere: the engine refuses the run, so say why first.
+	// The editor's model, like the Network tab's total (unsaved edits have their own note).
+	const overAllocated = $derived(overAllocationError(inputFlowShares({ model: editor.model, settings: project.settings }).sum));
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 	// The rail's in-page menu, and which section is being read (scroll spy).
@@ -335,7 +338,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 			<label for="run-label">Run label <span class="muted">(optional)</span></label>
 			<input id="run-label" maxlength="200" placeholder="e.g. Baseline, 2026 dam raise" bind:value={label} disabled={running} />
 		</div>
-		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0}>
+		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0 || !!overAllocated}>
 			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
 			{running ? 'Running model…' : 'Run model'}
 		</button>
@@ -346,6 +349,11 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				<span class="warn">
 					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
 					<a href="?tab=series">rainfall data</a> first.
+				</span>
+			{:else if overAllocated}
+				<span class="warn" data-testid="shares-over">
+					The run can't start: {overAllocated}. See the <a href="?tab=network">network</a> or
+					<a href="?tab=settings">settings</a>.
 				</span>
 			{:else if modelDirty}
 				<span class="warn">The model has unsaved changes — runs use the last saved version.</span>

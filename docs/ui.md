@@ -895,7 +895,9 @@ its own chunk loaded with the tab; WP-2.10,
   panel; the order above is the page's.
 - **Run model** takes an optional **Run label** (e.g. "Baseline"). The
   button is disabled, with links, until the project has a network and a
-  rainfall series. While a run is going it shows progress. A note says when
+  rainfall series, and while the farms' flow shares add up to more than 100 %
+  (the engine refuses those runs, [model.md §2.5](./model.md); the note gives
+  the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
   run shown; editors delete one with its ✕. Rows are compact so several fit

@@ -26,7 +26,7 @@ export * from './scenario';
 export * from './verify/columns';
 export { verifyRun } from './verify/verify';
 export { buildTopology, type Topology } from './network/topology';
-export { flowShares, SHARE_TOLERANCE, type FlowShares } from './network/shares';
+export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, waterYearOf, type CalibrationWindow } from './network/stats';
 export { ewrCompliance, type EwrCountMethod, type EwrSite } from './network/ewr';
 export { belowEwr, ewrAgreement, scoreContingency, type EwrAgreementExclusion, type EwrAgreementOptions } from './network/ewrAgreement';

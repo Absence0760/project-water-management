@@ -7,6 +7,7 @@
 // Keys are id-based so renaming a node doesn't turn an existing issue into a
 // "new" one; texts are for people.
 import type { ModelInput } from '../project';
+import { inputFlowShares, overAllocationError } from '../network/shares';
 import { resolveCatchmentAreaKm2 } from '../runoff/area';
 
 export type StructureIssues = Map<string, string>;
@@ -80,6 +81,10 @@ export function structureIssues(input: ModelInput): StructureIssues {
 	const cal = (s.calibration ?? {}) as { catchmentAreaKm2?: number | null };
 	if (m.nodes.length && !(resolveCatchmentAreaKm2({ catchmentAreaKm2: cal.catchmentAreaKm2 ?? null }, input) > 0))
 		add('area', 'the catchment has no area left: no farm has land and calibration.catchmentAreaKm2 is not set');
+
+	// Flow shares over 100 % make water from nowhere: runModel refuses them (network/shares.ts).
+	const over = overAllocationError(inputFlowShares(input).sum);
+	if (over) add('shares', over);
 
 	// Windows: a start after its end.
 	for (const [a, b, label] of [

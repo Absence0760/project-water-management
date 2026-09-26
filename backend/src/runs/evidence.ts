@@ -8,6 +8,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
+import { inputFlowShares, overAllocationError, type ModelInput } from '@water-management/engine';
 
 /** Longest history per project (the run_nomination_stamp trigger enforces the same number). */
 export const NOMINATIONS_PER_PROJECT_MAX = 50;
@@ -114,13 +115,17 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// Friendly answers first; the stamp trigger enforces each of these again.
-			const { rows: run } = await db.query<{ runoffModel: string }>(
-				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel" FROM model_run WHERE project_id = $1 AND id = $2`,
+			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null }>(
+				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings
+				   FROM model_run WHERE project_id = $1 AND id = $2`,
 				[id, body.runId]
 			);
 			if (!run[0]) throw new ApiError(404, 'run not found');
 			if (run[0].runoffModel === 'legacy')
 				throw new ApiError(409, 'a run of the legacy runoff model is workbook comparison only and cannot be nominated as evidence');
+			// Runs before engine 0.27.1 ran with flow shares over 100 % (water from nowhere); newer ones are refused.
+			const over = run[0].model && overAllocationError(inputFlowShares({ model: run[0].model, settings: run[0].settings ?? {} }).sum);
+			if (over) throw new ApiError(409, `this run cannot be nominated as evidence: its ${over.replace(/\. Correct .*$/, '')}`);
 			const before = await listNominations(db, id);
 			if (before.at(-1)?.runId === body.runId) throw new ApiError(409, 'this run is already the nominated evidence run');
 			if (before.length >= NOMINATIONS_PER_PROJECT_MAX)

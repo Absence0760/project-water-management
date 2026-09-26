@@ -1033,6 +1033,28 @@ describe('runModel — flow shares', () => {
 		expect(out.summary.warnings.some((w) => w.includes('sum to 80.00%'))).toBe(true);
 	});
 
+	it('refuses manual shares over 100 %: the farms would make water the catchment never had', () => {
+		const over = () =>
+			run({
+				nodes: [node('A', { flowShareManual: 0.5 }), node('B', { flowShareManual: 0.6, sortOrder: 1 })].map((n) =>
+					n.id === 'A' ? { ...n, downstreamNodeId: 'B' } : n
+				),
+				settings: { flowShareMethod: 'manual' },
+				natural: [1000]
+			});
+		expect(over).toThrow(/sum to 110\.00%, more than 100%/);
+	});
+
+	it('refuses a high/low MAP split over 100 %, and runs one within the tolerance', () => {
+		const nodes = [
+			node('A', { downstreamNodeId: 'B', areaKm2: 4, areaHiKm2: 3, areaLoKm2: 1 }),
+			node('B', { sortOrder: 1, areaKm2: 4, areaHiKm2: 1, areaLoKm2: 3 })
+		];
+		expect(() => run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.9, lo: 0.9 } }, natural: [1000] })).toThrow(/sum to 180\.00%/);
+		const out = run({ nodes, settings: { flowShareMethod: 'hiLo', hiLoSplit: { hi: 0.81, lo: 0.1901 } }, natural: [1000] });
+		expect(out.summary.warnings.some((w) => w.includes('flow shares sum'))).toBe(false);
+	});
+
 	it('hi/lo shares weight the high- and low-MAP areas by the split', () => {
 		const out = run({
 			nodes: [

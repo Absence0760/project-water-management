@@ -49,7 +49,7 @@ import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './n
 import { attributeEwrShortfall, bindingSite } from './network/attribution';
 import { boreholeOf } from './network/boreholes';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
-import { flowShares } from './network/shares';
+import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { ewrCompliance } from './network/ewr';
@@ -87,7 +87,7 @@ import {
 	type SeriesKind
 } from './project';
 
-export const ENGINE_VERSION = '0.27.0';
+export const ENGINE_VERSION = '0.27.1';
 
 const SEC_PER_DAY = 86_400;
 
@@ -776,6 +776,8 @@ export function buildNetworkPlan(
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
 	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
+	const overAllocated = overAllocationError(shares.sum);
+	if (overAllocated) throw new Error(overAllocated);
 	warnings.push(...shares.warnings);
 
 	const ewrWy = settings.ewrPragmaticM3PerDay;
