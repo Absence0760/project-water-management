@@ -472,6 +472,13 @@
 //               +3.5 to +8 KB. At 1500: −2 KB total, +2 KB on every page.
 //             - Svelte css: 'injected' (80 CSS files, 65 of them under 1 KB,
 //               cost ~23 KB of gzip overhead): total +6 KB, largest chunk 42.
+// 2026-09-26  total 821 → 837 KB for WP-3.1's reproduce panel and WP-3.13's
+//             validation statement, sign-off dialog and disclaimer (report
+//             sections), merged together on main. The reproduce panel and
+//             the sign-off dialog are lazy chunks; the report grows by its
+//             three closing sections. No new dependency; the largest page
+//             chunk stays under 41 KB. The engine split (#9) is still the
+//             way to win the total back.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -482,7 +489,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 821,
+	totalCodeKb: 837,
 	largestChunkKb: 41,
 	largestWorkerKb: 57,
 	largestSpreadsheetWorkerKb: 95,

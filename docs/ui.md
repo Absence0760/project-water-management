@@ -1696,9 +1696,45 @@ exists, says so with a link to Runs & results.
   summary: warnings, headline cards, the farm table; the self-checks and the
   water balance by water year, without Trace a day) and **Notes** (the run's
   notes, when it has any). A section appears only when the run has its data;
-  nothing is printed as a placeholder. Not yet: the published-by line and
-  restriction notice (WP-2.3), changes since the previous publication (WP-2.4),
-  the disclaimer (D10).
+  nothing is printed as a placeholder. Every report then closes with three
+  sections (WP-3.13, `components/liability/`):
+  - **Validation statement** (`ValidationStatement.svelte`, the engine's
+    `validationStatement`, [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)):
+    engine version, the build's invariant and soak results (*Not recorded
+    for this build* until CI injects them), the run's self-checks, the
+    runoff coefficient (flagged above 1, audit W1), a legacy-model warning,
+    NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
+    caveat, the flagged data-quality years and checks, and the **known
+    limitations** table (ID, limitation, where it stands) generated from
+    engine-audit.md.
+  - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
+    (signer, self-declared registration, date, scope, the statement version
+    and a 12-digit prefix of its SHA-256 with the full hash as the title,
+    the disclaimer version), or **Not signed off.** in bold; then the five
+    statements a signer confirms. An editor or owner gets **Sign off this
+    run…** (screen only); a legacy run says why it can't be signed; a viewer
+    sees neither. Loaded with the report (`GET …/signoffs`), so
+    `data-report-ready` waits for it and the server-side PDF prints it.
+  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): the draft
+    wording with a bold *Draft wording, pending the client's legal review
+    (decision D10)* line and its version, until the wording is agreed.
+
+  Not yet: the published-by line and restriction notice (WP-2.3), changes
+  since the previous publication (WP-2.4).
+- **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
+  opened): the five statements, each ticked on its own; the known
+  limitations in a focusable scroll box (keyboard-scrollable, a labelled
+  region) that must be scrolled to its end (a list too short to scroll counts
+  as read), with a polite live line saying whether the end was reached; the
+  notes (registration self-declared, dam safety classification by others,
+  this run only); full name, registration body (SACNASP by default),
+  registration number and what the sign-off covers. **Sign off** stays
+  disabled, described by the list of what's missing, until everything is
+  done (`signoffForm.ts` `signoffBlockers`). It sends back the statement's
+  hash; a `409` (the statement changed) shows the error and reloads the
+  statement, which clears the ticks and the read state. The Runs tab tags a
+  signed run **Signed off**, and the History tab reads "Signed off a run as
+  … (SACNASP …)".
 - **Components reused, in print modes.** `LineChart`'s `print` prop draws a
   fixed `printWidth` × `height` box at 2 device pixels per CSS pixel
   (`printScale`: uPlot has no pixel-ratio option, so on a 1× screen the plot

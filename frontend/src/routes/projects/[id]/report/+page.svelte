@@ -11,7 +11,7 @@
 	import { page } from '$app/state';
 	import { toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { chirpsSourceOfInput } from '$lib/series/provenance';
-	import { api, ApiError, type Project, type Run } from '$lib/api';
+	import { api, ApiError, type Project, type Run, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -19,6 +19,9 @@
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
+	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
+	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import NetworkSchematic from '$lib/components/network/NetworkSchematic.svelte';
 	import { ranAgo, supplyByNode } from '$lib/components/network/supplyColour';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
@@ -46,6 +49,8 @@
 	let series = $state.raw<SeriesMeta[]>([]);
 	// $state.raw: daily arrays, replaced and never mutated (as in RunCharts).
 	let flows = $state.raw<CatchmentFlows>({});
+	// The run's sign-offs and the statement a signer confirms (WP-3.13); part of what "ready" waits for.
+	let signoffs = $state.raw<SignoffList | null>(null);
 	let status = $state<'loading' | 'loaded' | 'no-runs' | 'not-found' | 'no-run' | 'error'>('loading');
 	let error = $state('');
 	let hydroDrawn = $state(false);
@@ -81,11 +86,15 @@
 				throw e;
 			}
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
-			const pairs = await Promise.all(
-				CATCHMENT_FLOW_KEYS.filter(([, k]) => have(k)).map(
-					async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
-				)
-			);
+			const [pairs, so] = await Promise.all([
+				Promise.all(
+					CATCHMENT_FLOW_KEYS.filter(([, k]) => have(k)).map(
+						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
+					)
+				),
+				api.signoffs.list(id, runId)
+			]);
+			signoffs = so;
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			await loadOnce(loadHumanImpacts);
 			flows = Object.fromEntries(pairs) as CatchmentFlows;
@@ -104,6 +113,20 @@
 		const want = runParam;
 		untrack(() => load(id, want));
 	});
+
+	/** After a sign-off: the new list, or (null, the statement changed) a fresh read of it. */
+	async function signoffsChanged(next: SignoffList['signoffs'] | null) {
+		if (!run || !signoffs) return;
+		if (next) signoffs = { ...signoffs, signoffs: next };
+		else {
+			try {
+				signoffs = await api.signoffs.list(projectId, run.id);
+			} catch (e) {
+				error = e instanceof Error ? e.message : String(e);
+				status = 'error';
+			}
+		}
+	}
 
 	const sections = $derived(run ? reportSections(run) : []);
 	const ready = $derived(isReportReady(status === 'loaded', reportCharts(sections), { hydrograph: hydroDrawn, ewr: ewrDrawn }));
@@ -288,6 +311,12 @@
 					{:else if s.id === 'notes'}
 						<p class="notes">{run.notes}</p>
 						{#if run.notesUpdatedAt}<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>{/if}
+					{:else if s.id === 'validation'}
+						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} />
+					{:else if s.id === 'signoff' && signoffs}
+						<SignoffSection {projectId} runId={run.id} list={signoffs} onchange={signoffsChanged} />
+					{:else if s.id === 'disclaimer'}
+						<Disclaimer />
 					{/if}
 				</section>
 			{/if}

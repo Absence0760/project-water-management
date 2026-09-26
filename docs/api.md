@@ -715,11 +715,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   run of the live model, and once that scenario is deleted); `scenarioName`
   its name (the name the run recorded, once the scenario is gone; `null` for
   a run of the model). `citedBy` is what keeps the run for good
-  (`{ kind: 'publication' | 'scenario', id, name }[]`, oldest first, the
-  citations you can see; a publication's `name` is the day it was published,
-  `YYYY-MM-DD` UTC; `[]` when none). `reproducible` is whether the run's
-  input series are stored (021_series_blob), so `…/reproduce` can re-run it;
-  `false` for a run from before stored inputs.
+  (`{ kind: 'publication' | 'scenario' | 'signoff', id, name }[]`, oldest
+  first, the citations you can see; a publication's `name` is the day it was
+  published, `YYYY-MM-DD` UTC, a sign-off's the signer's name; `[]` when
+  none). `reproducible` is whether the run's input series are stored
+  (021_series_blob), so `…/reproduce` can re-run it; `false` for a run from
+  before stored inputs.
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
@@ -992,6 +993,27 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   ops and base name every farm. A scenario's base run is **cited**: it can't
   be deleted, trimmed or unpinned while the scenario exists
   ([Runs](#runs)).
+
+## Sign-offs
+
+A registered professional signs a run (roadmap WP-3.13, migration 036;
+[data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason), `null` when they can | viewer |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (workbook comparison only, audit H1) | editor |
+
+- `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
+  engineVersion, scenario, confirmations: { id, text }[], limitations:
+  Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
+  the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
+  sends it back and the server recomputes it.
+- `Signoff = { id, runId, fullName, registrationBody, registrationNo, scope,
+  statementVersion, statementSha256, disclaimerVersion, signedAt, mine }`.
+- There is no route to change or remove a sign-off, and RLS allows neither. A
+  signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
+  Each sign-off is in the project's history (`signoff.created`).
 
 ## Publication
 

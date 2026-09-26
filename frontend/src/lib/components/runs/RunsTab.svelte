@@ -262,6 +262,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 
 	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
 	const citedByScenario = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'scenario');
+	const signedBy = (r: RunMeta) => (r.citedBy ?? []).filter((c) => c.kind === 'signoff').map((c) => c.name);
 
 	/** Pin or unpin a run (015_run_pinned): the storage cap keeps a pinned run. */
 	async function togglePin(r: RunMeta) {
@@ -431,6 +432,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 										{#if r.scenarioName}<span class="tag" title="Made by the scenario “{r.scenarioName}”: its changes applied to its base run.">Scenario</span>{/if}
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
 										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
+										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence.">Workbook comparison</span>{/if}
 									</span>
 								{/if}

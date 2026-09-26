@@ -253,6 +253,22 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		route: `POST ${P}/runs/:runId/signoffs`,
+		records: ['signoff.created'],
+		call: async (c) => {
+			const path = `${at(c)}/runs/${c.scenarioRunId}/signoffs`;
+			const { statement, statementSha256 } = (await c.owner.call('GET', path)).body;
+			return c.owner.call('POST', path, {
+				fullName: 'Guard Signer',
+				registrationBody: 'SACNASP',
+				registrationNo: '1',
+				scope: 'guard',
+				confirmed: statement.confirmations.map((k: { id: string }) => k.id),
+				statementSha256
+			});
+		}
+	},
+	{
 		route: `DELETE ${P}/scenarios/:sid`,
 		records: ['scenario.deleted'],
 		call: async (c) => {

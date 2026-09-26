@@ -38,6 +38,18 @@ Tick items off (or move them into an issue) as they are done.
       against the live page); CHIRPS-GEFS's licence before client use
       (details under § Features left half-way).
 
+- [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
+      decision D10).** The disclaimer on every report (engine
+      `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
+      and the five sign-off statements (`liability/signoff.ts`,
+      `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
+      not agreed wording. The report prints *Draft wording, pending the
+      client's legal review* until `DISCLAIMER.status` is `agreed`. Have the
+      client's legal adviser review both (and an Afrikaans version if the
+      farmer view shows it); then set the agreed text, bump both versions and
+      flip the status. Sign-offs made before that record the draft versions
+      they were shown.
+
 - [ ] **Client flow volumes in git history.** Until 2026-09-24,
       `docs/plan.md` quoted the client catchment's per-water-year gauge and
       logger volumes (commit 4f931bb onward). The tree no longer has them,
@@ -1319,8 +1331,7 @@ role and not before it.
   - [ ] **Sections waiting on other work**, added to `report/sections.ts`
         when their data exists (no placeholders until then): the cover's
         published-by line and restriction notice (WP-2.3), changes since the
-        previous publication (WP-2.4), the disclaimer (D10, text still to be
-        agreed), and the licensing evidence pack's sections and uncertainty
+        previous publication (WP-2.4), and the licensing evidence pack's sections and uncertainty
         display (#15: designed in [design/evidence-report.md](./design/evidence-report.md);
         built as WP-2.15 Phase C, evidence mode, whose trigger is the persona
         run against the mock-up in that spec's §11). WP-2.3 also adds the Overview published card's Report
@@ -1654,3 +1665,44 @@ role and not before it.
   catchment if the workbook is present.
 - The domain personas (`/persona hydrologist,environmentalist,…`) are ready to
   run against the merged app. See `.claude/personas/README.md`.
+
+## Liability and sign-off (WP-3.13)
+
+Built 2026-09-26: the draft disclaimer, the validation statement with the
+known limitations generated from engine-audit.md, and the immutable
+professional sign-off on a run, all on the report route
+([ui.md § Report](./ui.md#report), [model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313),
+[data-model.md § Sign-offs](./data-model.md#sign-offs-035_signoffsql)).
+Left, each with its trigger:
+
+- [ ] **`ENGINE_BUILD` from CI.** `validationStatement` takes an
+      `EngineBuild` (version, git SHA, invariants passed, soak cases) and the
+      report says *Not recorded for this build* without one. Durable fix: the
+      web release workflow runs the invariant suite and a soak, writes the
+      record, and the frontend build injects it (a Vite `define`) for the
+      report to pass in. Trigger: before the first evidence pack (WP-3.14),
+      which must state it.
+- [ ] **Methodology statement and engine errata** (`docs/methodology/`,
+      versioned, hashed into each pack; `docs/engine-errata.md`, known bugs
+      per engine version). Only the limitations list is generated so far.
+      Trigger: WP-3.14, the pack that records their version and hash.
+- [ ] **Pack sign-off.** `signoff` has `run_id` only; the WP's `target =
+      'pack'` comes with `evidence_pack` (WP-3.14), as a nullable
+      `pack_id` column with a check that exactly one target is set. A
+      scenario is signed through its run (`model_run.scenario_id`), and the
+      works statement words itself for a scenario.
+- [ ] **Validation statement panel on the run and the scenario** (WP-3.13
+      UI). It is printed on the report only; the Runs tab and the scenario
+      view link to the report. Trigger: the first hydrologist or assessor
+      review that asks for it on screen.
+- [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
+      sign-off is as strong as the signer's password.
+- [ ] **Sign-offs in the POPIA data export** (WP-1.13): a sign-off holds the
+      signer's typed name and registration; the export and account deletion
+      must list them (deletion keeps the row with `user_id` nulled, as the
+      professional record, and the privacy notice must say so).
+- [ ] **Flagged years are capped** at the data-quality check's example limit
+      (`quality.ts` `MAX_EXAMPLES`), so a record with more low-vs-CHIRPS
+      years lists only the first ones. Trigger: a catchment that hits it;
+      the fix is a full list on the check or in the statement.
+
