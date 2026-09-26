@@ -384,8 +384,9 @@ export function chirpsBiasFactors(
 	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced);
 	const b0 = toEpochDay(sb.startDate);
 
-	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their status.
-	const shared: { day: number; c: number; h: number; status: SuspectRainDay | null }[] = [];
+	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their
+	// status, water year and calendar month (read by every fit below, so each is worked out once).
+	const shared: { day: number; wy: number; m: number; c: number; h: number; status: SuspectRainDay | null }[] = [];
 	if (sa) {
 		const low = new Set(lowYears);
 		const a0 = toEpochDay(sa.startDate);
@@ -394,15 +395,17 @@ export function chirpsBiasFactors(
 		for (let day = from; day < to; day++) {
 			const va = sa.values[day - a0];
 			const vb = sb.values[day - b0];
-			if (!isReading(va) || !isReading(vb) || low.has(waterYearOf(day))) continue;
-			shared.push({ day, c: va, h: vb, status: suspect.status(day) });
+			if (!isReading(va) || !isReading(vb)) continue;
+			const wy = waterYearOf(day);
+			if (low.has(wy)) continue;
+			shared.push({ day, wy, m: monthOfEpochDay(day), c: va, h: vb, status: suspect.status(day) });
 		}
 	}
 	const sums = (include: (d: (typeof shared)[number]) => boolean): MonthSums => {
 		const t: MonthSums = { days: new Array<number>(13).fill(0), cMm: new Array<number>(13).fill(0), hMm: new Array<number>(13).fill(0) };
 		for (const d of shared) {
 			if (!include(d)) continue;
-			const m = monthOfEpochDay(d.day);
+			const m = d.m;
 			t.days[m]!++;
 			t.cMm[m] = t.cMm[m]! + d.c;
 			t.hMm[m] = t.hMm[m]! + d.h;
@@ -446,7 +449,7 @@ export function chirpsBiasFactors(
 	let outsideRangeDaysLeftOut = 0;
 	let replacedDaysLeftOut = 0;
 	for (const d of shared) {
-		const wy = waterYearOf(d.day);
+		const wy = d.wy;
 		if (doubtYears.has(wy)) continue;
 		if (!inListed(wy)) {
 			if (d.status === null || d.status === 'keptDry') outsideRangeDaysLeftOut++;
@@ -459,7 +462,7 @@ export function chirpsBiasFactors(
 		else if (d.status === 'accumulation') accumulationDaysLeftOut++;
 	}
 	const inFit = (d: (typeof shared)[number]) => {
-		const wy = waterYearOf(d.day);
+		const wy = d.wy;
 		return !doubtYears.has(wy) && inListed(wy) && (d.status === null || d.status === 'keptDry');
 	};
 	/** The first and last water year among the days `include` keeps: a fit's reference window. */
@@ -468,7 +471,7 @@ export function chirpsBiasFactors(
 		let hi = -Infinity;
 		for (const d of shared) {
 			if (!include(d)) continue;
-			const wy = waterYearOf(d.day);
+			const wy = d.wy;
 			if (wy < lo) lo = wy;
 			if (wy > hi) hi = wy;
 		}
@@ -478,7 +481,7 @@ export function chirpsBiasFactors(
 	// One set per listed range, from the same days, split by water year.
 	const segments: ChirpsFitSegment[] = plan.segments.map((p) => {
 		const include = (d: (typeof shared)[number]) => {
-			const wy = waterYearOf(d.day);
+			const wy = d.wy;
 			return inFit(d) && wy >= p.fromWaterYear && wy <= p.toWaterYear;
 		};
 		const f = factorsFrom(sums(include), fit.months);
