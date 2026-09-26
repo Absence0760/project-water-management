@@ -279,8 +279,8 @@ auto re-runs and alerts plug in as further kinds.
   which the fetcher and renderer Lambdas import: `wake.ts`'s `memory`
   transport reaches the runner, and so `pg`, every handler and the engine,
   which Lambdas without a database must not carry (`lambda-fetcher.test.ts`
-  checks the fetcher's import graph; `package-lambdas.sh` greps both bundles
-  for `pg`).
+  checks the fetcher's import graph; `package-lambdas.sh` refuses either
+  bundle if esbuild's metafile lists a `pg` input).
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
   SKIP LOCKED`, a lease) and runs each.

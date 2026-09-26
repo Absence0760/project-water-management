@@ -245,8 +245,8 @@ Besides the email settings, `lambda.tf` sets `DATABASE_URL` (as `water_app`,
 `NODE_EXTRA_CA_CERTS` (the RDS CA bundle).
 
 The release package (`infra/scripts/package-lambdas.sh`) bundles `nodemailer`
-and `@aws-sdk/client-sesv2` into the API's `lambda.mjs` (~660 KB zipped,
-~3.2 MB unzipped), so production sends mail with the lockfile's pinned SDK, not
+and `@aws-sdk/client-sesv2` into the API's `lambda.mjs` (~670 KB zipped,
+~2.1 MB unzipped, minified: [§ Lambda bundles](#lambda-bundles)), so production sends mail with the lockfile's pinned SDK, not
 the one the `nodejs24.x` runtime happens to ship. Both mail transports are
 loaded lazily, only for the transport in use. The migrate Lambda is the
 exception: it imports `@aws-sdk/client-secrets-manager` from the runtime on
@@ -396,6 +396,42 @@ the real plan stays an operator step
   release. The worker Lambda's code is updated right after the API's. Then
   the job calls `/api/health` through CloudFront and fails unless it answers
   `{"ok":true}`.
+
+### Lambda bundles
+
+`infra/scripts/package-lambdas.sh` builds every Lambda bundle with esbuild's
+`--minify --keep-names --sourcemap` (and `pnpm build:backend` builds the API's
+the same way). Minifying roughly halves each bundle (most of it is zod 4 and
+the AWS SDK), so a cold start parses less JavaScript; `--keep-names` keeps
+function and class names, so a production stack trace still says *which*
+function threw, though its line and column point into one long minified line.
+
+| Bundle | Raw before → after | Zip before → after |
+|---|---|---|
+| API `lambda.mjs` | 4.14 MB → 2.13 MB | 866 KB → 681 KB |
+| worker `lambda-worker.mjs` | 3.64 MB → 1.83 MB | 736 KB → 579 KB |
+| fetcher `lambda-fetcher.mjs` | 2.03 MB → 0.99 MB | 343 KB → 256 KB |
+| renderer `lambda-renderer.mjs` (image; gzip) | 2.33 MB → 1.16 MB | 390 KB → 296 KB |
+| migrate `lambda-migrate.mjs` | 202 KB → 99 KB | 191 KB → 180 KB (mostly SQL) |
+
+**Source maps are not shipped.** The `.map` files land in
+`backend/dist/sourcemaps/`, and `deploy-backend.yml` uploads them as the
+`backend-sourcemaps` artifact (30 days). They stay out of the zips and the
+renderer image, and the Lambdas don't set `NODE_OPTIONS=--enable-source-maps`,
+because a map with its sources is 3–4× the minified bundle (the API zip would
+grow from ~0.7 MB to ~2.3 MB) and, measured locally, `--enable-source-maps`
+added 30–55 ms to the bundle's import, paid on every cold start. To read a
+production trace, download the artifact for that release, put the map beside
+the bundle from the same release's zip, and run or import it under
+`node --enable-source-maps` (each bundle ends in a `sourceMappingURL` comment
+that finds the map beside it), or feed the minified line:column to any source-map tool.
+
+The dependency guards at the end of the script (no dotenv, no playwright-core
+in the API/worker/fetcher, no `pg` in the fetcher/renderer) read esbuild's
+`--metafile` input list, not the bundle text: minifying drops the
+`// node_modules/…` comments the old greps matched, which would have made the
+`pg` check pass silently. Each guard first checks the metafile names the
+bundle's entry point, so a missing or reshaped metafile fails the build.
 
 ### Releasing
 
