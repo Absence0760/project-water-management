@@ -335,7 +335,11 @@ merges into:
 - **Merging** goes through `series/merge.ts mergeInto`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. The merge and the feed's health
-  commit in the job's transaction, as the job's acting user.
+  commit in the job's transaction, as the job's acting user. A forecast
+  result is keyed by its issue date (`meta.issued`, which its days must start
+  on, 16 at most); one older than the issue the feed last merged (the
+  `ingest-results` queue does not keep order) is dropped, series and health
+  untouched, so an older forecast never overwrites a newer one.
 - **Schedule.** Every tick, `app_claim_due_feeds` (`SECURITY DEFINER`) claims
   the enabled feeds not scheduled within a day (or an hour), and the tick
   queues a `feed_fetch` for each **as the feed's acting user** (the owner who

@@ -4,29 +4,48 @@
 // record the feed's health. A failed fetch records the failure and writes no
 // series data. The result is validated first: in production it arrived over a
 // queue from the fetcher Lambda, so it is untrusted input.
+//
+// A CHIRPS-GEFS result is one whole issue, keyed by its issue date: its days
+// start on that date and number at most GEFS_DAYS. The newest issue merged
+// wins: an older one (the ingest-results queue does not keep order, and a
+// fetch before ~08:30 UTC reads yesterday's issue) is dropped without
+// touching the series or the feed's health, so it never overwrites a newer
+// forecast's days.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { mergeInto, SeriesBody } from '../series/merge.js';
 import { SOURCES } from './config.js';
 import { FetchResult } from './fetch.js';
-import { type FeedRow, recordFeedResult } from './store.js';
+import { GEFS_DAYS } from './sources/chirps.js';
+import { type FeedRow, lockFeedIssued, recordFeedResult } from './store.js';
 
 export interface IngestOutcome {
 	merged: number;
 	lastDate: string | null;
 }
 
+const INVALID = 'the fetcher’s answer was not valid, so nothing was written';
+
+/** A forecast result is one issue: days from its issue date (meta.issued), at most GEFS_DAYS of them. */
+const isKeyedIssue = (r: { startDate: string | null; values: unknown[]; meta: Record<string, string | number> }) =>
+	r.startDate === null || (r.meta.issued === r.startDate && r.values.length <= GEFS_DAYS);
+
 export async function ingestResult(db: Db, feed: FeedRow, raw: unknown): Promise<IngestOutcome> {
 	const parsed = FetchResult.safeParse(raw);
-	if (!parsed.success) {
-		await recordFeedResult(db, feed.id, { ok: false, error: 'the fetcher’s answer was not valid, so nothing was written' });
+	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
+		await recordFeedResult(db, feed.id, { ok: false, error: INVALID });
 		return { merged: 0, lastDate: null };
 	}
 	const result = parsed.data;
 	if (!result.ok) {
 		await recordFeedResult(db, feed.id, { ok: false, error: result.error });
 		return { merged: 0, lastDate: null };
+	}
+	if (feed.source === 'chirps_gefs' && result.startDate !== null) {
+		// ISO calendar dates compare as strings (startDate is checked; meta.issued equals it).
+		const newest = await lockFeedIssued(db, feed.id);
+		if (newest !== null && result.startDate < newest) return { merged: 0, lastDate: null };
 	}
 
 	let lastDate: string | null = null;
