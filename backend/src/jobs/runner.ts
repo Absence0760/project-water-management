@@ -33,7 +33,7 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 				throw err;
 			});
 			const payload = handler.payload.parse(await readPayload(db, job.id));
-			await handler.run({ db, job, payload });
+			await handler.run({ db, job, payload, progress: (pct) => reportProgress(job, pct) });
 			// Same transaction as the work: both commit, or neither.
 			if ((await finishJob(db, job, { ok: true })) !== 'done') throw new LeaseLostError();
 			return 'done' as const;
@@ -52,6 +52,14 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
 	}
+}
+
+/** app_job_progress on its own connection, outside the job's transaction. Best effort: a failure is logged, never fails the job. */
+async function reportProgress(job: ClaimedJob, pct: number): Promise<void> {
+	const v = Math.max(0, Math.min(100, Math.round(pct)));
+	await withoutUser((db) => db.query('SELECT app_job_progress($1, $2, $3)', [job.id, job.leaseToken, v])).catch((err) => {
+		console.warn(JSON.stringify({ event: 'job_progress_failed', jobId: job.id, error: (err as Error).message }));
+	});
 }
 
 async function readPayload(db: Db, jobId: string): Promise<unknown> {

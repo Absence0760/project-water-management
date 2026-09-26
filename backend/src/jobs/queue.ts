@@ -22,11 +22,13 @@ export interface JobMeta {
 	error: string | null;
 	/** The acting user's display name. */
 	createdBy: string;
+	/** How far a running job is, 0–100, when its handler reports it (035_yield); null otherwise. */
+	progress: number | null;
 }
 
 const JOB_META = `j.id, j.kind, j.status, j.attempts, j.max_attempts AS "maxAttempts", j.run_after AS "runAfter",
 	j.created_at AS "createdAt", j.started_at AS "startedAt", j.finished_at AS "finishedAt", j.last_error AS error,
-	u.display_name AS "createdBy"`;
+	u.display_name AS "createdBy", j.progress`;
 
 export interface EnqueueOptions {
 	projectId: string;

@@ -26,6 +26,7 @@ import { uncertaintyRoutes } from './runs/uncertainty.js';
 import { seriesRoutes } from './series/routes.js';
 import { shareLinkRoutes, sharePublicRoutes } from './share/routes.js';
 import { teamRoutes } from './teams/routes.js';
+import { yieldRoutes } from './yield/routes.js';
 
 export function createApp() {
 	const app = new Hono<AuthEnv>();
@@ -98,6 +99,7 @@ export function createApp() {
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
+	projects.route('/', yieldRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
