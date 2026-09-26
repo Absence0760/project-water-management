@@ -15,7 +15,10 @@ import {
 	restrictionText,
 	sortPortfolio,
 	sourceText,
-	statusCounts
+	statusCounts,
+	thresholdsError,
+	thresholdsRule,
+	thresholdsSource
 } from './portfolio';
 
 const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
@@ -138,5 +141,27 @@ describe('sorting', () => {
 describe('curtailmentHref', () => {
 	it('opens the run on the Runs tab with the last 7 days as its reporting window', () => {
 		expect(curtailmentHref({ id: 'p1', sourceRunId: 'r1' }, '/app')).toBe('/app/projects/p1?tab=runs&run=r1&window=last7#res-curtailment');
+	});
+});
+
+describe('the thresholds (D11)', () => {
+	it('writes the rule the statuses were judged by, decimals trimmed', () => {
+		expect(thresholdsRule({ green: 5, amber: 20 })).toBe('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
+		expect(thresholdsRule({ green: 2.5, amber: 12.75 })).toBe('green when it was not met on under 2.5 % of them, amber under 12.75 %, red otherwise');
+	});
+	it('says whose they are, and that the defaults still wait for the hydrologist', () => {
+		expect(thresholdsSource({ source: 'team' })).toBe('These are the team’s own thresholds.');
+		expect(thresholdsSource({ source: 'default' })).toBe('These are the default thresholds, still to be confirmed by the hydrologist.');
+	});
+	it('checks the team page form as the API does: numbers, 0–100 %, green below amber', () => {
+		expect(thresholdsError(5, 20)).toBeNull();
+		expect(thresholdsError(0, 100)).toBeNull();
+		expect(thresholdsError(2.5, 2.6)).toBeNull();
+		expect(thresholdsError(Number.NaN, 20)).toBe('Enter both cut-offs as numbers.');
+		expect(thresholdsError(null as unknown as number, 20)).toBe('Enter both cut-offs as numbers.');
+		expect(thresholdsError(-1, 20)).toBe('Each cut-off is a percentage from 0 to 100.');
+		expect(thresholdsError(5, 101)).toBe('Each cut-off is a percentage from 0 to 100.');
+		expect(thresholdsError(20, 20)).toBe('The green cut-off must be below the amber one.');
+		expect(thresholdsError(30, 20)).toBe('The green cut-off must be below the amber one.');
 	});
 });

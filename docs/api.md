@@ -583,7 +583,7 @@ move or copy into it). `role` in the member and invite bodies is one of
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
-| PATCH | `/teams/:id` | `{ name }` | `{ team }` | admin |
+| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
@@ -592,8 +592,16 @@ move or copy into it). `role` in the member and invite bodies is one of
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 | GET | `/teams/:id/portfolio` | – | `Portfolio` (see [Portfolio](#portfolio) below) | viewer |
 
-- `Team = { id, name, role, createdAt, memberCount, projectCount }` — `role` is
-  **your** role in the team.
+- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds }` — `role` is
+  **your** role in the team. `settings` is the stored document
+  (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
+  `portfolioThresholds = { green, amber, source: 'team' | 'default' }` is what
+  the portfolio judges by: the team's own, or the defaults (5, 20).
+- **Thresholds** (decision D11): percent of the last 30 days with the outlet
+  EWR not met, `green` and `amber` each 0–100 with `green < amber` (decimals
+  allowed); anything else, or an unknown key anywhere in `settings`, is a
+  `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
+  in the database). Every member reads them; only an admin changes them.
 - `TeamMember = { userId, email, displayName, role }`
 - `409 a team must keep at least one admin` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
@@ -608,9 +616,11 @@ run as you under RLS, whatever the number of projects (guarded by a query
 count in `portfolio.db.test.ts`); a project where your role is `farmer` is
 left out, so nobody gets a catchment roll-up of their neighbours.
 
-- `Portfolio = { team: { id, name, role }, today, thresholds: { amber, red }, projects: PortfolioProject[] }`;
+- `Portfolio = { team: { id, name, role }, today, thresholds: { green, amber, source }, projects: PortfolioProject[] }`;
   `today` is the server's UTC date the ages count to; `thresholds` are the
-  traffic-light fractions (below).
+  traffic-light cut-offs every `ewr.status` below was judged by, in percent,
+  and `source` says whether they are the team's (`team`) or the defaults
+  (`default`), so the page can say which apply.
 - `PortfolioProject = { id, name, role, dataUntil, lastRunAt, publishedAt, source, sourceRunId, figuresUntil, figuresAgeDays, stale, behindData, newerRun, ewr, farmsShort7, farmsShort30, farmCount, lowestDamPct, damsKnown, feeds, alertsFiring, restriction }`, by name:
   - `source`: where the figures come from. `published`: the current
     publication. `run`: nothing is published, so the newest baseline run
@@ -625,9 +635,11 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     the outlet EWR over the 30 days to `figuresUntil` (the publication's
     `catchmentView`, or, for `source: 'run'`, counted in SQL from that run's
     one outlet series; the DB test checks the two agree). Thresholds (D11):
-    **green** below 5 % of the days not met, **amber** below 20 %, **red**
-    otherwise; they are defaults for the hydrologist to confirm, not yet a
-    team setting (followups.md). `unknown` carries `reason`: `no-figures` (no
+    **green** below `thresholds.green` % of the days not met, **amber**
+    below `thresholds.amber` %, **red** otherwise: the team's own
+    ([Teams](#teams)), or by default 5 % and 20 %, which the hydrologist
+    still has to confirm (plan.md D11). A boundary is exclusive: exactly
+    5 % is amber. `unknown` carries `reason`: `no-figures` (no
     run), `no-ewr` (the source run had no EWR set, every month 0, so "never
     short" would be a false green) or `no-series` (the run has no outlet EWR
     record).

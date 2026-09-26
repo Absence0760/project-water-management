@@ -56,7 +56,7 @@ erDiagram
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (`en` / `af`, NULL = not chosen) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql) | none (the workbook has no users) |
-| `team` | A group of users (name, creator) whose projects its members share; see [Teams](#teams-002_teamssql) | none |
+| `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`. `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]`, `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()` |
 | `project_member` | (project, user, role) | none |
@@ -487,7 +487,13 @@ the result change?", and put back any earlier version.
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name),
   `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
-  series, lifetime; never the key or its hash), and restores. A key's ingest
+  series, lifetime; never the key or its hash), `alert_rules.changed` (051:
+  an editor switched alert kinds on or off or changed a threshold),
+  `team_thresholds.changed` (055: a team admin changed the portfolio's
+  traffic-light thresholds, `{ teamId, team, from, to }`, each side
+  `{ green, amber, source }`; written on every project of the team, see
+  [§ Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql)),
+  and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
 - **Account deletion (048, decision D12).** Deleting an `app_user` row (an
@@ -1330,7 +1336,7 @@ merges daily readings without a session (WP-2.9;
   `last_used_at` is bumped at most once a minute; > 0: seconds to wait; -1:
   the key is dead).
 
-### Teams (002_teams.sql, 008_team_viewer.sql)
+### Teams (002_teams.sql, 008_team_viewer.sql, 055_team_settings.sql)
 
 Users and groups work across many catchments. A **team** (e.g. a consultancy
 or a catchment management agency) has members with a team role, and projects
@@ -1365,6 +1371,24 @@ enum is ordered `viewer < member < admin`. `008` adds `viewer` with `ALTER TYPE
 … ADD VALUE` inside the migration runner's per-file transaction, which
 PostgreSQL allows as long as nothing in that transaction *uses* the new value:
 the mapping compares the role as text for that reason.
+
+**`team.settings`** (055, roadmap WP-2.14, decision D11): a jsonb document,
+`'{}'` by default. Its one key so far is the portfolio's traffic-light
+thresholds, `{ "portfolio": { "thresholds": { "green": 5, "amber": 20 } } }`:
+percent of the last 30 days with the outlet EWR not met, green below `green`,
+amber below `amber`, red otherwise, each 0–100 with `green < amber`. Absent
+means the defaults (5 % and 20 %, `portfolio/status.ts` `EWR_THRESHOLDS`),
+which the hydrologist still has to confirm. The `team_settings_valid` CHECK
+(`app_team_settings_valid`, plpgsql so each step is guarded before the next
+casts) holds that shape for any writer and rejects unknown keys; the API
+validates the same (`teams/settings.ts`). Access needs no new policy:
+`team_select` lets every member read it (the portfolio says which thresholds
+apply), `team_update` lets only an admin change it, and water_app's
+table-level grant on `team` covers the column. A change is recorded as a
+`team_thresholds.changed` audit event on **each** of the team's projects
+(`recordTeamAudit`), since it changes the status each one shows on the
+portfolio; `audit_event` rows belong to a project, so a team with no projects
+records nothing (nothing it holds changed).
 
 ### Two database roles
 

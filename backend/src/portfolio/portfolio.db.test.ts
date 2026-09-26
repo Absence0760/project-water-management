@@ -7,6 +7,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
 import { loadPortfolio, type PortfolioProject } from './portfolio.js';
+import { ewrStatus } from './status.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -75,7 +76,7 @@ describe('GET /teams/:id/portfolio', () => {
 		expect(ids).toHaveLength(3);
 		expect(ids).not.toContain(personal);
 		expect(ids).not.toContain(strangersProject);
-		expect(res.body.thresholds).toEqual({ amber: 0.05, red: 0.2 });
+		expect(res.body.thresholds).toEqual({ green: 5, amber: 20, source: 'default' });
 		expect(res.body.team).toEqual({ id: teamId, name: 'Portfolio WUA', role: 'viewer' });
 		expect(res.body.today).toBe(utcToday());
 	});
@@ -247,6 +248,69 @@ describe('firing alerts (WP-2.13)', () => {
 			expect(byId((await portfolio(teamViewer)).body.projects, published)!.alertsFiring).toBe(2);
 		} finally {
 			await asOwner('DELETE FROM alert_rule WHERE project_id = $1', [published]);
+		}
+	});
+});
+
+describe('the team’s thresholds (D11, 055_team_settings)', () => {
+	const setThresholds = (u: User, team: string, t: { green: number; amber: number } | null) =>
+		u.call('PATCH', `/teams/${team}`, { settings: { portfolio: { thresholds: t } } });
+
+	it('judge every known status; unset, the defaults apply; the response says which', async () => {
+		// A run whose outlet missed its EWR on exactly 3 of the last 30 days (10 %):
+		// the shortfall series rewritten as the schema owner, since the count is
+		// what's under test here, not the engine.
+		const pid = await makeProject(admin, 'Foxtrot thresholds', teamId);
+		const runId = await run(admin, pid);
+		const until = byId((await portfolio(admin)).body.projects, pid)!.figuresUntil!;
+		const [{ start }] = await asOwner(`SELECT to_char(start_date, 'YYYY-MM-DD') AS start FROM model_run WHERE id = $1`, [runId]);
+		const last = (Date.parse(until) - Date.parse(start)) / 86_400_000 + 1; // 1-based index of the figures' last day
+		const { length } = await asOwner(
+			`UPDATE run_series SET "values" = (SELECT array_agg(CASE WHEN g BETWEEN $2::int - 2 AND $2::int THEN -1 ELSE 0 END ORDER BY g) FROM generate_series(1, cardinality("values")) g)
+			 WHERE run_id = $1 AND node_id IS NULL AND key = 'ewr_shortfall' RETURNING 1`,
+			[runId, last]
+		);
+		expect(length).toBe(1);
+
+		const before = await portfolio(teamViewer);
+		expect(before.body.thresholds).toEqual({ green: 5, amber: 20, source: 'default' });
+		const rows = before.body.projects as PortfolioProject[];
+		expect(byId(rows, pid)!.ewr).toEqual({ status: 'amber', daysNotMet30: 3, days30: 30, fraction30: 0.1 });
+		for (const p of rows.filter((r) => r.ewr.status !== 'unknown')) expect(p.ewr.status).toBe(ewrStatus(p.ewr.daysNotMet30!, p.ewr.days30!));
+
+		try {
+			for (const [t, expected] of [
+				[{ green: 0, amber: 100 }, 'amber'], // nothing is green
+				[{ green: 10.5, amber: 20 }, 'green'],
+				[{ green: 10, amber: 20 }, 'amber'], // exactly 10 % is not below 10 %
+				[{ green: 1, amber: 2 }, 'red']
+			] as const) {
+				expect((await setThresholds(admin, teamId, t)).status).toBe(200);
+				const res = await portfolio(teamViewer);
+				expect(res.body.thresholds).toEqual({ ...t, source: 'team' });
+				expect(byId(res.body.projects, pid)!.ewr).toEqual({ status: expected, daysNotMet30: 3, days30: 30, fraction30: 0.1 });
+				// Every other row is judged by the same numbers; an unknown stays unknown.
+				for (const p of rows) {
+					const now = byId(res.body.projects, p.id)!;
+					expect(now.ewr).toEqual(p.ewr.status === 'unknown' ? p.ewr : { ...p.ewr, status: ewrStatus(p.ewr.daysNotMet30!, p.ewr.days30!, t) });
+				}
+			}
+		} finally {
+			expect((await setThresholds(admin, teamId, null)).status).toBe(200);
+		}
+		const after = await portfolio(teamViewer);
+		expect(after.body.thresholds).toEqual({ green: 5, amber: 20, source: 'default' });
+		for (const p of rows) expect(byId(after.body.projects, p.id)!.ewr).toEqual(p.ewr);
+	});
+
+	it('another team’s thresholds never reach this team’s rows', async () => {
+		expect((await setThresholds(stranger, otherTeamId, { green: 0, amber: 1 })).status).toBe(200);
+		try {
+			expect((await portfolio(teamViewer)).body.thresholds).toEqual({ green: 5, amber: 20, source: 'default' });
+			// Positive control: the other team's own portfolio uses them.
+			expect((await portfolio(stranger, otherTeamId)).body.thresholds).toEqual({ green: 0, amber: 1, source: 'team' });
+		} finally {
+			await setThresholds(stranger, otherTeamId, null);
 		}
 	});
 });
