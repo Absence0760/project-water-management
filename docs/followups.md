@@ -1576,9 +1576,17 @@ role and not before it.
       question in two clicks. Trigger: a hydrologist or WUA user asks for it
       on the field itself, or the History tab's parameter filter is the
       most-used one.
-- [ ] **`api_key.*` audit kinds are reserved** until per-project API keys
-      exist (WP-2.9); `audit_event.actor_api_key_id` is there, unused.
-      Trigger: WP-2.9.
+- [x] **`api_key.*` audit kinds are recorded** now that per-project API
+      keys exist (WP-2.9, `036_api_keys.sql`): `api_key.created/revoked`,
+      and a key's ingest merges carry `actor_api_key_id` (now a foreign key).
+- [ ] **Auto re-run after an ingest or a feed merge** (WP-2.11). `mergeInto`
+      calls the no-op `series/newData.ts` `onSeriesDaysChanged` on every
+      merge that changed days, and the ingest returns `rerunQueuedFor: null`.
+      Durable fix: WP-2.11 enqueues the debounced `rerun` there, and calls
+      the same hook from the data feeds' ingest (`feeds/ingest.ts`). A key's
+      transaction has no user, so the enqueue needs an acting user (e.g. the
+      key's creator) or a `SECURITY DEFINER` enqueue, plus a job policy for
+      keys. Trigger: WP-2.11.
 
 ## Housekeeping
 

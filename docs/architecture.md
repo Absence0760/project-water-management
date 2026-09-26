@@ -220,7 +220,11 @@ sliding back into the page chunk.
    emailed-link `/auth/*` routes), `requireUser` verifies the `wm_session`
    JWT (HS256, jose), checks it was issued after the user's
    `sessions_revoked_at` watermark (one `app_user` lookup by primary key), and
-   sets `userId`. Otherwise `401`.
+   sets `userId`. Otherwise `401`. The ingest routes (`/ingest/v1/*`, WP-2.9)
+   take a per-project API key instead (`requireApiKey`, `ingest/auth.ts`):
+   the key is checked in constant time and rate-limited per key, and the work
+   runs in `withApiKey`, which sets `app.current_api_key_id` and no user
+   ([security.md § API keys](./security.md#api-keys)).
 4. Project routes open **one transaction** on a pooled `pg` connection as
    `water_app` and run `set_config('app.current_user_id', userId, true)`. Every
    query inside it is filtered by RLS ([data-model.md § Access control](./data-model.md#access-control)).

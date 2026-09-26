@@ -415,9 +415,10 @@ the result change?", and put back any earlier version.
   `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
   values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with
-  `actor_user_id` (must be the caller), `actor_label` (the display name then),
-  `kind`, `subject jsonb`, `change_set`, and `actor_api_key_id` (reserved,
-  unused until API keys exist). Kinds recorded: `member.added/removed/role`
+  `actor_user_id` (must be the caller), `actor_label` (the display name then,
+  or `API key “<name>”`), `kind`, `subject jsonb`, `change_set`, and
+  `actor_api_key_id` (→ `api_key` SET NULL, 036: the key that acted, with
+  `actor_user_id` NULL; see [§ API keys](#api-keys-036_api_keyssql)). Kinds recorded: `member.added/removed/role`
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
@@ -429,8 +430,11 @@ the result change?", and put back any earlier version.
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
   PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
-  `report_schedule.configured`, `scenario.created/changed/deleted`, and
-  restores. `api_key.*` is reserved.
+  `report_schedule.configured`, `scenario.created/changed/deleted`,
+  `api_key.created/revoked` (036: key id, name, prefix, scopes, allowed
+  series, lifetime; never the key or its hash), and restores. A key's
+  ingest records `series.created/merged` as the key, with its optional
+  `source` label in the subject, and no series revision (like a data feed).
 - **Change sets.** `withUser` sets `app.change_set_id` to a fresh UUID per
   request (transaction-local), read by `app_change_set_id()`, so a save and
   the farmer unlinks it caused show as one entry.
@@ -853,6 +857,52 @@ Read-only links to the current publication for people outside the project
   recent_start, recent[] (the last 365 days)` for a catchment key of the
   current published run, only with at least 5 farm holders (`FARMER_K`).
 
+### API keys (036_api_keys.sql)
+
+Per-project keys for the ingest endpoint: a logger gateway or a script
+merges daily readings without a session (WP-2.9;
+[api.md § Ingest](./api.md#ingest), [security.md § API keys](./security.md#api-keys)).
+
+- `api_key (id, project_id → project CASCADE, name 1–100, prefix (generated:
+  the first 8 characters of id, UNIQUE), key_hash bytea UNIQUE (SHA-256 of
+  the whole key, CHECK 32 bytes), scopes text[] (CHECK ⊆ {series:write},
+  non-empty; default {series:write}), allowed_series jsonb NULL (NULL: any
+  series; else an array of 1–50 { kind, name }), created_by → app_user SET
+  NULL, created_at, last_used_at, expires_at NULL (≤ 3650 days after
+  created_at, CHECK), revoked_at, revoked_by → app_user SET NULL)`. Indexed on
+  `(project_id, created_at DESC)`, `created_by` and `revoked_by`. The
+  `api_key_issue` trigger stamps `created_by` / `created_at` and clears the
+  revocation and use stamps on insert.
+- The key is `wm_<prefix>_<43-char base64url secret>`: the prefix finds the
+  row, the secret is 32 random bytes. Only the hash is stored.
+- **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
+  `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
+  catalogue test's column-only and keep-forever lists): a key is revoked,
+  never removed, so the audit events that name it keep their link.
+- `api_key_throttle (key_id PK → api_key CASCADE, tokens, refilled_at)`: a
+  token bucket per key, the `login_throttle` pattern (deny-all policy,
+  reached only through `app_api_key_take`).
+- **Key context.** `withApiKey` (`db/tx.ts`) sets `app.current_api_key_id`
+  (transaction-local) and no user. `app_current_api_key_id()` reads it;
+  `app_api_key_project(p_scope)` (`SECURITY DEFINER`) is the key's project
+  while the key is live (not revoked, not expired) and holds the scope (NULL:
+  any), and NULL in a transaction that also has a user;
+  `app_api_key_allows(kind, name)` checks `allowed_series`;
+  `app_api_key_label()` is the audit actor label.
+- **Key policies** (permissive, beside the role policies):
+  `time_series_api_key_select/insert/update` (`project_id =
+  app_api_key_project('series:write') AND app_api_key_allows(kind, name)`;
+  no delete), and `audit_event_api_key_insert` (`actor_user_id IS NULL`,
+  `actor_api_key_id` the transaction's key, the key's project). Every other
+  table's policies need a user, so a key sees nothing else.
+- `app_api_key_lookup(p_prefix)` (`SECURITY DEFINER`): the row for a prefix
+  (id, project id and name, hash, name, scopes, allowed series, live) for
+  the backend's constant-time hash comparison.
+- `app_api_key_take(p_key, p_capacity, p_per_minute)` (`SECURITY DEFINER`):
+  takes one request from the key's bucket under a row lock (0: go ahead, and
+  `last_used_at` is bumped at most once a minute; > 0: seconds to wait; -1:
+  the key is dead).
+
 ### Teams (002_teams.sql, 008_team_viewer.sql)
 
 Users and groups work across many catchments. A **team** (e.g. a consultancy
@@ -943,6 +993,9 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Share links (025): `share_link` read, created and revoked by owners only,
   never deleted; the public reads only through `app_share_view` /
   `app_share_series` (see § Share links above).
+- API keys (036): `api_key` read, created and revoked by owners only, never
+  deleted. A key request (no user) writes its own project's allowed series
+  and adds audit events naming itself, nothing else (see § API keys above).
 - `team` / `team_member`: members read (`app_team_role()` not null); admins
   rename, delete and manage members; anyone may leave.
 - A project you are not a member of is simply **invisible**: the API returns
