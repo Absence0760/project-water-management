@@ -995,8 +995,13 @@ database:
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does.
-- Still open with the rest of POPIA ([§ Personal information](#personal-information-popia)):
-  allocations and names in a data-subject export.
+- In the data-subject export ([§ Personal information](#personal-information-popia)),
+  a farmer gets the allocations matched to *their* linked farms, holder name
+  included (what RLS already lets them read). A holder is never matched to
+  an account by name: names aren't unique, so matching would hand one
+  person another's registration. A registered user without a linked farm
+  has no account to export to; their name is the WUA's record, answered by
+  the WUA.
 
 ## Personal information (POPIA)
 
@@ -1041,7 +1046,7 @@ file), so a new column can't ship without a decision.
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, when they last downloaded their data (052) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address | `login_throttle` | A day without attempts | Not linked to the account | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -1061,11 +1066,26 @@ file), so a new column can't ship without a decision.
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
 
 **Data-subject requests.**
-- **Access / export: not built.** There is no "download my data" yet
-  (plan.md Phase 7). Until then the operator answers a request by querying
-  the tables above for the person (the WUA confirms who is asking). The
-  project exports (`export.json`, CSV, the farm CSV) are project data, not a
-  data-subject export.
+- **Access / export: self-service.** Account → Your data → **Download my
+  data** (`GET /auth/me/export`, [api.md § Auth](./api.md)) saves one JSON
+  file: the account (never the password hash), memberships, farm links with
+  those farms' current published figures (as the farm page shows them) and
+  the registered volumes and holder names matched to them, notes written,
+  sign-offs, invites to their verified address, alert and report choices,
+  alert mails sent, and every audit event they made or that names them.
+  The rows RLS hides from the person (the audit log for a farmer, invites,
+  anything in a project they've left) come through `app_subject_export()`
+  (052), a `SECURITY DEFINER` reader with no user argument that reads only
+  the caller's own rows. Nothing about another farm or person beyond what
+  those records name (the actor who linked them, the people named in events
+  they made). One export a minute per account. Every foreign key to
+  `app_user` is classified as exported or left out, with why, in
+  `auth/export.ts` `USER_FK_COVERAGE` (guarded by `export.db.test.ts`): the
+  project's own records that name the person only as their maker (runs,
+  revisions, keys, publications…) are left out, because the act is in the
+  audit events. The project exports (`export.json`, CSV, the farm CSV)
+  remain project data, not a data-subject export
+  ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
 - **Deletion: an operator act.** There is no self-service deletion. On a
   request the operator deletes the `app_user` row as the schema owner
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 7): the table
@@ -1220,9 +1240,9 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     number is **self-declared** (not checked against the SACNASP register);
     dam safety classification (DW793) is for others; there is no MFA on
     signing yet (Step 4), so a sign-off is as strong as the signer's
-    password. The typed name and registration are personal data: the POPIA
-    export and deletion must cover them (followups.md § Liability and
-    sign-off).
+    password. The typed name and registration are personal data: the
+    data-subject export lists them (`signoffs`), and deletion keeps the row
+    with the account cleared ([§ Personal information](#personal-information-popia)).
 
 ## Known gaps (tracked in [plan.md](./plan.md))
 
@@ -1241,8 +1261,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- POPIA: no privacy notice, no data-subject export and no self-service
-  account deletion yet (Phase 7); what exists today and the open items are in
+- POPIA: no privacy notice and no self-service account deletion yet
+  (Phase 7); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook
