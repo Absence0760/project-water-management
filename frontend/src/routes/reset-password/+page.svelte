@@ -8,6 +8,8 @@
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import { t, tRich } from '$lib/i18n/locale.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -27,7 +29,8 @@
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		error = passwordProblem(password, confirm);
+		const problem = passwordProblem(password, confirm);
+		error = problem ? t(problem) : null;
 		if (error || !token) return;
 		busy = true;
 		try {
@@ -45,32 +48,25 @@
 </script>
 
 <svelte:head>
-	<title>Choose a new password · Water Management</title>
+	<title>{t('common.pageTitle', { page: t('reset.title') })}</title>
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 
-<AuthCard title="Choose a new password" subtitle="Pick a password you don’t use anywhere else.">
+<AuthCard title={t('reset.title')} subtitle={t('reset.subtitle')}>
 	{#if done}
-		<div class="alert alert-info" role="status">
-			Your password has been changed and you’ve been signed out everywhere. Sign in with your new password.
-		</div>
-		<a class="btn btn-primary" href="{base}/login">Sign in</a>
+		<div class="alert alert-info" role="status">{t('reset.done')}</div>
+		<a class="btn btn-primary" href="{base}/login">{t('common.signIn')}</a>
 	{:else if linkDead}
-		<div class="alert alert-error" role="alert">
-			This reset link is invalid, already used, or older than 1 hour.
-		</div>
-		<a class="btn btn-primary" href="{base}/forgot-password">Send a new link</a>
+		<div class="alert alert-error" role="alert">{t('reset.dead')}</div>
+		<a class="btn btn-primary" href="{base}/forgot-password">{t('reset.newLink')}</a>
 	{:else}
 		{#if session.user}
-			<p class="signed-in">
-				You’re signed in as <strong>{session.user.email}</strong>. Setting a new password signs this browser out
-				too.
-			</p>
+			<p class="signed-in"><Rich text={tRich('reset.signedIn', { email: session.user.email })} /></p>
 		{/if}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
-				<label for="password">New password</label>
+				<label for="password">{t('common.newPassword')}</label>
 				<PasswordInput
 					id="password"
 					autocomplete="new-password"
@@ -80,20 +76,20 @@
 					aria-describedby="password-hint"
 					bind:value={password}
 				/>
-				<span class="hint" id="password-hint">At least 8 characters. Changing it signs you out on every device.</span>
+				<span class="hint" id="password-hint">{t('reset.hint')}</span>
 			</div>
 			<div class="field">
-				<label for="confirm">Repeat new password</label>
+				<label for="confirm">{t('common.repeatNewPassword')}</label>
 				<PasswordInput id="confirm" autocomplete="new-password" required maxlength={200} bind:value={confirm} />
 			</div>
-			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Set new password'}</button>
+			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('common.saving') : t('reset.submit')}</button>
 		</form>
 	{/if}
 	{#snippet footer()}
 		{#if session.user}
-			<a href="{base}/">Back to your projects</a>
+			<a href="{base}/">{t('common.backToProjects')}</a>
 		{:else}
-			<a href="{base}/login">Back to sign in</a>
+			<a href="{base}/login">{t('common.backToSignIn')}</a>
 		{/if}
 	{/snippet}
 </AuthCard>

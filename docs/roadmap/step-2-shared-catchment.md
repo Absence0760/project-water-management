@@ -384,10 +384,10 @@ the aggregate rule), api.md.
 > - **Bulk adds, never replaces**: a row adds its farm to an existing
 >   farmer's links or to a pending invite's farms. The single form replaces
 >   an invite's farms, as re-sending an invite replaces its role.
-> - **`invite.locale`** takes `en` or `af`; an `af` invite is sent in English
->   until the Afrikaans wording lands (WP-2.5). A new account's
->   `app_user.locale` isn't set from it yet: `app_user` has no `locale`
->   column until WP-2.4/2.5 adds it.
+> - **`invite.locale`** takes `en` or `af`; an `af` invite goes out through
+>   the email catalogue (WP-2.5), in English until the reviewed Afrikaans
+>   lands. A new account takes its `app_user.locale` from the invite
+>   (050_user_locale.sql).
 > - The e2e plants the invite token instead of reading Mailpit, like the
 >   other invite specs (e2e mails go to the server log).
 
@@ -782,6 +782,28 @@ audit log of model changes yet" from Known gaps).
 ---
 
 ### WP-2.5 Internationalisation foundation and Afrikaans
+
+> **Status: plumbing built, translation pending** (`050_user_locale.sql`,
+> `frontend/src/lib/i18n/`, `backend/src/mail/i18n/`;
+> [ui.md § Language](../ui.md#language), [api.md § Auth](../api.md#auth)).
+> Where the build departs from the plan below, and why:
+> - **`af.ts` is `Partial`**, not a full `Record`: no Afrikaans is reviewed
+>   yet and nothing is invented, so a missing key shows in English and must be
+>   on `docs/i18n/af-translation-sheet.md` (432 strings; the catalogue tests
+>   fail otherwise). An unknown key still fails `pnpm check`.
+> - **`<html lang>` follows the words**, not the choice: it stays `en` until
+>   the Afrikaans catalogue is complete, and dates follow it too; numbers
+>   switch to the decimal comma at once. The workspace and `/share` stay
+>   `en`.
+> - **The switch** is on the sign-in pages, the farm header and the account
+>   page, not the workspace header (the workspace isn't translated).
+> - **`invite.locale`** already existed (034); 050 adds `app_user.locale`
+>   (NULL = not chosen) and `volume_unit`, and `app_accept_invites` gives a
+>   new account its invite's locale. Sign-up takes the page's `locale`.
+> - **Help:** `content.af.ts` with `sourceHash` and its test are built; the
+>   `gen:i18n:stamp` script isn't (the sheet prints the hash). The root
+>   scripts are `gen:i18n:sheet` and `check:i18n`.
+> - Left over: [followups.md § Afrikaans](../followups.md#afrikaans-wp-25).
 
 **Goal.** English and Afrikaans for everything a farmer touches, with no
 heavy dependency, and help text that can't silently drift out of date.

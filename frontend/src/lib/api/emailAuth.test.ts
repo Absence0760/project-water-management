@@ -85,9 +85,9 @@ describe('signed-out access', () => {
 
 describe('passwordProblem', () => {
 	it('checks length and confirmation like the server', () => {
-		expect(passwordProblem('short', 'short')).toMatch(/at least 8/);
-		expect(passwordProblem('x'.repeat(201), 'x'.repeat(201))).toMatch(/at most 200/);
-		expect(passwordProblem('longenough', 'longenougH')).toMatch(/don’t match/);
+		expect(passwordProblem('short', 'short')).toBe('password.tooShort');
+		expect(passwordProblem('x'.repeat(201), 'x'.repeat(201))).toBe('password.tooLong');
+		expect(passwordProblem('longenough', 'longenougH')).toBe('password.mismatch');
 		expect(passwordProblem('longenough', 'longenough')).toBeNull();
 	});
 });

@@ -5,9 +5,18 @@
 // The page is for people outside the project (a catchment forum, a
 // municipality): the catchment-level result only, in the farmer view's plain
 // words, with no farm named anywhere (the API sends none).
+//
+// The share page isn't in the message catalogue yet (WP-2.5 translated the
+// signed-in farmer surfaces; docs/followups.md § Afrikaans), so its words are
+// English here rather than borrowed from the farm view's catalogue keys.
 import type { PublicationRestriction, SharedCatchmentView, ShareView } from '$lib/api/types';
-import { LEVEL_WORD, splitNotice, type NoticeVm } from '$lib/components/farm/cards';
-import { fmtDay, fmtPct, fmtStampDay, plural } from '$lib/components/farm/format';
+import { splitNotice, type NoticeVm } from '$lib/components/farm/notice';
+import { fmtDay, fmtPct, fmtStampDay, NBSP } from '$lib/components/farm/numbers';
+
+const LEVEL_WORD: Record<PublicationRestriction['level'], string> = { none: 'No restriction', advisory: 'Advisory', restricted: 'Restriction' };
+
+/** "1 day", "3 farms". */
+const plural = (n: number, one: string) => `${n}${NBSP}${n === 1 ? one : `${one}s`}`;
 
 /** A share token as we issue it: 32 bytes, base64url (backend auth/tokens.ts). */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;

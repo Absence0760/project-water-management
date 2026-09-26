@@ -2,9 +2,10 @@
 // level expected, around which day, and the days the farm may be short, from
 // the published forecast run. Worded as what the model expects on forecast
 // rain, never as what will happen, and with the day the forecast was made so
-// an old one reads as old.
+// an old one reads as old. Words from the message catalogue ($lib/i18n, WP-2.5).
 import type { FarmProjection } from '@water-management/engine';
-import { daysBetween, fmtDayMonth, fmtPct, plural } from './format';
+import { t } from '$lib/i18n/locale.svelte';
+import { count, daysBetween, fmtDayMonth, fmtPct } from './format';
 
 export interface ForecastVm {
 	/** "Next 14 days". */
@@ -22,7 +23,7 @@ export interface ForecastVm {
 /** A forecast older than this many days is flagged on the card. */
 export const FORECAST_OLD_DAYS = 3;
 
-export const FORECAST_FINE = 'Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction.';
+export const forecastFine = () => t('farm.forecast.fine');
 
 /** The card's view model, or null when the published run has no forecast (the card is left out). */
 export function forecastCard(farm: FarmProjection, today: string): ForecastVm | null {
@@ -30,10 +31,15 @@ export function forecastCard(farm: FarmProjection, today: string): ForecastVm | 
 	if (!f) return null;
 	const age = daysBetween(f.madeOn, today);
 	return {
-		title: `Next ${plural(f.days, 'day')}`,
-		dam: f.minDamPct === null ? null : `Lowest dam level expected: about ${fmtPct(f.minDamPct)}${f.minDamDate ? ` around ${fmtDayMonth(f.minDamDate)}` : ''}`,
-		short: f.deficitDays === 0 ? `The model doesn’t expect you to be short on any of these ${f.days} days.` : `You may be short on ${f.deficitDays} of the ${f.days} days.`,
-		fine: `From the rain forecast of ${fmtDayMonth(f.madeOn)}, for ${fmtDayMonth(f.from)} to ${fmtDayMonth(f.to)}. ${FORECAST_FINE}`,
-		old: age > FORECAST_OLD_DAYS ? `This forecast is ${plural(age, 'day')} old. Your WUA may publish a newer one.` : null
+		title: t('farm.forecast.title', { days: count('farm.n.day', f.days) }),
+		dam:
+			f.minDamPct === null
+				? null
+				: f.minDamDate
+					? t('farm.forecast.damAround', { pct: fmtPct(f.minDamPct), date: fmtDayMonth(f.minDamDate) })
+					: t('farm.forecast.dam', { pct: fmtPct(f.minDamPct) }),
+		short: f.deficitDays === 0 ? t('farm.forecast.noShort', { days: f.days }) : t('farm.forecast.short', { n: f.deficitDays, days: f.days }),
+		fine: `${t('farm.forecast.from', { made: fmtDayMonth(f.madeOn), from: fmtDayMonth(f.from), to: fmtDayMonth(f.to) })} ${forecastFine()}`,
+		old: age > FORECAST_OLD_DAYS ? t('farm.forecast.old', { age: count('farm.n.day', age) }) : null
 	};
 }

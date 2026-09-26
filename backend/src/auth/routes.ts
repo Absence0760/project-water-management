@@ -9,10 +9,15 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 import { clearSession, issueSession } from './session.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
+import { LOCALES } from '../mail/i18n/index.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
 const displayName = z.string().trim().min(1).max(100);
+/** app_user.locale (050): the farmer-facing pages' and emails' language; null = not chosen (follow the browser). */
+const locale = z.enum(LOCALES).nullable();
+/** app_user.volume_unit (050): how the farm view shows volumes. */
+const volumeUnit = z.enum(['m3', 'ML']);
 
 const RegisterBody = z.object({
 	email,
@@ -21,10 +26,16 @@ const RegisterBody = z.object({
 	/** Token from an invite link (`/register?invite=…`). Signing up with it,
 	 *  for the invited address, proves the inbox: the account starts verified
 	 *  and joins the invited projects/teams straight away. */
-	inviteToken: z.string().max(200).optional()
+	inviteToken: z.string().max(200).optional(),
+	/** The language the sign-up page was in, when the person picked one there. */
+	locale: z.enum(LOCALES).optional()
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
-const MeBody = z.object({ displayName });
+const MeBody = z
+	.object({ displayName: displayName.optional(), locale: locale.optional(), volumeUnit: volumeUnit.optional() })
+	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined, {
+		message: 'nothing to change: send displayName, locale or volumeUnit'
+	});
 const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 
 /**
@@ -49,14 +60,23 @@ export function lockedMessage(seconds: number): string {
 	return `too many sign-in attempts for this address — try again in ${wait}, or reset your password`;
 }
 
-type UserRow = { id: string; email: string; display_name: string; email_verified_at: Date | null };
+type UserRow = {
+	id: string;
+	email: string;
+	display_name: string;
+	email_verified_at: Date | null;
+	locale: 'en' | 'af' | null;
+	volume_unit: 'm3' | 'ML';
+};
 const toUser = (r: UserRow) => ({
 	id: r.id,
 	email: r.email,
 	displayName: r.display_name,
-	emailVerified: r.email_verified_at !== null
+	emailVerified: r.email_verified_at !== null,
+	locale: r.locale,
+	volumeUnit: r.volume_unit
 });
-const USER_COLS = 'id, email, display_name, email_verified_at';
+const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_unit';
 
 export const authRoutes = new Hono<AuthEnv>()
 	.post('/register', async (c) => {
@@ -65,9 +85,9 @@ export const authRoutes = new Hono<AuthEnv>()
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
 		const result = await withoutUser(async (db) => {
 			const { rows } = await db.query<UserRow>(
-				`INSERT INTO app_user (email, display_name, password_hash) VALUES ($1, $2, $3)
+				`INSERT INTO app_user (email, display_name, password_hash, locale) VALUES ($1, $2, $3, $4)
 				 ON CONFLICT (email) DO NOTHING RETURNING ${USER_COLS}`,
-				[body.email, body.displayName, hash]
+				[body.email, body.displayName, hash, body.locale ?? null]
 			);
 			const row = rows[0];
 			if (!row) return null;
@@ -78,7 +98,9 @@ export const authRoutes = new Hono<AuthEnv>()
 				]);
 				if (inv[0] && inv[0].email.toLowerCase() === row.email.toLowerCase()) {
 					await markVerified(db, row.id);
-					return { row: { ...row, email_verified_at: new Date() }, mail: null };
+					// Accepting may have set the locale from the invite (050).
+					const { rows: fresh } = await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id]);
+					return { row: fresh[0]!, mail: null };
 				}
 			}
 			return { row, mail: await verificationMail(db, row.id, row.email) };
@@ -139,10 +161,15 @@ export const authRoutes = new Hono<AuthEnv>()
 	})
 	.patch('/me', requireUser, async (c) => {
 		const body = MeBody.parse(await readJson(c));
+		// Only the fields sent change; locale may be set back to null (follow the browser).
 		const row = await withoutUser(async (db) => {
 			const { rows } = await db.query<UserRow>(
-				`UPDATE app_user SET display_name = $2 WHERE id = $1 RETURNING ${USER_COLS}`,
-				[c.get('userId'), body.displayName]
+				`UPDATE app_user SET
+					display_name = coalesce($2, display_name),
+					locale = CASE WHEN $3::boolean THEN $4 ELSE locale END,
+					volume_unit = coalesce($5, volume_unit)
+				 WHERE id = $1 RETURNING ${USER_COLS}`,
+				[c.get('userId'), body.displayName ?? null, body.locale !== undefined, body.locale ?? null, body.volumeUnit ?? null]
 			);
 			return rows[0];
 		});

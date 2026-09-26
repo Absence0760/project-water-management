@@ -3,12 +3,13 @@
 	// published notice in the warning (advisory) or danger (restricted) fill,
 	// with an icon and the level in words, or a loud "No restriction from the
 	// WUA" in the success fill. Only this card uses those fills (§6.2).
-	import type { NoticeVm } from './cards';
-	import { NO_RESTRICTION } from './cards';
+	import type { NoticeVm } from './notice';
 
 	// `lang`: the language the WUA's words are in, when it isn't the page's
 	// (the /share page's Afrikaans notice); our own label stays unmarked.
-	let { notice, lang = null }: { notice: NoticeVm | null; lang?: string | null } = $props();
+	// `noneText`: the "No restriction from the WUA" heading, in the page's words
+	// (the farm view's comes from the catalogue, /share's is English).
+	let { notice, noneText, lang = null }: { notice: NoticeVm | null; noneText: string; lang?: string | null } = $props();
 </script>
 
 {#if notice}
@@ -40,7 +41,7 @@
 {:else}
 	<section id="notice" class="notice none" aria-labelledby="notice-h">
 		<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9" /><path d="M7.5 12.5 L10.5 15.5 L16.5 9" /></svg>
-		<h2 id="notice-h">{NO_RESTRICTION}</h2>
+		<h2 id="notice-h">{noneText}</h2>
 	</section>
 {/if}
 

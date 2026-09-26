@@ -13,12 +13,12 @@ storage.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
+| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `201 { user }` + cookie; sends a verification email; `409` address already has an account |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
-| PATCH | `/auth/me` | `{ displayName }` | `200 { user }`; `400` blank or over 100 characters (signed in) |
+| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
@@ -62,8 +62,22 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`PATCH /auth/me`** changes only the display name (trimmed, 1–100
-  characters). The email address isn't editable; other keys are ignored.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit }`.
+  `locale` is `'en' | 'af' | null` (`app_user.locale`, 050_user_locale.sql,
+  WP-2.5): the language of the farmer-facing pages and of the emails the
+  account receives; `null` means not chosen (the site follows the browser,
+  emails are English). `volumeUnit` is `'m3' | 'ML'` (default `'m3'`), how
+  the farm view shows volumes.
+- **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
+  1–100 characters), `locale` (`'en'`, `'af'`, or `null` to go back to
+  following the browser) and `volumeUnit` (`'m3'` or `'ML'`). At least one
+  is required. The email address isn't editable; other keys are ignored.
+- **`register`** takes an optional `locale` (the language the sign-up page
+  was in). Without one, an account that accepts an invite takes the invite's
+  `locale` (`app_accept_invites`, 050); a chosen locale is never overwritten.
+  The verification, reset and farmer-invite emails go out in the account's
+  (or the invite's) language, English where the Afrikaans isn't reviewed yet
+  ([ui.md § Language](./ui.md#language)).
 - **`reset-password`** sets the new password, also marks the address verified
   (the link proved the inbox), and **signs out every existing session**
   (`app_user.sessions_revoked_at`; any session issued before it gets `401`).

@@ -4,6 +4,8 @@
 	import { api } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import { t, tRich } from '$lib/i18n/locale.svelte';
+	import Rich from '$lib/i18n/Rich.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -28,31 +30,28 @@
 	}
 </script>
 
-<svelte:head><title>Reset your password · Water Management</title></svelte:head>
+<svelte:head><title>{t('common.pageTitle', { page: t('forgot.title') })}</title></svelte:head>
 
-<AuthCard
-	title={sentTo ? 'Check your email' : 'Reset your password'}
-	subtitle={sentTo ? undefined : 'Enter the email address you signed up with and we’ll send you a link to choose a new password.'}
->
+<AuthCard title={sentTo ? t('forgot.titleSent') : t('forgot.title')} subtitle={sentTo ? undefined : t('forgot.subtitle')}>
 	{#if sentTo}
 		<!-- Same message whether or not the address has an account (no enumeration). -->
 		<div class="alert alert-info" role="status">
-			<p>If there is an account for <strong>{sentTo}</strong>, we’ve emailed it a link to choose a new password.</p>
-			<p>The link works once and expires in 1 hour. Check your spam folder if it doesn’t arrive in a few minutes.</p>
+			<p><Rich text={tRich('forgot.sentTo', { email: sentTo })} /></p>
+			<p>{t('forgot.sentHelp')}</p>
 		</div>
-		<button type="button" class="btn" onclick={() => (sentTo = null)}>Use a different address</button>
+		<button type="button" class="btn" onclick={() => (sentTo = null)}>{t('forgot.otherAddress')}</button>
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<form onsubmit={submit}>
 			<div class="field">
-				<label for="email">Email</label>
+				<label for="email">{t('common.email')}</label>
 				<input id="email" type="email" autocomplete="email" inputmode="email" required bind:value={email} />
 			</div>
-			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
+			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('common.sending') : t('forgot.submit')}</button>
 		</form>
 	{/if}
 	{#snippet footer()}
-		Remembered it? <a href="{base}/login">Sign in</a>
+		{t('forgot.remembered')} <a href="{base}/login">{t('common.signIn')}</a>
 	{/snippet}
 </AuthCard>
 

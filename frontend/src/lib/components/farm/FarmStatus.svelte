@@ -3,7 +3,8 @@
 	// publication yet, access removed, and the error with Try again (the
 	// contact line after a second failure). No raw error text (CLAUDE.md rule 6).
 	import { base } from '$app/paths';
-	import { STATES, stillFailing } from './cards';
+	import { t } from '$lib/i18n/locale.svelte';
+	import { stateText, stillFailing } from './cards';
 
 	let {
 		kind,
@@ -24,26 +25,26 @@
 
 {#if kind === 'error'}
 	<div class="error" role="alert">
-		<h1>{STATES.errorTitle}</h1>
-		<p>{STATES.errorText}</p>
-		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>Try again</button>{/if}
+		<h1>{stateText('errorTitle')}</h1>
+		<p>{stateText('errorText')}</p>
+		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('common.tryAgain')}</button>{/if}
 		{#if attempts > 1}<p>{stillFailing(offline)}</p>{/if}
 	</div>
 {:else if kind === 'removed'}
-	<h1>{farmName ?? 'Your farm'}</h1>
-	<p role="alert">{STATES.removed}</p>
-	<a class="link" href="{base}/farm">Your farms</a>
+	<h1>{farmName ?? t('farm.yourFarm')}</h1>
+	<p role="alert">{stateText('removed')}</p>
+	<a class="link" href="{base}/farm">{t('farm.yourFarms')}</a>
 {:else}
 	<div>
-		<h1>{farmName ?? 'Your farm'}</h1>
+		<h1>{farmName ?? t('farm.yourFarm')}</h1>
 		{#if projectName}<p class="sub">{projectName}</p>{/if}
 	</div>
 	<section class="card empty" aria-labelledby="empty-h">
 		<svg width="36" height="36" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 C12 3 6 10 6 14 a6 6 0 0 0 12 0 C18 10 12 3 12 3 Z" /></svg>
-		<h2 id="empty-h">{STATES.noPublication}</h2>
-		<p>{STATES.noPublicationText}</p>
+		<h2 id="empty-h">{stateText('noPublication')}</h2>
+		<p>{stateText('noPublicationText')}</p>
 	</section>
-	<p class="sub">{STATES.contact}</p>
+	<p class="sub">{stateText('contact')}</p>
 {/if}
 
 <style>

@@ -23,6 +23,7 @@ describe('email templates', () => {
 
 	it.each([
 		['verify', verifyEmailMail('ann@example.com', url), /Confirm your email address — Water Management/, /48 hours/],
+		['verify (no locale chosen: English)', verifyEmailMail('ann@example.com', url, null), /Confirm your email address — Water Management/, /48 hours/],
 		['reset', resetPasswordMail('ann@example.com', url), /Reset your password — Water Management/, /1 hour/],
 		[
 			'invite',
@@ -137,11 +138,9 @@ describe('farmer invite email (WP-2.2)', () => {
 		expect(mail.text).toContain('There is already a Water Management account for farmer@example.com');
 	});
 
-	it('defaults to English, and sends an Afrikaans invite in English until its translation lands (WP-2.5)', () => {
+	it('defaults to English (the Afrikaans wording is in templates.af.test.ts)', () => {
 		const facts = { catchment: 'Kloof', farms: ['Hoek'] };
-		const en = farmerInviteMail('f@example.com', url, 'Ann', facts);
-		expect(farmerInviteMail('f@example.com', url, 'Ann', facts, 'sign-up', 'en')).toEqual(en);
-		expect(farmerInviteMail('f@example.com', url, 'Ann', facts, 'sign-up', 'af')).toEqual(en);
+		expect(farmerInviteMail('f@example.com', url, 'Ann', facts, 'sign-up', 'en')).toEqual(farmerInviteMail('f@example.com', url, 'Ann', facts));
 	});
 
 	it('escapes farm, catchment and inviter names in the HTML', () => {

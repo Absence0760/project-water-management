@@ -47,7 +47,10 @@ export async function markVerified(db: Db, userId: string): Promise<void> {
  */
 export async function verificationMail(db: Db, userId: string, to: string): Promise<Mail | null> {
 	const raw = await issueEmailToken(db, userId, 'verify');
-	return raw ? verifyEmailMail(to, siteLink('/verify-email', raw)) : null;
+	if (!raw) return null;
+	// In the person's language (app_user.locale, 050); English when unset.
+	const { rows } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = $1', [userId]);
+	return verifyEmailMail(to, siteLink('/verify-email', raw), rows[0]?.locale);
 }
 
 export const emailAuthRoutes = new Hono<AuthEnv>()
@@ -57,13 +60,14 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/forgot-password', async (c) => {
 		const body = z.object({ email }).parse(await readJson(c));
 		const mail = await withoutUser(async (db) => {
-			const { rows } = await db.query<{ id: string; email: string }>('SELECT id, email FROM app_user WHERE email = $1', [
-				body.email
-			]);
+			const { rows } = await db.query<{ id: string; email: string; locale: string | null }>(
+				'SELECT id, email, locale FROM app_user WHERE email = $1',
+				[body.email]
+			);
 			const user = rows[0];
 			if (!user) return null;
 			const raw = await issueEmailToken(db, user.id, 'reset');
-			return raw ? resetPasswordMail(user.email, siteLink('/reset-password', raw)) : null;
+			return raw ? resetPasswordMail(user.email, siteLink('/reset-password', raw), user.locale) : null;
 		});
 		if (mail) await trySendMail(mail);
 		return c.json({ ok: true }, 202);

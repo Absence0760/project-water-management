@@ -77,7 +77,7 @@ test('a wrong password shows an error and stays on the login page', async ({ pag
 	await page.goto('/login');
 	await signInThroughForm(page, user.email, 'not the password');
 
-	await expect(page.getByRole('alert')).toHaveText('wrong email or password');
+	await expect(page.getByRole('alert')).toHaveText('Wrong email or password.');
 	await expect(page).toHaveURL('/login');
 	await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
 });
@@ -158,7 +158,7 @@ test('a reset link sets a new password and signs in with it', async ({ page, pla
 
 	await page.getByRole('link', { name: 'Sign in', exact: true }).click();
 	await signInThroughForm(page, user.email, user.password);
-	await expect(page.getByRole('alert')).toHaveText('wrong email or password');
+	await expect(page.getByRole('alert')).toHaveText('Wrong email or password.');
 	await page.getByLabel('Password').fill('a brand new passphrase');
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
