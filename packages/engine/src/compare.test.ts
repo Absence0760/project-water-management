@@ -802,6 +802,28 @@ describe('diffInputs', () => {
 		expect(texts(s('aa'), longer)).toEqual(['Rainfall (catchment) series extended to 2001-01-01 (was 2000-12-31)', 'Rainfall (catchment): the days both runs cover were not checked for edits (a run from before runs stored their input series)']);
 	});
 
+	it('notes a CHIRPS version change (issue #40 part c), only when both runs recorded the version', () => {
+		const s = (provenance?: { product: string; version: string } | null) =>
+			snapshot({
+				series: { rain_chirps_mm: { startDate: '2000-01-01', length: 366, valuesSha256: 'aa', ...(provenance !== undefined ? { provenance } : {}) } }
+			});
+		const v2 = { product: 'CHIRPS', version: '2.0' };
+		const v3 = { product: 'CHIRPS', version: '3.0' };
+		expect(texts(s(v2), s(v3))).toEqual([
+			'Rainfall (CHIRPS) is now CHIRPS v3.0 (was CHIRPS v2.0): the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds'
+		]);
+		expect(texts(s(null), s(v3))).toEqual([
+			'Rainfall (CHIRPS) is now CHIRPS v3.0 (was an unrecorded version): the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds'
+		]);
+		expect(texts(s(v2), s({ ...v2 }))).toEqual([]);
+		// A run from before the version was recorded: nothing to compare.
+		expect(texts(s(), s(v3))).toEqual([]);
+		// Another kind gets the line without the CHIRPS factors' note.
+		const rain = (provenance: { product: string; version: string } | null) =>
+			snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 366, valuesSha256: 'aa', provenance } } });
+		expect(texts(rain(null), rain(v3))).toEqual(['Rainfall (catchment) is now CHIRPS v3.0 (was an unrecorded version)']);
+	});
+
 	it('compares the days both runs cover from their stored values, so an edit cannot hide behind a date change', () => {
 		// The licensing-authority finding: rain cut 15 % and one day added read only "series extended".
 		const rain = Array.from({ length: 366 }, (_, i) => (i % 7 === 0 ? 20 : 0));

@@ -479,6 +479,14 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, chirpsBiasCorrection: 'yearly' } })).toBe(false); // not a known mode
 	});
 
+	it('accepts an optional chirpsSource inside forcing (issue #40c): a product and version, or null for not recorded', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		expect(ok({ ...record, forcing: { ...forcing, chirpsSource: { product: 'CHIRPS', version: '2.0' } } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsSource: null } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsSource: { product: 'CHIRPS', version: '' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, chirpsSource: { product: 'CHIRPS', version: '2.0', extra: 1 } } })).toBe(false);
+	});
+
 	it('accepts an optional, whole zeroRainRuns inside forcing (CR-20)', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100], chirpsBiasCorrection: 'monthly' };
 		const zr = { mode: 'missing', keepDry: [{ waterYear: 2003, reason: 'real drought' }], missing: [] };

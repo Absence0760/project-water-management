@@ -11,6 +11,7 @@ import type { RainSourceInfo } from './rainSourcePeriods';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Gr4jParams } from './runoff/gr4j';
 import type { RunoffModelId } from './runoff/types';
+import type { SeriesProvenance } from './seriesProvenance';
 import { defaultWr2012Settings, type Wr2012Report, type Wr2012Settings } from './reference/wr2012';
 import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
@@ -790,6 +791,13 @@ export interface LandCoverPatch {
 export interface DailySeries {
 	startDate: string;
 	values: (number | null)[];
+	/**
+	 * The product and version the values come from (time_series.product /
+	 * product_version, 032_series_provenance.sql); null = not recorded, absent
+	 * = not known here. The model never reads it: a run records it in its input
+	 * snapshot, for the run comparison and the fit record's forcing.
+	 */
+	provenance?: SeriesProvenance | null;
 }
 
 export interface SeriesMeta {
@@ -801,6 +809,11 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
+	product?: string | null;
+	productVersion?: string | null;
+	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
+	rebuilding?: boolean;
 }
 
 // ---------------------------------------------------------------------------

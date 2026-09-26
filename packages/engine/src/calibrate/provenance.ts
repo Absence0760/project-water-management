@@ -17,6 +17,7 @@ import { waterYearLabel } from '../quality';
 import { GR4J_PARAMS } from '../runoff/gr4j';
 import { LEGACY_PARAMS } from '../runoff/legacy';
 import type { RunoffModelId } from '../runoff/types';
+import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
 import type { CalibrationBounds, CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ParamSet, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { ObjectiveId } from './objective';
 
@@ -189,6 +190,10 @@ export interface FitRecord {
 	 * each gap, so it is recorded too, with the factors themselves per fit
 	 * range (`chirpsFactors`, from the fit's own run); both absent on a
 	 * `forcing` made before them.
+	 * `chirpsSource` is the product and version the CHIRPS series held
+	 * (issue #40 part c; null = not recorded, absent on a record made before
+	 * it was tracked): the monthly CHIRPS factors are fitted on those values,
+	 * so a different version changes the rain on every gap-filled day.
 	 * `settings.rainSource` (engine ≥ 0.30.0) replaces the rain over its
 	 * periods, so it is recorded too; a `forcing` without it ran with none.
 	 */
@@ -199,6 +204,7 @@ export interface FitRecord {
 		zeroRainRuns?: ZeroRainSettings;
 		chirpsFitPeriod?: ChirpsFitPeriod;
 		chirpsFactors?: ChirpsFactorSet[] | null;
+		chirpsSource?: SeriesProvenance | null;
 		rainSource?: RainSourcePeriod[];
 	};
 	splitSample: ValidationTest | null;
@@ -231,6 +237,8 @@ export interface FitContext {
 	validationRecord: CalibrationFlowKind | null;
 	engineVersion: string;
 	fittedAt: string;
+	/** The CHIRPS series' product and version when the fit ran (null = not recorded); omit when not known. */
+	chirpsSource?: SeriesProvenance | null;
 }
 
 /** The fit record for a report, as Apply stores it. */
@@ -266,6 +274,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.settings.zeroRainRuns ? { zeroRainRuns: structuredClone(ctx.settings.zeroRainRuns) } : {}),
 			chirpsFitPeriod: structuredClone(ctx.settings.chirpsFitPeriod ?? 'all'),
 			...(r.chirpsFactors !== undefined ? { chirpsFactors: structuredClone(r.chirpsFactors) } : {}),
+			...(ctx.chirpsSource !== undefined ? { chirpsSource: ctx.chirpsSource ? { ...ctx.chirpsSource } : null } : {}),
 			rainSource: structuredClone(ctx.settings.rainSource ?? [])
 		},
 		splitSample: r.splitSample,
@@ -325,9 +334,16 @@ export interface FitRecordStatus {
 	 * the fit. False for records made before `forcing` was recorded, and a
 	 * field added to `forcing` later (`chirpsBiasCorrection`, `zeroRainRuns`)
 	 * never flags a record made before it: there is nothing to compare
-	 * against.
+	 * against. Also true when `chirpsSourceChanged`.
 	 */
 	forcingChanged: boolean;
+	/**
+	 * The CHIRPS series now holds another product or version than the fit ran
+	 * on (CHIRPS v2.0 → v3.0): the monthly CHIRPS factors, and so every
+	 * gap-filled day's rain, changed. False when the record or the caller
+	 * doesn't know the version.
+	 */
+	chirpsSourceChanged: boolean;
 }
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -375,10 +391,17 @@ function forcingDiff(
 	};
 }
 
-/** Compare a fit record with the settings (the form, or a run's snapshot). */
-export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitRecord): FitRecordStatus {
+/** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */
+export interface FitForcingNow {
+	chirpsSource?: SeriesProvenance | null;
+}
+
+/** Compare a fit record with the settings (the form, or a run's snapshot), and with the CHIRPS series' version when `now` gives it. */
+export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitRecord, now: FitForcingNow = {}): FitRecordStatus {
 	const kind = settings.calibrationFlowKind ?? null;
 	const forcing = forcingDiff(settings, record);
+	const recorded = record.forcing?.chirpsSource;
+	const chirpsSourceChanged = recorded !== undefined && now.chirpsSource !== undefined && !sameProvenance(recorded, now.chirpsSource);
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (settings.runoffModel ?? 'legacy') !== record.model,
@@ -386,7 +409,10 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
-		forcingChanged: !!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)
+		forcingChanged:
+			chirpsSourceChanged ||
+			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
+		chirpsSourceChanged
 	};
 }
 
@@ -400,7 +426,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.windowChanged) out.push('The calibration window has changed since the fit.');
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
-	if (status.forcingChanged) {
+	if (status.chirpsSourceChanged) {
+		out.push(
+			'The CHIRPS series holds another product or version than the fit ran on, so the monthly CHIRPS factors and the rain on every day CHIRPS fills have changed. Refit before relying on the parameters.'
+		);
+	}
+	if (status.forcingChanged && !status.chirpsSourceChanged) {
 		out.push(
 			'The pan coefficient, A-pan evaporation, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);

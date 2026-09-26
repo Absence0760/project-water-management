@@ -1,7 +1,7 @@
 // The fit behind each compared run's parameters (issue #4): its in-sample
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
-import { describeFitRecord, fitRecordStatus, type FitRecord, type FitScores, type ProjectSettings } from '@water-management/engine';
+import { describeFitRecord, fitRecordStatus, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 import { objectiveName } from '$lib/calibration/fit';
 
 export interface FitValidationRow {
@@ -24,10 +24,11 @@ export function asFitRecord(v: unknown): FitRecord | null {
  * with no record, 'unknown' when the run's settings weren't given (older
  * callers), else 'yes'/'no'.
  */
-const forcingChangedText = (r: FitRecord | null, settings: Partial<ProjectSettings> | null | undefined): string => {
+const forcingChangedText = (r: FitRecord | null, settings: Partial<ProjectSettings> | null | undefined, chirpsSource: SeriesProvenance | null | undefined): string => {
 	if (!r) return '–';
 	if (!settings) return 'unknown';
-	return fitRecordStatus(settings, r).forcingChanged ? 'yes' : 'no';
+	const s = fitRecordStatus(settings, r, { chirpsSource });
+	return s.chirpsSourceChanged ? 'yes (another CHIRPS product or version)' : s.forcingChanged ? 'yes' : 'no';
 };
 
 /**
@@ -39,7 +40,9 @@ export function fitValidationRows(
 	ra: FitRecord | null,
 	rb: FitRecord | null,
 	settingsA?: Partial<ProjectSettings> | null,
-	settingsB?: Partial<ProjectSettings> | null
+	settingsB?: Partial<ProjectSettings> | null,
+	/** Each run's CHIRPS series product and version (its input snapshot); undefined when not recorded. */
+	chirps: { a?: SeriesProvenance | null; b?: SeriesProvenance | null } = {}
 ): FitValidationRow[] | null {
 	if (!ra && !rb) return null;
 	const both = (f: (r: FitRecord) => string) => ({ a: ra ? f(ra) : '–', b: rb ? f(rb) : '–' });
@@ -65,6 +68,6 @@ export function fitValidationRows(
 			})
 		},
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) },
-		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA), b: forcingChangedText(rb, settingsB) }
+		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA, chirps.a), b: forcingChangedText(rb, settingsB, chirps.b) }
 	];
 }

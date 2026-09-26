@@ -9,7 +9,7 @@ import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
-import { toCanonicalUnit } from '../series/merge.js';
+import { checkProvenance, ProvenanceFields, toCanonicalUnit } from '../series/merge.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 
 /** Marker written into exports; the importer ignores unknown top-level keys. */
@@ -32,8 +32,11 @@ export const ProjectFile = z.object({
 				name: z.string().trim().max(100).default(''),
 				unit: z.string().trim().min(1).max(20),
 				startDate: SeriesStartDate,
-				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES)
+				values: z.array(z.number().finite().nullable()).max(MAX_SERIES_VALUES),
+				// What the values are (032_series_provenance.sql), e.g. CHIRPS 2.0; absent = not recorded.
+				...ProvenanceFields
 			})
+			.superRefine(checkProvenance)
 			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
 			.transform(toCanonicalUnit)
 		)
@@ -51,7 +54,8 @@ export interface ProjectDocument {
 	/** Stored settings merged over the defaults, so the file is self-contained. */
 	settings: Record<string, unknown>;
 	model: ProjectModel;
-	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[] }[];
+	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
+	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string }[];
 }
 
 /** Read a project as a portable document (caller has already checked access). */
@@ -63,10 +67,12 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	const p = rows[0];
 	if (!p) return null;
 	const model = await loadModel(db, projectId);
-	const { rows: series } = await db.query<ProjectDocument['series'][number]>(
-		`SELECT kind, name, unit, start_date AS "startDate", "values" FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
+	const { rows: stored } = await db.query<ProjectDocument['series'][number] & { product: string | null; productVersion: string | null }>(
+		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion"
+		 FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
+	const series = stored.map(({ product, productVersion, ...s }) => (product !== null && productVersion !== null ? { ...s, product, productVersion } : s));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,
 		version: PROJECT_DOCUMENT_VERSION,

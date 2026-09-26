@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, type FitRecord, type ProjectSettings } from '@water-management/engine';
+	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, type FitRecord, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -21,7 +21,8 @@
 		settings,
 		heading = 'Where the parameters came from',
 		headingLevel = 3,
-		context = 'run'
+		context = 'run',
+		chirpsSource
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -30,10 +31,12 @@
 		headingLevel?: 3 | 4;
 		/** 'run': a stored run; 'form': the unsaved Settings form. */
 		context?: 'run' | 'form';
+		/** The CHIRPS series' product and version now (the run's, or the project's); undefined when not known. */
+		chirpsSource?: SeriesProvenance | null;
 	} = $props();
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);
@@ -74,6 +77,13 @@
 				<div>
 					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
 					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
+				</div>
+				<!-- Issue #40c: the CHIRPS product and version the fit ran on, and the series' now when it differs. -->
+				<div data-testid="fit-chirps-source">
+					<dt>CHIRPS series</dt>
+					<dd>
+						{record.forcing.chirpsSource !== undefined ? provenanceLabel(record.forcing.chirpsSource) : 'not recorded (fit made before this was tracked)'}{#if status?.chirpsSourceChanged}{' '}(now {provenanceLabel(chirpsSource)}){/if}
+					</dd>
 				</div>
 				{#if record.forcing.chirpsFactors?.length}
 					<div>

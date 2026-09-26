@@ -121,18 +121,24 @@ test('a feed that fails shows as failing, with the warning above the list', asyn
 test('attaching a feed to a series that already has data asks first, and offers a separate series', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Feed takeover');
-	// An imported gauge record the feed would mix with (it keeps these values and fills only empty days).
-	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2026-01-01', values: Array.from({ length: 1200 }, (_, i) => i % 7) });
+	// A CHIRPS record of the feed's own product and version (so no version question, #40c) the feed would mix with (it keeps these values and fills only empty days).
+	await putSeries(page.request, project.id, {
+		kind: 'rain_chirps_mm',
+		unit: 'mm',
+		startDate: '2023-01-01',
+		values: Array.from({ length: 1200 }, (_, i) => i % 7),
+		product: 'CHIRPS sat',
+		productVersion: '3.0'
+	});
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
-	await panel.getByLabel('Into series').selectOption({ label: 'Rainfall — catchment' });
 	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 
 	// Nothing is attached yet: the form asks, with focus on the safe choice.
-	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — catchment” already has data (1,200 days).' });
+	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — CHIRPS” already has data (1,200 days).' });
 	await expect(ask).toBeVisible();
 	await expect(ask).toHaveAccessibleDescription(/The values already there stay, including ones you uploaded or imported: the feed fills only the days without one.*such as “CHIRPS”/);
 	const separate = ask.getByRole('button', { name: 'Use a separate series: CHIRPS' });
@@ -159,19 +165,73 @@ test('attaching a feed to a series that already has data asks first, and offers 
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 	const feeds = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await expect(feeds).toHaveCount(1);
-	await expect(feeds).toContainText('Rainfall — catchment · CHIRPS');
+	await expect(feeds).toContainText('Rainfall — CHIRPS · CHIRPS');
 
 	// Mixing on purpose: "Fill its empty days" attaches into the existing series.
 	await panel.getByRole('button', { name: 'Attach a feed' }).click();
-	await panel.getByLabel('Into series').selectOption({ label: 'Rainfall — catchment' });
 	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 	// "CHIRPS" is taken now (the first feed's series name), so the suggestion moves on.
 	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS 2' })).toBeFocused();
 	await ask.getByRole('button', { name: 'Fill its empty days' }).click();
 	await expect(feeds).toHaveCount(2);
-	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: Rainfall — catchment from cell -20.12, 25.17.' })).toBeVisible();
+	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: Rainfall — CHIRPS from cell -20.12, 25.17.' })).toBeVisible();
 	await expect(panel.getByRole('alertdialog')).toHaveCount(0);
+});
+
+// Issue #40 part c: the feed writes CHIRPS sat v3.0 and never splices it onto a series of another version.
+test('a series of another CHIRPS version: the form asks to replace it whole or use a separate series, and a feed that clashes later offers the replacement', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Feed version');
+	const v2 = { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2001-01-01', values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' };
+	await putSeries(page.request, project.id, v2);
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	// The product choice: sat by default, rnl for a record before 1998.
+	await expect(panel.getByLabel('Daily product')).toHaveValue('sat');
+	await panel.getByLabel('Grid cells').fill('-20.12, 25.17');
+	await panel.getByRole('button', { name: 'Attach feed' }).click();
+	const ask = panel.getByRole('alertdialog', { name: '“Rainfall — CHIRPS” already has data (3 days).' });
+	await expect(ask).toHaveAccessibleDescription(/It holds CHIRPS v2\.0, and this feed writes CHIRPS sat v3\.0\..*never splices one onto the other.*such as “CHIRPS”/);
+	await expect(ask.getByRole('button', { name: 'Use a separate series: CHIRPS' })).toBeFocused();
+	const { violations } = await new AxeBuilder({ page })
+		.include('#set-feeds')
+		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
+		.analyze();
+	expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+
+	// Replacing: the feed is attached with the replacement confirmed, waiting for its first fetch.
+	await ask.getByRole('button', { name: 'Replace the series with CHIRPS sat v3.0' }).click();
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await expect(feed).toHaveCount(1);
+	await expect(panel.getByRole('status').filter({ hasText: 'Feed attached: its first fetch replaces Rainfall — CHIRPS with CHIRPS sat v3.0.' })).toBeVisible();
+	await expect(feed).toContainText('cell -20.12, 25.17 · CHIRPS sat v3.0');
+	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(
+		/^Replacement confirmed: the feed backfills CHIRPS sat v3\.0 from its start date, then replaces the series \(CHIRPS v2\.0\) with it whole/
+	);
+
+	// The first fetch stages the new record (2001 onwards is a long backfill): the card says how far it has got,
+	// and the Data and Runs tabs say runs keep the current series until it completes.
+	await runJobsTick();
+	await page.reload();
+	await expect(feed.getByRole('paragraph').filter({ hasText: /^Replacing the series: the new record runs 1 Jan 2001 to 30 Apr 2001 so far\./ })).toBeVisible();
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.getByTestId('rebuilding-note')).toHaveText(/Runs use the current series until the replacement completes/);
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await expect(page.getByTestId('series-rebuilding')).toHaveText('Being replaced');
+
+	// Withdrawing discards what was staged; the card then says every fetch is refused and offers the replacement again.
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Replacement withdrawn' })).toBeVisible();
+	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
+	page.once('dialog', (d) => void d.accept());
+	await feed.getByRole('button', { name: 'Replace the series: Rainfall — CHIRPS' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Replacement confirmed: the feed backfills the new record' })).toBeVisible();
+	await expect(feed.getByRole('button', { name: /^Replace the series/ })).toHaveCount(0);
+	await expect(feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' })).toBeVisible();
 });
 
 test('an action on a feed changed elsewhere says why it failed and shows the list as it is now', async ({ page, owner }) => {

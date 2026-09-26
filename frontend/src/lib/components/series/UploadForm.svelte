@@ -6,6 +6,7 @@
 	// never erases a stored value the file leaves blank.
 	import { untrack } from 'svelte';
 	import { fromEpochDay, toEpochDay, unitOptions, type SeriesMeta } from '@water-management/engine';
+	import { asksProvenance, CHIRPS_CHOICES, provenanceFields } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -50,6 +51,9 @@
 	// A kind picked by hand is never overridden by the file-name guess.
 	let kindTouched = $state(false);
 	let targetValues = $state.raw<Daily | null>(null);
+	// CHIRPS only (issue #40 part c): which product and version the file holds, as a provenance key ('' = not recorded).
+	let provenanceKey = $state('');
+	let provenanceTouched = $state(false);
 
 	$effect(() => {
 		pending = parsed !== null || uploading;
@@ -58,6 +62,12 @@
 	const id = (s: string) => `${idPrefix}-${s}`;
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const target = $derived(list.find((s) => s.kind === kind && s.name === name.trim()) ?? null);
+	// Until picked by hand, an existing series' own label (so appending to it just works).
+	$effect(() => {
+		const t = target;
+		if (!provenanceTouched) provenanceKey = t?.product && t.productVersion ? `${t.product}/${t.productVersion}` : '';
+	});
+	const askProvenance = $derived(asksProvenance(kind));
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
 	const preview = $derived(
 		parsed && target && mode === 'merge' && targetValues
@@ -147,7 +157,9 @@
 					name: name.trim(),
 					unit: unit.trim(),
 					startDate: parsed.startDate,
-					values: p.result.values.slice(off, off + parsed.values.length)
+					values: p.result.values.slice(off, off + parsed.values.length),
+					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.
+					...(askProvenance && provenanceKey ? provenanceFields(provenanceKey) : {})
 				});
 				result = {
 					meta,
@@ -161,7 +173,8 @@
 					name: name.trim() || undefined,
 					unit: unit.trim(),
 					startDate: parsed.startDate,
-					values: parsed.values
+					values: parsed.values,
+					...(askProvenance ? provenanceFields(provenanceKey) : {})
 				});
 				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${fmtNum(meta.length)} days to “${meta.name || label}”.` };
 			}
@@ -222,6 +235,19 @@
 			</select>
 		</div>
 	</div>
+	{#if askProvenance}
+		<div class="field">
+			<label for={id('provenance')}>CHIRPS product and version</label>
+			<select id={id('provenance')} bind:value={provenanceKey} onchange={() => (provenanceTouched = true)} aria-describedby={id('provenance-h')}>
+				<option value="">Not known</option>
+				{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+			</select>
+			<span class="hint muted" id={id('provenance-h')}>
+				CHIRPS v2.0 and v3.0 differ by an amount that changes over the years, so one series holds one of them. A b023 workbook’s CHIRPS
+				column is usually v2.0; the CHIRPS data feed writes v3.0.
+			</span>
+		</div>
+	{/if}
 	{#if target}
 		<fieldset class="mode">
 			<legend>“{target.name || kindLabel(target.kind)}” already exists ({target.startDate} → {seriesEnd(target)})</legend>

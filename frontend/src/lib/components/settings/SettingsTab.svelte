@@ -12,7 +12,8 @@
 		type CalibrationReport,
 		type FitRecord,
 		type FlowShareMethod,
-		type ProjectSettings
+		type ProjectSettings,
+		type SeriesProvenance
 	} from '@water-management/engine';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
@@ -59,6 +60,7 @@
 		project,
 		editor,
 		seriesKinds = null,
+		chirpsSource,
 		readonly,
 		onProjectChange
 	}: {
@@ -66,6 +68,8 @@
 		editor?: ModelEditor;
 		/** Kinds of the project's input series, to limit the calibration flow choices. */
 		seriesKinds?: string[] | null;
+		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
+		chirpsSource?: SeriesProvenance | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
 	} = $props();
@@ -640,7 +644,7 @@
 			onApply={applyFit}
 		/>
 		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" />
+			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} />
 		{/if}
 	</div>
 

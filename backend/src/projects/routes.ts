@@ -248,8 +248,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			);
 			await saveModel(db, newId, copied);
 			await db.query(
-				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
-				 SELECT $2, kind, name, unit, start_date, "values" FROM time_series WHERE project_id = $1`,
+				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version)
+				 SELECT $2, kind, name, unit, start_date, "values", product, product_version FROM time_series WHERE project_id = $1`,
 				[srcId, newId]
 			);
 			// The copy's history starts with its first state; the original's stays with the original.

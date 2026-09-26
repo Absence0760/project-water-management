@@ -95,11 +95,17 @@ export const runRoutes = new Hono<AuthEnv>()
 			// The run's own settings snapshot: its fit record and calibration
 			// exclusions are the provenance of its parameters and scores. Its
 			// model snapshot (nodes, crops, transfers as they were when it ran)
-			// names its nodes and fills the workbook's Inputs sheet.
-			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model ${FROM_RUN} WHERE r.project_id = $1 AND r.id = $2`, [
-				id,
-				runId
-			]);
+			// names its nodes and fills the workbook's Inputs sheet. Its input
+			// series' dates, hashes and product/version (inputSeries; the values
+			// are in series_blob): the fit record compares the CHIRPS version.
+			const { rows } = await db.query(
+				`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model, r.inputs->'series' AS "inputSeries" ${FROM_RUN}
+				 WHERE r.project_id = $1 AND r.id = $2`,
+				[
+					id,
+					runId
+				]
+			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			const { rows: series } = await db.query(
 				`SELECT node_id AS "nodeId", key, meta->>'label' AS label, meta->>'unit' AS unit

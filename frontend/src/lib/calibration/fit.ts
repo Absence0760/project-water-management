@@ -18,7 +18,8 @@ import {
 	type ObjectiveId,
 	type ProjectModel,
 	type ProjectSettings,
-	type RunoffModelId
+	type RunoffModelId,
+	type SeriesProvenance
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 
@@ -211,14 +212,16 @@ export function seedError(seed: number | null): string | null {
 export function fitRecordFor(
 	r: CalibrationReport,
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'>,
-	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date }
+	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null }
 ): FitRecord {
 	return fitRecordFromReport(r, {
 		settings,
 		validate: opts.validate,
 		validationRecord: opts.validationRecord,
 		engineVersion: ENGINE_VERSION,
-		fittedAt: (opts.now ?? new Date()).toISOString()
+		fittedAt: (opts.now ?? new Date()).toISOString(),
+		// The CHIRPS series' product and version the fit ran on (issue #40c), when known.
+		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {})
 	});
 }
 

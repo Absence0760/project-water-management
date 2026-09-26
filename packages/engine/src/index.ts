@@ -36,3 +36,4 @@ export { computeCurtailment, DEMAND_PCT_FLOOR_M3_DAY, demandPctNote, EQUITABLE_S
 export * from './views/farmView';
 export * from './views/farmProjection';
 export * from './units';
+export * from './seriesProvenance';

@@ -21,6 +21,7 @@ import {
 	ewrRuleTableIssues,
 	GR4J_PARAMS,
 	MAX_STARTS,
+	provenanceError,
 	OBJECTIVES,
 	resolveFitRecord,
 	RUNOFF_MODELS,
@@ -343,6 +344,14 @@ export const FitRecord = z
 						addAccumulations: periodList('listed accumulation').optional()
 					})
 					.strict()
+					.optional(),
+				// Issue #40 part c: the CHIRPS series' product and version the fit
+				// ran on (null = not recorded). Optional, as above.
+				chirpsSource: z
+					.object({ product: z.string(), version: z.string() })
+					.strict()
+					.refine((p) => provenanceError(p) === null, 'not a valid product and version')
+					.nullable()
 					.optional()
 			})
 			.strict()

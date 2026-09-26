@@ -138,6 +138,11 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await dialog.getByLabel("It's a gauge on another river: import it as a reference gauge").uncheck();
 	await expect(notes.getByText(/gauge column imported as flow_reference_m3s/)).toHaveCount(0);
 
+	// The CHIRPS column's product and version (issue #40c): v2.0 by default, what b023 workbooks were built on.
+	const chirps = dialog.getByLabel('CHIRPS column');
+	await expect(chirps).toHaveValue('CHIRPS/2.0');
+	await expect(chirps).toHaveAccessibleDescription(/b023 workbooks were built on v2\.0; the CHIRPS data feed writes v3\.0/);
+
 	await dialog.getByLabel('Name').fill('Synthetic — from the workbook');
 	await dialog.getByLabel('Run the model after importing').check();
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
@@ -156,7 +161,11 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 
 	// What was sent is what the workbook holds: the same series as the Python importer's committed output.
 	const id = new URL(page.url()).pathname.split('/').pop()!;
-	const exported = (await (await page.request.get(`${API_URL}/projects/${id}/export.json`)).json()) as { series: { kind: string; values: unknown[] }[] };
+	const exported = (await (await page.request.get(`${API_URL}/projects/${id}/export.json`)).json()) as {
+		series: { kind: string; values: unknown[]; product?: string; productVersion?: string }[];
+	};
+	// The CHIRPS series went in labelled with the review's answer; the others have no version.
+	expect(exported.series.filter((x) => x.product).map((x) => [x.kind, x.product, x.productVersion])).toEqual([['rain_chirps_mm', 'CHIRPS', '2.0']]);
 	const expected = JSON.parse(readFileSync(new URL('../../scripts/wbt-import/fixtures/synthetic_b023.project.json', import.meta.url), 'utf8')) as {
 		series: { kind: string; values: unknown[] }[];
 	};

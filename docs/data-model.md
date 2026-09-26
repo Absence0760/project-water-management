@@ -132,6 +132,36 @@ Trade-offs we accept: updating one day rewrites the whole array (fine, since
 inputs are uploaded in bulk), and SQL date-range aggregates need `unnest … WITH
 ORDINALITY` (fine for occasional reports).
 
+### Series provenance (032_series_provenance.sql)
+
+`time_series.product` and `product_version` say what the values are, e.g.
+`CHIRPS` `2.0` (a b023 workbook's CHIRPS column), `CHIRPS sat` `3.0` or
+`CHIRPS rnl` `3.0` (the CHIRPS feed's two daily products). Both or neither;
+`NULL` = not recorded. The product is recorded apart from the version, and a
+change of either is a change of forcing: v2.0 and v3.0 differ by an
+era-dependent factor, and v3.0's `sat` and `rnl` disaggregate the same
+pentads with different daily timing (issue #40 part c).
+
+- **Set by** an upload (`PUT …/series` with `product` + `productVersion`; a
+  replace that doesn't say clears it), a merge into an empty or new series,
+  an import or project document, a copy, a data feed (the series it creates
+  or, confirmed, replaces), a restore (the revision's label comes back with
+  its values), and `PATCH /projects/:id/series/:seriesId` (a person saying
+  what an existing series is, logged as `series.labelled`).
+- **Kept** by a merge. A merge of days labelled with another product or
+  version into a series holding values is refused (409): replace the series
+  whole, or use another name. A data feed never merges into a series holding
+  another label, or an unrecorded one, without an owner's confirmation
+  ([architecture.md § Data feeds](./architecture.md#data-feeds)).
+- **Read by** runs: each input series' label goes into the run's snapshot
+  (`inputs.series[kind].provenance`), so the run comparison can say the
+  version changed, and into the live model input, which the in-browser fit
+  records as the fit's `forcing.chirpsSource`
+  ([model.md §2.10b](./model.md)). The model never reads it.
+- Checked by the same rules in the database (`CHECK`s) and the engine
+  (`provenanceError`): 1–40 letters, digits, spaces, dots, dashes or
+  underscores for the product, 1–20 without spaces for the version.
+
 **Run output volume.** Each run stores tens to a couple of hundred output arrays
 (nodes × keys, 8 bytes a day each before compression), so a multi-decade run is a few
 MB to a few tens of MB. The engine is deterministic, so a run saved since
@@ -348,7 +378,10 @@ the result change?", and put back any earlier version.
   plain uuid, not a foreign key, so a deleted series can still be restored by
   its old id; `unit` is kept with it. **Retention**: the newest 5 per
   (project, kind, name) and nothing older than 180 days, trimmed by a
-  `SECURITY DEFINER` trigger on insert.
+  `SECURITY DEFINER` trigger on insert. `product` / `product_version` (032)
+  keep the series' label with its values, so a restore puts it back.
+  `reason` is `replace`, `delete`, `manual_merge`, or `feed_replace` (032: the
+  values a data feed replaced under an owner's confirmation).
 - **`audit_event`**: append-only access, data and publication events, with
   `actor_user_id` (must be the caller), `actor_label` (the display name then),
   `kind`, `subject jsonb`, `change_set`, and `actor_api_key_id` (reserved,
@@ -358,7 +391,9 @@ the result change?", and put back any earlier version.
   or a restore causes), `invite.sent/revoked` (email masked `j•••@domain`),
   `publication.published/notice_changed`, `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
-  changed), `run.created/changed/deleted/trimmed`, `feed.configured`,
+  changed; a replace that changed the series' product or version adds
+  `provenance: { from, to }`), `series.labelled` (032: a label changed by
+  PATCH, `provenance: { from, to }`), `run.created/changed/deleted/trimmed`, `feed.configured`,
   `feed.failed` (only the first failure after a success), `project.changed`,
   `report_schedule.configured`, `scenario.created/changed/deleted`, and
   restores. `api_key.*` is reserved.
@@ -959,20 +994,21 @@ The background job queue's source of truth ([architecture.md § Background work]
   `acting_user_id` (covering the foreign keys); the dedupe index; and
   `finished_at` (partial) for the purge.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 | Column | Holds |
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
-| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays` |
-| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)) |
+| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981) |
+| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
 | `enabled`, `schedule` | `daily` or `hourly` |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30) |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -1008,6 +1044,23 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   - `app_feed_schedule_failed(feed)`: the scheduler couldn't queue a fetch as
     the acting user (RLS refused: no longer an editor); records a fixed
     message.
+  - `app_feed_replace_done(feed)` (032): the ingest replaced the target
+    series under the owner's confirmation; clears `replace_series_from`, as
+    the job's user, who must be an editor (an editor can't write `data_feed`
+    directly).
+  - **`feed_stage`** (032): one row per feed with a confirmed replacement
+    being backfilled: `start_date` + `values` (≤ 60 000, the new record so
+    far), the `product` / `product_version` it will be labelled, the
+    `replace_from` it was confirmed against, `updated_at` (when it last grew:
+    a day without growth is `rebuild-stalled`). Cascades with the feed and
+    the project. RLS: SELECT viewers; INSERT / UPDATE / DELETE editors, for a
+    feed of the same project (the ingest writes it as the feed's acting user;
+    an owner's save of the feed discards it through `data_feed_stamp`).
+    Nothing reads it for a run: runs read `time_series` only.
+  - `app_feed_fetch_now(feed)` (032): "Run now" while the feed's fetch is
+    pending but waiting (a backfill's next window, a retry): makes that job
+    due now, as an editor, and says whether it moved one (`water_app` can't
+    UPDATE `job`).
   - `app_feed_fetch_job(job, feed)`: for the production worker's
     `ingest-results` messages, the project and acting user of a real
     `feed_fetch` job of that feed, or nothing.

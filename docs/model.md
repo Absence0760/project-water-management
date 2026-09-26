@@ -318,72 +318,100 @@ predates the setting, so run comparison reads it as legacy.
     | Winter rainfall (e.g. Western Cape) | 0.70, 0.65, 0.65, 0.65, 0.65, 0.70 | 0.75, 0.80, 0.80, 0.80, 0.80, 0.75 |
     | Summer rainfall | 0.65, 0.70, 0.75, 0.75, 0.75, 0.75 | 0.70, 0.70, 0.70, 0.65, 0.60, 0.60 |
 
-    They are **indicative, from FAO-56 Table 5 climate classes** (Allen et
-    al. 1998); confirm against local humidity and wind before relying on
-    them.
+    They are **indicative only**: rough readings of FAO-56 Table 5 climate
+    classes (Allen et al. 1998), not values for any particular pan. Confirm
+    against the pan's siting, local humidity and wind, and a local ET₀,
+    before relying on them.
 
-    **Issue #13 reading of FAO-56 Table 5 for the winter-rainfall
-    preset.** The result: the current preset swings too far.
-    Table 5 gives the Class A coefficient by mean RH, wind at 2 m, and the
-    pan's siting and fetch. For **moderate wind (2–5 m/s)**, the Western Cape
-    norm all year:
+    **Reading FAO-56 Table 5 (issue #13, revised after review).** Table 5
+    gives the Class A coefficient Kp by mean RH, wind at 2 m, the pan's
+    siting and its upwind fetch. Two readings from issue #13:
 
-    | Siting | Fetch | RH 40–70 % | RH > 70 % |
-    | --- | --- | --- | --- |
-    | Case A (pan in a short green crop) | 1 m | 0.60 | 0.65 |
-    | | 10 m | 0.70 | 0.75 |
-    | | 100 m | 0.75 | 0.80 |
-    | | 1000 m | 0.80 | 0.80 |
-    | Case B (pan in dry fallow) | 1 m | 0.75 | 0.80 |
-    | | 10 m | 0.65 | 0.70 |
-    | | 100 m | 0.60 | 0.65 |
-    | | 1000 m | 0.55 | 0.60 |
-
-    - **Climate class.** The dry season (Oct–Apr) has mean RH of 40–70 %.
-      The wet season (May–Sep) is about 70 % or more.
-    - **What a standard pan reads.** A standard pan enclosure (Case A, about
-      10 m of green fetch) reads **0.70 in the dry season and 0.75 in the wet
-      season**. The step between seasons is about 0.05.
-    - **Why the current preset is too wide.** Its summer 0.65 needs a 1 m
-      fetch or a dry-fallow pan. Its winter 0.80 needs 100 m or more of green
-      fetch. One pan can't have both sitings.
-    - **Proposed change.** Issue #39 changes the preset to 0.70 Oct–Apr and
-      0.75 May–Sep.
-    - **Ensemble range.** For an uncertainty ensemble (CR-21), use
-      **0.60–0.80 in the dry season and 0.65–0.85 in the wet season**. The
-      low end is Case B or a low-RH summer. The high end is Case A with a
-      long fetch, or a screened pan.
-    - **Cross-check.** FAO-56 Penman–Monteith ET₀ from reanalysis should come
-      out at about Kp × A-pan. A ratio outside 0.6–0.85 means the A-pan row
-      or the coefficient is wrong. Reanalysis cells are coarse, so treat it as
-      a check, not a value.
+    - **One pan can swing a lot between seasons.** Wind and RH both change
+      with the season, so a single enclosure (Case A, pan in a short green
+      crop, about 10 m of fetch) can read **0.60–0.70** in a dry, windy
+      summer (moderate wind, RH near 40 %) and **0.85** in a calm, humid
+      winter (light wind, RH above 70 %). A seasonal step of 0.10–0.25 is
+      not by itself a sign of an inconsistent preset. (An earlier reading,
+      for moderate wind only, concluded the step should be about 0.05; that
+      was wrong, and the preset change it proposed, issue #39, is on hold.)
+    - **Dry, bare surroundings pull Kp down.** FAO-56 says to reduce Kp by
+      5–10 % in moderate conditions and by up to 20 % where the surroundings
+      are arid, windy and bare. A summer Kp of 0.55–0.60 is plausible for an
+      exposed pan in dry veld.
+    - **Ensemble range.** For an uncertainty ensemble (CR-21), a generic
+      range of **0.55–0.80 in the dry season and 0.60–0.85 in the wet
+      season** covers the sitings above (the 0.55 end sits just under the
+      plausibility band below, so the run will warn). Treat Kp and the A-pan level
+      together: it is PE (Kp × A-pan) that the model sees.
+    - **Cross-check against ET₀, but check the ET₀ first.** FAO-56
+      Penman–Monteith ET₀ should come out at about Kp × A-pan. Gridded
+      reanalysis ET₀ can read far too high: in one semi-arid Western Cape
+      case, reanalysis ET₀ (NASA POWER, MERRA-2 based) read **26–36 %
+      above** a nearby weather station's FAO-56 ET₀ over the same days,
+      enough to flip which A-pan level the check favoured. Compare the
+      reanalysis against any station ET₀ in or near the catchment (the ARC
+      agro-climatic network, provincial agricultural weather networks, or a
+      research orchard station) before using it, and scale it if they
+      disagree. A station ET₀ record is often the most useful single piece
+      of evidence on the PE level.
 
     **Check the A-pan row before choosing a coefficient** (issue #13). A
     workbook's A-pan row isn't necessarily raw A-pan.
 
     - **A pre-scaled row.** A row already multiplied by a pan or lake
-      factor (0.7 × A-pan, i.e. an ET₀ or open-water estimate) makes GR4J's
-      coefficient count twice. PE then comes out near 0.5 × A-pan, and the
-      fitted production store X1 grows to absorb the extra rain.
+      factor (0.7 × A-pan, i.e. an ET₀, open-water or S-pan-like estimate)
+      makes GR4J's coefficient count twice unless the coefficient is chosen
+      against that row. Ask whoever built the row what it was converted to
+      and why before "correcting" it: the conversion may have been
+      deliberate, for the crop demand.
     - **The same row drives three things.** Crop demand is crop factor ×
       A-pan (§2.3). Dam evaporation is lake factor × A-pan (§2.7a). GR4J PE
-      is Kp × A-pan. So a scaled row understates all three.
-    - **Fixing it.** Correct the row. If the crop factors were meant against
-      the scaled row, rescale them too, so the irrigation demand is kept.
-    - **Checks that expose a bad row:**
+      is Kp × A-pan. Changing the row to change PE also changes the
+      irrigation demand and the dam evaporation. To test PE alone, keep the
+      row and move `panCoefficient` (the value may then sit outside the
+      0.6–0.85 plausibility band; that is an artefact of the shared row, and
+      the run notes should say so). South African practice keeps these
+      inputs apart (Pitman/WRSM2000 on S-pan; reservoir evaporation as
+      S-pan × lake factors; ACRU on an A-pan-equivalent reference; SAPWAT as
+      ET₀ × Kc). A separate PE/ET₀ input for GR4J is the durable fix
+      (issue #39, repurposed).
+    - **Checks on the row:**
       1. Compare the row with the WR90/WR2012 **S-pan** MAE for the
          quaternary. An A-pan reads *higher* than a Symons S-pan beside it,
-         so an A-pan annual total below the S-pan MAE is a red flag. Bosman
-         (1990, *Water SA* 16(4):227–236) gives the SA inter-conversion and
+         so a row labelled A-pan whose annual total is below the S-pan MAE
+         is either not raw A-pan or from somewhere else. Bosman (1990,
+         *Water SA* 16(4):227–236) gives the SA inter-conversion and
          bird-screen formulae. Taljaard (2023, MEng, Stellenbosch) finds the
          relationship linear and the old annual equations still valid, and
-         proposes monthly ones.
-      2. The Penman–Monteith ratio above. A ratio above 0.85 means the row is
-         too low.
-      3. Screening. SA pans were often bird-screened, which cuts pan
+         proposes monthly ones. A row well *above* the MAE can also come
+         from a hotter, lower station.
+      2. The ET₀ ratio above, with a station-checked ET₀.
+      3. Provenance. Values that are each a whole number of mm when
+         multiplied by n are means of n whole-mm readings; that dates the
+         record, but doesn't say which instrument it came from.
+      4. Screening. SA pans were often bird-screened, which cuts pan
          evaporation by up to about 10 % (FAO-56 ch. 4). A screened record
          needs the Bosman correction, or a coefficient at the high end of the
          range.
+    - **Calibration can't pick the PE level.** GR4J's production store X1
+      absorbs much of the PE level, so fits at quite different PE can close
+      the water balance equally well; a better NSE at one level is usually
+      hydrograph shape and timing. Compare fits on volume (PBIAS, AET) as
+      well as NSE. And look at where NSE comes from: when a rating is
+      extrapolated far above its highest gauging, the days on that limb can
+      carry most of the NSE variance, and the preferred PE level can flip
+      when they are down-weighted or masked. Refit with the high limb
+      perturbed before trusting a preference.
+    - **Rain and PE compensate in one direction.** With the observed flow
+      fixed, rain that reads high needs *more* loss (higher PE, or a larger
+      X1). A fit that prefers low PE points to rain reading low, flow
+      reading high (an over-extrapolated rating), or under-counted
+      abstraction, not to rain reading high. Settle rain level and PE
+      together ([calibration-research.md](./calibration-research.md)).
+    - **Report the spread.** Until the PE level is settled, carry low,
+      middle and high PE through to the results that decide anything (EWR
+      compliance, curtailment, MAR), refitting at each, and report the band.
   - **Plausibility warning.** A run warns, and Settings hints
     (`panCoefficientOutOfRange`), when a month sits outside **0.6–0.85**,
     FAO-56's usual range for a Class A pan. This is a soundness check, not a
@@ -729,6 +757,27 @@ warns: *3 days (… to …) of this run use forecast rain, not recorded rain
 curtailment and the EWR sites cover forecast days*. Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
+
+**One CHIRPS product and version per series** (issue #40 part c). The
+factors are fitted on whatever the CHIRPS series holds, so they are only as
+good as its homogeneity. CHIRPS v2.0 and v3.0 differ by an era-dependent
+factor, and v3.0's two daily products, `sat` (from 1998) and `rnl` (from
+1981), share their pentad totals but not their daily timing. A series that
+splices one onto another has a break the double-mass check (§2.10a) then
+blames on the catchment, and one set of factors fitted across it. So each
+series records its product and version
+([data-model.md § Series provenance](./data-model.md#series-provenance-032_series_provenancesql)):
+a b023 import asks which version the workbook's CHIRPS column is (v2.0 by
+default, what the workbooks were built on), an upload can say, and the feed
+labels what it writes. The feed refuses to write into a series holding
+another product or version unless an owner confirms replacing it whole
+([architecture.md § Data feeds](./architecture.md#data-feeds)), and reads one
+product end to end: a record that must reach before 1998 uses `rnl`
+throughout, never `rnl` before 1998 and `sat` after. A version change changes
+the factors and so the rain on every gap-filled day: the fit record flags
+"forcing changed since fit" (§2.10b) and the run comparison says the version
+changed. The model itself never reads the label, so this needs no
+`ENGINE_VERSION` bump.
 
 ### 2.4c Zero-rain runs treated as missing
 
@@ -2104,7 +2153,16 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   because it trades off against X1/X3, and CHIRPS bias correction changes the
   rain GR4J sees on the days CHIRPS fills a gap (§2.4b), so a fit is only
   valid for the forcing it was fitted under and a later change to any of them
-  marks the record stale, with a caveat naming the trade-off. The record never
+  marks the record stale, with a caveat naming the trade-off. The forcing
+  also records the CHIRPS series' product and version the fit ran on
+  (`forcing.chirpsSource`, issue #40 part c; null = not recorded). The series'
+  label isn't a setting, so the caller passes the current one
+  (`fitRecordStatus(settings, record, { chirpsSource })`: Settings from the
+  live model input, the run comparison from each run's input snapshot); a
+  different one sets `chirpsSourceChanged`, and with it `forcingChanged`,
+  with its own caveat: refit, since the monthly CHIRPS factors and every
+  gap-filled day's rain changed. A record made before it, or a caller that
+  doesn't know the label, compares nothing. The record never
   changes a result.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) take on the order of a minute in Node on

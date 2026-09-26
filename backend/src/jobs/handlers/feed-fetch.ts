@@ -21,8 +21,8 @@ import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport
 
 export const FeedFetchPayload = z.object({ feedId: z.string().uuid() }).strict();
 
-/** One pending fetch per feed. */
-export const feedFetchDedupeKey = (feedId: string) => `feed_fetch:${feedId}`;
+// One pending fetch per feed: the key lives in feeds/store.ts, so the ingest (which queues a backfill's next window) shares it.
+export { feedFetchDedupeKey } from '../../feeds/store.js';
 
 export const feedFetchHandler = defineHandler({
 	role: 'editor',

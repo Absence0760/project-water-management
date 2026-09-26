@@ -233,3 +233,31 @@ test('a flow uploaded in l/s is converted to m³/s, the unit the model reads', a
 	const first = Number((await import('node:fs')).readFileSync(fixture('observed-flow-daily.csv'), 'utf8').split('\n')[1]!.split(',')[1]);
 	expect(values[0]).toBeCloseTo(first / 1000, 9);
 });
+
+// Issue #40 part c: a CHIRPS series says which product and version it holds.
+test('a CHIRPS upload is asked its product and version, and the series row shows and changes it', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'CHIRPS version');
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const form = await upload(page, 'Rainfall — CHIRPS', 'rainfall-daily.csv');
+	const version = form.getByLabel('CHIRPS product and version');
+	await expect(version).toHaveValue('');
+	await expect(version).toHaveAccessibleDescription(/A b023 workbook’s CHIRPS column is usually v2\.0; the CHIRPS data feed writes v3\.0/);
+	await version.selectOption({ label: 'CHIRPS v2.0' });
+	await form.getByRole('button', { name: 'Upload' }).click();
+	await expect(form.getByRole('status')).toContainText('Uploaded 92 days');
+
+	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — CHIRPS' });
+	const label = row.getByRole('combobox', { name: 'Product and version of Rainfall — CHIRPS' });
+	await expect(label).toHaveValue('CHIRPS/2.0');
+	// Relabelling keeps the values; the server has the new label.
+	await label.selectOption({ label: 'CHIRPS sat v3.0' });
+	await expect
+		.poll(async () => ((await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { product: string | null }[])[0]!.product)
+		.toBe('CHIRPS sat');
+	await page.reload();
+	await expect(label).toHaveValue('CHIRPS sat/3.0');
+	// Other kinds are never asked.
+	await upload(page, 'Rainfall — catchment', 'rainfall-daily.csv');
+	await expect(form.getByLabel('CHIRPS product and version')).toHaveCount(0);
+});

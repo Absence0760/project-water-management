@@ -19,9 +19,11 @@
 		type ObjectiveId,
 		type ProjectModel,
 		type ProjectSettings,
-		type RunoffModelId
+		type RunoffModelId,
+		type SeriesProvenance
 	} from '@water-management/engine';
 	import { untrack } from 'svelte';
+	import { chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import {
 		BOUNDS_LABEL,
@@ -102,7 +104,7 @@
 	let error = $state<string | null>(null);
 	let handle: FitHandle | null = null;
 	// What the shown report was run on, for its fit record.
-	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null } | null = null;
+	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null; chirpsSource?: SeriesProvenance | null } | null = null;
 
 	const params = $derived(fitParams(runoffModel, x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
@@ -131,7 +133,8 @@
 			const server = await api.runs.modelInput(projectId);
 			const form = settings();
 			const input = fitInput(server, form, model?.());
-			const context = { settings: form, validate, validationRecord: chosenRecord };
+			// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
+			const context = { settings: form, validate, validationRecord: chosenRecord, chirpsSource: chirpsSourceOfInput(server.series) };
 			status = 'running';
 			runStarts = starts;
 			handle = startFit({ input, model: runoffModel, objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));

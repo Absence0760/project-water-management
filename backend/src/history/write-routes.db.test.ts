@@ -98,6 +98,11 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		route: `PATCH ${P}/series/:seriesId`,
+		records: ['series.labelled'],
+		call: (c) => c.owner.call('PATCH', `${at(c)}/series/${c.seriesId}`, { product: 'Guard gauge', productVersion: '1' })
+	},
+	{
 		route: `DELETE ${P}/series/:seriesId`,
 		records: ['series.deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/series/${c.seriesId}`)

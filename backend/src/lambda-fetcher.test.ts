@@ -123,7 +123,7 @@ describe('the fetcher bundle', () => {
 	// the output, so it doesn't lean on tree-shaking: jobs/transport.ts once
 	// reached the runner through wakeWorker's memory transport (now jobs/wake.ts),
 	// and esbuild only dropped it because nothing called wakeWorker.
-	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar', async () => {
+	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar and series provenance', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({
 			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
@@ -143,6 +143,9 @@ describe('the fetcher bundle', () => {
 		// fromEpochDay) through the `@water-management/engine/calendar` subpath;
 		// the package root would pull in every engine module (the model, ~27 KB
 		// of tree-shaken stubs), so nothing the fetcher reaches may import it.
-		expect(inputs.filter((f) => f.includes('packages/engine/') && !f.endsWith('packages/engine/src/calendar.ts'))).toEqual([]);
+		// feeds/config.ts names the CHIRPS product it writes through the
+		// `/provenance` subpath (seriesProvenance.ts: constants, no imports).
+		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts'];
+		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
 	});
 });

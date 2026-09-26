@@ -332,10 +332,16 @@ Lessons from the review (judgement):
   candidates standing. The choice of level then rests on consistency with
   the calibration (§4), with the runoff tests as support. State that
   plainly.
-- **Rain level and PE interact.** A forcing that reads too wet fits best
-  with PE that reads too low, and GR4J's stores absorb both. Correcting
-  one without revisiting the other can make the fit worse *and* push
-  natural MAR outside the published band. Settle them together: refit on a
+- **Rain level and PE interact.** With the observed flow fixed, a forcing
+  that reads too wet needs *more* loss to match it: higher PE, or a larger
+  production store X1 that keeps more water available to evaporate. Low PE
+  is favoured by rain that reads too *dry*, by flow that reads too high (an
+  over-extrapolated rating limb), or by under-counted abstraction. GR4J's
+  stores absorb much of either level, so fits at different levels can close
+  the volume equally well and differ mainly in hydrograph shape (compare
+  PBIAS and AET, not only NSE; model.md §2.4a). Correcting one forcing
+  without revisiting the other can make the fit worse *and* push natural
+  MAR outside the published band. Settle them together: refit on a
   small grid of fixed rain levels against the corrected PE, and pick by the
   physical checks first and fit second. The rain level stays a fixed input
   chosen once, never a calibrated multiplier.
@@ -425,7 +431,13 @@ Lessons from the review (judgement):
   double-mass check will attribute to the catchment. Replace the whole
   column with one version and refit the factors. The app's feed reads v3's
   daily `sat` product, which starts in 1998 (CHC daily readme); earlier
-  days need v3's `rnl` daily product.
+  days need v3's `rnl` daily product, for the whole record, since the two
+  disaggregate the same pentads with different daily timing. The app
+  enforces this (issue #40 part c): each series records its product and
+  version, the feed never writes into a series of another one without an
+  owner confirming a whole-series replacement (a full backfill, `rnl` for a
+  record before 1998), and the fit record and run comparison flag the
+  change (architecture.md § Data feeds).
 
 ### 5. Carry the uncertainty into calibration
 

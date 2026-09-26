@@ -12,6 +12,7 @@ import type { EwrRuleTable } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objective';
+import { provenanceLabel, sameProvenance, type SeriesProvenance } from './seriesProvenance';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
@@ -47,6 +48,11 @@ export interface RunSeriesSnapshot {
 	length: number;
 	/** Hash of the values (backend: SHA-256 hex of their JSON). Absent on runs stored before it existed. */
 	valuesSha256?: string;
+	/**
+	 * The product and version the series held (032_series_provenance.sql):
+	 * null = not recorded, absent on runs stored before it was recorded.
+	 */
+	provenance?: SeriesProvenance | null;
 }
 
 /** The parts of a run compareRuns needs. */
@@ -1139,6 +1145,18 @@ function diffSeries(
 		} else if (x && y) {
 			const ra = range(x);
 			const rb = range(y);
+			// A different product or version (CHIRPS v2.0 → v3.0): its own line,
+			// whatever the dates do, since the values change by an era-dependent
+			// factor and any fit made on the old one no longer holds. Only when
+			// both runs recorded it: an older run has nothing to compare.
+			if (x.provenance !== undefined && y.provenance !== undefined && !sameProvenance(x.provenance, y.provenance)) {
+				out.push({
+					area: 'series',
+					kind: 'changed',
+					subject: label,
+					text: `${label} is now ${provenanceLabel(y.provenance)} (was ${provenanceLabel(x.provenance)})${k === 'rain_chirps_mm' ? ': the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds' : ''}`
+				});
+			}
 			// An empty series has no dates to compare: say it emptied or filled.
 			if (ra.empty || rb.empty) {
 				if (ra.empty !== rb.empty) {

@@ -1,4 +1,4 @@
-import { scaleValues, SERIES_KINDS, seriesUnit } from '@water-management/engine';
+import { provenanceError, provenanceLabel, sameProvenance, scaleValues, SERIES_KINDS, seriesUnit, type SeriesProvenance } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -7,6 +7,36 @@ import { MAX_SERIES_VALUES, SeriesStartDate } from './limits.js';
 
 export { MAX_SERIES_VALUES, SeriesStartDate };
 
+/**
+ * A series' product and version as a body carries them (032_series_provenance.sql):
+ * both strings, both null (not recorded), or both absent (not said: a merge
+ * keeps what the series has). Checked with the engine's rules, the same as
+ * the database CHECKs.
+ */
+export const ProvenanceFields = {
+	product: z.string().nullable().optional(),
+	productVersion: z.string().nullable().optional()
+};
+
+export function checkProvenance(b: { product?: string | null; productVersion?: string | null }, ctx: z.RefinementCtx): void {
+	if ((b.product === undefined) !== (b.productVersion === undefined) || (b.product === null) !== (b.productVersion === null)) {
+		ctx.addIssue({ code: 'custom', path: ['productVersion'], message: 'give product and productVersion together' });
+		return;
+	}
+	if (typeof b.product === 'string') {
+		const err = provenanceError({ product: b.product, version: b.productVersion });
+		if (err) ctx.addIssue({ code: 'custom', path: [err.startsWith('version') ? 'productVersion' : 'product'], message: err });
+	}
+}
+
+/** What a checked body says about provenance: undefined = not said, null = not recorded. */
+export const bodyProvenance = (b: { product?: string | null; productVersion?: string | null }): SeriesProvenance | null | undefined =>
+	b.product === undefined ? undefined : b.product === null || b.productVersion == null ? null : { product: b.product, version: b.productVersion };
+
+/** A series row's provenance columns as the engine's type. */
+export const rowProvenance = (r: { product: string | null; productVersion: string | null }): SeriesProvenance | null =>
+	r.product !== null && r.productVersion !== null ? { product: r.product, version: r.productVersion } : null;
+
 /** A whole series, or the days to merge into one (PUT and POST …/series/merge, and the data feeds). */
 export const SeriesBody = z
 	.object({
@@ -14,8 +44,10 @@ export const SeriesBody = z
 		name: z.string().trim().max(100).default(''),
 		unit: z.string().trim().min(1).max(20),
 		startDate: SeriesStartDate,
-		values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES)
+		values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES),
+		...ProvenanceFields
 	})
+	.superRefine(checkProvenance)
 	.transform(toCanonicalUnit);
 
 /**
@@ -37,11 +69,24 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
 // "new data since the last run" even for corrections inside the run period.
-export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt"`;
+// product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
+// rebuilding: a data feed is backfilling a confirmed replacement of this
+// series (feed_stage); the values here stay as they are until it swaps in.
+export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
+	product, product_version AS "productVersion",
+	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
+		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
 
 export interface MergeOptions {
 	/** A null in the incoming days leaves the existing value (default: it overwrites). */
 	keepOnNull?: boolean;
+	/**
+	 * The product and version of the incoming days (undefined = not said:
+	 * the series keeps what it has). Merging days of one version into a series
+	 * holding values of another is refused (409): the splice would put a break
+	 * in the record. Into an empty or new series, it labels the series.
+	 */
+	provenance?: SeriesProvenance | null;
 }
 
 export interface Daily {
@@ -184,16 +229,29 @@ export interface SeriesMetaRow {
 	startDate: string;
 	length: number;
 	updatedAt: string;
+	product: string | null;
+	productVersion: string | null;
+	rebuilding: boolean;
 }
 
+/** Any day with a value. */
+export const hasValues = (values: readonly (number | null)[]): boolean => values.some((v) => v !== null);
+
+/** The 409 for days of one version merged into a series of another. */
+export const versionMismatch = (holds: SeriesProvenance | null, incoming: SeriesProvenance | null) =>
+	new ApiError(
+		409,
+		`the series holds ${provenanceLabel(holds)} and these days are ${provenanceLabel(incoming)}: merging them would splice two versions into one record. Replace the series whole, or use a series of another name`
+	);
+
 /**
- * What a merge did: the series' meta after it, and its values before (null
- * when the merge created it) and after; for a feed's merge, the days it wrote
- * and the days it kept because their value wasn't its own.
+ * What a merge did: the series' meta after it, and its values (and label)
+ * before (null when the merge created it) and after; for a feed's merge, the
+ * days it wrote and the days it kept because their value wasn't its own.
  */
 export interface MergeResult {
 	meta: SeriesMetaRow;
-	before: { id: string; unit: string; startDate: string; values: (number | null)[] } | null;
+	before: { id: string; unit: string; startDate: string; values: (number | null)[]; product: string | null; productVersion: string | null } | null;
 	after: Daily;
 	written: number;
 	kept: number;
@@ -216,7 +274,7 @@ export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
-	{ keepOnNull = false, feedId }: MergeOptions & { feedId?: string } = {}
+	{ keepOnNull = false, feedId, provenance }: MergeOptions & { feedId?: string } = {}
 ): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
 	const { rows: cur } = await db.query<{
@@ -226,8 +284,10 @@ export async function mergeSeries(
 		values: (number | null)[];
 		feed_id: string | null;
 		feed_days: DayRuns;
+		product: string | null;
+		productVersion: string | null;
 	}>(
-		`SELECT id, start_date, unit, "values", feed_id,
+		`SELECT id, start_date, unit, "values", feed_id, product, product_version AS "productVersion",
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
 			 FROM unnest(feed_days) r) AS feed_days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
@@ -235,6 +295,13 @@ export async function mergeSeries(
 	);
 	const row = cur[0];
 	const existing = row ? { startDate: row.start_date, values: row.values } : null;
+	// The version guard (032_series_provenance): days of another product or
+	// version never go into a series holding values; an empty or new series
+	// takes the incoming days' label, a filled one keeps its own.
+	const held = row ? rowProvenance(row) : null;
+	const filled = !!existing && hasValues(existing.values);
+	if (provenance !== undefined && filled && !sameProvenance(held, provenance)) throw versionMismatch(held, provenance);
+	const label = provenance !== undefined && !filled ? provenance : held;
 	let incoming: Daily = { startDate: body.startDate, values: body.values };
 	let owner = row?.feed_id ?? null;
 	let owned: DayRuns = row?.feed_days ?? [];
@@ -252,11 +319,13 @@ export async function mergeSeries(
 	if (owned.length === 0) owner = null;
 	const merged = mergeDaily(existing, incoming, { keepOnNull });
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
-	const before = row ? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values } : null;
+	const before = row
+		? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values, product: row.product, productVersion: row.productVersion }
+		: null;
 	const sameOwner = !!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
 	// leave the values, so updated_at still says when the values last changed.
-	if (row && row.unit === body.unit && sameDaily(existing!, merged)) {
+	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label)) {
 		const { rows } = sameOwner
 			? await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
 					projectId,
@@ -271,13 +340,26 @@ export async function mergeSeries(
 		return { meta: rows[0]!, before, after: merged, kept, written };
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)})
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(),
-			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days
+			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
+			product = EXCLUDED.product, product_version = EXCLUDED.product_version
 		 RETURNING ${SERIES_META}`,
-		[projectId, body.kind, body.name, body.unit, merged.startDate, merged.values, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
+		[
+			projectId,
+			body.kind,
+			body.name,
+			body.unit,
+			merged.startDate,
+			merged.values,
+			owner,
+			owned.map((r) => r[0]),
+			owned.map((r) => r[1]),
+			label?.product ?? null,
+			label?.version ?? null
+		]
 	);
 	return { meta: rows[0]!, before, after: merged, kept, written };
 }

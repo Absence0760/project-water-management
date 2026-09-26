@@ -375,6 +375,16 @@
 //             worker are lazy, so no page's first load grows by more than the
 //             shared engine share. Headroom ~6 KB. Issue #9 (bring the bundle
 //             down) still stands.
+// 2026-09-26  total 754 → 760 KB; other ceilings unchanged. CHIRPS product
+//             and version (issue #40 (c)): the b023 import review's CHIRPS
+//             column choice, the Upload CSV and series-row version selects,
+//             the Data feeds panel's product / start-date fields, version
+//             question and staged-replacement progress (its own lazy chunk),
+//             the Data / Runs tab rebuilding notes, and the fit record's
+//             CHIRPS source row and comparison. Measured merged over main
+//             f072a83: 748 → 753 KB (+5). No new dependency; the largest
+//             chunk is unchanged (38 KB). Headroom ~7 KB. Issue #9 still
+//             stands.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -385,7 +395,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 754,
+	totalCodeKb: 760,
 	largestChunkKb: 41,
 	largestWorkerKb: 55,
 	largestSpreadsheetWorkerKb: 95,

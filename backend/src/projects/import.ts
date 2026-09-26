@@ -89,8 +89,8 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await saveModel(db, id, model);
 	for (const s of data.series) {
 		await db.query(
-			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values") VALUES ($1, $2, $3, $4, $5, $6)`,
-			[id, s.kind, s.name, s.unit, s.startDate, s.values]
+			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			[id, s.kind, s.name, s.unit, s.startDate, s.values, s.product ?? null, s.productVersion ?? null]
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).
