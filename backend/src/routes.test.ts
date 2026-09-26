@@ -55,6 +55,22 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Publication (WP-2.3) and the farmer's farm view (WP-2.6): auth-gated like every project route.
+	it('inventories the publication and farm-view routes as auth-gated', () => {
+		const added = [
+			'GET /projects/:id/publication',
+			'POST /projects/:id/publication',
+			'PATCH /projects/:id/publication/:pubId',
+			'GET /projects/:id/farm',
+			'GET /projects/:id/farm/:nodeId',
+			'GET /projects/:id/farm/:nodeId/export.csv'
+		];
+		for (const r of added) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	it.each(routes.filter((r) => !PUBLIC.has(r)))('%s rejects anonymous requests with 401', async (route) => {
 		const [method, path] = route.split(' ') as [string, string];
 		const url = path.replace(/:[A-Za-z]+/g, '00000000-0000-4000-8000-000000000000');

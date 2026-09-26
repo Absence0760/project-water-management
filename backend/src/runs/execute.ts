@@ -58,17 +58,22 @@ export const PINNED_RUNS_PER_PROJECT_MAX = 10;
 /**
  * True for a run the storage cap never trims and the DELETE route refuses, as
  * a SQL expression over `model_run r`: one the evidence history names, now or
- * before (010_run_nomination), or one an editor pinned (015_run_pinned). The
- * single exemption path for both, so they can't drift apart.
+ * before (010_run_nomination), one an editor pinned (015_run_pinned), or one
+ * a publication in the project's history holds (022_publication; the history
+ * is capped at 12, and a run leaves this set when its last publication is
+ * trimmed). The single exemption path for all three, so they can't drift apart.
  */
-export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id))`;
+export const RUN_KEPT_SQL = `(r.pinned OR EXISTS (SELECT 1 FROM run_nomination n WHERE n.run_id = r.id) OR EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id))`;
+
+/** Also a SQL expression over `model_run r`: a publication (current or in the history) holds the run. */
+export const RUN_PUBLISHED_SQL = `EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id)`;
 
 /**
  * Delete the project's oldest runs beyond the cap (run_series cascades).
  * Runs inside the caller's transaction as the signed-in editor, so RLS
  * (model_run_delete: editor) applies. Returns the ids removed.
  *
- * A kept run (RUN_KEPT_SQL: pinned, or nominated as evidence now or before)
+ * A kept run (RUN_KEPT_SQL: pinned, nominated as evidence now or before, or published)
  * is never trimmed and doesn't count against the cap: the cap keeps the
  * newest `keep` runs that are neither.
  *

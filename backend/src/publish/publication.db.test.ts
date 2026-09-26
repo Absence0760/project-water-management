@@ -1,0 +1,374 @@
+// Publishing a run (WP-2.3, 022_publication.sql) and the farmer's farm view
+// built from it (WP-2.6 API). Every "cannot see" check has a positive
+// control: the same farmer sees their own farm, a viewer sees every farm.
+import { beforeAll, describe, expect, it } from 'vitest';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
+import { trimRuns } from '../runs/execute.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+let owner: User;
+let editor: User;
+let viewer: User;
+let farmer: User; // linked to farm 1
+let farmer2: User; // linked to farm 2 (later farms 2–4)
+let stranger: User;
+let projectId: string;
+// Outlet ← 1 ← 2 ← 3, and 4, 5, 6 straight into the outlet: six farms, so the aggregate rule (k = 5) can go either way.
+const outlet = node('Weir', null);
+const one = node('Farm One', outlet.id);
+const two = node('Farm Two', one.id);
+const farms = [
+	one,
+	two,
+	node('Farm Three', two.id),
+	node('Farm Four', outlet.id),
+	node('Farm Five', outlet.id, { damMinPct: 0 }),
+	node('Farm Six', outlet.id, { damCapacityM3: 0, damInitialPct: 0 })
+];
+const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+const RAIN_START = '2021-10-01';
+const DAYS = 820; // to 2023-12-29
+
+const rowsAs = async <T = Record<string, unknown>>(u: User, sql: string, params: unknown[] = []) =>
+	withUser(u.id, async (db) => (await db.query<T & Record<string, unknown>>(sql, params)).rows);
+const run = async (u: User, pid = projectId) => {
+	const res = await u.call('POST', `/projects/${pid}/runs`, { label: 'r' });
+	expect(res.status).toBe(201);
+	return res.body.run.id as string;
+};
+const publish = (u: User, runId: string, extra: Record<string, unknown> = {}, pid = projectId) => u.call('POST', `/projects/${pid}/publication`, { runId, ...extra });
+const csv = async (u: User, path: string) => {
+	const r = await app.request(path, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } });
+	return { status: r.status, text: await r.text(), headers: r.headers };
+};
+
+/** A project with the six-farm network; node and crop ids are the shared ones for the main project, fresh for any other (ids are global). */
+async function makeProject(u: User, name: string, sharedIds = false, days = DAYS) {
+	const id = (await u.call('POST', '/projects', { name })).body.project.id as string;
+	const ids = new Map<string, string>([outlet, ...farms, crop].map((x) => [x.id, sharedIds ? x.id : crypto.randomUUID()]));
+	const remap = (v: string | null) => (v === null ? null : ids.get(v)!);
+	const model = {
+		nodes: [outlet, ...farms].map((n) => ({ ...n, id: remap(n.id), downstreamNodeId: remap(n.downstreamNodeId) })),
+		crops: [{ ...crop, id: remap(crop.id) }],
+		cropAreas: farms.map((f, i) => ({ nodeId: remap(f.id), cropId: remap(crop.id), areaM2: 100_000 + 40_000 * i })),
+		transfers: []
+	};
+	expect((await u.call('PUT', `/projects/${id}/model`, model)).status).toBe(200);
+	expect((await u.call('PATCH', `/projects/${id}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(4000) } })).status).toBe(200);
+	const rain = Array.from({ length: days }, (_, i) => (i % 9 === 0 ? 25 : i % 4 === 0 ? 3 : 0));
+	expect((await u.call('PUT', `/projects/${id}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: RAIN_START, values: rain })).status).toBe(200);
+	return id;
+}
+
+beforeAll(async () => {
+	[owner, editor, viewer, farmer, farmer2, stranger] = (await Promise.all(['Powner', 'Peditor', 'Pviewer', 'Pfarmer', 'Pfarmertwo', 'Pstranger'].map((n) => signUp(n)))) as [
+		User,
+		User,
+		User,
+		User,
+		User,
+		User
+	];
+	projectId = await makeProject(owner, 'Publication', true);
+	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
+	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farms[0]!.id] })).status).toBe(201);
+	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer2.email, nodeIds: [farms[1]!.id] })).status).toBe(201);
+}, 60_000);
+
+describe('publishing', () => {
+	it('publishes a run as an editor, with one projection per farm, and one current publication', async () => {
+		const r1 = await run(editor);
+		const res = await publish(editor, r1, { note: 'First baseline', restriction: { level: 'advisory', pct: 10, noticeEn: 'Please save water.', noticeAf: 'Spaar asseblief water.' }, nextExpectedOn: '2024-01-15' });
+		expect(res.status).toBe(201);
+		expect(res.body.farms).toBe(6);
+		expect(res.body.publication).toMatchObject({
+			runId: r1,
+			publishedBy: 'Peditor',
+			note: 'First baseline',
+			restriction: { level: 'advisory', pct: 10, noticeEn: 'Please save water.', noticeAf: 'Spaar asseblief water.' },
+			nextExpectedOn: '2024-01-15',
+			supersededAt: null,
+			catchmentView: { runStart: RAIN_START, farmCount: 6, runoffModel: 'gr4j' }
+		});
+		const r2 = await run(editor);
+		expect((await publish(editor, r2)).status).toBe(201);
+		const list = await viewer.call('GET', `/projects/${projectId}/publication`);
+		expect(list.body.current.runId).toBe(r2);
+		expect(list.body.current.restriction).toEqual({ level: 'none', pct: null, noticeEn: null, noticeAf: null });
+		expect(list.body.history.map((h: { runId: string }) => h.runId)).toEqual([r2, r1]);
+		expect(list.body.history[1].supersededAt).not.toBeNull();
+		const current = await asOwner('SELECT count(*)::int AS n FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		expect(current).toEqual([{ n: 1 }]);
+		expect((await asOwner('SELECT count(*)::int AS n FROM publication_farm WHERE project_id = $1', [projectId]))[0].n).toBe(12);
+		// The runs list flags the current one.
+		const runs = (await viewer.call('GET', `/projects/${projectId}/runs`)).body.runs as { id: string; published: boolean }[];
+		expect(runs.find((r) => r.id === r2)!.published).toBe(true);
+		expect(runs.find((r) => r.id === r1)!.published).toBe(false);
+	});
+
+	it('refuses a second current publication in the database itself', async () => {
+		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		await expect(
+			withUser(editor.id, (db) => db.query('INSERT INTO run_publication (project_id, run_id, published_by) VALUES ($1, $2, $3)', [projectId, runId, editor.id]))
+		).rejects.toMatchObject({ code: '23505' });
+	});
+
+	it('lets only editors publish, and only runs of this project', async () => {
+		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		expect((await publish(viewer, runId)).status).toBe(403);
+		expect((await publish(farmer, runId)).status).toBe(403);
+		expect((await publish(stranger, runId)).status).toBe(404);
+		const other = await makeProject(owner, 'Elsewhere');
+		const foreignRun = await run(owner, other);
+		expect(await publish(editor, foreignRun)).toEqual({ status: 400, body: { error: 'no such run in this project' } });
+		// And in the database: a publication naming another project's run.
+		await expect(
+			withUser(owner.id, async (db) => {
+				await db.query('UPDATE run_publication SET superseded_at = now() WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+				await db.query('INSERT INTO run_publication (project_id, run_id, published_by) VALUES ($1, $2, $3)', [projectId, foreignRun, owner.id]);
+			})
+		).rejects.toMatchObject({ code: '23503' });
+		// A farmer can't write a publication even past the API.
+		await expect(
+			withUser(farmer.id, (db) => db.query('INSERT INTO run_publication (project_id, run_id, published_by) VALUES ($1, $2, $3)', [projectId, runId, farmer.id]))
+		).rejects.toMatchObject({ code: '42501' });
+		expect((await owner.call('DELETE', `/projects/${other}`)).status).toBe(204);
+	});
+
+	it('refuses a legacy-runoff-model run', async () => {
+		const legacy = await makeProject(owner, 'Legacy');
+		expect((await owner.call('PATCH', `/projects/${legacy}`, { settings: { runoffModel: 'legacy' } })).status).toBe(200);
+		const r = await run(owner, legacy);
+		const res = await publish(owner, r, {}, legacy);
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/legacy runoff model/);
+		expect((await owner.call('DELETE', `/projects/${legacy}`)).status).toBe(204);
+	});
+
+	it('validates the notice', async () => {
+		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		expect((await publish(editor, runId, { restriction: { level: 'none', pct: 5 } })).status).toBe(400);
+		expect((await publish(editor, runId, { restriction: { level: 'severe' } })).status).toBe(400);
+		expect((await publish(editor, runId, { restriction: { level: 'advisory', noticeEn: 'x'.repeat(2001) } })).status).toBe(400);
+		expect((await publish(editor, runId, { nextExpectedOn: '2024-02-31' })).status).toBe(400);
+	});
+});
+
+describe('changing the notice', () => {
+	it('changes the restriction, note and next date without re-publishing, as an editor', async () => {
+		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
+		const res = await editor.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, {
+			restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null },
+			nextExpectedOn: null
+		});
+		expect(res.status).toBe(200);
+		expect(res.body.publication).toMatchObject({ id: cur.id, runId: cur.runId, restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null }, nextExpectedOn: null, updatedBy: 'Peditor' });
+		expect(res.body.publication.catchmentView).toEqual(cur.catchmentView);
+		expect((await viewer.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, { note: 'x' })).status).toBe(403);
+		expect((await farmer.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, { note: 'x' })).status).toBe(403);
+		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, {})).status).toBe(400);
+		const old = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.history[1];
+		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${old.id}`, { note: 'late' })).status).toBe(409);
+	});
+
+	it('never lets the app change what was published, only the notice', async () => {
+		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
+		for (const sql of ["UPDATE run_publication SET catchment_view = '{}' WHERE id = $1", 'UPDATE run_publication SET published_at = now() WHERE id = $1']) {
+			await expect(withUser(owner.id, (db) => db.query(sql, [cur.id]))).rejects.toMatchObject({ code: '42501' });
+		}
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE publication_farm SET view = '{}' WHERE publication_id = $1`, [cur.id]))).rejects.toMatchObject({ code: '42501' });
+	});
+});
+
+describe('publications keep their runs', () => {
+	it('spares published runs from the trim (positive control: an unpublished run is trimmed)', async () => {
+		const unpublished = await run(editor);
+		const published = (await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1', [projectId])).map((r) => r.run_id as string);
+		expect(published.length).toBeGreaterThanOrEqual(2);
+		const newest = await run(editor);
+		const removed = await withUser(editor.id, (db) => trimRuns(db, projectId, 1));
+		expect(removed).toContain(unpublished);
+		for (const r of published) expect(removed).not.toContain(r);
+		expect(removed).not.toContain(newest);
+		const left = (await asOwner('SELECT id FROM model_run WHERE project_id = $1', [projectId])).map((r) => r.id);
+		expect(left.sort()).toEqual([...published, newest].sort());
+	});
+
+	it('answers 409 to deleting a published run (positive control: an unpublished one goes)', async () => {
+		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
+		expect(await editor.call('DELETE', `/projects/${projectId}/runs/${runId}`)).toEqual({ status: 409, body: { error: 'run is published: it is, or was, the published baseline, so it is kept' } });
+		const loose = await run(editor);
+		expect((await editor.call('DELETE', `/projects/${projectId}/runs/${loose}`)).status).toBe(204);
+	});
+
+	it('keeps the newest 12 publications, and their runs become trimmable', async () => {
+		// A short record: thirteen runs and publications of it.
+		const p = await makeProject(owner, 'History cap', false, 60);
+		const runIds: string[] = [];
+		for (let i = 0; i < 13; i++) {
+			const r = await run(owner, p);
+			runIds.push(r);
+			expect((await publish(owner, r, {}, p)).status).toBe(201);
+		}
+		const history = (await owner.call('GET', `/projects/${p}/publication`)).body.history as { runId: string }[];
+		expect(history).toHaveLength(12);
+		expect(history.map((h) => h.runId)).not.toContain(runIds[0]);
+		expect(history[0]!.runId).toBe(runIds[12]);
+		// The first run is no longer held; with a newer unpublished run and a cap of 1, it goes.
+		await run(owner, p);
+		const removed = await withUser(owner.id, (db) => trimRuns(db, p, 1));
+		expect(removed).toEqual([runIds[0]]);
+		// A project with publications still deletes whole.
+		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
+		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [p])).toEqual([]);
+	});
+});
+
+describe('what a farmer reads', () => {
+	let currentRun: string;
+	beforeAll(async () => {
+		currentRun = (await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]))[0].run_id;
+	});
+
+	it('shows a farmer only their own farm’s projection; a viewer sees every farm', async () => {
+		const own = await rowsAs<{ node_id: string }>(farmer, 'SELECT DISTINCT node_id FROM publication_farm WHERE project_id = $1', [projectId]);
+		expect(own).toEqual([{ node_id: farms[0]!.id }]);
+		expect((await rowsAs(viewer, 'SELECT DISTINCT node_id FROM publication_farm WHERE project_id = $1', [projectId])).length).toBe(6);
+		expect(await rowsAs(stranger, 'SELECT 1 FROM publication_farm WHERE project_id = $1', [projectId])).toEqual([]);
+		// Every member reads the publication itself; a stranger doesn't.
+		expect((await rowsAs(farmer, 'SELECT 1 FROM run_publication WHERE project_id = $1', [projectId])).length).toBeGreaterThan(0);
+		expect(await rowsAs(stranger, 'SELECT 1 FROM run_publication WHERE project_id = $1', [projectId])).toEqual([]);
+	});
+
+	it('lets a farmer read only their farm’s allowlisted series of the current published run', async () => {
+		const keys = await rowsAs<{ node_id: string; key: string; run_id: string }>(farmer, 'SELECT node_id, key, run_id FROM run_series WHERE project_id = $1', [projectId]);
+		expect(new Set(keys.map((k) => k.node_id))).toEqual(new Set([farms[0]!.id]));
+		expect(new Set(keys.map((k) => k.run_id))).toEqual(new Set([currentRun]));
+		expect(keys.map((k) => k.key).sort()).toEqual(['dam_storage', 'deficit', 'demand', 'spill', 'supplied', 'transfer']);
+		// Positive control: a viewer reads every series of every run, flows included.
+		const all = await rowsAs<{ key: string }>(viewer, 'SELECT key FROM run_series WHERE project_id = $1 AND run_id = $2', [projectId, currentRun]);
+		expect(all.some((r) => r.key === 'inflow_upstream')).toBe(true);
+		expect(all.length).toBeGreaterThan(keys.length);
+		// No model_run and no time series, published or not.
+		expect(await rowsAs(farmer, 'SELECT 1 FROM model_run WHERE project_id = $1', [projectId])).toEqual([]);
+	});
+
+	it('serves the farm view of the farmer’s own farm, naming no other node', async () => {
+		const res = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`);
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({
+			project: { id: projectId, name: 'Publication' },
+			farm: { nodeId: farms[0]!.id, name: 'Farm One', dataUntil: '2023-12-29', season: { from: '2023-10-01', to: '2023-12-29' } },
+			context: { farmsUpstream: 2, farmsDownstream: 0, farmCount: 6 },
+			publication: { publishedBy: 'Peditor', restriction: { level: 'restricted', pct: 25.5, notice: 'Irrigation cut by 25 %.', noticeLang: 'en' }, nextExpectedOn: null },
+			outlet30: { name: 'Weir', days: 30 },
+			stale: true
+		});
+		expect(res.body.farm.monthly).toHaveLength(12);
+		expect(res.body.farm.lastSeason).toMatchObject({ from: '2022-10-01', to: '2022-12-29' });
+		expect(typeof res.body.publication.engineVersion).toBe('string');
+		// The response scan: no other farm's id or name, anywhere.
+		const text = JSON.stringify(res.body);
+		for (const f of farms.slice(1)) {
+			expect(text).not.toContain(f.id);
+			expect(text).not.toContain(f.name);
+		}
+		// Their publication list names no farm and carries no staff note.
+		const pubs = await farmer.call('GET', `/projects/${projectId}/publication`);
+		expect(pubs.status).toBe(200);
+		expect(pubs.body.current).not.toHaveProperty('note');
+		const ptext = JSON.stringify(pubs.body);
+		for (const f of farms) {
+			expect(ptext).not.toContain(f.id);
+			expect(ptext).not.toContain(f.name);
+		}
+		// Positive control: the viewer's list has the note.
+		expect((await viewer.call('GET', `/projects/${projectId}/publication`)).body.current).toHaveProperty('note');
+	});
+
+	it('falls back to the other language when the viewer’s notice is missing', async () => {
+		const af = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}?lang=af`);
+		expect(af.body.publication.restriction).toEqual({ level: 'restricted', pct: 25.5, notice: 'Irrigation cut by 25 %.', noticeLang: 'en' });
+	});
+
+	it('404s a farm the farmer isn’t linked to, even with a publication (positive control: their own is 200)', async () => {
+		for (const n of [farms[1]!.id, farms[3]!.id, outlet.id, '00000000-0000-4000-8000-000000000000', 'not-a-uuid']) {
+			expect((await farmer.call('GET', `/projects/${projectId}/farm/${n}`)).status, n).toBe(404);
+			expect((await csv(farmer, `/projects/${projectId}/farm/${n}/export.csv`)).status, n).toBe(404);
+		}
+		expect((await stranger.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`)).status).toBe(404);
+		expect((await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`)).status).toBe(200);
+		// A viewer previews any farm.
+		expect((await viewer.call('GET', `/projects/${projectId}/farm/${farms[3]!.id}`)).status).toBe(200);
+	});
+
+	it('lists a farmer’s own farms and the current publication', async () => {
+		const res = await farmer.call('GET', `/projects/${projectId}/farm`);
+		expect(res.body).toEqual({
+			project: { id: projectId, name: 'Publication' },
+			farms: [{ nodeId: farms[0]!.id, name: 'Farm One' }],
+			publication: { publishedAt: expect.any(String), restriction: { level: 'restricted' } }
+		});
+		expect((await viewer.call('GET', `/projects/${projectId}/farm`)).body.farms).toHaveLength(6);
+	});
+
+	it('downloads the farm’s own daily CSV: farm keys only, no other node', async () => {
+		const res = await csv(farmer, `/projects/${projectId}/farm/${farms[0]!.id}/export.csv?from=2023-12-01`);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+		expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="publication_farm-one_daily_\d{4}-\d{2}-\d{2}\.csv"$/);
+		const lines = res.text.replace(/^﻿/, '').trim().split('\r\n');
+		expect(lines).toHaveLength(1 + 29);
+		expect(lines[1]!.startsWith('2023-12-01,')).toBe(true);
+		const header = lines[0]!;
+		expect(header.split(',').length).toBe(7);
+		expect(header).not.toMatch(/inflow|outflow|runoff|ewr/i);
+		for (const f of farms.slice(1)) expect(res.text).not.toContain(f.name);
+		expect((await csv(farmer, `/projects/${projectId}/farm/${farms[0]!.id}/export.csv?from=2030-01-01`)).status).toBe(400);
+	});
+});
+
+describe('the aggregate rule on the even share', () => {
+	const share = async (u: User, nodeId: string) => (await u.call('GET', `/projects/${projectId}/farm/${nodeId}`)).body.farm.river as { equitableFraction: number | null; aboveBelowShareM3Day: number | null };
+
+	it('shows the even share with at least k − 1 other holders, and hides it below', async () => {
+		// Farmer: the other holders are farmer2 (farm 2) and farms 3–6 unlinked = 5 ≥ 4.
+		const shown = await share(farmer, farms[0]!.id);
+		expect(shown.equitableFraction).not.toBeNull();
+		expect(shown.aboveBelowShareM3Day).not.toBeNull();
+		// Farmer2 takes farms 2–4: the others are farmer2 once, farms 5 and 6 = 3 < 4.
+		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${farmer2.id}`, { nodeIds: [farms[1]!.id, farms[2]!.id, farms[3]!.id] })).status).toBe(200);
+		const hidden = await share(farmer, farms[0]!.id);
+		expect(hidden).toMatchObject({ equitableFraction: null, aboveBelowShareM3Day: null });
+		// Farmer2 sees farmer (farm 1) and farms 5, 6 = 3: hidden too.
+		expect((await share(farmer2, farms[2]!.id)).equitableFraction).toBeNull();
+		// Stored as computed; a viewer (who links nothing: six holders) sees it.
+		expect((await share(viewer, farms[0]!.id)).equitableFraction).toBe(shown.equitableFraction);
+		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${farmer2.id}`, { nodeIds: [farms[1]!.id] })).status).toBe(200);
+	});
+});
+
+describe('a run that goes on on forecast rain', () => {
+	it('projects only to the last day of observed rain, and the CSV stops there too', async () => {
+		const p = await makeProject(owner, 'Forecast tail', false, 90); // observed rain to 2021-12-29
+		expect((await owner.call('PUT', `/projects/${p}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2021-12-30', values: new Array(10).fill(4) })).status).toBe(200);
+		const r = await run(owner, p);
+		const meta = (await owner.call('GET', `/projects/${p}/runs`)).body.runs.find((x: { id: string }) => x.id === r);
+		expect(meta.endDate).toBe('2022-01-08');
+		expect((await publish(owner, r, {}, p)).status).toBe(201);
+		const farmId = (await owner.call('GET', `/projects/${p}/farm`)).body.farms[0].nodeId as string;
+		const view = (await owner.call('GET', `/projects/${p}/farm/${farmId}`)).body;
+		expect(view.farm.dataUntil).toBe('2021-12-29');
+		expect(view.farm.season).toMatchObject({ from: '2021-10-01', to: '2021-12-29' });
+		const pub = (await owner.call('GET', `/projects/${p}/publication`)).body.current;
+		expect(pub.catchmentView).toMatchObject({ dataUntil: '2021-12-29', runDays: 90 });
+		const file = await csv(owner, `/projects/${p}/farm/${farmId}/export.csv`);
+		const lines = file.text.replace(/^﻿/, '').trim().split('\r\n');
+		expect(lines).toHaveLength(1 + 90);
+		expect(lines.at(-1)!.startsWith('2021-12-29,')).toBe(true);
+		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
+	});
+});

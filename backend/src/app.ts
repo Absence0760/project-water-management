@@ -9,11 +9,13 @@ import { authRoutes } from './auth/routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
+import { farmViewRoutes } from './farms/view.js';
 import { handleError } from './http/errors.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
+import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
 import { runRoutes } from './runs/routes.js';
@@ -91,6 +93,8 @@ export function createApp() {
 	projects.route('/', jobRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', farmerRoutes);
+	projects.route('/', farmViewRoutes);
+	projects.route('/', publicationRoutes);
 	app.route('/projects', projects);
 
 	const teams = new Hono<AuthEnv>();
