@@ -396,7 +396,11 @@ test('with automatic runs on, new data runs the model without anyone pressing Ru
 	await page.goto(`/projects/${project.id}`);
 	const offer = page.getByRole('region', { name: 'Published baseline' }).getByTestId('auto-publish-offer');
 	await expect(offer).toContainText('New auto run: publish? “Auto · data to 2022-01-30” is newer than the published run.');
-	await expect(offer.getByRole('link', { name: 'Compare with the published run' })).toHaveAttribute('href', new RegExp(`/compare\\?a=${project.id}%3A${baseline}&b=${project.id}%3A`));
+	// The workspace's Compare runs tab, published run as A (d0a5d5d5, issue #17 option A step 3).
+	await expect(offer.getByRole('link', { name: 'Compare with the published run' })).toHaveAttribute(
+		'href',
+		new RegExp(`^\\?tab=compare&a=${project.id}%3A${baseline}&b=${project.id}%3A[^&]+$`)
+	);
 	await expect(offer.getByRole('link', { name: 'Review and publish' })).toBeVisible();
 	await expect(page.getByTestId('rerun-queued')).toHaveCount(0);
 });
