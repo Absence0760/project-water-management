@@ -420,6 +420,10 @@ Lessons from the review (judgement):
   automatic station reports midnight to midnight. Correlate the two at lags
   of −1, 0 and +1 day. If the manual series leads, aggregate the automatic
   station's hourly data to 08:00–08:00 windows booked to the start day.
+  **Done, engine 0.30.0 (issue #40 (b)):** the Upload form adds an hourly
+  file up into 08:00–08:00 days booked to the start day, and the series
+  records it; a gauge-anchored replacement is a `settings.rainSource` period
+  ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 - **Check daily intensity, not only totals.** A single automatic gauge has
   more intense days than a mean of several manual gauges, and a constant
   scale factor keeps that. Compare the share of rain on heavy days (say

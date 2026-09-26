@@ -518,7 +518,19 @@ relabels it without touching its values (`PATCH …/series/:id`), viewers the
 words. The **Upload CSV** form asks the same for a CHIRPS file (*Not known*
 by default, or the existing series' own label when appending to it); a
 merge of another version into a filled series is refused by the server with
-its reason. Below 640px wide each row becomes a card
+its reason. The alternative catchment gauge and the reanalysis (engine ≥
+0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
+instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
+*Not used: no rain-source period names it* until Settings → *Rain source
+periods* names them. A CSV with several timed readings a day (an automatic
+station's hourly log) is not refused: the form asks how to add it up into
+days, **08:00 to 08:00, booked to the day it starts** (the default, the
+manual-gauge day) or **midnight to midnight**, and its summary says how many
+readings, how many a day and how many days are short of that. Each
+timestamp closes its interval. The series records the choice
+(`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
+other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+Below 640px wide each row becomes a card
 (series and role on top, then labelled Period / Data up to / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
@@ -753,7 +765,27 @@ which checks every catchment tab).
   when spreading: readings confirmed as one day's rain) and **Also spread**
   (windows listed by hand, ending on the reading day), on the same period
   editor. The help entry *Multi-day rain accumulations* explains the
-  detection rule.
+  detection rule. Last, **Rain source periods**
+  (`settings/RainSourceSection.svelte`, pure part `settings/rainSource.ts`,
+  `settings.rainSource`, engine ≥ 0.30.0,
+  [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)):
+  *None* until **Add a rain-source period**, which starts one over the last
+  five complete water years from the alternative catchment gauge, fitted
+  against the reanalysis over the ten years before, with a blank reason
+  that blocks Save until written. Each period has From / To dates, a
+  Reason, **Factors** (*Fixed monthly factors, with where they came from*:
+  twelve factors Oct … Sep, 0.25–4, and *Fitted by*, *Fitted on, from* /
+  *to*, *Method*, all required; or *Fit against a reference series*: the
+  reference, reanalysis or CHIRPS, and the reference era's water years),
+  **Gaps from** (CHIRPS × the CHIRPS fit-period factors, or the reanalysis
+  with the water years its factors are fitted on) and **CHIRPS ingests this
+  gauge in this period**, which refuses CHIRPS as the reference and needs a
+  reanalysis fallback. The form blocks Save on the engine's own check
+  (`rainSourceError`, which the API uses too), with the first problem
+  shown under the list. It doesn't reuse the period editors above: its rows
+  have different fields, and it is the second list with water-year fields
+  (the CHIRPS fit period is the first), short of the third caller that
+  would justify a shared editor.
 - **Calibration record** (`#set-record`): the calibration window and flow
   series (`calibration/CalibrationWindowFields.svelte`), and the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
@@ -821,7 +853,10 @@ which checks every catchment tab).
     or version than the fit ran on (issue #40 part c; the fit records it, and
     Settings compares the series a run would use), with its own caveat. The
     record's **CHIRPS series** row names the product and version the fit ran
-    on, and the series' current one when it differs.
+    on, and the series' current one when it differs. Its **Rain source
+    periods** row lists the periods the fit ran under (engine ≥ 0.30.0; a
+    fit made before them ran with none), and a change of periods also shows
+    **Forcing changed since fit**.
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.

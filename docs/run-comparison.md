@@ -68,7 +68,19 @@ The page has these sections, top to bottom:
    fit uses, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)),
    a multi-day accumulation newly detected, kept or listed (engine ≥ 0.20.0,
    its window days are left out of the fit, [§2.4d](./model.md#24d-multi-day-rainfall-accumulations)),
-   or the engine version. And there is a
+   a rain-source period (engine ≥ 0.30.0, its primary days are left out of
+   the fit), or the engine version. There is a note when the **rain-source
+   periods** differ (`RunComparison.rainSource`, engine ≥ 0.30.0,
+   [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)):
+   one line per period and run, with its dates, reason, series and its
+   product label, the factors (Oct … Sep), where they came from (fixed with
+   provenance, or a fit's reference, reference era and the water years that
+   gave each ratio shared days: the reference windows) and its fallback, so
+   two runs that used different reference eras, or a different alternative
+   gauge product, say so (`compare/rainSource.ts`). A change of the
+   `rainSource` setting itself is also a settings line ("Rain-source periods:
+   none (the catchment series throughout) → 2012-10-01 to 2019-09-30: …"); a
+   run saved before 0.30.0 compares as none. And there is a
    warning when **either run used the legacy runoff model** (audit H1): it
    doesn't conserve water at the event scale, so the comparison is a workbook
    comparison only, not evidence.

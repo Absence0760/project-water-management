@@ -625,7 +625,9 @@ the keep-dry guard, which still judges with whole-record factors), the
 minimum sample and the clamp. **Replaced and filled days never enter any
 fit**: a `missing` period at any level leaves every range's factors exactly
 as if its days were blank (a test pins this with a period at 10 × CHIRPS),
-and so do the days of a flagged zero run CHIRPS fills. **The minimum sample
+and so do the days of a flagged zero run CHIRPS fills and (engine ≥ 0.30.0)
+the primary days of a rain-source period (§2.4e), which a second test pins
+the same way. **The minimum sample
 falls back within the range first**: a month short of 90 shared days or
 50 mm of CHIRPS in its range takes the range's pooled factor, and with too
 little for that, the factor for that month over all the listed ranges
@@ -711,6 +713,7 @@ and the series explorer:
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
+| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from with rain-source periods (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Only output when the settings list a period | NaN when no source has a value |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -823,7 +826,10 @@ over a flagged run** for its days, in accumulation mode `'spread'`: the
 window's own recorded total covers them, so they are not filled from CHIRPS
 as well (engine ≥ 0.20.0; up to 0.19 a flagged run that ended in an
 accumulation reading was filled *and* the reading kept, counting that rain
-twice). A listed missing period wins over a window.
+twice). A listed missing period wins over a window. A day inside a
+rain-source period (§2.4e, engine ≥ 0.30.0) is set aside by neither a
+flagged run nor a listed missing period: the period's own series gives its
+rain, and its primary reading stays out of the CHIRPS fit.
 
 **Not changed.** The data checks (§2.10a) still report the flagged runs,
 because the data is still suspect. The low-vs-CHIRPS check never blanks a
@@ -968,6 +974,125 @@ client catchment suite replays with `accumulationMode: 'asRecorded'`. Its
 "B4:" test runs the defaults: each window wholly inside the run adds up to
 its recorded total, no window day is also filled as a zero run, catchment
 rain changes on no other day, and every self-check passes.
+
+### 2.4e Rain-source periods (engine ≥ 0.30.0, issue #40 (b))
+
+`packages/engine/src/rainSourcePeriods.ts`. Setting: `settings.rainSource`,
+a list of periods, default none.
+
+**Why.** The catchment-rain series can stop representing the catchment for a
+stretch of years: a gauge closes or moves, the "catchment average" is built
+from other gauges, and the level and seasonal shape change against every
+reference ([calibration-research.md § Rain forcing](./calibration-research.md#rain-forcing-which-record-and-how-to-homogenise-it-issue-12)).
+Scaling such an era back is not defensible when its *shape* changed. Up to
+0.29 the only remedy was to list it as `missing` (§2.4c) and fill it from
+bias-corrected CHIRPS, and two gridded fills can disagree by tens of percent
+in a single year. Where another gauge covers the era (an in-catchment
+automatic station), a gauge-anchored replacement is better.
+
+**The rule.** Over each listed period (ISO dates, inclusive), a day's
+catchment rain is
+
+  rain = alternative series × factor(calendar month of the day)
+
+where the alternative series is `rain_catchment_alt_mm`, a second
+catchment-rain kind that the engine reads nowhere else. The primary
+catchment reading inside a period is never used. A day the alternative
+series lacks (or a month without a factor) falls through to the period's
+**fallback**, then forecast rain, then nothing (0 mm, with the run's usual
+"no rainfall value" warning).
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `start`, `end` | ISO dates | The period, inclusive. Periods may not overlap |
+| `series` | `'rain_catchment_alt_mm'` | The series the period's rain comes from |
+| `factors` | 12 numbers (Oct … Sep), 0.25–4, **or** `'fit'` | Fixed factors, the normal case, need `provenance`; `'fit'` needs `fitReference` |
+| `provenance` | `{ source, fittedFrom, fittedTo, method }` | Fixed factors only: who fitted them, the dates they were fitted on, and how |
+| `fitReference` | `{ series, fromWaterYear, toWaterYear }` | `'fit'` only: the reference series (`rain_reanalysis_mm` or `rain_chirps_mm`) and the **reference era** |
+| `fallback` | absent, or `{ series: 'rain_reanalysis_mm', fromWaterYear, toWaterYear }` | Where the series' gaps go. Absent: CHIRPS × the §2.4b factors (the fit period's), as for any blank day. Named: reanalysis × catchment ÷ reanalysis factors fitted over that era |
+| `gaugeInChirps` | boolean | The period's gauge reports to CHIRPS: CHIRPS may be neither the fit reference nor the fallback, so a fallback must be named |
+| `reason` | 1–500 characters | Why, shown in the warning, the summary CSV and run comparison |
+
+**`'fit'`.** The alternative gauge is scaled to the primary series' level in
+the reference era, through a reference series that contains neither:
+
+  factor(m) = (Σ catchment ÷ Σ reference, month *m*, reference era)
+            ÷ (Σ alternative ÷ Σ reference, month *m*, over the period)
+
+This is the research note's era factor (calibration-research.md §4,
+*Replace, don't scale*). Each ratio uses the §2.4b minimum sample (90
+shared days and 50 mm of reference rain for a month's own ratio, else the
+pooled ratio over all months) and the result is clamped to 0.25–4. The
+catchment side uses only trusted days: outside every rain-source period, off
+the suspect days of §2.4b/§2.4c/§2.4d (listed missing, flagged zero runs
+not kept dry, accumulation windows), and outside the low-vs-CHIRPS years. A
+month with neither ratio has no factor, and its days fall through. **The
+reference must not contain the gauge.** CHIRPS v3 ingests in-catchment
+automatic stations once they report, so once `gaugeInChirps` is set, CHIRPS
+is refused as the reference (API 400; the engine drops the period with a
+warning): use a gauge-free reanalysis such as ERA5, stored as its own series
+kind, `rain_reanalysis_mm`, which the engine reads only as a reference or a
+named fallback. Fixed factors are the normal case: a factor fitted once, by
+the hydrologist, and recorded with its provenance, doesn't move when a new
+year of data arrives.
+
+**Left out of every fit.** A period's primary catchment days are replaced,
+so they are left out of the §2.4b CHIRPS factors (counted in
+`replacedDaysLeftOut`, and the correction warning names them), of the
+per-range fits, of a `'fit'` here and of a reanalysis fallback's fit, one
+by one, whatever they read (a test pins this with the primary at 10 ×
+CHIRPS over a replaced period). The alternative series never enters any fit
+either. The zero-run handling (§2.4c) doesn't claim a day inside a period
+(the period's series gives its rain), and accumulation windows (§2.4d)
+overlapping a period are dropped as if it were listed missing. The data
+checks (§2.10a) still read the primary series as recorded, but the fits
+judge the low-vs-CHIRPS years without the replaced days (`withoutReplaced`
+in `rain.ts`), so a replaced era far below CHIRPS doesn't take the rest of
+its water years out of the fits too.
+
+**The run window** extends to the alternative series' first and last day
+inside a period, so a gauge that runs past the primary record drives the
+run over the period.
+
+**Output.** `summary.rainSource` (null without periods) lists each period
+with its factors applied (calendar months), their origin (fixed with
+provenance, or the fit's two ratios per month with the **reference window**
+and the period window: the water years that actually gave each ratio shared
+days), the fallback (and its factors and window), the series' product
+label (`seriesProvenance`, 032), and where its run days' rain came from:
+`seriesDays` (with the raw and scaled millimetres), `chirpsDays`,
+`reanalysisDays`, `forecastDays` and `noneDays`. Each period adds one run
+warning with those counts, the factors (Oct–Sep) and their origin, and names
+any month without a factor. A daily column **`rain_source`** (only with
+periods) marks where each day's rain came from: 0 catchment, 1 alternative
+gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank for none. The summary CSV
+has a *Rain-source periods* block (`rainSourceCsvLines` in
+`backend/src/export/run-tables.ts`): one row per period with its reason,
+day counts, factors' origin and fallback, then the factors by month. Run
+comparison lists a change of `rainSource` among the settings and sets the
+two runs' periods side by side (`RunComparison.rainSource`, with factors,
+reference windows and product label). A fit record's `forcing.rainSource`
+stores the periods, and any change flags "Forcing changed since fit" (a fit
+recorded before 0.30.0 ran with none). Settings → Rain gaps and CHIRPS →
+*Rain source periods* edits them ([ui.md](./ui.md)).
+
+**Sub-daily imports and the day boundary.** Manual gauges are read at 08:00
+and the reading is booked to the previous day; an automatic station reports
+midnight to midnight, so a storm straddling midnight lands a day apart in
+the two. A CSV with several timed readings a day is added up into days in
+the window the uploader picks: **08:00 to 08:00, booked to the day it
+starts** (the default, the manual-gauge day), or midnight to midnight. Each
+timestamp is taken to close its interval, so a reading stamped exactly
+08:00 belongs to the day before. The series records the choice
+(`time_series.day_boundary`, 033, [data-model.md](./data-model.md)), and a
+merge of days added up in the other window is refused. The engine itself
+reads only daily values.
+
+**Not done here.** Quantile mapping of a single automatic gauge's heavier
+daily intensities (calibration-research.md §4) is not applied: a factor
+keeps the gauge's own wet-day distribution. A replacement from a gridded
+product alone (no gauge) is still a `missing` period (§2.4c) filled from
+CHIRPS.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -2305,6 +2430,11 @@ before any run, with the project's thresholds.
 **Other input checks** (`seriesChecks`, `areaMismatches` in `quality.ts`),
 reported as run warnings, in `RunSummary.dataQuality.seriesChecks` /
 `areaMismatches`, and on the Time series tab:
+
+The negative, outlier and flat-line checks run on every series present,
+the alternative catchment gauge and the reanalysis (§2.4e, engine ≥ 0.30.0)
+included; the zero-run, low-vs-CHIRPS and double-mass checks read the
+primary catchment series only.
 
 | Check | Rule | Why |
 | --- | --- | --- |
