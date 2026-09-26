@@ -6,6 +6,7 @@
 	// (its own chunk), so the workspace doesn't carry it.
 	import { onMount } from 'svelte';
 	import { api, type AlertEvent } from '$lib/api';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import { eventText, KIND_NAME } from './alerts';
 
 	let { projectId, canEdit }: { projectId: string; canEdit: boolean } = $props();
@@ -25,9 +26,17 @@
 	}
 	onMount(load);
 
+	// A failed download says so and offers a reload (ChunkFailed; lazy.ts says
+	// why pressing again can't help).
+	let editorFailed = $state(false);
 	async function openEditor() {
-		Editor ??= (await import('./AlertRulesEditor.svelte')).default;
-		editorOpen = true;
+		editorFailed = false;
+		try {
+			Editor ??= (await import('./AlertRulesEditor.svelte')).default;
+			editorOpen = true;
+		} catch {
+			editorFailed = true;
+		}
 	}
 </script>
 
@@ -52,6 +61,8 @@
 	{#if canEdit}
 		{#if editorOpen && Editor}
 			<Editor {projectId} onClose={() => (editorOpen = false)} onSaved={load} />
+		{:else if editorFailed}
+			<ChunkFailed what="The alert email settings" />
 		{:else}
 			<p><button type="button" class="btn btn-sm" onclick={openEditor}>Set up alert emails</button></p>
 		{/if}

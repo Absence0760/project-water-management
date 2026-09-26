@@ -1040,7 +1040,7 @@ the suggested order (the IDs carry the detail):
       code. Pinning the keyboard path found that `Dialog` couldn't be
       reopened straight after Escape (its `close` event is queued, so the
       bound `open` lagged); it now follows `cancel` too.
-- [ ] **A failed chunk download can't be retried without a reload.**
+- [x] **A failed chunk download can't be retried without a reload.**
       `common/lazy.ts` forgets a failed import and `Lazy.svelte` offers
       "Try again", but browsers keep a module that failed to fetch in the
       page's module map (HTML spec; checked in Chromium with the home
@@ -1051,6 +1051,40 @@ the suggested order (the IDs carry the detail):
       reload when something is (the save bar knows), and correct the
       comment in `lazy.ts`. Trigger: the next change to `Lazy.svelte`, or
       a report of a stuck "Try again".
+      **Done 2026-09-26:** a failed chunk now says what failed and offers
+      **Reload page** (`common/ChunkFailed.svelte`), never "Try again", and
+      never reloads by itself. With unsaved changes it says so; the reload is
+      a plain `location.reload()`, so the page's `beforeunload` guard asks
+      first (`provideUnsaved()` in `common/chunkFailed.ts`: the workspace's
+      model editor and a scenario's override editor). No "Save, then reload"
+      button: the save bar stays on screen, and saving can be refused (model
+      issues), so the user saves and then reloads. `lazy.ts` says why a
+      rerun or a cache-busting URL can't recover. The third, fourth and
+      fifth users made the shared piece: `Lazy`, the home import dialog, and
+      three sites found on the way that had the same bug: the workbook
+      reader in the import dialog (a failed download left it stuck on
+      "Reading…" with the file input disabled), Overview's "Set up alert
+      emails" (did nothing), the report's human-impact tables and the root
+      layout's language catalogue ("Try again" that couldn't work).
+      `e2e/tests/lazy-chunk.spec.ts` pins them (the layout's catalogue
+      aside: its chunk has no name or content a test can block it by).
+      Total bundle 891.5 → 892.8 KB gzip.
+- [ ] **Three dynamic imports still report a failed chunk as a raw error.**
+      The run's workbook export (`export/DownloadMenu.svelte`, "Workbook
+      failed: Failed to fetch dynamically imported module …") and the
+      account's data export (`routes/account/+page.svelte`) show the
+      browser's message, and pressing again fails the same way; the
+      verify-email banner (`routes/+layout.svelte`, `{#await import(…)}`)
+      is silently missing. Nothing is stuck or lost. Durable fix: catch the
+      `import()` on its own and say it the `ChunkFailed` way, as the
+      workbook reader now does. Not done with the rest because each needs
+      more than a swap: the menu's status line is an inline `aria-live`
+      span with no room for an alert and a button, and the account page is
+      a translated surface, so its message needs `t()` wording and the
+      translation sheet (`ChunkFailed` is English, which the layout's
+      catalogue failure can use only because the catalogue is what failed).
+      The banner may well stay silent (a reminder, not the page). Trigger:
+      the next change to either export or the banner.
 - [ ] Soak the fuzz tests after any engine change:
       `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/run.invariants.test.ts`.
       **Owed for engine 0.12.0** (working columns + `checkWorkings`) and
