@@ -1,7 +1,10 @@
 # Testing: the fast loop and the gate
 
-Run the smallest check that proves the change while working, and the full
-suites once, before committing. Measured on the 20-core dev laptop
+Run the smallest check that proves the change while working, and
+`pnpm check && pnpm test` plus the targeted DB/e2e files before committing.
+The full suite (all of `test:backend:db`, all of e2e in 14 shards) runs on
+GitHub Actions on every push to `main` and every PR; don't run it locally,
+and never run the suites one after another. Measured on the 20-core dev laptop
 (2026-09-25):
 
 | Command | What | Wall time |
@@ -19,9 +22,12 @@ suites once, before committing. Measured on the 20-core dev laptop
 1. While editing: `pnpm test:changed` (or one file: `pnpm -C <ws> exec vitest run <path>`).
 2. For UI work, the e2e specs for that surface only: `pnpm test:e2e tests/runs.spec.ts`.
    Never the whole e2e suite locally; CI runs it in 14 shards.
-3. Before the commit: `pnpm check && pnpm test`, plus `pnpm test:backend:db`
-   when backend or SQL changed. Don't re-run a full suite after every small
-   edit: re-run the failing file until it passes, then the suite once.
+3. Before the commit: `pnpm check && pnpm test`, plus the DB test files for
+   backend or SQL you changed (`pnpm -C backend exec vitest run --project db
+   src/<area>`). Not the whole `test:backend:db`: CI runs it. Don't re-run a
+   suite after every small edit: re-run the failing file until it passes.
+4. Don't pipe e2e output into `grep`/`head`/`tail`: the web servers hold the
+   pipe open and the command hangs after the tests finish. Redirect to a file.
 
 ## Why the slow ones are shaped the way they are
 

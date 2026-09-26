@@ -147,24 +147,26 @@ Also run the guard for anything the change touches: `src/routes.test.ts`
 for a new route, `src/db/catalogue.db.test.ts` for a migration,
 `pnpm test:scripts` for root scripts.
 
-**The full suite runs once**, before a merge or push to `main`: where branches
-meet is where they break each other. Its parts are independent (unit tests
-use no database; the DB tests use this checkout's `water_test…`; e2e uses
-its own `water_e2e…` database and ports, `e2e/support/env.ts`), so start them
-**in parallel**, e.g. as three background commands, and wait for all three:
+**The full suite runs on GitHub Actions, not locally.** CI
+(`.github/workflows/ci.yml`) runs on every push to `main` and every PR: unit
+tests, `test:backend:db`, the guards, the bundle budget, and e2e as 14
+parallel shards on one shared build. Locally, before a commit, run
+`pnpm check && pnpm test` plus the DB test files and e2e specs for what you
+touched. Don't run the full `pnpm test:backend:db` or `pnpm test:e2e`
+locally, and never run the suites one after another; if you do need more
+than one locally, their parts are independent (unit tests use no database;
+the DB tests use this checkout's `water_test…`; e2e uses its own
+`water_e2e…` database and ports, `e2e/support/env.ts`), so start them as
+background commands in parallel. Run `pnpm build:frontend && pnpm
+check:bundle` when you added or moved frontend code. The DB project stays
+serial *inside* itself (its queue and feed tests claim jobs globally;
+`backend/vitest.workspace.ts` pins it to one fork). The perf projects
+(`test:*:perf`) run alone, never alongside anything, since they assert
+wall-clock budgets.
 
-```bash
-pnpm test                   # engine + frontend + backend unit
-pnpm test:backend:db        # serial inside (one fork), ~2 min
-pnpm test:e2e               # ~2–3 min
-```
-
-then `pnpm test:guards`, `pnpm test:scripts`, and `pnpm build:frontend &&
-pnpm check:bundle`. The DB project must stay serial *inside* itself (its
-queue and feed tests claim jobs globally; `backend/vitest.workspace.ts`
-pins it to one fork), but it can run beside the other two. The perf
-projects (`test:*:perf`) are the exception: run them alone, never alongside
-anything, since they assert wall-clock budgets.
+Don't pipe `pnpm test:e2e` into `grep`, `head` or `tail`: Playwright's web
+servers keep the pipe open after the tests finish, so the command hangs
+until something kills it. Redirect to a file (`> e2e.log 2>&1`) and read that.
 
 Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main
 --generate-notes` deploys that component after a preflight and the

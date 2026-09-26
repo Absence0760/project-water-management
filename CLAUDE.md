@@ -36,7 +36,7 @@ Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `
 9. e2e is Playwright under `e2e/`. It runs fully locally against docker Postgres, the backend and a production build of the frontend (not `vite dev`), with no `networkidle` waits and a pinned `timezoneId: 'UTC'`.
 10. Engine correctness is judged by documented hydrology and invariant tests, not by agreement with the b023 workbook. Where the engine departs from the workbook, `docs/engine-audit.md` says why and the client catchment regression suite in `packages/engine` lists the affected columns with the finding ID; any other difference is a bug. Those regression tests may skip **only** when the gitignored `data/` fixtures are absent.
 11. **The repo is public.** Client data (workbooks, extracted data, real farm names or values) is never committed; fixtures are synthetic. Secrets live only in `infra-secrets/water-management/`.
-12. **Test the area you changed; run the full suite once, where branches meet.** While working, run `pnpm test:changed` (typecheck + the vitest files your changes touch), or `pnpm check` plus the tests for what you touched by hand: the vitest files or directories you changed, and the e2e specs for the screens you changed. Don't re-run the full suites after each change, and don't have parallel agents run them: give each agent targeted test commands. The full suite (unit, `test:backend:db`, `test:e2e`, the guards) runs **once**, before a merge or push to `main`, and its independent parts run **in parallel** (they use separate databases and ports). Commands: `docs/STACK.md` § Running tests.
+12. **Test the area you changed; the full suite is CI's job.** While working, run `pnpm test:changed` (typecheck + the vitest files your changes touch), or `pnpm check` plus the tests for what you touched by hand: the vitest files or directories you changed, the DB test files for backend/SQL you changed, and the e2e specs for the screens you changed. Before a commit, `pnpm check && pnpm test` plus those targeted DB/e2e files. **Don't run the full `test:backend:db` or `test:e2e` locally, and never run the suites one after another**: GitHub Actions runs the whole suite on every push to `main` and every PR, with e2e split into 14 parallel shards (`.github/workflows/ci.yml`). Don't have parallel agents run full suites either: give each agent targeted test commands. Commands: `docs/STACK.md` § Running tests.
 
 ## Working alongside other Claude sessions
 
@@ -104,9 +104,11 @@ If you spot a candidate fix that fits one of those patterns: stop, surface the u
 
 Don't run full suites after every edit. While working use `pnpm test:changed`
 (typecheck + only the tests the change reaches) or the single failing file;
-run e2e only for the specs of the surface you touched. Run the full gate
-(`pnpm check && pnpm test`, plus `pnpm test:backend:db` for backend/SQL) once
-before committing. Timings and the why: `docs/testing.md`.
+run e2e only for the specs of the surface you touched. Before committing,
+`pnpm check && pnpm test` plus the DB test files for backend/SQL you touched.
+The full `test:backend:db` and `test:e2e` run on GitHub Actions (e2e in 14
+shards), not locally. Never pipe e2e output into `grep`/`head`: it hangs;
+redirect to a file. Timings and the why: `docs/testing.md`.
 
 ## UI verification
 
