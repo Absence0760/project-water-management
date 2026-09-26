@@ -20,6 +20,7 @@ import { publicationRoutes } from './publish/routes.js';
 import { projectRoutes } from './projects/routes.js';
 import { renderSessionRoutes, reportRoutes } from './reports/routes.js';
 import { evidenceRoutes } from './runs/evidence.js';
+import { reproduceRoutes } from './runs/reproduce.js';
 import { runRoutes } from './runs/routes.js';
 import { scenarioRoutes } from './scenarios/routes.js';
 import { uncertaintyRoutes } from './runs/uncertainty.js';
@@ -94,6 +95,7 @@ export function createApp() {
 	projects.route('/', runRoutes);
 	projects.route('/', uncertaintyRoutes);
 	projects.route('/', evidenceRoutes);
+	projects.route('/', reproduceRoutes);
 	projects.route('/', scenarioRoutes);
 	projects.route('/', exportRoutes);
 	projects.route('/', projectInviteRoutes);

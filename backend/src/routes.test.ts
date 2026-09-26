@@ -56,6 +56,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
+	// Reproduction (WP-3.1): auth-gated like every project route.
+	it('inventories the reproduce route as auth-gated', () => {
+		for (const r of ['GET /projects/:id/runs/:runId/reproduce']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts).
 	it('inventories the account routes as auth-gated', () => {
 		for (const r of ['PATCH /auth/me', 'POST /auth/change-password']) {
