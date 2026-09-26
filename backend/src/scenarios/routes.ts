@@ -133,11 +133,17 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 		const body = RebaseBody.parse(await json(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			const s = await loadScenario(db, id, scenarioId(sid));
-			if (!body.dryRun && s.status !== 'draft') throw frozen(s);
+			scenarioId(sid);
+			// Lock first (as a trim and a scenario run do), then the new base's input.
 			if (!body.dryRun) await lockProjectRuns(db, id);
-			const check = checkScenario(await loadBaseInput(db, id, body.baseRunId), s.ops, s.ownedNodeIds);
-			if (!body.dryRun) await db.query('UPDATE scenario SET base_run_id = $3 WHERE project_id = $1 AND id = $2', [id, sid, body.baseRunId]);
-			return c.json({ scenario: body.dryRun ? s : await loadScenario(db, id, sid), ...checkView(check) });
+			const base = await loadBaseInput(db, id, body.baseRunId);
+			if (!body.dryRun) {
+				// The update takes the row lock, so the ops checked below are the ones the
+				// scenario has now, not ones a concurrent PATCH has since replaced.
+				const { rowCount } = await db.query("UPDATE scenario SET base_run_id = $3 WHERE project_id = $1 AND id = $2 AND status = 'draft'", [id, sid, body.baseRunId]);
+				if (!rowCount) throw frozen(await loadScenario(db, id, sid));
+			}
+			const s = await loadScenario(db, id, sid);
+			return c.json({ scenario: s, ...checkView(checkScenario(base, s.ops, s.ownedNodeIds)) });
 		});
 	});
