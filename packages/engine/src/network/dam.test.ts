@@ -61,7 +61,6 @@ function input(a: Partial<NetworkNode>, opts: { days?: number; need?: number; ew
 	const apanMm = [180, 230, 270, 285, 245, 210, 140, 90, 60, 65, 90, 130];
 	return {
 		settings: {
-			runoffModel: 'legacy',
 			apanMm: apanMm as never,
 			effectiveRainFraction: 0,
 			ewrPragmaticM3PerDay: flat(opts.ewr ?? 0) as never,

@@ -44,7 +44,7 @@ function input(a: Partial<NetworkNode>, need: number, days: number): ModelInput 
 	const apanMm = new Array(12).fill(0);
 	apanMm[3] = need;
 	return {
-		settings: { runoffModel: 'legacy', apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
 		model: {
 			nodes: [node('G', 'gauge', null), node('A', 'farm', 'G', a)],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: flat(1) }],
@@ -183,7 +183,7 @@ describe('boreholes (WP-1.34)', () => {
 	});
 
 	it('a drought rule can legitimately raise the supply fraction when demand grows (seed 4623; was 1450 before the fuzz generator drew rule tables), so the doubled-crop-area law is checked without it', () => {
-		const input = randomInput(4623, { runoffModel: 'gr4j' });
+		const input = randomInput(4623);
 		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n24's supply fraction/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});

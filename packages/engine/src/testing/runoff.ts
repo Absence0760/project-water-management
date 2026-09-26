@@ -4,22 +4,11 @@
 // Run by ../runoff/runoff.invariants.test.ts across random parameters and
 // forcing; the run-level balance (a whole ModelOutput) is checkRunoffBalance
 // in ./invariants.ts.
-import { computeNaturalFlow } from '../flow';
-import { defaultProjectSettings } from '../project';
 import type { RunoffForcing } from '../runoff/simulate';
-import type { DayFluxes, ParamSpec, RunoffModel, RunoffModelId } from '../runoff/types';
+import type { DayFluxes, ParamSpec, RunoffModel } from '../runoff/types';
 import type { Rng } from './fuzz';
 
 const tol = (x: number) => 1e-9 + 1e-12 * Math.abs(x);
-
-/**
- * Models known to fail a check, each with the reason. An exemption is not a
- * skip: the tests assert that the exempt model still *fails*, so the entry has
- * to go when the model is fixed or removed.
- */
-export const EVENT_SCALE_EXEMPT: Partial<Record<RunoffModelId, string>> = {
-	legacy: 'b023 recession model: one storm returns several times its rain (docs/engine-audit.md H1); removed by issue #4 phase 10'
-};
 
 /** Random parameters inside each spec's bounds (log-uniform where the range spans decades). */
 export function randomParams<P>(rng: Rng, specs: ParamSpec<P>[], opts: { freeFixed?: boolean } = {}): P {
@@ -108,23 +97,6 @@ export function modelRunner<P, S>(model: RunoffModel<P, S>, p: P, fill = 0.5): E
 	};
 }
 
-/**
- * The legacy model as an EventRunner: its default parameters on a 1 km²
- * catchment (so m³/day ÷ 1000 = mm), no Pitman fallback. It has no
- * evaporation input; PET is ignored.
- */
-export const legacyRunner: EventRunner = (rain) => {
-	const cal = { ...defaultProjectSettings().calibration, catchmentAreaKm2: 1 };
-	const nf = computeNaturalFlow(cal, {
-		startDate: '2021-06-01',
-		days: rain.length,
-		rainCatchmentMm: Array.from(rain),
-		rainChirpsMm: [],
-		rainForecastMm: []
-	});
-	return Float64Array.from(nf.naturalFlowM3Day, (v) => v / 1000);
-};
-
 export const EVENT_DEPTHS_MM = [1, 2, 5, 10, 20, 50, 100, 200, 400];
 
 /**
@@ -132,7 +104,8 @@ export const EVENT_DEPTHS_MM = [1, 2, 5, 10, 20, 50, 100, 200, 400];
  * depth d falls, then two dry years. The storm's own runoff is the flow minus
  * the flow of the same run without the storm. Its runoff coefficient must be
  * ≤ 1 (the storm can't give back more than fell), and must not fall as d rises
- * (wetter soils shed a larger share, the opposite of the legacy model).
+ * (wetter soils shed a larger share; the removed legacy b023 model did the
+ * opposite, docs/engine-audit.md H1).
  */
 export function checkEventScale(run: EventRunner, petMmPerDay = 3): string | null {
 	const n = 365 + 1 + 730;

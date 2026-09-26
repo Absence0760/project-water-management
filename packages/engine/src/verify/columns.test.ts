@@ -1,5 +1,5 @@
-// The catchment column catalogues (GR4J_COLUMNS, LEGACY_RUNOFF_COLUMNS) name
-// every runoff series a run stores, and the GR4J formulas they print redo a
+// The catchment column catalogues name every runoff series a run stores
+// (GR4J_COLUMNS; LEGACY_RUNOFF_COLUMNS only reads runs saved before engine 1.0.0), and the GR4J formulas they print redo a
 // day from the stored numbers (docs/ui.md § Self-checks, the catchment trace).
 import { describe, expect, it } from 'vitest';
 import type { ModelInput, ModelOutput } from '../project';
@@ -85,9 +85,13 @@ describe('GR4J_COLUMNS', () => {
 });
 
 describe('LEGACY_RUNOFF_COLUMNS', () => {
-	it('names every catchment series the legacy model stores for the trace', () => {
-		const out = runModel(input({ runoffModel: 'legacy' }));
-		for (const c of LEGACY_RUNOFF_COLUMNS) expect(cat(out, c.key), c.key).toHaveLength(out.days);
-		expect(out.summary.runoff).toBeUndefined();
+	it('describes only stored runs: a run today stores none of its legacy-only series (engine 1.0.0)', () => {
+		const out = runModel(input({}));
+		const shared = new Set(GR4J_COLUMNS.map((c) => c.key));
+		const legacyOnly = LEGACY_RUNOFF_COLUMNS.filter((c) => !shared.has(c.key));
+		expect(legacyOnly.map((c) => c.key)).toEqual(['is_summer', 'rain_flow', 'base_flow', 'response_flow', 'resultant_flow']);
+		for (const c of legacyOnly) expect(cat(out, c.key), c.key).toBeUndefined();
+		// Positive control: the GR4J series are there (exchange only when X2 ≠ 0).
+		for (const c of GR4J_COLUMNS) if (c.key !== 'exchange') expect(cat(out, c.key), c.key).toHaveLength(out.days);
 	});
 });

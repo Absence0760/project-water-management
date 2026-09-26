@@ -56,7 +56,7 @@ export function pairedRefusal(other: ModelInput, baseline: Pick<EnsembleResult, 
 		return `the runs use different runoff models (${baseline.options.model} and ${run.settings.runoffModel}); a paired band needs one model`;
 	}
 	// The baseline's members shift the pan coefficient; a monthly PE never reads it, so the pairs would not match.
-	if (baseline.options.panOffset > 0 && run.settings.runoffModel === 'gr4j' && run.settings.pe.kind === 'monthly') {
+	if (baseline.options.panOffset > 0 && run.settings.pe.kind === 'monthly') {
 		return 'the baseline varies the pan coefficient, which this run’s monthly PE row does not use; a paired band needs the same members on both runs';
 	}
 	if (run.startDate !== baseline.header.startDate || run.days !== baseline.header.days) {

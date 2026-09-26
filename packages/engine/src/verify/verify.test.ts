@@ -38,9 +38,8 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 // Farm u (a quarter of the area, no dam) drains into farm b, which has a dam,
 // a diversion, return flow and one crop. Day 1 is worked by hand below.
 const handInput = (): ModelInput => ({
-	// Natural flow is injected (runModelWith), so no conceptual runoff model runs:
-	// say legacy, or the GR4J default (engine 0.11.0) would expect its store balance.
-	settings: { ewrPragmaticM3PerDay: zeros, apanMm: flat(100), runoffModel: 'legacy' },
+	// Natural flow is injected (runModelWith), so no runoff model runs and there is no store balance to check.
+	settings: { ewrPragmaticM3PerDay: zeros, apanMm: flat(100) },
 	model: {
 		nodes: [
 			node('u', { areaKm2: 1, downstreamNodeId: 'b' }),
@@ -118,12 +117,10 @@ describe('verification (engine 0.12.0)', () => {
 		expect(out.summary.warnings.some((w) => w.startsWith('self-check failed'))).toBe(false);
 	});
 
-	it('passes on random networks, legacy and GR4J', () => {
+	it('passes on random networks', () => {
 		for (const seed of [1, 2, 3]) {
-			for (const runoffModel of ['legacy', 'gr4j'] as const) {
-				const v = runModelChecked(randomInput(seed, { runoffModel, maxDays: 400 })).summary.verification!;
-				expect(v.checks.filter((c) => !c.passed), `seed ${seed} ${runoffModel}`).toEqual([]);
-			}
+			const v = runModelChecked(randomInput(seed, { maxDays: 400 })).summary.verification!;
+			expect(v.checks.filter((c) => !c.passed), `seed ${seed}`).toEqual([]);
 		}
 	});
 
@@ -198,35 +195,29 @@ describe('water balance per water year (engine 0.12.0)', () => {
 	const volumeKeys = ['naturalFlowM3', 'farmRunoffM3', 'demandM3', 'suppliedM3', 'returnFlowM3', 'consumptiveUseM3', 'transfersM3', 'spillM3', 'outflowM3'] as const;
 	const scaleOf = (r: WaterBalanceRow) => Math.max(1, r.openingStorageM3, r.farmRunoffM3, r.outflowM3, r.closingStorageM3, r.suppliedM3);
 
-	for (const runoffModel of ['legacy', 'gr4j'] as const) {
-		it(`closes every year and adds up to the run (${runoffModel})`, () => {
-			for (const seed of [4, 5, 6]) {
-				const out = runModelChecked(randomInput(seed, { runoffModel }));
-				const wb = out.summary.waterBalance!;
-				const where = `seed ${seed}`;
-				expect(wb.years.reduce((s, y) => s + y.days, 0), where).toBe(out.days);
-				expect(wb.total.waterYear).toBeNull();
-				for (const [i, y] of wb.years.entries()) {
-					expect(Math.abs(y.residualM3), `${where} ${y.waterYear}`).toBeLessThan(1e-9 * scaleOf(y));
-					expect(y.consumptiveUseM3).toBeCloseTo(y.suppliedM3 - y.returnFlowM3, 6);
-					if (i > 0) expect(y.openingStorageM3).toBe(wb.years[i - 1]!.closingStorageM3);
-					if (i > 0) expect(y.waterYear).toBe(wb.years[i - 1]!.waterYear! + 1);
-					if (runoffModel === 'gr4j') {
-						expect(y.runoff, where).not.toBeNull();
-						expect(Math.abs(y.runoff!.residualMm)).toBeLessThan(1e-6 * Math.max(1, y.rainMm ?? 0));
-					} else {
-						expect(y.runoff).toBeNull();
-					}
-				}
-				expect(wb.total.openingStorageM3).toBe(wb.years[0]!.openingStorageM3);
-				expect(wb.total.closingStorageM3).toBe(wb.years.at(-1)!.closingStorageM3);
-				for (const k of volumeKeys) {
-					const sum = wb.years.reduce((s, y) => s + y[k], 0);
-					expect(Math.abs(wb.total[k] - sum), `${where} ${k}`).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(sum)));
-				}
+	it('closes every year and adds up to the run', () => {
+		for (const seed of [4, 5, 6]) {
+			const out = runModelChecked(randomInput(seed));
+			const wb = out.summary.waterBalance!;
+			const where = `seed ${seed}`;
+			expect(wb.years.reduce((s, y) => s + y.days, 0), where).toBe(out.days);
+			expect(wb.total.waterYear).toBeNull();
+			for (const [i, y] of wb.years.entries()) {
+				expect(Math.abs(y.residualM3), `${where} ${y.waterYear}`).toBeLessThan(1e-9 * scaleOf(y));
+				expect(y.consumptiveUseM3).toBeCloseTo(y.suppliedM3 - y.returnFlowM3, 6);
+				if (i > 0) expect(y.openingStorageM3).toBe(wb.years[i - 1]!.closingStorageM3);
+				if (i > 0) expect(y.waterYear).toBe(wb.years[i - 1]!.waterYear! + 1);
+				expect(y.runoff, where).not.toBeNull();
+				expect(Math.abs(y.runoff!.residualMm)).toBeLessThan(1e-6 * Math.max(1, y.rainMm ?? 0));
 			}
-		});
-	}
+			expect(wb.total.openingStorageM3).toBe(wb.years[0]!.openingStorageM3);
+			expect(wb.total.closingStorageM3).toBe(wb.years.at(-1)!.closingStorageM3);
+			for (const k of volumeKeys) {
+				const sum = wb.years.reduce((s, y) => s + y[k], 0);
+				expect(Math.abs(wb.total[k] - sum), `${where} ${k}`).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(sum)));
+			}
+		}
+	});
 
 	it('splits the run at 1 October', () => {
 		const input = handInput();

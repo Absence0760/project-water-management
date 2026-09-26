@@ -49,7 +49,7 @@ function input(a: Partial<NetworkNode>, need: number, days: number, between: Net
 	apanMm[3] = need;
 	const down = between.length ? between[0]!.id : 'G';
 	return {
-		settings: { runoffModel: 'legacy', apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
 		model: {
 			nodes: [node('G', 'gauge', null), ...between, node('A', 'farm', down, a)],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: flat(1) }],

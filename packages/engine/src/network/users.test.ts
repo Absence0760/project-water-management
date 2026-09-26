@@ -49,7 +49,7 @@ function input(nodes: NetworkNode[], farmNeedM3Day: number | null): ModelInput {
 	const apanMm = new Array(12).fill(0);
 	apanMm[3] = farmNeedM3Day ?? 0;
 	return {
-		settings: { runoffModel: 'legacy', apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: flat(0) as never },
 		model: {
 			nodes,
 			crops: [{ id: 'c', name: 'Crop', cropFactor: flat(1) }],

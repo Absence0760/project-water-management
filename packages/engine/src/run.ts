@@ -1,7 +1,7 @@
 // Model entry point: runModel(input) → daily series + summary for a project.
 //
 // Pipeline (b023 sheet in brackets):
-//   1. natural flow from rain                     [Flow data]            → ./runoff (legacy: ./flow.ts)
+//   1. natural flow from rain                     [Flow data]            → ./runoff (GR4J)
 //   2. per-farm share of flow and EWR             [Fragmented flow/EWR]  → ./network/shares.ts
 //   3. daily net irrigation demand                [Irrigation Demand]    → ./demand.ts
 //   4. transfers + farm dams, routed downstream   [Transfers], Elements  → ./network/simulate.ts
@@ -161,7 +161,6 @@ function runNetwork(
 	}
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
-	if (settings.runoffModel === 'legacy') warnings.push(LEGACY_NOT_EVIDENCE_WARNING);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
 	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
@@ -278,7 +277,7 @@ function runNetwork(
 	const ewrAssurance = assessEwrRules(settings, nodes, topo.outflow, attribution.sites, sim, simOutflow, startDate, days, warnings);
 	for (const a of ewrAssurance) push(a.report.nodeId, 'ewr_rule', 'EWR from the Reserve rule table (the month’s requirement, per day)', 'm³/day', a.requiredM3Day);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
-	// Before any model's rain threshold (legacy rain_used zeroes rain ≤ threshold); no value from any source = NaN.
+	// No value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
@@ -1171,9 +1170,10 @@ function catchmentRunoffCoefficient(
 				'. A run this short is dominated by the starting state'
 		);
 	} else if (coefficient > 1) {
+		// No runoff model ran: the caller supplied the natural flow (runModelWith).
 		warnings.push(
 			`the rain model makes more runoff than rainfall: natural flow is ${coefficient.toFixed(2)}× the rain volume over the run. ` +
-				'Check the calibration (a, b, the season factors, the recession curve) and the catchment area'
+				'Check the natural flow supplied and the catchment area'
 		);
 	}
 	return coefficient;
@@ -1333,17 +1333,6 @@ const USER_LABELS: Record<string, string> = {
 	supplied: 'Taken from the river',
 	deficit: 'Demand not met'
 };
-
-/**
- * Every legacy run carries this (audit H1, operator decision 2026-09-24): the
- * b023 recession model doesn't conserve water at the event scale (a storm can
- * return several times its own rain as flow — docs/engine-audit.md H1), so it
- * stays unchanged for workbook comparison only. The "LEGACY_NOT_EVIDENCE:"
- * prefix is a stable code a caller can match on even if the wording changes.
- */
-export const LEGACY_NOT_EVIDENCE_WARNING =
-	'LEGACY_NOT_EVIDENCE: Legacy runoff model (b023 workbook): does not conserve water at the event scale (audit H1); ' +
-	'workbook comparison only, not evidence for a licence, Reserve or compliance assessment.';
 
 /** Run warning when no calibration record is chosen and both a gauge and a logger record exist (issue #1). */
 export const DEFAULT_GAUGE_PICK_WARNING =

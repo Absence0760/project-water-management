@@ -12,7 +12,6 @@ import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/params';
 import { DEFAULT_ASSURANCE_POINTS } from '../reserve/rules';
-import type { RunoffModelId } from '../runoff/types';
 
 export { Rng };
 
@@ -21,12 +20,6 @@ type Shape = 'chain' | 'fan' | 'random' | 'binary' | 'twoBranches';
 export interface GenOptions {
 	maxNodes?: number;
 	maxDays?: number;
-	/**
-	 * Runoff model of the generated project (default legacy). A conceptual
-	 * model draws its parameters from a second generator, so a seed's network
-	 * and series are the same whichever model runs them.
-	 */
-	runoffModel?: RunoffModelId;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -250,7 +243,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		settings.calibrationEnd = iso(rng.int(-50, days + 50));
 	}
 	if (rng.bool(0.2)) settings.calibrationFlowKind = rng.pick(['flow_observed_m3s', 'flow_logger_m3s'] as const);
-	if (opts.runoffModel === 'gr4j') {
+	// GR4J (the only runoff model since engine 1.0.0) draws its parameters from a second generator, so a seed's network and series don't depend on them.
+	{
 		const g = new Rng(seed ^ 0x5bd1e995);
 		const p = Object.fromEntries(
 			GR4J_PARAMS.map((s) => [s.key, s.fixedByDefault ? (g.bool(0.25) ? g.float(s.min, s.max) : s.default) : g.bool(0.1) ? g.pick([s.min, s.max]) : g.logFloat(Math.max(s.min, 1e-3), s.max)])
@@ -261,9 +255,6 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 		// Sometimes GR4J's PE comes as a monthly row instead (engine ≥ 0.31.0). Its own stream, so a seed still builds the same network.
 		const pe = new Rng(seed ^ 0x3c6ef372);
 		if (pe.bool(0.25)) settings.pe = { kind: 'monthly', mm: monthly(() => (pe.bool(0.1) ? 0 : pe.float(0, 250))), source: 'fuzz: invented monthly PE' };
-	} else {
-		// Explicit, so a change of the engine's default doesn't change what a seed runs.
-		settings.runoffModel = 'legacy';
 	}
 	// The soil-water store (N3): none, the default, anything, or practically
 	// endless. From its own stream, so a seed still builds the same network.
@@ -559,19 +550,19 @@ function irrigationOps(g: Rng, r: number): Pick<NetworkNode, 'irrigationEfficien
 	};
 }
 
-/** Rain-model parameters: mostly the defaults, sometimes pushed around. */
+/** The rain threshold and catchment area: mostly the defaults, sometimes pushed around. */
 function defaultCalibrationOverrides(rng: Rng): Partial<ProjectSettings['calibration']> {
 	if (rng.bool(0.5)) return {};
-	return {
-		a: rng.logFloat(0.001, 1),
-		b: rng.float(0.5, 2),
-		rainThresholdMm: rng.pick([0, 2, 5]),
-		summerFactor: rng.frac(0.1, 0.1),
-		winterFactor: rng.frac(0.1, 0.3),
-		summerMonths: [...new Set(Array.from({ length: rng.int(0, 8) }, () => rng.int(1, 12)))],
-		baseFlowInitial: rng.pick([0, 300, 1e5]),
-		...(rng.bool(0.1) ? { catchmentAreaKm2: rng.logFloat(0.1, 1000) } : {})
-	};
+	// The legacy runoff model's parameters (removed in engine 1.0.0) are still
+	// drawn and dropped, so every seed keeps the network and series it had.
+	rng.logFloat(0.001, 1);
+	rng.float(0.5, 2);
+	const rainThresholdMm = rng.pick([0, 2, 5]);
+	rng.frac(0.1, 0.1);
+	rng.frac(0.1, 0.3);
+	Array.from({ length: rng.int(0, 8) }, () => rng.int(1, 12));
+	rng.pick([0, 300, 1e5]);
+	return { rainThresholdMm, ...(rng.bool(0.1) ? { catchmentAreaKm2: rng.logFloat(0.1, 1000) } : {}) };
 }
 
 /** Deep copy (inputs are plain JSON). */

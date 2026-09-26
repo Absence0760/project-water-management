@@ -40,7 +40,7 @@ function catchment(): ModelInput {
 	}
 	nodes.push({ ...nodes[0]!, id: 'out', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, sortOrder: 99, areaKm2: 0, damCapacityM3: 0 });
 	return {
-		settings: { runoffModel: 'legacy', apanMm: new Array(12).fill(180) as unknown as Monthly },
+		settings: { apanMm: new Array(12).fill(180) as unknown as Monthly },
 		model: {
 			nodes,
 			crops: [{ id: 'c1', name: 'Citrus', cropFactor: new Array(12).fill(0.7) }],

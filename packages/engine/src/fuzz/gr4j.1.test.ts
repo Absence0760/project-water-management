@@ -1,3 +1,3 @@
 import { fuzzShard } from './shard';
 
-fuzzShard('gr4j', 1);
+fuzzShard(1);

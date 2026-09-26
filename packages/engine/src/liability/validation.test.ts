@@ -37,11 +37,11 @@ describe('Moriasi et al. (2007) ratings', () => {
 });
 
 describe('validationStatement', () => {
-	it('restates a real run faithfully (random catchments, legacy and GR4J)', () => {
+	it('restates a real run faithfully (random catchments)', () => {
 		for (const seed of [1, 2, 3, 7]) {
 			const input = randomInput(seed);
 			const summary = runModel(input).summary;
-			const v = validationStatement({ summary, engineVersion: ENGINE_VERSION, legacy: input.settings.runoffModel === 'legacy' });
+			const v = validationStatement({ summary, engineVersion: ENGINE_VERSION, legacy: false });
 			expect(v.engineVersion).toBe(ENGINE_VERSION);
 			expect(v.limitations).toBe(KNOWN_LIMITATIONS);
 			const c = summary.calibration;

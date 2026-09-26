@@ -16,6 +16,7 @@ import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection }
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
 	defaultProjectSettings,
+	RETIRED_CALIBRATION_KEYS,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
 	upgradeLegacyModel,
@@ -654,6 +655,7 @@ const GR4J_FIELDS: Record<string, ScalarField> = {
 	x4: { label: 'unit hydrograph time base X4', fmt: withUnit('days') },
 	warmupDays: { label: 'warm-up', fmt: withUnit('days') }
 };
+/** Calibration settings; all but the rain threshold and catchment area belonged to the legacy runoff model (engine < 1.0.0). */
 const CALIBRATION_FIELDS: Record<string, ScalarField> = {
 	a: { label: 'peak flow coefficient a', fmt: plain },
 	b: { label: 'peak flow exponent b', fmt: plain },
@@ -759,17 +761,23 @@ function diffSettings(
 
 	const ka = a.calibration as Record<string, unknown>;
 	const kb = b.calibration as Record<string, unknown>;
+	// The legacy runoff model's own settings (removed in engine 1.0.0) changed a
+	// run only if it ran that model: compare them only between two legacy runs.
+	// Otherwise the model line above says what changed.
+	const bothLegacy = a.runoffModel === 'legacy' && b.runoffModel === 'legacy';
+	const retired = new Set<string>(RETIRED_CALIBRATION_KEYS);
+	const counts = (k: string) => bothLegacy || !retired.has(k);
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) {
-		if (!same(ka[k], kb[k])) push(`Calibration ${f.label}`, `Calibration ${f.label}: ${f.fmt(ka[k])} → ${f.fmt(kb[k])}`);
+		if (counts(k) && !same(ka[k], kb[k])) push(`Calibration ${f.label}`, `Calibration ${f.label}: ${f.fmt(ka[k])} → ${f.fmt(kb[k])}`);
 	}
-	if (!same(monthSet(ka.summerMonths), monthSet(kb.summerMonths))) {
+	if (bothLegacy && !same(monthSet(ka.summerMonths), monthSet(kb.summerMonths))) {
 		push(
 			'Calibration summer months',
 			`Calibration summer months: ${describeCalendarMonths((ka.summerMonths as number[]) ?? [])} → ${describeCalendarMonths((kb.summerMonths as number[]) ?? [])}`
 		);
 	}
 	for (const [k, label] of Object.entries(CALIBRATION_ARRAYS)) {
-		if (!same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
+		if (bothLegacy && !same(ka[k], kb[k])) push(`Calibration ${label}`, `Calibration ${label}: ${arrayChange(ka[k], kb[k])}`);
 	}
 	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
 	out.push(...diffEwrRules(a.ewrRules, b.ewrRules, siteName));
