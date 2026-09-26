@@ -15,6 +15,7 @@
 	import MembersPanel from './MembersPanel.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import NeedsAttention from './NeedsAttention.svelte';
+	import PublishedBaseline from './PublishedBaseline.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
@@ -196,6 +197,9 @@
 		retry={retryRuns}
 	/>
 {/if}
+
+<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
+<PublishedBaseline projectId={project.id} {runs} {canEdit} />
 
 <NeedsAttention items={attentionItems} />
 

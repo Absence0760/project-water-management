@@ -43,24 +43,42 @@ export interface FetchRequest {
 	today: string;
 }
 
-/** The days to ask for, from what the feed already has. */
+/**
+ * The days to ask for, from what the feed already has. A configured startDate
+ * is a floor for every fetch, not just the first: the revision re-read never
+ * reaches before it, where the target series may hold the owner's own data.
+ */
 export function fetchWindow(source: FeedSource, config: FeedConfig, lastDataDate: string | null, today: string): { start: string; end: string } {
+	const from = (revisionDays: number, firstDays: number) => {
+		const start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
+		return config.startDate && start < config.startDate ? config.startDate : start;
+	};
 	switch (source) {
 		case 'chirps': {
 			const end = addDays(today, -1);
-			const start = lastDataDate ? addDays(lastDataDate, -CHIRPS_REVISION_DAYS) : (config.startDate ?? addDays(today, -CHIRPS_FIRST_DAYS));
+			const start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS);
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > CHIRPS_MAX_DAYS ? addDays(start, CHIRPS_MAX_DAYS - 1) : end;
 			return { start, end: capped };
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
 		case 'dws': {
-			const start = lastDataDate ? addDays(lastDataDate, -DWS_REVISION_DAYS) : (config.startDate ?? addDays(today, -365 * DWS_FIRST_YEARS));
+			const start = from(DWS_REVISION_DAYS, 365 * DWS_FIRST_YEARS);
 			const limit = addDays(start, 365 * DWS_MAX_YEARS - 1);
 			return { start, end: limit < today ? limit : today };
 		}
 	}
 }
+
+/** Text Postgres will store: it refuses U+0000 in text and in jsonb. */
+const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
+/**
+ * The most bytes of meta JSON a result may carry: data_feed.last_meta holds at
+ * most 4096 (018_feeds.sql CHECK), and the ingest adds `merged` and jsonb's
+ * text form adds a space after each colon and comma. The per-field limits
+ * alone allow ~8.5 KB of multi-byte characters.
+ */
+export const FEED_META_MAX_BYTES = 3072;
 
 /** The fetcher's answer: days to merge (nulls are gaps, never erasures), or a failure. */
 export const FetchResult = z.discriminatedUnion('ok', [
@@ -71,13 +89,19 @@ export const FetchResult = z.discriminatedUnion('ok', [
 			startDate: SeriesStartDate.nullable(),
 			values: z.array(z.number().finite().nonnegative().nullable()).max(MAX_SERIES_VALUES),
 			/** What the source said about the data, for the status panel. Small and flat. */
-			meta: z.record(z.string().max(40), z.union([z.string().max(100), z.number().finite()])).refine((m) => Object.keys(m).length <= 20)
+			meta: z
+				.record(StoredText(40), z.union([StoredText(100), z.number().finite()]))
+				.refine((m) => Object.keys(m).length <= 20)
+				.refine((m) => Buffer.byteLength(JSON.stringify(m)) <= FEED_META_MAX_BYTES, `meta is over ${FEED_META_MAX_BYTES} bytes`)
 		})
 		.strict()
 		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values'),
-	z.object({ ok: z.literal(false), error: z.string().min(1).max(FEED_ERROR_MAX) }).strict()
+	z.object({ ok: z.literal(false), error: StoredText(FEED_ERROR_MAX).min(1) }).strict()
 ]);
 export type FetchResult = z.output<typeof FetchResult>;
+
+/** The longest window per source, as fetchWindow caps it (GEFS reads its 16 days whatever the window). */
+const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: 365 * DWS_MAX_YEARS };
 
 /** A fetch request as the fetcher Lambda receives it: the config is checked against its source's schema again. */
 export const FetchRequestSchema = z
@@ -93,6 +117,13 @@ export const FetchRequestSchema = z
 		const config = configSchema(v.source).safeParse(v.config);
 		if (!config.success) {
 			ctx.addIssue({ code: 'custom', path: ['config'], message: 'not a valid config for the source' });
+			return z.NEVER;
+		}
+		// No more days than fetchWindow ever asks for: the fetcher is the
+		// door to the internet, and a request is a message off a queue.
+		const days = toEpochDay(v.end) - toEpochDay(v.start) + 1;
+		if (days > MAX_WINDOW_DAYS[v.source]) {
+			ctx.addIssue({ code: 'custom', path: ['end'], message: 'the window is longer than one fetch reads' });
 			return z.NEVER;
 		}
 		return { ...v, config: config.data };
@@ -116,9 +147,11 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 			case 'dws': {
 				const page = await http.text(dwsUrl((req.config as DwsConfig).station, req.start, req.end));
 				if (page === null) throw new FeedFormatError('the DWS page was not found');
-				const r = parseDwsDaily(page);
+				// Never a day after today: the feed's newest day drives its next window and its health.
+				const r = parseDwsDaily(page, { start: req.start, end: req.end < req.today ? req.end : req.today });
 				const meta: Record<string, string | number> = { days: r.values.length, gaps: r.values.filter((v) => v === null).length };
 				if (r.rejected) meta.rejected = r.rejected;
+				if (r.outside) meta.outside = r.outside;
 				for (const [code, n] of Object.entries(r.quality).slice(0, 10)) meta[`quality ${code.slice(0, 20)}`] = n;
 				return r.startDate === null ? { ok: true, startDate: null, values: [], meta } : { ok: true, startDate: r.startDate, values: r.values, meta };
 			}

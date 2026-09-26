@@ -95,7 +95,7 @@ shorter than the cap looks as before.
 ## Overview
 
 The setup checklist (`overview/checklist.ts`), the latest run's results,
-a "Needs attention" list, eight headline facts, project details, the import
+the published baseline, a "Needs attention" list, eight headline facts, project details, the import
 record (an imported project only), team and members.
 
 - **Latest run** (`overview/LatestRun.svelte`, rules in
@@ -124,6 +124,18 @@ record (an imported project only), team and members.
   tab's `detailCache`, so only this section shows a loading or error state
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
+- **Published baseline** (WP-2.3, `overview/PublishedBaseline.svelte`),
+  under Latest run (shown with or without runs): what stakeholders and farmers see. It fetches
+  `GET /projects/:id/publication` and names the published run (a link to it
+  in Runs, with its period from the page's runs list), when and by whom it
+  was published, the notice level with its percentage ("Advisory · 15 %"),
+  the English and Afrikaans notice, and the next expected update (a calendar
+  day, `fmtDay`). It is read-only for everyone: editors get **Change the
+  notice or publish another run**, a link to the Runs tab on the published
+  run at its Publication panel (`?tab=runs&run=<id>#res-publication`), so
+  the notice has one editor, not two. With nothing published: "No run is
+  published yet. Stakeholders and farmers see nothing until you publish one
+  (Runs tab)." Its own `LoadState` (loading, an error with a retry).
 - **Needs attention** (`overview/NeedsAttention.svelte`, rules in
   `overview/attention.ts`): one sentence and one link per item, hidden when
   there is nothing. Items: farms below `SUPPLY_TARGET` in the latest run (the
@@ -196,6 +208,13 @@ decides how it's read, so a workbook picked from the JSON button still works.
 Two buttons rather than one "Import…": the client looks for a named workbook
 import, and the two sources explain themselves differently (a workbook's
 review has options and reports a `.json` file doesn't).
+
+**A click anywhere on a project's row opens it.** The name link stretches
+over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:
+Ctrl/Cmd-click or a middle click opens a new tab, and the keyboard and screen
+readers still meet one named link per row. The row's Team link, its Add data,
+Copy and Delete buttons, and the freshness and last-run badges (whose tooltips
+explain them) sit above the stretch and keep doing their own thing.
 
 ### Import a project file
 
@@ -844,7 +863,8 @@ its own chunk loaded with the tab; WP-2.10,
   card carries `data-state`), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
   schedule and who it runs as, the server's health sentence ("The last fetch
-  failed: the source is unreachable: HTTP 503. Newest data 2026-09-01."), and
+  failed: the source is unreachable: HTTP 503. Newest data 1 Sep 2026.", its
+  days written like the rest of the app's calendar days), and
   "Last data 21 Sep 2026 · checked 2026-09-24 06:00" (the data day is a
   calendar day, never shifted by the time zone). CHIRPS says how many of the
   days are preliminary.
@@ -860,6 +880,14 @@ its own chunk loaded with the tab; WP-2.10,
   their weighted mean) or a **DWS station** code (checked as `A2H012`). The
   form explains a bad cell or code before anything is sent, and a second feed
   for the same series is refused.
+- **Keyboard and screen readers**: opening the form focuses **Source**, and
+  closing it (Cancel or a successful attach) returns focus to **Attach a
+  feed**; a bad cell or code marks its field `aria-invalid`, describes it by
+  the message and focuses it; busy buttons are `aria-disabled` so they keep
+  focus; after **Remove**, focus goes to the section heading. Messages land
+  in a live region that is always in the page. A failed action re-reads the
+  list (it was usually changed elsewhere), and a failed refresh keeps the
+  list shown.
 - When the server reads the synthetic fixtures (`FEED_SOURCE=fixtures`, the
   default in dev and CI), a **Sample data** badge says so, and the cells hint
   names the sample grid's extent.
@@ -948,6 +976,13 @@ run's report to chosen members every week or month.
   whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
   runs** (`/compare?project=<id>`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
+  **Which run opens** when the URL names none (`defaultRunId` in
+  `runs/runList.ts`): for an editor or owner the newest run, the one they are
+  working on; for a viewer the published baseline when there is one (the run
+  stakeholders are meant to read), else the newest. An explicit `?run=`
+  always wins. Viewing any run other than the published one, the results
+  header offers **Compare with published** (`/compare?a=<published>&b=<this
+  run>`, [run-comparison.md](./run-comparison.md)).
   The server keeps at most `RUNS_KEPT_PER_PROJECT` runs (default 20); the
   oldest runs it trims (`removedRunIds`) leave the list at once.
 - **Pinned runs** (015_run_pinned). Each row has a pin toggle for editors
@@ -956,7 +991,7 @@ run's report to chosen members every week or month.
   unpinned. A project holds at most 10 pinned runs; pinning an 11th shows the
   server's `409` reason in the tab's error. Viewers see the badge but no
   toggle. The compare page's run pickers add "· pinned" to a pinned run's
-  option (read only).
+  option (read only), and "· published" to the published one.
 - **Publishing a run** (WP-2.3, 022_publication; `runs/PublicationPanel.svelte`,
   its own lazy chunk, helpers in `runs/publication.ts`; `#res-publication`,
   menu entry **Publication**). Says whether the shown run is the project's

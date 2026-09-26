@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Compare two runs — same project or two projects you can see.
 	// URL: /compare?a=<projectId>:<runId>&b=<projectId>:<runId>, or
-	// /compare?project=<id> to open on that project's previous vs latest run.
+	// /compare?project=<id> to open on that project's latest run against its
+	// published baseline (or, with none, the previous run).
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -18,7 +19,7 @@
 	import { chirpsFitNote } from '$lib/components/compare/chirpsFit';
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
-	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, type RunRef } from '$lib/components/compare/picker';
+	import { compareSearch, defaultPair, defaultRunFor, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { fmtDate } from '$lib/format/number';
 
@@ -95,7 +96,7 @@
 		goto(`${base}/compare${compareSearch(a, b, projectParam)}`, { replaceState: replace, keepFocus: true, noScroll: true });
 	}
 
-	// Opened with ?project= only: previous vs latest run of that project.
+	// Opened with ?project= only: latest run vs the published baseline, or the previous run (picker.ts defaultPair).
 	let resolving = $state(false);
 	$effect(() => {
 		const p = projectParam;
@@ -128,6 +129,9 @@
 		picked[side] = null;
 		navigate(side === 'a' ? ref : refA, side === 'b' ? ref : refB);
 	}
+
+	// "Compare with published": A becomes B's project's published baseline, offered only when that changes the pair.
+	const withPublished = $derived(publishedBaseline(refB ? runs[refB.projectId] : undefined, refA, refB));
 
 	// --- the comparison ----------------------------------------------------------
 	let data = $state<RunCompareResponse | null>(null);
@@ -214,6 +218,12 @@
 				onProject={(p) => onProject('b', p)}
 				onRun={(r) => onRun('b', r)}
 			/>
+			{#if withPublished}
+				<p class="with-published">
+					<button type="button" class="btn btn-sm" onclick={() => navigate(withPublished, refB)}>Compare with published</button>
+					<span class="muted small">Sets A to the published baseline, the run stakeholders see.</span>
+				</p>
+			{/if}
 		</section>
 
 		{#if soloProject && soloRuns && soloRuns.length < 2}
@@ -371,6 +381,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 1rem;
+	}
+	.with-published {
+		flex-basis: 100%;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0;
 	}
 	.empty {
 		text-align: center;

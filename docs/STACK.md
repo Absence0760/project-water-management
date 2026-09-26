@@ -99,6 +99,7 @@ pnpm dev:s3:down | dev:s3:status | dev:s3:logs
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
 pnpm check                  # typecheck all workspaces
+pnpm test:changed           # the fast loop: typecheck + only the tests your change reaches (docs/testing.md)
 pnpm test                   # unit tests everywhere (no DB, no wall-clock assertions)
 pnpm test:engine | test:frontend | test:backend   # test:backend includes the route-auth inventory
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
@@ -122,6 +123,47 @@ pnpm check:terms            # no client-identifying term in any tracked file (ne
 pnpm test:guards            # node:test suites for scripts/guards and scripts/release
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 ```
+
+## Running tests
+
+**While you work, run only what you touched** (CLAUDE.md rule 12). The
+quick way is `pnpm test:changed`: typecheck plus `vitest --changed` for what
+your working changes touch, DB tests included when Postgres is up, never e2e
+([testing.md](./testing.md)). By hand:
+
+```bash
+pnpm test:changed                                             # typecheck + the vitest files your changes touch
+pnpm check                                                    # typecheck (fast; always)
+pnpm -C backend exec vitest run --project unit src/<area>     # backend unit files you changed
+pnpm -C backend exec vitest run --project db src/<area>       # backend DB/RLS files (needs dev:db:up)
+pnpm -C frontend exec vitest run src/lib/components/<area>    # frontend unit files
+pnpm -C packages/engine exec vitest run src/<area>            # engine unit files
+pnpm -C e2e e2e tests/<spec>.spec.ts                          # e2e specs for the screens you changed
+pnpm build:frontend && pnpm check:bundle                      # only when you added or moved frontend code
+```
+
+Also run the guard for anything the change touches: `src/routes.test.ts`
+for a new route, `src/db/catalogue.db.test.ts` for a migration,
+`pnpm test:scripts` for root scripts.
+
+**The full suite runs once**, before a merge or push to `main`: where branches
+meet is where they break each other. Its parts are independent (unit tests
+use no database; the DB tests use this checkout's `water_test…`; e2e uses
+its own `water_e2e…` database and ports, `e2e/support/env.ts`), so start them
+**in parallel**, e.g. as three background commands, and wait for all three:
+
+```bash
+pnpm test                   # engine + frontend + backend unit
+pnpm test:backend:db        # serial inside (one fork), ~2 min
+pnpm test:e2e               # ~2–3 min
+```
+
+then `pnpm test:guards`, `pnpm test:scripts`, and `pnpm build:frontend &&
+pnpm check:bundle`. The DB project must stay serial *inside* itself (its
+queue and feed tests claim jobs globally; `backend/vitest.workspace.ts`
+pins it to one fork), but it can run beside the other two. The perf
+projects (`test:*:perf`) are the exception: run them alone, never alongside
+anything, since they assert wall-clock budgets.
 
 Releases: `gh release create backend@X.Y.Z` / `web@X.Y.Z --target main
 --generate-notes` deploys that component after a preflight and the
@@ -156,6 +198,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
+- `docs/testing.md`: which test command when, and how long each takes
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/design/`: design specs written before a build (the farmer view, issue #14), each with its prototype

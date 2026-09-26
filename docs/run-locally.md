@@ -297,7 +297,9 @@ The project list groups projects by owner: **Personal**, one group per team
 you're in, and **Shared with me** (projects shared with you directly). Filter by
 owner, search by name/description/team and sort by last update or name; the
 filters live in the URL (`/?owner=team:<id>&q=…&sort=name`), so Back and shared
-links keep them. `/?new=1` opens the New project dialog.
+links keep them. `/?new=1` opens the New project dialog. Each row shows how
+far its data reaches, when it last ran and, once a run is published (Runs
+tab), "published <date>".
 
 **Teams** (header → Teams, `/teams`) own catchments together: team admins are
 owners of every team project, members are editors and viewers are read-only.

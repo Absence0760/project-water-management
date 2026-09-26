@@ -529,6 +529,10 @@ plan-only until the first deploy):
   It has no database access and no credentials to one: its role may receive
   from `fetch-requests` and send to `ingest-results`, nothing else. One
   request per invocation; a failed send is a batch-item failure, retried.
+  Every request that names a fetch job is answered: a fetch still running
+  15 s before the timeout, or one it can route but not run (e.g. a source
+  this build doesn't know), is sent back as a failure, so the feed shows
+  failing instead of the message timing out into the DLQ unrecorded.
 - **`ingest-results`** triggers the worker, which checks each result answers a
   real `feed_fetch` job of that feed and queues a `feed_ingest` job as that
   job's user; the job validates the result before merging.

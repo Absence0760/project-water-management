@@ -7,7 +7,8 @@
 //             lag allows (config.ts SOURCES staleAfterDays, or the feed's own
 //             staleAfterDays): the source stopped publishing, or the fetch
 //             keeps finding nothing new
-//   pending   never fetched yet
+//   pending   not fetched yet, or not since a new place or series was saved
+//             (018_feeds.sql clears the data, success and failures then)
 //   ok        otherwise
 //
 // `stale` is also reported on its own, so a failing feed that is out of date
@@ -30,6 +31,8 @@ export interface HealthInput {
 	config: FeedConfig;
 	enabled: boolean;
 	createdAt: Date | string;
+	/** The last save; a feed with no data counts its grace from here. */
+	updatedAt?: Date | string;
 	lastAttemptAt: Date | string | null;
 	lastSuccessAt: Date | string | null;
 	lastDataDate: string | null;
@@ -37,7 +40,7 @@ export interface HealthInput {
 	lastError: string | null;
 }
 
-/** A never-successful feed counts as stale this long after it was attached. */
+/** A feed with no data counts as stale this long after it was attached or last saved. */
 const FIRST_DATA_GRACE_DAYS = 2;
 
 const iso = (d: Date | string) => (typeof d === 'string' ? d : d.toISOString()).slice(0, 10);
@@ -45,9 +48,12 @@ const iso = (d: Date | string) => (typeof d === 'string' ? d : d.toISOString()).
 export function feedHealth(f: HealthInput, today: string): FeedHealth {
 	const staleAfterDays = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
 	const t = toEpochDay(today);
+	const since = f.updatedAt ?? f.createdAt;
+	// No outcome recorded for the current place and series (a re-target keeps only last_attempt_at).
+	const unfetched = !f.lastSuccessAt && f.consecutiveFailures === 0;
 	const stale = f.lastDataDate
 		? t - toEpochDay(f.lastDataDate) > staleAfterDays
-		: t - toEpochDay(iso(f.createdAt)) > FIRST_DATA_GRACE_DAYS;
+		: t - toEpochDay(iso(since)) > FIRST_DATA_GRACE_DAYS;
 	const newest = f.lastDataDate ? `newest data ${f.lastDataDate}` : 'no data yet';
 	if (!f.enabled) return { state: 'disabled', stale, staleAfterDays, message: `Switched off; ${newest}.` };
 	if (f.consecutiveFailures > 0) {
@@ -68,12 +74,12 @@ export function feedHealth(f: HealthInput, today: string): FeedHealth {
 				? staleAfterDays < 0
 					? `No new forecast: it reaches only ${f.lastDataDate}, less than ${-staleAfterDays} days ahead.`
 					: `No new data: the newest day, ${f.lastDataDate}, is more than ${staleAfterDays} days old.`
-				: f.lastAttemptAt
+				: !unfetched
 					? 'Fetches succeed but have found no data yet: check the cells or station.'
-					: `Not fetched since it was attached on ${iso(f.createdAt)}: the background worker may not be running.`
+					: `Not fetched since it was ${iso(since) === iso(f.createdAt) ? 'attached' : 'changed'} on ${iso(since)}: the background worker may not be running.`
 		};
 	}
-	if (!f.lastAttemptAt) return { state: 'pending', stale, staleAfterDays, message: 'Waiting for its first fetch.' };
+	if (unfetched || !f.lastAttemptAt) return { state: 'pending', stale, staleAfterDays, message: 'Waiting for its first fetch.' };
 	return { state: 'ok', stale, staleAfterDays, message: `OK; ${newest}, checked ${iso(f.lastSuccessAt ?? f.lastAttemptAt)}.` };
 }
 

@@ -62,6 +62,11 @@ export function mergeDaily(existing: Daily | null, incoming: Daily, { keepOnNull
 	return { startDate: fromEpochDay(start), values: out };
 }
 
+/** The same days and values (a stored double round-trips exactly, so === is equality). */
+export function sameDaily(a: Daily, b: Daily): boolean {
+	return a.startDate === b.startDate && a.values.length === b.values.length && a.values.every((v, i) => v === b.values[i]);
+}
+
 export interface SeriesMetaRow {
 	id: string;
 	kind: string;
@@ -80,13 +85,23 @@ export interface SeriesMetaRow {
  */
 export async function mergeInto(db: Db, projectId: string, body: SeriesBody, options: MergeOptions = {}): Promise<SeriesMetaRow> {
 	// Lock the row so two concurrent batches can't lose each other's days.
-	const { rows: cur } = await db.query<{ start_date: string; values: (number | null)[] }>(
-		`SELECT start_date, "values" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
+	const { rows: cur } = await db.query<{ start_date: string; unit: string; values: (number | null)[] }>(
+		`SELECT start_date, unit, "values" FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, body.kind, body.name]
 	);
 	const existing = cur[0] ? { startDate: cur[0].start_date, values: cur[0].values } : null;
 	const merged = mergeDaily(existing, { startDate: body.startDate, values: body.values }, options);
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
+	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
+	// leave the row, so updated_at still says when the values last changed.
+	if (cur[0] && cur[0].unit === body.unit && sameDaily(existing!, merged)) {
+		const { rows } = await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
+			projectId,
+			body.kind,
+			body.name
+		]);
+		return rows[0]!;
+	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
 		 VALUES ($1, $2, $3, $4, $5, $6)

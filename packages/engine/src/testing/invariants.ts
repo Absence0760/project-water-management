@@ -195,6 +195,25 @@ export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 }
 
 /** runModel + every invariant, including the ones that re-run the model. */
+/**
+ * Two runs gave the same output, to the bit: every series value compared with
+ * Object.is (NaN equals NaN, 0 and −0 differ), the rest through JSON. Stricter
+ * than comparing JSON.stringify of the whole output (which folds NaN into
+ * null and −0 into 0), and it doesn't serialise hundreds of thousands of
+ * daily values twice per fuzz case: that cost as much as the run itself.
+ */
+export function sameOutput(a: ModelOutput, b: ModelOutput): boolean {
+	if (a.engineVersion !== b.engineVersion || a.startDate !== b.startDate || a.endDate !== b.endDate || a.days !== b.days) return false;
+	if (a.series.length !== b.series.length) return false;
+	for (let i = 0; i < a.series.length; i++) {
+		const x = a.series[i]!;
+		const y = b.series[i]!;
+		if (x.nodeId !== y.nodeId || x.key !== y.key || x.label !== y.label || x.unit !== y.unit || x.values.length !== y.values.length) return false;
+		for (let t = 0; t < x.values.length; t++) if (!Object.is(x.values[t], y.values[t])) return false;
+	}
+	return JSON.stringify(a.summary) === JSON.stringify(b.summary);
+}
+
 export function checkAll(input: ModelInput, seed = 1): string | null {
 	let out: ModelOutput;
 	try {
@@ -204,6 +223,6 @@ export function checkAll(input: ModelInput, seed = 1): string | null {
 	}
 	const bad = checkInvariants(input, out);
 	if (bad) return bad;
-	if (JSON.stringify(runModel(input)) !== JSON.stringify(out)) return 'not deterministic';
+	if (!sameOutput(runModel(input), out)) return 'not deterministic';
 	return checkOrderInvariance(input, out, seed) ?? checkDoubledCropAreas(droughtBoreholesAsSupplemental(input));
 }

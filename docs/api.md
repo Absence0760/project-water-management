@@ -90,7 +90,8 @@ text never reaches the client.
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
 lists their projects with `role: "farmer"`, `dataUntil: null` and
-`lastRunAt: null`. Their own farm routes come with WP-2.6.
+`lastRunAt: null`, and the current publication's `publishedAt` (which every
+member reads). Their own farm routes come with WP-2.6.
 
 ## Projects
 
@@ -112,13 +113,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs not; stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
-- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
   `startDate + length − 1`), or `null` with none. A forecast or a flow series
   doesn't count: a forecast runs into the future and flow only scores a run.
-  `lastRunAt` — ISO timestamp of the newest run, or `null`. Both come from the
-  same query as the list (no per-project calls), for the list's freshness badge.
+  `lastRunAt` — ISO timestamp of the newest run, or `null`. `publishedAt` —
+  ISO timestamp of the current publication ([§ Publication](#publication)), or
+  `null` before any; every member sees it, farmers included. All three come
+  from the same query as the list (no per-project calls), for the list's
+  freshness badge and its "published" hint.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
@@ -514,7 +518,8 @@ tell there is new data since the last run.
 sent are merged into the existing series by date. Incoming values win on
 overlapping days, the series extends in either direction, and any gap days
 between the old and new ranges become `null`. `413` if the merged series would
-exceed 60 000 days.
+exceed 60 000 days. A merge that changes nothing (a re-sent batch) leaves the
+row alone, so `updatedAt` doesn't move.
 
 `kind` ∈ `SERIES_KINDS` (`packages/engine/src/project.ts`): `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, `flow_observed_m3s`, `flow_logger_m3s`
@@ -1014,8 +1019,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   - `config` for `chirps` / `chirps_gefs`: `{ cells: { lat, lon, weight? }[] }`,
     1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1); for `dws`:
     `{ station }`, a code like `A2H012` (letter, digit, letter, three digits;
-    upper-cased). Both take optional `startDate` (the first fetch's first day)
-    and `staleAfterDays` (overrides the source's staleness threshold);
+    upper-cased). Both take optional `startDate` (the first fetch's first day,
+    and a floor no later fetch reads before; for `chirps`, not before
+    `1981-01-01`, where CHIRPS begins) and `staleAfterDays` (overrides the source's staleness threshold);
   - `targetKind`: one of the source's kinds (`chirps`: `rain_chirps_mm`,
     `rain_catchment_mm`; `chirps_gefs`: `rain_forecast_mm`; `dws`:
     `flow_observed_m3s`, `flow_reference_m3s`, `flow_logger_m3s`), default the

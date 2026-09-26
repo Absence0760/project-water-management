@@ -78,6 +78,38 @@ beforeAll(async () => {
 	expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: farmer2.email, nodeIds: [farms[1]!.id] })).status).toBe(201);
 }, 60_000);
 
+/** The project as each member's GET /projects lists it (null when it isn't listed). */
+const listed = async (u: User, pid = projectId) =>
+	((await u.call('GET', '/projects')).body.projects as { id: string; publishedAt: string | null }[]).find((p) => p.id === pid) ?? null;
+
+describe('publishedAt on the project list (WP-2.1, WP-2.3)', () => {
+	it('is null for every member before any publication', async () => {
+		for (const u of [owner, editor, viewer, farmer]) expect((await listed(u))?.publishedAt, u.email).toBeNull();
+		expect((await viewer.call('GET', `/projects/${projectId}`)).body.project.publishedAt).toBeNull();
+	});
+
+	it('carries the current publication’s date for every member, farmers included, and follows a re-publish', async () => {
+		const other = await makeProject(owner, 'Publication elsewhere');
+		const first = await publish(owner, await run(owner, other), {}, other);
+		expect(first.status).toBe(201);
+		const at = first.body.publication.publishedAt as string;
+		const farmer3 = await signUp('Pfarmerthree');
+		// Positive control: the owner, a viewer and a farmer of that project all see it.
+		expect((await owner.call('POST', `/projects/${other}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${other}/farmers`, { email: farmer3.email, nodeIds: [(await asOwner("SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' LIMIT 1", [other]))[0].id] })).status).toBe(201);
+		for (const u of [owner, viewer, farmer3]) expect((await listed(u, other))?.publishedAt, u.email).toBe(at);
+		expect((await viewer.call('GET', `/projects/${other}`)).body.project.publishedAt).toBe(at);
+		// A stranger isn't listed the project at all; the main project (no publication yet) stays null.
+		expect(await listed(stranger, other)).toBeNull();
+		expect((await listed(viewer))?.publishedAt).toBeNull();
+		// Re-publishing moves it to the new publication, never the superseded one.
+		const second = await publish(owner, await run(owner, other), {}, other);
+		expect(second.status).toBe(201);
+		expect((await listed(farmer3, other))?.publishedAt).toBe(second.body.publication.publishedAt);
+		expect(Date.parse(second.body.publication.publishedAt)).toBeGreaterThanOrEqual(Date.parse(at));
+	});
+});
+
 describe('publishing', () => {
 	it('publishes a run as an editor, with one projection per farm, and one current publication', async () => {
 		const r1 = await run(editor);

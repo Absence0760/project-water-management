@@ -889,7 +889,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | --- | --- |
 | `project_id`, `source` | The project, and `chirps`, `chirps_gefs` or `dws` |
 | `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ station }`, plus optional `startDate`, `staleAfterDays` |
-| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series |
+| `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces whatever that series held on its day, a user-entered one included; a gap never erases ([architecture.md § Data feeds](./architecture.md#data-feeds)) |
 | `enabled`, `schedule` | `daily` or `hourly` |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
