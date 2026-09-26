@@ -1,6 +1,6 @@
 import { SERIES_KINDS, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { KIND_ROLES, seriesInUse } from './roles';
+import { KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
 
 const meta = (id: string, kind: string, name = ''): SeriesMeta => ({ id, kind, name, unit: '', startDate: '2020-01-01', length: 1 });
 
@@ -25,5 +25,14 @@ describe('seriesInUse', () => {
 		expect([...seriesInUse([meta('r', 'flow_reference_m3s'), meta('l', 'flow_logger_m3s')])]).toEqual(['l']);
 		expect([...seriesInUse([meta('r', 'flow_reference_m3s')])]).toEqual([]);
 		expect(KIND_ROLES.flow_reference_m3s!.driver).toBe(false);
+	});
+
+	it('counts the alternative gauge and the reanalysis only when a rain-source period names them (engine ≥ 0.30.0)', () => {
+		const list = [meta('c', 'rain_catchment_mm'), meta('alt', 'rain_catchment_alt_mm'), meta('era', 'rain_reanalysis_mm')];
+		expect([...seriesInUse(list)]).toEqual(['c']);
+		const kinds = rainSourceKinds([{ series: 'rain_catchment_alt_mm', fitReference: { series: 'rain_reanalysis_mm' } }]);
+		expect([...seriesInUse(list, kinds)].sort()).toEqual(['alt', 'c', 'era']);
+		expect([...seriesInUse(list, rainSourceKinds([{ series: 'rain_catchment_alt_mm' }]))].sort()).toEqual(['alt', 'c']);
+		expect(rainSourceKinds(null).size).toBe(0);
 	});
 });

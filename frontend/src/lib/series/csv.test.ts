@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CsvError, parseDate, parseSeriesCsv } from './csv';
+import { bookedDay, CsvError, parseDate, parseSeriesCsv, parseTime } from './csv';
 
 describe('parseDate', () => {
 	it('accepts ISO, slashed and day-first dates', () => {
@@ -88,3 +88,83 @@ describe('parseSeriesCsv date order', () => {
 	});
 });
 
+
+// Sub-daily readings added up into days (issue #40 (b) amendment 5): an
+// automatic station's hourly record, aggregated to the manual gauges' 08:00
+// day or to midnight. Timestamps close their interval.
+describe('sub-daily files', () => {
+	/** An hourly file from 2020-03-04 09:00 to 2020-03-07 08:00 (72 readings), with `storm` mm an hour at the given stamps. */
+	function hourly(storm: Record<string, number>): string {
+		const rows = ['timestamp,rain_mm'];
+		for (let h = 0; h < 72; h++) {
+			const t = Date.UTC(2020, 2, 4, 9 + h);
+			const iso = new Date(t).toISOString();
+			const stamp = `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+			rows.push(`${stamp},${storm[stamp] ?? 0}`);
+		}
+		return rows.join('\n');
+	}
+	// A storm from 20:00 on the 5th to 04:00 on the 6th: 2 mm in each of the eight hours, straddling midnight.
+	const storm: Record<string, number> = {};
+	for (const s of ['2020-03-05 21:00', '2020-03-05 22:00', '2020-03-05 23:00', '2020-03-06 00:00', '2020-03-06 01:00', '2020-03-06 02:00', '2020-03-06 03:00', '2020-03-06 04:00']) storm[s] = 2;
+
+	it('adds a storm straddling midnight into one 08:00–08:00 day, booked to the day it starts', () => {
+		const r = parseSeriesCsv(hourly(storm), { dayBoundary: '08:00' });
+		// Windows: 4th 08:00 → 5th 08:00, 5th → 6th, 6th → 7th; the whole storm falls on the 5th.
+		expect(r.startDate).toBe('2020-03-04');
+		expect(r.values).toEqual([0, 16, 0]);
+		expect(r.subDaily).toEqual({ dayBoundary: '08:00', readings: 72, readingsPerDay: 24, incompleteDays: 0 });
+	});
+
+	it('splits the same storm at midnight with the 00:00 boundary', () => {
+		const r = parseSeriesCsv(hourly(storm), { dayBoundary: '00:00' });
+		// The 4th (09:00–24:00: 16 readings), 5th (21:00–24:00: 4 × 2 mm), 6th (01:00–04:00), 7th (01:00–08:00).
+		expect(r.startDate).toBe('2020-03-04');
+		expect(r.values).toEqual([0, 8, 8, 0]);
+		expect(r.subDaily!.readingsPerDay).toBe(24);
+		expect(r.subDaily!.incompleteDays).toBe(2);
+	});
+
+	it('gives the same days at UTC+14 and UTC−11 (no local-time parsing)', () => {
+		const tz = process.env.TZ;
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			const east = parseSeriesCsv(hourly(storm), { dayBoundary: '08:00' });
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(parseSeriesCsv(hourly(storm), { dayBoundary: '08:00' })).toEqual(east);
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
+	it('asks for a boundary when a file has several timed readings a day, and needs a time on every row once it has one', () => {
+		let err: unknown;
+		try {
+			parseSeriesCsv(hourly(storm));
+		} catch (e) {
+			err = e;
+		}
+		expect(err).toBeInstanceOf(CsvError);
+		expect((err as CsvError).subDaily).toBe(true);
+		expect((err as CsvError).message).toMatch(/^Line 3: several readings on 2020-03-04: this looks like sub-daily data/);
+		// A plain duplicate date is still just that.
+		expect(() => parseSeriesCsv('2020-01-01,1\n2020-01-01,2')).toThrow(/duplicate date 2020-01-01/);
+		expect(() => parseSeriesCsv('2020-01-01 10:00,1\n2020-01-01,2', { dayBoundary: '08:00' })).toThrow(/has no time/);
+		expect(() => parseSeriesCsv('2020-01-01 25:00,1', { dayBoundary: '08:00' })).toThrow(/isn't HH:MM/);
+		// A daily file whose dates carry midnight still reads as daily.
+		expect(parseSeriesCsv('2020-01-01 00:00:00,1\n2020-01-02 00:00:00,2').values).toEqual([1, 2]);
+	});
+
+	it('books a reading stamped exactly at the boundary to the window it closes; blanks are no reading', () => {
+		expect(parseTime('2020-01-05 08:30')).toBe(510);
+		expect(parseTime('2020-01-05T24:00:00')).toBe(1440);
+		expect(parseTime('2020-01-05')).toBeNull();
+		const day = (iso: string, hm: string) => new Date(bookedDay(iso, parseTime(`${iso} ${hm}`)!, '08:00') * 86_400_000).toISOString().slice(0, 10);
+		expect(day('2020-01-06', '08:00')).toBe('2020-01-05');
+		expect(day('2020-01-06', '08:01')).toBe('2020-01-06');
+		expect(day('2020-01-06', '00:00')).toBe('2020-01-05');
+		const r = parseSeriesCsv('2020-01-05 09:00,1\n2020-01-05 10:00,\n2020-01-06 09:00,', { dayBoundary: '08:00' });
+		// The 6th has only a blank: no reading, not 0.
+		expect(r.values).toEqual([1, null]);
+	});
+});

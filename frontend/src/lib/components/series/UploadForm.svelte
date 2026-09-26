@@ -5,8 +5,8 @@
 	// …/series/merge), which adds new days and corrects overlapping ones but
 	// never erases a stored value the file leaves blank.
 	import { untrack } from 'svelte';
-	import { fromEpochDay, toEpochDay, unitOptions, type SeriesMeta } from '@water-management/engine';
-	import { asksProvenance, CHIRPS_CHOICES, provenanceFields } from '$lib/series/provenance';
+	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
+	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -54,6 +54,12 @@
 	// CHIRPS only (issue #40 part c): which product and version the file holds, as a provenance key ('' = not recorded).
 	let provenanceKey = $state('');
 	let provenanceTouched = $state(false);
+	// The alternative gauge and the reanalysis (issue #40 (b)): a free product and version, e.g. "SASSCAL AWS" / "1".
+	let freeProduct = $state('');
+	let freeVersion = $state('');
+	// A sub-daily file (issue #40 (b) amendment 5): its text, kept to add it up again when the day boundary changes.
+	let subDailyText = $state<string | null>(null);
+	let dayBoundary = $state<DayBoundary>('08:00');
 
 	$effect(() => {
 		pending = parsed !== null || uploading;
@@ -68,6 +74,12 @@
 		if (!provenanceTouched) provenanceKey = t?.product && t.productVersion ? `${t.product}/${t.productVersion}` : '';
 	});
 	const askProvenance = $derived(asksProvenance(kind));
+	const askFree = $derived(asksFreeProvenance(kind));
+	// Said only when filled in; the server refuses a half label.
+	const labelFields = $derived(
+		askProvenance ? (provenanceKey ? provenanceFields(provenanceKey) : null) : askFree ? freeProvenanceFields(freeProduct, freeVersion) : null
+	);
+	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
 	const preview = $derived(
 		parsed && target && mode === 'merge' && targetValues
@@ -117,11 +129,19 @@
 		parseError = null;
 		uploadDone = null;
 		guessed = null;
+		subDailyText = null;
 		fileName = f?.name ?? '';
 		if (!f) return;
 		try {
 			const text = await f.text();
-			parsed = parseSeriesCsv(text);
+			try {
+				parsed = parseSeriesCsv(text);
+			} catch (err) {
+				// Several timed readings a day: add them up into days, in the window picked below.
+				if (!(err instanceof CsvError) || !err.subDaily) throw err;
+				subDailyText = text;
+				parsed = parseSeriesCsv(text, { dayBoundary });
+			}
 			const g = guessSeries(f.name, headerLine(text), list);
 			if (g && !kindTouched) {
 				onKind(g.kind);
@@ -138,6 +158,18 @@
 		const f = file;
 		if (f) untrack(() => read(f));
 	});
+
+	function onBoundary(b: DayBoundary) {
+		dayBoundary = b;
+		if (subDailyText === null) return;
+		try {
+			parsed = parseSeriesCsv(subDailyText, { dayBoundary: b });
+			parseError = null;
+		} catch (err) {
+			parsed = null;
+			parseError = err instanceof CsvError ? err.message : `Could not read the file: ${msg(err)}`;
+		}
+	}
 
 	async function upload(e: SubmitEvent) {
 		e.preventDefault();
@@ -159,7 +191,9 @@
 					startDate: parsed.startDate,
 					values: p.result.values.slice(off, off + parsed.values.length),
 					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.
-					...(askProvenance && provenanceKey ? provenanceFields(provenanceKey) : {})
+					...(labelFields ?? {}),
+					// A sub-daily file's day boundary: one of the other window into a filled series is refused (409).
+					...boundaryFields
 				});
 				result = {
 					meta,
@@ -174,7 +208,8 @@
 					unit: unit.trim(),
 					startDate: parsed.startDate,
 					values: parsed.values,
-					...(askProvenance ? provenanceFields(provenanceKey) : {})
+					...(askProvenance ? provenanceFields(provenanceKey) : (labelFields ?? {})),
+					...boundaryFields
 				});
 				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${fmtNum(meta.length)} days to “${meta.name || label}”.` };
 			}
@@ -247,6 +282,34 @@
 				column is usually v2.0; the CHIRPS data feed writes v3.0.
 			</span>
 		</div>
+	{:else if askFree}
+		<div class="form-row">
+			<div class="field grow">
+				<label for={id('product')}>Product <span class="muted">(optional)</span></label>
+				<input id={id('product')} maxlength="40" placeholder="e.g. SASSCAL AWS, ERA5" bind:value={freeProduct} />
+			</div>
+			<div class="field unit">
+				<label for={id('version')}>Version</label>
+				<input id={id('version')} maxlength="20" placeholder="e.g. 1" bind:value={freeVersion} />
+			</div>
+		</div>
+	{/if}
+	{#if subDailyText !== null}
+		<fieldset class="mode" data-testid="day-boundary">
+			<legend>This file has several readings a day. Add them up into days from</legend>
+			<label
+				><input type="radio" name="{idPrefix}-boundary" value="08:00" checked={dayBoundary === '08:00'} onchange={() => onBoundary('08:00')} /> 08:00 to 08:00,
+				booked to the day it starts (the manual-gauge day)</label
+			>
+			<label
+				><input type="radio" name="{idPrefix}-boundary" value="00:00" checked={dayBoundary === '00:00'} onchange={() => onBoundary('00:00')} /> midnight to
+				midnight</label
+			>
+			<span class="hint muted"
+				>Each timestamp is taken as the end of its interval, so a reading at 08:00 closes the day before. The series records the choice, and a rain-source
+				period (Settings → Rain source) compares like with like.</span
+			>
+		</fieldset>
 	{/if}
 	{#if target}
 		<fieldset class="mode">
@@ -268,6 +331,15 @@
 			<div><dt>Days</dt><dd>{fmtNum(parsed.values.length)}</dd></div>
 			<div><dt>With values</dt><dd>{fmtNum(parsed.rowCount)}</dd></div>
 			<div><dt>Gaps</dt><dd>{fmtNum(parsed.missingCount)}</dd></div>
+			{#if parsed.subDaily}
+				<div class="wide">
+					<dt>Added up from</dt>
+					<dd data-testid="sub-daily-summary">
+						{fmtNum(parsed.subDaily.readings)} readings, {fmtNum(parsed.subDaily.readingsPerDay)} a day, {parsed.subDaily.dayBoundary}–{parsed.subDaily.dayBoundary}{#if parsed.subDaily.incompleteDays}
+							<span class="warn-text">; {fmtNum(parsed.subDaily.incompleteDays)} days have fewer readings, so their totals may be short</span>{/if}
+					</dd>
+				</div>
+			{/if}
 			{#if parsed.dateOrder !== 'iso'}
 				<div>
 					<dt>Dates read as</dt>

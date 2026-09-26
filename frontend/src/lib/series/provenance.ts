@@ -14,6 +14,21 @@ import {
 /** The kinds a person is asked the product and version of: the CHIRPS series. */
 export const asksProvenance = (kind: string) => kind === 'rain_chirps_mm';
 
+/**
+ * The kinds a person may name the product and version of freely (issue #40
+ * (b)): the alternative catchment gauge (e.g. an automatic-station network)
+ * and the reanalysis (e.g. ERA5). Optional; recorded with the series like
+ * CHIRPS's, so a rain-source period's forcing names its source.
+ */
+export const asksFreeProvenance = (kind: string) => kind === 'rain_catchment_alt_mm' || kind === 'rain_reanalysis_mm';
+
+/** Free product and version to the request fields: both trimmed strings, or null when either is blank (not said). */
+export function freeProvenanceFields(product: string, version: string): { product: string; productVersion: string } | null {
+	const p = product.trim();
+	const v = version.trim();
+	return p && v ? { product: p, productVersion: v } : null;
+}
+
 /** The CHIRPS products and versions to pick from, as select options. */
 export const CHIRPS_CHOICES: { value: string; label: string }[] = CHIRPS_PROVENANCES.map((p) => ({ value: provenanceKey(p), label: provenanceLabel(p) }));
 

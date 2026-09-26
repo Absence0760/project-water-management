@@ -34,14 +34,14 @@
 	import { fmtNum, localIsoDate } from '$lib/format/number';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote } from '$lib/series/provenance';
+	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import UploadForm from './UploadForm.svelte';
 	import type { UploadResult } from './upload';
-	import { KIND_ROLES, seriesInUse } from './roles';
+	import { isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
 	import { isRecordedRain } from './freshness';
 	import { valuesCache } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
@@ -114,7 +114,7 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const endDate = (s: { startDate: string; length: number }) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1);
-	const inUse = $derived(seriesInUse(list));
+	const inUse = $derived(seriesInUse(list, rainSourceKinds(settings?.rainSource)));
 	const latestRun = $derived(runs?.[0] ?? null);
 	const isRain = (k: string) => k.startsWith('rain_');
 
@@ -366,6 +366,13 @@
 											{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
 										</select>
 									{/if}
+								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
+									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
+								{/if}
+								{#if s.dayBoundary}
+									<span class="prov" data-testid="series-day-boundary" title="Added up from sub-daily readings in {s.dayBoundary}–{s.dayBoundary} windows"
+										>{s.dayBoundary} day</span
+									>
 								{/if}
 								{#if role}
 									<span class="role" class:unused={!inUse.has(s.id)} title={role.help}>
@@ -373,7 +380,9 @@
 											? role.role
 											: s.kind === 'flow_logger_m3s' && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
 												? 'Calibration if chosen in settings'
-												: 'Not used (another series of this kind is)'}
+												: isPeriodOnly(s.kind) && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
+													? 'Not used: no rain-source period names it'
+													: 'Not used (another series of this kind is)'}
 									</span>
 								{/if}
 							</th>
