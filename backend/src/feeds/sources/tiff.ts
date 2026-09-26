@@ -9,8 +9,9 @@
 // is (-180, 60) (GeoKeys: geographic, EPSG:4326, degrees, PixelIsArea), and
 // -9999 over the sea. A big-endian file or several rows
 // per strip are legal TIFF and read as such. Anything else (BigTIFF, tiles, a
-// predictor, several bands) is refused with a FeedFormatError rather than
-// guessed at: a format change must fail loudly, never write garbage.
+// predictor, several bands, a reversed fill order, a GDAL scale / offset) is
+// refused with a FeedFormatError rather than guessed at: a format change must
+// fail loudly, never write garbage.
 //
 // No dependency: the roadmap's `geotiff` package would pull in a decoder zoo
 // for one codec. The reader is ~200 lines, its LZW is TIFF's own variant
@@ -26,6 +27,7 @@ const TAG = {
 	height: 257,
 	bitsPerSample: 258,
 	compression: 259,
+	fillOrder: 266,
 	stripOffsets: 273,
 	samplesPerPixel: 277,
 	rowsPerStrip: 278,
@@ -37,6 +39,7 @@ const TAG = {
 	pixelScale: 33550,
 	tiepoint: 33922,
 	geoKeys: 34735,
+	gdalMetadata: 42112,
 	gdalNodata: 42113
 } as const;
 
@@ -169,6 +172,7 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 	if ((await scalar(TAG.samplesPerPixel, 1)) !== 1) throw new FeedFormatError('the grid has more than one band');
 	if ((await scalar(TAG.planarConfig, 1)) !== 1) throw new FeedFormatError('the grid’s planar configuration is not supported');
 	if ((await scalar(TAG.predictor, 1)) !== 1) throw new FeedFormatError('the grid uses a TIFF predictor, which is not supported');
+	if ((await scalar(TAG.fillOrder, 1)) !== 1) throw new FeedFormatError('the grid uses a reversed bit fill order, which is not supported');
 	const compression = await scalar(TAG.compression, 1);
 	if (compression !== 1 && compression !== 5) throw new FeedFormatError(`the grid uses TIFF compression ${compression}, which is not supported`);
 	const rowsPerStrip = Math.min(await scalar(TAG.rowsPerStrip, height), height);
@@ -212,10 +216,26 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 
 	let nodata: number | null = null;
 	const nd = entries.get(TAG.gdalNodata);
-	if (nd && nd.type === 2) {
+	if (nd && nd.type === 2 && nd.count <= 256) {
 		const text = new TextDecoder().decode(await bytesOf(nd)).replace(/\0+$/, '').trim();
 		const v = Number(text);
-		if (text !== '' && Number.isFinite(v)) nodata = v;
+		// The samples are float32: compare with the float32 the writer stored, not the decimal text.
+		if (text !== '' && Number.isFinite(v)) nodata = Math.fround(v);
+	}
+
+	// GDAL keeps a band's scale and offset (value = raw × scale + offset) in its
+	// XML metadata. The CHC files have none; a file that does means something
+	// other than mm in its raw samples, so refuse it rather than read it raw.
+	const md = entries.get(TAG.gdalMetadata);
+	if (md && md.type === 2) {
+		if (md.count > 1024 * 1024) throw new FeedFormatError('the grid’s GDAL metadata is implausibly large');
+		const xml = new TextDecoder().decode(await bytesOf(md));
+		for (const m of xml.matchAll(/<Item\b[^>]*\brole="(scale|offset)"[^>]*>([^<]*)<\/Item>/gi)) {
+			const v = Number(m[2]!.trim());
+			if (m[2]!.trim() === '' || v !== (m[1]!.toLowerCase() === 'scale' ? 1 : 0)) {
+				throw new FeedFormatError('the grid applies a scale or offset to its samples, which is not supported');
+			}
+		}
 	}
 
 	return {

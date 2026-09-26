@@ -124,6 +124,35 @@ describe('openGrid + readPoints', () => {
 		expect(await readPoints(r.read, grid, [0, 1, 2, 3].map((c) => ({ lat: -20.01, lon: 25.01 + c * 0.05 })))).toEqual([null, null, null, 3.5]);
 	});
 
+	it('matches a GDAL_NODATA the float32 samples cannot hold exactly (0.1 is stored as 0.100000001…)', async () => {
+		const values = spec().values.slice() as number[];
+		values[0] = 0.1;
+		const r = reader(writeGrid(spec({ values, nodata: '0.1' })));
+		const grid = (await openGrid(r.read))!;
+		expect(await readPoints(r.read, grid, [{ lat: -20.01, lon: 25.01 }, { lat: -20.01, lon: 25.06 }])).toEqual([null, 1.5]);
+	});
+
+	describe('GDAL scale / offset (GDAL_METADATA): a sample that means something else is refused, not read raw', () => {
+		const meta = (items: string) => {
+			const xml = `<GDALMetadata>${items}</GDALMetadata>\0`;
+			return { 42112: [2, [...new TextEncoder().encode(xml)]] as [number, number[]] };
+		};
+		it('reads a grid whose metadata has no scale / offset, or the identity', async () => {
+			for (const items of ['<Item name="units">mm</Item>', '<Item name="SCALE" sample="0" role="scale">1</Item><Item name="OFFSET" sample="0" role="offset">0</Item>']) {
+				const r = reader(writeGrid(spec({ override: meta(items) })));
+				const grid = (await openGrid(r.read))!;
+				expect(await readPoints(r.read, grid, [{ lat: -20.12, lon: 25.17 }])).toEqual([23.5]);
+			}
+		});
+		it.each([
+			['a scale', '<Item name="SCALE" sample="0" role="scale">0.1</Item>'],
+			['an offset', '<Item name="OFFSET" sample="0" role="offset">-5</Item>'],
+			['an unreadable scale', '<Item name="SCALE" sample="0" role="scale">x</Item>']
+		])('refuses %s', async (_, items) => {
+			await expect(openGrid(reader(writeGrid(spec({ override: meta(items) }))).read)).rejects.toThrow(/scale or offset/);
+		});
+	});
+
 	it('reads an uncompressed grid too', async () => {
 		const r = reader(writeGrid(spec({ compression: 1 })));
 		const grid = (await openGrid(r.read))!;
@@ -208,6 +237,8 @@ describe('openGrid + readPoints', () => {
 			['16-bit integers', writeGrid(spec({ override: { 258: [3, [16]], 339: [3, [1]] } })), /32-bit floating point/],
 			['several bands', writeGrid(spec({ override: { 277: [3, [3]] } })), /more than one band/],
 			['another compression', writeGrid(spec({ override: { 259: [3, [8]] } })), /compression 8/],
+			// FillOrder 2 reverses the bits of every byte, which LZW would then misread.
+			['a reversed bit fill order', writeGrid(spec({ override: { 266: [3, [2]] } })), /fill order/],
 			['no georeferencing', writeGrid(spec({ override: { 33922: null } })), /georeferencing/],
 			// A header claiming 100 000-pixel rows: refused before the decode buffer is allocated.
 			['a strip that would decode too large', writeGrid(spec({ override: { 256: [4, [100_000]], 278: [3, [6]] } })), /decode to an implausible size/],
